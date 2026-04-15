@@ -6,9 +6,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class StandardGammaTests
     {
-        [Test]
+        [TestMethod]
         public void StandardGamma_ReturnsScalar_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -30,7 +31,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_Returns2DArray()
         {
             var rng = np.random.RandomState(42);
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_AllValuesPositive()
         {
             var rng = np.random.RandomState(42);
@@ -50,7 +51,7 @@ namespace NumSharp.UnitTest.RandomSampling
             min.Should().BeGreaterThan(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_HasExpectedMean_Shape2()
         {
             // For standard gamma: mean = shape
@@ -61,7 +62,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 2.0).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_HasExpectedStd_Shape2()
         {
             // For standard gamma: variance = shape, std = sqrt(shape)
@@ -73,7 +74,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(std - expectedStd).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_HasExpectedMean_Shape5()
         {
             var rng = np.random.RandomState(42);
@@ -83,7 +84,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 5.0).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_HasExpectedStd_Shape5()
         {
             var rng = np.random.RandomState(42);
@@ -94,7 +95,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(std - expectedStd).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_ShapeLessThanOne_Works()
         {
             // Shape < 1 uses different algorithm branch
@@ -112,7 +113,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 0.5).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_ShapeZero_ReturnsZeros()
         {
             // Special case: shape=0 returns all zeros (NumPy behavior)
@@ -125,14 +126,14 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_ShapeNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.standard_gamma(-1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -141,7 +142,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);
@@ -153,7 +154,7 @@ namespace NumSharp.UnitTest.RandomSampling
             first.Should().BeEquivalentTo(second);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_FractionalShape_Works()
         {
             var rng = np.random.RandomState(42);
@@ -165,7 +166,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 2.5).Should().BeLessThan(0.2);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardGamma_VerySmallShape_AllPositive()
         {
             var rng = np.random.RandomState(42);

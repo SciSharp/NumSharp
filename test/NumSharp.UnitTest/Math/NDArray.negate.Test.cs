@@ -10,9 +10,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class NDArrayNegateTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void NegateArray()
         {
             //initialization
@@ -26,7 +27,7 @@ namespace NumSharp.UnitTest.Maths
             nd.Data<float>().Should().BeEquivalentTo(new float[] {-1, 2, -3.3f});
         }
 
-        [Test]
+        [TestMethod]
         public void NegateArray2()
         {
             //initialization
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest.Maths
             nd.Data<int>().Should().BeEquivalentTo(new int[] {1, 0, -1});
         }
 
-        [Test]
+        [TestMethod]
         public void NegateArray3()
         {
             //initialization
@@ -55,7 +56,7 @@ namespace NumSharp.UnitTest.Maths
             nd.Data<uint>().Should().BeEquivalentTo(new uint[] {0, 4294967295, 4294967294});
         }
 
-        [Test]
+        [TestMethod]
         public void NegateArray4()
         {
             //initialization
@@ -70,7 +71,7 @@ namespace NumSharp.UnitTest.Maths
             nd.Data<ulong>().Should().BeEquivalentTo(new ulong[] {0, 18446744073709551615, 18446744073709551614});
         }
 
-        [Test]
+        [TestMethod]
         public void AddArray()
         {
             //initialization
@@ -85,7 +86,7 @@ namespace NumSharp.UnitTest.Maths
             nd.Data<float>().Should().BeEquivalentTo(new float[] {1, -2, 3.3f});
         }
 
-        [Test]
+        [TestMethod]
         public void NegateEmptyArray()
         {
             //initialization

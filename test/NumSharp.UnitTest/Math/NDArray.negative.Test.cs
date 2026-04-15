@@ -9,9 +9,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class NDArrayNegativeTest
     {
-        [Test]
+        [TestMethod]
         public void Negative_FlipsSign()
         {
             // np.negative flips the sign of each element
@@ -26,7 +27,7 @@ namespace NumSharp.UnitTest.Maths
             Assert.AreEqual(-3.3f, data[2], 1e-5f);
         }
 
-        [Test]
+        [TestMethod]
         public void Negative_AllPositiveInput()
         {
             // When all inputs are positive, all outputs are negative
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Maths
             Assert.IsTrue(nd.Data<float>().All(v => v < 0));
         }
 
-        [Test]
+        [TestMethod]
         public void Negative_AllNegativeInput()
         {
             // When all inputs are negative, all outputs are positive

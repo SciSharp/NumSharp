@@ -10,11 +10,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Battle-proof tests verifying IL kernel fixes against NumPy behavior.
 /// Each test documents the NumPy output and verifies NumSharp matches.
 /// </summary>
+[TestClass]
 public class BattleProofTests : TestClass
 {
     #region Fix 1: Sliced Array × Scalar (ClassifyPath contiguity check)
 
-    [Test]
+    [TestMethod]
     public void SlicedColumn_MultiplyByScalar_MatchesNumPy()
     {
         // NumPy: x = np.arange(4).reshape(2,2); y = x[:,1]; z = y * 2
@@ -30,7 +31,7 @@ public class BattleProofTests : TestClass
         Assert.AreEqual(6L, z.GetInt64(1), "y[1]*2 = 3*2 = 6");
     }
 
-    [Test]
+    [TestMethod]
     public void StepSlice_MultiplyByScalar_MatchesNumPy()
     {
         // NumPy: np.arange(10)[::2] * 3 = [0, 6, 12, 18, 24]
@@ -44,7 +45,7 @@ public class BattleProofTests : TestClass
         result.Should().BeOfValues(0, 6, 12, 18, 24);
     }
 
-    [Test]
+    [TestMethod]
     public void ReverseSlice_MultiplyByScalar_MatchesNumPy()
     {
         // NumPy: np.arange(10)[::-1] * 2 = [18, 16, 14, 12, 10, 8, 6, 4, 2, 0]
@@ -56,7 +57,7 @@ public class BattleProofTests : TestClass
         result.Should().BeOfValues(18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
     }
 
-    [Test]
+    [TestMethod]
     public void SlicedRow_MultiplyByScalar_MatchesNumPy()
     {
         // NumPy: np.arange(12).reshape(3,4)[1,:] * 3 = [12, 15, 18, 21]
@@ -71,7 +72,7 @@ public class BattleProofTests : TestClass
         result.Should().BeOfValues(12, 15, 18, 21);
     }
 
-    [Test]
+    [TestMethod]
     public void ScalarMultiplySlice_BothDirections_MatchesNumPy()
     {
         // NumPy: 2 * x[:,1] and x[:,1] * 2 should give same result
@@ -89,7 +90,7 @@ public class BattleProofTests : TestClass
 
     #region Fix 2: Division Type Promotion (True Division → float64)
 
-    [Test]
+    [TestMethod]
     public void IntDivInt_ReturnsFloat64_MatchesNumPy()
     {
         // NumPy: np.array([1,2,3,4], dtype=int32) / np.array([2,2,2,2], dtype=int32)
@@ -103,7 +104,7 @@ public class BattleProofTests : TestClass
         result.Should().BeOfValues(0.5, 1.0, 1.5, 2.0);
     }
 
-    [Test]
+    [TestMethod]
     public void UInt8DivScalar_ReturnsFloat64_MatchesNumPy()
     {
         // NumPy: np.array([10, 20, 30], dtype=uint8) / 5
@@ -116,7 +117,7 @@ public class BattleProofTests : TestClass
         result.Should().BeOfValues(2.0, 4.0, 6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void IntDivInt_FractionalResult_MatchesNumPy()
     {
         // NumPy: 3 / 2 = 1.5 (not 1 like integer division)
@@ -129,7 +130,7 @@ public class BattleProofTests : TestClass
         Assert.AreEqual(1.5, result.GetDouble(0), 0.001, "3/2 should be 1.5, not 1");
     }
 
-    [Test]
+    [TestMethod]
     public void Float32DivFloat32_StaysFloat32_MatchesNumPy()
     {
         // NumPy: float32 / float32 = float32 (not promoted to float64)
@@ -141,7 +142,7 @@ public class BattleProofTests : TestClass
         Assert.AreEqual(typeof(float), result.dtype, "float32/float32 should stay float32");
     }
 
-    [Test]
+    [TestMethod]
     public void Float64DivFloat64_StaysFloat64_MatchesNumPy()
     {
         // NumPy: float64 / float64 = float64
@@ -157,7 +158,7 @@ public class BattleProofTests : TestClass
 
     #region Fix 3: Sign(NaN) Returns NaN (not exception)
 
-    [Test]
+    [TestMethod]
     public void SignNaN_ReturnsNaN_MatchesNumPy()
     {
         // NumPy: np.sign(np.nan) = nan
@@ -169,7 +170,7 @@ public class BattleProofTests : TestClass
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)), "sign(NaN) should return NaN, not throw");
     }
 
-    [Test]
+    [TestMethod]
     public void SignFloat32NaN_ReturnsNaN_MatchesNumPy()
     {
         // NumPy: np.sign(np.float32('nan')) = nan
@@ -180,7 +181,7 @@ public class BattleProofTests : TestClass
         Assert.IsTrue(float.IsNaN(result.GetSingle(0)), "sign(float32 NaN) should return NaN");
     }
 
-    [Test]
+    [TestMethod]
     public void SignInfinity_ReturnsOne_MatchesNumPy()
     {
         // NumPy: np.sign([inf, -inf]) = [1, -1]
@@ -192,7 +193,7 @@ public class BattleProofTests : TestClass
         Assert.AreEqual(-1.0, result.GetDouble(1), "sign(-inf) = -1");
     }
 
-    [Test]
+    [TestMethod]
     public void SignMixedWithNaN_MatchesNumPy()
     {
         // NumPy: np.sign([nan, 1, -1, 0, nan]) = [nan, 1, -1, 0, nan]
@@ -207,7 +208,7 @@ public class BattleProofTests : TestClass
         Assert.IsTrue(double.IsNaN(result.GetDouble(4)), "[4] NaN -> NaN");
     }
 
-    [Test]
+    [TestMethod]
     public void SignBasicValues_MatchesNumPy()
     {
         // NumPy: np.sign([1, -1, 0, 5, -5]) = [1, -1, 0, 1, -1]

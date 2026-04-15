@@ -7,9 +7,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.zipf (Zipf/zeta distribution)
     /// </summary>
     
+    [TestClass]
     public class NpRandomZipfTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Zipf_1D_ReturnsCorrectShape()
         {
             var rand = np.random.zipf(2, 5);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_2D_ReturnsCorrectShape()
         {
             var rand = np.random.zipf(2, new Shape(5, 5));
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.zipf(2, new Shape(5, 5));
@@ -33,14 +34,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_ReturnsInt64()
         {
             var result = np.random.zipf(2, 5);
             Assert.AreEqual(NPTypeCode.Int64, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_AllValuesPositive()
         {
             // Zipf distribution produces positive integers >= 1
@@ -53,7 +54,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_MinValueIsOne()
         {
             // Minimum value should be 1
@@ -67,7 +68,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1L, min, "Minimum Zipf value should be 1");
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_LargeA_ReturnsAllOnes()
         {
             // For very large a (>= 1025), NumPy returns 1
@@ -80,7 +81,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -90,7 +91,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -105,7 +106,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_DifferentSeeds_ProduceDifferentResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -128,14 +129,14 @@ namespace NumSharp.UnitTest.RandomSampling
 
         // ========== Validation Tests ==========
 
-        [Test]
+        [TestMethod]
         public void Zipf_AEqualsOne_ThrowsArgumentException()
         {
             // a must be > 1
             Assert.ThrowsException<ArgumentException>(() => np.random.zipf(1.0, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_ALessThanOne_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.zipf(0.5, 5));
@@ -143,7 +144,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.ThrowsException<ArgumentException>(() => np.random.zipf(-1, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Zipf_ANaN_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.zipf(double.NaN, 5));
@@ -155,7 +156,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_smoke.py test_zipf
         /// Basic smoke test.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Zipf_NumPy_SmokeTest()
         {
             // From NumPy: vals = rg.zipf(10, 10); assert_(len(vals) == 10)
@@ -167,7 +168,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_generator_mt19937_regressions.py test_zipf_large_parameter
         /// Large a should return all ones and not hang.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Zipf_NumPy_LargeParameter()
         {
             // From NumPy: sample = mt19937.zipf(10000, size=n); assert_array_equal(sample, np.ones(n, dtype=np.int64))
@@ -183,7 +184,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py TestBroadcast test_zipf
         /// Tests validation of bad a values.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Zipf_NumPy_BadAThrows()
         {
             // From NumPy: assert_raises(ValueError, zipf, bad_a * 3) where bad_a = [0]
@@ -195,7 +196,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Small a = heavy tail (larger values more likely)
         /// Large a = light tail (mostly 1s)
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Zipf_DifferentA_DifferentDistributions()
         {
             var rng1 = np.random.RandomState(42);

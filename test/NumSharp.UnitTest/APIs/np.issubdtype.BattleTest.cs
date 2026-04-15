@@ -1,14 +1,11 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Battle tests for np.issubdtype - comprehensive coverage of type hierarchy.
 /// </summary>
+[TestClass]
 public class NpIsSubdtypeBattleTests
 {
     private static readonly NPTypeCode[] AllTypes = new[]
@@ -20,12 +17,12 @@ public class NpIsSubdtypeBattleTests
 
     #region Generic Category
 
-    [Test]
-    public async Task IsSubdtype_AllTypes_AreGeneric()
+    [TestMethod]
+    public void IsSubdtype_AllTypes_AreGeneric()
     {
         foreach (var type in AllTypes)
         {
-            await Assert.That(np.issubdtype(type, "generic")).IsTrue();
+            np.issubdtype(type, "generic").Should().BeTrue();
         }
     }
 
@@ -33,133 +30,133 @@ public class NpIsSubdtypeBattleTests
 
     #region Number Category
 
-    [Test]
-    public async Task IsSubdtype_IntegersAreNumbers()
+    [TestMethod]
+    public void IsSubdtype_IntegersAreNumbers()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "number")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, "number").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_FloatsAreNumbers()
+    [TestMethod]
+    public void IsSubdtype_FloatsAreNumbers()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Double, "number").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_BoolNotNumber_NumPy2x()
+    [TestMethod]
+    public void IsSubdtype_BoolNotNumber_NumPy2x()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "number")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "number").Should().BeFalse();
     }
 
     #endregion
 
     #region Integer Category
 
-    [Test]
-    public async Task IsSubdtype_IntegersAreInteger()
+    [TestMethod]
+    public void IsSubdtype_IntegersAreInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "integer")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "integer")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "integer").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, "integer").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_BoolNotInteger_NumPy2x()
+    [TestMethod]
+    public void IsSubdtype_BoolNotInteger_NumPy2x()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsSubdtype_FloatNotInteger()
+    [TestMethod]
+    public void IsSubdtype_FloatNotInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Double, "integer").Should().BeFalse();
     }
 
     #endregion
 
     #region Signed/Unsigned Integer Categories
 
-    [Test]
-    public async Task IsSubdtype_SignedIntegers_AreSignedInteger()
+    [TestMethod]
+    public void IsSubdtype_SignedIntegers_AreSignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "signedinteger")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Int64, "signedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int64, "signedinteger").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_UnsignedIntegers_AreUnsignedInteger()
+    [TestMethod]
+    public void IsSubdtype_UnsignedIntegers_AreUnsignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "unsignedinteger")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.UInt32, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Byte, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
     }
 
     #endregion
 
     #region Floating Category
 
-    [Test]
-    public async Task IsSubdtype_Floats_AreFloating()
+    [TestMethod]
+    public void IsSubdtype_Floats_AreFloating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "floating")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "floating")).IsTrue();
+        np.issubdtype(NPTypeCode.Single, "floating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Integers_NotFloating()
+    [TestMethod]
+    public void IsSubdtype_Integers_NotFloating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "floating")).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, "floating").Should().BeFalse();
     }
 
     #endregion
 
     #region NDArray Overload
 
-    [Test]
-    public async Task IsSubdtype_NDArray_String()
+    [TestMethod]
+    public void IsSubdtype_NDArray_String()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        await Assert.That(np.issubdtype(arr, "integer")).IsTrue();
-        await Assert.That(np.issubdtype(arr, "floating")).IsFalse();
+        np.issubdtype(arr, "integer").Should().BeTrue();
+        np.issubdtype(arr, "floating").Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsSubdtype_NDArray_Null_Throws()
+    [TestMethod]
+    public void IsSubdtype_NDArray_Null_Throws()
     {
-        await Assert.That(() => np.issubdtype((NDArray)null!, "integer")).ThrowsException();
+        new Action(() => np.issubdtype((NDArray)null!, "integer")).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region Type Overloads
 
-    [Test]
-    public async Task IsSubdtype_Type_String()
+    [TestMethod]
+    public void IsSubdtype_Type_String()
     {
-        await Assert.That(np.issubdtype(typeof(int), "integer")).IsTrue();
-        await Assert.That(np.issubdtype(typeof(double), "floating")).IsTrue();
+        np.issubdtype(typeof(int), "integer").Should().BeTrue();
+        np.issubdtype(typeof(double), "floating").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Type_Type()
+    [TestMethod]
+    public void IsSubdtype_Type_Type()
     {
         // Same concrete types: returns True
-        await Assert.That(np.issubdtype(typeof(int), typeof(int))).IsTrue();
-        await Assert.That(np.issubdtype(typeof(long), typeof(long))).IsTrue();
+        np.issubdtype(typeof(int), typeof(int)).Should().BeTrue();
+        np.issubdtype(typeof(long), typeof(long)).Should().BeTrue();
 
         // Different concrete types: returns False (even if same kind)
         // This matches NumPy: np.issubdtype(np.int32, np.int64) == False
-        await Assert.That(np.issubdtype(typeof(int), typeof(long))).IsFalse();
-        await Assert.That(np.issubdtype(typeof(float), typeof(double))).IsFalse();
+        np.issubdtype(typeof(int), typeof(long)).Should().BeFalse();
+        np.issubdtype(typeof(float), typeof(double)).Should().BeFalse();
     }
 
     #endregion
 
     #region Invalid Category
 
-    [Test]
-    public async Task IsSubdtype_InvalidCategory_ReturnsFalse()
+    [TestMethod]
+    public void IsSubdtype_InvalidCategory_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "invalid_category")).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, "invalid_category").Should().BeFalse();
     }
 
     #endregion

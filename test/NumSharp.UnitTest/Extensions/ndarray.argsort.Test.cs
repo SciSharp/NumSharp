@@ -10,9 +10,10 @@ namespace NumSharp.UnitTest.Extensions
     /// <summary>
     /// Tests following https://numpy.org/doc/stable/reference/generated/numpy.hstack.html
     /// </summary>
+    [TestClass]
     public class NdArrayArgSortTest
     {
-        [Test]
+        [TestMethod]
         public void OneDimension()
         {
             // NumPy argsort always returns int64 indices
@@ -21,7 +22,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(Enumerable.SequenceEqual(new long[] {1, 2, 0}, x.Data<long>()));
         }
 
-        [Test]
+        [TestMethod]
         public void TwoDimension()
         {
             var x = np.array(new int[] {3, 1, 2});

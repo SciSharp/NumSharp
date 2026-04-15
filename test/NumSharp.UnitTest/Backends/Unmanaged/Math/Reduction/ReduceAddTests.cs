@@ -7,15 +7,16 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
 {
+    [TestClass]
     public class ReduceAddTests
     {
-        [Test]
+        [TestMethod]
         public void EmptyArray()
         {
             np.sum(np.array(new int[0])).Should().BeScalar(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Elementwise_keepdims()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             mean.GetValue(0).Should().BeEquivalentTo(21);
         }
 
-        [Test]
+        [TestMethod]
         public void Case0_Scalar()
         {
             var a = NDArray.Scalar(1);
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case0_Scalar_Axis0()
         {
             var a = NDArray.Scalar(1);
@@ -43,7 +44,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Elementwise()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -52,7 +53,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt64(0).Should().Be(3 * 3 * 3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis0()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -64,7 +65,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis1()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -75,7 +76,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis2()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -86,7 +87,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis_minus1()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -97,7 +98,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis2_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -108,7 +109,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis_minus1_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -119,7 +120,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis_1_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -131,7 +132,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
 
-        [Test]
+        [TestMethod]
         public void Case2_Elementwise()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -141,7 +142,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt64(0).Should().Be(2 * 1 * 3 * 5 * 1);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis0()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(2);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -163,7 +164,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis2()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -174,7 +175,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis4()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -185,7 +186,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis_minus1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -196,7 +197,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis2_keepdims()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -207,7 +208,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis_minus1_keepdims()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -218,7 +219,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Case3_TurnIntoScalar()
         {
             NDArray a;
@@ -242,13 +243,13 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         /// for all supported numeric dtypes. NumPy behavior: shape (M, N) with keepdims=true
         /// should return shape (1, 1), not (1) or ().
         /// </summary>
-        [Test]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.Byte)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.Byte)]
         public void Keepdims_AllReductions_PreservesDimensions(NPTypeCode dtype)
         {
             // Create 2D array with specific dtype
@@ -288,7 +289,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         /// <summary>
         /// Tests that keepdims=true works correctly for 3D arrays
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Keepdims_3D_PreservesThreeDimensions()
         {
             var arr = np.arange(24).reshape(2, 3, 4);

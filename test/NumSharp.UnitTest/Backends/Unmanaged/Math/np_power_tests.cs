@@ -7,9 +7,10 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
+    [TestClass]
     public class np_power_tests
     {
-        [Test]
+        [TestMethod]
         public void Power_1()
         {
             var arr = np.zeros(new Shape(5, 5)) + 5d;
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => d==25).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Power_2()
         {
             var arr = np.ones(new Shape(5, 5));
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => d == 1).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void PowerUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32)+5;
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void PowerDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;

@@ -10,9 +10,10 @@ namespace NumSharp.UnitTest
     /// Test concolve with standard example from
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
+    [TestClass]
     public class NdArrayConvolveTest
     {
-        [Test]
+        [TestMethod]
         public void ConvoleFull()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
-        [Test]
+        [TestMethod]
         public void ConvoleValid()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -38,7 +39,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
-        [Test]
+        [TestMethod]
         public void ConvoleSame()
         {
             var series1 = np.array(new double[] {1, 2, 3});

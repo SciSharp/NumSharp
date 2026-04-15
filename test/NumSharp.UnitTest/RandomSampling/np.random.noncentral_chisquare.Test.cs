@@ -9,9 +9,10 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Mean = df + nonc
 /// </summary>
 
+    [TestClass]
     public class RandomNoncentralChisquareTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ScalarCall_ReturnsDouble()
     {
         var rng = np.random.RandomState(42);
@@ -19,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.IsTrue(result >= 0, $"Result {result} should be non-negative");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ArraySize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -28,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.AreEqual(typeof(double), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_MultiDimensionalSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -36,7 +37,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ShapeSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -44,7 +45,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_AllValuesNonNegative()
     {
         var rng = np.random.RandomState(12345);
@@ -57,7 +58,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         }
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_MeanConvergesToExpected()
     {
         // Mean = df + nonc = 3 + 2 = 5
@@ -69,7 +70,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 5 (df + nonc)");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ZeroNonc_IsCentralChisquare()
     {
         // When nonc=0, it's central chi-square with mean = df
@@ -81,7 +82,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 3 (df) when nonc=0");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_SmallDf()
     {
         // df <= 1 uses the Poisson method
@@ -101,7 +102,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 2.5");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_LargeDf()
     {
         // Large df should work correctly
@@ -114,7 +115,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 15");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_LargeNonc()
     {
         // Large non-centrality
@@ -127,37 +128,37 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 23");
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ZeroDf_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_NegativeDf_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(-1, 2, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_NegativeNonc_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ScalarZeroDf_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_ScalarNegativeNonc_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1));
     }
 
-    [Test]
+    [TestMethod]
     public void NoncentralChisquare_Reproducibility()
     {
         var rng1 = np.random.RandomState(42);

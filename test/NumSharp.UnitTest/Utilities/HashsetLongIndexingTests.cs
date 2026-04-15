@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Utilities
 {
@@ -12,11 +11,12 @@ namespace NumSharp.UnitTest.Utilities
 /// Verifies that the Hashset supports indexing beyond int.MaxValue
 /// and uses 33% growth for large collections.
 /// </summary>
+[TestClass]
 public class HashsetLongIndexingTests
 {
     #region Basic Functionality Tests
 
-    [Test]
+    [TestMethod]
     public void Hashset_BasicAddContains()
     {
         var set = new Hashset<int>();
@@ -34,7 +34,7 @@ public class HashsetLongIndexingTests
         Assert.AreEqual(3L, set.LongCount);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_Remove()
     {
         var set = new Hashset<int>(new[] { 1, 2, 3, 4, 5 });
@@ -47,7 +47,7 @@ public class HashsetLongIndexingTests
         Assert.AreEqual(4, set.Count);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_Clear()
     {
         var set = new Hashset<int>(new[] { 1, 2, 3, 4, 5 });
@@ -59,7 +59,7 @@ public class HashsetLongIndexingTests
         Assert.IsFalse(set.Contains(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_Enumeration()
     {
         var set = new Hashset<int>(new[] { 1, 2, 3 });
@@ -73,7 +73,7 @@ public class HashsetLongIndexingTests
 
     #region Long Index Support Tests
 
-    [Test]
+    [TestMethod]
     public void Hashset_LongCount_ReturnsSameAsCount_WhenSmall()
     {
         var set = new Hashset<int>();
@@ -86,7 +86,7 @@ public class HashsetLongIndexingTests
         Assert.AreEqual(1000L, set.LongCount);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_LongCapacityConstructor()
     {
         // Create with long capacity
@@ -100,7 +100,7 @@ public class HashsetLongIndexingTests
         Assert.AreEqual(100, set.Count);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_Slot_UsesLongNext()
     {
         // This test verifies that the internal Slot structure uses long for next pointer
@@ -129,7 +129,7 @@ public class HashsetLongIndexingTests
 
     #region HashHelpersLong Tests
 
-    [Test]
+    [TestMethod]
     public void HashHelpersLong_IsPrime()
     {
         // Known primes
@@ -152,7 +152,7 @@ public class HashsetLongIndexingTests
         Assert.IsTrue(HashHelpersLong.IsPrime(4252464407L)); // Valid large prime from extended array
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // HashHelpersLong.primes array contains non-prime values
     public void HashHelpersLong_GetPrime()
     {
@@ -169,7 +169,7 @@ public class HashsetLongIndexingTests
         Assert.IsTrue(HashHelpersLong.IsPrime(result));
     }
 
-    [Test]
+    [TestMethod]
     public void HashHelpersLong_ExpandPrime_DoublesForSmallSizes()
     {
         // For sizes below 1 billion, should approximately double
@@ -180,7 +180,7 @@ public class HashsetLongIndexingTests
         Assert.IsTrue(newSize >= 2 * oldSize, $"Expected newSize >= {2 * oldSize}, got {newSize}");
     }
 
-    [Test]
+    [TestMethod]
     public void HashHelpersLong_ExpandPrime_Uses33PercentForLargeSizes()
     {
         // For sizes at or above 1 billion, should use 33% growth
@@ -198,7 +198,7 @@ public class HashsetLongIndexingTests
             $"Expected newSize < {2 * oldSize} (should use 33% growth, not doubling), got {newSize}");
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // HashHelpersLong.primes array contains non-prime values
     public void HashHelpersLong_ExpandPrime_ProgressiveGrowthTest()
     {
@@ -233,7 +233,7 @@ public class HashsetLongIndexingTests
 
     #region BitHelperLong Tests
 
-    [Test]
+    [TestMethod]
     public void BitHelperLong_MarkAndCheck()
     {
         long[] bitArray = new long[10];
@@ -258,7 +258,7 @@ public class HashsetLongIndexingTests
         Assert.IsFalse(helper.IsMarked(100));
     }
 
-    [Test]
+    [TestMethod]
     public void BitHelperLong_ToLongArrayLength()
     {
         // 64 bits per long
@@ -277,7 +277,7 @@ public class HashsetLongIndexingTests
 
     #region Set Operations Tests
 
-    [Test]
+    [TestMethod]
     public void Hashset_UnionWith()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3 });
@@ -289,7 +289,7 @@ public class HashsetLongIndexingTests
         CollectionAssert.AreEquivalent(new[] { 1, 2, 3, 4, 5 }, set1.ToArray());
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_IntersectWith()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3, 4 });
@@ -301,7 +301,7 @@ public class HashsetLongIndexingTests
         CollectionAssert.AreEquivalent(new[] { 2, 3 }, set1.ToArray());
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_ExceptWith()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3, 4 });
@@ -313,7 +313,7 @@ public class HashsetLongIndexingTests
         CollectionAssert.AreEquivalent(new[] { 1, 4 }, set1.ToArray());
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_SymmetricExceptWith()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3 });
@@ -329,7 +329,7 @@ public class HashsetLongIndexingTests
 
     #region Stress Tests
 
-    [Test]
+    [TestMethod]
     public void Hashset_MediumScaleTest()
     {
         // Test with 1 million elements to verify correct operation
@@ -359,7 +359,7 @@ public class HashsetLongIndexingTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_RemoveWhereWithLongReturn()
     {
         var set = new Hashset<int>(Enumerable.Range(0, 1000));
@@ -381,7 +381,7 @@ public class HashsetLongIndexingTests
 
     #region CopyTo Tests
 
-    [Test]
+    [TestMethod]
     public void Hashset_CopyTo_Array()
     {
         var set = new Hashset<int>(new[] { 1, 2, 3, 4, 5 });
@@ -392,7 +392,7 @@ public class HashsetLongIndexingTests
         CollectionAssert.AreEquivalent(new[] { 1, 2, 3, 4, 5 }, array);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_CopyTo_LongOffsetAndCount()
     {
         var set = new Hashset<int>(new[] { 1, 2, 3, 4, 5 });
@@ -414,7 +414,7 @@ public class HashsetLongIndexingTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Hashset_TrimExcess()
     {
         var set = new Hashset<int>(1000);
@@ -433,7 +433,7 @@ public class HashsetLongIndexingTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_TryGetValue()
     {
         var set = new Hashset<string>(new[] { "hello", "world" });
@@ -445,7 +445,7 @@ public class HashsetLongIndexingTests
         Assert.IsNull(value2);
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_SetEquals()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3 });
@@ -456,7 +456,7 @@ public class HashsetLongIndexingTests
         Assert.IsFalse(set1.SetEquals(set3));
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_Overlaps()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3 });
@@ -465,7 +465,7 @@ public class HashsetLongIndexingTests
         Assert.IsFalse(set1.Overlaps(new[] { 4, 5, 6 }));
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_IsSubsetOf()
     {
         var set1 = new Hashset<int>(new[] { 1, 2 });
@@ -476,7 +476,7 @@ public class HashsetLongIndexingTests
         Assert.IsFalse(set1.IsSubsetOf(set3));
     }
 
-    [Test]
+    [TestMethod]
     public void Hashset_IsSupersetOf()
     {
         var set1 = new Hashset<int>(new[] { 1, 2, 3 });

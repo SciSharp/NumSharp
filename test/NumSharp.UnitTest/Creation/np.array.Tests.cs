@@ -6,9 +6,10 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_array_tests
     {
-        [Test]
+        [TestMethod]
         public void nparray_1d()
         {
             var v = np.array(new int[] {1, 2, 3, 4, 5, 6, 7, 8});
@@ -16,7 +17,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_params()
         {
             var v = np.array(1, 2, 3, 4, 5, 6, 7, 8);
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_1d_typeless()
         {
             var v = np.array((Array)new int[] {1, 2, 3, 4, 5, 6, 7, 8});
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_3d_jagged()
         {
             var v = np.array((Array)new int[,] {{1, 2, 3, 4}, {5, 6, 7, 8}});
@@ -43,7 +44,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_1d_typeless_knowntype()
         {
             var v = np.array(new int[] {1, 2, 3, 4, 5, 6, 7, 8});
@@ -52,7 +53,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_3d_jagged_knowntype()
         {
             var v = np.array(new int[,] {{1, 2, 3, 4}, {5, 6, 7, 8}});
@@ -61,7 +62,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_3d_typeless()
         {
             // @formatter:off — disable formatter after this line
@@ -81,7 +82,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_2d()
         {
             var v = np.array(new int[][] {new int[] {1, 2, 3, 4}, new int[] {5, 6, 7, 8}});
@@ -90,7 +91,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_3d()
         {
             // @formatter:off — disable formatter after this line
@@ -110,7 +111,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void nparray_4d()
         {
             // @formatter:off — disable formatter after this line
@@ -135,7 +136,7 @@ namespace NumSharp.UnitTest.Creation
             v.size.Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void Arrays_Concat()
         {
             var a = new int[] {1, 2, 3};
@@ -144,7 +145,7 @@ namespace NumSharp.UnitTest.Creation
             r.Should().ContainInOrder(1, 2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_Copy()
         {
             var arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.Creation
             np.array(arr, copy: false).Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_NonCopy()
         {
             var arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -162,7 +163,7 @@ namespace NumSharp.UnitTest.Creation
             nd[0, 2].Should().BeOfValues(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_Jagged()
         {
             var arr = new int[][] {new int[] {1, 2, 3}, new int[] {4, 5, 6}};

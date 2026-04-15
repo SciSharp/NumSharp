@@ -10,9 +10,10 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomRandintTest
     {
-        [Test]
+        [TestMethod]
         public void randint()
         {
             var a = np.random.RandomState().randint(low: 0, high: 10, size: new Shape(5, 5));
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// <summary>
         /// Based on issue https://github.com/SciSharp/NumSharp/issues/292
         /// </summary>
-        [Test]
+        [TestMethod]
         public void randint_2()
         {
             for (int i = 0; i < 50; i++)

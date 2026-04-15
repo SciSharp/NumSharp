@@ -1,144 +1,141 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Battle tests for np.min_scalar_type - comprehensive coverage of scalar type inference.
 /// </summary>
+[TestClass]
 public class NpMinScalarTypeBattleTests
 {
     #region Unsigned Integer Boundaries
 
-    [Test]
-    public async Task MinScalarType_Zero()
+    [TestMethod]
+    public void MinScalarType_Zero()
     {
-        await Assert.That(np.min_scalar_type(0)).IsEqualTo(NPTypeCode.Byte);
+        np.min_scalar_type(0).Should().Be(NPTypeCode.Byte);
     }
 
-    [Test]
-    public async Task MinScalarType_ByteMax()
+    [TestMethod]
+    public void MinScalarType_ByteMax()
     {
-        await Assert.That(np.min_scalar_type(255)).IsEqualTo(NPTypeCode.Byte);
+        np.min_scalar_type(255).Should().Be(NPTypeCode.Byte);
     }
 
-    [Test]
-    public async Task MinScalarType_ByteMaxPlus1()
+    [TestMethod]
+    public void MinScalarType_ByteMaxPlus1()
     {
-        await Assert.That(np.min_scalar_type(256)).IsEqualTo(NPTypeCode.UInt16);
+        np.min_scalar_type(256).Should().Be(NPTypeCode.UInt16);
     }
 
-    [Test]
-    public async Task MinScalarType_UInt16Max()
+    [TestMethod]
+    public void MinScalarType_UInt16Max()
     {
-        await Assert.That(np.min_scalar_type(65535)).IsEqualTo(NPTypeCode.UInt16);
+        np.min_scalar_type(65535).Should().Be(NPTypeCode.UInt16);
     }
 
-    [Test]
-    public async Task MinScalarType_UInt16MaxPlus1()
+    [TestMethod]
+    public void MinScalarType_UInt16MaxPlus1()
     {
-        await Assert.That(np.min_scalar_type(65536)).IsEqualTo(NPTypeCode.UInt32);
+        np.min_scalar_type(65536).Should().Be(NPTypeCode.UInt32);
     }
 
-    [Test]
-    public async Task MinScalarType_UInt32Max()
+    [TestMethod]
+    public void MinScalarType_UInt32Max()
     {
-        await Assert.That(np.min_scalar_type(uint.MaxValue)).IsEqualTo(NPTypeCode.UInt32);
+        np.min_scalar_type(uint.MaxValue).Should().Be(NPTypeCode.UInt32);
     }
 
     #endregion
 
     #region Signed Integer Boundaries
 
-    [Test]
-    public async Task MinScalarType_MinusOne()
+    [TestMethod]
+    public void MinScalarType_MinusOne()
     {
-        await Assert.That(np.min_scalar_type(-1)).IsEqualTo(NPTypeCode.Int16);
+        np.min_scalar_type(-1).Should().Be(NPTypeCode.Int16);
     }
 
-    [Test]
-    public async Task MinScalarType_Int16Min()
+    [TestMethod]
+    public void MinScalarType_Int16Min()
     {
-        await Assert.That(np.min_scalar_type(short.MinValue)).IsEqualTo(NPTypeCode.Int16);
+        np.min_scalar_type(short.MinValue).Should().Be(NPTypeCode.Int16);
     }
 
-    [Test]
-    public async Task MinScalarType_Int16MinMinus1()
+    [TestMethod]
+    public void MinScalarType_Int16MinMinus1()
     {
-        await Assert.That(np.min_scalar_type((int)short.MinValue - 1)).IsEqualTo(NPTypeCode.Int32);
+        np.min_scalar_type((int)short.MinValue - 1).Should().Be(NPTypeCode.Int32);
     }
 
-    [Test]
-    public async Task MinScalarType_Int32Min()
+    [TestMethod]
+    public void MinScalarType_Int32Min()
     {
-        await Assert.That(np.min_scalar_type(int.MinValue)).IsEqualTo(NPTypeCode.Int32);
+        np.min_scalar_type(int.MinValue).Should().Be(NPTypeCode.Int32);
     }
 
     #endregion
 
     #region Float Values
 
-    [Test]
-    public async Task MinScalarType_FloatValue()
+    [TestMethod]
+    public void MinScalarType_FloatValue()
     {
-        await Assert.That(np.min_scalar_type(1.0f)).IsEqualTo(NPTypeCode.Single);
+        np.min_scalar_type(1.0f).Should().Be(NPTypeCode.Single);
     }
 
-    [Test]
-    public async Task MinScalarType_DoubleLarge()
+    [TestMethod]
+    public void MinScalarType_DoubleLarge()
     {
-        await Assert.That(np.min_scalar_type(1e100)).IsEqualTo(NPTypeCode.Double);
+        np.min_scalar_type(1e100).Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
-    public async Task MinScalarType_FloatNaN()
+    [TestMethod]
+    public void MinScalarType_FloatNaN()
     {
-        await Assert.That(np.min_scalar_type(float.NaN)).IsEqualTo(NPTypeCode.Single);
+        np.min_scalar_type(float.NaN).Should().Be(NPTypeCode.Single);
     }
 
-    [Test]
-    public async Task MinScalarType_FloatInfinity()
+    [TestMethod]
+    public void MinScalarType_FloatInfinity()
     {
-        await Assert.That(np.min_scalar_type(float.PositiveInfinity)).IsEqualTo(NPTypeCode.Single);
+        np.min_scalar_type(float.PositiveInfinity).Should().Be(NPTypeCode.Single);
     }
 
     #endregion
 
     #region Boolean
 
-    [Test]
-    public async Task MinScalarType_True()
+    [TestMethod]
+    public void MinScalarType_True()
     {
-        await Assert.That(np.min_scalar_type(true)).IsEqualTo(NPTypeCode.Boolean);
+        np.min_scalar_type(true).Should().Be(NPTypeCode.Boolean);
     }
 
-    [Test]
-    public async Task MinScalarType_False()
+    [TestMethod]
+    public void MinScalarType_False()
     {
-        await Assert.That(np.min_scalar_type(false)).IsEqualTo(NPTypeCode.Boolean);
+        np.min_scalar_type(false).Should().Be(NPTypeCode.Boolean);
     }
 
     #endregion
 
     #region Decimal
 
-    [Test]
-    public async Task MinScalarType_Decimal()
+    [TestMethod]
+    public void MinScalarType_Decimal()
     {
-        await Assert.That(np.min_scalar_type(1.0m)).IsEqualTo(NPTypeCode.Decimal);
+        np.min_scalar_type(1.0m).Should().Be(NPTypeCode.Decimal);
     }
 
     #endregion
 
     #region Error Cases
 
-    [Test]
-    public async Task MinScalarType_Null_Throws()
+    [TestMethod]
+    public void MinScalarType_Null_Throws()
     {
-        await Assert.That(() => np.min_scalar_type(null!)).ThrowsException();
+        new Action(() => np.min_scalar_type(null!)).Should().Throw<Exception>();
     }
 
     #endregion

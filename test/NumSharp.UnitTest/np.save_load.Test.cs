@@ -8,9 +8,10 @@ using System.IO;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class NumpySaveLoad
     {
-        [Test]
+        [TestMethod]
         public void Run()
         {
             int[] x = {1, 2, 3, 4, 5};
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest
             np.Load_Npz<int[]>(@"test1.npz");
         }
 
-        [Test]
+        [TestMethod]
         public void Float1DimArray()
         {
             float[] x = {1.0f, 1.5f, 2.0f, 2.5f, 3.0f};
@@ -30,7 +31,7 @@ namespace NumSharp.UnitTest
             np.Load_Npz<float[]>(@"test_Float1DimArray.npz");
         }
 
-        [Test]
+        [TestMethod]
         public void Double1DimArray()
         {
             double[] x = {1.0, 1.5, 2.0, 2.5, 3.0};
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest
             np.Load_Npz<double[]>(@"test_Double1DimArray.npz");
         }
 
-        [Test]
+        [TestMethod]
         public void SaveAndLoadMultiDimArray()
         {
             int[,] x = {{1, 2}, {3, 4}};
@@ -51,7 +52,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [Test]
+        [TestMethod]
         public void SaveAndLoadWithNpyFileExt()
         {
             // float

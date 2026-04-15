@@ -5,9 +5,10 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class astypeTests
     {
-        [Test]
+        [TestMethod]
         public void Upcasting()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
@@ -21,7 +22,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [Test]
+        [TestMethod]
         public void UpcastingByteToLong()
         {
             var nd = np.ones(new Shape(3, 3), np.uint8);
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [Test]
+        [TestMethod]
         public void UpcastingCharsToLong()
         {
             var nd = np.ones(new Shape(3, 3), np.@char);
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [Test]
+        [TestMethod]
         public void DowncastingIntToShort()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
@@ -63,7 +64,7 @@ namespace NumSharp.UnitTest.Manipulation
             int16.GetTypeCode.Should().Be(NPTypeCode.Int16);
         }
 
-        [Test]
+        [TestMethod]
         public void DowncastingDoubleToInt()
         {
             var nd = np.ones(new Shape(3, 3), np.float64);
@@ -87,7 +88,7 @@ namespace NumSharp.UnitTest.Manipulation
             }
         }
 
-        [Test]
+        [TestMethod]
         public void DowncastingIntToUShort()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
@@ -102,7 +103,7 @@ namespace NumSharp.UnitTest.Manipulation
             int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
         }
 
-        [Test]
+        [TestMethod]
         public void CastEmptyNDArray()
         {
             var nd = new NDArray(NPTypeCode.Int32);
@@ -111,7 +112,7 @@ namespace NumSharp.UnitTest.Manipulation
             int16_copied.Shape.IsEmpty.Should().BeTrue();
         }
 
-        [Test, Skip("String dtype is not supported")]
+        [TestMethod, Ignore("String dtype is not supported")]
         public void CastingStringToByte()
         {
             throw new NotSupportedException();
@@ -127,7 +128,7 @@ namespace NumSharp.UnitTest.Manipulation
             //output.Array.GetType().GetElementType().Should().Be<byte>();
         }
 
-        [Test, Skip("String dtype is not supported")]
+        [TestMethod, Ignore("String dtype is not supported")]
         public void CastingByteToString()
         {
             throw new NotSupportedException();
@@ -146,7 +147,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
 
-        [Test, Skip("Complex dtype is not supported yet")] //TODO!
+        [TestMethod, Ignore("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
             //var nd = np.ones(new Shape(3, 3), np.int32);

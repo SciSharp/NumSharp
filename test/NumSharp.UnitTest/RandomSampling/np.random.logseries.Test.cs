@@ -3,7 +3,6 @@ using System.Linq;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
@@ -12,11 +11,12 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
     
+    [TestClass]
     public class np_random_logseries_Tests
     {
         #region Basic Functionality
 
-        [Test]
+        [TestMethod]
         public void Logseries_Scalar_ReturnsNDArray()
         {
             var rng = np.random.RandomState(42);
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.RandomSampling
             ((long)result).Should().BeGreaterThanOrEqualTo(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_1D_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_2D_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_SizeNull_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.ndim.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_3DShape()
         {
             var rng = np.random.RandomState(42);
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Value Verification
 
-        [Test]
+        [TestMethod]
         public void Logseries_AllValuesAtLeast1()
         {
             var rng = np.random.RandomState(42);
@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_SmallP_MostlyOnes()
         {
             // With small p, values should be mostly 1
@@ -96,7 +96,7 @@ namespace NumSharp.UnitTest.RandomSampling
             countOnes.Should().BeGreaterThan(80);
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_HighP_LargerValues()
         {
             // With high p close to 1, values should have more variation
@@ -109,7 +109,7 @@ namespace NumSharp.UnitTest.RandomSampling
             maxValue.Should().BeGreaterThan(10);
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_PZero_AllOnes()
         {
             // When p=0, all values should be 1
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_MeanApproximatesTheoretical()
         {
             // Theoretical mean = -p / ((1-p) * ln(1-p))
@@ -143,25 +143,25 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Validation
 
-        [Test]
+        [TestMethod]
         public void Logseries_NegativeP_Throws()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.logseries(-0.1, 10));
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_PEqualsOne_Throws()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.logseries(1.0, 10));
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_PGreaterThanOne_Throws()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.logseries(1.5, 10));
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_PIsNaN_Throws()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.logseries(double.NaN, 10));
@@ -171,7 +171,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Reproducibility
 
-        [Test]
+        [TestMethod]
         public void Logseries_SameSeed_SameResults()
         {
             var rng1 = np.random.RandomState(12345);
@@ -189,7 +189,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_DifferentSeeds_DifferentResults()
         {
             var rng1 = np.random.RandomState(111);
@@ -218,7 +218,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void Logseries_VerySmallP()
         {
             // Edge case: very small p should still produce valid output
@@ -232,7 +232,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_PCloseToOne()
         {
             // Edge case: p very close to 1 (but less than 1)
@@ -248,7 +248,7 @@ namespace NumSharp.UnitTest.RandomSampling
             data.Max().Should().BeGreaterThan(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_Size1_ReturnsSingleElementArray()
         {
             var rng = np.random.RandomState(42);
@@ -258,7 +258,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().BeEquivalentTo(new[] { 1 });
         }
 
-        [Test]
+        [TestMethod]
         public void Logseries_VariousP_AllValuesPositive()
         {
             var rng = np.random.RandomState(42);

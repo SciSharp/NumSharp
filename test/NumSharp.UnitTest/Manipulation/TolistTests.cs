@@ -2,18 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AwesomeAssertions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Manipulation
 {
     /// <summary>
     ///     Battle tests for NDArray.tolist() - NumPy parity verification.
     /// </summary>
+    [TestClass]
     public class TolistTests
     {
         #region Basic Functionality
 
-        [Test]
+        [TestMethod]
         public void Tolist_Scalar_ReturnsScalarValue()
         {
             // NumPy: np.array(42).tolist() -> 42
@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().Be(42L); // arange returns int64
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_1D_ReturnsFlatList()
         {
             // NumPy: np.array([1, 2, 3, 4, 5]).tolist() -> [1, 2, 3, 4, 5]
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[4].Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_2D_ReturnsNestedList()
         {
             // NumPy: np.arange(6).reshape(2, 3).tolist() -> [[0, 1, 2], [3, 4, 5]]
@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest.Manipulation
             row1[2].Should().Be(5L);
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_3D_ReturnsTriplyNestedList()
         {
             // NumPy: np.arange(24).reshape(2, 3, 4).tolist()
@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Dtype Preservation
 
-        [Test]
+        [TestMethod]
         public void Tolist_Int32_PreservesType()
         {
             var arr = np.array(new int[] { 1, 2, 3 });
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[0].Should().BeOfType<int>();
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_Float64_PreservesType()
         {
             var arr = np.array(new double[] { 1.5, 2.5, 3.5 });
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[0].Should().Be(1.5);
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_Bool_PreservesType()
         {
             var arr = np.array(new bool[] { true, false, true });
@@ -113,7 +113,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void Tolist_SingleElement1D_ReturnsSingleElementList()
         {
             var arr = np.array(new int[] { 42 });
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[0].Should().Be(42);
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_SlicedArray_WorksCorrectly()
         {
             // Test that sliced arrays produce correct nested lists
@@ -142,7 +142,7 @@ namespace NumSharp.UnitTest.Manipulation
             row1[1].Should().Be(10L);
         }
 
-        [Test]
+        [TestMethod]
         public void Tolist_TransposedArray_WorksCorrectly()
         {
             // NumPy: np.arange(6).reshape(2, 3).T.tolist()

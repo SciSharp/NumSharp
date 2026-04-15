@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Manipulation;
 
@@ -11,11 +10,12 @@ namespace NumSharp.UnitTest.Manipulation;
 /// Comprehensive edge case tests for np.unique sorting fix (commit c0eed5d1).
 /// Verifies that np.unique returns SORTED unique values, matching NumPy 2.x behavior.
 /// </summary>
+[TestClass]
 public class np_unique_EdgeCases_Test
 {
         #region Empty Arrays
 
-        [Test]
+        [TestMethod]
         public void Unique_EmptyArray_Int32()
         {
             // >>> np.unique(np.array([], dtype=np.int32))
@@ -28,7 +28,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_EmptyArray_Double()
         {
             var arr = np.array(Array.Empty<double>());
@@ -38,7 +38,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_EmptyArray_Boolean()
         {
             var arr = np.array(Array.Empty<bool>());
@@ -52,7 +52,7 @@ public class np_unique_EdgeCases_Test
 
         #region Single Element
 
-        [Test]
+        [TestMethod]
         public void Unique_SingleElement_Int32()
         {
             // >>> np.unique(np.array([42]))
@@ -63,7 +63,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(42);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_SingleElement_Double()
         {
             var arr = np.array(new double[] { 3.14 });
@@ -72,7 +72,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(3.14);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_SingleElement_Boolean_True()
         {
             var arr = np.array(new bool[] { true });
@@ -81,7 +81,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(true);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_SingleElement_Boolean_False()
         {
             var arr = np.array(new bool[] { false });
@@ -94,7 +94,7 @@ public class np_unique_EdgeCases_Test
 
         #region All Duplicates
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDuplicates_Int32()
         {
             // >>> np.unique(np.array([5, 5, 5, 5]))
@@ -105,7 +105,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(5);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDuplicates_Double()
         {
             var arr = np.array(new double[] { 2.71, 2.71, 2.71 });
@@ -114,7 +114,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(2.71);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDuplicates_Boolean_AllTrue()
         {
             // >>> np.unique(np.array([True, True, True]))
@@ -125,7 +125,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(1).And.BeOfValues(true);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDuplicates_Boolean_AllFalse()
         {
             // >>> np.unique(np.array([False, False, False]))
@@ -140,7 +140,7 @@ public class np_unique_EdgeCases_Test
 
         #region Boolean Arrays
 
-        [Test]
+        [TestMethod]
         public void Unique_Boolean_MixedValues()
         {
             // >>> np.unique(np.array([True, False, True, False, True]))
@@ -159,7 +159,7 @@ public class np_unique_EdgeCases_Test
 
         #region All 12 Supported Dtypes
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Byte()
         {
             var arr = np.array(new byte[] { 3, 1, 2, 1 });
@@ -169,7 +169,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(byte));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Int16()
         {
             var arr = np.array(new short[] { 3, 1, 2, 1 });
@@ -179,7 +179,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(short));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_UInt16()
         {
             var arr = np.array(new ushort[] { 3, 1, 2, 1 });
@@ -189,7 +189,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(ushort));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Int32()
         {
             var arr = np.array(new int[] { 3, 1, 2, 1 });
@@ -199,7 +199,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_UInt32()
         {
             var arr = np.array(new uint[] { 3, 1, 2, 1 });
@@ -209,7 +209,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(uint));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Int64()
         {
             var arr = np.array(new long[] { 3, 1, 2, 1 });
@@ -219,7 +219,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_UInt64()
         {
             var arr = np.array(new ulong[] { 3, 1, 2, 1 });
@@ -229,7 +229,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(ulong));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Char()
         {
             var arr = np.array(new char[] { 'c', 'a', 'b', 'a' });
@@ -239,7 +239,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(char));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Single()
         {
             var arr = np.array(new float[] { 3.0f, 1.0f, 2.0f, 1.0f });
@@ -249,7 +249,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(float));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Double()
         {
             var arr = np.array(new double[] { 3.0, 1.0, 2.0, 1.0 });
@@ -259,7 +259,7 @@ public class np_unique_EdgeCases_Test
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllDtypes_Decimal()
         {
             var arr = np.array(new decimal[] { 3.0m, 1.0m, 2.0m, 1.0m });
@@ -273,7 +273,7 @@ public class np_unique_EdgeCases_Test
 
         #region NaN and Infinity (Float Types)
 
-        [Test]
+        [TestMethod]
         public void Unique_NaN_Double()
         {
             // >>> np.unique(np.array([1.0, np.nan, 2.0, np.nan, 1.0, np.inf, -np.inf]))
@@ -293,7 +293,7 @@ public class np_unique_EdgeCases_Test
             double.IsNaN(result.GetDouble(4)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_NaN_Single()
         {
             // >>> np.unique(np.array([1.0, np.nan, 2.0, np.nan], dtype=np.float32))
@@ -307,7 +307,7 @@ public class np_unique_EdgeCases_Test
             float.IsNaN(result.GetSingle(2)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_Infinity_Only()
         {
             var arr = np.array(new double[] { double.PositiveInfinity, double.NegativeInfinity, double.PositiveInfinity });
@@ -318,7 +318,7 @@ public class np_unique_EdgeCases_Test
             result.GetDouble(1).Should().Be(double.PositiveInfinity);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllNaN()
         {
             // All NaN values should deduplicate to one
@@ -333,7 +333,7 @@ public class np_unique_EdgeCases_Test
 
         #region Sliced/Non-Contiguous Arrays
 
-        [Test]
+        [TestMethod]
         public void Unique_SlicedArray_Column()
         {
             // Slicing a column creates a non-contiguous view
@@ -345,7 +345,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(4).And.BeOfValues(0L, 5L, 10L, 15L);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_SlicedArray_StridedSlice()
         {
             // >>> arr = np.arange(20).reshape(4, 5)
@@ -359,7 +359,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(4).And.BeOfValues(1L, 3L, 11L, 13L);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_SlicedArray_WithDuplicates()
         {
             // Create array with duplicates, then slice
@@ -371,7 +371,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(2).And.BeOfValues(3, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_ReversedArray()
         {
             // >>> np.unique(np.array([9, 7, 5, 3, 1])[::-1])
@@ -388,7 +388,7 @@ public class np_unique_EdgeCases_Test
 
         #region Negative Values
 
-        [Test]
+        [TestMethod]
         public void Unique_NegativeValues_Int32()
         {
             // >>> np.unique(np.array([-3, -1, -2, 0, 1, -1]))
@@ -399,7 +399,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(5).And.BeOfValues(-3, -2, -1, 0, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_NegativeValues_Double()
         {
             var arr = np.array(new double[] { -3.5, -1.5, -2.5, 0.0, 1.5, -1.5 });
@@ -408,7 +408,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(5).And.BeOfValues(-3.5, -2.5, -1.5, 0.0, 1.5);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_AllNegative()
         {
             var arr = np.array(new int[] { -5, -3, -1, -3, -5 });
@@ -421,7 +421,7 @@ public class np_unique_EdgeCases_Test
 
         #region Large Values (Boundary Conditions)
 
-        [Test]
+        [TestMethod]
         public void Unique_LargeValues_Int64()
         {
             // >>> np.unique(np.array([2**62, -2**62, 0, 2**62], dtype=np.int64))
@@ -433,7 +433,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(3).And.BeOfValues(-large, 0L, large);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_LargeValues_UInt64()
         {
             ulong large = 1UL << 62;
@@ -443,7 +443,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(3).And.BeOfValues(0UL, large, ulong.MaxValue);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_MinMaxValues_Int32()
         {
             var arr = np.array(new int[] { int.MaxValue, int.MinValue, 0, int.MaxValue });
@@ -456,7 +456,7 @@ public class np_unique_EdgeCases_Test
 
         #region Sorting Verification
 
-        [Test]
+        [TestMethod]
         public void Unique_VerifySorting_UnsortedInput()
         {
             // This is the core test for the sorting fix
@@ -468,7 +468,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 5, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_VerifySorting_ReverseInput()
         {
             // Input is in reverse order - verify output is sorted ascending
@@ -478,7 +478,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(5).And.BeOfValues(2, 4, 6, 8, 10);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_VerifySorting_AlreadySorted()
         {
             // Input already sorted - verify it stays sorted
@@ -492,7 +492,7 @@ public class np_unique_EdgeCases_Test
 
         #region Multidimensional Arrays
 
-        [Test]
+        [TestMethod]
         public void Unique_2DArray_Flattens()
         {
             // np.unique flattens multidimensional arrays
@@ -505,7 +505,7 @@ public class np_unique_EdgeCases_Test
             result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_3DArray_Flattens()
         {
             var arr = np.array(new int[,,] { { { 3, 1 }, { 2, 1 } }, { { 3, 4 }, { 1, 2 } } });

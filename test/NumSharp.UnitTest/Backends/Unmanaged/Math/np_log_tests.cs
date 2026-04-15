@@ -7,9 +7,10 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
+    [TestClass]
     public class np_log_tests
     {
-        [Test]
+        [TestMethod]
         public void Log_1()
         {
             var arr = np.zeros(new Shape(5, 5)) + 5d;
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => System.Math.Abs(d - 1.6094379124341) < 0.0001).Should().BeTrue();
         }        
 
-        [Test]
+        [TestMethod]
         public void Log_2()
         {
             var arr = np.ones(new Shape(5, 5));
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => d == 0).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void LogUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32)+5;
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void LogDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;

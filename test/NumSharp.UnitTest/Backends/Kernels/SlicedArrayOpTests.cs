@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -11,11 +10,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// All expected values are verified against NumPy 2.x output.
 /// Sliced arrays test the strided path of IL kernels rather than the SIMD contiguous path.
 /// </summary>
+[TestClass]
 public class SlicedArrayOpTests
 {
     #region Binary Operations on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedArrays_Int32()
     {
         // NumPy: a[::2] + b[::2] where a=[1,2,3,4,5,6,7,8], b=[10,20,30,40,50,60,70,80]
@@ -29,7 +29,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(11, 33, 55, 77).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedArrays_SameSource()
     {
         // NumPy: a[::2] + a[1::2] where a=[1,2,3,4,5,6,7,8]
@@ -42,7 +42,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(3, 7, 11, 15).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Subtract_SlicedArrays_Float64()
     {
         // a[::2] - a[1::2]
@@ -57,7 +57,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(44.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_SlicedArrays_Int32()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
@@ -69,7 +69,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(2, 12, 30).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_SlicedArrays_Float64()
     {
         var a = np.array(new[] { 10.0, 2.0, 30.0, 5.0, 60.0, 6.0 });
@@ -83,7 +83,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(10.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedWithScalar()
     {
         // NumPy: j[::2] + 5 where j=[10, 20, 30, 40, 50]
@@ -96,7 +96,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(15, 35, 55).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_SlicedWithScalar()
     {
         // NumPy: j[1::2] * 2 where j=[10, 20, 30, 40, 50]
@@ -113,7 +113,7 @@ public class SlicedArrayOpTests
 
     #region 2D Sliced Operations
 
-    [Test]
+    [TestMethod]
     public void Add_2DSliced_Rows()
     {
         // c[::2, :] + c[1::1, :] for 3x3 array
@@ -129,7 +129,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(7.0, sliced.GetDouble(1, 0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_2DSliced_Cols()
     {
         var c = np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
@@ -144,7 +144,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(6.0, sliced.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_2DSliced_Corners()
     {
         var c = np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
@@ -164,7 +164,7 @@ public class SlicedArrayOpTests
 
     #region Unary Operations on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void Sin_SlicedArray()
     {
         // NumPy: np.sin(d[::2]) where d=[0, 1, 2, 3, 4, 5]
@@ -179,7 +179,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(-0.7568025, result.GetDouble(2), 1e-7);
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_SlicedArray()
     {
         // NumPy: np.sqrt(d[1::2]) where d=[0, 1, 2, 3, 4, 5]
@@ -194,7 +194,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(2.23606798, result.GetDouble(2), 1e-7);
     }
 
-    [Test]
+    [TestMethod]
     public void Cos_SlicedArray()
     {
         var d = np.array(new[] { 0.0, Math.PI / 2, Math.PI, Math.PI * 1.5, Math.PI * 2 });
@@ -208,7 +208,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(1.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_SlicedArray()
     {
         var d = np.array(new[] { 0.0, 1.0, 2.0, 3.0 });
@@ -221,7 +221,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(Math.Exp(2.0), result.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Log_SlicedArray()
     {
         var d = np.array(new[] { 1.0, 2.0, Math.E, 4.0, Math.E * Math.E });
@@ -235,7 +235,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(2.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_SlicedArray()
     {
         var d = np.array(new[] { -5.0, 3.0, -2.0, 7.0, -1.0, 9.0 });
@@ -253,7 +253,7 @@ public class SlicedArrayOpTests
 
     #region Comparison Operations on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void LessThan_SlicedArrays()
     {
         // NumPy: e[::2] < e[1::2] where e=[1, 5, 2, 6, 3, 7]
@@ -268,7 +268,7 @@ public class SlicedArrayOpTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [TestMethod]
     public void GreaterThan_SlicedWithScalar()
     {
         // NumPy: e[::2] > 2 where e=[1, 5, 2, 6, 3, 7]
@@ -283,7 +283,7 @@ public class SlicedArrayOpTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Equal_SlicedArrays()
     {
         var a = np.array(new[] { 1, 2, 3, 2, 5, 2 });
@@ -301,7 +301,7 @@ public class SlicedArrayOpTests
 
     #region Bitwise Operations on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_SlicedBoolArrays()
     {
         // NumPy: f[::2] & g[::2]
@@ -318,7 +318,7 @@ public class SlicedArrayOpTests
         Assert.IsFalse(result.GetBoolean(2));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_SlicedBoolArrays()
     {
         // NumPy: f[::2] | g[::2]
@@ -334,7 +334,7 @@ public class SlicedArrayOpTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseXor_SlicedIntArrays()
     {
         var a = np.array(new[] { 0b1010, 0b0000, 0b1111, 0b0000, 0b0101 });
@@ -357,7 +357,7 @@ public class SlicedArrayOpTests
 
     #region Reduction Operations on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void Sum_SlicedArray()
     {
         // NumPy: np.sum(h[::2]) where h=[1, 2, 3, 4, 5, 6, 7, 8]
@@ -370,7 +370,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(16.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_SlicedArray()
     {
         // NumPy: np.mean(h[1::2]) where h=[1, 2, 3, 4, 5, 6, 7, 8]
@@ -383,7 +383,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(5.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Max_SlicedArray()
     {
         // NumPy: np.max(h[::3]) where h=[1, 2, 3, 4, 5, 6, 7, 8]
@@ -396,7 +396,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(7.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_SlicedArray()
     {
         var h = np.array(new[] { 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0 });
@@ -408,7 +408,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(2.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_2DSliced()
     {
         // NumPy: np.sum(c[::2, :]) where c=[[1,2,3],[4,5,6],[7,8,9]]
@@ -421,7 +421,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(30.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_2DSlicedCols()
     {
         // NumPy: np.sum(c[:, ::2]) where c=[[1,2,3],[4,5,6],[7,8,9]]
@@ -438,7 +438,7 @@ public class SlicedArrayOpTests
 
     #region Reversed Slice Operations
 
-    [Test]
+    [TestMethod]
     public void Add_ReversedSlice()
     {
         // NumPy: i[::-1] + i where i=[1, 2, 3, 4, 5]
@@ -455,7 +455,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(6.0, result.GetDouble(4), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_ReversedSlice()
     {
         // NumPy: np.sum(i[::-1]) = 15 (same as forward)
@@ -466,7 +466,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(15.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sin_ReversedStridedSlice()
     {
         // NumPy: np.sin(i[::-2]) where i=[1, 2, 3, 4, 5]
@@ -481,7 +481,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(0.84147098, result.GetDouble(2), 1e-7);
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_ReversedSlice()
     {
         var a = np.array(new[] { 1, 2, 3, 4 });
@@ -497,7 +497,7 @@ public class SlicedArrayOpTests
 
     #region Mixed Contiguous and Sliced Operations
 
-    [Test]
+    [TestMethod]
     public void Add_ContiguousWithSliced()
     {
         // Contiguous + Sliced
@@ -509,7 +509,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(11, 32, 53, 74).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_SlicedWithContiguous()
     {
         // Sliced * Contiguous
@@ -525,7 +525,7 @@ public class SlicedArrayOpTests
 
     #region Type Preservation on Sliced Arrays
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedByte()
     {
         var a = np.array(new byte[] { 1, 2, 3, 4, 5, 6 });
@@ -536,7 +536,7 @@ public class SlicedArrayOpTests
         result.Should().BeOfValues(11, 33, 55).And.BeOfType(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedFloat32()
     {
         var a = np.array(new float[] { 1.5f, 2.5f, 3.5f, 4.5f });
@@ -549,7 +549,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(5.0f, result.GetSingle(1), 1e-5f);
     }
 
-    [Test]
+    [TestMethod]
     public void Add_SlicedInt64()
     {
         var a = np.array(new long[] { 1000000000000L, 2, 3000000000000L, 4 });
@@ -566,7 +566,7 @@ public class SlicedArrayOpTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void SingleElement_Slice()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -579,7 +579,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(3, sliced.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Step_GreaterThanSize()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -591,7 +591,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(1, sliced.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeStep_FullReverse()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -606,7 +606,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(1, sliced.GetInt32(4));
     }
 
-    [Test]
+    [TestMethod]
     public void SliceOfSlice()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -621,7 +621,7 @@ public class SlicedArrayOpTests
         Assert.AreEqual(9, sliced.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void SliceOfSlice_Operations()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5, 6, 7, 8 });

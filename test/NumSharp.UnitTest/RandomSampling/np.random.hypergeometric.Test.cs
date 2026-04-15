@@ -9,9 +9,10 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Samples from hypergeometric distribution without replacement.
 /// Mean = nsample * ngood / (ngood + nbad)
 /// </summary>
+[TestClass]
 public class RandomHypergeometricTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Hypergeometric_ScalarCall_Returns0dArray()
     {
         var rng = np.random.RandomState(42);
@@ -21,7 +22,7 @@ public class RandomHypergeometricTests : TestClass
         Assert.IsTrue(value >= 0 && value <= 10, $"Result {value} should be in [0, 10]");
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_ArraySize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -30,7 +31,7 @@ public class RandomHypergeometricTests : TestClass
         Assert.AreEqual(typeof(long), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_MultiDimensionalSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -38,7 +39,7 @@ public class RandomHypergeometricTests : TestClass
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_ShapeSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -46,7 +47,7 @@ public class RandomHypergeometricTests : TestClass
         result.Should().BeShaped(3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_AllValuesInRange()
     {
         // Result must be in [max(0, nsample-nbad), min(nsample, ngood)]
@@ -62,7 +63,7 @@ public class RandomHypergeometricTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_MeanConvergesToExpected()
     {
         // Mean = nsample * ngood / (ngood + nbad)
@@ -82,7 +83,7 @@ public class RandomHypergeometricTests : TestClass
             $"Mean {mean} should be close to 5");
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_AllGood_ReturnsNsample()
     {
         // When nbad=0, result is always nsample (all are good)
@@ -96,7 +97,7 @@ public class RandomHypergeometricTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_AllBad_ReturnsZero()
     {
         // When ngood=0, result is always 0 (none are good)
@@ -110,7 +111,7 @@ public class RandomHypergeometricTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_TakeAll_ReturnsNgood()
     {
         // When nsample = ngood + nbad, result is always ngood
@@ -124,7 +125,7 @@ public class RandomHypergeometricTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_MostlyGood()
     {
         // (100, 2, 10) - should get mostly ~10 good
@@ -142,7 +143,7 @@ public class RandomHypergeometricTests : TestClass
         Assert.IsTrue(mean > 9.5, $"Mean {mean} should be close to 10 for mostly good");
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_MostlyBad()
     {
         // (2, 100, 10) - should get mostly ~0 good
@@ -160,39 +161,39 @@ public class RandomHypergeometricTests : TestClass
         Assert.IsTrue(mean < 0.5, $"Mean {mean} should be close to 0 for mostly bad");
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_NegativeNgood_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(-1, 15, 10, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_NegativeNbad_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, -1, 10, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_ZeroNsample_ThrowsArgumentException()
     {
         // NumPy requires nsample >= 1
         Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 0, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_NegativeNsample_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, -1, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_NsampleTooLarge_ThrowsArgumentException()
     {
         // nsample > ngood + nbad should throw
         Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 40, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_Reproducibility()
     {
         var rng1 = np.random.RandomState(42);
@@ -208,7 +209,7 @@ public class RandomHypergeometricTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Hypergeometric_NsampleOne()
     {
         // With nsample=1, result is either 0 or 1

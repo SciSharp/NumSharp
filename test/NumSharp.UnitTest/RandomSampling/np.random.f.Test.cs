@@ -4,9 +4,10 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomFTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void F_ScalarReturn()
         {
             var rng = np.random.RandomState(42);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue((double)result > 0);
         }
 
-        [Test]
+        [TestMethod]
         public void F_1DArray()
         {
             var result = np.random.f(5, 10, 5);
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void F_2DArray()
         {
             var result = np.random.f(5, 10, new Shape(2, 3));
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void F_ShapeOverload()
         {
             var result = np.random.f(5, 10, new Shape(10, 5));
@@ -46,31 +47,31 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void F_DfnumZero_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.f(0, 10));
         }
 
-        [Test]
+        [TestMethod]
         public void F_DfdenZero_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.f(5, 0));
         }
 
-        [Test]
+        [TestMethod]
         public void F_DfnumNegative_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.f(-1, 10));
         }
 
-        [Test]
+        [TestMethod]
         public void F_DfdenNegative_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.f(5, -1));
         }
 
-        [Test]
+        [TestMethod]
         public void F_MeanMatchesTheory()
         {
             // For F(dfnum, dfden), mean = dfden / (dfden - 2) when dfden > 2
@@ -83,7 +84,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 $"Mean {actualMean} should be close to {expectedMean}");
         }
 
-        [Test]
+        [TestMethod]
         public void F_AllValuesPositive()
         {
             var rng = np.random.RandomState(42);
@@ -93,7 +94,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.IsTrue(val > 0, $"Value {val} should be positive");
         }
 
-        [Test]
+        [TestMethod]
         public void F_DifferentDf_MeanMatchesTheory()
         {
             // Test with different df values
@@ -106,7 +107,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 $"Mean {actualMean} should be close to {expectedMean}");
         }
 
-        [Test]
+        [TestMethod]
         public void F_ReturnsFloat64()
         {
             var result = np.random.f(5, 10, size: new Shape(5));
@@ -114,7 +115,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void F_Reproducible()
         {
             var rng1 = np.random.RandomState(123);

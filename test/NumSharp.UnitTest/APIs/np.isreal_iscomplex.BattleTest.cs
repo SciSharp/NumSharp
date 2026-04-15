@@ -1,193 +1,190 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Battle tests for np.isreal, np.iscomplex, np.isrealobj, np.iscomplexobj.
 /// </summary>
+[TestClass]
 public class NpIsRealIsComplexBattleTests
 {
     #region isreal Tests
 
-    [Test]
-    public async Task IsReal_IntArray_AllTrue()
+    [TestMethod]
+    public void IsReal_IntArray_AllTrue()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.isreal(arr);
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsReal_FloatArray_AllTrue()
+    [TestMethod]
+    public void IsReal_FloatArray_AllTrue()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.isreal(arr);
-        await Assert.That(result.GetBoolean(0)).IsTrue();
+        result.GetBoolean(0).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsReal_DoubleArray_AllTrue()
+    [TestMethod]
+    public void IsReal_DoubleArray_AllTrue()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.isreal(arr);
-        await Assert.That(result.GetBoolean(0)).IsTrue();
+        result.GetBoolean(0).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsReal_ShapeMatches()
+    [TestMethod]
+    public void IsReal_ShapeMatches()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.isreal(arr);
-        await Assert.That(result.shape).IsEquivalentTo(arr.shape);
+        result.shape.Should().BeEquivalentTo(arr.shape);
     }
 
-    [Test]
-    public async Task IsReal_Null_Throws()
+    [TestMethod]
+    public void IsReal_Null_Throws()
     {
-        await Assert.That(() => np.isreal(null!)).ThrowsException();
+        new Action(() => np.isreal(null!)).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region iscomplex Tests
 
-    [Test]
-    public async Task IsComplex_IntArray_AllFalse()
+    [TestMethod]
+    public void IsComplex_IntArray_AllFalse()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.iscomplex(arr);
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsComplex_FloatArray_AllFalse()
+    [TestMethod]
+    public void IsComplex_FloatArray_AllFalse()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.iscomplex(arr);
-        await Assert.That(result.GetBoolean(0)).IsFalse();
+        result.GetBoolean(0).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsComplex_ShapeMatches()
+    [TestMethod]
+    public void IsComplex_ShapeMatches()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.iscomplex(arr);
-        await Assert.That(result.shape).IsEquivalentTo(arr.shape);
+        result.shape.Should().BeEquivalentTo(arr.shape);
     }
 
-    [Test]
-    public async Task IsComplex_Null_Throws()
+    [TestMethod]
+    public void IsComplex_Null_Throws()
     {
-        await Assert.That(() => np.iscomplex(null!)).ThrowsException();
+        new Action(() => np.iscomplex(null!)).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region isrealobj Tests
 
-    [Test]
-    public async Task IsRealObj_IntArray_True()
+    [TestMethod]
+    public void IsRealObj_IntArray_True()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        await Assert.That(np.isrealobj(arr)).IsTrue();
+        np.isrealobj(arr).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsRealObj_FloatArray_True()
+    [TestMethod]
+    public void IsRealObj_FloatArray_True()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        await Assert.That(np.isrealobj(arr)).IsTrue();
+        np.isrealobj(arr).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsRealObj_DoubleArray_True()
+    [TestMethod]
+    public void IsRealObj_DoubleArray_True()
     {
         var arr = np.array(new double[] { 1.0, 2.0 });
-        await Assert.That(np.isrealobj(arr)).IsTrue();
+        np.isrealobj(arr).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsRealObj_AllTypes_True()
+    [TestMethod]
+    public void IsRealObj_AllTypes_True()
     {
-        await Assert.That(np.isrealobj(np.array(new bool[] { true }))).IsTrue();
-        await Assert.That(np.isrealobj(np.array(new byte[] { 1 }))).IsTrue();
-        await Assert.That(np.isrealobj(np.array(new short[] { 1 }))).IsTrue();
-        await Assert.That(np.isrealobj(np.array(new int[] { 1 }))).IsTrue();
-        await Assert.That(np.isrealobj(np.array(new long[] { 1 }))).IsTrue();
+        np.isrealobj(np.array(new bool[] { true })).Should().BeTrue();
+        np.isrealobj(np.array(new byte[] { 1 })).Should().BeTrue();
+        np.isrealobj(np.array(new short[] { 1 })).Should().BeTrue();
+        np.isrealobj(np.array(new int[] { 1 })).Should().BeTrue();
+        np.isrealobj(np.array(new long[] { 1 })).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsRealObj_Null_Throws()
+    [TestMethod]
+    public void IsRealObj_Null_Throws()
     {
-        await Assert.That(() => np.isrealobj(null!)).ThrowsException();
+        new Action(() => np.isrealobj(null!)).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region iscomplexobj Tests
 
-    [Test]
-    public async Task IsComplexObj_IntArray_False()
+    [TestMethod]
+    public void IsComplexObj_IntArray_False()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        await Assert.That(np.iscomplexobj(arr)).IsFalse();
+        np.iscomplexobj(arr).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsComplexObj_FloatArray_False()
+    [TestMethod]
+    public void IsComplexObj_FloatArray_False()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        await Assert.That(np.iscomplexobj(arr)).IsFalse();
+        np.iscomplexobj(arr).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsComplexObj_AllRealTypes_False()
+    [TestMethod]
+    public void IsComplexObj_AllRealTypes_False()
     {
-        await Assert.That(np.iscomplexobj(np.array(new bool[] { true }))).IsFalse();
-        await Assert.That(np.iscomplexobj(np.array(new byte[] { 1 }))).IsFalse();
-        await Assert.That(np.iscomplexobj(np.array(new int[] { 1 }))).IsFalse();
-        await Assert.That(np.iscomplexobj(np.array(new double[] { 1.0 }))).IsFalse();
+        np.iscomplexobj(np.array(new bool[] { true })).Should().BeFalse();
+        np.iscomplexobj(np.array(new byte[] { 1 })).Should().BeFalse();
+        np.iscomplexobj(np.array(new int[] { 1 })).Should().BeFalse();
+        np.iscomplexobj(np.array(new double[] { 1.0 })).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsComplexObj_Null_Throws()
+    [TestMethod]
+    public void IsComplexObj_Null_Throws()
     {
-        await Assert.That(() => np.iscomplexobj(null!)).ThrowsException();
+        new Action(() => np.iscomplexobj(null!)).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region Various Array Shapes
 
-    [Test]
-    public async Task IsReal_EmptyArray()
+    [TestMethod]
+    public void IsReal_EmptyArray()
     {
         var arr = np.array(new int[0]);
         var result = np.isreal(arr);
-        await Assert.That(result.size).IsEqualTo(0);
+        result.size.Should().Be(0);
     }
 
-    [Test]
-    public async Task IsComplex_EmptyArray()
+    [TestMethod]
+    public void IsComplex_EmptyArray()
     {
         var arr = np.array(new int[0]);
         var result = np.iscomplex(arr);
-        await Assert.That(result.size).IsEqualTo(0);
+        result.size.Should().Be(0);
     }
 
-    [Test]
-    public async Task IsRealObj_EmptyArray_True()
+    [TestMethod]
+    public void IsRealObj_EmptyArray_True()
     {
         var arr = np.array(new int[0]);
-        await Assert.That(np.isrealobj(arr)).IsTrue();
+        np.isrealobj(arr).Should().BeTrue();
     }
 
     #endregion

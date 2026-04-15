@@ -10,9 +10,10 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class NdArrayEyeTest
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             np.eye(3, k: 1).flat.Cast<double>().Count(i => i == 1d).Should().Be(2);
@@ -21,7 +22,7 @@ namespace NumSharp.UnitTest.Creation
                 .Be(new NDArray(new double[][] {new double[] {0.0d, 1.0d, 0.0d}, new double[] {0.0d, 0d, 1.0d}, new double[] {0d, 0d, 0d}}, Shape.Matrix(3, 3)));
         }        
         
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             np.eye(3).flat.Cast<double>().Count(i => i == 1).Should().Be(3);
@@ -29,12 +30,12 @@ namespace NumSharp.UnitTest.Creation
                 .Be(new NDArray(new double[][] { new double[] { 1.0d, 0.0d, 0.0d }, new double[] { 0.0d, 1d, 0d }, new double[] { 0d, 0d, 1d } }, Shape.Matrix(3, 3)));
 
         }        
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             np.eye(10, k: -6).flat.Cast<double>().Count(i=>i==1).Should().Be(4);
         }        
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             np.eye(10, k: -6).flat.Cast<double>().Count(i=>i==1).Should().Be(4);

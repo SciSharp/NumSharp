@@ -5,9 +5,10 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class ValueOffsetIncrementorTests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var shape = new Shape(3, 3, 1, 2);
@@ -33,7 +34,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var shape = new Shape(1, 1, 1, 3);
@@ -45,7 +46,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var shape = new Shape(3, 1, 1, 1);
@@ -57,7 +58,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var shape = new Shape(1, 1, 3, 1);
@@ -69,7 +70,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case5()
         {
             var shape = new Shape(2, 1, 3, 1);
@@ -84,7 +85,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case6()
         {
             var shape = new Shape(1);
@@ -93,7 +94,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
             sh.Next().Should().Be(-1);
         }
-        [Test]
+        [TestMethod]
         public void Case7()
         {
             var shape = new Shape(2);
@@ -104,7 +105,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(-1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case8()
         {
             var shape = new Shape(100);
@@ -114,7 +115,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().Be(shape.GetOffset(2));
         }
 
-        [Test]
+        [TestMethod]
         public void Case9()
         {
             var shape = new Shape(0);

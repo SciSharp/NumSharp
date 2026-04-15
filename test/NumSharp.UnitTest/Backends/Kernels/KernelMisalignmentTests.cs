@@ -1,7 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -9,13 +8,14 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests documenting NumSharp vs NumPy misalignments in kernel operations.
 /// These tests verify current NumSharp behavior which differs from NumPy.
 /// </summary>
+[TestClass]
 public class KernelMisalignmentTests
 {
     /// <summary>
     /// NumPy: np.square(np.int32(3)) -> int32(9) (preserves dtype)
     /// NumSharp: np.square(3) -> int32(9) (preserves dtype) - FIXED
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Square_IntegerInput_PreservesDtype()
     {
         // NumPy behavior: preserves int32 dtype
@@ -35,7 +35,7 @@ public class KernelMisalignmentTests
     /// NumPy: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=int32)
     /// NumSharp: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=int32) - FIXED
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Square_IntegerArray_PreservesDtype()
     {
         // NumPy behavior:
@@ -58,7 +58,7 @@ public class KernelMisalignmentTests
     /// NumPy: np.invert(True) -> False (logical NOT for boolean)
     /// NumSharp: np.invert(true) -> False (logical NOT) - FIXED
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Invert_Boolean_LogicalNot()
     {
         // NumPy behavior:
@@ -79,7 +79,7 @@ public class KernelMisalignmentTests
     /// NumPy: np.invert(np.array([True, False])) -> array([False, True])
     /// NumSharp: np.invert([true, false]) -> [False, True] - FIXED
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Invert_BooleanArray_LogicalNot()
     {
         // NumPy behavior:
@@ -99,7 +99,7 @@ public class KernelMisalignmentTests
     /// <summary>
     /// Verify np.square works correctly for floating point (no misalignment).
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Square_FloatingPoint_Correct()
     {
         // Float input preserves float
@@ -116,7 +116,7 @@ public class KernelMisalignmentTests
     /// <summary>
     /// Verify np.invert works correctly for integers (no misalignment).
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Invert_Integer_Correct()
     {
         // NumPy: np.invert(0) -> -1
@@ -136,7 +136,7 @@ public class KernelMisalignmentTests
     /// to floating point for reciprocal, while NumPy preserves integer dtype
     /// and uses floor division.
     /// </summary>
-    [Test]
+    [TestMethod]
     [Misaligned]
     public void Reciprocal_Integer_TypePromotion()
     {
@@ -162,7 +162,7 @@ public class KernelMisalignmentTests
     /// <summary>
     /// Verify np.reciprocal floating point is correct.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Reciprocal_FloatingPoint_Correct()
     {
         // NumPy: np.reciprocal(2.0) -> 0.5

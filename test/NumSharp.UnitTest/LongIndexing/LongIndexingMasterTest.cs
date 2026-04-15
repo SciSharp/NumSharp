@@ -2,10 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
 
@@ -29,6 +27,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// 3. We don't exceed available system memory
 /// </summary>
 [HighMemory]
+[TestClass]
 public class LongIndexingMasterTest
 {
     /// <summary>
@@ -46,9 +45,9 @@ public class LongIndexingMasterTest
     /// Master test that exercises all np.* functions with large arrays.
     /// Runs sequentially to manage memory usage.
     /// </summary>
-    [Test]
-    [Explicit("Requires ~8GB+ RAM. Run manually with: dotnet test -- --treenode-filter \"/*/*/*/*[Category=LongIndexing]\"")]
-    public async Task AllNpFunctions_WithLargeArrays()
+    [TestMethod]
+    [TestCategory("Explicit")] // Requires ~8GB+ RAM. Run manually with: dotnet test --filter "TestCategory=LongIndexing"
+    public void AllNpFunctions_WithLargeArrays()
     {
         var results = new System.Collections.Generic.List<(string Operation, bool Success, string Error, TimeSpan Duration)>();
 

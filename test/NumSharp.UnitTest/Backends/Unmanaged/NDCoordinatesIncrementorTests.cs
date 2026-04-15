@@ -7,9 +7,10 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class NDCoordinatesIncrementorTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var shape = new Shape(3, 3, 1, 2);
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var shape = new Shape(1, 1, 1, 3);
@@ -47,7 +48,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var shape = new Shape(3, 1, 1, 1);
@@ -59,7 +60,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var shape = new Shape(1, 1, 3, 1);
@@ -71,7 +72,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case5()
         {
             var shape = new Shape(2, 1, 3, 1);
@@ -86,7 +87,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case6()
         {
             var shape = new Shape(1);
@@ -96,7 +97,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case7()
         {
             var shape = new Shape(2);
@@ -107,7 +108,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case8()
         {
             var shape = new Shape(100);
@@ -117,14 +118,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case9()
         {
             var shape = new Shape(0);
             new Action(() => new ValueCoordinatesIncrementor(ref shape)).Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Extended()
         {
             var shape = new Shape(3, 3, 1, 2);
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Extended()
         {
             var shape = new Shape(1, 1, 1, 3);
@@ -164,7 +165,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case3_Extended()
         {
             var shape = new Shape(3, 1, 1, 1);
@@ -176,7 +177,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case4_Extended()
         {
             var shape = new Shape(1, 1, 3, 1);
@@ -188,7 +189,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case5_Extended()
         {
             var shape = new Shape(2, 1, 3, 1);
@@ -203,7 +204,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case6_Extended()
         {
             var shape = new Shape(1);
@@ -213,7 +214,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case7_Extended()
         {
             var shape = new Shape(2);
@@ -224,7 +225,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case8_Extended()
         {
             var shape = new Shape(100);
@@ -235,21 +236,21 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().ContainInOrder(2, 0, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case9_Extended()
         {
             var shape = new Shape(0);
             new Action(() => new NDExtendedCoordinatesIncrementor(shape, 2)).Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Case10_Scalar()
         {
             var a = new UnmanagedStorage(17);
             AssertAreEqual(new int[] {17}, a.ToArray<int>());
         }
 
-        [Test]
+        [TestMethod]
         public void Case10_Scalar_2()
         {
             var shape = Shape.Scalar;
@@ -258,7 +259,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case11_Scalar()
         {
             var sh = new ValueCoordinatesIncrementor(new long[0]);
@@ -266,7 +267,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case10_Scalar_Extended()
         {
             var shape = Shape.Scalar;

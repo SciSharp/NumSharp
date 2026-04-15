@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         private const long onegb = 1_073_741_824;
         private static readonly object _lock = new Object();
 
-        [Test, LargeMemoryTest]
+        [TestMethod, LargeMemoryTest]
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test, LargeMemoryTest]
+        [TestMethod, LargeMemoryTest]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test, LargeMemoryTest]
+        [TestMethod, LargeMemoryTest]
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test, LargeMemoryTest]
+        [TestMethod, LargeMemoryTest]
         public void Allocate_44GB()
         {
             lock (_lock)

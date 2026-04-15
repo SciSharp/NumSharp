@@ -8,9 +8,10 @@ namespace NumSharp.UnitTest
     ///     NumPy-aligned offset parity tests: Verify element access uses the formula
     ///     offset + sum(indices * strides) for all shape types (simple, sliced, broadcast).
     /// </summary>
+    [TestClass]
     public class ShapeOffsetParityTests
     {
-        [Test]
+        [TestMethod]
         public void Parity_Vector_AllIndices()
         {
             // 1D vector
@@ -23,7 +24,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Parity_Matrix_AllIndices()
         {
             // 2D matrix
@@ -39,7 +40,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Parity_3DArray_AllIndices()
         {
             // 3D array
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Parity_4DArray_SampleIndices()
         {
             // 4D array (sample indices to keep test fast)
@@ -79,7 +80,7 @@ namespace NumSharp.UnitTest
             actual.Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void Parity_Scalar()
         {
             // Scalar shape (edge case)
@@ -90,7 +91,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [Test]
+        [TestMethod]
         public void Offset_DefaultsToZero_ForNewShapes()
         {
             // Verify offset is 0 for all newly created shapes
@@ -102,7 +103,7 @@ namespace NumSharp.UnitTest
             Shape.Matrix(3, 4).Offset.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Offset_PreservedByClone()
         {
             var original = new Shape(4, 3);
@@ -113,7 +114,7 @@ namespace NumSharp.UnitTest
             cloned.Offset.Should().Be(original.Offset);
         }
 
-        [Test]
+        [TestMethod]
         public void Offset_PreservedByCopyConstructor()
         {
             var original = new Shape(4, 3);
@@ -121,7 +122,7 @@ namespace NumSharp.UnitTest
             copy.Offset.Should().Be(original.Offset);
         }
 
-        [Test]
+        [TestMethod]
         public void Parity_RandomIndices()
         {
             // Test with random indices
@@ -144,7 +145,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void GetOffsetSimple_Formula_MatchesExpectedCalculation()
         {
             // Verify the formula: offset + sum(indices * strides)
@@ -165,7 +166,7 @@ namespace NumSharp.UnitTest
         //  Sliced shape tests - offset computed at slice time
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Slice_SlicedShape_OffsetComputedAtSliceTime()
         {
             // Original shape (4,3) with strides [3, 1]
@@ -178,7 +179,7 @@ namespace NumSharp.UnitTest
             sliced.Dimensions.Should().BeEquivalentTo([2, 3]);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_SlicedShape_GetOffsetSimple_Parity()
         {
             // np.arange(12).reshape(4,3)[1:3, :]
@@ -199,7 +200,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_SlicedVector_OffsetAndParity()
         {
             // np.arange(10)[3:7] -> offset=3, strides=[1], dims=[4]
@@ -217,7 +218,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_SlicedWithStep_OffsetAndStrides()
         {
             // np.arange(10)[1:7:2] -> starts at 1, takes [1,3,5], dims=[3]
@@ -238,7 +239,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_Sliced2D_ColumnSlice()
         {
             // np.arange(12).reshape(4,3)[:, 1] -> column 1
@@ -259,7 +260,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_SlicedScalar_Offset()
         {
             // np.arange(12).reshape(4,3)[2, 1] -> scalar at offset 2*3 + 1 = 7
@@ -270,7 +271,7 @@ namespace NumSharp.UnitTest
             sliced.Offset.Should().Be(7, because: "[2,1] is at linear offset 7");
         }
 
-        [Test]
+        [TestMethod]
         public void Slice_DoubleSliced_OffsetAccumulates()
         {
             // First slice: np.arange(12).reshape(4,3)[1:, :] -> offset=3
@@ -301,7 +302,7 @@ namespace NumSharp.UnitTest
         //  Broadcast shape tests - offset preserved from source
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Broadcast_BroadcastBasic_OffsetPreserved()
         {
             // Broadcast a simple shape - offset should stay 0
@@ -315,7 +316,7 @@ namespace NumSharp.UnitTest
             bRight.Dimensions.Should().BeEquivalentTo([3, 4]);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_BroadcastSliced_OffsetPreserved()
         {
             // Slice a shape (gains offset), then broadcast
@@ -333,7 +334,7 @@ namespace NumSharp.UnitTest
             bSliced.Dimensions.Should().BeEquivalentTo([2, 3]);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_BroadcastScalar_OffsetPreserved()
         {
             // Slice to get scalar with offset, then broadcast
@@ -351,7 +352,7 @@ namespace NumSharp.UnitTest
             bScalar.Dimensions.Should().BeEquivalentTo([2, 2]);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_BroadcastTo_SlicedArray()
         {
             // np.arange(10)[3:7] = [3,4,5,6], offset=3, shape=(4,)
@@ -367,7 +368,7 @@ namespace NumSharp.UnitTest
             broadcasted.Dimensions.Should().BeEquivalentTo([3, 4]);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_BroadcastMultiple_OffsetPreserved()
         {
             // Test Broadcast(Shape[]) with multiple shapes
@@ -385,7 +386,7 @@ namespace NumSharp.UnitTest
             results[2].Offset.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_GetOffsetSimple_BroadcastedSliced()
         {
             // End-to-end: slice then broadcast, verify GetOffsetSimple parity
@@ -410,7 +411,7 @@ namespace NumSharp.UnitTest
         //  NumPy-aligned GetOffset verification
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void SlicedShape_GetOffset_NumPyAligned()
         {
             // GetOffset uses NumPy formula: offset + sum(indices * strides)
@@ -430,7 +431,7 @@ namespace NumSharp.UnitTest
             sliced[1, 2].GetInt64(0).Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void SlicedWithStep_GetOffset_NumPyAligned()
         {
             // Slice with step
@@ -443,7 +444,7 @@ namespace NumSharp.UnitTest
             sliced[2].GetInt64(0).Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void ColumnSlice_GetOffset_NumPyAligned()
         {
             // Column slice (dimension reduction)
@@ -457,7 +458,7 @@ namespace NumSharp.UnitTest
             col1[3].GetInt64(0).Should().Be(10);
         }
 
-        [Test]
+        [TestMethod]
         public void DoubleSliced_GetOffset_NumPyAligned()
         {
             // Double slice (slice of slice)
@@ -479,7 +480,7 @@ namespace NumSharp.UnitTest
         //  NumPy purity verification
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void NumPyPurity_IsSimpleSlice_TrueForNonContiguousSlice()
         {
             // Note: Contiguous slices get optimized (IsSliced=false).
@@ -492,7 +493,7 @@ namespace NumSharp.UnitTest
             stepSliced.Shape.IsBroadcasted.Should().BeFalse();
         }
 
-        [Test]
+        [TestMethod]
         public void NumPyPurity_IsSimpleSlice_TrueForColumnSlice()
         {
             // Column slice is non-contiguous
@@ -505,7 +506,7 @@ namespace NumSharp.UnitTest
             colSliced.Shape.Strides.Should().BeEquivalentTo([3]);
         }
 
-        [Test]
+        [TestMethod]
         public void NumPyPurity_IsSimpleSlice_FalseForBroadcast()
         {
             var arr = np.arange(3);
@@ -515,7 +516,7 @@ namespace NumSharp.UnitTest
             broadcasted.Shape.IsSimpleSlice.Should().BeFalse();
         }
 
-        [Test]
+        [TestMethod]
         public void NumPyPurity_ContiguousSlice_Optimized()
         {
             // Contiguous slices are optimized: no ViewInfo, IsSliced=false
@@ -532,7 +533,7 @@ namespace NumSharp.UnitTest
             sliced[1, 2].GetInt64(0).Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void NumPyPurity_NonSlicedShape_UsesGetOffsetSimple()
         {
             // Verify non-sliced shapes also use the simple offset formula

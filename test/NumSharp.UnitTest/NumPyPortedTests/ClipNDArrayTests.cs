@@ -9,11 +9,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests for np.clip with array-valued min/max bounds.
     /// Validates the IL kernel migration of Default.ClipNDArray.cs.
     /// </summary>
+    [TestClass]
     public class ClipNDArrayTests
     {
         #region Basic Array Bounds Tests
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_BasicArrayBounds_MatchesNumPy()
         {
             // NumPy: np.clip([1,2,3,4,5,6,7,8,9], [2,2,2,3,3,3,4,4,4], [5,5,5,6,6,6,7,7,7])
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2, 2, 3, 4, 5, 6, 7, 7, 7);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_MinArrayOnly_MatchesNumPy()
         {
             // NumPy: np.clip([1,2,3,4,5], [2,2,2,2,2], None) = [2,2,3,4,5]
@@ -39,7 +40,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_MaxArrayOnly_MatchesNumPy()
         {
             // NumPy: np.clip([1,2,3,4,5], None, [3,3,3,3,3]) = [1,2,3,3,3]
@@ -55,7 +56,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Broadcasting Tests
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_BroadcastMinAlongAxis0_MatchesNumPy()
         {
             // NumPy:
@@ -71,7 +72,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2, 3, 4, 5, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_BroadcastMaxAlongAxis0_MatchesNumPy()
         {
             // NumPy:
@@ -87,7 +88,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 9, 10);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_ScalarMinArrayMax_MatchesNumPy()
         {
             // Mixed: scalar min, array max
@@ -100,7 +101,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 8, 8, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_ArrayMinNullMax_MatchesNumPy()
         {
             // From np.clip.Test.cs Case2
@@ -113,7 +114,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 10, 11);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_NullMinArrayMax_MatchesNumPy()
         {
             // From np.clip.Test.cs Case3
@@ -130,7 +131,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_MinGreaterThanMax_UsesMaxValue()
         {
             // NumPy behavior: when min[i] > max[i], result is max[i]
@@ -144,7 +145,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(3, 3, 3, 3, 3);
         }
 
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void ClipNDArray_NaNInBoundsArray_PropagatesNaN()
         {
@@ -167,7 +168,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(5.0, data[4]);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_EmptyArray_ReturnsEmpty()
         {
             var a = np.array(new double[0]);
@@ -179,7 +180,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_BothNone_ReturnsCopy()
         {
             var a = np.arange(10);
@@ -192,7 +193,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Dtype Tests
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_Float64Array_PreservesDtype()
         {
             var a = np.arange(10.0);
@@ -205,7 +206,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 7.0, 7.0);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_Int32Array_PreservesDtype()
         {
             // Explicit int32 array for testing dtype preservation
@@ -223,7 +224,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Contiguous vs Non-Contiguous Tests
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_TransposedArray_MatchesNumPy()
         {
             // Non-contiguous input (transposed)
@@ -239,7 +240,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2, 4, 8, 2, 5, 8, 2, 6, 8, 3, 7, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void ClipNDArray_SlicedArray_MatchesNumPy()
         {
             // Sliced input (every other element)

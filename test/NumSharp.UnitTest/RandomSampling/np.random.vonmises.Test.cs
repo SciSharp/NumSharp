@@ -10,11 +10,12 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
     
+    [TestClass]
     public class np_random_vonmises_Tests : TestClass
     {
         #region Basic Functionality
 
-        [Test]
+        [TestMethod]
         public void VonMises_Scalar_ReturnsNDArray()
         {
             var rng = np.random.RandomState(42);
@@ -24,7 +25,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.ndim.Should().Be(0);  // Scalar
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_1D_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_2D_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -44,7 +45,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_SizeNull_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -57,7 +58,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Range Verification
 
-        [Test]
+        [TestMethod]
         public void VonMises_ResultsInRange_MinusPiToPi()
         {
             // All results should be in [-pi, pi]
@@ -72,7 +73,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_Kappa0_UniformOnCircle()
         {
             // kappa=0 gives uniform distribution on [-pi, pi]
@@ -94,7 +95,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_HighKappa_ConcentratedAroundMu()
         {
             // High kappa = concentrated around mu
@@ -117,7 +118,7 @@ namespace NumSharp.UnitTest.RandomSampling
             std.Should().BeLessThan(0.15);
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_HighKappa_ConcentratedAroundMuPiHalf()
         {
             // High kappa around mu=pi/2
@@ -137,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Kappa Parameter Ranges
 
-        [Test]
+        [TestMethod]
         public void VonMises_VerySmallKappa_NearUniform()
         {
             // kappa < 1e-8 uses uniform distribution
@@ -153,7 +154,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_VeryHighKappa_WrappedNormalFallback()
         {
             // kappa > 1e6 uses wrapped normal approximation
@@ -175,7 +176,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean).Should().BeLessThan(0.01);
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_VariousKappaValues_AllInRange()
         {
             var rng = np.random.RandomState(42);
@@ -196,13 +197,13 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Validation
 
-        [Test]
+        [TestMethod]
         public void VonMises_NegativeKappa_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -1));
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_SmallNegativeKappa_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.vonmises(0, -0.001));
@@ -212,7 +213,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Mu Parameter
 
-        [Test]
+        [TestMethod]
         public void VonMises_DifferentMu_MeanFollowsMu()
         {
             var rng = np.random.RandomState(42);
@@ -230,7 +231,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_MuAtPi_WrapsCorrectly()
         {
             // mu = pi should wrap around properly
@@ -250,7 +251,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void VonMises_EmptyShape_ReturnsEmptyArray()
         {
             var rng = np.random.RandomState(42);
@@ -259,7 +260,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_Size1_ReturnsSingleElementArray()
         {
             var rng = np.random.RandomState(42);
@@ -268,7 +269,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void VonMises_Reproducibility_SameSeedSameResults()
         {
             var rng1 = np.random.RandomState(42);

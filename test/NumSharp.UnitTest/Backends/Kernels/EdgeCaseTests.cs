@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -10,11 +9,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Edge case tests discovered through NumPy battle testing.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class EdgeCaseTests
 {
     #region Modulo Edge Cases - Python vs C Semantics
 
-    [Test]
+    [TestMethod]
     public void Mod_NegativeDividend_PythonSemantics()
     {
         // NumPy: -7 % 3 = 2 (Python semantics: result has same sign as divisor)
@@ -27,7 +27,7 @@ public class EdgeCaseTests
         Assert.AreEqual(2, result.GetInt32(0), "NumPy uses Python modulo semantics");
     }
 
-    [Test]
+    [TestMethod]
     public void Mod_NegativeDivisor_PythonSemantics()
     {
         // NumPy: 7 % -3 = -2 (Python semantics)
@@ -40,7 +40,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-2, result.GetInt32(0), "NumPy uses Python modulo semantics");
     }
 
-    [Test]
+    [TestMethod]
     public void Mod_BothNegative()
     {
         // NumPy: -7 % -3 = -1 (both semantics agree here)
@@ -52,7 +52,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-1, result.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Mod_Float_ByZero()
     {
         // NumPy: 5.0 % 0.0 = NaN
@@ -68,7 +68,7 @@ public class EdgeCaseTests
 
     #region Absolute Value Edge Cases
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // Int8 abs overflow is a known edge case
     public void Abs_Int8_MinValue_Overflow()
     {
@@ -82,7 +82,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-128, (sbyte)result.GetByte(0), "abs(MIN_VALUE) overflows to MIN_VALUE");
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_NegativeZero()
     {
         // NumPy: np.abs(-0.0) = 0.0 (positive zero)
@@ -94,7 +94,7 @@ public class EdgeCaseTests
         // Note: Checking if it's positive zero vs negative zero is tricky
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_NegativeInfinity()
     {
         // NumPy: np.abs(-inf) = inf
@@ -105,7 +105,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsPositiveInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_NaN()
     {
         // NumPy: np.abs(nan) = nan
@@ -120,7 +120,7 @@ public class EdgeCaseTests
 
     #region Sign Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Sign_NaN_ReturnsNaN()
     {
         // NumPy: np.sign(nan) = nan
@@ -132,7 +132,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_Infinity()
     {
         // NumPy: np.sign(inf) = 1.0, np.sign(-inf) = -1.0
@@ -144,7 +144,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-1.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_Zero()
     {
         // NumPy: np.sign(0) = 0, np.sign(-0.0) = 0.0
@@ -156,7 +156,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_PreservesIntegerType()
     {
         // NumPy: np.sign(int16) returns int16
@@ -178,7 +178,7 @@ public class EdgeCaseTests
 
     #region Negative Edge Cases
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp throws NotSupportedException for unsigned types
     public void Negative_UInt8_Wraps()
     {
@@ -194,7 +194,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0, result.GetByte(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Negative_NegativeZero()
     {
         // NumPy: np.negative(-0.0) = 0.0 (becomes positive zero)
@@ -205,7 +205,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Negative_Infinity()
     {
         // NumPy: np.negative(inf) = -inf
@@ -216,7 +216,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Negative_NaN()
     {
         // NumPy: np.negative(nan) = nan
@@ -231,7 +231,7 @@ public class EdgeCaseTests
 
     #region Integer Overflow Edge Cases
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // sbyte array operations may not work correctly
     public void Add_Int8_Overflow_Wraps()
     {
@@ -244,7 +244,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-128, (sbyte)result.GetByte(0));
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // sbyte array operations may not work correctly
     public void Subtract_Int8_Underflow_Wraps()
     {
@@ -257,7 +257,7 @@ public class EdgeCaseTests
         Assert.AreEqual(127, (sbyte)result.GetByte(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Add_UInt8_Overflow_Wraps()
     {
         // NumPy: np.uint8(255) + np.uint8(1) = 0
@@ -269,7 +269,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0, result.GetByte(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Subtract_UInt8_Underflow_Wraps()
     {
         // NumPy: np.uint8(0) - np.uint8(1) = 255
@@ -281,7 +281,7 @@ public class EdgeCaseTests
         Assert.AreEqual(255, result.GetByte(0));
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // sbyte array operations may not work correctly
     public void Multiply_Int8_Overflow_Wraps()
     {
@@ -298,7 +298,7 @@ public class EdgeCaseTests
 
     #region Division Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Divide_Float_ByPositiveZero()
     {
         // NumPy: 1.0 / 0.0 = inf
@@ -310,7 +310,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsPositiveInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_Float_ByNegativeZero()
     {
         // NumPy: 1.0 / -0.0 = -inf
@@ -322,7 +322,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_ZeroByZero()
     {
         // NumPy: 0.0 / 0.0 = nan
@@ -334,7 +334,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_InfinityByInfinity()
     {
         // NumPy: inf / inf = nan
@@ -346,7 +346,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_ZeroByInfinity()
     {
         // NumPy: 0.0 / inf = 0.0
@@ -362,7 +362,7 @@ public class EdgeCaseTests
 
     #region Infinity Arithmetic Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Subtract_InfinityFromInfinity()
     {
         // NumPy: inf - inf = nan
@@ -374,7 +374,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_InfinityByZero()
     {
         // NumPy: inf * 0 = nan
@@ -386,7 +386,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Add_InfinityPlusOne()
     {
         // NumPy: inf + 1 = inf
@@ -398,7 +398,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsPositiveInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Add_NegativeInfinityPlusInfinity()
     {
         // NumPy: -inf + inf = nan
@@ -414,7 +414,7 @@ public class EdgeCaseTests
 
     #region Trig Function Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Sin_Infinity()
     {
         // NumPy: np.sin(inf) = nan
@@ -425,7 +425,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Cos_Infinity()
     {
         // NumPy: np.cos(inf) = nan
@@ -436,7 +436,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void ArcSin_OutOfRange()
     {
         // NumPy: np.arcsin(2) = nan
@@ -447,7 +447,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void ArcTan_Infinity()
     {
         // NumPy: np.arctan(inf) = pi/2
@@ -463,7 +463,7 @@ public class EdgeCaseTests
 
     #region Log/Exp Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Log_Zero()
     {
         // NumPy: np.log(0) = -inf
@@ -474,7 +474,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Log_Negative()
     {
         // NumPy: np.log(-1) = nan
@@ -485,7 +485,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Log1p_MinusOne()
     {
         // NumPy: np.log1p(-1) = -inf
@@ -496,7 +496,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Log1p_LessThanMinusOne()
     {
         // NumPy: np.log1p(-2) = nan
@@ -507,7 +507,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_NegativeInfinity()
     {
         // NumPy: np.exp(-inf) = 0
@@ -518,7 +518,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Expm1_NegativeInfinity()
     {
         // NumPy: np.expm1(-inf) = -1
@@ -529,7 +529,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-1.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Exp2_NegativeInfinity()
     {
         // NumPy: np.exp2(-inf) = 0
@@ -544,7 +544,7 @@ public class EdgeCaseTests
 
     #region Sqrt Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Sqrt_Negative()
     {
         // NumPy: np.sqrt(-1) = nan
@@ -555,7 +555,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_NegativeInfinity()
     {
         // NumPy: np.sqrt(-inf) = nan
@@ -566,7 +566,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_PositiveInfinity()
     {
         // NumPy: np.sqrt(inf) = inf
@@ -581,7 +581,7 @@ public class EdgeCaseTests
 
     #region Hyperbolic Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Tanh_Infinity()
     {
         // NumPy: np.tanh(inf) = 1.0, np.tanh(-inf) = -1.0
@@ -593,7 +593,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-1.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Tanh_LargeValue()
     {
         // NumPy: np.tanh(1000) = 1.0 (saturates to 1)
@@ -604,7 +604,7 @@ public class EdgeCaseTests
         Assert.AreEqual(1.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Sinh_Infinity()
     {
         // NumPy: np.sinh(inf) = inf, np.sinh(-inf) = -inf
@@ -616,7 +616,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Cosh_Infinity()
     {
         // NumPy: np.cosh(inf) = inf (both +inf and -inf give +inf)
@@ -632,7 +632,8 @@ public class EdgeCaseTests
 
     #region Rounding Edge Cases (Banker's Rounding)
 
-    [Test]
+    [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_HalfToEven_BankersRounding()
     {
         // NumPy uses banker's rounding: round half to even
@@ -648,7 +649,8 @@ public class EdgeCaseTests
         Assert.AreEqual(4.0, result.GetDouble(4));  // Half rounds to even (4)
     }
 
-    [Test]
+    [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_NegativeHalf()
     {
         // NumPy: np.round(-0.5) = -0.0, np.round(-1.5) = -2.0
@@ -661,7 +663,7 @@ public class EdgeCaseTests
         Assert.AreEqual(-2.0, result.GetDouble(2));  // Half rounds to even (-2)
     }
 
-    [Test]
+    [TestMethod]
     public void Floor_Infinity()
     {
         // NumPy: np.floor(inf) = inf, np.floor(-inf) = -inf
@@ -673,7 +675,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Floor_NaN()
     {
         // NumPy: np.floor(nan) = nan
@@ -684,7 +686,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Ceil_NegativeHalf()
     {
         // NumPy: np.ceil(-0.5) = -0.0
@@ -699,7 +701,7 @@ public class EdgeCaseTests
 
     #region Empty Array Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Sum_EmptyArray()
     {
         // NumPy: np.sum([]) = 0.0
@@ -710,7 +712,7 @@ public class EdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_EmptyArray()
     {
         // NumPy: np.prod([]) = 1.0
@@ -721,7 +723,7 @@ public class EdgeCaseTests
         Assert.AreEqual(1.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_EmptyArray()
     {
         // NumPy: np.mean([]) = nan
@@ -732,7 +734,7 @@ public class EdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_EmptyArray()
     {
         // NumPy: np.cumsum([]) = [] (empty array)
@@ -744,7 +746,7 @@ public class EdgeCaseTests
         Assert.AreEqual(1, result.ndim);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_EmptyArrays()
     {
         // NumPy: np.dot([], []) = 0.0
@@ -760,7 +762,7 @@ public class EdgeCaseTests
 
     #region Type Promotion Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Add_Bool_ActsAsLogicalOr()
     {
         // NumPy: True + True = True (bool + bool stays bool, acts as OR)
@@ -773,7 +775,7 @@ public class EdgeCaseTests
         Assert.IsTrue(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Add_Bool_False()
     {
         // NumPy: False + False = False
@@ -786,7 +788,7 @@ public class EdgeCaseTests
         Assert.IsFalse(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_Bool_ActsAsLogicalAnd()
     {
         // NumPy: True * False = False (bool * bool stays bool, acts as AND)
@@ -799,7 +801,7 @@ public class EdgeCaseTests
         Assert.IsFalse(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_Bool_WithInt()
     {
         // NumPy: True * 5 = 5 (promotes to int64)
@@ -811,7 +813,7 @@ public class EdgeCaseTests
         Assert.AreEqual(5, result.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Add_UInt64_Int64_PromotesToFloat64()
     {
         // NumPy: uint64 + int64 = float64 (can't safely fit in either)
@@ -828,7 +830,7 @@ public class EdgeCaseTests
 
     #region NaN Comparison Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Equal_NaN_NaN_IsFalse()
     {
         // NumPy: nan == nan -> False (IEEE 754)
@@ -840,7 +842,7 @@ public class EdgeCaseTests
         Assert.IsFalse(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void NotEqual_NaN_NaN_IsTrue()
     {
         // NumPy: nan != nan -> True (IEEE 754)
@@ -852,7 +854,7 @@ public class EdgeCaseTests
         Assert.IsTrue(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void LessThan_NaN_IsFalse()
     {
         // NumPy: nan < anything -> False
@@ -864,7 +866,7 @@ public class EdgeCaseTests
         Assert.IsFalse(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void GreaterThan_NaN_IsFalse()
     {
         // NumPy: nan > anything -> False
@@ -880,7 +882,7 @@ public class EdgeCaseTests
 
     #region Infinity Comparison Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Equal_Infinity_Infinity_IsTrue()
     {
         // NumPy: inf == inf -> True
@@ -892,7 +894,7 @@ public class EdgeCaseTests
         Assert.IsTrue(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void GreaterThan_Infinity_Infinity_IsFalse()
     {
         // NumPy: inf > inf -> False
@@ -904,7 +906,7 @@ public class EdgeCaseTests
         Assert.IsFalse(result.GetBoolean(0));
     }
 
-    [Test]
+    [TestMethod]
     public void GreaterThanOrEqual_Infinity_Infinity_IsTrue()
     {
         // NumPy: inf >= inf -> True

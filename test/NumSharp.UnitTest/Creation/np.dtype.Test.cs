@@ -6,9 +6,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_dtype_tests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             np.dtype("?").type.Should().Be<bool>();

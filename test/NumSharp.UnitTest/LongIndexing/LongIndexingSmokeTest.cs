@@ -1,8 +1,6 @@
 using System;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
 
@@ -18,6 +16,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// - Verifies Shape, NDArray, and np.* APIs accept long indices
 /// - Fast execution (~1-2 seconds total)
 /// </summary>
+[TestClass]
 public class LongIndexingSmokeTest
 {
     /// <summary>
@@ -25,8 +24,8 @@ public class LongIndexingSmokeTest
     /// </summary>
     private const long TestSize = 1_000_000L;
 
-    [Test]
-    public async Task Shape_AcceptsLongDimensions()
+    [TestMethod]
+    public void Shape_AcceptsLongDimensions()
     {
         var shape = new Shape(TestSize);
         Assert.AreEqual(TestSize, shape.Size);
@@ -34,24 +33,24 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(TestSize, shape.Dimensions[0]);
     }
 
-    [Test]
-    public async Task Shape_AcceptsLongMultiDimensions()
+    [TestMethod]
+    public void Shape_AcceptsLongMultiDimensions()
     {
         var shape = new Shape(1000L, 1000L);
         Assert.AreEqual(1_000_000L, shape.Size);
         Assert.AreEqual(2, shape.NDim);
     }
 
-    [Test]
-    public async Task Shape_GetOffset_AcceptsLongIndices()
+    [TestMethod]
+    public void Shape_GetOffset_AcceptsLongIndices()
     {
         var shape = new Shape(TestSize);
         var offset = shape.GetOffset(TestSize - 1);
         Assert.AreEqual(TestSize - 1, offset);
     }
 
-    [Test]
-    public async Task Shape_GetCoordinates_ReturnsLongArray()
+    [TestMethod]
+    public void Shape_GetCoordinates_ReturnsLongArray()
     {
         var shape = new Shape(1000L, 1000L);
         long[] coords = shape.GetCoordinates(999_999);
@@ -60,8 +59,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(999L, coords[1]);
     }
 
-    [Test]
-    public async Task NDArray_Zeros_AcceptsLongShape()
+    [TestMethod]
+    public void NDArray_Zeros_AcceptsLongShape()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         Assert.AreEqual(TestSize, arr.size);
@@ -69,8 +68,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0, arr.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_Ones_AcceptsLongShape()
+    [TestMethod]
+    public void NDArray_Ones_AcceptsLongShape()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         Assert.AreEqual(TestSize, arr.size);
@@ -78,8 +77,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1, arr.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_Full_AcceptsLongShape()
+    [TestMethod]
+    public void NDArray_Full_AcceptsLongShape()
     {
         var arr = np.full(new Shape(TestSize), (byte)42, np.uint8);
         Assert.AreEqual(TestSize, arr.size);
@@ -87,16 +86,16 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(42, arr.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_GetSet_AcceptsLongIndex()
+    [TestMethod]
+    public void NDArray_GetSet_AcceptsLongIndex()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         arr.SetByte((byte)123, TestSize - 1);
         Assert.AreEqual(123, arr.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_Reshape_AcceptsLongDimensions()
+    [TestMethod]
+    public void NDArray_Reshape_AcceptsLongDimensions()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         var reshaped = np.reshape(arr, new Shape(1000L, 1000L));
@@ -104,24 +103,24 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, reshaped.ndim);
     }
 
-    [Test]
-    public async Task NDArray_Sum_ReturnsCorrectForLargeArray()
+    [TestMethod]
+    public void NDArray_Sum_ReturnsCorrectForLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.sum(arr);
         Assert.AreEqual(0, result.ndim);
     }
 
-    [Test]
-    public async Task NDArray_Mean_ReturnsCorrectForLargeArray()
+    [TestMethod]
+    public void NDArray_Mean_ReturnsCorrectForLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.mean(arr);
         Assert.AreEqual(1.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_ArgMax_ReturnsLongIndex()
+    [TestMethod]
+    public void NDArray_ArgMax_ReturnsLongIndex()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         arr.SetByte((byte)255, TestSize - 100);
@@ -129,8 +128,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(TestSize - 100, result);
     }
 
-    [Test]
-    public async Task NDArray_ArgMin_ReturnsLongIndex()
+    [TestMethod]
+    public void NDArray_ArgMin_ReturnsLongIndex()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         arr.SetByte((byte)0, TestSize / 2);
@@ -138,16 +137,16 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(TestSize / 2, result);
     }
 
-    [Test]
-    public async Task NDArray_CountNonzero_ReturnsLongCount()
+    [TestMethod]
+    public void NDArray_CountNonzero_ReturnsLongCount()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var count = np.count_nonzero(arr);
         Assert.AreEqual(TestSize, count);
     }
 
-    [Test]
-    public async Task NDArray_Slicing_WorksWithLargeIndices()
+    [TestMethod]
+    public void NDArray_Slicing_WorksWithLargeIndices()
     {
         var arr = np.full(new Shape(TestSize), (byte)99, np.uint8);
         long start = TestSize - 100;
@@ -157,8 +156,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(99, slice.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_BroadcastTo_WorksWithLongTarget()
+    [TestMethod]
+    public void NDArray_BroadcastTo_WorksWithLongTarget()
     {
         var scalar = np.full(new Shape(1L), (byte)77, np.uint8);
         var broadcast = np.broadcast_to(scalar, new Shape(TestSize));
@@ -167,8 +166,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(77, broadcast.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_Add_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Add_WorksWithLargeArrays()
     {
         var a = np.ones(new Shape(TestSize), np.uint8);
         var b = np.ones(new Shape(TestSize), np.uint8);
@@ -178,16 +177,16 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, result.GetByte(TestSize - 1));
     }
 
-    [Test]
-    public async Task NDArray_Cumsum_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Cumsum_WorksWithLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.cumsum(arr);
         Assert.AreEqual(TestSize, result.size);
     }
 
-    [Test]
-    public async Task NDArray_Roll_WorksWithLargeShift()
+    [TestMethod]
+    public void NDArray_Roll_WorksWithLargeShift()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         arr.SetByte((byte)1, 0);
@@ -196,8 +195,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1, result.GetByte(TestSize / 2));
     }
 
-    [Test]
-    public async Task NDArray_Clip_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Clip_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), (byte)100, np.uint8);
         var result = np.clip(arr, 50, 75);
@@ -205,8 +204,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(75, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_BitwiseOps_WorkWithLargeArrays()
+    [TestMethod]
+    public void NDArray_BitwiseOps_WorkWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), (byte)0b11110000, np.uint8);
         var b = np.full(new Shape(TestSize), (byte)0b00001111, np.uint8);
@@ -222,8 +221,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(255, xorResult.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_ExpandDims_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_ExpandDims_WorksWithLargeArray()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         var result = np.expand_dims(arr, 0);
@@ -231,8 +230,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, result.ndim);
     }
 
-    [Test]
-    public async Task NDArray_Ravel_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Ravel_WorksWithLargeArray()
     {
         var arr = np.zeros(new Shape(1000L, 1000L), np.uint8);
         var result = np.ravel(arr);
@@ -240,8 +239,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1, result.ndim);
     }
 
-    [Test]
-    public async Task NDArray_Flatten_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Flatten_WorksWithLargeArray()
     {
         var arr = np.zeros(new Shape(1000L, 1000L), np.uint8);
         var result = arr.flatten();
@@ -249,16 +248,16 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1, result.ndim);
     }
 
-    [Test]
-    public async Task NDArray_All_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_All_WorksWithLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.all(arr);
         Assert.IsTrue(result);
     }
 
-    [Test]
-    public async Task NDArray_Any_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Any_WorksWithLargeArray()
     {
         var arr = np.zeros(new Shape(TestSize), np.uint8);
         arr.SetByte((byte)1, TestSize - 1);
@@ -266,24 +265,24 @@ public class LongIndexingSmokeTest
         Assert.IsTrue(result);
     }
 
-    [Test]
-    public async Task NDArray_Min_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Min_WorksWithLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.min(arr);
         Assert.AreEqual(1, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Max_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Max_WorksWithLargeArray()
     {
         var arr = np.ones(new Shape(TestSize), np.uint8);
         var result = np.max(arr);
         Assert.AreEqual(1, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Maximum_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Maximum_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), (byte)5, np.uint8);
         var b = np.full(new Shape(TestSize), (byte)10, np.uint8);
@@ -291,8 +290,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(10, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Minimum_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Minimum_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), (byte)5, np.uint8);
         var b = np.full(new Shape(TestSize), (byte)10, np.uint8);
@@ -300,40 +299,40 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(5, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_LeftShift_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_LeftShift_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), (byte)1, np.uint8);
         var result = np.left_shift(arr, 4);
         Assert.AreEqual(16, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_RightShift_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_RightShift_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), (byte)16, np.uint8);
         var result = np.right_shift(arr, 4);
         Assert.AreEqual(1, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Invert_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Invert_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), (byte)0b11110000, np.uint8);
         var result = np.invert(arr);
         Assert.AreEqual(0b00001111, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Square_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Square_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), (byte)3, np.uint8);
         var result = np.square(arr);
         Assert.AreEqual(9, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Multiply_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Multiply_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), (byte)3, np.uint8);
         var b = np.full(new Shape(TestSize), (byte)4, np.uint8);
@@ -341,8 +340,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(12, result.GetByte(0));
     }
 
-    [Test]
-    public async Task NDArray_Subtract_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Subtract_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), (byte)10, np.uint8);
         var b = np.full(new Shape(TestSize), (byte)3, np.uint8);
@@ -354,8 +353,8 @@ public class LongIndexingSmokeTest
     // UNARY MATH OPERATIONS
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Abs_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Abs_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), -5, np.int32);
         var result = np.abs(arr);
@@ -363,8 +362,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(5, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Absolute_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Absolute_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), -5, np.int32);
         var result = np.absolute(arr);
@@ -372,8 +371,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(5, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Negative_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Negative_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 5, np.int32);
         var result = np.negative(arr);
@@ -381,8 +380,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(-5, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Positive_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Positive_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 5, np.int32);
         var result = np.positive(arr);
@@ -390,8 +389,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(5, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Sqrt_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Sqrt_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 16.0, np.float64);
         var result = np.sqrt(arr);
@@ -399,8 +398,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(4.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Cbrt_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Cbrt_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 27.0, np.float64);
         var result = np.cbrt(arr);
@@ -408,8 +407,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Reciprocal_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Reciprocal_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 4.0, np.float64);
         var result = np.reciprocal(arr);
@@ -417,8 +416,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0.25, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Floor_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Floor_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.7, np.float64);
         var result = np.floor(arr);
@@ -426,8 +425,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Ceil_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Ceil_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.7, np.float64);
         var result = np.ceil(arr);
@@ -435,8 +434,9 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(4.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Trunc_WorksWithLargeArray()
+    [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Truncate for Vector512" on AVX-512 capable runners
+    public void NDArray_Trunc_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.7, np.float64);
         var result = np.trunc(arr);
@@ -444,8 +444,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Sign_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Sign_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), -5, np.int32);
         var result = np.sign(arr);
@@ -461,8 +461,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Exp_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Exp_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 1.0, np.float64);
         var result = np.exp(arr);
@@ -470,8 +470,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(Math.E, result.GetDouble(0), 0.0001);
     }
 
-    [Test]
-    public async Task NDArray_Exp2_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Exp2_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.0, np.float64);
         var result = np.exp2(arr);
@@ -479,8 +479,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(8.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Expm1_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Expm1_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 0.0, np.float64);
         var result = np.expm1(arr);
@@ -488,8 +488,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Log_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Log_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), Math.E, np.float64);
         var result = np.log(arr);
@@ -497,8 +497,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.0, result.GetDouble(0), 0.0001);
     }
 
-    [Test]
-    public async Task NDArray_Log10_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Log10_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 100.0, np.float64);
         var result = np.log10(arr);
@@ -506,8 +506,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Log1p_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Log1p_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 0.0, np.float64);
         var result = np.log1p(arr);
@@ -515,8 +515,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Log2_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Log2_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 8.0, np.float64);
         var result = np.log2(arr);
@@ -524,8 +524,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Sin_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Sin_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 0.0, np.float64);
         var result = np.sin(arr);
@@ -533,8 +533,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Cos_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Cos_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 0.0, np.float64);
         var result = np.cos(arr);
@@ -542,8 +542,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Tan_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Tan_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 0.0, np.float64);
         var result = np.tan(arr);
@@ -555,8 +555,8 @@ public class LongIndexingSmokeTest
     // BINARY MATH OPERATIONS
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Divide_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Divide_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 10.0, np.float64);
         var b = np.full(new Shape(TestSize), 4.0, np.float64);
@@ -565,8 +565,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2.5, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_TrueDivide_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_TrueDivide_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 10.0, np.float64);
         var b = np.full(new Shape(TestSize), 4.0, np.float64);
@@ -575,8 +575,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2.5, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_FloorDivide_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_FloorDivide_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 10.0, np.float64);
         var b = np.full(new Shape(TestSize), 4.0, np.float64);
@@ -585,8 +585,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Mod_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Mod_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 10, np.int32);
         var b = np.full(new Shape(TestSize), 3, np.int32);
@@ -595,8 +595,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Power_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Power_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 2, np.int32);
         var b = np.full(new Shape(TestSize), 10, np.int32);
@@ -605,8 +605,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1024, result.GetInt32(0));
     }
 
-    [Test]
-    public async Task NDArray_Modf_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Modf_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.5, np.float64);
         var (fractional, integer) = np.modf(arr);
@@ -620,8 +620,8 @@ public class LongIndexingSmokeTest
     // ADDITIONAL REDUCTIONS
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Prod_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Prod_WorksWithLargeArray()
     {
         // Use small values to avoid overflow
         var arr = np.full(new Shape(10L), 2L, np.int64);
@@ -630,8 +630,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1024L, result.GetInt64(0));
     }
 
-    [Test]
-    public async Task NDArray_Std_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Std_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1, 2, 3, 4, 5 });
         var result = np.std(arr);
@@ -639,8 +639,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.414214, result.GetDouble(0), 0.0001);
     }
 
-    [Test]
-    public async Task NDArray_Var_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Var_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1, 2, 3, 4, 5 });
         var result = np.var(arr);
@@ -648,8 +648,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2.0, result.GetDouble(0), 0.0001);
     }
 
-    [Test]
-    public async Task NDArray_Cumprod_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Cumprod_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(5L), 2L, np.int64);
         var result = np.cumprod(arr);
@@ -665,56 +665,56 @@ public class LongIndexingSmokeTest
     // NAN-AWARE FUNCTIONS
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Nansum_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nansum_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nansum(arr);
         Assert.AreEqual(9.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Nanmean_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanmean_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanmean(arr);
         Assert.AreEqual(3.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Nanmin_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanmin_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanmin(arr);
         Assert.AreEqual(1.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Nanmax_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanmax_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanmax(arr);
         Assert.AreEqual(5.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Nanprod_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanprod_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanprod(arr);
         Assert.AreEqual(15.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Nanstd_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanstd_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanstd(arr);
         Assert.AreEqual(1.632993, result.GetDouble(0), 0.0001);
     }
 
-    [Test]
-    public async Task NDArray_Nanvar_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nanvar_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
         var result = np.nanvar(arr);
@@ -725,8 +725,8 @@ public class LongIndexingSmokeTest
     // COMPARISON & LOGIC
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Isnan_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Isnan_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
         var result = np.isnan(arr);
@@ -738,9 +738,9 @@ public class LongIndexingSmokeTest
         Assert.IsFalse(result.GetBoolean(4));  // 0.0
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // isinf not implemented - returns null (Default.IsInf.cs)
-    public async Task NDArray_Isinf_WorksWithLargeArray()
+    public void NDArray_Isinf_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
         var result = np.isinf(arr);
@@ -752,8 +752,8 @@ public class LongIndexingSmokeTest
         Assert.IsFalse(result.GetBoolean(4));  // 0.0
     }
 
-    [Test]
-    public async Task NDArray_Isfinite_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Isfinite_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
         var result = np.isfinite(arr);
@@ -765,8 +765,8 @@ public class LongIndexingSmokeTest
         Assert.IsTrue(result.GetBoolean(4));   // 0.0
     }
 
-    [Test]
-    public async Task NDArray_ArrayEqual_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_ArrayEqual_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize), 1.0, np.float64);
         var b = np.full(new Shape(TestSize), 1.0, np.float64);
@@ -776,16 +776,16 @@ public class LongIndexingSmokeTest
         Assert.IsFalse(np.array_equal(a, b));
     }
 
-    [Test]
-    public async Task NDArray_Allclose_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Allclose_WorksWithLargeArrays()
     {
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var b = np.array(new double[] { 1.0, 2.0, 3.0000001 });
         Assert.IsTrue(np.allclose(a, b));
     }
 
-    [Test]
-    public async Task NDArray_Isclose_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Isclose_WorksWithLargeArrays()
     {
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var b = np.array(new double[] { 1.0, 2.0, 3.0000001 });
@@ -800,8 +800,8 @@ public class LongIndexingSmokeTest
     // SHAPE MANIPULATION
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Concatenate_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Concatenate_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(TestSize / 2), (byte)1, np.uint8);
         var b = np.full(new Shape(TestSize / 2), (byte)2, np.uint8);
@@ -811,8 +811,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, result.GetByte(TestSize / 2));
     }
 
-    [Test]
-    public async Task NDArray_Stack_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Stack_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(1000L, 1000L), (byte)1, np.uint8);
         var b = np.full(new Shape(1000L, 1000L), (byte)2, np.uint8);
@@ -822,8 +822,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, result.shape[0]);
     }
 
-    [Test]
-    public async Task NDArray_Hstack_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Hstack_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(1000L, 500L), (byte)1, np.uint8);
         var b = np.full(new Shape(1000L, 500L), (byte)2, np.uint8);
@@ -833,8 +833,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1000, result.shape[1]);
     }
 
-    [Test]
-    public async Task NDArray_Vstack_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Vstack_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(500L, 1000L), (byte)1, np.uint8);
         var b = np.full(new Shape(500L, 1000L), (byte)2, np.uint8);
@@ -844,8 +844,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1000, result.shape[1]);
     }
 
-    [Test]
-    public async Task NDArray_Dstack_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Dstack_WorksWithLargeArrays()
     {
         var a = np.full(new Shape(100L, 100L), (byte)1, np.uint8);
         var b = np.full(new Shape(100L, 100L), (byte)2, np.uint8);
@@ -857,8 +857,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(2, result.shape[2]);
     }
 
-    [Test]
-    public async Task NDArray_Moveaxis_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Moveaxis_WorksWithLargeArrays()
     {
         var arr = np.zeros(new Shape(100L, 200L, 300L), np.uint8);
         var result = np.moveaxis(arr, 0, -1);
@@ -868,8 +868,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(100, result.shape[2]);
     }
 
-    [Test]
-    public async Task NDArray_Rollaxis_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Rollaxis_WorksWithLargeArrays()
     {
         var arr = np.zeros(new Shape(100L, 200L, 300L), np.uint8);
         var result = np.rollaxis(arr, 2, 0);
@@ -879,8 +879,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(200, result.shape[2]);
     }
 
-    [Test]
-    public async Task NDArray_Repeat_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Repeat_WorksWithLargeArray()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
         var result = np.repeat(arr, 2);
@@ -895,8 +895,8 @@ public class LongIndexingSmokeTest
     // SORTING & SEARCHING
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Argsort_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Argsort_WorksWithLargeArray()
     {
         var arr = np.array(new int[] { 3, 1, 4, 1, 5, 9, 2, 6 });
         var result = np.argsort<int>(arr);
@@ -909,8 +909,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(0L, result.GetInt64(3)); // Index of 3
     }
 
-    [Test]
-    public async Task NDArray_Nonzero_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Nonzero_WorksWithLargeArray()
     {
         var arr = np.array(new int[] { 0, 5, 0, 3, 0 });
         var result = np.nonzero(arr);
@@ -920,8 +920,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3, result[0].GetInt64(1)); // Index of 3
     }
 
-    [Test]
-    public async Task NDArray_Searchsorted_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Searchsorted_WorksWithLargeArray()
     {
         var arr = np.array(new int[] { 1, 3, 5, 7, 9 });
         var result = np.searchsorted(arr, 4);
@@ -932,8 +932,8 @@ public class LongIndexingSmokeTest
     // CREATION
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Eye_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Eye_WorksWithLargeArray()
     {
         var result = np.eye(1000);
         Assert.AreEqual(TestSize, result.size);
@@ -943,8 +943,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.0, result.GetDouble(1, 1));
     }
 
-    [Test]
-    public async Task NDArray_Identity_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Identity_WorksWithLargeArray()
     {
         var result = np.identity(1000);
         Assert.AreEqual(TestSize, result.size);
@@ -954,8 +954,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.0, result.GetDouble(999, 999));
     }
 
-    [Test]
-    public async Task NDArray_Array_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Array_WorksWithLargeArray()
     {
         var data = new byte[TestSize];
         for (int i = 0; i < TestSize; i++) data[i] = (byte)(i % 256);
@@ -969,8 +969,8 @@ public class LongIndexingSmokeTest
     // OTHER
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Around_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Around_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.567, 2.345, 3.789 });
         var result = np.around(arr, 1);
@@ -980,8 +980,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(3.8, result.GetDouble(2), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Copyto_WorksWithLargeArray()
+    [TestMethod]
+    public void NDArray_Copyto_WorksWithLargeArray()
     {
         var dst = np.zeros(new Shape(TestSize), np.float64);
         var src = np.ones(new Shape(TestSize), np.float64);
@@ -994,8 +994,8 @@ public class LongIndexingSmokeTest
     // LINEAR ALGEBRA
     // ================================================================
 
-    [Test]
-    public async Task NDArray_Dot_1D_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Dot_1D_WorksWithLargeArrays()
     {
         // dot product of two 1D vectors: sum of element-wise products
         var a = np.ones(new Shape(TestSize), np.float64);
@@ -1005,8 +1005,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual((double)TestSize, result.GetDouble(0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Dot_2D_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Dot_2D_WorksWithLargeArrays()
     {
         // Matrix multiplication: (100x100) @ (100x100) = (100x100)
         // Each element = sum of 100 ones = 100
@@ -1019,8 +1019,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(100.0, result.GetDouble(0, 0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Matmul_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Matmul_WorksWithLargeArrays()
     {
         // Matrix multiplication: (100x100) @ (100x100) = (100x100)
         var a = np.ones(new Shape(100L, 100L), np.float64);
@@ -1032,8 +1032,8 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(100.0, result.GetDouble(0, 0), 0.001);
     }
 
-    [Test]
-    public async Task NDArray_Outer_WorksWithLargeArrays()
+    [TestMethod]
+    public void NDArray_Outer_WorksWithLargeArrays()
     {
         // Outer product: (1000,) x (1000,) = (1000, 1000)
         // Each element = a[i] * b[j] = 2 * 3 = 6

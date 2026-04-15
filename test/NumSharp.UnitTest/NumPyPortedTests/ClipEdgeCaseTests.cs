@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -11,11 +10,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_numeric.py TestClip class.
     /// Covers edge cases for np.clip operation.
     /// </summary>
+    [TestClass]
     public class ClipEdgeCaseTests
     {
         #region Basic Clip Tests
 
-        [Test]
+        [TestMethod]
         public void Clip_BasicIntArray()
         {
             // NumPy: clip([-1,5,2,3,10,-4,-9], 2, 7) = [2, 5, 2, 3, 7, 2, 2]
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(2, 5, 2, 3, 7, 2, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_2DArray()
         {
             // NumPy: clip(arange(12).reshape(3,4), 3, 8)
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Clip with None Tests
 
-        [Test]
+        [TestMethod]
         public void Clip_NoneMin_OnlyMaxApplied()
         {
             // NumPy: clip(arange(10), None, 5) = [0,1,2,3,4,5,5,5,5,5]
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 5, 5, 5, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_NoneMax_OnlyMinApplied()
         {
             // NumPy: clip(arange(10), 3, None) = [3,3,3,3,4,5,6,7,8,9]
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_BothNone_ReturnsOriginal()
         {
             // NumPy: clip(arange(10), None, None) = arange(10)
@@ -69,7 +69,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Min > Max Edge Case (from test_clip_value_min_max_flip)
 
-        [Test]
+        [TestMethod]
         public void Clip_MinGreaterThanMax_UsesMaxValue()
         {
             // NumPy: clip(arange(10), 5, 3) = all 3s
@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region NaN Handling (from test_clip_nan)
 
-        [Test]
+        [TestMethod]
         public void Clip_NaNMin_ReturnsAllNaN()
         {
             // NumPy: clip(arange(7.), min=np.nan) = [nan, nan, ...]
@@ -97,7 +97,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_NaNMax_ReturnsAllNaN()
         {
             // NumPy: clip(arange(7.), max=np.nan) = [nan, nan, ...]
@@ -115,7 +115,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Dtype Preservation Tests
 
-        [Test]
+        [TestMethod]
         public void Clip_Int32_PreservesDtype()
         {
             // Explicit int32 array for testing dtype preservation
@@ -124,7 +124,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.int32, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_Int64_PreservesDtype()
         {
             // np.arange returns int64 by default (NumPy 2.x)
@@ -133,7 +133,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.int64, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_Float32_PreservesDtype()
         {
             var arr = np.arange(10f);  // float32 from float overload
@@ -141,7 +141,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float32, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_Float64_PreservesDtype()
         {
             var arr = np.arange(10.0);  // float64 from double overload
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Strided Array Tests (from test_clip_non_contig)
 
-        [Test]
+        [TestMethod]
         public void Clip_StridedArray()
         {
             // NumPy: clip(a[::2], 3, 15) where a = arange(20)
@@ -168,7 +168,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Transposed Array Tests (from test_clip_with_out_transposed)
 
-        [Test]
+        [TestMethod]
         public void Clip_TransposedArray()
         {
             // NumPy: clip(arange(16).reshape(4,4).T, 4, 10)
@@ -183,7 +183,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Broadcasting Tests
 
-        [Test]
+        [TestMethod]
         public void Clip_BroadcastMin()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -194,7 +194,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 8, 8, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_BroadcastMax()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -209,7 +209,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Special Float Values
 
-        [Test]
+        [TestMethod]
         public void Clip_WithInfinity()
         {
             var a = np.array(new double[] { -100.0, -1.0, 0.0, 1.0, 100.0 });
@@ -221,7 +221,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result2.Should().BeOfValues(-50.0, -1.0, 0.0, 1.0, 100.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_InfiniteValuesInArray()
         {
             var a = np.array(new double[] { double.NegativeInfinity, -1.0, 0.0, 1.0, double.PositiveInfinity });
@@ -234,7 +234,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Empty Array
 
-        [Test]
+        [TestMethod]
         public void Clip_EmptyArray_ReturnsEmptyArray()
         {
             var a = np.array(new double[0]);
@@ -247,7 +247,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Single Element
 
-        [Test]
+        [TestMethod]
         public void Clip_SingleElement_BelowMin()
         {
             var a = np.array(new double[] { -5.0 });
@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_SingleElement_AboveMax()
         {
             var a = np.array(new double[] { 15.0 });
@@ -263,7 +263,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(10.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_SingleElement_InRange()
         {
             var a = np.array(new double[] { 5.0 });
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Scalar Min/Max
 
-        [Test]
+        [TestMethod]
         public void Clip_ScalarMinMax()
         {
             var a = np.arange(10);
@@ -287,7 +287,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region All Same Value
 
-        [Test]
+        [TestMethod]
         public void Clip_AllSameValue_BelowMin()
         {
             // NumPy-aligned: np.full(shape, fill_value)
@@ -296,7 +296,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.GetData<long>().Should().AllBeEquivalentTo(0L);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_AllSameValue_AboveMax()
         {
             var a = np.full(new Shape(10), 15);
@@ -304,7 +304,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.GetData<long>().Should().AllBeEquivalentTo(10L);
         }
 
-        [Test]
+        [TestMethod]
         public void Clip_AllSameValue_InRange()
         {
             var a = np.full(new Shape(10), 5);

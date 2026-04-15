@@ -1,6 +1,5 @@
 using System;
 using AwesomeAssertions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.View
 {
@@ -8,11 +7,12 @@ namespace NumSharp.UnitTest.View
     ///     Battle tests for NDArray.view() - NumPy parity verification.
     ///     Tests byte reinterpretation, not value conversion.
     /// </summary>
+    [TestClass]
     public class ViewTests
     {
         #region Same Type Views
 
-        [Test]
+        [TestMethod]
         public void View_SameType_SharesMemory()
         {
             var arr = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.View
             view.GetInt32(0).Should().Be(100);
         }
 
-        [Test]
+        [TestMethod]
         public void View_SameType_PreservesShape()
         {
             var arr = np.arange(12).reshape(3, 4);
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.View
 
         #region Byte Reinterpretation (Same Size Types)
 
-        [Test]
+        [TestMethod]
         public void View_Float64AsInt64_ReinterpretsIEEE754Bits()
         {
             // NumPy: np.array([1.0, 2.0]).view(np.int64)
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.View
             view.GetInt64(2).Should().Be(0x4008000000000000L);
         }
 
-        [Test]
+        [TestMethod]
         public void View_Float32AsInt32_ReinterpretsIEEE754Bits()
         {
             // NumPy: np.array([1.0, 2.0], dtype=np.float32).view(np.int32)
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.View
             view.GetInt32(3).Should().Be(0x40800000);
         }
 
-        [Test]
+        [TestMethod]
         public void View_Int64AsFloat64_ReinterpretsToDouble()
         {
             // Put IEEE 754 bit pattern for 2.0, should read as 2.0
@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest.View
 
         #region Different Size Types (Shape Changes)
 
-        [Test]
+        [TestMethod]
         public void View_Float64AsFloat32_DoublesLastDimension()
         {
             // NumPy: np.array([1.0, 2.0], dtype=np.float64).view(np.float32)
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.View
             view.size.Should().Be(4);
         }
 
-        [Test]
+        [TestMethod]
         public void View_Float64AsInt8_ExpandsLastDimension()
         {
             // NumPy: np.array([1.0, 2.0], dtype=np.float64).view(np.int8)
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest.View
             view.size.Should().Be(16);
         }
 
-        [Test]
+        [TestMethod]
         public void View_Int8AsFloat64_ContractsLastDimension()
         {
             // int8[16] (16 bytes) -> float64[2]
@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest.View
             view.size.Should().Be(2);
         }
 
-        [Test]
+        [TestMethod]
         public void View_2D_AdjustsLastDimension()
         {
             // NumPy: np.zeros((3, 4), dtype=np.float64).view(np.float32)
@@ -136,7 +136,7 @@ namespace NumSharp.UnitTest.View
 
         #region Memory Sharing
 
-        [Test]
+        [TestMethod]
         public void View_ModifyThroughView_AffectsOriginal()
         {
             var original = np.array(new double[] { 1.0, 2.0 });
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.View
             original.GetDouble(0).Should().Be(3.0);
         }
 
-        [Test]
+        [TestMethod]
         public void View_ModifyOriginal_AffectsView()
         {
             var original = np.array(new double[] { 1.0, 2.0 });
@@ -165,7 +165,7 @@ namespace NumSharp.UnitTest.View
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void View_WithNull_ReturnsSameTypeCopy()
         {
             var arr = np.array(new int[] { 1, 2, 3 });
@@ -175,7 +175,7 @@ namespace NumSharp.UnitTest.View
             view.shape.Should().BeEquivalentTo(arr.shape);
         }
 
-        [Test]
+        [TestMethod]
         public void View_NonContiguous_ThrowsForDifferentSize()
         {
             // Non-contiguous arrays can't be viewed as different-sized types
@@ -191,7 +191,7 @@ namespace NumSharp.UnitTest.View
             act.Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void View_IncompatibleByteSize_Throws()
         {
             // 3 * 8 = 24 bytes, not divisible by sizeof(decimal) = 16

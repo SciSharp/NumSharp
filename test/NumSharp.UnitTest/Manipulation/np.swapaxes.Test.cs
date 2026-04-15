@@ -3,9 +3,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class np_swapaxes_Test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var nd = np.array(1, 2, 3, 4).reshape(2, 2, 1);
@@ -13,7 +14,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .BeOfValues(1, 3, 2, 4).And.BeShaped(1, 2, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var nd = np.arange(3 * 2 * 4).reshape(3, 2, 4);
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .And.BeShaped(2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var nd = np.arange(3 * 2 * 4).reshape(3, 2, 4);
@@ -31,7 +32,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .And.BeShaped(4, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var nd = np.array(1, 2, 3).reshape(1, 3);
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .And.BeShaped(3, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case5()
         {
             var nd = np.arange(8).reshape(2, 2, 2);

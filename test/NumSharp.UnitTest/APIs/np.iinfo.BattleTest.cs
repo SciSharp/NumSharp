@@ -1,232 +1,229 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Battle tests for np.iinfo - comprehensive coverage of all integer types and edge cases.
 /// </summary>
+[TestClass]
 public class NpIInfoBattleTests
 {
     #region All Integer Types Coverage
 
-    [Test]
-    public async Task IInfo_Boolean_AllProperties()
+    [TestMethod]
+    public void IInfo_Boolean_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Boolean);
-        await Assert.That(info.bits).IsEqualTo(8);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(1);
-        await Assert.That(info.maxUnsigned).IsEqualTo(1UL);
-        await Assert.That(info.kind).IsEqualTo('b');
-        await Assert.That(info.dtype).IsEqualTo(NPTypeCode.Boolean);
+        info.bits.Should().Be(8);
+        info.min.Should().Be(0);
+        info.max.Should().Be(1);
+        info.maxUnsigned.Should().Be(1UL);
+        info.kind.Should().Be('b');
+        info.dtype.Should().Be(NPTypeCode.Boolean);
     }
 
-    [Test]
-    public async Task IInfo_Byte_AllProperties()
+    [TestMethod]
+    public void IInfo_Byte_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Byte);
-        await Assert.That(info.bits).IsEqualTo(8);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(255);
-        await Assert.That(info.maxUnsigned).IsEqualTo(255UL);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.bits.Should().Be(8);
+        info.min.Should().Be(0);
+        info.max.Should().Be(255);
+        info.maxUnsigned.Should().Be(255UL);
+        info.kind.Should().Be('u');
     }
 
-    [Test]
-    public async Task IInfo_Int16_AllProperties()
+    [TestMethod]
+    public void IInfo_Int16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int16);
-        await Assert.That(info.bits).IsEqualTo(16);
-        await Assert.That(info.min).IsEqualTo(short.MinValue);
-        await Assert.That(info.max).IsEqualTo(short.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('i');
+        info.bits.Should().Be(16);
+        info.min.Should().Be(short.MinValue);
+        info.max.Should().Be(short.MaxValue);
+        info.kind.Should().Be('i');
     }
 
-    [Test]
-    public async Task IInfo_UInt16_AllProperties()
+    [TestMethod]
+    public void IInfo_UInt16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt16);
-        await Assert.That(info.bits).IsEqualTo(16);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(ushort.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.bits.Should().Be(16);
+        info.min.Should().Be(0);
+        info.max.Should().Be(ushort.MaxValue);
+        info.kind.Should().Be('u');
     }
 
-    [Test]
-    public async Task IInfo_Int32_AllProperties()
+    [TestMethod]
+    public void IInfo_Int32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int32);
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.min).IsEqualTo(int.MinValue);
-        await Assert.That(info.max).IsEqualTo(int.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('i');
+        info.bits.Should().Be(32);
+        info.min.Should().Be(int.MinValue);
+        info.max.Should().Be(int.MaxValue);
+        info.kind.Should().Be('i');
     }
 
-    [Test]
-    public async Task IInfo_UInt32_AllProperties()
+    [TestMethod]
+    public void IInfo_UInt32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt32);
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(uint.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.bits.Should().Be(32);
+        info.min.Should().Be(0);
+        info.max.Should().Be(uint.MaxValue);
+        info.kind.Should().Be('u');
     }
 
-    [Test]
-    public async Task IInfo_Int64_AllProperties()
+    [TestMethod]
+    public void IInfo_Int64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int64);
-        await Assert.That(info.bits).IsEqualTo(64);
-        await Assert.That(info.min).IsEqualTo(long.MinValue);
-        await Assert.That(info.max).IsEqualTo(long.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('i');
+        info.bits.Should().Be(64);
+        info.min.Should().Be(long.MinValue);
+        info.max.Should().Be(long.MaxValue);
+        info.kind.Should().Be('i');
     }
 
-    [Test]
-    public async Task IInfo_UInt64_AllProperties()
+    [TestMethod]
+    public void IInfo_UInt64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
-        await Assert.That(info.bits).IsEqualTo(64);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(long.MaxValue); // clamped
-        await Assert.That(info.maxUnsigned).IsEqualTo(ulong.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.bits.Should().Be(64);
+        info.min.Should().Be(0);
+        info.max.Should().Be(long.MaxValue); // clamped
+        info.maxUnsigned.Should().Be(ulong.MaxValue);
+        info.kind.Should().Be('u');
     }
 
-    [Test]
-    public async Task IInfo_Char_AllProperties()
+    [TestMethod]
+    public void IInfo_Char_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Char);
-        await Assert.That(info.bits).IsEqualTo(16);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(char.MaxValue);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.bits.Should().Be(16);
+        info.min.Should().Be(0);
+        info.max.Should().Be(char.MaxValue);
+        info.kind.Should().Be('u');
     }
 
     #endregion
 
     #region Error Cases
 
-    [Test]
-    public async Task IInfo_Single_Throws()
+    [TestMethod]
+    public void IInfo_Single_Throws()
     {
-        await Assert.That(() => np.iinfo(NPTypeCode.Single)).ThrowsException();
+        new Action(() => np.iinfo(NPTypeCode.Single)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_Double_Throws()
+    [TestMethod]
+    public void IInfo_Double_Throws()
     {
-        await Assert.That(() => np.iinfo(NPTypeCode.Double)).ThrowsException();
+        new Action(() => np.iinfo(NPTypeCode.Double)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_Decimal_Throws()
+    [TestMethod]
+    public void IInfo_Decimal_Throws()
     {
-        await Assert.That(() => np.iinfo(NPTypeCode.Decimal)).ThrowsException();
+        new Action(() => np.iinfo(NPTypeCode.Decimal)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_Empty_Throws()
+    [TestMethod]
+    public void IInfo_Empty_Throws()
     {
-        await Assert.That(() => np.iinfo(NPTypeCode.Empty)).ThrowsException();
+        new Action(() => np.iinfo(NPTypeCode.Empty)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_NullType_Throws()
+    [TestMethod]
+    public void IInfo_NullType_Throws()
     {
-        await Assert.That(() => np.iinfo((Type)null!)).ThrowsException();
+        new Action(() => np.iinfo((Type)null!)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_NullArray_Throws()
+    [TestMethod]
+    public void IInfo_NullArray_Throws()
     {
-        await Assert.That(() => np.iinfo((NDArray)null!)).ThrowsException();
+        new Action(() => np.iinfo((NDArray)null!)).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_EmptyDtypeString_Throws()
+    [TestMethod]
+    public void IInfo_EmptyDtypeString_Throws()
     {
-        await Assert.That(() => np.iinfo("")).ThrowsException();
+        new Action(() => np.iinfo("")).Should().Throw<Exception>();
     }
 
-    [Test]
-    public async Task IInfo_InvalidDtypeString_Throws()
+    [TestMethod]
+    public void IInfo_InvalidDtypeString_Throws()
     {
-        await Assert.That(() => np.iinfo("float32")).ThrowsException();
+        new Action(() => np.iinfo("float32")).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region Generic Overload Tests
 
-    [Test]
-    public async Task IInfo_Generic_Int()
+    [TestMethod]
+    public void IInfo_Generic_Int()
     {
         var info = np.iinfo<int>();
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.min).IsEqualTo(int.MinValue);
-        await Assert.That(info.max).IsEqualTo(int.MaxValue);
+        info.bits.Should().Be(32);
+        info.min.Should().Be(int.MinValue);
+        info.max.Should().Be(int.MaxValue);
     }
 
-    [Test]
-    public async Task IInfo_Generic_Byte()
+    [TestMethod]
+    public void IInfo_Generic_Byte()
     {
         var info = np.iinfo<byte>();
-        await Assert.That(info.bits).IsEqualTo(8);
-        await Assert.That(info.max).IsEqualTo(255);
+        info.bits.Should().Be(8);
+        info.max.Should().Be(255);
     }
 
-    [Test]
-    public async Task IInfo_Generic_Long()
+    [TestMethod]
+    public void IInfo_Generic_Long()
     {
         var info = np.iinfo<long>();
-        await Assert.That(info.bits).IsEqualTo(64);
+        info.bits.Should().Be(64);
     }
 
-    [Test]
-    public async Task IInfo_Generic_Bool()
+    [TestMethod]
+    public void IInfo_Generic_Bool()
     {
         var info = np.iinfo<bool>();
-        await Assert.That(info.bits).IsEqualTo(8);
-        await Assert.That(info.max).IsEqualTo(1);
+        info.bits.Should().Be(8);
+        info.max.Should().Be(1);
     }
 
-    [Test]
-    public async Task IInfo_Generic_Float_Throws()
+    [TestMethod]
+    public void IInfo_Generic_Float_Throws()
     {
-        await Assert.That(() => np.iinfo<float>()).ThrowsException();
+        new Action(() => np.iinfo<float>()).Should().Throw<Exception>();
     }
 
     #endregion
 
     #region NDArray Overload Tests
 
-    [Test]
-    public async Task IInfo_NDArray_Int32()
+    [TestMethod]
+    public void IInfo_NDArray_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var info = np.iinfo(arr);
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.dtype).IsEqualTo(NPTypeCode.Int32);
+        info.bits.Should().Be(32);
+        info.dtype.Should().Be(NPTypeCode.Int32);
     }
 
-    [Test]
-    public async Task IInfo_NDArray_Byte()
+    [TestMethod]
+    public void IInfo_NDArray_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
         var info = np.iinfo(arr);
-        await Assert.That(info.bits).IsEqualTo(8);
+        info.bits.Should().Be(8);
     }
 
-    [Test]
-    public async Task IInfo_NDArray_Float_Throws()
+    [TestMethod]
+    public void IInfo_NDArray_Float_Throws()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        await Assert.That(() => np.iinfo(arr)).ThrowsException();
+        new Action(() => np.iinfo(arr)).Should().Throw<Exception>();
     }
 
     #endregion
@@ -236,58 +233,58 @@ public class NpIInfoBattleTests
     // Note: np.dtype() uses size+type format (e.g., "i4" for int32)
     // NumPy-style names like "int32" are not fully supported yet
 
-    [Test]
-    public async Task IInfo_String_Int()
+    [TestMethod]
+    public void IInfo_String_Int()
     {
         var info = np.iinfo("int");  // defaults to int32
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
-    [Test]
-    public async Task IInfo_String_I4()
+    [TestMethod]
+    public void IInfo_String_I4()
     {
         var info = np.iinfo("i4");  // int32
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
-    [Test]
-    public async Task IInfo_String_I8()
+    [TestMethod]
+    public void IInfo_String_I8()
     {
         var info = np.iinfo("i8");  // int64
-        await Assert.That(info.bits).IsEqualTo(64);
+        info.bits.Should().Be(64);
     }
 
-    [Test]
-    public async Task IInfo_String_Bool()
+    [TestMethod]
+    public void IInfo_String_Bool()
     {
         var info = np.iinfo("bool");
-        await Assert.That(info.bits).IsEqualTo(8);
+        info.bits.Should().Be(8);
     }
 
     #endregion
 
     #region ToString Tests
 
-    [Test]
-    public async Task IInfo_ToString_ContainsExpectedInfo()
+    [TestMethod]
+    public void IInfo_ToString_ContainsExpectedInfo()
     {
         var info = np.iinfo(NPTypeCode.Int32);
         var str = info.ToString();
-        await Assert.That(str).Contains("min=");
-        await Assert.That(str).Contains("max=");
-        await Assert.That(str).Contains("int32");
+        str.Should().Contain("min=");
+        str.Should().Contain("max=");
+        str.Should().Contain("int32");
     }
 
     #endregion
 
     #region UInt64 Max Value Edge Case
 
-    [Test]
-    public async Task IInfo_UInt64_MaxExceedsLongMaxValue()
+    [TestMethod]
+    public void IInfo_UInt64_MaxExceedsLongMaxValue()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
-        await Assert.That(info.maxUnsigned).IsEqualTo(ulong.MaxValue);
-        await Assert.That(info.maxUnsigned).IsGreaterThan((ulong)info.max);
+        info.maxUnsigned.Should().Be(ulong.MaxValue);
+        info.maxUnsigned.Should().BeGreaterThan((ulong)info.max);
     }
 
     #endregion

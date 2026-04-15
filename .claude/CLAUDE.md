@@ -345,8 +345,7 @@ dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 
 ### Running Tests
 
-Tests use **TUnit** framework with source-generated test discovery.
-- `dotnet_test_tunit --filter "..."`: MSTest-style filter for TUnit (Category=, Name~, ClassName~, FullyQualifiedName~)
+Tests use **MSTest v3** framework with source-generated test discovery.
 
 ```bash
 # Run from test directory
@@ -356,10 +355,19 @@ cd test/NumSharp.UnitTest
 dotnet test --no-build
 
 # Exclude OpenBugs (CI-style - only real failures)
-dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category!=OpenBugs]"
+dotnet test --no-build --filter "TestCategory!=OpenBugs"
 
 # Run ONLY OpenBugs tests
-dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
+dotnet test --no-build --filter "TestCategory=OpenBugs"
+
+# Exclude multiple categories
+dotnet test --no-build --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
+
+# Run specific test class
+dotnet test --no-build --filter "ClassName~BinaryOpTests"
+
+# Run specific test method
+dotnet test --no-build --filter "Name~Add_Int32_SameType"
 ```
 
 ### Output Formatting
@@ -369,10 +377,10 @@ dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
 dotnet test --no-build 2>&1 | grep -E "^(failed|skipped|Test run|  total:|  failed:|  succeeded:|  skipped:|  duration:)"
 
 # Results with messages (no stack traces)
-dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/TUnit.Engine.Exceptions.TestFailedException: //' | sed 's/AssertFailedException: //'
+dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/AssertFailedException: //'
 
-# Detailed output (shows passed tests too)
-dotnet test --no-build -- --output Detailed
+# Verbose output (shows passed tests too)
+dotnet test --no-build -v normal
 ```
 
 ## Test Categories
@@ -383,36 +391,38 @@ Tests use typed category attributes defined in `TestCategory.cs`. Adding new bug
 |----------|-----------|---------|-------------|
 | `OpenBugs` | `[OpenBugs]` | Known-failing bug reproductions. Remove when fixed. | **EXCLUDED** via filter |
 | `Misaligned` | `[Misaligned]` | Documents NumSharp vs NumPy behavioral differences. | Runs (tests pass) |
-| `WindowsOnly` | `[WindowsOnly]` | Requires GDI+/System.Drawing.Common | Runtime platform check |
+| `WindowsOnly` | `[WindowsOnly]` | Requires GDI+/System.Drawing.Common | Excluded on non-Windows |
+| `HighMemory` | `[HighMemory]` | Requires 8GB+ RAM | **EXCLUDED** via filter |
 
-### How CI Excludes OpenBugs
+### How CI Excludes Categories
 
-The CI pipeline (`.github/workflows/build-and-release.yml`) uses TUnit's `--treenode-filter` to exclude `OpenBugs`:
+The CI pipeline (`.github/workflows/build-and-release.yml`) uses MSTest's `--filter` to exclude categories:
 
 ```yaml
 - name: Test (net10.0)
   run: |
-    dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+    dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
       --configuration Release --no-build --framework net10.0 \
-      -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]'
+      --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
 ```
 
-This filter excludes all tests with `[OpenBugs]` attribute from CI runs. Tests pass locally when the bug is fixed — then remove the `[OpenBugs]` attribute.
+This filter excludes all tests with `[OpenBugs]` or `[HighMemory]` attributes from CI runs. Tests pass locally when the bug is fixed — then remove the `[OpenBugs]` attribute.
 
 ### Usage
 
 ```csharp
 // Class-level (all tests in class)
+[TestClass]
 [OpenBugs]
 public class BroadcastBugTests { ... }
 
 // Method-level
-[Test]
+[TestMethod]
 [OpenBugs]
-public async Task BroadcastWriteCorruptsData() { ... }
+public void BroadcastWriteCorruptsData() { ... }
 
 // Documenting behavioral differences (NOT excluded from CI)
-[Test]
+[TestMethod]
 [Misaligned]
 public void BroadcastSlice_MaterializesInNumSharp() { ... }
 ```
@@ -421,13 +431,16 @@ public void BroadcastSlice_MaterializesInNumSharp() { ... }
 
 ```bash
 # Exclude OpenBugs (same as CI)
-dotnet test -- --treenode-filter "/*/*/*/*[Category!=OpenBugs]"
+dotnet test --filter "TestCategory!=OpenBugs"
 
 # Run ONLY OpenBugs tests (to verify fixes)
-dotnet test -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
+dotnet test --filter "TestCategory=OpenBugs"
 
 # Run ONLY Misaligned tests
-dotnet test -- --treenode-filter "/*/*/*/*[Category=Misaligned]"
+dotnet test --filter "TestCategory=Misaligned"
+
+# Combine multiple exclusions
+dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=WindowsOnly"
 ```
 
 **OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel).
@@ -599,10 +612,10 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 ## Q&A - Development
 
 **Q: What's in the test suite?**
-A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
+A: MSTest v3 framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
 
 **Q: What .NET version is targeted?**
-A: Library multi-targets `net8.0` and `net10.0`. Tests require .NET 9+ runtime (TUnit requirement).
+A: Library multi-targets `net8.0` and `net10.0`. Tests also multi-target both frameworks.
 
 **Q: What are the main dependencies?**
 A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` (previously NuGet packages) are built into the .NET 8+ runtime.

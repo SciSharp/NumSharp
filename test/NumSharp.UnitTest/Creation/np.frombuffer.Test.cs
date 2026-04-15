@@ -8,9 +8,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class NpFromBufferTest
     {
-        [Test]
+        [TestMethod]
         public void ToInt16()
         {
             short[] ints = { -100, 200, 300, 400, 500 };
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetInt16(4), 500);
         }
 
-        [Test]
+        [TestMethod]
         public void ToInt32()
         {
             int[] ints = {-100, 200, 300, 400, 500};
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetInt32(4), 500);
         }
 
-        [Test]
+        [TestMethod]
         public void ToInt64()
         {
             long[] ints = { -100, 200, 300, 400, 500 };
@@ -46,7 +47,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetInt64(4), 500);
         }
 
-        [Test]
+        [TestMethod]
         public void ToUInt16()
         {
             ushort[] ints = { 100, 200, 300, 400, 500 };
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetUInt16(4), (ushort)500);
         }
 
-        [Test]
+        [TestMethod]
         public void ToUInt32()
         {
             uint[] ints = { 100, 200, 300, 400, 500 };
@@ -70,7 +71,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetUInt32(4), (uint)500);
         }
 
-        [Test]
+        [TestMethod]
         public void ToUInt64()
         {
             ulong[] ints = { 100, 200, 300, 400, 500 };
@@ -82,7 +83,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetUInt64(4), (ulong)500);
         }
         
-        [Test]
+        [TestMethod]
         public void ToSingle()
         {
             float[] floats = { 100.5F, 200.0F, 300.0F, 400.0F, 500.0F };
@@ -94,7 +95,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(nd.GetSingle(4), 500.0F);
         }
 
-        [Test]
+        [TestMethod]
         public void ToDouble()
         {
             double[] floats = { 100.5, 200.0, 300.0, 400.0, 500.0 };

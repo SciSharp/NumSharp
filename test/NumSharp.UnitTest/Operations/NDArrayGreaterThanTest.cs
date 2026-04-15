@@ -5,6 +5,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Operations
 {
+    [TestClass]
     public class NDArrayGreaterThanTest : TestClass
     {
         private void PerformGreaterThanTests (NDArray nd)
@@ -14,28 +15,28 @@ namespace NumSharp.UnitTest.Operations
             (nd > 7).Should().BeOfValues(false, false, false, false, false, false);
         }
 
-        [Test]
+        [TestMethod]
         public void DoublesGreaterThanTest()
         {
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformGreaterThanTests(nd);
         }
 
-        [Test]
+        [TestMethod]
         public void FloatsGreaterThanTest()
         {
             NDArray nd = new float[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformGreaterThanTests(nd);
         }
 
-        [Test]
+        [TestMethod]
         public void IntsGreaterThanTest()
         {
             NDArray nd = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformGreaterThanTests(nd);
         }
 
-        [Test]
+        [TestMethod]
         public void LongsGreaterThanTest()
         {
             NDArray nd = new long[,] { { 1, 2, 3 }, { 4, 5, 6 } };

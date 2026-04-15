@@ -13,9 +13,10 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// For axis support, use the Generator API (not yet implemented in NumSharp).
 /// </summary>
 
+    [TestClass]
     public class ShuffleNumPyAlignedTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Shuffle_1D_ShufflesElements()
     {
         var arr = np.arange(10);
@@ -28,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.AreEqual(originalSum, (int)np.sum(arr));
     }
 
-    [Test]
+    [TestMethod]
     public void Shuffle_2D_ShufflesRowsOnly()
     {
         // NumPy: shuffle only shuffles along axis 0 (rows for 2D)
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         CollectionAssert.AreEqual(new[] { 3, 12, 21 }, sums);
     }
 
-    [Test]
+    [TestMethod]
     public void Shuffle_3D_ShufflesFirstDimension()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
@@ -73,7 +74,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         CollectionAssert.AreEqual(expectedSums, sums);
     }
 
-    [Test]
+    [TestMethod]
     public void Shuffle_SingleElement_NoOp()
     {
         var arr = np.array(new[] { 42 });
@@ -81,7 +82,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.AreEqual(42, (int)arr[0]);
     }
 
-    [Test]
+    [TestMethod]
     public void Shuffle_4D_ShufflesFirstDimension()
     {
         var arr = np.arange(120).reshape(2, 3, 4, 5);
@@ -104,7 +105,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         CollectionAssert.AreEqual(expectedSums, blockSums);
     }
 
-    [Test]
+    [TestMethod]
     public void Shuffle_PreservesRowContents()
     {
         // Key NumPy behavior: row contents are unchanged, only order changes

@@ -7,9 +7,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class NDArray_flat_Test
     {
-        [Test]
+        [TestMethod]
         public void flat_3_3()
         {
             var nd = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
@@ -21,7 +22,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Cast<int>().Should().AllBeEquivalentTo(5);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_3_3_sliced()
         {
             var nd = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Cast<int>().Should().AllBeEquivalentTo(5);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_scalar_sliced()
         {
             var nd = NDArray.Scalar(1);
@@ -46,7 +47,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.item<int>().Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_1_3_1_3()
         {
             var nd = np.full(new Shape(1, 3, 1, 3), 5, NPTypeCode.Int32);
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Cast<int>().Should().AllBeEquivalentTo(5);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_2_3_1_3_sliced()
         {
             var nd = np.full(new Shape(2, 3, 1, 3), 5, NPTypeCode.Int32);
@@ -71,7 +72,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Cast<int>().Should().AllBeEquivalentTo(5);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_3()
         {
             var nd = np.full(Shape.Vector(3), 5, NPTypeCode.Int32);
@@ -83,7 +84,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Cast<int>().Should().AllBeEquivalentTo(5);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_scalar()
         {
             var nd = NDArray.Scalar(1);
@@ -95,7 +96,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.item<int>().Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_broadcasted_Case1()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];
@@ -111,7 +112,7 @@ namespace NumSharp.UnitTest.Manipulation
             b.flat.Should().BeShaped(10).And.BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_broadcasted_Case2()
         {
             var a = np.arange(2 * 1 * 3).reshape((2, 1, 3)); //0, 1
@@ -130,7 +131,7 @@ namespace NumSharp.UnitTest.Manipulation
             bflat.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3 * 3);
         }
 
-        [Test]
+        [TestMethod]
         public void flat_broadcasted_Case3()
         {
             var a = np.arange(3 * 1 * 3 * 3).reshape((3, 1, 3, 3)); //0, 1

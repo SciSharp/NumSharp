@@ -11,9 +11,10 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class TransposeTest
     {
-        [Test]
+        [TestMethod]
         public void TransposeVector()
         {
             // NumPy: transpose of 1D array returns the array itself (view semantics)
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsTrue(Enumerable.SequenceEqual(x.Data<long>(), y.Data<long>()), "Transpose should share memory with original (view semantics)");
         }
 
-        [Test]
+        [TestMethod]
         public void Transpose3x2()
         {
             // np.arange returns int64 by default (NumPy 2.x)

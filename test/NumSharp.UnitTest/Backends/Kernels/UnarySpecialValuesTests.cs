@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     /// Tests for unary operations with special IEEE 754 float values.
     /// Verifies correct handling of: 0.0, -0.0, +inf, -inf, NaN
     /// </summary>
+    [TestClass]
     public class UnarySpecialValuesTests
     {
         // Helper to check if a value is negative zero
@@ -15,7 +16,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.sqrt
 
-        [Test]
+        [TestMethod]
         public void Sqrt_SpecialValues()
         {
             // NumPy: np.sqrt([0, -0, inf, -inf, nan]) = [0, -0, inf, nan, nan]
@@ -33,7 +34,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.log
 
-        [Test]
+        [TestMethod]
         public void Log_SpecialValues()
         {
             // NumPy: np.log([0, -0, inf, -inf, nan]) = [-inf, -inf, inf, nan, nan]
@@ -51,7 +52,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.exp
 
-        [Test]
+        [TestMethod]
         public void Exp_SpecialValues()
         {
             // NumPy: np.exp([0, -0, inf, -inf, nan]) = [1, 1, inf, 0, nan]
@@ -69,7 +70,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.sin
 
-        [Test]
+        [TestMethod]
         public void Sin_SpecialValues()
         {
             // NumPy: np.sin([0, -0, inf, -inf, nan]) = [0, -0, nan, nan, nan]
@@ -87,7 +88,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.cos
 
-        [Test]
+        [TestMethod]
         public void Cos_SpecialValues()
         {
             // NumPy: np.cos([0, -0, inf, -inf, nan]) = [1, 1, nan, nan, nan]
@@ -105,7 +106,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.tan
 
-        [Test]
+        [TestMethod]
         public void Tan_SpecialValues()
         {
             // NumPy: np.tan([0, -0, inf, -inf, nan]) = [0, -0, nan, nan, nan]
@@ -123,7 +124,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.sign
 
-        [Test]
+        [TestMethod]
         public void Sign_SpecialValues()
         {
             // NumPy: np.sign([0, -0, inf, -inf, nan]) = [0, 0, 1, -1, nan]
@@ -141,7 +142,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.negative
 
-        [Test]
+        [TestMethod]
         public void Negative_SpecialValues()
         {
             // NumPy: np.negative([0, -0, inf, -inf, nan]) = [-0, 0, -inf, inf, nan]
@@ -160,7 +161,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region np.reciprocal
 
-        [Test]
+        [TestMethod]
         public void Reciprocal_SpecialValues()
         {
             // NumPy: np.reciprocal([0, -0, inf, -inf, nan]) = [inf, -inf, 0, -0, nan]
@@ -178,7 +179,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Float32 tests
 
-        [Test]
+        [TestMethod]
         public void Sqrt_Float32_SpecialValues()
         {
             // Same behavior for float32
@@ -192,7 +193,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(float.IsNaN(result.GetSingle(4)));
         }
 
-        [Test]
+        [TestMethod]
         public void Exp_Float32_SpecialValues()
         {
             var input = np.array(new float[] { 0.0f, -0.0f, float.PositiveInfinity, float.NegativeInfinity, float.NaN });
@@ -209,7 +210,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region NaN propagation
 
-        [Test]
+        [TestMethod]
         public void NaN_Propagates_Through_All_Operations()
         {
             // NaN should propagate through all unary operations

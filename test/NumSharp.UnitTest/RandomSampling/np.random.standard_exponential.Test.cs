@@ -7,9 +7,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.standard_exponential (standard exponential distribution)
     /// </summary>
     
+    [TestClass]
     public class NpRandomStandardExponentialTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void StandardExponential_1D_ReturnsCorrectShape()
         {
             var rand = np.random.standard_exponential(5L);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_2D_ReturnsCorrectShape()
         {
             var rand = np.random.standard_exponential(new Shape(5, 5));
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.standard_exponential(new Shape(2, 3));
@@ -33,14 +34,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(6, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_ReturnsFloat64()
         {
             var result = np.random.standard_exponential(5L);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_AllValuesPositive()
         {
             // Exponential distribution produces strictly positive values
@@ -53,7 +54,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_HasCorrectMean()
         {
             // mean = 1 for standard exponential
@@ -68,7 +69,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - 1.0) < 0.05, $"Mean should be near 1.0, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_HasCorrectVariance()
         {
             // variance = 1 for standard exponential
@@ -88,7 +89,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(variance - 1.0) < 0.1, $"Variance should be near 1.0, got {variance}");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -98,7 +99,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -113,7 +114,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_EquivalentToExponentialScale1()
         {
             // standard_exponential() should be equivalent to exponential(scale=1)
@@ -129,7 +130,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_Size1_ReturnsShape1Array()
         {
             var result = np.random.standard_exponential(1L);
@@ -137,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardExponential_LargeSample_NoInfinities()
         {
             var rng = np.random.RandomState(42);
@@ -156,7 +157,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_randomstate.py
         /// Basic smoke test.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void StandardExponential_NumPy_SmokeTest()
         {
             var vals = np.random.standard_exponential(10L);
@@ -166,7 +167,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// <summary>
         /// Migrated from NumPy - verify output is always positive.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void StandardExponential_NumPy_OutputAlwaysPositive()
         {
             var rng = np.random.RandomState(12345);

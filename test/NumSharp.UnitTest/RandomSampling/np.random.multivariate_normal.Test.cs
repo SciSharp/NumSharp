@@ -8,9 +8,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Reference: https://numpy.org/doc/stable/reference/random/generated/numpy.random.multivariate_normal.html
     /// </summary>
     
+    [TestClass]
     public class NpRandomMultivariateNormalTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_SingleSample_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -23,7 +24,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(2, result.shape[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_MultipleSamples_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(2, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_TupleSize_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -52,7 +53,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(2, result.shape[2]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_Samples_HaveCorrectMean()
         {
             var rng = np.random.RandomState(42);
@@ -74,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(sampleMean1 - (-3)) < 0.1, $"Mean[1] should be ~-3, got {sampleMean1}");
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_DiagonalCovariance_HasCorrectVariances()
         {
             var rng = np.random.RandomState(42);
@@ -106,7 +107,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(var1 - 4) < 0.3, $"Variance[1] should be ~4, got {var1}");
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_CorrelatedVariables_HaveCorrectCovariance()
         {
             var rng = np.random.RandomState(42);
@@ -136,7 +137,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(cov01 - 0.5) < 0.1, $"Covariance should be ~0.5, got {cov01}");
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_ThreeDimensional_Works()
         {
             var rng = np.random.RandomState(42);
@@ -150,7 +151,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, samples.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_OneDimensional_Works()
         {
             var rng = np.random.RandomState(42);
@@ -179,7 +180,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(var_ - 4) < 0.3, $"Variance should be ~4, got {var_}");
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_IdentityCovariance_ProducesUncorrelatedSamples()
         {
             var rng = np.random.RandomState(42);
@@ -212,7 +213,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(correlation) < 0.05, $"Correlation should be ~0, got {correlation}");
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_NDArrayInput_Works()
         {
             var rng = np.random.RandomState(42);
@@ -225,7 +226,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(2, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_DimensionMismatch_Throws()
         {
             var mean = new double[] { 0, 0, 0 };
@@ -235,7 +236,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_NonSquareCovariance_Throws()
         {
             var mean = new double[] { 0, 0 };
@@ -245,7 +246,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_EmptyMean_Throws()
         {
             var mean = new double[0];
@@ -255,7 +256,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_NullMean_Throws()
         {
             double[] mean = null!;
@@ -265,7 +266,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_NullCovariance_Throws()
         {
             var mean = new double[] { 0, 0 };
@@ -275,7 +276,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_InvalidCheckValid_Throws()
         {
             var mean = new double[] { 0, 0 };
@@ -285,7 +286,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov, default(Shape), "invalid"));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_CheckValidRaise_ThrowsForNonPositiveDefinite()
         {
             var mean = new double[] { 0, 0 };
@@ -296,7 +297,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 np.random.multivariate_normal(mean, cov, null, "raise"));
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_CheckValidIgnore_ReturnsResultForNonPositiveDefinite()
         {
             var rng = np.random.RandomState(42);
@@ -311,7 +312,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(2, result.shape[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_LargeDimension_Works()
         {
             var rng = np.random.RandomState(42);
@@ -330,7 +331,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(n, samples.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultivariateNormal_ReturnsDtype_Double()
         {
             var rng = np.random.RandomState(42);

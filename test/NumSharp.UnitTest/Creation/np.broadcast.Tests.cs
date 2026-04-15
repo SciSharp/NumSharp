@@ -11,9 +11,10 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class BroadcastTests
     {
-        [Test]
+        [TestMethod]
         public void BroadcastArrayTest()
         {
             var arr1 = new int[][] {new int[] {1, 2, 3}};
@@ -36,7 +37,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
-        [Test]
+        [TestMethod]
         public void basics_ResolveReturnShape()
         {
             Shape arrOne;
@@ -75,7 +76,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
-        [Test]
+        [TestMethod]
         public void basics_broadcasting()
         {
             (Shape LeftShape, Shape RightShape) ret;
@@ -142,7 +143,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
-        [Test]
+        [TestMethod]
         public void basics_broadcasting_narrays()
         {
             Shape[] ret;
@@ -204,7 +205,7 @@ namespace NumSharp.UnitTest.Creation
             new Action(() => DefaultEngine.ResolveReturnShape(new Shape(2, 1), new Shape(8, 4, 3))).Should().Throw<Exception>();
         }
 
-        [Test]
+        [TestMethod]
         public void broadcast_accessing()
         {
             // np.arange returns int64 by default (NumPy 2.x)

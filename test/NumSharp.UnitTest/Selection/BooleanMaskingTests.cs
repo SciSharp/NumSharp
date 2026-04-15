@@ -9,9 +9,10 @@ namespace NumSharp.UnitTest.Selection
     /// <summary>
     /// Tests for boolean masking based on NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class BooleanMaskingTests
     {
-        [Test]
+        [TestMethod]
         public void ExplicitMask_1D_FiltersCorrectly()
         {
             // NumPy: a[mask] where mask = [True, False, True, False, True, False]
@@ -23,7 +24,7 @@ namespace NumSharp.UnitTest.Selection
             result.Should().BeOfValues(1, 3, 5).And.BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Condition_1D_FiltersCorrectly()
         {
             // NumPy: a[a % 2 == 1] = [1, 3, 5]
@@ -33,7 +34,7 @@ namespace NumSharp.UnitTest.Selection
             result.Should().BeOfValues(1, 3, 5).And.BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void ExplicitMask_MatchesCondition()
         {
             // Explicit mask and condition should produce same result
@@ -47,7 +48,7 @@ namespace NumSharp.UnitTest.Selection
             condition_result.Should().BeOfValues(1, 3, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void AllTrue_ReturnsAll()
         {
             // NumPy: a[[T,T,T]] = [1, 2, 3]
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest.Selection
             result.Should().BeOfValues(1, 2, 3).And.BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void AllFalse_ReturnsEmpty()
         {
             // NumPy: a[[F,F,F]] = [], shape (0,)
@@ -70,7 +71,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(1, result.ndim);  // 1D empty array
         }
 
-        [Test]
+        [TestMethod]
         public void TwoDimensional_RowSelection()
         {
             // NumPy: 2D array with 1D mask selects rows
@@ -88,7 +89,7 @@ namespace NumSharp.UnitTest.Selection
             result["1"].Should().BeOfValues(7, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void TwoDimensional_ElementMask_Flattens()
         {
             // NumPy: 2D array with 2D mask of same shape selects elements, flattens
@@ -102,7 +103,7 @@ namespace NumSharp.UnitTest.Selection
             result.Should().BeOfValues(1, 4).And.BeShaped(2);
         }
 
-        [Test]
+        [TestMethod]
         public void EmptyResult_PreservesDtype()
         {
             // NumPy: Empty result preserves dtype

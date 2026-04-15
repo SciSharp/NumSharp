@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -10,11 +9,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests for linear algebra operations.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class LinearAlgebraTests
 {
     #region Dot Product
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_1D()
     {
         // NumPy: np.dot([1,2,3], [4,5,6]) = 32
@@ -26,7 +26,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(32.0, (double)result, 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_2D_1D()
     {
         // NumPy: np.dot([[1,2],[3,4],[5,6]], [1,2]) = [5, 11, 17]
@@ -42,7 +42,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(17.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D()
     {
         // NumPy: np.dot([1,2,3], [[1,2],[3,4],[5,6]]) = [22, 28]
@@ -57,7 +57,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(28.0, result.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_Float64()
     {
         // NumPy: np.dot([1.5, 2.5], [[1,2,3],[4,5,6]]) = [11.5, 15.5, 19.5]
@@ -74,7 +74,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(19.5, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_SingleColumn()
     {
         // NumPy: np.dot([1,2,3], [[10],[20],[30]]) = [140]
@@ -88,7 +88,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(140, result.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_ShapeMismatch_Throws()
     {
         // NumPy: ValueError: shapes (3,) and (1,3) not aligned
@@ -99,7 +99,7 @@ public class LinearAlgebraTests
         Assert.IsTrue(ex.Message.Contains("not aligned"));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_NegativeValues()
     {
         // NumPy: np.dot([-1,2,-3], [[1,-2],[-3,4],[5,-6]]) = [-22, 28]
@@ -112,7 +112,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(28, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_Larger()
     {
         // NumPy: np.dot([1,2,3,4,5], arange(15).reshape(5,3)) = [120, 135, 150]
@@ -128,7 +128,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(150L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_SingleElement()
     {
         // NumPy: np.dot([5], [[1,2,3]]) = [5, 10, 15]
@@ -144,7 +144,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(15, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_WithZeros()
     {
         // NumPy: np.dot([0,1,0], [[1,2],[3,4],[5,6]]) = [3, 4]
@@ -157,7 +157,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(4, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_MixedDtypes_IntFloat()
     {
         // NumPy: int32 x float64 -> float64
@@ -171,7 +171,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(16.0, result.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D_Int64()
     {
         // NumPy: int64 x int64 -> int64
@@ -185,7 +185,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(16L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_2D_2D()
     {
         // NumPy: [[1,2],[3,4],[5,6]] @ [[1,2,3],[4,5,6]] = [[9,12,15],[19,26,33],[29,40,51]]
@@ -202,7 +202,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(51.0, result.GetDouble(2, 2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_Empty()
     {
         // NumPy: np.dot([], []) = 0.0
@@ -218,7 +218,7 @@ public class LinearAlgebraTests
 
     #region Matmul
 
-    [Test]
+    [TestMethod]
     public void Matmul_2D_2D()
     {
         // NumPy: A @ B (same as dot for 2D)
@@ -233,7 +233,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(50.0, result.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // 3D matmul broadcasting fails
     public void Matmul_3D_2D_Broadcasting()
     {
@@ -254,7 +254,7 @@ public class LinearAlgebraTests
 
     #region Outer Product
 
-    [Test]
+    [TestMethod]
     public void Outer_Simple()
     {
         // NumPy: np.outer([1,2,3], [10,20]) = [[10,20],[20,40],[30,60]]
@@ -275,7 +275,7 @@ public class LinearAlgebraTests
 
     #region Identity and Eye
 
-    [Test]
+    [TestMethod]
     public void Eye_Square()
     {
         // NumPy: np.eye(3) = [[1,0,0],[0,1,0],[0,0,1]]
@@ -289,7 +289,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(1.0, result.GetDouble(2, 2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Eye_Rectangular()
     {
         // NumPy: np.eye(3, 4)
@@ -305,7 +305,7 @@ public class LinearAlgebraTests
 
     #region Statistics-Based Linear Algebra
 
-    [Test]
+    [TestMethod]
     public void Mean_2D_Axis0()
     {
         // NumPy: np.mean([[1,2,3],[4,5,6]], axis=0) = [2.5, 3.5, 4.5]
@@ -320,7 +320,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(4.5, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_2D_Axis1()
     {
         // NumPy: np.mean([[1,2,3],[4,5,6]], axis=1) = [2.0, 5.0]
@@ -334,7 +334,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(5.0, result.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_Sample()
     {
         // NumPy: np.std([1, 2, 3, 4, 5]) = 1.4142... (population std)
@@ -345,7 +345,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(Math.Sqrt(2.0), result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_WithDdof()
     {
         // NumPy: np.std([1, 2, 3, 4, 5], ddof=1) = 1.5811... (sample std)
@@ -361,7 +361,7 @@ public class LinearAlgebraTests
 
     #region Argmax/Argmin with Axis
 
-    [Test]
+    [TestMethod]
     public void Argmax_NoAxis()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]]) = 5 (flattened index)
@@ -372,7 +372,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(5, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Argmax_Axis0()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]], axis=0) = [1, 0, 1]
@@ -383,7 +383,7 @@ public class LinearAlgebraTests
         result.Should().BeOfValues(1, 0, 1);
     }
 
-    [Test]
+    [TestMethod]
     public void Argmax_Axis1()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]], axis=1) = [1, 2]
@@ -394,7 +394,7 @@ public class LinearAlgebraTests
         result.Should().BeOfValues(1, 2);
     }
 
-    [Test]
+    [TestMethod]
     public void Argmin_NoAxis()
     {
         // NumPy: np.argmin([[1,5,3],[4,2,6]]) = 0
@@ -405,7 +405,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Argmin_Axis0()
     {
         // NumPy: np.argmin([[1,5,3],[4,2,6]], axis=0) = [0, 1, 0]
@@ -420,7 +420,7 @@ public class LinearAlgebraTests
 
     #region Cumsum with Axis
 
-    [Test]
+    [TestMethod]
     public void Cumsum_NoAxis_Flattens()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]]) = [1,3,6,10,15,21]
@@ -433,7 +433,7 @@ public class LinearAlgebraTests
         result.Should().BeOfValues(1L, 3L, 6L, 10L, 15L, 21L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_Axis0()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]], axis=0) = [[1,2,3],[5,7,9]]
@@ -448,7 +448,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(9L, result.GetInt64(1, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_Axis1()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]], axis=1) = [[1,3,6],[4,9,15]]
@@ -467,7 +467,7 @@ public class LinearAlgebraTests
 
     #region Searchsorted
 
-    [Test]
+    [TestMethod]
     public void Searchsorted_Simple()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 3) = 2
@@ -478,7 +478,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Searchsorted_BeforeAll()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 0) = 0
@@ -489,7 +489,7 @@ public class LinearAlgebraTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Searchsorted_AfterAll()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 10) = 5

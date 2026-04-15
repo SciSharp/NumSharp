@@ -7,9 +7,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_linspace_tests
     {
-        [Test]
+        [TestMethod]
         public void FromNumpyDocs()
         {
             NDArray nd;

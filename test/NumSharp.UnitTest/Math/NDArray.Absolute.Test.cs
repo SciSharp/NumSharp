@@ -6,9 +6,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Extensions
 {
+    [TestClass]
     public class NDArrayAbsoluteTest
     {
-        [Test]
+        [TestMethod]
         public void absolute()
         {
             //2D - np.abs now correctly preserves int dtype (NumPy-aligned)

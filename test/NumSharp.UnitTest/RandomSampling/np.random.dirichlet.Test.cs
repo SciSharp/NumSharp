@@ -6,9 +6,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.dirichlet (Dirichlet distribution)
     /// </summary>
+    [TestClass]
     public class NpRandomDirichletTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Dirichlet_SingleSample_ReturnsCorrectShape()
         {
             var alpha = new double[] { 1, 2, 3 };
@@ -18,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, result.shape[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_MultipleSamples_ReturnsCorrectShape()
         {
             var alpha = new double[] { 1, 2, 3 };
@@ -29,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(15, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_2DSize_ReturnsCorrectShape()
         {
             var alpha = new double[] { 1, 2, 3 };
@@ -41,7 +42,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(18, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_ReturnsFloat64()
         {
             var alpha = new double[] { 1, 2, 3 };
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_EachRowSumsToOne()
         {
             var rng = np.random.RandomState(42);
@@ -67,7 +68,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_AllValuesInZeroOne()
         {
             var rng = np.random.RandomState(42);
@@ -80,7 +81,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_HasCorrectMean()
         {
             // Mean of component i = alpha[i] / sum(alpha)
@@ -108,7 +109,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(means[2] - 3.0 / alphaSum) < 0.01, $"Mean[2] should be ~0.5, got {means[2]}");
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_UniformAlpha_HasEqualMeans()
         {
             // For alpha = [1, 1, 1], all means should be 1/3
@@ -135,7 +136,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_SingleCategory_ReturnsAllOnes()
         {
             // k=1: only one category, so each sample is [1.0]
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_SameSeed_ProducesSameResults()
         {
             var alpha = new double[] { 1, 2, 3 };
@@ -171,31 +172,31 @@ namespace NumSharp.UnitTest.RandomSampling
 
         // ========== Validation Tests ==========
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_EmptyAlpha_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[0], 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_NullAlpha_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet((double[])null, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_NegativeAlpha_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 1, -1, 2 }, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_ZeroAlpha_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 0, 1, 2 }, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Dirichlet_NaNAlpha_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.dirichlet(new double[] { 1, double.NaN, 2 }, 5));
@@ -207,7 +208,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_randomstate.py
         /// Basic smoke test.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Dirichlet_NumPy_SmokeTest()
         {
             var alpha = new double[] { 1.0, 2.0, 3.0 };
@@ -219,7 +220,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// <summary>
         /// Migrated from NumPy - verify samples sum to 1.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Dirichlet_NumPy_SamplesSumToOne()
         {
             var rng = np.random.RandomState(12345);
@@ -240,7 +241,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// <summary>
         /// Test with NDArray input for alpha.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Dirichlet_NDArrayAlpha_Works()
         {
             var alpha = np.array(new double[] { 1, 2, 3 });

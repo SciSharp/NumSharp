@@ -9,9 +9,10 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_concatenate_test : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Case1_Axis1()
         {
             var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, 2, :"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis1_Cast()
         {
             var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, 2, :"].flat.Cast<double>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis0()
         {
             var a = np.full(new Shape(1, 3, 3), 1, NPTypeCode.Int32);
@@ -54,7 +55,7 @@ namespace NumSharp.UnitTest.Creation
             c["2, :, :"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis2()
         {
             var a = np.full(new Shape(3, 3, 1), 1, NPTypeCode.Int32);
@@ -68,7 +69,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, :, 2"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis_minus1()
         {
             var a = np.full(new Shape(3, 3, 1), 1, NPTypeCode.Int32);
@@ -82,7 +83,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, :, 2"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis1_3Arrays_Cast()
         {
             var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
@@ -103,7 +104,7 @@ namespace NumSharp.UnitTest.Creation
         ///     NumPy: np.hstack([np.broadcast_to([[1],[2]],(2,2)), np.broadcast_to([[3],[4]],(2,3))])
         ///            → [[1,1,3,3,3], [2,2,4,4,4]]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Hstack_BroadcastColumnVectors()
         {
             var a = np.broadcast_to(np.array(new int[,] { { 1 }, { 2 } }), new Shape(2, 2));
@@ -124,7 +125,7 @@ namespace NumSharp.UnitTest.Creation
         ///            np.vstack([np.broadcast_to(x[:,0:1],(3,3)), [[10,20,30]]])
         ///            → [[0,0,0], [2,2,2], [4,4,4], [10,20,30]]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Vstack_SlicedBroadcast()
         {
             var x = np.arange(6).reshape(3, 2);
@@ -148,7 +149,7 @@ namespace NumSharp.UnitTest.Creation
         ///            np.concatenate([np.broadcast_to(x[:,1:2],(3,3)), np.ones((1,3),dtype=int)])
         ///            → [[1,1,1], [5,5,5], [9,9,9], [1,1,1]]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Concatenate_SlicedBroadcast_Axis0()
         {
             var x = np.arange(12).reshape(3, 4);

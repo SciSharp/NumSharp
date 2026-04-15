@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Runtime.Intrinsics.X86;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -12,11 +11,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests correctness of strided SIMD (AVX2 gather) and parallel outer loop.
 /// Issue #576: Complete SIMD axis reductions
 /// </summary>
+[TestClass]
 public class AxisReductionBenchmarkTests
 {
     #region Correctness Tests - Strided Access with SIMD Gather
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_LargeStrided_CorrectResults()
     {
         // Sum along axis 0 requires strided access (rows are not contiguous)
@@ -41,7 +41,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_LargeStrided_Double_CorrectResults()
     {
         // Test AVX2 gather for double
@@ -64,7 +64,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Axis0_LargeStrided_CorrectResults()
     {
         // Test strided Max with AVX2 gather
@@ -88,7 +88,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Axis0_LargeStrided_CorrectResults()
     {
         // Test strided Min with AVX2 gather
@@ -112,7 +112,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_Axis0_SmallStrided_CorrectResults()
     {
         // Test strided Prod (small to avoid overflow)
@@ -139,7 +139,7 @@ public class AxisReductionBenchmarkTests
 
     #region Correctness Tests - Parallel Outer Loop
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis1_LargeOutput_ParallelPath()
     {
         // Large number of output elements triggers parallel outer loop
@@ -164,7 +164,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_Axis0_LargeOutput_ParallelPath()
     {
         // Test Mean with parallel outer loop
@@ -188,7 +188,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Axis1_LargeOutput_ParallelPath()
     {
         // Test Max with parallel outer loop
@@ -215,7 +215,7 @@ public class AxisReductionBenchmarkTests
 
     #region Correctness Tests - Integer Types (non-gather path)
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_LargeStrided_Int32_CorrectResults()
     {
         // Int32 uses scalar strided path (no gather)
@@ -238,7 +238,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_LargeStrided_Int64_CorrectResults()
     {
         // Int64 uses scalar strided path (no gather)
@@ -265,7 +265,7 @@ public class AxisReductionBenchmarkTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_SmallOutput_SequentialPath()
     {
         // Small output (< 1000) should use sequential path
@@ -287,7 +287,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_SmallAxisSize_CorrectResults()
     {
         // Very small axis size (< 8, below gather vector count)
@@ -310,7 +310,7 @@ public class AxisReductionBenchmarkTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_3D_MiddleAxis_Strided()
     {
         // 3D array, reduce along middle axis
@@ -332,7 +332,7 @@ public class AxisReductionBenchmarkTests
                 Assert.AreEqual((double)d1, result.GetDouble(i, k), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithNaN_StridedPath()
     {
         // NaN propagation in strided path
@@ -363,7 +363,7 @@ public class AxisReductionBenchmarkTests
 
     #region Performance Verification (not timing, just that it runs)
 
-    [Test]
+    [TestMethod]
     public void Sum_VeryLarge_Axis0_CompletesWithoutError()
     {
         // Very large array to stress test parallel + gather paths
@@ -377,7 +377,7 @@ public class AxisReductionBenchmarkTests
         Assert.AreEqual((double)rows, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_VeryLarge_Axis1_CompletesWithoutError()
     {
         // Very large output to stress test parallel path
@@ -395,7 +395,7 @@ public class AxisReductionBenchmarkTests
 
     #region AVX2 Feature Detection
 
-    [Test]
+    [TestMethod]
     public void Avx2IsSupported_ReportStatus()
     {
         // Informational test to report AVX2 status

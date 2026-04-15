@@ -7,9 +7,10 @@ using AwesomeAssertions;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class CastingTester
     {
-        [Test]
+        [TestMethod]
         public void ToDotNetArray()
         {
             //TODO! this test is not a test because it doesn't even have assertions
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest
             var twoDArrayDotNet = (double[,])twoDArray.ToMuliDimArray<double>();
         }
 
-        [Test]
+        [TestMethod]
         public void ToByteArray()
         {
             var nd = np.array(new int[][] {new int[] {3, 1}, new int[] {2, 1}});

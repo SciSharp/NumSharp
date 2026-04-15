@@ -7,9 +7,10 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomBinomialTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Rand1D()
         {
             var rand = np.random.binomial(5, 0.5, 5);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Rand2D()
         {
             var rand = np.random.binomial(5, 0.5, new Shape(5, 5));
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 25);
         }
 
-        [Test]
+        [TestMethod]
         public void Rand2DByShape()
         {
             var rand = np.random.binomial(5, 0.5, new Shape(5, 5));

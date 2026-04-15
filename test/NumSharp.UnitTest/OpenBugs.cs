@@ -61,6 +61,7 @@ namespace NumSharp.UnitTest
     ///     Bug 68:           swapaxes on empty arrays crashes (NDIterator limitation)
     ///     Bug 69:           Out-of-bounds axis error is IndexOutOfRangeException, not AxisError
     /// </summary>
+    [TestClass]
     public partial class OpenBugs : TestClass
     {
         // ================================================================
@@ -128,7 +129,7 @@ namespace NumSharp.UnitTest
         ///     means the logical element order is reversed from the physical
         ///     memory layout.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_ToString_ReversedSliceBroadcast()
         {
             var rev = np.arange(3)["::-1"]; // [2, 1, 0]
@@ -164,7 +165,7 @@ namespace NumSharp.UnitTest
         ///     the broadcast stride and the view stride are being multiplied
         ///     or combined incorrectly.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_ToString_StepSliceBroadcast()
         {
             var stepped = np.arange(6)["::2"]; // [0, 2, 4]
@@ -201,7 +202,7 @@ namespace NumSharp.UnitTest
         ///     appears to walk linearly with some stride that misses offset 36
         ///     and lands in zeroed/garbage memory beyond the allocation.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_ToString_SlicedColumnBroadcast()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -243,7 +244,7 @@ namespace NumSharp.UnitTest
         ///     creates a compound stride that the ToString iterator fails
         ///     to resolve correctly.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_ToString_DoubleSlicedBroadcast()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -303,7 +304,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: y[0,0] = 999 raises ValueError.
         ///     NumSharp: SetInt32(999, 0, 0) succeeds silently.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_BroadcastTo_NoReadOnlyProtection()
         {
             var x = np.array(new int[] { 1, 2, 3, 4 });
@@ -364,7 +365,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: broadcast_to(ones(1,2), (2,1)) raises ValueError.
         ///     NumSharp: Returns shape (2,2) — stretched both.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_BroadcastTo_BilateralSemantics()
         {
             // NumPy: broadcast_to(ones(3), (1,)) must throw
@@ -426,7 +427,7 @@ namespace NumSharp.UnitTest
         ///     new leading dimension with stride=0, but the IsBroadcasted
         ///     guard blocks it.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_ReBroadcast_Inconsistency()
         {
             var x = np.ones(new Shape(1, 3));
@@ -495,7 +496,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns (3,3) bool with False on diagonal.
         ///     NumSharp: InvalidCastException: Unable to cast 'NDArray' to 'IConvertible'.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_NotEquals_NDArrayBroadcast_Throws()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -563,7 +564,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: allclose(a, a) returns True.
         ///     NumSharp: NullReferenceException at np.all.cs:line 29.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Allclose_AlwaysThrows()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -586,7 +587,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: allclose(shape(3,), shape(2,3)) returns True when all elements match.
         ///     NumSharp: NullReferenceException.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Allclose_BroadcastThrows()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0 });         // shape (3,)
@@ -652,7 +653,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) > array([2,4,3]) = [False,True,False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_GreaterThan_NDArrayVsNDArray_SameShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -677,7 +678,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) &lt; array([2,4,3]) = [True,False,False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_LessThan_NDArrayVsNDArray_SameShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -703,7 +704,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) > array([[2],[4]]) = [[F,T,T],[F,T,F]]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_GreaterThan_NDArrayVsNDArray_Broadcast()
         {
             var a = np.array(new int[] { 1, 5, 3 });        // (3,)
@@ -761,8 +762,8 @@ namespace NumSharp.UnitTest
         ///     NumPy: unique([3,1,2,1,3]) = [1,2,3] (always sorted).
         ///     Fix: Added Span.Sort() after collecting unique values.
         /// </summary>
-        [Test]
-        [Category("Fixed")]
+        [TestMethod]
+        [TestCategory("Fixed")]
         public void Bug_Unique_NotSorted()
         {
             var a = np.array(new int[] { 3, 1, 2, 1, 3 });
@@ -829,7 +830,7 @@ namespace NumSharp.UnitTest
         ///     Note: ravel() returns correct results for the same input,
         ///     suggesting it uses a different iteration path than flatten().
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Flatten_ColumnBroadcast_WrongOrder()
         {
             var a = np.array(new int[,] { { 1 }, { 2 }, { 3 } }); // (3,1)
@@ -902,7 +903,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[1,2,3], [2,4,6], [3,6,9]]
         ///     NumSharp: [[garbage, garbage, garbage], ...] (uninitialized memory)
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Cumsum_Axis0_RowBroadcast_Garbage()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
@@ -941,7 +942,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[1,1,1], [3,3,3], [6,6,6]]
         ///     NumSharp: [[garbage, garbage, garbage], ...]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Cumsum_Axis0_ColBroadcast_Garbage()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -983,7 +984,7 @@ namespace NumSharp.UnitTest
         ///     The values suggest cumsum reads with wrong strides — it appears
         ///     to be accumulating along axis=0 instead of axis=1.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Cumsum_Axis1_ColBroadcast_Wrong()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -1055,7 +1056,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[3,1,2], [3,1,2]]
         ///     NumSharp: [[3,1,2], [0,0,0]]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Roll_RowBroadcast_ZerosInSecondRow()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
@@ -1087,7 +1088,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[30,30,30], [10,10,10], [20,20,20]]
         ///     NumSharp: [[30,30,30], [0,0,0], [0,0,0]]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Roll_ColBroadcast_ZerosAfterFirstRow()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
@@ -1175,7 +1176,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [600, 600, 600]
         ///     NumSharp: [300, 300, 300]  (under-counts, appears to miss row 2)
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Sum_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
@@ -1201,7 +1202,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   mean = [2.0, 2.0, 2.0]
         ///     NumSharp: mean = [1.0, 1.0, 1.0]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Mean_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
@@ -1224,7 +1225,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   var = [0.6667, 0.6667, 0.6667]
         ///     NumSharp: var = [0.0, 0.0, 0.0]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Var_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
@@ -1247,7 +1248,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   std = [0.8165, 0.8165, 0.8165]
         ///     NumSharp: std = [0.0, 0.0, 0.0]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Std_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
@@ -1272,7 +1273,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   sum(axis=0) = [15, 15, 15]  (1+2+3+4+5)
         ///     NumSharp: sum(axis=0) = [7, 7, 7]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Sum_Axis0_ColBroadcast_5x3_WrongValues()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -1321,7 +1322,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   argsort([[3,1,2],[6,4,5]]) = [[1,2,0],[1,2,0]]
         ///     NumSharp: InvalidOperationException: Failed to compare two elements
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Argsort_2D_Crashes()
         {
             var a = np.array(new int[,] { { 3, 1, 2 }, { 6, 4, 5 } });
@@ -1356,7 +1357,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   argsort([[3.0,1.0,2.0]]) = [[1,2,0]]
         ///     NumSharp: InvalidOperationException
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Argsort_2D_Double_Crashes()
         {
             var a = np.array(new double[,] { { 3.0, 1.0, 2.0 } });
@@ -1398,7 +1399,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   clip(broadcast, 2, 7) = [[2,5,7],[2,5,7]]
         ///     NumSharp: NotSupportedException: Unable to broadcast already broadcasted shape.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Clip_Broadcast_ThrowsNotSupported()
         {
             var a = np.broadcast_to(np.array(new double[] { 1.0, 5.0, 9.0 }), new Shape(2, 3));
@@ -1516,7 +1517,7 @@ namespace NumSharp.UnitTest
         ///     of 0, 3, 6 (using stride 3), so it reads data[0..2] which
         ///     are all 100 (row 0 repeated 3 times in the contiguous clone).
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_ColumnBroadcast_SliceColumn()
         {
             // Setup: column vector [[100],[200],[300]] broadcast to (3,3)
@@ -1557,7 +1558,7 @@ namespace NumSharp.UnitTest
         ///     correctly materializes the data; the bug is purely that
         ///     _shape.Slice(slices) attaches broadcast strides to the clone.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SliceBroadcast_CopyWorkaround_Proves_StrideMismatch()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
@@ -1611,7 +1612,7 @@ namespace NumSharp.UnitTest
         ///     We use np.copy as the control path: copy materializes with
         ///     clean strides, then slicing works correctly.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_SlicedSourceRows()
         {
             // arange(12).reshape(3,4) = [[ 0, 1, 2, 3],
@@ -1680,7 +1681,7 @@ namespace NumSharp.UnitTest
         ///     the same slice that the reduction code does, proving that the
         ///     slice itself returns wrong values.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_Causes_Sum_Axis0_Bug()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
@@ -1765,7 +1766,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    cumsum(broadcast_to([1,2,3],(3,3)), axis=0) = [[1,2,3],[2,4,6],[3,6,9]]
         ///     NumSharp: uninitialized memory (e.g. [43060696, 32766, 0])
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Cumsum_OutputBroadcastShape_RowBroadcast_Axis0()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
@@ -1800,7 +1801,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    cumsum(broadcast_to([[1],[2],[3]],(3,3)), axis=1) = [[1,2,3],[2,4,6],[3,6,9]]
         ///     NumSharp: garbage
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Cumsum_OutputBroadcastShape_ColBroadcast_Axis1()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -1872,7 +1873,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    roll(broadcast_to([1,2,3],(2,3)), 1, axis=1) = [[3,1,2],[3,1,2]]
         ///     NumSharp: row 0 may be correct, row 1 contains zeros/garbage
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Roll_DataT_RowBroadcast()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
@@ -1898,7 +1899,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    roll(broadcast_to([[1],[2],[3]],(3,3)), 1, axis=0) = [[3,3,3],[1,1,1],[2,2,2]]
         ///     NumSharp: garbage values
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Roll_DataT_ColBroadcast()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -1972,7 +1973,7 @@ namespace NumSharp.UnitTest
         ///     This is a root cause contributing to Bug 19 (roll) and
         ///     Bug 5/9 (np.minimum via TransformOffset → GetAtIndex).
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_GetCoordinates_BroadcastStrides_RowBroadcast()
         {
             // Row broadcast: [1,2,3] → (3,3), strides [0, 1]
@@ -2008,7 +2009,7 @@ namespace NumSharp.UnitTest
         ///     BUG 20b: GetCoordinates for col-broadcast (3,3) strides [1, 0].
         ///     Flat index 1 maps to [1, 0] instead of [0, 1].
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_GetCoordinates_BroadcastStrides_ColBroadcast()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -2061,7 +2062,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    arr[mask] where mask has 3 True values → shape (3,)
         ///     NumSharp: returns shape (3, ...) — treats True as row selector
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_BooleanMask_2D_WrongShape()
         {
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
@@ -2113,7 +2114,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.any([[T,F],[F,T]], axis=0) = [True, True]
         ///     NumSharp: InvalidCastException: Unable to cast NDArray to NDArray&lt;Boolean&gt;
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Any_WithAxis_AlwaysThrows()
         {
             var a = np.array(new bool[,] { { true, false }, { false, true } });
@@ -2134,7 +2135,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 22b: np.any with axis=1 also throws.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Any_WithAxis1_AlwaysThrows()
         {
             var a = np.array(new bool[,] { { true, false }, { false, false } });
@@ -2185,7 +2186,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [10,10,10,20,20,20,30,30,30]
         ///     NumSharp: [10,20,30,10,20,30,10,20,30]
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Reshape_ColBroadcast_WrongOrder()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
@@ -2219,7 +2220,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    abs(broadcast_to([-1,2,-3], (2,3))) = [[1,2,3],[1,2,3]]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Abs_Broadcast_Throws()
         {
             var a = np.broadcast_to(np.array(new int[] { -1, 2, -3 }), new Shape(2, 3));
@@ -2285,7 +2286,7 @@ namespace NumSharp.UnitTest
         ///     contiguous [10,10,10,20,20,20,30,30,30] then creates a plain
         ///     shape with strides [3,1], losing the broadcast semantics.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Transpose_ColBroadcast_WrongValues()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
@@ -2350,7 +2351,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    t[0,0] = 999 → a[0,0] == 999 (shared memory)
         ///     NumSharp: t[0,0] = 999 → a[0,0] == 0   (independent copy)
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_Transpose_ReturnsPhysicalCopy_ShouldBeView()
         {
             var a = np.arange(6).reshape(2, 3);
@@ -2384,7 +2385,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    s[0,0,0] = 999 → a[0,0,0] == 999 (shared memory)
         ///     NumSharp: s[0,0,0] = 999 → a[0,0,0] == 0   (independent copy)
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_ReturnsPhysicalCopy_ShouldBeView()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2442,7 +2443,7 @@ namespace NumSharp.UnitTest
         ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this
         ///     by slicing the InternalArray and creating a fresh shape with offset=0.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_IsContiguous_FalseForContiguousSlice1D()
         {
             var a = np.arange(10);
@@ -2461,7 +2462,7 @@ namespace NumSharp.UnitTest
         ///     row-major array — the data is contiguous in memory.
         ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_IsContiguous_FalseForContiguousRowSlice2D()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -2514,7 +2515,7 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(0,2):    strides = [1, 4, 12]  (swap strides[0] and strides[2])
         ///       NumSharp swapaxes(0,2): strides = [6, 2, 1]   (C-contiguous for shape (4,3,2))
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis02()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2539,7 +2540,7 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(0,1):    strides = [4, 12, 1]  (swap strides[0] and strides[1])
         ///       NumSharp swapaxes(0,1): strides = [8, 4, 1]   (C-contiguous for shape (3,2,4))
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis01()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2559,7 +2560,7 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(1,2):    strides = [12, 1, 4]  (swap strides[1] and strides[2])
         ///       NumSharp swapaxes(1,2): strides = [12, 3, 1]  (C-contiguous for shape (2,4,3))
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis12()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2601,7 +2602,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.swapaxes(np.array(42), 0, 0) → AxisError
         ///     NumSharp: np.swapaxes(np.array(42), 0, 0) → shape=[1], no error
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_0DScalar_ShouldThrow()
         {
             var s = np.array(42);
@@ -2648,7 +2649,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns empty array with shape (4,3,0).
         ///     NumSharp: InvalidOperationException — NDIterator can't handle empty shape.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_EmptyArray_Crashes()
         {
             var empty = np.empty(new Shape(0, 3, 4));
@@ -2671,7 +2672,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns empty array with shape (4,0,2).
         ///     NumSharp: InvalidOperationException — same root cause.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_EmptyArray_MiddleDimZero_Crashes()
         {
             var empty = np.empty(new Shape(2, 0, 4));
@@ -2724,7 +2725,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    AxisError: axis2: axis 3 is out of bounds for array of dimension 3
         ///     NumSharp: IndexOutOfRangeException: Index was outside the bounds of the array.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_OutOfBoundsAxis_BadErrorMessage()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2752,7 +2753,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    AxisError: axis1: axis -4 is out of bounds for array of dimension 3
         ///     NumSharp: IndexOutOfRangeException (from array access with negative index)
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug_SwapAxes_NegativeOutOfBoundsAxis_BadErrorMessage()
         {
             var a = np.arange(24).reshape(2, 3, 4);

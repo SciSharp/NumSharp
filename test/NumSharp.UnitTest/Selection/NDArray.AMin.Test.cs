@@ -6,9 +6,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Selection
 {
+    [TestClass]
     public class NDArrayAMinTest
     {
-        [Test]
+        [TestMethod]
         public void amin()
         {
             //no axis

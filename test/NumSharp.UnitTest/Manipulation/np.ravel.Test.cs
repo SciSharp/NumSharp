@@ -4,13 +4,14 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class np_ravel_Test
     {
         // ================================================================
         // VALUES: 1D arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_1D_AlreadyFlat()
         {
             var a = np.array(new long[] { 1, 2, 3, 4, 5 });
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_1D_Instance()
         {
             var a = np.array(new long[] { 10, 20, 30 });
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: 2D arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_2D_COrder()
         {
             // NumPy: np.ravel([[1,2,3],[4,5,6]]) = [1,2,3,4,5,6]
@@ -45,7 +46,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_2D_Instance()
         {
             var a = np.array(new long[,] { { 1, 2 }, { 3, 4 } });
@@ -55,7 +56,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_2D_SingleRow()
         {
             var a = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
@@ -65,7 +66,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_2D_SingleColumn()
         {
             var a = np.array(new long[,] { { 1 }, { 2 }, { 3 } });
@@ -79,7 +80,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: 3D and 4D arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_3D()
         {
             // NumPy: np.ravel(np.arange(24).reshape(2,3,4)) = [0,1,...,23]
@@ -92,7 +93,7 @@ namespace NumSharp.UnitTest.Manipulation
                 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_4D()
         {
             var a = np.arange(24).reshape(new Shape(1, 2, 3, 4));
@@ -108,7 +109,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: scalar and empty
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Scalar()
         {
             // NumPy: np.ravel(np.array(42)) = [42] shape=(1,)
@@ -121,7 +122,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(0).Should().Be(42);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Empty_1D()
         {
             // NumPy: np.ravel(np.array([])) = [] shape=(0,)
@@ -132,7 +133,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_SingleElement()
         {
             var a = np.array(new long[,] { { 42 } });
@@ -146,7 +147,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: broadcast arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Broadcast_RowBroadcast()
         {
             // NumPy: np.ravel(np.broadcast_to([1,2,3], (3,3))) = [1,2,3,1,2,3,1,2,3]
@@ -157,7 +158,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 1, 2, 3, 1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Broadcast_ColumnBroadcast()
         {
             // NumPy: np.ravel(np.broadcast_to([[10],[20],[30]], (3,3)))
@@ -170,7 +171,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(10, 10, 10, 20, 20, 20, 30, 30, 30);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Broadcast_2x3_ColumnBroadcast()
         {
             // np.ravel(np.broadcast_to([[1],[2]], (2,3))) = [1,1,1,2,2,2]
@@ -186,7 +187,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: sliced arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Sliced_2D_ColumnSlice()
         {
             // NumPy: np.ravel(np.arange(12).reshape(3,4)[:,1:3]) = [1,2,5,6,9,10]
@@ -197,7 +198,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 5, 6, 9, 10);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Sliced_Step2()
         {
             // NumPy: np.ravel(np.arange(10)[::2]) = [0,2,4,6,8]
@@ -208,7 +209,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 2, 4, 6, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Sliced_Reversed()
         {
             // NumPy: np.ravel(np.arange(5)[::-1]) = [4,3,2,1,0]
@@ -223,7 +224,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VALUES: transposed arrays
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Transposed_2D()
         {
             // NumPy: np.ravel(np.array([[1,2,3],[4,5,6]]).T) = [1,4,2,5,3,6]
@@ -234,7 +235,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 4, 2, 5, 3, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Swapaxes_3D()
         {
             // NumPy: np.ravel(np.arange(12).reshape(2,3,2).swapaxes(1,2))
@@ -251,7 +252,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VIEW SEMANTICS: contiguous array ravel is a view
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Contiguous_IsView()
         {
             // NumPy: ravel of contiguous array returns view (shared memory)
@@ -264,7 +265,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "NumPy: modifying ravel output modifies original.");
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Contiguous2D_IsView()
         {
             // NumPy: ravel of contiguous 2D array returns view
@@ -281,7 +282,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VIEW SEMANTICS: non-contiguous ravel is a copy
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_StepSlice_IsCopy()
         {
             // NumPy: ravel of step-2 slice returns copy (not C-contiguous)
@@ -295,7 +296,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "NumPy: step-2 slice is not C-contiguous.");
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Broadcast_IsCopy()
         {
             // NumPy: ravel of broadcast array returns copy
@@ -309,7 +310,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "NumPy: broadcast is not contiguous.");
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_ColumnSlice_IsCopy()
         {
             // NumPy: ravel of column slice returns copy (not C-contiguous)
@@ -328,7 +329,7 @@ namespace NumSharp.UnitTest.Manipulation
         // These are upstream Shape.IsContiguous issues, not ravel bugs.
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_ContiguousSlice1D_ShouldBeView()
         {
             // NumPy: a[2:7] is c_contiguous=True, ravel returns a VIEW
@@ -345,7 +346,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "unnecessarily copy via CloneData.");
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_ContiguousRowSlice2D_ShouldBeView()
         {
             // NumPy: c[1:3] (row slice) is c_contiguous=True, ravel returns VIEW
@@ -365,7 +366,7 @@ namespace NumSharp.UnitTest.Manipulation
         // FLATTEN: always returns a copy
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Flatten_Contiguous_IsCopy()
         {
             // NumPy: flatten always returns a copy, even for contiguous arrays
@@ -378,7 +379,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "NumPy: modifying flatten output never modifies original.");
         }
 
-        [Test]
+        [TestMethod]
         public void Flatten_2D_Values()
         {
             var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -388,7 +389,7 @@ namespace NumSharp.UnitTest.Manipulation
             f.Should().BeOfValues(1, 2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Flatten_Broadcast()
         {
             var bc = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(2, 3));
@@ -398,7 +399,7 @@ namespace NumSharp.UnitTest.Manipulation
             f.Should().BeOfValues(1, 2, 3, 1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Flatten_Broadcast_IsCopy()
         {
             var src = np.array(new long[] { 1, 2, 3 });
@@ -414,70 +415,70 @@ namespace NumSharp.UnitTest.Manipulation
         // DTYPE PRESERVATION
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Int32()
         {
             var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Int64()
         {
             var a = np.array(new long[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Float32()
         {
             var a = np.array(new float[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(float));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Float64()
         {
             var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Bool()
         {
             var a = np.array(new bool[,] { { true, false }, { false, true } });
             np.ravel(a).dtype.Should().Be(typeof(bool));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Byte()
         {
             var a = np.array(new byte[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(byte));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_Int16()
         {
             var a = np.array(new short[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(short));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_UInt16()
         {
             var a = np.array(new ushort[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(ushort));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_UInt32()
         {
             var a = np.array(new uint[,] { { 1, 2 }, { 3, 4 } });
             np.ravel(a).dtype.Should().Be(typeof(uint));
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_PreservesDtype_UInt64()
         {
             var a = np.array(new ulong[,] { { 1, 2 }, { 3, 4 } });
@@ -488,7 +489,7 @@ namespace NumSharp.UnitTest.Manipulation
         // NDIM AND SHAPE
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_AlwaysReturns1D()
         {
             np.ravel(np.arange(5)).ndim.Should().Be(1);
@@ -496,7 +497,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.ravel(np.arange(24).reshape(2, 3, 4)).ndim.Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_SizePreserved()
         {
             np.ravel(np.arange(5)).size.Should().Be(5);
@@ -508,7 +509,7 @@ namespace NumSharp.UnitTest.Manipulation
         // ORIGINAL NOT MODIFIED (for copy cases)
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_Broadcast_OriginalNotModified()
         {
             var src = np.array(new long[] { 1, 2, 3 });
@@ -522,7 +523,7 @@ namespace NumSharp.UnitTest.Manipulation
             src.Should().BeOfValues(1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_StepSlice_OriginalNotModified()
         {
             var a = np.arange(10);
@@ -539,7 +540,7 @@ namespace NumSharp.UnitTest.Manipulation
         // RAVEL vs FLATTEN EQUIVALENCE (values only)
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_EquivalentToFlatten_Values()
         {
             var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -551,7 +552,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "ravel and flatten should produce the same values for C-order");
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_EquivalentToFlatten_Broadcast()
         {
             var bc = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(2, 3));
@@ -566,7 +567,7 @@ namespace NumSharp.UnitTest.Manipulation
         // RAVEL of various dtypes — values
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_BoolValues()
         {
             var a = np.array(new bool[,] { { true, false }, { false, true } });
@@ -576,7 +577,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(true, false, false, true);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_DoubleValues()
         {
             var a = np.array(new double[,] { { 1.5, 2.5 }, { 3.5, 4.5 } });
@@ -586,7 +587,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1.5, 2.5, 3.5, 4.5);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_FloatValues()
         {
             var a = np.array(new float[,] { { 1.5f, 2.5f }, { 3.5f, 4.5f } });
@@ -596,7 +597,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1.5f, 2.5f, 3.5f, 4.5f);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_Int64Values()
         {
             var a = np.array(new long[,] { { 100, 200 }, { 300, 400 } });
@@ -606,7 +607,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(100L, 200L, 300L, 400L);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_ByteValues()
         {
             var a = np.array(new byte[,] { { 1, 2 }, { 3, 4 } });
@@ -620,7 +621,7 @@ namespace NumSharp.UnitTest.Manipulation
         // LARGE ARRAY
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Ravel_LargeArray()
         {
             var a = np.arange(1000).reshape(10, 10, 10);

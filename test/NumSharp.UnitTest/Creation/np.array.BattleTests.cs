@@ -13,11 +13,12 @@ namespace NumSharp.UnitTest;
 /// - With ndmin parameter
 /// - With copy parameter
 /// </summary>
+[TestClass]
 public class np_array_BattleTests
 {
     #region Scalars (0-dimensional)
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarInt32_Creates0DimArray()
     {
         // NumPy: np.array(42) creates shape=(), ndim=0
@@ -28,7 +29,7 @@ public class np_array_BattleTests
         ((int)arr).Should().Be(42);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarInt64_Creates0DimArray()
     {
         var arr = np.array(42L);
@@ -37,7 +38,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(long));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarDouble_Creates0DimArray()
     {
         var arr = np.array(3.14);
@@ -47,7 +48,7 @@ public class np_array_BattleTests
         ((double)arr).Should().BeApproximately(3.14, 0.001);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarBoolTrue_Creates0DimArray()
     {
         var arr = np.array(true);
@@ -56,7 +57,7 @@ public class np_array_BattleTests
         ((bool)arr).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarBoolFalse_Creates0DimArray()
     {
         var arr = np.array(false);
@@ -64,7 +65,7 @@ public class np_array_BattleTests
         ((bool)arr).Should().BeFalse();
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarNegative_Creates0DimArray()
     {
         var arr = np.array(-99);
@@ -72,7 +73,7 @@ public class np_array_BattleTests
         ((int)arr).Should().Be(-99);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarZero_Creates0DimArray()
     {
         var arr = np.array(0);
@@ -80,7 +81,7 @@ public class np_array_BattleTests
         ((int)arr).Should().Be(0);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_ScalarLargeValue_Creates0DimArray()
     {
         var arr = np.array(long.MaxValue);
@@ -92,7 +93,7 @@ public class np_array_BattleTests
 
     #region 1D Arrays
 
-    [Test]
+    [TestMethod]
     public void Array_1DInt32_CreatesVector()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -101,7 +102,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(int));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DInt64_CreatesVector()
     {
         var arr = np.array(new long[] { 1, 2, 3 });
@@ -110,7 +111,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(long));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DFloat32_CreatesVector()
     {
         var arr = np.array(new float[] { 1f, 2f, 3f });
@@ -118,7 +119,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(float));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DFloat64_CreatesVector()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -126,7 +127,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DBool_CreatesVector()
     {
         var arr = np.array(new bool[] { true, false, true });
@@ -135,7 +136,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DSingleElement_CreatesVector()
     {
         // NumPy: np.array([42]) creates shape=(1,), ndim=1
@@ -144,7 +145,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 1 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DEmpty_CreatesEmptyVector()
     {
         var arr = np.array(new int[0]);
@@ -153,7 +154,7 @@ public class np_array_BattleTests
         arr.size.Should().Be(0);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_1DNegative_CreatesVector()
     {
         var arr = np.array(new int[] { -1, -2, -3 });
@@ -165,7 +166,7 @@ public class np_array_BattleTests
 
     #region 2D Arrays
 
-    [Test]
+    [TestMethod]
     public void Array_2DInt32_CreatesMatrix()
     {
         var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -174,7 +175,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(int));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_2DDouble_CreatesMatrix()
     {
         var arr = np.array(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
@@ -183,7 +184,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_2DSingleRow_CreatesMatrix()
     {
         var arr = np.array(new int[,] { { 1, 2, 3 } });
@@ -191,7 +192,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 1, 3 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_2DSingleCol_CreatesMatrix()
     {
         var arr = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -199,7 +200,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 3, 1 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_2D1x1_CreatesMatrix()
     {
         var arr = np.array(new int[,] { { 42 } });
@@ -211,7 +212,7 @@ public class np_array_BattleTests
 
     #region 3D+ Arrays
 
-    [Test]
+    [TestMethod]
     public void Array_3D_CreatesTensor()
     {
         var arr = np.array(new int[,,] { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } });
@@ -219,7 +220,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 2, 2, 2 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_4D_CreatesTensor()
     {
         var arr = np.array(new int[,,,] { { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } } });
@@ -231,7 +232,7 @@ public class np_array_BattleTests
 
     #region Jagged Arrays
 
-    [Test]
+    [TestMethod]
     public void Array_2DJagged_CreatesMatrix()
     {
         var arr = np.array(new int[][] { new[] { 1, 2 }, new[] { 3, 4 } });
@@ -239,7 +240,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 2, 2 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_3DJagged_CreatesTensor()
     {
         var arr = np.array(new int[][][] {
@@ -254,7 +255,7 @@ public class np_array_BattleTests
 
     #region ndmin Parameter
 
-    [Test]
+    [TestMethod]
     public void Array_Ndmin1_On1DArray_NoChange()
     {
         var arr = np.array(new int[] { 1, 2, 3 }, ndmin: 1);
@@ -262,7 +263,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 3 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_Ndmin2_On1DArray_AddsLeadingDim()
     {
         // NumPy: np.array([1,2,3], ndmin=2) -> shape (1, 3)
@@ -271,7 +272,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 1, 3 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_Ndmin3_On1DArray_AddsTwoLeadingDims()
     {
         // NumPy: np.array([1,2,3], ndmin=3) -> shape (1, 1, 3)
@@ -280,7 +281,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 1, 1, 3 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_Ndmin3_On2DArray_AddsOneLeadingDim()
     {
         // NumPy: np.array([[1,2],[3,4]], ndmin=3) -> shape (1, 2, 2)
@@ -289,7 +290,7 @@ public class np_array_BattleTests
         arr.shape.Should().BeEquivalentTo(new[] { 1, 2, 2 });
     }
 
-    [Test]
+    [TestMethod]
     public void Array_Ndmin1_On2DArray_NoChange()
     {
         var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } }, ndmin: 1);
@@ -301,7 +302,7 @@ public class np_array_BattleTests
 
     #region From Existing NDArray
 
-    [Test]
+    [TestMethod]
     public void Array_FromNDArray_DefaultCopyFalse_SharesMemory()
     {
         var original = np.array(new int[] { 1, 2, 3 });
@@ -311,7 +312,7 @@ public class np_array_BattleTests
         original.GetInt32(0).Should().Be(999, "copy=false should share memory");
     }
 
-    [Test]
+    [TestMethod]
     public void Array_FromNDArray_CopyTrue_Independent()
     {
         var original = np.array(new int[] { 1, 2, 3 });
@@ -321,7 +322,7 @@ public class np_array_BattleTests
         original.GetInt32(0).Should().Be(1, "copy=true should not affect original");
     }
 
-    [Test]
+    [TestMethod]
     public void Array_FromNDArray_PreservesShape()
     {
         var original = np.arange(6).reshape(2, 3);
@@ -333,7 +334,7 @@ public class np_array_BattleTests
 
     #region Params Syntax
 
-    [Test]
+    [TestMethod]
     public void Array_ParamsMultipleValues_Creates1DArray()
     {
         var arr = np.array(1, 2, 3);
@@ -345,7 +346,7 @@ public class np_array_BattleTests
 
     #region Special Values
 
-    [Test]
+    [TestMethod]
     public void Array_WithInfinity_Preserved()
     {
         var arr = np.array(new double[] { 1, double.PositiveInfinity, double.NegativeInfinity });
@@ -353,7 +354,7 @@ public class np_array_BattleTests
         arr.GetDouble(2).Should().Be(double.NegativeInfinity);
     }
 
-    [Test]
+    [TestMethod]
     public void Array_WithNaN_Preserved()
     {
         var arr = np.array(new double[] { 1, double.NaN, 2 });
@@ -364,7 +365,7 @@ public class np_array_BattleTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Array_EmptyInt_CreatesEmptyWithCorrectDtype()
     {
         var arr = np.array(new int[0]);
@@ -372,7 +373,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(int));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_EmptyDouble_CreatesEmptyWithCorrectDtype()
     {
         var arr = np.array(new double[0]);
@@ -380,7 +381,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_EmptyBool_CreatesEmptyWithCorrectDtype()
     {
         var arr = np.array(new bool[0]);
@@ -388,7 +389,7 @@ public class np_array_BattleTests
         arr.dtype.Should().Be(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_String_CreatesCharArray()
     {
         // NumSharp-specific: string creates char array
@@ -402,35 +403,35 @@ public class np_array_BattleTests
 
     #region All Supported Dtypes
 
-    [Test]
+    [TestMethod]
     public void Array_Byte_Supported()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
         arr.dtype.Should().Be(typeof(byte));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_Int16_Supported()
     {
         var arr = np.array(new short[] { 1, 2, 3 });
         arr.dtype.Should().Be(typeof(short));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_UInt16_Supported()
     {
         var arr = np.array(new ushort[] { 1, 2, 3 });
         arr.dtype.Should().Be(typeof(ushort));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_UInt32_Supported()
     {
         var arr = np.array(new uint[] { 1, 2, 3 });
         arr.dtype.Should().Be(typeof(uint));
     }
 
-    [Test]
+    [TestMethod]
     public void Array_UInt64_Supported()
     {
         var arr = np.array(new ulong[] { 1, 2, 3 });

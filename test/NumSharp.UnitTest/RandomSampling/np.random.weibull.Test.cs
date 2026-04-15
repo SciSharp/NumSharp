@@ -5,9 +5,10 @@ using System.Linq;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class NpRandomWeibullTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Weibull_ScalarReturn()
         {
             var rng = np.random.RandomState(42);
@@ -18,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue((double)result > 0);
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_1DArray()
         {
             var result = np.random.weibull(2, new Shape(5));
@@ -28,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_2DArray()
         {
             var result = np.random.weibull(2, new Shape(2, 3));
@@ -38,7 +39,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_ShapeOverload()
         {
             var result = np.random.weibull(1.5, new Shape(10, 5));
@@ -47,13 +48,13 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_NegativeA_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.weibull(-1));
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_ZeroA_ReturnsZeros()
         {
             var result = np.random.weibull(0, 5);
@@ -62,7 +63,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.AreEqual(0.0, val);
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_A1_IsExponential()
         {
             // When a=1, Weibull reduces to exponential distribution with mean=1
@@ -74,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - 1.0) < 0.05, $"Mean {mean} should be close to 1.0");
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_A2_StatisticalProperties()
         {
             // For Weibull(a=2), mean = Gamma(1 + 1/a) = Gamma(1.5) ≈ 0.886
@@ -85,7 +86,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - 0.886) < 0.02, $"Mean {mean} should be close to 0.886");
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_AllValuesNonNegative()
         {
             var samples = np.random.weibull(0.5, 1000);
@@ -94,7 +95,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 Assert.IsTrue(val >= 0, $"Value {val} should be non-negative");
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_SmallA_ProducesLargeValues()
         {
             // Small a (shape < 1) produces heavy-tailed distribution
@@ -106,7 +107,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(max > 1.0, $"Max {max} should be > 1 for heavy-tailed distribution");
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_LargeA_ProducesConcentratedValues()
         {
             // Large a produces values concentrated near 1
@@ -120,7 +121,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(std < 0.2, $"Std {std} should be small for large a");
         }
 
-        [Test]
+        [TestMethod]
         public void Weibull_ReturnsFloat64()
         {
             var result = np.random.weibull(2, size: new Shape(5));

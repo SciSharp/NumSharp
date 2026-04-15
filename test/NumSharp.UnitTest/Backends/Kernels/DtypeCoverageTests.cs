@@ -19,6 +19,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     ///
     /// Known limitations documented inline.
     /// </summary>
+    [TestClass]
     public class DtypeCoverageTests
     {
         #region Dtype Lists
@@ -78,10 +79,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Unary Operations
 
-        [Test]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Sqrt_FloatDtypes(NPTypeCode dtype)
         {
             // sqrt is meaningful for float types
@@ -100,14 +101,14 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(v2 >= 2.9 && v2 <= 3.1, $"sqrt(9) should be 3, got {v2}");
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
         public void Sqrt_IntegerDtypes(NPTypeCode dtype)
         {
             // sqrt on integers works (result is float64)
@@ -119,17 +120,17 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Abs_NumericDtypes(NPTypeCode dtype)
         {
             // abs works for all numeric types
@@ -142,13 +143,13 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(value >= 0, $"abs result should be non-negative, got {value}");
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Negate_SignedDtypes(NPTypeCode dtype)
         {
             // negate works for signed types
@@ -165,19 +166,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Binary Operations
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Add_AllDtypes(NPTypeCode dtype)
         {
             // Addition works for all 12 dtypes
@@ -207,19 +208,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Multiply_AllDtypes(NPTypeCode dtype)
         {
             // Multiplication works for all 12 dtypes
@@ -248,11 +249,11 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Int32, NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Int64, NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Byte, NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt16, NPTypeCode.Int64)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Int32, NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Int64, NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Byte, NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt16, NPTypeCode.Int64)]
         public void Add_MixedDtypes(NPTypeCode dtype1, NPTypeCode dtype2)
         {
             // Mixed type addition with type promotion
@@ -268,19 +269,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Reduction Operations
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Sum_AllDtypes(NPTypeCode dtype)
         {
             // Sum works for all 12 dtypes
@@ -302,18 +303,18 @@ namespace NumSharp.UnitTest.Backends.Kernels
                 Assert.IsTrue(value >= 5.9 && value <= 6.1, $"Sum should be 6, got {value}");
         }
 
-        [Test]
+        [TestMethod]
         // Note: Boolean and Char are excluded - np.amax doesn't support them
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Max_AllDtypes(NPTypeCode dtype)
         {
             // Max works for numeric dtypes (excluding Boolean and Char)
@@ -329,18 +330,18 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(value >= 2.9 && value <= 3.1, $"Max should be 3, got {value}");
         }
 
-        [Test]
+        [TestMethod]
         // Note: Boolean and Char are excluded - np.amin doesn't support them
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Min_AllDtypes(NPTypeCode dtype)
         {
             // Min works for numeric dtypes (excluding Boolean and Char)
@@ -358,17 +359,17 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(value >= 0.9 && value <= 1.1, $"Min should be 1, got {value}");
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Mean_NumericDtypes(NPTypeCode dtype)
         {
             // Mean works for numeric dtypes
@@ -387,19 +388,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Comparison Operations
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Equal_AllDtypes(NPTypeCode dtype)
         {
             // Equality comparison works for all 12 dtypes
@@ -414,18 +415,18 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(result.GetBoolean(2));   // 3 == 3
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Less_NumericDtypes(NPTypeCode dtype)
         {
             // Less-than comparison for numeric dtypes
@@ -440,18 +441,18 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsFalse(result.GetBoolean(2));  // 3 < 2 is false
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Greater_NumericDtypes(NPTypeCode dtype)
         {
             // Greater-than comparison for numeric dtypes
@@ -470,19 +471,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Edge Cases
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void EmptyArray_AllDtypes(NPTypeCode dtype)
         {
             // Empty arrays should be handled for all dtypes
@@ -490,19 +491,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(0, arr.size);
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void ScalarArray_AllDtypes(NPTypeCode dtype)
         {
             // Scalar arrays should work for all dtypes
@@ -510,19 +511,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.IsTrue(arr.Shape.IsScalar || arr.size == 1);
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Reshape_AllDtypes(NPTypeCode dtype)
         {
             // Reshape should work for all dtypes
@@ -533,19 +534,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(6L, reshaped.size);
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Slice_AllDtypes(NPTypeCode dtype)
         {
             // Slicing should work for all dtypes
@@ -555,19 +556,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(3, sliced.size);
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Decimal)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
         public void Copy_AllDtypes(NPTypeCode dtype)
         {
             // Copy should work for all dtypes

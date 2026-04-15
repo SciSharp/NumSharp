@@ -1,562 +1,559 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Tests for NumPy type introspection and promotion functions.
 /// </summary>
+[TestClass]
 public class NpTypingTests
 {
 #region iinfo tests
 
-    [Test]
-    public async Task IInfo_Int32_Bits()
+    [TestMethod]
+    public void IInfo_Int32_Bits()
     {
         var info = np.iinfo(NPTypeCode.Int32);
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
-    [Test]
-    public async Task IInfo_Int32_Min()
+    [TestMethod]
+    public void IInfo_Int32_Min()
     {
         var info = np.iinfo(NPTypeCode.Int32);
-        await Assert.That(info.min).IsEqualTo(int.MinValue);
+        info.min.Should().Be(int.MinValue);
     }
 
-    [Test]
-    public async Task IInfo_Int32_Max()
+    [TestMethod]
+    public void IInfo_Int32_Max()
     {
         var info = np.iinfo(NPTypeCode.Int32);
-        await Assert.That(info.max).IsEqualTo(int.MaxValue);
+        info.max.Should().Be(int.MaxValue);
     }
 
-    [Test]
-    public async Task IInfo_Int32_Kind()
+    [TestMethod]
+    public void IInfo_Int32_Kind()
     {
         var info = np.iinfo(NPTypeCode.Int32);
-        await Assert.That(info.kind).IsEqualTo('i');
+        info.kind.Should().Be('i');
     }
 
-    [Test]
-    public async Task IInfo_UInt8_Min()
+    [TestMethod]
+    public void IInfo_UInt8_Min()
     {
         var info = np.iinfo(NPTypeCode.Byte);
-        await Assert.That(info.min).IsEqualTo(0);
+        info.min.Should().Be(0);
     }
 
-    [Test]
-    public async Task IInfo_UInt8_Max()
+    [TestMethod]
+    public void IInfo_UInt8_Max()
     {
         var info = np.iinfo(NPTypeCode.Byte);
-        await Assert.That(info.max).IsEqualTo(255);
+        info.max.Should().Be(255);
     }
 
-    [Test]
-    public async Task IInfo_UInt8_Kind()
+    [TestMethod]
+    public void IInfo_UInt8_Kind()
     {
         var info = np.iinfo(NPTypeCode.Byte);
-        await Assert.That(info.kind).IsEqualTo('u');
+        info.kind.Should().Be('u');
     }
 
-    [Test]
-    public async Task IInfo_Bool_Bits()
+    [TestMethod]
+    public void IInfo_Bool_Bits()
     {
         var info = np.iinfo(NPTypeCode.Boolean);
-        await Assert.That(info.bits).IsEqualTo(8);
+        info.bits.Should().Be(8);
     }
 
-    [Test]
-    public async Task IInfo_Bool_MinMax()
+    [TestMethod]
+    public void IInfo_Bool_MinMax()
     {
         var info = np.iinfo(NPTypeCode.Boolean);
-        await Assert.That(info.min).IsEqualTo(0);
-        await Assert.That(info.max).IsEqualTo(1);
+        info.min.Should().Be(0);
+        info.max.Should().Be(1);
     }
 
-    [Test]
-    public async Task IInfo_Float_Throws()
+    [TestMethod]
+    public void IInfo_Float_Throws()
     {
-        await Assert.That(() => np.iinfo(NPTypeCode.Double)).ThrowsException();
+        Assert.Throws<Exception>(() => np.iinfo(NPTypeCode.Double));
     }
 
-    [Test]
-    public async Task IInfo_Int64_Values()
+    [TestMethod]
+    public void IInfo_Int64_Values()
     {
         var info = np.iinfo(NPTypeCode.Int64);
-        await Assert.That(info.bits).IsEqualTo(64);
-        await Assert.That(info.min).IsEqualTo(long.MinValue);
-        await Assert.That(info.max).IsEqualTo(long.MaxValue);
+        info.bits.Should().Be(64);
+        info.min.Should().Be(long.MinValue);
+        info.max.Should().Be(long.MaxValue);
     }
 
-    [Test]
-    public async Task IInfo_UInt64_MaxUnsigned()
+    [TestMethod]
+    public void IInfo_UInt64_MaxUnsigned()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
-        await Assert.That(info.maxUnsigned).IsEqualTo(ulong.MaxValue);
+        info.maxUnsigned.Should().Be(ulong.MaxValue);
     }
 
 #endregion
 
 #region finfo tests
 
-    [Test]
-    public async Task FInfo_Float64_Bits()
+    [TestMethod]
+    public void FInfo_Float64_Bits()
     {
         var info = np.finfo(NPTypeCode.Double);
-        await Assert.That(info.bits).IsEqualTo(64);
+        info.bits.Should().Be(64);
     }
 
-    [Test]
-    public async Task FInfo_Float64_Precision()
+    [TestMethod]
+    public void FInfo_Float64_Precision()
     {
         var info = np.finfo(NPTypeCode.Double);
-        await Assert.That(info.precision).IsEqualTo(15);
+        info.precision.Should().Be(15);
     }
 
-    [Test]
-    public async Task FInfo_Float64_Eps()
+    [TestMethod]
+    public void FInfo_Float64_Eps()
     {
         var info = np.finfo(NPTypeCode.Double);
         // eps should be approximately 2.22e-16
-        await Assert.That(info.eps).IsGreaterThan(2e-16);
-        await Assert.That(info.eps).IsLessThan(3e-16);
+        info.eps.Should().BeGreaterThan(2e-16);
+        info.eps.Should().BeLessThan(3e-16);
     }
 
-    [Test]
-    public async Task FInfo_Float32_Bits()
+    [TestMethod]
+    public void FInfo_Float32_Bits()
     {
         var info = np.finfo(NPTypeCode.Single);
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
-    [Test]
-    public async Task FInfo_Float32_Precision()
+    [TestMethod]
+    public void FInfo_Float32_Precision()
     {
         var info = np.finfo(NPTypeCode.Single);
-        await Assert.That(info.precision).IsEqualTo(6);
+        info.precision.Should().Be(6);
     }
 
-    [Test]
-    public async Task FInfo_Int_Throws()
+    [TestMethod]
+    public void FInfo_Int_Throws()
     {
-        await Assert.That(() => np.finfo(NPTypeCode.Int32)).ThrowsException();
+        Assert.Throws<Exception>(() => np.finfo(NPTypeCode.Int32));
     }
 
-    [Test]
-    public async Task FInfo_Decimal()
+    [TestMethod]
+    public void FInfo_Decimal()
     {
         var info = np.finfo(NPTypeCode.Decimal);
-        await Assert.That(info.bits).IsEqualTo(128);
-        await Assert.That(info.precision).IsEqualTo(28);
+        info.bits.Should().Be(128);
+        info.precision.Should().Be(28);
     }
 
 #endregion
 
 #region can_cast tests
 
-    [Test]
-    public async Task CanCast_Int32ToInt64_Safe()
+    [TestMethod]
+    public void CanCast_Int32ToInt64_Safe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Int32, NPTypeCode.Int64)).IsTrue();
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Int64).Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_Int64ToInt32_Safe()
+    [TestMethod]
+    public void CanCast_Int64ToInt32_Safe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Int64, NPTypeCode.Int32)).IsFalse();
+        np.can_cast(NPTypeCode.Int64, NPTypeCode.Int32).Should().BeFalse();
     }
 
-    [Test]
-    public async Task CanCast_Int32ToFloat64_Safe()
+    [TestMethod]
+    public void CanCast_Int32ToFloat64_Safe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Int32, NPTypeCode.Double)).IsTrue();
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Double).Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_Float32ToFloat64_Safe()
+    [TestMethod]
+    public void CanCast_Float32ToFloat64_Safe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Single, NPTypeCode.Double)).IsTrue();
+        np.can_cast(NPTypeCode.Single, NPTypeCode.Double).Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_Float64ToInt32_Safe()
+    [TestMethod]
+    public void CanCast_Float64ToInt32_Safe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Double, NPTypeCode.Int32)).IsFalse();
+        np.can_cast(NPTypeCode.Double, NPTypeCode.Int32).Should().BeFalse();
     }
 
-    [Test]
-    public async Task CanCast_Int32ToInt16_SameKind()
+    [TestMethod]
+    public void CanCast_Int32ToInt16_SameKind()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "same_kind")).IsTrue();
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "same_kind").Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_Int32ToFloat32_SameKind()
+    [TestMethod]
+    public void CanCast_Int32ToFloat32_SameKind()
     {
         // Int to float is NOT same_kind - different type kinds
-        await Assert.That(np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind")).IsFalse();
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind").Should().BeFalse();
     }
 
-    [Test]
-    public async Task CanCast_Int32ToInt16_Unsafe()
+    [TestMethod]
+    public void CanCast_Int32ToInt16_Unsafe()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "unsafe")).IsTrue();
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "unsafe").Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_ScalarFits()
+    [TestMethod]
+    public void CanCast_ScalarFits()
     {
-        await Assert.That(np.can_cast(100, NPTypeCode.Byte)).IsTrue();
+        np.can_cast(100, NPTypeCode.Byte).Should().BeTrue();
     }
 
-    [Test]
-    public async Task CanCast_ScalarOverflow()
+    [TestMethod]
+    public void CanCast_ScalarOverflow()
     {
-        await Assert.That(np.can_cast(1000, NPTypeCode.Byte)).IsFalse();
+        np.can_cast(1000, NPTypeCode.Byte).Should().BeFalse();
     }
 
-    [Test]
-    public async Task CanCast_BoolToInt()
+    [TestMethod]
+    public void CanCast_BoolToInt()
     {
-        await Assert.That(np.can_cast(NPTypeCode.Boolean, NPTypeCode.Int32)).IsTrue();
+        np.can_cast(NPTypeCode.Boolean, NPTypeCode.Int32).Should().BeTrue();
     }
 
 #endregion
 
 #region result_type tests
 
-    [Test]
-    public async Task ResultType_Int32Int64()
+    [TestMethod]
+    public void ResultType_Int32Int64()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.result_type(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
-    [Test]
-    public async Task ResultType_Int32Float32()
+    [TestMethod]
+    public void ResultType_Int32Float32()
     {
         // Mixed int/float promotes to higher precision
         var result = np.result_type(NPTypeCode.Int32, NPTypeCode.Single);
         // Result should be single or double - we accept either
-        await Assert.That(result == NPTypeCode.Single || result == NPTypeCode.Double).IsTrue();
+        (result == NPTypeCode.Single || result == NPTypeCode.Double).Should().BeTrue();
     }
 
-    [Test]
-    public async Task ResultType_Float32Float64()
+    [TestMethod]
+    public void ResultType_Float32Float64()
     {
-        await Assert.That(np.result_type(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.result_type(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
-    public async Task ResultType_Arrays()
+    [TestMethod]
+    public void ResultType_Arrays()
     {
         var a = np.array(new int[] { 1, 2 });
         var b = np.array(new float[] { 1.0f, 2.0f });
         var result = np.result_type(a, b);
         // Result should be single or double - we accept either
-        await Assert.That(result == NPTypeCode.Single || result == NPTypeCode.Double).IsTrue();
+        (result == NPTypeCode.Single || result == NPTypeCode.Double).Should().BeTrue();
     }
 
 #endregion
 
 #region promote_types tests
 
-    [Test]
-    public async Task PromoteTypes_SameType()
+    [TestMethod]
+    public void PromoteTypes_SameType()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int32, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
+        np.promote_types(NPTypeCode.Int32, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
-    [Test]
-    public async Task PromoteTypes_Int16Int32()
+    [TestMethod]
+    public void PromoteTypes_Int16Int32()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
+        np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
-    [Test]
-    public async Task PromoteTypes_Float32Float64()
+    [TestMethod]
+    public void PromoteTypes_Float32Float64()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.promote_types(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
 #endregion
 
 #region min_scalar_type tests
 
-    [Test]
-    public async Task MinScalarType_SmallPositive()
+    [TestMethod]
+    public void MinScalarType_SmallPositive()
     {
-        await Assert.That(np.min_scalar_type(10)).IsEqualTo(NPTypeCode.Byte);
+        np.min_scalar_type(10).Should().Be(NPTypeCode.Byte);
     }
 
-    [Test]
-    public async Task MinScalarType_SmallNegative()
+    [TestMethod]
+    public void MinScalarType_SmallNegative()
     {
         // No Int8 in NumSharp, so smallest signed is Int16
-        await Assert.That(np.min_scalar_type(-10)).IsEqualTo(NPTypeCode.Int16);
+        np.min_scalar_type(-10).Should().Be(NPTypeCode.Int16);
     }
 
-    [Test]
-    public async Task MinScalarType_Large()
+    [TestMethod]
+    public void MinScalarType_Large()
     {
-        await Assert.That(np.min_scalar_type(100000)).IsEqualTo(NPTypeCode.UInt32);
+        np.min_scalar_type(100000).Should().Be(NPTypeCode.UInt32);
     }
 
-    [Test]
-    public async Task MinScalarType_Bool()
+    [TestMethod]
+    public void MinScalarType_Bool()
     {
-        await Assert.That(np.min_scalar_type(true)).IsEqualTo(NPTypeCode.Boolean);
+        np.min_scalar_type(true).Should().Be(NPTypeCode.Boolean);
     }
 
-    [Test]
-    public async Task MinScalarType_ByteRange()
+    [TestMethod]
+    public void MinScalarType_ByteRange()
     {
-        await Assert.That(np.min_scalar_type(255)).IsEqualTo(NPTypeCode.Byte);
-        await Assert.That(np.min_scalar_type(256)).IsEqualTo(NPTypeCode.UInt16);
+        np.min_scalar_type(255).Should().Be(NPTypeCode.Byte);
+        np.min_scalar_type(256).Should().Be(NPTypeCode.UInt16);
     }
 
 #endregion
 
 #region issubdtype tests
 
-    [Test]
-    public async Task IsSubdtype_Int32Integer()
+    [TestMethod]
+    public void IsSubdtype_Int32Integer()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "integer")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "integer").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Int32SignedInteger()
+    [TestMethod]
+    public void IsSubdtype_Int32SignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "signedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_UInt32UnsignedInteger()
+    [TestMethod]
+    public void IsSubdtype_UInt32UnsignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.UInt32, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Int32Floating()
+    [TestMethod]
+    public void IsSubdtype_Int32Floating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "floating")).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, "floating").Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsSubdtype_Float64Number()
+    [TestMethod]
+    public void IsSubdtype_Float64Number()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Double, "number").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Float64Floating()
+    [TestMethod]
+    public void IsSubdtype_Float64Floating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "floating")).IsTrue();
+        np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_Float64Inexact()
+    [TestMethod]
+    public void IsSubdtype_Float64Inexact()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "inexact")).IsTrue();
+        np.issubdtype(NPTypeCode.Double, "inexact").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSubdtype_BoolInteger_NumPy2x()
+    [TestMethod]
+    public void IsSubdtype_BoolInteger_NumPy2x()
     {
         // In NumPy 2.x, bool is NOT a subtype of integer
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsSubdtype_BoolGeneric()
+    [TestMethod]
+    public void IsSubdtype_BoolGeneric()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Boolean, "generic").Should().BeTrue();
     }
 
 #endregion
 
 #region common_type tests
 
-    [Test]
-    public async Task CommonType_Int32ReturnsDouble()
+    [TestMethod]
+    public void CommonType_Int32ReturnsDouble()
     {
         var a = np.array(new int[] { 1, 2 });
-        await Assert.That(np.common_type_code(a)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(a).Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
-    public async Task CommonType_Float32Float64()
+    [TestMethod]
+    public void CommonType_Float32Float64()
     {
         var a = np.array(new float[] { 1.0f });
         var b = np.array(new double[] { 1.0 });
-        await Assert.That(np.common_type_code(a, b)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(a, b).Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
-    public async Task CommonType_Float32Only()
+    [TestMethod]
+    public void CommonType_Float32Only()
     {
         var a = np.array(new float[] { 1.0f });
-        await Assert.That(np.common_type_code(a)).IsEqualTo(NPTypeCode.Single);
+        np.common_type_code(a).Should().Be(NPTypeCode.Single);
     }
 
 #endregion
 
 #region Type checking functions tests
 
-    [Test]
-    public async Task IsSctype_Int32()
+    [TestMethod]
+    public void IsSctype_Int32()
     {
-        await Assert.That(np.issctype(typeof(int))).IsTrue();
+        np.issctype(typeof(int)).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsSctype_NPTypeCode()
+    [TestMethod]
+    public void IsSctype_NPTypeCode()
     {
-        await Assert.That(np.issctype(NPTypeCode.Int32)).IsTrue();
+        np.issctype(NPTypeCode.Int32).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsDtype_Int32Integral()
+    [TestMethod]
+    public void IsDtype_Int32Integral()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Int32, "integral")).IsTrue();
+        np.isdtype(NPTypeCode.Int32, "integral").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsDtype_Float64RealFloating()
+    [TestMethod]
+    public void IsDtype_Float64RealFloating()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Double, "real floating")).IsTrue();
+        np.isdtype(NPTypeCode.Double, "real floating").Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsDtype_Int32Numeric()
+    [TestMethod]
+    public void IsDtype_Int32Numeric()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Int32, "numeric")).IsTrue();
+        np.isdtype(NPTypeCode.Int32, "numeric").Should().BeTrue();
     }
 
-    [Test]
-    public async Task Sctype2Char_Int32()
+    [TestMethod]
+    public void Sctype2Char_Int32()
     {
-        await Assert.That(np.sctype2char(NPTypeCode.Int32)).IsEqualTo('i');
+        np.sctype2char(NPTypeCode.Int32).Should().Be('i');
     }
 
-    [Test]
-    public async Task Sctype2Char_Double()
+    [TestMethod]
+    public void Sctype2Char_Double()
     {
-        await Assert.That(np.sctype2char(NPTypeCode.Double)).IsEqualTo('d');
+        np.sctype2char(NPTypeCode.Double).Should().Be('d');
     }
 
-    [Test]
-    public async Task Sctype2Char_UInt8()
+    [TestMethod]
+    public void Sctype2Char_UInt8()
     {
-        await Assert.That(np.sctype2char(NPTypeCode.Byte)).IsEqualTo('B');
+        np.sctype2char(NPTypeCode.Byte).Should().Be('B');
     }
 
-    [Test]
-    public async Task MaximumSctype_Int32()
+    [TestMethod]
+    public void MaximumSctype_Int32()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int64);
+        np.maximum_sctype(NPTypeCode.Int32).Should().Be(NPTypeCode.Int64);
     }
 
-    [Test]
-    public async Task MaximumSctype_UInt16()
+    [TestMethod]
+    public void MaximumSctype_UInt16()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.UInt16)).IsEqualTo(NPTypeCode.UInt64);
+        np.maximum_sctype(NPTypeCode.UInt16).Should().Be(NPTypeCode.UInt64);
     }
 
-    [Test]
-    public async Task MaximumSctype_Float32()
+    [TestMethod]
+    public void MaximumSctype_Float32()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Single)).IsEqualTo(NPTypeCode.Double);
+        np.maximum_sctype(NPTypeCode.Single).Should().Be(NPTypeCode.Double);
     }
 
 #endregion
 
 #region isreal/iscomplex tests
 
-    [Test]
-    public async Task IsReal_IntArray()
+    [TestMethod]
+    public void IsReal_IntArray()
     {
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.isreal(a);
         // All elements should be real for non-complex arrays
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsComplex_IntArray()
+    [TestMethod]
+    public void IsComplex_IntArray()
     {
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.iscomplex(a);
         // No elements should be complex for non-complex arrays
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsRealObj_IntArray()
+    [TestMethod]
+    public void IsRealObj_IntArray()
     {
         var a = np.array(new int[] { 1, 2 });
-        await Assert.That(np.isrealobj(a)).IsTrue();
+        np.isrealobj(a).Should().BeTrue();
     }
 
-    [Test]
-    public async Task IsComplexObj_IntArray()
+    [TestMethod]
+    public void IsComplexObj_IntArray()
     {
         var a = np.array(new int[] { 1, 2 });
-        await Assert.That(np.iscomplexobj(a)).IsFalse();
+        np.iscomplexobj(a).Should().BeFalse();
     }
 
-    [Test]
-    public async Task IsRealObj_FloatArray()
+    [TestMethod]
+    public void IsRealObj_FloatArray()
     {
         var a = np.array(new double[] { 1.0, 2.0 });
-        await Assert.That(np.isrealobj(a)).IsTrue();
+        np.isrealobj(a).Should().BeTrue();
     }
 
 #endregion
 
 #region NPTypeCode extension tests
 
-    [Test]
-    public async Task NPTypeCode_IsFloatingPoint()
+    [TestMethod]
+    public void NPTypeCode_IsFloatingPoint()
     {
-        await Assert.That(NPTypeCode.Double.IsFloatingPoint()).IsTrue();
-        await Assert.That(NPTypeCode.Single.IsFloatingPoint()).IsTrue();
-        await Assert.That(NPTypeCode.Decimal.IsFloatingPoint()).IsTrue();
-        await Assert.That(NPTypeCode.Int32.IsFloatingPoint()).IsFalse();
+        NPTypeCode.Double.IsFloatingPoint().Should().BeTrue();
+        NPTypeCode.Single.IsFloatingPoint().Should().BeTrue();
+        NPTypeCode.Decimal.IsFloatingPoint().Should().BeTrue();
+        NPTypeCode.Int32.IsFloatingPoint().Should().BeFalse();
     }
 
-    [Test]
-    public async Task NPTypeCode_IsInteger()
+    [TestMethod]
+    public void NPTypeCode_IsInteger()
     {
-        await Assert.That(NPTypeCode.Int32.IsInteger()).IsTrue();
-        await Assert.That(NPTypeCode.UInt64.IsInteger()).IsTrue();
-        await Assert.That(NPTypeCode.Double.IsInteger()).IsFalse();
-        await Assert.That(NPTypeCode.Boolean.IsInteger()).IsFalse();
+        NPTypeCode.Int32.IsInteger().Should().BeTrue();
+        NPTypeCode.UInt64.IsInteger().Should().BeTrue();
+        NPTypeCode.Double.IsInteger().Should().BeFalse();
+        NPTypeCode.Boolean.IsInteger().Should().BeFalse();
     }
 
-    [Test]
-    public async Task NPTypeCode_IsSimdCapable()
+    [TestMethod]
+    public void NPTypeCode_IsSimdCapable()
     {
-        await Assert.That(NPTypeCode.Int32.IsSimdCapable()).IsTrue();
-        await Assert.That(NPTypeCode.Double.IsSimdCapable()).IsTrue();
-        await Assert.That(NPTypeCode.Decimal.IsSimdCapable()).IsFalse();
-        await Assert.That(NPTypeCode.Boolean.IsSimdCapable()).IsFalse();
+        NPTypeCode.Int32.IsSimdCapable().Should().BeTrue();
+        NPTypeCode.Double.IsSimdCapable().Should().BeTrue();
+        NPTypeCode.Decimal.IsSimdCapable().Should().BeFalse();
+        NPTypeCode.Boolean.IsSimdCapable().Should().BeFalse();
     }
 
-    [Test]
-    public async Task NPTypeCode_GetOneValue()
+    [TestMethod]
+    public void NPTypeCode_GetOneValue()
     {
-        await Assert.That((int)NPTypeCode.Int32.GetOneValue()).IsEqualTo(1);
-        await Assert.That((double)NPTypeCode.Double.GetOneValue()).IsEqualTo(1.0);
-        await Assert.That((bool)NPTypeCode.Boolean.GetOneValue()).IsTrue();
+        ((int)NPTypeCode.Int32.GetOneValue()).Should().Be(1);
+        ((double)NPTypeCode.Double.GetOneValue()).Should().Be(1.0);
+        ((bool)NPTypeCode.Boolean.GetOneValue()).Should().BeTrue();
     }
 
 #endregion

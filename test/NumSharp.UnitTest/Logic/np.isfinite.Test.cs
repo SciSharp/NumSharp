@@ -12,9 +12,10 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for np.isfinite - test element-wise for finiteness (not infinity and not NaN).
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html
     /// </summary>
+    [TestClass]
     public class np_isfinite_Test
     {
-        [Test]
+        [TestMethod]
         public void np_isfinite_1D()
         {
             var np1 = new NDArray(new[] {1.0, Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN});
@@ -32,7 +33,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(1, np.isfinite(np3).ndim);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_2D()
         {
             var np1 = new NDArray(new[] {Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN}, new Shape(2, 3));
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(2, np.isfinite(np3).ndim);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_Float32()
         {
             // Test with float32 array
@@ -60,7 +61,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] {true, false, false, false, true, true}));
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_IntegerTypes_AlwaysTrue()
         {
             // All integer types are always finite
@@ -70,7 +71,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.all(np.isfinite(np.array(new short[] {0, short.MaxValue, short.MinValue}))));
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_Scalar()
         {
             Assert.IsTrue(np.isfinite(np.array(1.0)).GetBoolean());
@@ -79,7 +80,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.isfinite(np.array(double.NegativeInfinity)).GetBoolean());
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_EmptyArray()
         {
             var empty = np.array(new double[0]);
@@ -88,7 +89,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(typeof(bool), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isfinite_SlicedArray()
         {
             // Test with non-contiguous (sliced) array

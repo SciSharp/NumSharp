@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -11,11 +10,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_numeric.py for np.std and np.var.
     /// Covers edge cases including empty arrays, ddof, keepdims, and axis combinations.
     /// </summary>
+    [TestClass]
     public class VarStdEdgeCaseTests
     {
         #region Basic std Tests (from test_std)
 
-        [Test]
+        [TestMethod]
         public void Std_2DArray_Global()
         {
             // NumPy: std([[1,2,3],[4,5,6]]) = 1.707825127659933
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(value - 1.707825127659933) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_2DArray_Axis0()
         {
             // NumPy: std([[1,2,3],[4,5,6]], axis=0) = [1.5, 1.5, 1.5]
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(data[2] - 1.5) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_2DArray_Axis1()
         {
             // NumPy: std([[1,2,3],[4,5,6]], axis=1) = [0.81649658, 0.81649658]
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Basic var Tests (from test_var)
 
-        [Test]
+        [TestMethod]
         public void Var_2DArray_Global()
         {
             // NumPy: var([[1,2,3],[4,5,6]]) = 2.9166666666666665
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(value - 2.9166666666666665) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_2DArray_Axis0()
         {
             // NumPy: var([[1,2,3],[4,5,6]], axis=0) = [2.25, 2.25, 2.25]
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(data[2] - 2.25) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_2DArray_Axis1()
         {
             // NumPy: var([[1,2,3],[4,5,6]], axis=1) = [0.66666667, 0.66666667]
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region ddof Tests (Sample vs Population)
 
-        [Test]
+        [TestMethod]
         public void Std_Ddof0_PopulationStd()
         {
             // NumPy: std([1,2,3,4,5], ddof=0) = 1.4142135623730951
@@ -103,7 +103,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(value - 1.4142135623730951) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_Ddof1_SampleStd()
         {
             // NumPy: std([1,2,3,4,5], ddof=1) = 1.5811388300841898
@@ -113,7 +113,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(value - 1.5811388300841898) <1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_Ddof0_PopulationVar()
         {
             // NumPy: var([1,2,3,4,5], ddof=0) = 2.0
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(2.0, value);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_Ddof1_SampleVar()
         {
             // NumPy: var([1,2,3,4,5], ddof=1) = 2.5
@@ -137,7 +137,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region keepdims Tests
 
-        [Test]
+        [TestMethod]
         public void Std_Keepdims_True()
         {
             // NumPy: std(arange(12).reshape(3,4), axis=1, keepdims=True).shape = (3, 1)
@@ -146,7 +146,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(3, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_Keepdims_False()
         {
             // NumPy: std(arange(12).reshape(3,4), axis=1, keepdims=False).shape = (3,)
@@ -155,7 +155,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_Keepdims_True()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -163,7 +163,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(3, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_Keepdims_False()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -175,7 +175,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Empty Array Tests
 
-        [Test]
+        [TestMethod]
         public void Std_EmptyArray_ReturnsNaN()
         {
             // NumPy: std([]) = nan (with RuntimeWarning)
@@ -184,7 +184,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsNaN((double)result));
         }
 
-        [Test]
+        [TestMethod]
         public void Var_EmptyArray_ReturnsNaN()
         {
             // NumPy: var([]) = nan (with RuntimeWarning)
@@ -197,7 +197,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Single Element Tests
 
-        [Test]
+        [TestMethod]
         public void Std_SingleElement_ReturnsZero()
         {
             // NumPy: std([5]) = 0.0
@@ -206,7 +206,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0.0, (double)result);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_SingleElement_ReturnsZero()
         {
             // NumPy: var([5]) = 0.0
@@ -215,7 +215,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0.0, (double)result);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_SingleElement_Ddof1_ReturnsNaN()
         {
             // NumPy: std([5], ddof=1) = nan (division by zero)
@@ -224,7 +224,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsNaN((double)result));
         }
 
-        [Test]
+        [TestMethod]
         public void Var_SingleElement_Ddof1_ReturnsNaN()
         {
             // NumPy: var([5], ddof=1) = nan (division by zero)
@@ -237,7 +237,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Dtype Handling
 
-        [Test]
+        [TestMethod]
         public void Std_Int32_ReturnsFloat64()
         {
             // NumPy: std(int32 array) returns float64
@@ -246,7 +246,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float64, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_Int64_ReturnsFloat64()
         {
             var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
@@ -254,7 +254,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float64, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_Float32_ReturnsFloat32()
         {
             // NumPy: std(float32 array) returns float32
@@ -263,7 +263,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float32, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_Float64_ReturnsFloat64()
         {
             var arr = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region 3D Array Axis Combinations
 
-        [Test]
+        [TestMethod]
         public void Std_3DArray_Axis0()
         {
             // NumPy: std(arange(24).reshape(2,3,4), axis=0).shape = (3, 4)
@@ -284,7 +284,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_3DArray_Axis1()
         {
             // NumPy: std(arange(24).reshape(2,3,4), axis=1).shape = (2, 4)
@@ -293,7 +293,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(2, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_3DArray_Axis2()
         {
             // NumPy: std(arange(24).reshape(2,3,4), axis=2).shape = (2, 3)
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeShaped(2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Std_3DArray_AxisNone()
         {
             // NumPy: std(arange(24).reshape(2,3,4), axis=None).shape = ()
@@ -315,7 +315,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region NaN in Data
 
-        [Test]
+        [TestMethod]
         public void Std_WithNaN_ReturnsNaN()
         {
             // NumPy: std([1,2,nan,4,5]) = nan
@@ -324,7 +324,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsNaN((double)result));
         }
 
-        [Test]
+        [TestMethod]
         public void Var_WithNaN_ReturnsNaN()
         {
             // NumPy: var([1,2,nan,4,5]) = nan
@@ -337,7 +337,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Negative Axis
 
-        [Test]
+        [TestMethod]
         public void Std_NegativeAxis()
         {
             // NumPy: std(a, axis=-1) is same as axis=last dimension
@@ -359,7 +359,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region All Same Values
 
-        [Test]
+        [TestMethod]
         public void Std_AllSameValues_ReturnsZero()
         {
             var a = np.full(10, 5.0);  // full(shape, fill_value)
@@ -367,7 +367,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0.0, (double)result);
         }
 
-        [Test]
+        [TestMethod]
         public void Var_AllSameValues_ReturnsZero()
         {
             var a = np.full(10, 5.0);  // full(shape, fill_value)
@@ -379,7 +379,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Large Array
 
-        [Test]
+        [TestMethod]
         public void Std_LargeArray()
         {
             // Test numerical stability with large arrays
@@ -395,7 +395,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Strided Array
 
-        [Test]
+        [TestMethod]
         public void Std_StridedArray()
         {
             var a = np.arange(20);

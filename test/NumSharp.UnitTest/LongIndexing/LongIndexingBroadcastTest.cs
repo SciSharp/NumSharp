@@ -1,8 +1,6 @@
 using System;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
 
@@ -22,8 +20,9 @@ namespace NumSharp.UnitTest.LongIndexing;
 ///   even when input is broadcast, causing OutOfMemoryException
 ///
 /// NOTE: Marked [LargeMemoryTest] because iterating over 2.36 billion elements causes
-/// excessive CPU/memory pressure when TUnit runs tests in parallel.
+/// excessive CPU/memory pressure when MSTest runs tests in parallel.
 /// </summary>
+[TestClass]
 public class LongIndexingBroadcastTest
 {
     /// <summary>
@@ -54,8 +53,8 @@ public class LongIndexingBroadcastTest
     // SHAPE AND INDEXING (all pass - no memory allocation needed)
     // ================================================================
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_HasCorrectSize()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_HasCorrectSize()
     {
         var arr = BroadcastScalar((byte)42);
         Assert.AreEqual(LargeSize, arr.size);
@@ -63,16 +62,16 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, arr.shape[0]);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_IsBroadcasted()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_IsBroadcasted()
     {
         var arr = BroadcastScalar((byte)42);
         Assert.IsTrue(arr.Shape.IsBroadcasted);
         Assert.IsFalse(arr.Shape.IsContiguous);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_GetAtLargeIndex()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_GetAtLargeIndex()
     {
         var arr = BroadcastScalar((byte)77);
 
@@ -86,8 +85,8 @@ public class LongIndexingBroadcastTest
     // REDUCTIONS (these iterate over all elements logically - PASS)
     // ================================================================
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Mean()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Mean()
     {
         var arr = BroadcastScalar((byte)42);
         var result = np.mean(arr);
@@ -97,8 +96,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(42.0, result.GetDouble(0), 0.001);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Min()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Min()
     {
         var arr = BroadcastScalar((byte)7);
         var result = np.min(arr);
@@ -106,8 +105,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(7, result.GetByte(0));
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Max()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Max()
     {
         var arr = BroadcastScalar((byte)200);
         var result = np.max(arr);
@@ -115,8 +114,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(200, result.GetByte(0));
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_ArgMax()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_ArgMax()
     {
         var arr = BroadcastScalar((byte)100);
         var result = np.argmax(arr);
@@ -125,8 +124,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_ArgMin()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_ArgMin()
     {
         var arr = BroadcastScalar((byte)50);
         var result = np.argmin(arr);
@@ -135,8 +134,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_All()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_All()
     {
         var arr = BroadcastScalar((byte)1);
         var result = np.all(arr);
@@ -144,8 +143,8 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_All_Zero()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_All_Zero()
     {
         var arr = BroadcastScalar((byte)0);
         var result = np.all(arr);
@@ -153,8 +152,8 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Any()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Any()
     {
         var arr = BroadcastScalar((byte)1);
         var result = np.any(arr);
@@ -162,8 +161,8 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Any_Zero()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Any_Zero()
     {
         var arr = BroadcastScalar((byte)0);
         var result = np.any(arr);
@@ -171,8 +170,8 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_CountNonzero()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_CountNonzero()
     {
         var arr = BroadcastScalar((byte)1);
         var result = np.count_nonzero(arr);
@@ -181,8 +180,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_CountNonzero_Zero()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_CountNonzero_Zero()
     {
         var arr = BroadcastScalar((byte)0);
         var result = np.count_nonzero(arr);
@@ -194,8 +193,8 @@ public class LongIndexingBroadcastTest
     // SHAPE MANIPULATION (most pass - only reshape with slice fails)
     // ================================================================
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_ExpandDims()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_ExpandDims()
     {
         var arr = BroadcastScalar((byte)11);
         var result = np.expand_dims(arr, 0);
@@ -206,8 +205,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result.shape[1]);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Atleast2d()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Atleast2d()
     {
         var arr = BroadcastScalar((byte)22);
         var result = np.atleast_2d(arr);
@@ -216,8 +215,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(2, result.ndim);
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast_Atleast3d()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast_Atleast3d()
     {
         var arr = BroadcastScalar((byte)22);
         var result = np.atleast_3d(arr);
@@ -230,8 +229,8 @@ public class LongIndexingBroadcastTest
     // 2D BROADCAST (tests multi-dimensional long indexing)
     // ================================================================
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast2D_RowBroadcast()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast2D_RowBroadcast()
     {
         // Broadcast a single row to many rows
         long rows = LargeSize;
@@ -245,8 +244,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(77, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast2D_ColumnBroadcast()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast2D_ColumnBroadcast()
     {
         // Broadcast a single column to many columns
         long rows = 10;
@@ -260,8 +259,8 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(88, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test, LargeMemoryTest]
-    public async Task Broadcast2D_Transpose()
+    [TestMethod, LargeMemoryTest]
+    public void Broadcast2D_Transpose()
     {
         // Test transpose of a broadcast array
         long rows = 10;
@@ -286,8 +285,8 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: SliceDef is limited to int indices.
     /// Slicing a broadcast array with indices > int.MaxValue throws OverflowException.
     /// </summary>
-    [Test]
-    public async Task Broadcast_SliceWithLargeIndices_Limited()
+    [TestMethod]
+    public void Broadcast_SliceWithLargeIndices_Limited()
     {
         var arr = BroadcastScalar((byte)99);
 
@@ -303,8 +302,8 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Binary operations allocate full output arrays.
     /// Even with broadcast inputs, the output is allocated at full size.
     /// </summary>
-    [Test]
-    public async Task Broadcast_Add_AllocatesFullOutput()
+    [TestMethod]
+    public void Broadcast_Add_AllocatesFullOutput()
     {
         var a = BroadcastScalar((byte)10);
         var b = BroadcastScalar((byte)20);
@@ -317,8 +316,8 @@ public class LongIndexingBroadcastTest
     /// <summary>
     /// LIMITATION: Unary operations allocate full output arrays.
     /// </summary>
-    [Test]
-    public async Task Broadcast_Square_AllocatesFullOutput()
+    [TestMethod]
+    public void Broadcast_Square_AllocatesFullOutput()
     {
         var arr = BroadcastScalar((byte)5);
 
@@ -331,9 +330,9 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Sum on broadcast uses inefficient iterator.
     /// Currently throws "index < Count, Memory corruption expected" for large broadcast.
     /// </summary>
-    [Test]
+    [TestMethod]
     [OpenBugs]
-    public async Task Broadcast_Sum_InternalError()
+    public void Broadcast_Sum_InternalError()
     {
         var arr = BroadcastScalar((byte)1);
         var result = np.sum(arr);
@@ -347,10 +346,10 @@ public class LongIndexingBroadcastTest
     // Note: This DOES allocate full memory, so it's marked Explicit + LongIndexing
     // ================================================================
 
-    [Test]
-    [Explicit("Allocates full 2.4GB array")]
+    [TestMethod]
+    [TestCategory("Explicit")] // Allocates full 2.4GB array
     [HighMemory]
-    public async Task Broadcast_Copy_MaterializesFullArray()
+    public void Broadcast_Copy_MaterializesFullArray()
     {
         var broadcast = BroadcastScalar((byte)123);
 

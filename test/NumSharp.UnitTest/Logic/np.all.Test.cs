@@ -2,16 +2,14 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_all_Test
     {
-        [Test]
+        [TestMethod]
         public void np_all_1D()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -22,7 +20,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.all(np3));
         }
 
-        [Test]
+        [TestMethod]
         public void np_all_2D()
         {
             var np1 = new NDArray(new bool[] {true, true, false, false, true, false}, new Shape(2, 3));
@@ -33,7 +31,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.all(np3));
         }
 
-        [Test]
+        [TestMethod]
         public void np_all_0D_WithAxis0_ReturnsScalar()
         {
             // NumPy 2.x: np.all(0D_array, axis=0) returns 0D boolean scalar
@@ -50,7 +48,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(false, (bool)resultFalsy);
         }
 
-        [Test]
+        [TestMethod]
         public void np_all_0D_WithAxisNeg1_ReturnsScalar()
         {
             // NumPy 2.x: np.all(0D_array, axis=-1) is equivalent to axis=0
@@ -60,7 +58,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, (bool)result);
         }
 
-        [Test]
+        [TestMethod]
         public void np_all_0D_WithInvalidAxis_Throws()
         {
             // NumPy 2.x: np.all(0D_array, axis=1) raises AxisError

@@ -6,9 +6,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class NoncentralFTests
     {
-        [Test]
+        [TestMethod]
         public void NoncentralF_ReturnsScalar_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -30,7 +31,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_Returns2DArray()
         {
             var rng = np.random.RandomState(42);
@@ -40,7 +41,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_AllValuesPositive()
         {
             var rng = np.random.RandomState(42);
@@ -50,7 +51,7 @@ namespace NumSharp.UnitTest.RandomSampling
             min.Should().BeGreaterThan(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_NoncZero_IsCentralF()
         {
             // When nonc=0, should behave like central F distribution
@@ -67,7 +68,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 1.25).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_LargeNonc_IncreasesValues()
         {
             var rng1 = np.random.RandomState(42);
@@ -82,7 +83,7 @@ namespace NumSharp.UnitTest.RandomSampling
             meanLarge.Should().BeGreaterThan(meanSmall);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_DifferentDf_Works()
         {
             var rng = np.random.RandomState(42);
@@ -93,42 +94,42 @@ namespace NumSharp.UnitTest.RandomSampling
             min.Should().BeGreaterThan(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_DfnumZero_ThrowsArgumentException()
         {
             Action act = () => np.random.noncentral_f(0, 10, 2);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_DfnumNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.noncentral_f(-1, 10, 2);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_DfdenZero_ThrowsArgumentException()
         {
             Action act = () => np.random.noncentral_f(5, 0, 2);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_DfdenNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.noncentral_f(5, -1, 2);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_NoncNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.noncentral_f(5, 10, -1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -137,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);
@@ -149,7 +150,7 @@ namespace NumSharp.UnitTest.RandomSampling
             first.Should().BeEquivalentTo(second);
         }
 
-        [Test]
+        [TestMethod]
         public void NoncentralF_SmallDf_Works()
         {
             // df < 1 uses different algorithm branch in noncentral chisquare

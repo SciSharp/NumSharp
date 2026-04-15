@@ -5,9 +5,10 @@ using System.Linq;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class NpRandomStandardCauchyTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void StandardCauchy_ScalarReturn()
         {
             var rng = np.random.RandomState(42);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_1DArray()
         {
             var result = np.random.standard_cauchy(5L);
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_2DArray()
         {
             var result = np.random.standard_cauchy(new Shape(2, 3));
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_ShapeOverload()
         {
             var result = np.random.standard_cauchy(new Shape(10, 5));
@@ -46,7 +47,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_MedianNearZero()
         {
             // Cauchy has no mean/variance, but median = 0
@@ -60,7 +61,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(median) < 0.05, $"Median {median} should be close to 0");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_InterquartileRange()
         {
             // For standard Cauchy, Q1 = -1, Q3 = 1, so IQR = 2
@@ -80,7 +81,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(q3 - 1.0) < 0.05, $"Q3 {q3} should be close to 1");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_HasHeavyTails()
         {
             // Cauchy has heavy tails - should have some extreme values
@@ -95,7 +96,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 $"Should have extreme values (max={max}, min={min})");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_ReturnsFloat64()
         {
             var result = np.random.standard_cauchy(size: new Shape(5));
@@ -103,7 +104,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_EmptySize()
         {
             var result = np.random.standard_cauchy(0L);
@@ -112,7 +113,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(0, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardCauchy_Reproducible()
         {
             var rng1 = np.random.RandomState(123);

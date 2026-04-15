@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -10,11 +9,12 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Edge case tests for array indexing operations.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class IndexingEdgeCaseTests
 {
     #region Negative Indexing
 
-    [Test]
+    [TestMethod]
     public void NegativeIndex_Last()
     {
         // NumPy: arr[-1] = 5
@@ -23,7 +23,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(5, arr[-1].GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeIndex_First()
     {
         // NumPy: arr[-5] = 1 (same as arr[0] for 5-element array)
@@ -32,7 +32,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(1, arr[-5].GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_LastN()
     {
         // NumPy: arr[-3:] = [3, 4, 5]
@@ -43,7 +43,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(3, 4, 5);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_ExcludeLastN()
     {
         // NumPy: arr[:-3] = [1, 2]
@@ -54,7 +54,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(1, 2);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_Range()
     {
         // NumPy: arr[-4:-1] = [2, 3, 4]
@@ -65,7 +65,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(2, 3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_ReversePartial()
     {
         // NumPy: arr[-1:-4:-1] = [5, 4, 3]
@@ -76,7 +76,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(5, 4, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_2D_Corner()
     {
         // NumPy: arr2d[-2:, -2:] = [[6,7], [10,11]]
@@ -90,7 +90,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(11L, result.GetInt64(1, 1));
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeSlice_2D_FullReverse()
     {
         // NumPy: arr2d[::-1, ::-1] reverses both axes
@@ -106,7 +106,7 @@ public class IndexingEdgeCaseTests
 
     #region Boolean Indexing
 
-    [Test]
+    [TestMethod]
     public void BooleanIndex_Simple()
     {
         // NumPy: arr[mask] = [1, 3, 5]
@@ -118,7 +118,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(1, 3, 5);
     }
 
-    [Test]
+    [TestMethod]
     public void BooleanIndex_Condition()
     {
         // NumPy: arr[arr > 3] = [4, 5, 6]
@@ -129,7 +129,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(4, 5, 6);
     }
 
-    [Test]
+    [TestMethod]
     public void BooleanIndex_EvenNumbers()
     {
         // NumPy: arr[arr % 2 == 0] = [2, 4, 6]
@@ -140,7 +140,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(2, 4, 6);
     }
 
-    [Test]
+    [TestMethod]
     public void BooleanIndex_2D_Flattens()
     {
         // NumPy: arr2d[arr2d > 5] = [6, 7, 8, 9, 10, 11] (flattened!)
@@ -153,7 +153,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(6L, result.GetInt64(0));
     }
 
-    [Test]
+    [TestMethod]
     public void BooleanIndex_RowSelection()
     {
         // NumPy: arr2d[[True, False, True]] selects rows 0 and 2
@@ -172,7 +172,7 @@ public class IndexingEdgeCaseTests
 
     #region Fancy Indexing
 
-    [Test]
+    [TestMethod]
     public void FancyIndex_Simple()
     {
         // NumPy: arr[[0, 2, 4]] = [10, 30, 50]
@@ -184,7 +184,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(10, 30, 50);
     }
 
-    [Test]
+    [TestMethod]
     public void FancyIndex_NegativeIndices()
     {
         // NumPy: arr[[-1, -3, -5]] = [50, 30, 10]
@@ -196,7 +196,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(50, 30, 10);
     }
 
-    [Test]
+    [TestMethod]
     public void FancyIndex_Repeated()
     {
         // NumPy: arr[[0, 0, 1, 1, 2]] = [10, 10, 20, 20, 30]
@@ -208,7 +208,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(10, 10, 20, 20, 30);
     }
 
-    [Test]
+    [TestMethod]
     public void FancyIndex_2D_Diagonal()
     {
         // NumPy: arr2d[[0,1,2], [0,1,2]] = [0, 5, 10] (diagonal)
@@ -225,7 +225,7 @@ public class IndexingEdgeCaseTests
 
     #region Ellipsis
 
-    [Test]
+    [TestMethod]
     public void Ellipsis_3D_Last()
     {
         // NumPy: arr3d[..., 0].shape = (2, 3)
@@ -238,7 +238,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(3, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Ellipsis_3D_First()
     {
         // NumPy: arr3d[0, ...].shape = (3, 4)
@@ -255,7 +255,7 @@ public class IndexingEdgeCaseTests
 
     #region Combined Indexing
 
-    [Test]
+    [TestMethod]
     public void Combined_SliceAndInteger()
     {
         // NumPy: arr2d[1:, 0] = [4, 8]
@@ -267,7 +267,7 @@ public class IndexingEdgeCaseTests
         result.Should().BeOfValues(4, 8);
     }
 
-    [Test]
+    [TestMethod]
     public void Combined_IntegerAndSlice()
     {
         // NumPy: arr2d[0, 1:3] = [1, 2]
@@ -283,7 +283,7 @@ public class IndexingEdgeCaseTests
 
     #region Indexing Assignment
 
-    [Test]
+    [TestMethod]
     public void Assignment_SingleElement()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -293,7 +293,7 @@ public class IndexingEdgeCaseTests
         arr.Should().BeOfValues(1, 2, 100, 4, 5);
     }
 
-    [Test]
+    [TestMethod]
     public void Assignment_Slice()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -303,7 +303,7 @@ public class IndexingEdgeCaseTests
         arr.Should().BeOfValues(1, 10, 20, 30, 5);
     }
 
-    [Test]
+    [TestMethod]
     public void Assignment_SliceWithScalar()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -313,7 +313,7 @@ public class IndexingEdgeCaseTests
         arr.Should().BeOfValues(1, 99, 99, 99, 5);
     }
 
-    [Test]
+    [TestMethod]
     public void Assignment_FancyIndex()
     {
         // NumPy: arr[[0, 2, 4]] = 99 -> [99, 2, 99, 4, 99]
@@ -325,7 +325,7 @@ public class IndexingEdgeCaseTests
         arr.Should().BeOfValues(99, 2, 99, 4, 99);
     }
 
-    [Test]
+    [TestMethod]
     public void Assignment_BooleanMask()
     {
         // NumPy: arr[arr > 3] = 0 -> [1, 2, 3, 0, 0]
@@ -340,7 +340,7 @@ public class IndexingEdgeCaseTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void EmptySlice()
     {
         // NumPy: arr[2:2] = [] (empty)
@@ -351,7 +351,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(0, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void StepGreaterThanSize()
     {
         // NumPy: arr[::10] = [1] (only first element)
@@ -363,7 +363,7 @@ public class IndexingEdgeCaseTests
         Assert.AreEqual(1, result.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void ReverseWithStep()
     {
         // NumPy: arr[4:0:-2] = [5, 3]

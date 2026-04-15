@@ -3,9 +3,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class SinTest
     {
-        [Test]
+        [TestMethod]
         public void Simple1DArray()
         {
             var nd = np.array(new double[] {0D, 0.523598775598299D,

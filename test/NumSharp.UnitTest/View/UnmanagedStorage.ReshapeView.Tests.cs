@@ -10,10 +10,11 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
+    [TestClass]
     public class UnmanagedStorageReshapeViewTest : TestClass
     {
 
-        [Test]
+        [TestMethod]
         public void ReshapeSlicedArray()
         {
             // Reshaping a non-contiguous slice makes a copy (NumPy behavior)
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(view).ToString(flat: true).Should().Be("array([5, 6, 7, 8, 9, 15, 16, 17, 18, 19])");
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDimensions()
         {
             //>>> np.arange(6)
@@ -80,7 +81,7 @@ namespace NumSharp.UnitTest.View
             nd.ToString(flat: true).Should().Be("array([[[[1], [2]]], [[[4], [5]]]])");
         }
 
-        [Test]
+        [TestMethod]
         public void SliceReshapedSlicedArray()
         {
             // Reshaping a non-contiguous slice makes a copy (NumPy behavior)
@@ -94,7 +95,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(v1).ToString(flat: true).Should().Be("array([6, 8, 15, 17, 19])");
         }
 
-        [Test]
+        [TestMethod]
         public void TheUltimateTest______SliceReshapedSlicedReshapedSlicedArray()
         {
             // This test demonstrates the copy-on-reshape behavior for non-contiguous arrays.
@@ -125,7 +126,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(t).ToString(flat: true).Should().Be("array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])");
         }
 
-        [Test]
+        [TestMethod]
         public void ReshapeSlicedArray1()
         {
             //>>> a

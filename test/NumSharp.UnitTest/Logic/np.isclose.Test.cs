@@ -7,9 +7,10 @@ using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_isclose_Test
     {
-        [Test]
+        [TestMethod]
         public void np_isclose_1D()
         {
             //>>> np.isclose([1e10, 1e-7], [1.00001e10,1e-8])

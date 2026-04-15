@@ -7,9 +7,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class np_clip_test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -17,7 +18,7 @@ namespace NumSharp.UnitTest
             np.clip(a, 3, max).Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 8, 8, 8).And.BeShaped(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest
             np.clip(a, max, null).Should().BeOfValues(8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 10, 11).And.BeShaped(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var a = np.arange(12).reshape(3, 4);

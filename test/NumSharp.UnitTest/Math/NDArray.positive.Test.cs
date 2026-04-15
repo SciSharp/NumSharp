@@ -9,9 +9,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class NDArrayPositiveTest
     {
-        [Test]
+        [TestMethod]
         public void Positive_IsIdentity()
         {
             // np.positive is an identity function - returns unchanged values
@@ -27,7 +28,7 @@ namespace NumSharp.UnitTest.Maths
             Assert.AreEqual(3.3f, data[2], 1e-5f);
         }
 
-        [Test]
+        [TestMethod]
         public void Positive_PreservesNegatives()
         {
             // np.positive preserves negative values (identity function)
@@ -39,7 +40,7 @@ namespace NumSharp.UnitTest.Maths
             Assert.IsTrue(nd.Data<float>().All(v => v < 0));
         }
 
-        [Test]
+        [TestMethod]
         public void Positive_PreservesPositives()
         {
             // np.positive preserves positive values (identity function)

@@ -7,9 +7,10 @@ using static NumSharp.Slice;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class NdArrayToStringTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void ReShape()
         {
             var nd = np.arange(6);

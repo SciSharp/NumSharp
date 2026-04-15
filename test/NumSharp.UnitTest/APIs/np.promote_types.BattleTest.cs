@@ -1,14 +1,11 @@
 using System;
-using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
 /// <summary>
 /// Battle tests for np.promote_types - comprehensive coverage of type promotion.
 /// </summary>
+[TestClass]
 public class NpPromoteTypesBattleTests
 {
     private static readonly NPTypeCode[] AllTypes = new[]
@@ -20,12 +17,12 @@ public class NpPromoteTypesBattleTests
 
     #region Same Type
 
-    [Test]
-    public async Task PromoteTypes_SameType_ReturnsSame()
+    [TestMethod]
+    public void PromoteTypes_SameType_ReturnsSame()
     {
         foreach (var type in AllTypes)
         {
-            await Assert.That(np.promote_types(type, type)).IsEqualTo(type);
+            np.promote_types(type, type).Should().Be(type);
         }
     }
 
@@ -33,8 +30,8 @@ public class NpPromoteTypesBattleTests
 
     #region Symmetric Property
 
-    [Test]
-    public async Task PromoteTypes_Symmetric()
+    [TestMethod]
+    public void PromoteTypes_Symmetric()
     {
         foreach (var t1 in AllTypes)
         {
@@ -42,7 +39,7 @@ public class NpPromoteTypesBattleTests
             {
                 var result1 = np.promote_types(t1, t2);
                 var result2 = np.promote_types(t2, t1);
-                await Assert.That(result1).IsEqualTo(result2);
+                result1.Should().Be(result2);
             }
         }
     }
@@ -51,52 +48,52 @@ public class NpPromoteTypesBattleTests
 
     #region Integer Promotion
 
-    [Test]
-    public async Task PromoteTypes_Int16Int32()
+    [TestMethod]
+    public void PromoteTypes_Int16Int32()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
+        np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
-    [Test]
-    public async Task PromoteTypes_Int32Int64()
+    [TestMethod]
+    public void PromoteTypes_Int32Int64()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
     #endregion
 
     #region Float Promotion
 
-    [Test]
-    public async Task PromoteTypes_Float32Float64()
+    [TestMethod]
+    public void PromoteTypes_Float32Float64()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.promote_types(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
 
     #region Generic Overload
 
-    [Test]
-    public async Task PromoteTypes_Generic_IntLong()
+    [TestMethod]
+    public void PromoteTypes_Generic_IntLong()
     {
-        await Assert.That(np.promote_types<int, long>()).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types<int, long>().Should().Be(NPTypeCode.Int64);
     }
 
-    [Test]
-    public async Task PromoteTypes_Generic_FloatDouble()
+    [TestMethod]
+    public void PromoteTypes_Generic_FloatDouble()
     {
-        await Assert.That(np.promote_types<float, double>()).IsEqualTo(NPTypeCode.Double);
+        np.promote_types<float, double>().Should().Be(NPTypeCode.Double);
     }
 
     #endregion
 
     #region Type Overload
 
-    [Test]
-    public async Task PromoteTypes_Type_IntLong()
+    [TestMethod]
+    public void PromoteTypes_Type_IntLong()
     {
-        await Assert.That(np.promote_types(typeof(int), typeof(long))).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types(typeof(int), typeof(long)).Should().Be(NPTypeCode.Int64);
     }
 
     #endregion

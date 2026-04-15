@@ -8,9 +8,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class PowerTest
     {
-        [Test]
+        [TestMethod]
         public void PowerWithSingleValue()
         {
             // np.arange returns int64 by default (NumPy 2.x)

@@ -8,9 +8,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Indexing
 {
+    [TestClass]
     public class np_nonzero_tests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var x = np.array(3, 0, 0, 0, 4, 0, 5, 6, 0).reshape(3, 3);
@@ -20,7 +21,7 @@ namespace NumSharp.UnitTest.Indexing
             x[np.nonzero(x)].Should().BeOfValues(3, 4, 5, 6).And.BeShaped(4);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var x = np.arange(9).reshape(3, 3);

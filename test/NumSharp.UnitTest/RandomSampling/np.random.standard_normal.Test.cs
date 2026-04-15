@@ -8,9 +8,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.standard_normal (standard normal distribution with mean=0, std=1).
     /// NumPy reference: https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
     /// </summary>
+    [TestClass]
     public class NpRandomStandardNormalTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void StandardNormal_NoArgs_ReturnsScalar()
         {
             // Python: np.random.standard_normal() returns a single float
@@ -23,7 +24,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_Size5_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -34,7 +35,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, result.shape[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_2DShape_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -46,7 +47,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(3, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_ShapeOverload_ReturnsCorrectShape()
         {
             var rng = np.random.RandomState(42);
@@ -58,7 +59,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(20, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_EmptySize_ReturnsEmptyArray()
         {
             var rng = np.random.RandomState(42);
@@ -68,14 +69,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(0, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_ReturnsFloat64()
         {
             var result = np.random.standard_normal(5);
             Assert.AreEqual(typeof(double), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_MeanIsZero()
         {
             // Statistical test: mean of standard normal should be close to 0
@@ -86,7 +87,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean) < 0.02, $"Mean {mean} should be close to 0");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_StdIsOne()
         {
             // Statistical test: std of standard normal should be close to 1
@@ -97,7 +98,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(std - 1.0) < 0.02, $"Std {std} should be close to 1");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_VarianceIsOne()
         {
             // Statistical test: variance of standard normal should be close to 1
@@ -108,7 +109,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(variance - 1.0) < 0.02, $"Variance {variance} should be close to 1");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_MatchesRandn()
         {
             // standard_normal and randn should produce equivalent statistical properties
@@ -130,7 +131,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(sn_std - 1.0) < 0.1, $"standard_normal std {sn_std} should be near 1");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_Reproducible()
         {
             // Same seed should produce same results
@@ -144,7 +145,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 "Same seed should produce identical first values");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_DifferentSeeds_ProduceDifferentResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -157,7 +158,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 "Different seeds should produce different results");
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_ValuesInReasonableRange()
         {
             // Standard normal values should mostly be in [-4, 4] range
@@ -172,7 +173,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StandardNormal_3DShape_Works()
         {
             var result = np.random.standard_normal(new Shape(2, 3, 4));

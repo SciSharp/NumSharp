@@ -4,14 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs
 {
-    [NotInParallel]
+    [DoNotParallelize]
+    [TestClass]
     public class NumpyLoad
     {
-        [Test]
+        [TestMethod]
         public void NumpyLoadTest()
         {
             int[] a = {1, 2, 3, 4, 5};
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.APIs
             int[] b = np.Load<int[]>(mem);
         }
 
-        [Test]
+        [TestMethod]
         public void NumpyLoad1DimTest()
         {
             int[] arr = np.Load<int[]>(@"data/1-dim-int32_4_comma_empty.npy");
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.APIs
             Assert.IsTrue(arr[3] == 3);
         }
 
-        [Test]
+        [TestMethod]
         public void NumpyNPZRoundTripTest()
         {
             int[] arr = np.Load<int[]>(@"data/1-dim-int32_4_comma_empty.npy");
