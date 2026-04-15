@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -19,7 +18,7 @@ public class NpIsSubdtypeBattleTests
     #region Generic Category
 
     [TestMethod]
-    public async Task IsSubdtype_AllTypes_AreGeneric()
+    public void IsSubdtype_AllTypes_AreGeneric()
     {
         foreach (var type in AllTypes)
         {
@@ -32,20 +31,20 @@ public class NpIsSubdtypeBattleTests
     #region Number Category
 
     [TestMethod]
-    public async Task IsSubdtype_IntegersAreNumbers()
+    public void IsSubdtype_IntegersAreNumbers()
     {
         np.issubdtype(NPTypeCode.Int32, "number").Should().BeTrue();
         np.issubdtype(NPTypeCode.Byte, "number").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_FloatsAreNumbers()
+    public void IsSubdtype_FloatsAreNumbers()
     {
         np.issubdtype(NPTypeCode.Double, "number").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_BoolNotNumber_NumPy2x()
+    public void IsSubdtype_BoolNotNumber_NumPy2x()
     {
         np.issubdtype(NPTypeCode.Boolean, "number").Should().BeFalse();
     }
@@ -55,20 +54,20 @@ public class NpIsSubdtypeBattleTests
     #region Integer Category
 
     [TestMethod]
-    public async Task IsSubdtype_IntegersAreInteger()
+    public void IsSubdtype_IntegersAreInteger()
     {
         np.issubdtype(NPTypeCode.Int32, "integer").Should().BeTrue();
         np.issubdtype(NPTypeCode.Byte, "integer").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_BoolNotInteger_NumPy2x()
+    public void IsSubdtype_BoolNotInteger_NumPy2x()
     {
         np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_FloatNotInteger()
+    public void IsSubdtype_FloatNotInteger()
     {
         np.issubdtype(NPTypeCode.Double, "integer").Should().BeFalse();
     }
@@ -78,14 +77,14 @@ public class NpIsSubdtypeBattleTests
     #region Signed/Unsigned Integer Categories
 
     [TestMethod]
-    public async Task IsSubdtype_SignedIntegers_AreSignedInteger()
+    public void IsSubdtype_SignedIntegers_AreSignedInteger()
     {
         np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
         np.issubdtype(NPTypeCode.Int64, "signedinteger").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_UnsignedIntegers_AreUnsignedInteger()
+    public void IsSubdtype_UnsignedIntegers_AreUnsignedInteger()
     {
         np.issubdtype(NPTypeCode.Byte, "unsignedinteger").Should().BeTrue();
         np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
@@ -96,14 +95,14 @@ public class NpIsSubdtypeBattleTests
     #region Floating Category
 
     [TestMethod]
-    public async Task IsSubdtype_Floats_AreFloating()
+    public void IsSubdtype_Floats_AreFloating()
     {
         np.issubdtype(NPTypeCode.Single, "floating").Should().BeTrue();
         np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_Integers_NotFloating()
+    public void IsSubdtype_Integers_NotFloating()
     {
         np.issubdtype(NPTypeCode.Int32, "floating").Should().BeFalse();
     }
@@ -113,7 +112,7 @@ public class NpIsSubdtypeBattleTests
     #region NDArray Overload
 
     [TestMethod]
-    public async Task IsSubdtype_NDArray_String()
+    public void IsSubdtype_NDArray_String()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         np.issubdtype(arr, "integer").Should().BeTrue();
@@ -121,7 +120,7 @@ public class NpIsSubdtypeBattleTests
     }
 
     [TestMethod]
-    public async Task IsSubdtype_NDArray_Null_Throws()
+    public void IsSubdtype_NDArray_Null_Throws()
     {
         new Action(() => np.issubdtype((NDArray)null!, "integer")).Should().Throw<Exception>();
     }
@@ -131,14 +130,14 @@ public class NpIsSubdtypeBattleTests
     #region Type Overloads
 
     [TestMethod]
-    public async Task IsSubdtype_Type_String()
+    public void IsSubdtype_Type_String()
     {
         np.issubdtype(typeof(int), "integer").Should().BeTrue();
         np.issubdtype(typeof(double), "floating").Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsSubdtype_Type_Type()
+    public void IsSubdtype_Type_Type()
     {
         // Same concrete types: returns True
         np.issubdtype(typeof(int), typeof(int)).Should().BeTrue();
@@ -155,7 +154,7 @@ public class NpIsSubdtypeBattleTests
     #region Invalid Category
 
     [TestMethod]
-    public async Task IsSubdtype_InvalidCategory_ReturnsFalse()
+    public void IsSubdtype_InvalidCategory_ReturnsFalse()
     {
         np.issubdtype(NPTypeCode.Int32, "invalid_category").Should().BeFalse();
     }

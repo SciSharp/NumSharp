@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Threading.Tasks;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Operations;
@@ -21,7 +20,7 @@ namespace NumSharp.UnitTest.Operations;
 public class EmptyArrayComparisonTests
 {
     [TestMethod]
-    public async Task EmptyArray_Equals_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_Equals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) == 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -33,7 +32,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_NotEquals_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_NotEquals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) != 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -45,7 +44,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_GreaterThan_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_GreaterThan_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) > 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -57,7 +56,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_GreaterThanOrEqual_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_GreaterThanOrEqual_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) >= 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -69,7 +68,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_LessThan_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_LessThan_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) < 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -81,7 +80,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_LessThanOrEqual_Scalar_ReturnsEmptyArray()
+    public void EmptyArray_LessThanOrEqual_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) <= 0).shape returns (0,)
         var emptyInt = np.array(Array.Empty<int>());
@@ -93,7 +92,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task Empty2DArray_Equals_Scalar_PreservesShape()
+    public void Empty2DArray_Equals_Scalar_PreservesShape()
     {
         // NumPy: (np.zeros((0,3), dtype=int) == 0).shape returns (0, 3)
         var empty2D = np.zeros(new Shape(0, 3), NPTypeCode.Int32);
@@ -105,7 +104,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task Empty2DArray_Reverse_Equals_Scalar_PreservesShape()
+    public void Empty2DArray_Reverse_Equals_Scalar_PreservesShape()
     {
         // NumPy: (np.zeros((3,0), dtype=int) == 0).shape returns (3, 0)
         var empty2D = np.zeros(new Shape(3, 0), NPTypeCode.Int32);
@@ -117,7 +116,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyFloatArray_Equals_Scalar_ReturnsEmptyArray()
+    public void EmptyFloatArray_Equals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=float) == 0.0).shape returns (0,)
         var emptyFloat = np.array(Array.Empty<double>());
@@ -129,7 +128,7 @@ public class EmptyArrayComparisonTests
     }
 
     [TestMethod]
-    public async Task EmptyArray_ArrayEquals_Preserves_Shape()
+    public void EmptyArray_ArrayEquals_Preserves_Shape()
     {
         // Compare two empty arrays
         var empty1 = np.array(Array.Empty<int>());

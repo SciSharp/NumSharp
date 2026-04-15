@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
@@ -16,7 +15,7 @@ public class ArgsortInt64Tests
     #region Return Type Tests
 
     [TestMethod]
-    public async Task Argsort_ReturnsInt64Indices()
+    public void Argsort_ReturnsInt64Indices()
     {
         // NumPy: np.argsort([3, 1, 2]).dtype = int64
         var a = np.array(new int[] { 3, 1, 2 });
@@ -26,7 +25,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_Float64_ReturnsInt64Indices()
+    public void Argsort_Float64_ReturnsInt64Indices()
     {
         var a = np.array(new double[] { 3.0, 1.0, 2.0 });
         var result = np.argsort<double>(a);
@@ -35,7 +34,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_Float32_ReturnsInt64Indices()
+    public void Argsort_Float32_ReturnsInt64Indices()
     {
         var a = np.array(new float[] { 3.0f, 1.0f, 2.0f });
         var result = np.argsort<float>(a);
@@ -44,7 +43,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_Byte_ReturnsInt64Indices()
+    public void Argsort_Byte_ReturnsInt64Indices()
     {
         var a = np.array(new byte[] { 3, 1, 2 });
         var result = np.argsort<byte>(a);
@@ -53,7 +52,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_Int64_ReturnsInt64Indices()
+    public void Argsort_Int64_ReturnsInt64Indices()
     {
         var a = np.array(new long[] { 3, 1, 2 });
         var result = np.argsort<long>(a);
@@ -66,7 +65,7 @@ public class ArgsortInt64Tests
     #region Various DType Tests
 
     [TestMethod]
-    public async Task Argsort_Int16_SortsCorrectly()
+    public void Argsort_Int16_SortsCorrectly()
     {
         // NumPy: np.argsort(np.array([30, 10, 20], dtype=np.int16)) = [1, 2, 0]
         var a = np.array(new short[] { 30, 10, 20 });
@@ -78,7 +77,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_UInt16_SortsCorrectly()
+    public void Argsort_UInt16_SortsCorrectly()
     {
         var a = np.array(new ushort[] { 30, 10, 20 });
         var result = np.argsort<ushort>(a);
@@ -89,7 +88,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_UInt32_SortsCorrectly()
+    public void Argsort_UInt32_SortsCorrectly()
     {
         var a = np.array(new uint[] { 30, 10, 20 });
         var result = np.argsort<uint>(a);
@@ -100,7 +99,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_UInt64_SortsCorrectly()
+    public void Argsort_UInt64_SortsCorrectly()
     {
         var a = np.array(new ulong[] { 30, 10, 20 });
         var result = np.argsort<ulong>(a);
@@ -111,7 +110,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_Decimal_SortsCorrectly()
+    public void Argsort_Decimal_SortsCorrectly()
     {
         var a = np.array(new decimal[] { 3.0m, 1.0m, 2.0m });
         var result = np.argsort<decimal>(a);
@@ -126,7 +125,7 @@ public class ArgsortInt64Tests
     #region Axis Parameter Tests
 
     [TestMethod]
-    public async Task Argsort_2D_Axis0_SortsColumns()
+    public void Argsort_2D_Axis0_SortsColumns()
     {
         // NumPy:
         // a = np.array([[3, 1], [1, 3], [2, 2]])
@@ -150,7 +149,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_2D_Axis1_SortsRows()
+    public void Argsort_2D_Axis1_SortsRows()
     {
         // NumPy:
         // a = np.array([[3, 1, 2], [6, 4, 5]])
@@ -174,7 +173,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_2D_AxisMinus1_SortsLastAxis()
+    public void Argsort_2D_AxisMinus1_SortsLastAxis()
     {
         // NumPy: axis=-1 is equivalent to the last axis
         var a = np.array(new int[,] { { 3, 1, 2 }, { 6, 4, 5 } });
@@ -193,7 +192,7 @@ public class ArgsortInt64Tests
     #region Edge Cases
 
     [TestMethod]
-    public async Task Argsort_SingleElement_ReturnsZero()
+    public void Argsort_SingleElement_ReturnsZero()
     {
         var a = np.array(new int[] { 42 });
         var result = np.argsort<int>(a);
@@ -203,7 +202,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_TwoElements_SortsCorrectly()
+    public void Argsort_TwoElements_SortsCorrectly()
     {
         var a = np.array(new int[] { 2, 1 });
         var result = np.argsort<int>(a);
@@ -213,7 +212,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_DuplicateValues_StableSort()
+    public void Argsort_DuplicateValues_StableSort()
     {
         // NumPy uses stable sort by default (mergesort)
         // For equal values, original order is preserved
@@ -231,7 +230,7 @@ public class ArgsortInt64Tests
     }
 
     [TestMethod]
-    public async Task Argsort_LargerArray_SortsCorrectly()
+    public void Argsort_LargerArray_SortsCorrectly()
     {
         // Test with a larger array to ensure no issues with indexing
         var values = new int[] { 9, 3, 7, 1, 5, 8, 2, 6, 4, 0 };
@@ -253,7 +252,7 @@ public class ArgsortInt64Tests
     #region Using Result as Index
 
     [TestMethod]
-    public async Task Argsort_CanBeUsedForIndexing()
+    public void Argsort_CanBeUsedForIndexing()
     {
         // NumPy pattern: a[np.argsort(a)] gives sorted array
         var a = np.array(new int[] { 3, 1, 4, 1, 5, 9, 2, 6 });

@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.Generic;
 using NumSharp.UnitTest.Utilities;
@@ -20,7 +19,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.equal (3 overloads)
 
     [TestMethod]
-    public async Task Equal_TwoArrays_Compiles()
+    public void Equal_TwoArrays_Compiles()
     {
         // NumPy: np.equal([1, 2, 3], [1, 2, 4]) -> [True, True, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -34,7 +33,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Equal_ArrayAndScalar_Compiles()
+    public void Equal_ArrayAndScalar_Compiles()
     {
         // NumPy: np.equal([1, 2, 3], 2) -> [False, True, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -47,7 +46,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Equal_ScalarAndArray_Compiles()
+    public void Equal_ScalarAndArray_Compiles()
     {
         // NumPy: np.equal(2, [1, 2, 3]) -> [False, True, False]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -64,7 +63,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.not_equal (3 overloads)
 
     [TestMethod]
-    public async Task NotEqual_TwoArrays_Compiles()
+    public void NotEqual_TwoArrays_Compiles()
     {
         // NumPy: np.not_equal([1, 2, 3], [1, 2, 4]) -> [False, False, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -78,7 +77,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task NotEqual_ArrayAndScalar_Compiles()
+    public void NotEqual_ArrayAndScalar_Compiles()
     {
         // NumPy: np.not_equal([1, 2, 3], 2) -> [True, False, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -91,7 +90,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task NotEqual_ScalarAndArray_Compiles()
+    public void NotEqual_ScalarAndArray_Compiles()
     {
         // NumPy: np.not_equal(2, [1, 2, 3]) -> [True, False, True]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -108,7 +107,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.less (3 overloads)
 
     [TestMethod]
-    public async Task Less_TwoArrays_Compiles()
+    public void Less_TwoArrays_Compiles()
     {
         // NumPy: np.less([1, 2, 3], [2, 2, 2]) -> [True, False, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -122,7 +121,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Less_ArrayAndScalar_Compiles()
+    public void Less_ArrayAndScalar_Compiles()
     {
         // NumPy: np.less([1, 2, 3], 2) -> [True, False, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -135,7 +134,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Less_ScalarAndArray_Compiles()
+    public void Less_ScalarAndArray_Compiles()
     {
         // NumPy: np.less(2, [1, 2, 3]) -> [False, False, True]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -152,7 +151,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.greater (3 overloads)
 
     [TestMethod]
-    public async Task Greater_TwoArrays_Compiles()
+    public void Greater_TwoArrays_Compiles()
     {
         // NumPy: np.greater([1, 2, 3], [2, 2, 2]) -> [False, False, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -166,7 +165,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Greater_ArrayAndScalar_Compiles()
+    public void Greater_ArrayAndScalar_Compiles()
     {
         // NumPy: np.greater([1, 2, 3], 2) -> [False, False, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -179,7 +178,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Greater_ScalarAndArray_Compiles()
+    public void Greater_ScalarAndArray_Compiles()
     {
         // NumPy: np.greater(2, [1, 2, 3]) -> [True, False, False]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -196,7 +195,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.less_equal (3 overloads)
 
     [TestMethod]
-    public async Task LessEqual_TwoArrays_Compiles()
+    public void LessEqual_TwoArrays_Compiles()
     {
         // NumPy: np.less_equal([1, 2, 3], [2, 2, 2]) -> [True, True, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -210,7 +209,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task LessEqual_ArrayAndScalar_Compiles()
+    public void LessEqual_ArrayAndScalar_Compiles()
     {
         // NumPy: np.less_equal([1, 2, 3], 2) -> [True, True, False]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -223,7 +222,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task LessEqual_ScalarAndArray_Compiles()
+    public void LessEqual_ScalarAndArray_Compiles()
     {
         // NumPy: np.less_equal(2, [1, 2, 3]) -> [False, True, True]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -240,7 +239,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Comparison Operations - np.greater_equal (3 overloads)
 
     [TestMethod]
-    public async Task GreaterEqual_TwoArrays_Compiles()
+    public void GreaterEqual_TwoArrays_Compiles()
     {
         // NumPy: np.greater_equal([1, 2, 3], [2, 2, 2]) -> [False, True, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -254,7 +253,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task GreaterEqual_ArrayAndScalar_Compiles()
+    public void GreaterEqual_ArrayAndScalar_Compiles()
     {
         // NumPy: np.greater_equal([1, 2, 3], 2) -> [False, True, True]
         var a = np.array(new int[] { 1, 2, 3 });
@@ -267,7 +266,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task GreaterEqual_ScalarAndArray_Compiles()
+    public void GreaterEqual_ScalarAndArray_Compiles()
     {
         // NumPy: np.greater_equal(2, [1, 2, 3]) -> [True, True, False]
         var b = np.array(new int[] { 1, 2, 3 });
@@ -284,7 +283,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Logical Operations (4 overloads)
 
     [TestMethod]
-    public async Task LogicalAnd_TwoArrays_Compiles()
+    public void LogicalAnd_TwoArrays_Compiles()
     {
         // NumPy: np.logical_and([True, True, False, False], [True, False, True, False])
         //        -> [True, False, False, False]
@@ -300,7 +299,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task LogicalOr_TwoArrays_Compiles()
+    public void LogicalOr_TwoArrays_Compiles()
     {
         // NumPy: np.logical_or([True, True, False, False], [True, False, True, False])
         //        -> [True, True, True, False]
@@ -316,7 +315,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task LogicalNot_Array_Compiles()
+    public void LogicalNot_Array_Compiles()
     {
         // NumPy: np.logical_not([True, True, False, False]) -> [False, False, True, True]
         var x = np.array(new bool[] { true, true, false, false });
@@ -330,7 +329,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task LogicalXor_TwoArrays_Compiles()
+    public void LogicalXor_TwoArrays_Compiles()
     {
         // NumPy: np.logical_xor([True, True, False, False], [True, False, True, False])
         //        -> [False, True, True, False]
@@ -350,7 +349,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Axis Manipulation - np.moveaxis (4 overloads)
 
     [TestMethod]
-    public async Task MoveAxis_IntSource_IntDest_Compiles()
+    public void MoveAxis_IntSource_IntDest_Compiles()
     {
         // NumPy: np.moveaxis(np.zeros((2, 3, 4)), 0, -1).shape -> (3, 4, 2)
         var a = np.zeros(new Shape(2, 3, 4));
@@ -363,7 +362,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task MoveAxis_ArraySource_IntDest_Compiles()
+    public void MoveAxis_ArraySource_IntDest_Compiles()
     {
         // NumPy: np.moveaxis(np.zeros((2, 3, 4)), [0, 1], 0) is not valid actually
         // Let's do a valid one: moveaxis with array source to single dest
@@ -378,7 +377,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task MoveAxis_IntSource_ArrayDest_Compiles()
+    public void MoveAxis_IntSource_ArrayDest_Compiles()
     {
         // Similar - move single source to array of destinations
         var a = np.zeros(new Shape(2, 3, 4));
@@ -389,7 +388,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task MoveAxis_ArraySource_ArrayDest_Compiles()
+    public void MoveAxis_ArraySource_ArrayDest_Compiles()
     {
         // NumPy: np.moveaxis(np.zeros((2, 3, 4)), [0, 1], [1, 0]).shape -> (3, 2, 4)
         var a = np.zeros(new Shape(2, 3, 4));
@@ -406,7 +405,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Axis Manipulation - np.rollaxis (1 overload)
 
     [TestMethod]
-    public async Task RollAxis_WithStart_Compiles()
+    public void RollAxis_WithStart_Compiles()
     {
         // NumPy: np.rollaxis(np.zeros((2, 3, 4)), 2, 0).shape -> (4, 2, 3)
         var a = np.zeros(new Shape(2, 3, 4));
@@ -419,7 +418,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task RollAxis_DefaultStart_Compiles()
+    public void RollAxis_DefaultStart_Compiles()
     {
         // NumPy: np.rollaxis(np.zeros((2, 3, 4)), 2).shape -> (4, 2, 3) (start defaults to 0)
         var a = np.zeros(new Shape(2, 3, 4));
@@ -436,7 +435,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Axis Manipulation - np.swapaxes (1 overload)
 
     [TestMethod]
-    public async Task SwapAxes_Compiles()
+    public void SwapAxes_Compiles()
     {
         // NumPy: np.swapaxes(np.zeros((2, 3, 4)), 0, 2).shape -> (4, 3, 2)
         var a = np.zeros(new Shape(2, 3, 4));
@@ -453,7 +452,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Axis Manipulation - np.transpose (2 overloads)
 
     [TestMethod]
-    public async Task Transpose_NoArgs_Compiles()
+    public void Transpose_NoArgs_Compiles()
     {
         // NumPy: np.transpose(np.arange(6).reshape(2, 3)).shape -> (3, 2)
         var a = np.arange(6).reshape(2, 3);
@@ -465,7 +464,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Transpose_WithPermute_Compiles()
+    public void Transpose_WithPermute_Compiles()
     {
         // NumPy: np.transpose(np.arange(6).reshape(2, 3), [1, 0]).shape -> (3, 2)
         var a = np.arange(6).reshape(2, 3);
@@ -477,7 +476,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Transpose_3D_Compiles()
+    public void Transpose_3D_Compiles()
     {
         // NumPy: np.transpose(np.arange(24).reshape(2, 3, 4), [2, 0, 1]).shape -> (4, 2, 3)
         var a = np.arange(24).reshape(2, 3, 4);
@@ -494,7 +493,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region np.unique (1 overload)
 
     [TestMethod]
-    public async Task Unique_1D_Compiles()
+    public void Unique_1D_Compiles()
     {
         // NumPy: np.unique([1, 2, 2, 3, 3, 3]) -> [1, 2, 3]
         var a = np.array(new int[] { 1, 2, 2, 3, 3, 3 });
@@ -508,7 +507,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Unique_2D_Flattens_Compiles()
+    public void Unique_2D_Flattens_Compiles()
     {
         // NumPy: np.unique([[1, 1], [2, 3]]) -> [1, 2, 3]
         var a = np.array(new int[,] { { 1, 1 }, { 2, 3 } });
@@ -524,7 +523,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Counting/Indexing - np.count_nonzero (2 overloads)
 
     [TestMethod]
-    public async Task CountNonzero_NoAxis_ReturnsInt_Compiles()
+    public void CountNonzero_NoAxis_ReturnsInt_Compiles()
     {
         // NumPy: np.count_nonzero([0, 1, 0, 2, 0, 3]) -> 3
         var a = np.array(new int[] { 0, 1, 0, 2, 0, 3 });
@@ -534,7 +533,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task CountNonzero_WithAxis_ReturnsNDArray_Compiles()
+    public void CountNonzero_WithAxis_ReturnsNDArray_Compiles()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 5]], axis=0) -> [1, 1, 2]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -548,7 +547,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task CountNonzero_WithAxisKeepdims_Compiles()
+    public void CountNonzero_WithAxisKeepdims_Compiles()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 5]], axis=1, keepdims=True) -> [[2], [2]]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -563,7 +562,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Counting/Indexing - np.nonzero (1 overload)
 
     [TestMethod]
-    public async Task Nonzero_1D_ReturnsNDArrayIntArray_Compiles()
+    public void Nonzero_1D_ReturnsNDArrayIntArray_Compiles()
     {
         // NumPy: np.nonzero([0, 1, 0, 2]) -> (array([1, 3]),)
         var a = np.array(new int[] { 0, 1, 0, 2 });
@@ -577,7 +576,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Nonzero_2D_ReturnsMultipleArrays_Compiles()
+    public void Nonzero_2D_ReturnsMultipleArrays_Compiles()
     {
         // NumPy: np.nonzero([[0, 1], [2, 0]]) -> (array([0, 1]), array([1, 0]))
         var a = np.array(new int[,] { { 0, 1 }, { 2, 0 } });
@@ -596,7 +595,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Linear Algebra - np.dot (1 overload)
 
     [TestMethod]
-    public async Task Dot_2DMatrices_Compiles()
+    public void Dot_2DMatrices_Compiles()
     {
         // NumPy: np.dot([[1, 2], [3, 4]], [[5, 6], [7, 8]]) -> [[19, 22], [43, 50]]
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -612,7 +611,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Dot_1DVectors_Compiles()
+    public void Dot_1DVectors_Compiles()
     {
         // NumPy: np.dot([1, 2, 3], [4, 5, 6]) -> 32 (1*4 + 2*5 + 3*6)
         var a = np.array(new int[] { 1, 2, 3 });
@@ -629,7 +628,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Linear Algebra - np.matmul (1 overload)
 
     [TestMethod]
-    public async Task Matmul_2DMatrices_Compiles()
+    public void Matmul_2DMatrices_Compiles()
     {
         // NumPy: np.matmul([[1, 2], [3, 4]], [[5, 6], [7, 8]]) -> [[19, 22], [43, 50]]
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -649,7 +648,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Linear Algebra - np.outer (1 overload)
 
     [TestMethod]
-    public async Task Outer_1DVectors_Compiles()
+    public void Outer_1DVectors_Compiles()
     {
         // NumPy: np.outer([1, 2, 3], [4, 5, 6]) ->
         //        [[ 4,  5,  6],
@@ -677,7 +676,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Min with dtype - np.amin (2 overloads)
 
     [TestMethod]
-    public async Task AminGeneric_ReturnsT_Compiles()
+    public void AminGeneric_ReturnsT_Compiles()
     {
         // NumPy: np.amin([1, 2, 3, 4, 5]) -> 1
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -687,7 +686,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task AminGeneric_Float_Compiles()
+    public void AminGeneric_Float_Compiles()
     {
         // NumPy: np.amin([1.5, 2.5, 0.5]) -> 0.5
         var a = np.array(new double[] { 1.5, 2.5, 0.5 });
@@ -697,7 +696,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Amin_WithAxis_Compiles()
+    public void Amin_WithAxis_Compiles()
     {
         // NumPy: np.amin([[0, 1, 2], [3, 0, 5]], axis=0) -> [0, 0, 2]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -711,7 +710,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Amin_WithAxisKeepdims_Compiles()
+    public void Amin_WithAxisKeepdims_Compiles()
     {
         // NumPy: np.amin([[0, 1, 2], [3, 0, 5]], axis=1, keepdims=True) -> [[0], [0]]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -722,7 +721,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Amin_WithDtype_Compiles()
+    public void Amin_WithDtype_Compiles()
     {
         // Test that dtype parameter compiles (behavior may vary)
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -736,7 +735,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Min with dtype - np.min (1 overload)
 
     [TestMethod]
-    public async Task Min_WithAxis_Compiles()
+    public void Min_WithAxis_Compiles()
     {
         // NumPy: np.min([[0, 1, 2], [3, 0, 5]], axis=0) -> [0, 0, 2]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -750,7 +749,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Min_WithDtype_Compiles()
+    public void Min_WithDtype_Compiles()
     {
         // Test that dtype parameter compiles (behavior may vary)
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -760,7 +759,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Min_WithAxisKeepdimsDtype_Compiles()
+    public void Min_WithAxisKeepdimsDtype_Compiles()
     {
         // Test full signature with all optional parameters
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
@@ -775,7 +774,7 @@ public class NpApiOverloadTests_LogicManipulation
     #region Additional Edge Cases
 
     [TestMethod]
-    public async Task Comparison_WithFloats_Compiles()
+    public void Comparison_WithFloats_Compiles()
     {
         // NumPy: np.equal([1.0, 2.0, 3.0], [1.0, 2.1, 3.0]) -> [True, False, True]
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -789,7 +788,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Logical_WithIntArrays_Compiles()
+    public void Logical_WithIntArrays_Compiles()
     {
         // NumPy: np.logical_and([1, 0, 1], [1, 1, 0]) -> [True, False, False]
         // Nonzero integers are truthy
@@ -804,7 +803,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Transpose_1D_ReturnsUnchanged_Compiles()
+    public void Transpose_1D_ReturnsUnchanged_Compiles()
     {
         // NumPy: np.transpose([1, 2, 3]).shape -> (3,) - unchanged for 1D
         var a = np.array(new int[] { 1, 2, 3 });
@@ -815,7 +814,7 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    public async Task Unique_EmptyArray_Compiles()
+    public void Unique_EmptyArray_Compiles()
     {
         // NumPy: np.unique([]) -> []
         var a = np.array(new int[0]);
@@ -827,7 +826,7 @@ public class NpApiOverloadTests_LogicManipulation
 
     [TestMethod]
     [OpenBugs]  // np.dot(matrix, vector) has existing bug - memory corruption
-    public async Task Dot_MatrixVector_Compiles()
+    public void Dot_MatrixVector_Compiles()
     {
         // NumPy: np.dot([[1, 2], [3, 4]], [1, 1]) -> [3, 7]
         // Note: This test verifies the signature compiles correctly.

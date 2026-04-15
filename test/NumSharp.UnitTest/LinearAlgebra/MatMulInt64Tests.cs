@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
@@ -16,7 +15,7 @@ public class MatMulInt64Tests
     #region Basic Correctness Tests
 
     [TestMethod]
-    public async Task MatMul_Float64_2x2_Correct()
+    public void MatMul_Float64_2x2_Correct()
     {
         // NumPy:
         // a = np.array([[1., 2.], [3., 4.]])
@@ -34,7 +33,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_Float32_2x2_Correct()
+    public void MatMul_Float32_2x2_Correct()
     {
         var a = np.array(new float[,] { { 1, 2 }, { 3, 4 } });
         var b = np.array(new float[,] { { 5, 6 }, { 7, 8 } });
@@ -48,7 +47,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_Int32_2x2_Correct()
+    public void MatMul_Int32_2x2_Correct()
     {
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
         var b = np.array(new int[,] { { 5, 6 }, { 7, 8 } });
@@ -66,7 +65,7 @@ public class MatMulInt64Tests
     #region SIMD Path Tests (Contiguous Arrays)
 
     [TestMethod]
-    public async Task MatMul_ContiguousArrays_UsesSimdPath()
+    public void MatMul_ContiguousArrays_UsesSimdPath()
     {
         // Create contiguous arrays that should trigger SIMD path
         var a = np.arange(100).reshape(10, 10).astype(NPTypeCode.Double);
@@ -89,7 +88,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_LargerMatrices_Correct()
+    public void MatMul_LargerMatrices_Correct()
     {
         // Test with larger matrices to exercise blocking in SIMD path
         var a = np.ones(new Shape(64, 64), NPTypeCode.Double);
@@ -104,7 +103,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_NonSquare_MxN_NxP()
+    public void MatMul_NonSquare_MxN_NxP()
     {
         // Test non-square matrix multiplication
         // (3x4) @ (4x5) = (3x5)
@@ -128,7 +127,7 @@ public class MatMulInt64Tests
     #region np.dot Tests
 
     [TestMethod]
-    public async Task Dot_Float64_VectorVector()
+    public void Dot_Float64_VectorVector()
     {
         // NumPy: np.dot([1,2,3], [4,5,6]) = 32
         var a = np.array(new double[] { 1, 2, 3 });
@@ -140,7 +139,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task Dot_Float32_VectorVector()
+    public void Dot_Float32_VectorVector()
     {
         var a = np.array(new float[] { 1, 2, 3 });
         var b = np.array(new float[] { 4, 5, 6 });
@@ -151,7 +150,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task Dot_MatrixVector()
+    public void Dot_MatrixVector()
     {
         // NumPy: np.dot([[1,2],[3,4]], [5,6]) = [17, 39]
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -165,7 +164,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task Dot_MatrixMatrix_SameAsMatMul()
+    public void Dot_MatrixMatrix_SameAsMatMul()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
         var b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
@@ -185,7 +184,7 @@ public class MatMulInt64Tests
     #region Edge Cases
 
     [TestMethod]
-    public async Task MatMul_1x1_Matrices()
+    public void MatMul_1x1_Matrices()
     {
         var a = np.array(new double[,] { { 3 } });
         var b = np.array(new double[,] { { 4 } });
@@ -198,7 +197,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_Identity_PreservesMatrix()
+    public void MatMul_Identity_PreservesMatrix()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
         var identity = np.eye(2);
@@ -212,7 +211,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task MatMul_ZeroMatrix_ReturnsZeros()
+    public void MatMul_ZeroMatrix_ReturnsZeros()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
         var zeros = np.zeros(new Shape(2, 2), NPTypeCode.Double);
@@ -230,7 +229,7 @@ public class MatMulInt64Tests
     #region Various DTypes
 
     [TestMethod]
-    public async Task MatMul_Int64_Correct()
+    public void MatMul_Int64_Correct()
     {
         var a = np.array(new long[,] { { 1, 2 }, { 3, 4 } });
         var b = np.array(new long[,] { { 5, 6 }, { 7, 8 } });
@@ -242,7 +241,7 @@ public class MatMulInt64Tests
     }
 
     [TestMethod]
-    public async Task Dot_LargeContiguousArrays()
+    public void Dot_LargeContiguousArrays()
     {
         // Test with larger arrays to ensure SIMD path handles size correctly
         var rng = np.random.RandomState(42);

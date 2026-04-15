@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -12,7 +11,7 @@ public class NpIsRealIsComplexBattleTests
     #region isreal Tests
 
     [TestMethod]
-    public async Task IsReal_IntArray_AllTrue()
+    public void IsReal_IntArray_AllTrue()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.isreal(arr);
@@ -22,7 +21,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsReal_FloatArray_AllTrue()
+    public void IsReal_FloatArray_AllTrue()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.isreal(arr);
@@ -30,7 +29,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsReal_DoubleArray_AllTrue()
+    public void IsReal_DoubleArray_AllTrue()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.isreal(arr);
@@ -38,7 +37,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsReal_ShapeMatches()
+    public void IsReal_ShapeMatches()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.isreal(arr);
@@ -46,7 +45,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsReal_Null_Throws()
+    public void IsReal_Null_Throws()
     {
         new Action(() => np.isreal(null!)).Should().Throw<Exception>();
     }
@@ -56,7 +55,7 @@ public class NpIsRealIsComplexBattleTests
     #region iscomplex Tests
 
     [TestMethod]
-    public async Task IsComplex_IntArray_AllFalse()
+    public void IsComplex_IntArray_AllFalse()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.iscomplex(arr);
@@ -66,7 +65,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsComplex_FloatArray_AllFalse()
+    public void IsComplex_FloatArray_AllFalse()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.iscomplex(arr);
@@ -74,7 +73,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsComplex_ShapeMatches()
+    public void IsComplex_ShapeMatches()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.iscomplex(arr);
@@ -82,7 +81,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsComplex_Null_Throws()
+    public void IsComplex_Null_Throws()
     {
         new Action(() => np.iscomplex(null!)).Should().Throw<Exception>();
     }
@@ -92,28 +91,28 @@ public class NpIsRealIsComplexBattleTests
     #region isrealobj Tests
 
     [TestMethod]
-    public async Task IsRealObj_IntArray_True()
+    public void IsRealObj_IntArray_True()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         np.isrealobj(arr).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsRealObj_FloatArray_True()
+    public void IsRealObj_FloatArray_True()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
         np.isrealobj(arr).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsRealObj_DoubleArray_True()
+    public void IsRealObj_DoubleArray_True()
     {
         var arr = np.array(new double[] { 1.0, 2.0 });
         np.isrealobj(arr).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task IsRealObj_AllTypes_True()
+    public void IsRealObj_AllTypes_True()
     {
         np.isrealobj(np.array(new bool[] { true })).Should().BeTrue();
         np.isrealobj(np.array(new byte[] { 1 })).Should().BeTrue();
@@ -123,7 +122,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsRealObj_Null_Throws()
+    public void IsRealObj_Null_Throws()
     {
         new Action(() => np.isrealobj(null!)).Should().Throw<Exception>();
     }
@@ -133,21 +132,21 @@ public class NpIsRealIsComplexBattleTests
     #region iscomplexobj Tests
 
     [TestMethod]
-    public async Task IsComplexObj_IntArray_False()
+    public void IsComplexObj_IntArray_False()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         np.iscomplexobj(arr).Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task IsComplexObj_FloatArray_False()
+    public void IsComplexObj_FloatArray_False()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
         np.iscomplexobj(arr).Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task IsComplexObj_AllRealTypes_False()
+    public void IsComplexObj_AllRealTypes_False()
     {
         np.iscomplexobj(np.array(new bool[] { true })).Should().BeFalse();
         np.iscomplexobj(np.array(new byte[] { 1 })).Should().BeFalse();
@@ -156,7 +155,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsComplexObj_Null_Throws()
+    public void IsComplexObj_Null_Throws()
     {
         new Action(() => np.iscomplexobj(null!)).Should().Throw<Exception>();
     }
@@ -166,7 +165,7 @@ public class NpIsRealIsComplexBattleTests
     #region Various Array Shapes
 
     [TestMethod]
-    public async Task IsReal_EmptyArray()
+    public void IsReal_EmptyArray()
     {
         var arr = np.array(new int[0]);
         var result = np.isreal(arr);
@@ -174,7 +173,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsComplex_EmptyArray()
+    public void IsComplex_EmptyArray()
     {
         var arr = np.array(new int[0]);
         var result = np.iscomplex(arr);
@@ -182,7 +181,7 @@ public class NpIsRealIsComplexBattleTests
     }
 
     [TestMethod]
-    public async Task IsRealObj_EmptyArray_True()
+    public void IsRealObj_EmptyArray_True()
     {
         var arr = np.array(new int[0]);
         np.isrealobj(arr).Should().BeTrue();

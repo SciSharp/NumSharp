@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
@@ -15,7 +14,7 @@ public class NonzeroTests
     #region 1D Arrays
 
     [TestMethod]
-    public async Task Nonzero_1D_ReturnsIndices()
+    public void Nonzero_1D_ReturnsIndices()
     {
         // NumPy: np.nonzero([0, 1, 0, 2]) = (array([1, 3]),)
         var a = np.array(new int[] { 0, 1, 0, 2 });
@@ -28,7 +27,7 @@ public class NonzeroTests
     }
 
     [TestMethod]
-    public async Task Nonzero_1D_Empty_ReturnsEmptyArray()
+    public void Nonzero_1D_Empty_ReturnsEmptyArray()
     {
         // NumPy: np.nonzero([0, 0, 0]) = (array([], dtype=int64),)
         var a = np.array(new int[] { 0, 0, 0 });
@@ -39,7 +38,7 @@ public class NonzeroTests
     }
 
     [TestMethod]
-    public async Task Nonzero_1D_AllNonzero_ReturnsAllIndices()
+    public void Nonzero_1D_AllNonzero_ReturnsAllIndices()
     {
         // NumPy: np.nonzero([1, 2, 3]) = (array([0, 1, 2]),)
         var a = np.array(new int[] { 1, 2, 3 });
@@ -57,7 +56,7 @@ public class NonzeroTests
     #region 2D Arrays
 
     [TestMethod]
-    public async Task Nonzero_2D_ReturnsTupleOfIndices()
+    public void Nonzero_2D_ReturnsTupleOfIndices()
     {
         // NumPy: np.nonzero([[0, 1], [2, 0]]) = (array([0, 1]), array([1, 0]))
         // First array is row indices, second is column indices
@@ -78,7 +77,7 @@ public class NonzeroTests
     }
 
     [TestMethod]
-    public async Task Nonzero_2D_ThreeElements()
+    public void Nonzero_2D_ThreeElements()
     {
         // NumPy: np.nonzero([[1, 0], [0, 2], [3, 0]]) = (array([0, 1, 2]), array([0, 1, 0]))
         var a = np.array(new int[,] { { 1, 0 }, { 0, 2 }, { 3, 0 } });
@@ -100,7 +99,7 @@ public class NonzeroTests
     }
 
     [TestMethod]
-    public async Task Nonzero_2D_AllZero_ReturnsEmptyArrays()
+    public void Nonzero_2D_AllZero_ReturnsEmptyArrays()
     {
         // NumPy: np.nonzero([[0, 0], [0, 0]]) = (array([], dtype=int64), array([], dtype=int64))
         var a = np.array(new int[,] { { 0, 0 }, { 0, 0 } });
@@ -116,7 +115,7 @@ public class NonzeroTests
     #region 3D Arrays
 
     [TestMethod]
-    public async Task Nonzero_3D_ReturnsTupleOfThreeIndices()
+    public void Nonzero_3D_ReturnsTupleOfThreeIndices()
     {
         // 3D array: each nonzero element has (depth, row, col) index
         var a = np.zeros(new Shape(2, 2, 2), NPTypeCode.Int32);
@@ -148,7 +147,7 @@ public class NonzeroTests
     #region Boolean Arrays
 
     [TestMethod]
-    public async Task Nonzero_Boolean_TrueIsTreatedAsNonzero()
+    public void Nonzero_Boolean_TrueIsTreatedAsNonzero()
     {
         // NumPy: np.nonzero([False, True, False, True]) = (array([1, 3]),)
         var a = np.array(new bool[] { false, true, false, true });
@@ -165,7 +164,7 @@ public class NonzeroTests
     #region Float Arrays
 
     [TestMethod]
-    public async Task Nonzero_Float_ZeroIsExact()
+    public void Nonzero_Float_ZeroIsExact()
     {
         // NumPy: np.nonzero([0.0, 1.0, 0.0, 2.0]) = (array([1, 3]),)
         var a = np.array(new double[] { 0.0, 1.0, 0.0, 2.0 });
@@ -178,7 +177,7 @@ public class NonzeroTests
     }
 
     [TestMethod]
-    public async Task Nonzero_Float_NaN_IsNonzero()
+    public void Nonzero_Float_NaN_IsNonzero()
     {
         // NumPy: np.nonzero([0.0, nan]) = (array([1]),) - NaN is treated as nonzero
         var a = np.array(new double[] { 0.0, double.NaN });

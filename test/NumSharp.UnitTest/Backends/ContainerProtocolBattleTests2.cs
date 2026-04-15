@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Backends;
@@ -17,7 +16,7 @@ public class ContainerProtocolBattleTests2
     #region __len__ Round 2
 
     [TestMethod]
-    public async Task Len_LargeArray_ReturnsCorrectLength()
+    public void Len_LargeArray_ReturnsCorrectLength()
     {
         // Test with large first dimension
         var arr = np.zeros(new long[] { 10000, 10 });
@@ -25,21 +24,21 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Len_FirstDimensionOne_ReturnsOne()
+    public void Len_FirstDimensionOne_ReturnsOne()
     {
         var arr = np.zeros(new long[] { 1, 100, 100 });
         arr.__len__().Should().Be(1);
     }
 
     [TestMethod]
-    public async Task Len_HighDimensional_5D()
+    public void Len_HighDimensional_5D()
     {
         var arr = np.zeros(new long[] { 2, 3, 4, 5, 6 });
         arr.__len__().Should().Be(2);
     }
 
     [TestMethod]
-    public async Task Len_AfterTranspose_ChangesFirstDimension()
+    public void Len_AfterTranspose_ChangesFirstDimension()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
         arr.__len__().Should().Be(2);
@@ -50,7 +49,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Len_NegativeStridedSlice()
+    public void Len_NegativeStridedSlice()
     {
         var arr = np.arange(10);
         var reversed = arr["::-2"]; // [9, 7, 5, 3, 1]
@@ -58,7 +57,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Len_SliceOfSlice()
+    public void Len_SliceOfSlice()
     {
         var arr = np.arange(100);
         var slice1 = arr["10:90"];
@@ -71,7 +70,7 @@ public class ContainerProtocolBattleTests2
     #region __getitem__ Round 2 - Long Indexing
 
     [TestMethod]
-    public async Task GetItem_LongIndex_PositiveWorks()
+    public void GetItem_LongIndex_PositiveWorks()
     {
         var arr = np.arange(10);
         var result = arr.__getitem__(5L);
@@ -79,7 +78,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_LongIndex_NegativeWorks()
+    public void GetItem_LongIndex_NegativeWorks()
     {
         var arr = np.arange(10);
         var result = arr.__getitem__(-1L);
@@ -87,7 +86,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_LongIndex_2DArray()
+    public void GetItem_LongIndex_2DArray()
     {
         var arr = np.arange(12).reshape(3, 4);
         var row = arr.__getitem__(2L);
@@ -96,7 +95,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_Ellipsis_Basic()
+    public void GetItem_Ellipsis_Basic()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
         // "..., 0" = all dimensions except last, then index 0 on last
@@ -105,7 +104,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_ComplexSlice_StartStopStep()
+    public void GetItem_ComplexSlice_StartStopStep()
     {
         var arr = np.arange(20);
         var result = arr["2:18:3"]; // [2, 5, 8, 11, 14, 17]
@@ -115,7 +114,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_2D_ColumnSlice()
+    public void GetItem_2D_ColumnSlice()
     {
         var arr = np.arange(12).reshape(3, 4);
         var column = arr[":, 1"]; // All rows, column 1
@@ -126,7 +125,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_2D_SubMatrix()
+    public void GetItem_2D_SubMatrix()
     {
         var arr = np.arange(20).reshape(4, 5);
         var submat = arr["1:3, 2:5"];
@@ -135,7 +134,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_ViewChaining_PreservesData()
+    public void GetItem_ViewChaining_PreservesData()
     {
         var original = np.arange(100).reshape(10, 10);
         var view1 = original["2:8, :"];
@@ -156,7 +155,7 @@ public class ContainerProtocolBattleTests2
     #region __setitem__ Round 2
 
     [TestMethod]
-    public async Task SetItem_LongIndex_Works()
+    public void SetItem_LongIndex_Works()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         arr.__setitem__(3L, 99);
@@ -164,7 +163,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_NegativeLongIndex_Works()
+    public void SetItem_NegativeLongIndex_Works()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         arr.__setitem__(-2L, 88);
@@ -172,7 +171,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_BroadcastScalarTo2D()
+    public void SetItem_BroadcastScalarTo2D()
     {
         var arr = np.zeros(new long[] { 3, 4 }, np.int32);
         arr.__setitem__(":", 5);
@@ -181,7 +180,7 @@ public class ContainerProtocolBattleTests2
 
     [TestMethod]
     [OpenBugs] // BUG: NumPy broadcasts row to all rows, NumSharp doesn't
-    public async Task SetItem_BroadcastRowTo2D()
+    public void SetItem_BroadcastRowTo2D()
     {
         // NumPy: arr[:] = row broadcasts row to all rows
         // NumSharp: doesn't support this broadcast pattern yet
@@ -198,7 +197,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_SliceToSlice()
+    public void SetItem_SliceToSlice()
     {
         var arr = np.zeros(new long[] { 10 }, np.int32);
         var source = np.arange(3) + 1; // [1, 2, 3]
@@ -214,7 +213,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_StridedSlice()
+    public void SetItem_StridedSlice()
     {
         var arr = np.zeros(new long[] { 10 }, np.int32);
         arr.__setitem__("::2", 1); // Set every other element
@@ -226,7 +225,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_TypePromotion_IntToDouble()
+    public void SetItem_TypePromotion_IntToDouble()
     {
         var arr = np.array(new[] { 1.5, 2.5, 3.5 });
         arr.__setitem__(1, 10); // int assigned to double array
@@ -235,7 +234,7 @@ public class ContainerProtocolBattleTests2
 
     [TestMethod]
     [Misaligned] // NumPy truncates (2.9 -> 2), NumSharp rounds (2.9 -> 3)
-    public async Task SetItem_TypePromotion_DoubleToInt_Rounds()
+    public void SetItem_TypePromotion_DoubleToInt_Rounds()
     {
         // NumPy truncates: arr[1] = 2.9 becomes 2
         // NumSharp rounds: arr[1] = 2.9 becomes 3
@@ -245,7 +244,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task SetItem_ViewModifiesOriginal()
+    public void SetItem_ViewModifiesOriginal()
     {
         var original = np.arange(10);
         var view = original["3:7"];
@@ -260,7 +259,7 @@ public class ContainerProtocolBattleTests2
     #region __contains__ Round 2
 
     [TestMethod]
-    public async Task Contains_NaN_InFloatArray_ReturnsFalse()
+    public void Contains_NaN_InFloatArray_ReturnsFalse()
     {
         // NaN != NaN in IEEE 754
         var arr = np.array(new[] { 1.0f, float.NaN, 3.0f });
@@ -268,14 +267,14 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Contains_NaN_DoubleArray_ReturnsFalse()
+    public void Contains_NaN_DoubleArray_ReturnsFalse()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
         arr.Contains(double.NaN).Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task Contains_MaxValue_Int32()
+    public void Contains_MaxValue_Int32()
     {
         var arr = np.array(new[] { int.MinValue, 0, int.MaxValue });
         arr.Contains(int.MaxValue).Should().BeTrue();
@@ -283,7 +282,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Contains_MaxValue_Int64()
+    public void Contains_MaxValue_Int64()
     {
         var arr = np.array(new[] { long.MinValue, 0L, long.MaxValue });
         arr.Contains(long.MaxValue).Should().BeTrue();
@@ -291,28 +290,28 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Contains_TypePromotion_ByteInInt32Array()
+    public void Contains_TypePromotion_ByteInInt32Array()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         arr.Contains(((byte)3)).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task Contains_TypePromotion_Int32InInt64Array()
+    public void Contains_TypePromotion_Int32InInt64Array()
     {
         var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
         arr.Contains(3).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task Contains_ZeroInMixedSignArray()
+    public void Contains_ZeroInMixedSignArray()
     {
         var arr = np.array(new[] { -5, -3, 0, 3, 5 });
         arr.Contains(0).Should().BeTrue();
     }
 
     [TestMethod]
-    public async Task Contains_SpecialFloats()
+    public void Contains_SpecialFloats()
     {
         var arr = np.array(new[] {
             double.NegativeInfinity,
@@ -329,7 +328,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Contains_TransposedArray()
+    public void Contains_TransposedArray()
     {
         var arr = np.arange(12).reshape(3, 4).T;
         arr.Contains(5).Should().BeTrue();
@@ -337,7 +336,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Contains_ReversedArray()
+    public void Contains_ReversedArray()
     {
         var arr = np.arange(10)["::-1"];
         arr.Contains(5).Should().BeTrue();
@@ -349,7 +348,7 @@ public class ContainerProtocolBattleTests2
     #region __iter__ Round 2
 
     [TestMethod]
-    public async Task Iter_ViewIteration_CorrectValues()
+    public void Iter_ViewIteration_CorrectValues()
     {
         var arr = np.arange(20).reshape(4, 5);
         var view = arr["1:3, :"];
@@ -366,7 +365,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_NestedIteration_3DArray()
+    public void Iter_NestedIteration_3DArray()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
 
@@ -388,7 +387,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_MultipleEnumerators_Independent()
+    public void Iter_MultipleEnumerators_Independent()
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
@@ -404,7 +403,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_ResetEnumerator_ThrowsNotSupported()
+    public void Iter_ResetEnumerator_ThrowsNotSupported()
     {
         // NDIterator does not support Reset - document this behavior
         var arr = np.array(new[] { 1, 2, 3 });
@@ -419,7 +418,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_TransposedArray_CorrectOrder()
+    public void Iter_TransposedArray_CorrectOrder()
     {
         var arr = np.arange(6).reshape(2, 3).T; // Shape (3, 2)
 
@@ -436,7 +435,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_SlicedArray_CorrectElements()
+    public void Iter_SlicedArray_CorrectElements()
     {
         var arr = np.arange(20);
         var sliced = arr["5:10"]; // [5, 6, 7, 8, 9]
@@ -451,7 +450,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_StridedArray_CorrectElements()
+    public void Iter_StridedArray_CorrectElements()
     {
         var arr = np.arange(10);
         var strided = arr["1::2"]; // [1, 3, 5, 7, 9]
@@ -466,7 +465,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_ReversedArray_CorrectOrder()
+    public void Iter_ReversedArray_CorrectOrder()
     {
         var arr = np.arange(5)["::-1"]; // [4, 3, 2, 1, 0]
 
@@ -480,7 +479,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_BroadcastArray_IteratesOverBroadcastDimension()
+    public void Iter_BroadcastArray_IteratesOverBroadcastDimension()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         var broadcast = np.broadcast_to(arr, new Shape(4, 3));
@@ -505,7 +504,7 @@ public class ContainerProtocolBattleTests2
     #region Edge Cases and Error Conditions
 
     [TestMethod]
-    public async Task GetItem_EmptySlice_ReturnsEmpty()
+    public void GetItem_EmptySlice_ReturnsEmpty()
     {
         var arr = np.arange(10);
         var empty = arr["5:5"]; // Empty slice
@@ -513,7 +512,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_OutOfBoundsStart_ClampsToZero()
+    public void GetItem_OutOfBoundsStart_ClampsToZero()
     {
         var arr = np.arange(5);
         var result = arr["-100:3"]; // Should be equivalent to [:3]
@@ -521,7 +520,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task GetItem_OutOfBoundsStop_ClampsToEnd()
+    public void GetItem_OutOfBoundsStop_ClampsToEnd()
     {
         var arr = np.arange(5);
         var result = arr["2:100"]; // Should be equivalent to [2:]
@@ -529,14 +528,14 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Len_EmptyHighDimensional()
+    public void Len_EmptyHighDimensional()
     {
         var arr = np.zeros(new long[] { 0, 5, 10 });
         arr.__len__().Should().Be(0);
     }
 
     [TestMethod]
-    public async Task Contains_WrongType_ReturnsFalse()
+    public void Contains_WrongType_ReturnsFalse()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         // String can't be in int array
@@ -544,7 +543,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Iter_EmptyDimension_NoIterations()
+    public void Iter_EmptyDimension_NoIterations()
     {
         var arr = np.zeros(new long[] { 0, 5 });
         var count = 0;
@@ -556,7 +555,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task Hash_DifferentArrays_AllThrow()
+    public void Hash_DifferentArrays_AllThrow()
     {
         var arrays = new[]
         {
@@ -577,7 +576,7 @@ public class ContainerProtocolBattleTests2
     #region Python API Naming
 
     [TestMethod]
-    public async Task PythonAPI_AllMethodsAccessible()
+    public void PythonAPI_AllMethodsAccessible()
     {
         var arr = np.arange(12).reshape(3, 4);
 
@@ -594,7 +593,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task PythonAPI_SetItem_Works()
+    public void PythonAPI_SetItem_Works()
     {
         var arr = np.zeros(new long[] { 3, 3 }, np.int32);
         arr.__setitem__(1, 5);
@@ -605,7 +604,7 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    public async Task PythonAPI_Hash_Throws()
+    public void PythonAPI_Hash_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => arr.__hash__());

@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -19,7 +18,7 @@ public class NpPromoteTypesBattleTests
     #region Same Type
 
     [TestMethod]
-    public async Task PromoteTypes_SameType_ReturnsSame()
+    public void PromoteTypes_SameType_ReturnsSame()
     {
         foreach (var type in AllTypes)
         {
@@ -32,7 +31,7 @@ public class NpPromoteTypesBattleTests
     #region Symmetric Property
 
     [TestMethod]
-    public async Task PromoteTypes_Symmetric()
+    public void PromoteTypes_Symmetric()
     {
         foreach (var t1 in AllTypes)
         {
@@ -50,13 +49,13 @@ public class NpPromoteTypesBattleTests
     #region Integer Promotion
 
     [TestMethod]
-    public async Task PromoteTypes_Int16Int32()
+    public void PromoteTypes_Int16Int32()
     {
         np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
     [TestMethod]
-    public async Task PromoteTypes_Int32Int64()
+    public void PromoteTypes_Int32Int64()
     {
         np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
@@ -66,7 +65,7 @@ public class NpPromoteTypesBattleTests
     #region Float Promotion
 
     [TestMethod]
-    public async Task PromoteTypes_Float32Float64()
+    public void PromoteTypes_Float32Float64()
     {
         np.promote_types(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
@@ -76,13 +75,13 @@ public class NpPromoteTypesBattleTests
     #region Generic Overload
 
     [TestMethod]
-    public async Task PromoteTypes_Generic_IntLong()
+    public void PromoteTypes_Generic_IntLong()
     {
         np.promote_types<int, long>().Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
-    public async Task PromoteTypes_Generic_FloatDouble()
+    public void PromoteTypes_Generic_FloatDouble()
     {
         np.promote_types<float, double>().Should().Be(NPTypeCode.Double);
     }
@@ -92,7 +91,7 @@ public class NpPromoteTypesBattleTests
     #region Type Overload
 
     [TestMethod]
-    public async Task PromoteTypes_Type_IntLong()
+    public void PromoteTypes_Type_IntLong()
     {
         np.promote_types(typeof(int), typeof(long)).Should().Be(NPTypeCode.Int64);
     }

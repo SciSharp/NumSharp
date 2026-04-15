@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -12,7 +11,7 @@ public class NpFInfoBattleTests
     #region All Float Types Coverage
 
     [TestMethod]
-    public async Task FInfo_Single_AllProperties()
+    public void FInfo_Single_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Single);
         info.bits.Should().Be(32);
@@ -32,7 +31,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_Double_AllProperties()
+    public void FInfo_Double_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Double);
         info.bits.Should().Be(64);
@@ -49,7 +48,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_Decimal_AllProperties()
+    public void FInfo_Decimal_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Decimal);
         info.bits.Should().Be(128);
@@ -62,49 +61,49 @@ public class NpFInfoBattleTests
     #region Error Cases
 
     [TestMethod]
-    public async Task FInfo_Int32_Throws()
+    public void FInfo_Int32_Throws()
     {
         new Action(() => np.finfo(NPTypeCode.Int32)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_Boolean_Throws()
+    public void FInfo_Boolean_Throws()
     {
         new Action(() => np.finfo(NPTypeCode.Boolean)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_Byte_Throws()
+    public void FInfo_Byte_Throws()
     {
         new Action(() => np.finfo(NPTypeCode.Byte)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_Empty_Throws()
+    public void FInfo_Empty_Throws()
     {
         new Action(() => np.finfo(NPTypeCode.Empty)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_NullType_Throws()
+    public void FInfo_NullType_Throws()
     {
         new Action(() => np.finfo((Type)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_NullArray_Throws()
+    public void FInfo_NullArray_Throws()
     {
         new Action(() => np.finfo((NDArray)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_EmptyDtypeString_Throws()
+    public void FInfo_EmptyDtypeString_Throws()
     {
         new Action(() => np.finfo("")).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task FInfo_InvalidDtypeString_Throws()
+    public void FInfo_InvalidDtypeString_Throws()
     {
         new Action(() => np.finfo("int32")).Should().Throw<Exception>();
     }
@@ -114,7 +113,7 @@ public class NpFInfoBattleTests
     #region Generic Overload Tests
 
     [TestMethod]
-    public async Task FInfo_Generic_Float()
+    public void FInfo_Generic_Float()
     {
         var info = np.finfo<float>();
         info.bits.Should().Be(32);
@@ -122,7 +121,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_Generic_Double()
+    public void FInfo_Generic_Double()
     {
         var info = np.finfo<double>();
         info.bits.Should().Be(64);
@@ -130,14 +129,14 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_Generic_Decimal()
+    public void FInfo_Generic_Decimal()
     {
         var info = np.finfo<decimal>();
         info.bits.Should().Be(128);
     }
 
     [TestMethod]
-    public async Task FInfo_Generic_Int_Throws()
+    public void FInfo_Generic_Int_Throws()
     {
         new Action(() => np.finfo<int>()).Should().Throw<Exception>();
     }
@@ -147,7 +146,7 @@ public class NpFInfoBattleTests
     #region NDArray Overload Tests
 
     [TestMethod]
-    public async Task FInfo_NDArray_Float32()
+    public void FInfo_NDArray_Float32()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var info = np.finfo(arr);
@@ -155,7 +154,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_NDArray_Float64()
+    public void FInfo_NDArray_Float64()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
         var info = np.finfo(arr);
@@ -163,7 +162,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_NDArray_Int_Throws()
+    public void FInfo_NDArray_Int_Throws()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         new Action(() => np.finfo(arr)).Should().Throw<Exception>();
@@ -177,21 +176,21 @@ public class NpFInfoBattleTests
     // NumPy-style names like "float32", "float64" are not fully supported yet
 
     [TestMethod]
-    public async Task FInfo_String_Float()
+    public void FInfo_String_Float()
     {
         var info = np.finfo("float");  // defaults to float (single)
         info.bits.Should().Be(32);
     }
 
     [TestMethod]
-    public async Task FInfo_String_Single()
+    public void FInfo_String_Single()
     {
         var info = np.finfo("single");
         info.bits.Should().Be(32);
     }
 
     [TestMethod]
-    public async Task FInfo_String_Double()
+    public void FInfo_String_Double()
     {
         var info = np.finfo("double");
         info.bits.Should().Be(64);
@@ -202,7 +201,7 @@ public class NpFInfoBattleTests
     #region Epsilon Verification
 
     [TestMethod]
-    public async Task FInfo_Double_EpsIsNextFloat()
+    public void FInfo_Double_EpsIsNextFloat()
     {
         var info = np.finfo(NPTypeCode.Double);
         double expected = Math.BitIncrement(1.0) - 1.0;
@@ -210,7 +209,7 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public async Task FInfo_Single_EpsIsNextFloat()
+    public void FInfo_Single_EpsIsNextFloat()
     {
         var info = np.finfo(NPTypeCode.Single);
         // Must use MathF for float operations
@@ -223,7 +222,7 @@ public class NpFInfoBattleTests
     #region ToString Tests
 
     [TestMethod]
-    public async Task FInfo_ToString_ContainsExpectedInfo()
+    public void FInfo_ToString_ContainsExpectedInfo()
     {
         var info = np.finfo(NPTypeCode.Double);
         var str = info.ToString();

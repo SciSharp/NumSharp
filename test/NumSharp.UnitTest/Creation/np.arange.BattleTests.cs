@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using AwesomeAssertions;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
@@ -16,7 +15,7 @@ public class ArangeBattleTests
     #region Basic Integer Ranges
 
     [TestMethod]
-    public async Task Arange_StopOnly_Zero_ReturnsEmptyInt64()
+    public void Arange_StopOnly_Zero_ReturnsEmptyInt64()
     {
         // np.arange(0): array([], dtype=int64)
         var result = np.arange(0);
@@ -27,7 +26,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StopOnly_One_ReturnsSingleElementInt64()
+    public void Arange_StopOnly_One_ReturnsSingleElementInt64()
     {
         // np.arange(1): array([0]) dtype=int64
         var result = np.arange(1);
@@ -37,7 +36,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StopOnly_Five_ReturnsZeroToFourInt64()
+    public void Arange_StopOnly_Five_ReturnsZeroToFourInt64()
     {
         // np.arange(5): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(5);
@@ -47,7 +46,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StopOnly_Ten_ReturnsZeroToNineInt64()
+    public void Arange_StopOnly_Ten_ReturnsZeroToNineInt64()
     {
         // np.arange(10): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) dtype=int64
         var result = np.arange(10);
@@ -61,7 +60,7 @@ public class ArangeBattleTests
     #region Start and Stop
 
     [TestMethod]
-    public async Task Arange_StartStop_ZeroToFive()
+    public void Arange_StartStop_ZeroToFive()
     {
         // np.arange(0, 5): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(0, 5);
@@ -71,7 +70,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StartStop_OneToFive()
+    public void Arange_StartStop_OneToFive()
     {
         // np.arange(1, 5): array([1, 2, 3, 4]) dtype=int64
         var result = np.arange(1, 5);
@@ -81,7 +80,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StartStop_FiveToTen()
+    public void Arange_StartStop_FiveToTen()
     {
         // np.arange(5, 10): array([5, 6, 7, 8, 9]) dtype=int64
         var result = np.arange(5, 10);
@@ -91,7 +90,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StartStop_NegativeFiveToFive()
+    public void Arange_StartStop_NegativeFiveToFive()
     {
         // np.arange(-5, 5): array([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(-5, 5);
@@ -101,7 +100,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_StartStop_NegativeTenToNegativeFive()
+    public void Arange_StartStop_NegativeTenToNegativeFive()
     {
         // np.arange(-10, -5): array([-10, -9, -8, -7, -6]) dtype=int64
         var result = np.arange(-10, -5);
@@ -115,7 +114,7 @@ public class ArangeBattleTests
     #region With Step
 
     [TestMethod]
-    public async Task Arange_WithStep_ZeroToTenByTwo()
+    public void Arange_WithStep_ZeroToTenByTwo()
     {
         // np.arange(0, 10, 2): array([0, 2, 4, 6, 8]) dtype=int64
         var result = np.arange(0, 10, 2);
@@ -125,7 +124,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_WithStep_ZeroToTenByThree()
+    public void Arange_WithStep_ZeroToTenByThree()
     {
         // np.arange(0, 10, 3): array([0, 3, 6, 9]) dtype=int64
         var result = np.arange(0, 10, 3);
@@ -135,7 +134,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_WithStep_OneToTenByTwo()
+    public void Arange_WithStep_OneToTenByTwo()
     {
         // np.arange(1, 10, 2): array([1, 3, 5, 7, 9]) dtype=int64
         var result = np.arange(1, 10, 2);
@@ -149,7 +148,7 @@ public class ArangeBattleTests
     #region Negative Step
 
     [TestMethod]
-    public async Task Arange_NegativeStep_TenToZeroByMinusOne()
+    public void Arange_NegativeStep_TenToZeroByMinusOne()
     {
         // np.arange(10, 0, -1): array([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]) dtype=int64
         var result = np.arange(10, 0, -1);
@@ -159,7 +158,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NegativeStep_TenToZeroByMinusTwo()
+    public void Arange_NegativeStep_TenToZeroByMinusTwo()
     {
         // np.arange(10, 0, -2): array([10, 8, 6, 4, 2]) dtype=int64
         var result = np.arange(10, 0, -2);
@@ -169,7 +168,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NegativeStep_FiveToNegativeFiveByMinusOne()
+    public void Arange_NegativeStep_FiveToNegativeFiveByMinusOne()
     {
         // np.arange(5, -5, -1): array([5, 4, 3, 2, 1, 0, -1, -2, -3, -4]) dtype=int64
         var result = np.arange(5, -5, -1);
@@ -179,7 +178,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NegativeStep_FiveToNegativeFiveByMinusTwo()
+    public void Arange_NegativeStep_FiveToNegativeFiveByMinusTwo()
     {
         // np.arange(5, -5, -2): array([5, 3, 1, -1, -3]) dtype=int64
         var result = np.arange(5, -5, -2);
@@ -189,7 +188,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NegativeStep_NegativeOneToNegativeTenByMinusOne()
+    public void Arange_NegativeStep_NegativeOneToNegativeTenByMinusOne()
     {
         // np.arange(-1, -10, -1): array([-1, -2, -3, -4, -5, -6, -7, -8, -9]) dtype=int64
         var result = np.arange(-1, -10, -1);
@@ -203,7 +202,7 @@ public class ArangeBattleTests
     #region Empty Arrays
 
     [TestMethod]
-    public async Task Arange_Empty_StartGreaterThanStop()
+    public void Arange_Empty_StartGreaterThanStop()
     {
         // np.arange(5, 0): array([], dtype=int64)
         var result = np.arange(5, 0);
@@ -213,7 +212,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Empty_StartEqualsStop()
+    public void Arange_Empty_StartEqualsStop()
     {
         // np.arange(5, 5): array([], dtype=int64)
         var result = np.arange(5, 5);
@@ -223,7 +222,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Empty_ZeroToNegative()
+    public void Arange_Empty_ZeroToNegative()
     {
         // np.arange(0, -5): array([], dtype=int64)
         var result = np.arange(0, -5);
@@ -233,7 +232,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Empty_WrongStepDirection()
+    public void Arange_Empty_WrongStepDirection()
     {
         // np.arange(0, 5, -1): array([], dtype=int64)
         var result = np.arange(0, 5, -1);
@@ -247,7 +246,7 @@ public class ArangeBattleTests
     #region Float Ranges
 
     [TestMethod]
-    public async Task Arange_Float_ZeroToFive()
+    public void Arange_Float_ZeroToFive()
     {
         // np.arange(0.0, 5.0): array([0., 1., 2., 3., 4.]) dtype=float64
         var result = np.arange(0.0, 5.0);
@@ -257,7 +256,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float_ZeroToOneByPointOne()
+    public void Arange_Float_ZeroToOneByPointOne()
     {
         // np.arange(0.0, 1.0, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.1);
@@ -270,7 +269,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float_ZeroToOneByPointTwo()
+    public void Arange_Float_ZeroToOneByPointTwo()
     {
         // np.arange(0.0, 1.0, 0.2): array([0., 0.2, 0.4, 0.6, 0.8]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.2);
@@ -280,7 +279,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float_ZeroToOneByPointThree()
+    public void Arange_Float_ZeroToOneByPointThree()
     {
         // np.arange(0.0, 1.0, 0.3): array([0., 0.3, 0.6, 0.9]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.3);
@@ -290,7 +289,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float_HalfToFivePointFive()
+    public void Arange_Float_HalfToFivePointFive()
     {
         // np.arange(0.5, 5.5): array([0.5, 1.5, 2.5, 3.5, 4.5]) dtype=float64
         var result = np.arange(0.5, 5.5);
@@ -300,7 +299,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float_OnePointFiveToFivePointFiveByHalf()
+    public void Arange_Float_OnePointFiveToFivePointFiveByHalf()
     {
         // np.arange(1.5, 5.5, 0.5): array([1.5, 2., 2.5, 3., 3.5, 4., 4.5, 5.]) dtype=float64
         var result = np.arange(1.5, 5.5, 0.5);
@@ -314,7 +313,7 @@ public class ArangeBattleTests
     #region Float Negative Step
 
     [TestMethod]
-    public async Task Arange_FloatNegativeStep_FiveToZeroByMinusOne()
+    public void Arange_FloatNegativeStep_FiveToZeroByMinusOne()
     {
         // np.arange(5.0, 0.0, -1.0): array([5., 4., 3., 2., 1.]) dtype=float64
         var result = np.arange(5.0, 0.0, -1.0);
@@ -324,7 +323,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_FloatNegativeStep_OneToZeroByMinusPointTwo()
+    public void Arange_FloatNegativeStep_OneToZeroByMinusPointTwo()
     {
         // np.arange(1.0, 0.0, -0.2): array([1., 0.8, 0.6, 0.4, 0.2]) dtype=float64
         var result = np.arange(1.0, 0.0, -0.2);
@@ -340,7 +339,7 @@ public class ArangeBattleTests
     #region With dtype Parameter
 
     [TestMethod]
-    public async Task Arange_Dtype_Int32()
+    public void Arange_Dtype_Int32()
     {
         // np.arange(5, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(5, typeof(int));
@@ -350,7 +349,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_Int64()
+    public void Arange_Dtype_Int64()
     {
         // np.arange(5, dtype=np.int64): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(5, typeof(long));
@@ -360,7 +359,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_Float32()
+    public void Arange_Dtype_Float32()
     {
         // np.arange(5, dtype=np.float32): array([0., 1., 2., 3., 4.], dtype=float32)
         var result = np.arange(5, typeof(float));
@@ -370,7 +369,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_Float64()
+    public void Arange_Dtype_Float64()
     {
         // np.arange(5, dtype=np.float64): array([0., 1., 2., 3., 4.]) dtype=float64
         var result = np.arange(5, typeof(double));
@@ -380,7 +379,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_FloatInputToInt32()
+    public void Arange_Dtype_FloatInputToInt32()
     {
         // np.arange(5.0, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(5.0, typeof(int));
@@ -390,7 +389,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_WithStepToFloat32()
+    public void Arange_Dtype_WithStepToFloat32()
     {
         // np.arange(0, 10, 2, dtype=np.float32): array([0., 2., 4., 6., 8.], dtype=float32)
         var result = np.arange(0, 10, 2, typeof(float));
@@ -400,7 +399,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_FloatRangeToInt32()
+    public void Arange_Dtype_FloatRangeToInt32()
     {
         // np.arange(0.0, 5.0, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(0.0, 5.0, 1.0, typeof(int));
@@ -414,7 +413,7 @@ public class ArangeBattleTests
     #region Various Integer dtypes
 
     [TestMethod]
-    public async Task Arange_Dtype_UInt8()
+    public void Arange_Dtype_UInt8()
     {
         // np.arange(10, dtype=np.uint8): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint8)
         var result = np.arange(10, typeof(byte));
@@ -424,7 +423,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_Int16()
+    public void Arange_Dtype_Int16()
     {
         // np.arange(10, dtype=np.int16): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=int16)
         var result = np.arange(10, typeof(short));
@@ -434,7 +433,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_UInt16()
+    public void Arange_Dtype_UInt16()
     {
         // np.arange(10, dtype=np.uint16): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint16)
         var result = np.arange(10, typeof(ushort));
@@ -444,7 +443,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_UInt32()
+    public void Arange_Dtype_UInt32()
     {
         // np.arange(10, dtype=np.uint32): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint32)
         var result = np.arange(10, typeof(uint));
@@ -454,7 +453,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Dtype_UInt64()
+    public void Arange_Dtype_UInt64()
     {
         // np.arange(10, dtype=np.uint64): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint64)
         var result = np.arange(10, typeof(ulong));
@@ -468,7 +467,7 @@ public class ArangeBattleTests
     #region Large Ranges
 
     [TestMethod]
-    public async Task Arange_Large_Thousand()
+    public void Arange_Large_Thousand()
     {
         // np.arange(1000).shape: (1000,)
         var result = np.arange(1000);
@@ -480,7 +479,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Large_WithStep()
+    public void Arange_Large_WithStep()
     {
         // np.arange(0, 1000000, 1000).shape: (1000,)
         // np.arange(0, 1000000, 1000)[-5:]: array([995000, 996000, 997000, 998000, 999000])
@@ -499,7 +498,7 @@ public class ArangeBattleTests
     #region Floating Point Edge Cases
 
     [TestMethod]
-    public async Task Arange_FloatEdge_PointOneToPointFour()
+    public void Arange_FloatEdge_PointOneToPointFour()
     {
         // np.arange(0.1, 0.4, 0.1): array([0.1, 0.2, 0.3, 0.4]) len=4
         // Note: NumPy includes 0.4 due to floating point rounding
@@ -511,7 +510,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_FloatEdge_ZeroToPointSix()
+    public void Arange_FloatEdge_ZeroToPointSix()
     {
         // np.arange(0.0, 0.6, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5]) len=6
         var result = np.arange(0.0, 0.6, 0.1);
@@ -521,7 +520,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_FloatEdge_ZeroToPointSeven()
+    public void Arange_FloatEdge_ZeroToPointSeven()
     {
         // np.arange(0.0, 0.7, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) len=7
         var result = np.arange(0.0, 0.7, 0.1);
@@ -535,7 +534,7 @@ public class ArangeBattleTests
     #region NPTypeCode Overloads
 
     [TestMethod]
-    public async Task Arange_NPTypeCode_Int32()
+    public void Arange_NPTypeCode_Int32()
     {
         var result = np.arange(5, NPTypeCode.Int32);
 
@@ -544,7 +543,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NPTypeCode_WithStartStop()
+    public void Arange_NPTypeCode_WithStartStop()
     {
         var result = np.arange(2, 8, NPTypeCode.Int16);
 
@@ -553,7 +552,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_NPTypeCode_WithStep()
+    public void Arange_NPTypeCode_WithStep()
     {
         var result = np.arange(0, 10, 2, NPTypeCode.Single);
 
@@ -566,7 +565,7 @@ public class ArangeBattleTests
     #region Single-Precision Float (float32)
 
     [TestMethod]
-    public async Task Arange_Float32_Basic()
+    public void Arange_Float32_Basic()
     {
         // Explicit float overload
         var result = np.arange(0f, 5f);
@@ -576,7 +575,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float32_WithStep()
+    public void Arange_Float32_WithStep()
     {
         var result = np.arange(0f, 2f, 0.5f);
 
@@ -585,7 +584,7 @@ public class ArangeBattleTests
     }
 
     [TestMethod]
-    public async Task Arange_Float32_NegativeStep()
+    public void Arange_Float32_NegativeStep()
     {
         var result = np.arange(5f, 0f, -1f);
 
@@ -598,15 +597,15 @@ public class ArangeBattleTests
     #region Error Cases
 
     [TestMethod]
-    public async Task Arange_ZeroStep_ThrowsArgumentException()
+    public void Arange_ZeroStep_ThrowsArgumentException()
     {
-        await Assert.ThrowsAsync<ArgumentException>(async () => np.arange(0, 10, 0));
+        new Action(() => np.arange(0, 10, 0)).Should().Throw<ArgumentException>();
     }
 
     [TestMethod]
-    public async Task Arange_ZeroStepFloat_ThrowsArgumentException()
+    public void Arange_ZeroStepFloat_ThrowsArgumentException()
     {
-        await Assert.ThrowsAsync<ArgumentException>(async () => np.arange(0.0, 10.0, 0.0));
+        new Action(() => np.arange(0.0, 10.0, 0.0)).Should().Throw<ArgumentException>();
     }
 
     #endregion
@@ -618,7 +617,7 @@ public class ArangeBattleTests
     /// For arange(0, 5, 0.5, int32): delta = int(0.5) - int(0) = 0, so all values are 0.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FractionalStep_IntDtype_ZeroDelta()
+    public void Arange_FractionalStep_IntDtype_ZeroDelta()
     {
         // np.arange(0, 5, 0.5, dtype=np.int32) → [0,0,0,0,0,0,0,0,0,0]
         // NumPy: int(0)=0, int(0+0.5)=0, delta=0, all values=0
@@ -635,7 +634,7 @@ public class ArangeBattleTests
     /// Values decrement by 1, not by 0.5.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FractionalNegativeStep_IntDtype_IntegerDelta()
+    public void Arange_FractionalNegativeStep_IntDtype_IntegerDelta()
     {
         // np.arange(5, 0, -0.5, dtype=np.int32) → [5,4,3,2,1,0,-1,-2,-3,-4]
         // NumPy: int(5)=5, int(5-0.5)=4, delta=-1
@@ -651,7 +650,7 @@ public class ArangeBattleTests
     /// For arange(0, 5, 0.7, int32): delta = int(0.7) - int(0) = 0.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FractionalStep_0_7_IntDtype()
+    public void Arange_FractionalStep_0_7_IntDtype()
     {
         // np.arange(0, 5, 0.7, dtype=np.int32) → [0,0,0,0,0,0,0,0]
         var result = np.arange(0, 5, 0.7, typeof(int));
@@ -665,7 +664,7 @@ public class ArangeBattleTests
     /// For arange(5, 0, -0.7, int32): delta = int(4.3) - int(5) = 4 - 5 = -1.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FractionalNegativeStep_0_7_IntDtype()
+    public void Arange_FractionalNegativeStep_0_7_IntDtype()
     {
         // np.arange(5, 0, -0.7, dtype=np.int32) → [5,4,3,2,1,0,-1,-2]
         var result = np.arange(5, 0, -0.7, typeof(int));
@@ -679,7 +678,7 @@ public class ArangeBattleTests
     /// Float start with integer step and int dtype works correctly.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FloatStart_IntStep_IntDtype()
+    public void Arange_FloatStart_IntStep_IntDtype()
     {
         // np.arange(0.5, 5.5, 1, dtype=np.int32) → [0,1,2,3,4]
         // NumPy: int(0.5)=0, int(1.5)=1, delta=1
@@ -693,7 +692,7 @@ public class ArangeBattleTests
     /// Another float start case.
     /// </summary>
     [TestMethod]
-    public async Task Arange_FloatStart_0_9_IntDtype()
+    public void Arange_FloatStart_0_9_IntDtype()
     {
         // np.arange(0.9, 5.9, 1, dtype=np.int32) → [0,1,2,3,4]
         var result = np.arange(0.9, 5.9, 1, typeof(int));

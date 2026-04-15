@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -12,7 +11,7 @@ public class NpIInfoBattleTests
     #region All Integer Types Coverage
 
     [TestMethod]
-    public async Task IInfo_Boolean_AllProperties()
+    public void IInfo_Boolean_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Boolean);
         info.bits.Should().Be(8);
@@ -24,7 +23,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Byte_AllProperties()
+    public void IInfo_Byte_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Byte);
         info.bits.Should().Be(8);
@@ -35,7 +34,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Int16_AllProperties()
+    public void IInfo_Int16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int16);
         info.bits.Should().Be(16);
@@ -45,7 +44,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_UInt16_AllProperties()
+    public void IInfo_UInt16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt16);
         info.bits.Should().Be(16);
@@ -55,7 +54,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Int32_AllProperties()
+    public void IInfo_Int32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int32);
         info.bits.Should().Be(32);
@@ -65,7 +64,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_UInt32_AllProperties()
+    public void IInfo_UInt32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt32);
         info.bits.Should().Be(32);
@@ -75,7 +74,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Int64_AllProperties()
+    public void IInfo_Int64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int64);
         info.bits.Should().Be(64);
@@ -85,7 +84,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_UInt64_AllProperties()
+    public void IInfo_UInt64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
         info.bits.Should().Be(64);
@@ -96,7 +95,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Char_AllProperties()
+    public void IInfo_Char_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Char);
         info.bits.Should().Be(16);
@@ -110,49 +109,49 @@ public class NpIInfoBattleTests
     #region Error Cases
 
     [TestMethod]
-    public async Task IInfo_Single_Throws()
+    public void IInfo_Single_Throws()
     {
         new Action(() => np.iinfo(NPTypeCode.Single)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_Double_Throws()
+    public void IInfo_Double_Throws()
     {
         new Action(() => np.iinfo(NPTypeCode.Double)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_Decimal_Throws()
+    public void IInfo_Decimal_Throws()
     {
         new Action(() => np.iinfo(NPTypeCode.Decimal)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_Empty_Throws()
+    public void IInfo_Empty_Throws()
     {
         new Action(() => np.iinfo(NPTypeCode.Empty)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_NullType_Throws()
+    public void IInfo_NullType_Throws()
     {
         new Action(() => np.iinfo((Type)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_NullArray_Throws()
+    public void IInfo_NullArray_Throws()
     {
         new Action(() => np.iinfo((NDArray)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_EmptyDtypeString_Throws()
+    public void IInfo_EmptyDtypeString_Throws()
     {
         new Action(() => np.iinfo("")).Should().Throw<Exception>();
     }
 
     [TestMethod]
-    public async Task IInfo_InvalidDtypeString_Throws()
+    public void IInfo_InvalidDtypeString_Throws()
     {
         new Action(() => np.iinfo("float32")).Should().Throw<Exception>();
     }
@@ -162,7 +161,7 @@ public class NpIInfoBattleTests
     #region Generic Overload Tests
 
     [TestMethod]
-    public async Task IInfo_Generic_Int()
+    public void IInfo_Generic_Int()
     {
         var info = np.iinfo<int>();
         info.bits.Should().Be(32);
@@ -171,7 +170,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Generic_Byte()
+    public void IInfo_Generic_Byte()
     {
         var info = np.iinfo<byte>();
         info.bits.Should().Be(8);
@@ -179,14 +178,14 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Generic_Long()
+    public void IInfo_Generic_Long()
     {
         var info = np.iinfo<long>();
         info.bits.Should().Be(64);
     }
 
     [TestMethod]
-    public async Task IInfo_Generic_Bool()
+    public void IInfo_Generic_Bool()
     {
         var info = np.iinfo<bool>();
         info.bits.Should().Be(8);
@@ -194,7 +193,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_Generic_Float_Throws()
+    public void IInfo_Generic_Float_Throws()
     {
         new Action(() => np.iinfo<float>()).Should().Throw<Exception>();
     }
@@ -204,7 +203,7 @@ public class NpIInfoBattleTests
     #region NDArray Overload Tests
 
     [TestMethod]
-    public async Task IInfo_NDArray_Int32()
+    public void IInfo_NDArray_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
         var info = np.iinfo(arr);
@@ -213,7 +212,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_NDArray_Byte()
+    public void IInfo_NDArray_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
         var info = np.iinfo(arr);
@@ -221,7 +220,7 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public async Task IInfo_NDArray_Float_Throws()
+    public void IInfo_NDArray_Float_Throws()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
         new Action(() => np.iinfo(arr)).Should().Throw<Exception>();
@@ -235,28 +234,28 @@ public class NpIInfoBattleTests
     // NumPy-style names like "int32" are not fully supported yet
 
     [TestMethod]
-    public async Task IInfo_String_Int()
+    public void IInfo_String_Int()
     {
         var info = np.iinfo("int");  // defaults to int32
         info.bits.Should().Be(32);
     }
 
     [TestMethod]
-    public async Task IInfo_String_I4()
+    public void IInfo_String_I4()
     {
         var info = np.iinfo("i4");  // int32
         info.bits.Should().Be(32);
     }
 
     [TestMethod]
-    public async Task IInfo_String_I8()
+    public void IInfo_String_I8()
     {
         var info = np.iinfo("i8");  // int64
         info.bits.Should().Be(64);
     }
 
     [TestMethod]
-    public async Task IInfo_String_Bool()
+    public void IInfo_String_Bool()
     {
         var info = np.iinfo("bool");
         info.bits.Should().Be(8);
@@ -267,7 +266,7 @@ public class NpIInfoBattleTests
     #region ToString Tests
 
     [TestMethod]
-    public async Task IInfo_ToString_ContainsExpectedInfo()
+    public void IInfo_ToString_ContainsExpectedInfo()
     {
         var info = np.iinfo(NPTypeCode.Int32);
         var str = info.ToString();
@@ -281,7 +280,7 @@ public class NpIInfoBattleTests
     #region UInt64 Max Value Edge Case
 
     [TestMethod]
-    public async Task IInfo_UInt64_MaxExceedsLongMaxValue()
+    public void IInfo_UInt64_MaxExceedsLongMaxValue()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
         info.maxUnsigned.Should().Be(ulong.MaxValue);

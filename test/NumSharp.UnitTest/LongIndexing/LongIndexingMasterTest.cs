@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
@@ -48,7 +47,7 @@ public class LongIndexingMasterTest
     /// </summary>
     [TestMethod]
     [TestCategory("Explicit")] // Requires ~8GB+ RAM. Run manually with: dotnet test --filter "TestCategory=LongIndexing"
-    public async Task AllNpFunctions_WithLargeArrays()
+    public void AllNpFunctions_WithLargeArrays()
     {
         var results = new System.Collections.Generic.List<(string Operation, bool Success, string Error, TimeSpan Duration)>();
 

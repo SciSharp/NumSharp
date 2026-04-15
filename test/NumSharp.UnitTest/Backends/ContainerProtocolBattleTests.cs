@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Backends;
@@ -17,7 +16,7 @@ public class ContainerProtocolBattleTests
     #region __len__ Battle Tests
 
     [TestMethod]
-    public async Task Len_AllDtypes_1DArray()
+    public void Len_AllDtypes_1DArray()
     {
         // Test __len__ works for all 12 dtypes
         np.array(new bool[] { true, false, true }).__len__().Should().Be(3);
@@ -35,7 +34,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_3DArray_ReturnsFirstDimension()
+    public void Len_3DArray_ReturnsFirstDimension()
     {
         // NumPy: len(np.zeros((2, 3, 4))) = 2
         var arr = np.zeros(new[] { 2, 3, 4 });
@@ -43,14 +42,14 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_4DArray_ReturnsFirstDimension()
+    public void Len_4DArray_ReturnsFirstDimension()
     {
         var arr = np.zeros(new[] { 5, 4, 3, 2 });
         arr.__len__().Should().Be(5);
     }
 
     [TestMethod]
-    public async Task Len_EmptyArray_ReturnsZero()
+    public void Len_EmptyArray_ReturnsZero()
     {
         // NumPy: len(np.array([])) = 0
         var arr = np.array(Array.Empty<int>());
@@ -58,7 +57,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_EmptyArray_2D_ReturnsZero()
+    public void Len_EmptyArray_2D_ReturnsZero()
     {
         // NumPy: len(np.zeros((0, 5))) = 0
         var arr = np.zeros(new[] { 0, 5 });
@@ -66,7 +65,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_SlicedArray_ReturnsCorrectLength()
+    public void Len_SlicedArray_ReturnsCorrectLength()
     {
         var arr = np.arange(10);
         var sliced = arr["2:7"]; // [2, 3, 4, 5, 6]
@@ -74,7 +73,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_SlicedArray_Strided_ReturnsCorrectLength()
+    public void Len_SlicedArray_Strided_ReturnsCorrectLength()
     {
         var arr = np.arange(10);
         var sliced = arr["::2"]; // [0, 2, 4, 6, 8]
@@ -82,7 +81,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_SlicedArray_Reversed_ReturnsCorrectLength()
+    public void Len_SlicedArray_Reversed_ReturnsCorrectLength()
     {
         var arr = np.arange(10);
         var sliced = arr["::-1"]; // [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
@@ -90,7 +89,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_TransposedArray_ReturnsFirstDimension()
+    public void Len_TransposedArray_ReturnsFirstDimension()
     {
         // NumPy: len(np.zeros((3, 5)).T) = 5
         var arr = np.zeros(new[] { 3, 5 });
@@ -99,14 +98,14 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_ReshapedArray_ReturnsFirstDimension()
+    public void Len_ReshapedArray_ReturnsFirstDimension()
     {
         var arr = np.arange(12).reshape(3, 4);
         arr.__len__().Should().Be(3);
     }
 
     [TestMethod]
-    public async Task Len_BroadcastArray_ReturnsFirstDimension()
+    public void Len_BroadcastArray_ReturnsFirstDimension()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         var broadcast = np.broadcast_to(arr, new Shape(4, 3));
@@ -114,14 +113,14 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Len_SingleElementArray_ReturnsOne()
+    public void Len_SingleElementArray_ReturnsOne()
     {
         var arr = np.array(new[] { 42 });
         arr.__len__().Should().Be(1);
     }
 
     [TestMethod]
-    public async Task Len_ScalarAllDtypes_ThrowsTypeError()
+    public void Len_ScalarAllDtypes_ThrowsTypeError()
     {
         // All scalar types should throw TypeError
         Assert.Throws<TypeError>(() => NDArray.Scalar(true).__len__());
@@ -143,7 +142,7 @@ public class ContainerProtocolBattleTests
     #region __getitem__ Battle Tests
 
     [TestMethod]
-    public async Task GetItem_AllDtypes_IntIndex()
+    public void GetItem_AllDtypes_IntIndex()
     {
         ((bool)np.array(new[] { true, false }).__getitem__(0)).Should().BeTrue();
         ((int)(byte)np.array(new byte[] { 1, 2 }).__getitem__(1)).Should().Be(2);
@@ -160,7 +159,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_NegativeIndex_AllPositions()
+    public void GetItem_NegativeIndex_AllPositions()
     {
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
 
@@ -172,7 +171,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_SliceStrings_Various()
+    public void GetItem_SliceStrings_Various()
     {
         var arr = np.array(new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
 
@@ -202,7 +201,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_2DArray_RowAccess()
+    public void GetItem_2DArray_RowAccess()
     {
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
 
@@ -217,7 +216,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_SliceReturnsView_NotCopy()
+    public void GetItem_SliceReturnsView_NotCopy()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         var slice = arr.__getitem__("1:4");
@@ -230,7 +229,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_OutOfBounds_Throws()
+    public void GetItem_OutOfBounds_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
@@ -239,7 +238,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_EmptySlice_ReturnsEmptyArray()
+    public void GetItem_EmptySlice_ReturnsEmptyArray()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         var empty = arr.__getitem__("2:2"); // Empty slice
@@ -248,7 +247,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task GetItem_SlicedSourceArray()
+    public void GetItem_SlicedSourceArray()
     {
         var arr = np.arange(20);
         var sliced = arr["5:15"]; // [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
@@ -263,7 +262,7 @@ public class ContainerProtocolBattleTests
     #region __setitem__ Battle Tests
 
     [TestMethod]
-    public async Task SetItem_AllDtypes_ScalarAssignment()
+    public void SetItem_AllDtypes_ScalarAssignment()
     {
         var boolArr = np.array(new[] { true, false });
         boolArr.__setitem__(0, false);
@@ -279,7 +278,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_NegativeIndex()
+    public void SetItem_NegativeIndex()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
@@ -291,7 +290,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_SliceString_ScalarBroadcast()
+    public void SetItem_SliceString_ScalarBroadcast()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
@@ -305,7 +304,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_SliceString_ArrayAssignment()
+    public void SetItem_SliceString_ArrayAssignment()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
@@ -319,7 +318,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_ViewAffectsOriginal()
+    public void SetItem_ViewAffectsOriginal()
     {
         var original = np.array(new[] { 1, 2, 3, 4, 5 });
         var view = original["1:4"];
@@ -330,7 +329,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_2DArray_RowAssignment()
+    public void SetItem_2DArray_RowAssignment()
     {
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
 
@@ -342,7 +341,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_TypePromotion()
+    public void SetItem_TypePromotion()
     {
         var arr = np.array(new[] { 1.0, 2.0, 3.0 });
 
@@ -353,7 +352,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_AllElements_WithColon()
+    public void SetItem_AllElements_WithColon()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
@@ -363,7 +362,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task SetItem_ReversedSlice()
+    public void SetItem_ReversedSlice()
     {
         // NumPy: arr[::-1] = [10, 20, 30, 40, 50] assigns in reverse order
         // arr[4]=10, arr[3]=20, arr[2]=30, arr[1]=40, arr[0]=50
@@ -381,7 +380,7 @@ public class ContainerProtocolBattleTests
     #region __hash__ Battle Tests
 
     [TestMethod]
-    public async Task Hash_AllDtypes_Throw()
+    public void Hash_AllDtypes_Throw()
     {
         Assert.Throws<NotSupportedException>(() => np.array(new[] { true, false }).GetHashCode());
         Assert.Throws<NotSupportedException>(() => np.array(new byte[] { 1, 2 }).GetHashCode());
@@ -398,19 +397,19 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Hash_EmptyArray_Throws()
+    public void Hash_EmptyArray_Throws()
     {
         Assert.Throws<NotSupportedException>(() => np.array(Array.Empty<int>()).GetHashCode());
     }
 
     [TestMethod]
-    public async Task Hash_ScalarArray_Throws()
+    public void Hash_ScalarArray_Throws()
     {
         Assert.Throws<NotSupportedException>(() => NDArray.Scalar(5).GetHashCode());
     }
 
     [TestMethod]
-    public async Task Hash_SlicedArray_Throws()
+    public void Hash_SlicedArray_Throws()
     {
         var arr = np.arange(10);
         var sliced = arr["2:8"];
@@ -418,7 +417,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Hash_BroadcastArray_Throws()
+    public void Hash_BroadcastArray_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         var broadcast = np.broadcast_to(arr, new Shape(4, 3));
@@ -426,7 +425,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Hash_HashSetUsage_Fails()
+    public void Hash_HashSetUsage_Fails()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         var set = new HashSet<object>();
@@ -435,7 +434,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Hash_ErrorMessage_IsDescriptive()
+    public void Hash_ErrorMessage_IsDescriptive()
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
@@ -456,7 +455,7 @@ public class ContainerProtocolBattleTests
     #region __contains__ Battle Tests
 
     [TestMethod]
-    public async Task Contains_AllDtypes()
+    public void Contains_AllDtypes()
     {
         np.array(new[] { true, false }).Contains(true).Should().BeTrue();
         np.array(new byte[] { 1, 2, 3 }).Contains(((byte)2)).Should().BeTrue();
@@ -473,7 +472,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_LargeArray()
+    public void Contains_LargeArray()
     {
         var arr = np.arange(10000);
 
@@ -484,7 +483,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_Infinity()
+    public void Contains_Infinity()
     {
         var arr = np.array(new[] { double.NegativeInfinity, 0.0, double.PositiveInfinity });
 
@@ -494,7 +493,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_NegativeValues()
+    public void Contains_NegativeValues()
     {
         var arr = np.array(new[] { -5, -3, -1, 0, 1, 3, 5 });
 
@@ -503,7 +502,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_3DArray()
+    public void Contains_3DArray()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
 
@@ -514,7 +513,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_SlicedArray()
+    public void Contains_SlicedArray()
     {
         var arr = np.arange(10);
         var sliced = arr["3:7"]; // [3, 4, 5, 6]
@@ -525,7 +524,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_StridedArray()
+    public void Contains_StridedArray()
     {
         var arr = np.arange(10);
         var strided = arr["::2"]; // [0, 2, 4, 6, 8]
@@ -535,7 +534,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_BroadcastArray()
+    public void Contains_BroadcastArray()
     {
         var arr = np.array(new[] { 1, 2, 3 });
         var broadcast = np.broadcast_to(arr, new Shape(4, 3));
@@ -545,7 +544,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Contains_ScalarArray()
+    public void Contains_ScalarArray()
     {
         var scalar = NDArray.Scalar(42);
 
@@ -558,7 +557,7 @@ public class ContainerProtocolBattleTests
     #region __iter__ Battle Tests
 
     [TestMethod]
-    public async Task Iter_AllDtypes_Enumerate()
+    public void Iter_AllDtypes_Enumerate()
     {
         // Just verify iteration doesn't crash for all types
         foreach (var _ in np.array(new[] { true, false })) { }
@@ -578,7 +577,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_1DArray_ElementsMatch()
+    public void Iter_1DArray_ElementsMatch()
     {
         var arr = np.array(new[] { 10, 20, 30 });
         var collected = new List<int>();
@@ -593,7 +592,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_2DArray_IteratesRows()
+    public void Iter_2DArray_IteratesRows()
     {
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
         var rowCount = 0;
@@ -613,7 +612,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_3DArray_Iterates2DSlices()
+    public void Iter_3DArray_Iterates2DSlices()
     {
         var arr = np.zeros(new[] { 2, 3, 4 });
         var sliceCount = 0;
@@ -633,7 +632,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_EmptyArray_NoIterations()
+    public void Iter_EmptyArray_NoIterations()
     {
         var arr = np.array(Array.Empty<int>());
         var count = 0;
@@ -647,7 +646,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_SingleElement_OneIteration()
+    public void Iter_SingleElement_OneIteration()
     {
         var arr = np.array(new[] { 42 });
         var count = 0;
@@ -665,7 +664,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_MultipleEnumeration()
+    public void Iter_MultipleEnumeration()
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
@@ -683,7 +682,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_LINQ_ToList()
+    public void Iter_LINQ_ToList()
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
@@ -693,7 +692,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_LINQ_Count()
+    public void Iter_LINQ_Count()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
@@ -703,7 +702,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_SlicedArray()
+    public void Iter_SlicedArray()
     {
         var arr = np.arange(10);
         var sliced = arr["2:7"];
@@ -716,7 +715,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_BreakEarly()
+    public void Iter_BreakEarly()
     {
         var arr = np.arange(100);
         var count = 0;
@@ -732,7 +731,7 @@ public class ContainerProtocolBattleTests
     }
 
     [TestMethod]
-    public async Task Iter_ScalarArray_ThrowsTypeError()
+    public void Iter_ScalarArray_ThrowsTypeError()
     {
         // NumPy: iteration over a 0-d array throws TypeError
         var scalar = NDArray.Scalar(42);

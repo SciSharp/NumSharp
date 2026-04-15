@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
@@ -18,7 +17,7 @@ public class ArgsortNaNTests
     #region NaN Handling
 
     [TestMethod]
-    public async Task Argsort_NaN_SortsToEnd()
+    public void Argsort_NaN_SortsToEnd()
     {
         // NumPy: np.argsort([nan, 1, 2]) = [1, 2, 0]
         // NaN should be at the end
@@ -31,7 +30,7 @@ public class ArgsortNaNTests
     }
 
     [TestMethod]
-    public async Task Argsort_MultipleNaN_SortToEnd()
+    public void Argsort_MultipleNaN_SortToEnd()
     {
         // NumPy: np.argsort([nan, 1, nan, 2]) = [1, 3, 0, 2]
         // All NaN values at the end, maintaining relative order
@@ -50,7 +49,7 @@ public class ArgsortNaNTests
     #region Inf Handling
 
     [TestMethod]
-    public async Task Argsort_Inf_SortsCorrectly()
+    public void Argsort_Inf_SortsCorrectly()
     {
         // NumPy: np.argsort([inf, -inf, 0]) = [1, 2, 0]
         // -inf first, then 0, then inf
@@ -63,7 +62,7 @@ public class ArgsortNaNTests
     }
 
     [TestMethod]
-    public async Task Argsort_InfAndNaN_SortsCorrectly()
+    public void Argsort_InfAndNaN_SortsCorrectly()
     {
         // NumPy: np.argsort([nan, inf, -inf, 0]) = [2, 3, 1, 0]
         // Order: -inf, 0, +inf, nan
@@ -81,7 +80,7 @@ public class ArgsortNaNTests
     #region Float32 Tests
 
     [TestMethod]
-    public async Task Argsort_Float32_NaN_SortsToEnd()
+    public void Argsort_Float32_NaN_SortsToEnd()
     {
         // Same behavior for float32
         var a = np.array(new float[] { float.NaN, 1.0f, 2.0f });
@@ -93,7 +92,7 @@ public class ArgsortNaNTests
     }
 
     [TestMethod]
-    public async Task Argsort_Float32_InfAndNaN_SortsCorrectly()
+    public void Argsort_Float32_InfAndNaN_SortsCorrectly()
     {
         var a = np.array(new float[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity, 0.0f });
         var result = np.argsort<float>(a);
@@ -109,7 +108,7 @@ public class ArgsortNaNTests
     #region Basic Argsort (No NaN)
 
     [TestMethod]
-    public async Task Argsort_Normal_SortsCorrectly()
+    public void Argsort_Normal_SortsCorrectly()
     {
         // NumPy: np.argsort([3, 1, 2]) = [1, 2, 0]
         var a = np.array(new double[] { 3.0, 1.0, 2.0 });
@@ -121,7 +120,7 @@ public class ArgsortNaNTests
     }
 
     [TestMethod]
-    public async Task Argsort_AlreadySorted_ReturnsSequentialIndices()
+    public void Argsort_AlreadySorted_ReturnsSequentialIndices()
     {
         // NumPy: np.argsort([1, 2, 3]) = [0, 1, 2]
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -133,7 +132,7 @@ public class ArgsortNaNTests
     }
 
     [TestMethod]
-    public async Task Argsort_ReverseSorted_ReturnsReverseIndices()
+    public void Argsort_ReverseSorted_ReturnsReverseIndices()
     {
         // NumPy: np.argsort([3, 2, 1]) = [2, 1, 0]
         var a = np.array(new double[] { 3.0, 2.0, 1.0 });
@@ -149,7 +148,7 @@ public class ArgsortNaNTests
     #region Integer Types (No NaN)
 
     [TestMethod]
-    public async Task Argsort_Int32_SortsCorrectly()
+    public void Argsort_Int32_SortsCorrectly()
     {
         var a = np.array(new int[] { 3, 1, 2 });
         var result = np.argsort<int>(a);
