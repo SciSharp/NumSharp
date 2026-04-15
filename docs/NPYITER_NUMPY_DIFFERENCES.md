@@ -406,10 +406,10 @@ public fixed long BufStrides[MaxOperands];
 2. **GetIterView()** - Return NDArray with iterator's axis ordering
 3. **Negative stride handling** - Integrate with axis permutation
 4. **Cast support** - Type conversion during buffered iteration
-5. **Copy()** - Create independent copy of iterator at current position
 
 ### Recently Completed (2026-04-15)
 
+- **Copy()** - Create independent copy of iterator at current position
 - **GotoIndex()** - Jump to flat C/F index position (full NumPy parity)
 - **ComputeFlatIndex fix** - Uses Perm to compute index in original coordinate order
 - **F-order with MULTI_INDEX** - Full NumPy parity: first axis changes fastest

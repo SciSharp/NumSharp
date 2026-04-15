@@ -1400,5 +1400,102 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter.Iternext();
             }
         }
+
+        // =========================================================================
+        // Copy Tests
+        // =========================================================================
+
+        [TestMethod]
+        public void Copy_CreatesIndependentIterator()
+        {
+            // NumPy 2.4.2:
+            // >>> it1 = np.nditer(np.arange(12).reshape(3,4), flags=['multi_index'])
+            // >>> for i in range(5): it1.iternext()
+            // >>> it2 = it1.copy()
+            // >>> it1.multi_index, it2.multi_index
+            // ((1, 1), (1, 1))
+            // >>> it1.iternext()
+            // >>> it1.multi_index, it2.multi_index
+            // ((1, 2), (1, 1))
+
+            var arr = np.arange(12).reshape(3, 4);
+            using var it1 = NpyIterRef.New(arr, NpyIterGlobalFlags.MULTI_INDEX);
+
+            // Advance 5 positions
+            for (int i = 0; i < 5; i++)
+                it1.Iternext();
+
+            var coords1 = new long[2];
+            var coords2 = new long[2];
+
+            it1.GetMultiIndex(coords1);
+            Assert.AreEqual(1, coords1[0]);
+            Assert.AreEqual(1, coords1[1]);
+
+            // Copy
+            using var it2 = it1.Copy();
+            it2.GetMultiIndex(coords2);
+            Assert.AreEqual(1, coords2[0]);
+            Assert.AreEqual(1, coords2[1]);
+
+            // Advance original only
+            it1.Iternext();
+            it1.GetMultiIndex(coords1);
+            it2.GetMultiIndex(coords2);
+
+            // Original advanced
+            Assert.AreEqual(1, coords1[0]);
+            Assert.AreEqual(2, coords1[1]);
+
+            // Copy unchanged
+            Assert.AreEqual(1, coords2[0]);
+            Assert.AreEqual(1, coords2[1]);
+        }
+
+        [TestMethod]
+        public void Copy_PreservesFlags()
+        {
+            var arr = np.arange(12).reshape(3, 4);
+            using var it1 = NpyIterRef.New(arr, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            it1.GotoIndex(5);
+
+            using var it2 = it1.Copy();
+
+            Assert.AreEqual(it1.HasMultiIndex, it2.HasMultiIndex);
+            Assert.AreEqual(it1.HasIndex, it2.HasIndex);
+            Assert.AreEqual(it1.GetIndex(), it2.GetIndex());
+            Assert.AreEqual(it1.GetValue<int>(), it2.GetValue<int>());
+        }
+
+        [TestMethod]
+        public void Copy_ResetDoesNotAffectOriginal()
+        {
+            var arr = np.arange(12).reshape(3, 4);
+            using var it1 = NpyIterRef.New(arr, NpyIterGlobalFlags.MULTI_INDEX);
+
+            // Advance to position 6
+            for (int i = 0; i < 6; i++)
+                it1.Iternext();
+
+            using var it2 = it1.Copy();
+
+            // Reset copy
+            it2.Reset();
+
+            var coords1 = new long[2];
+            var coords2 = new long[2];
+
+            it1.GetMultiIndex(coords1);
+            it2.GetMultiIndex(coords2);
+
+            // Original still at (1, 2)
+            Assert.AreEqual(1, coords1[0]);
+            Assert.AreEqual(2, coords1[1]);
+
+            // Copy at (0, 0)
+            Assert.AreEqual(0, coords2[0]);
+            Assert.AreEqual(0, coords2[1]);
+        }
     }
 }

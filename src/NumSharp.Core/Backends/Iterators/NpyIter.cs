@@ -1076,6 +1076,61 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
+        /// <summary>
+        /// Create an independent copy of the iterator at its current position.
+        /// Matches NumPy's NpyIter_Copy behavior.
+        /// The copy has its own state and can be advanced independently.
+        /// </summary>
+        public NpyIterRef Copy()
+        {
+            // Allocate new state on heap
+            var newStatePtr = (NpyIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NpyIterState));
+
+            try
+            {
+                // Copy fixed-size portion of state
+                *newStatePtr = *_state;
+
+                // Allocate new dimension arrays and copy contents
+                if (_state->NDim > 0)
+                {
+                    newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp);
+
+                    // Copy Shape
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Shape[d] = _state->Shape[d];
+
+                    // Copy Coords
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Coords[d] = _state->Coords[d];
+
+                    // Copy Perm
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Perm[d] = _state->Perm[d];
+
+                    // Copy Strides
+                    int strideCount = _state->StridesNDim * _state->NOp;
+                    for (int i = 0; i < strideCount; i++)
+                        newStatePtr->Strides[i] = _state->Strides[i];
+                }
+
+                // Create new iterator owning the state
+                return new NpyIterRef
+                {
+                    _state = newStatePtr,
+                    _ownsState = true,
+                    _operands = _operands,  // Share operand references (they're not modified)
+                    _cachedIterNext = null  // Don't copy cached delegate
+                };
+            }
+            catch
+            {
+                newStatePtr->FreeDimArrays();
+                NativeMemory.Free(newStatePtr);
+                throw;
+            }
+        }
+
         // =========================================================================
         // Lifecycle
         // =========================================================================
