@@ -1263,5 +1263,142 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(1, iter.GetValue<int>(0));
             Assert.AreEqual(20, iter.GetValue<int>(1));
         }
+
+        // =========================================================================
+        // GotoIndex Tests
+        // =========================================================================
+
+        [TestMethod]
+        public void GotoIndex_CIndex_JumpsToCorrectPosition()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(12).reshape(3, 4)
+            // >>> it = np.nditer(a, flags=['c_index', 'multi_index'])
+            // C_INDEX formula: c_index = row * 4 + col
+
+            var arr = np.arange(12).reshape(3, 4);
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.MULTI_INDEX);
+
+            var coords = new long[2];
+
+            // Jump to c_index=5 -> (1, 1) = value 5
+            iter.GotoIndex(5);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(5, iter.GetIndex());
+            Assert.AreEqual(1, coords[0]);
+            Assert.AreEqual(1, coords[1]);
+            Assert.AreEqual(5, iter.GetValue<int>());
+
+            // Jump to c_index=11 -> (2, 3) = value 11
+            iter.GotoIndex(11);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(11, iter.GetIndex());
+            Assert.AreEqual(2, coords[0]);
+            Assert.AreEqual(3, coords[1]);
+            Assert.AreEqual(11, iter.GetValue<int>());
+
+            // Jump back to c_index=0 -> (0, 0) = value 0
+            iter.GotoIndex(0);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(0, iter.GetIndex());
+            Assert.AreEqual(0, coords[0]);
+            Assert.AreEqual(0, coords[1]);
+            Assert.AreEqual(0, iter.GetValue<int>());
+        }
+
+        [TestMethod]
+        public void GotoIndex_FIndex_JumpsToCorrectPosition()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(12).reshape(3, 4)
+            // >>> it = np.nditer(a, flags=['f_index', 'multi_index'])
+            // F_INDEX formula: f_index = col * 3 + row
+
+            var arr = np.arange(12).reshape(3, 4);
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.F_INDEX | NpyIterGlobalFlags.MULTI_INDEX);
+
+            var coords = new long[2];
+
+            // F_INDEX=5 -> row = 5 % 3 = 2, col = 5 / 3 = 1 -> (2, 1) = value 9
+            iter.GotoIndex(5);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(5, iter.GetIndex());
+            Assert.AreEqual(2, coords[0]);
+            Assert.AreEqual(1, coords[1]);
+            Assert.AreEqual(9, iter.GetValue<int>());
+
+            // F_INDEX=7 -> row = 7 % 3 = 1, col = 7 / 3 = 2 -> (1, 2) = value 6
+            iter.GotoIndex(7);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(7, iter.GetIndex());
+            Assert.AreEqual(1, coords[0]);
+            Assert.AreEqual(2, coords[1]);
+            Assert.AreEqual(6, iter.GetValue<int>());
+        }
+
+        [TestMethod]
+        public void GotoIndex_3D_CIndex()
+        {
+            // NumPy 2.4.2:
+            // >>> b = np.arange(24).reshape(2, 3, 4)
+            // C_INDEX formula: c_index = d0 * 12 + d1 * 4 + d2
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.MULTI_INDEX);
+
+            var coords = new long[3];
+
+            // c_index=13 -> (1, 0, 1) = value 13
+            iter.GotoIndex(13);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(13, iter.GetIndex());
+            Assert.AreEqual(1, coords[0]);
+            Assert.AreEqual(0, coords[1]);
+            Assert.AreEqual(1, coords[2]);
+            Assert.AreEqual(13, iter.GetValue<int>());
+
+            // c_index=23 -> (1, 2, 3) = value 23
+            iter.GotoIndex(23);
+            iter.GetMultiIndex(coords);
+            Assert.AreEqual(23, iter.GetIndex());
+            Assert.AreEqual(1, coords[0]);
+            Assert.AreEqual(2, coords[1]);
+            Assert.AreEqual(3, coords[2]);
+            Assert.AreEqual(23, iter.GetValue<int>());
+        }
+
+        [TestMethod]
+        public void CIndex_FOrderIteration_TracksOriginalArrayIndex()
+        {
+            // NumPy 2.4.2:
+            // >>> it = np.nditer(np.arange(12).reshape(3,4), flags=['c_index', 'multi_index'], order='F')
+            // >>> [(it.index, it.multi_index, int(it[0])) for i in range(6) if not it.iternext() or True]
+            // [(0, (0, 0), 0), (4, (1, 0), 4), (8, (2, 0), 8), (1, (0, 1), 1), (5, (1, 1), 5), (9, (2, 1), 9)]
+            //
+            // Note: c_index tracks position in ORIGINAL array's C-order, not iteration order
+
+            var arr = np.arange(12).reshape(3, 4);
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.MULTI_INDEX, NPY_ORDER.NPY_FORTRANORDER);
+
+            var expected = new[] {
+                (0, (0L, 0L), 0),
+                (4, (1L, 0L), 4),
+                (8, (2L, 0L), 8),
+                (1, (0L, 1L), 1),
+                (5, (1L, 1L), 5),
+                (9, (2L, 1L), 9)
+            };
+
+            var coords = new long[2];
+            for (int i = 0; i < 6; i++)
+            {
+                iter.GetMultiIndex(coords);
+                Assert.AreEqual(expected[i].Item1, iter.GetIndex(), $"c_index mismatch at iteration {i}");
+                Assert.AreEqual(expected[i].Item2.Item1, coords[0], $"row mismatch at iteration {i}");
+                Assert.AreEqual(expected[i].Item2.Item2, coords[1], $"col mismatch at iteration {i}");
+                Assert.AreEqual(expected[i].Item3, iter.GetValue<int>(), $"value mismatch at iteration {i}");
+                iter.Iternext();
+            }
+        }
     }
 }
