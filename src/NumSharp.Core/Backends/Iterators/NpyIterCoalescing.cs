@@ -164,50 +164,92 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Reorder axes for optimal memory access pattern.
-        /// Prioritizes axes with stride=1 as innermost.
+        /// Reorder axes for optimal coalescing based on iteration order.
+        /// This is called BEFORE CoalesceAxes to enable full coalescing of contiguous arrays.
+        ///
+        /// For C-order (row-major) iteration, axes are sorted so smallest strides come FIRST.
+        /// This allows the coalescing formula stride[i]*shape[i]==stride[i+1] to work correctly.
+        ///
+        /// Example: C-contiguous (2,3,4) with strides [12,4,1]
+        /// - Before reorder: (0,1) check: 12*2=24 != 4 → can't coalesce
+        /// - After reorder to [4,3,2] with strides [1,4,12]:
+        ///   (0,1) check: 1*4=4 == 4 ✓ → coalesce to [12,2], strides [1,12]
+        ///   (0,1) check: 1*12=12 == 12 ✓ → coalesce to [24], strides [1]
         /// </summary>
-        public static void ReorderAxes(ref NpyIterState state)
+        public static void ReorderAxesForCoalescing(ref NpyIterState state, NPY_ORDER order)
         {
             if (state.NDim <= 1)
                 return;
+
+            // KEEPORDER and ANYORDER: sort by stride to maximize coalescing
+            // CORDER: sort ascending (smallest stride first = inner dimension first)
+            // FORTRANORDER: sort descending (largest stride first)
+            bool ascending = order != NPY_ORDER.NPY_FORTRANORDER;
 
             var shape = state.Shape;
             var strides = state.Strides;
             var perm = state.Perm;
             int stridesNDim = state.StridesNDim;
 
-            // Simple bubble sort by minimum stride (prefer contiguous axes as inner)
-            for (int i = 0; i < state.NDim - 1; i++)
+            // Simple insertion sort by minimum absolute stride across all operands
+            // Using insertion sort for stability and good performance on nearly-sorted data
+            for (int i = 1; i < state.NDim; i++)
             {
-                for (int j = 0; j < state.NDim - 1 - i; j++)
+                long keyShape = shape[i];
+                sbyte keyPerm = perm[i];
+
+                // Gather key strides for all operands
+                var keyStrides = stackalloc long[state.NOp];
+                for (int op = 0; op < state.NOp; op++)
+                    keyStrides[op] = strides[op * stridesNDim + i];
+
+                long keyMinStride = GetMinStride(strides, state.NOp, i, stridesNDim);
+
+                int j = i - 1;
+                while (j >= 0)
                 {
-                    long minStrideJ = GetMinStride(strides, state.NOp, j, stridesNDim);
-                    long minStrideJ1 = GetMinStride(strides, state.NOp, j + 1, stridesNDim);
+                    long jMinStride = GetMinStride(strides, state.NOp, j, stridesNDim);
 
-                    // Swap if j has larger minimum stride than j+1
-                    // (we want smaller strides at higher indices = inner)
-                    if (minStrideJ > minStrideJ1)
+                    // Compare based on order
+                    bool shouldShift = ascending
+                        ? jMinStride > keyMinStride
+                        : jMinStride < keyMinStride;
+
+                    if (!shouldShift)
+                        break;
+
+                    // Shift element at j to j+1
+                    shape[j + 1] = shape[j];
+                    perm[j + 1] = perm[j];
+                    for (int op = 0; op < state.NOp; op++)
                     {
-                        // Swap shapes
-                        (shape[j], shape[j + 1]) = (shape[j + 1], shape[j]);
-
-                        // Swap permutation
-                        (perm[j], perm[j + 1]) = (perm[j + 1], perm[j]);
-
-                        // Swap strides for all operands
-                        for (int op = 0; op < state.NOp; op++)
-                        {
-                            int baseIdx = op * stridesNDim;
-                            (strides[baseIdx + j], strides[baseIdx + j + 1]) =
-                                (strides[baseIdx + j + 1], strides[baseIdx + j]);
-                        }
+                        int baseIdx = op * stridesNDim;
+                        strides[baseIdx + j + 1] = strides[baseIdx + j];
                     }
+
+                    j--;
                 }
+
+                // Insert key at j+1
+                shape[j + 1] = keyShape;
+                perm[j + 1] = keyPerm;
+                for (int op = 0; op < state.NOp; op++)
+                    strides[op * stridesNDim + j + 1] = keyStrides[op];
             }
 
-            // Clear IDENTPERM if we reordered
+            // Mark that permutation may have changed
             state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
+            state.ItFlags |= (uint)NpyIterFlags.NEGPERM;  // Indicate non-identity permutation
+        }
+
+        /// <summary>
+        /// Reorder axes for optimal memory access pattern.
+        /// Prioritizes axes with stride=1 as innermost.
+        /// </summary>
+        [Obsolete("Use ReorderAxesForCoalescing with order parameter instead")]
+        public static void ReorderAxes(ref NpyIterState state)
+        {
+            ReorderAxesForCoalescing(ref state, NPY_ORDER.NPY_KEEPORDER);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
