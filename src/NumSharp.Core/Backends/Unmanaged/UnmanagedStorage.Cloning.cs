@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -375,7 +376,9 @@ namespace NumSharp.Backends
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
-            MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);
+            var dst = new UnmanagedStorage(ret, _shape.Clean());
+            if (!NpyIter.TryCopySameType(dst, this))
+                MultiIterator.Assign(dst, this);
 
             return ret;
         }

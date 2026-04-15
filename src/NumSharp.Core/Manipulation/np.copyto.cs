@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
@@ -22,17 +23,9 @@ namespace NumSharp
 
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
-            //try to perform memory copy
-            if (dst.Shape.IsContiguous && src.Shape.IsContiguous && dst.dtype == src.dtype && src.size == dst.size)
-            {
-                unsafe
-                {
-                    src.CopyTo(dst.Address);
-                    return;
-                }
-            }
+            if (NpyIter.TryCopySameType(dst.Storage, src.Storage))
+                return;
 
-            //perform manual copy with automatic casting
             MultiIterator.Assign(dst.Storage, src.Storage);
         }
     }

@@ -7,6 +7,18 @@ using NumSharp.Backends;
 namespace NumSharp.Utilities
 {
     /// <summary>
+    /// Static utility methods for type information.
+    /// </summary>
+    public static class InfoOf
+    {
+        /// <summary>
+        /// Get the size in bytes of the given NPTypeCode.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetSize(NPTypeCode typeCode) => typeCode.SizeOf();
+    }
+
+    /// <summary>
     ///     Provides a cache for properties of <typeparamref name="T"/> that requires computation.
     /// </summary>
     /// <typeparam name="T"></typeparam>

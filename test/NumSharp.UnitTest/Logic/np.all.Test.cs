@@ -63,8 +63,8 @@ namespace NumSharp.UnitTest.Logic
         {
             // NumPy 2.x: np.all(0D_array, axis=1) raises AxisError
             var arr = np.array(5);
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.all(arr, axis: 1));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.all(arr, axis: -2));
+            Assert.ThrowsException<AxisError>(() => np.all(arr, axis: 1));
+            Assert.ThrowsException<AxisError>(() => np.all(arr, axis: -2));
         }
     }
 }

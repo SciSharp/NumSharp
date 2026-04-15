@@ -480,6 +480,8 @@ MoveNext = () => *((T*)Address + shape.GetOffset(index++));
 
 ## Code Generation
 
+For the practical implementation rules used by `DefaultEngine` and `ILKernelGenerator`, see `docs/DEFAULTENGINE_ILKERNEL_PLAYBOOK.md`. That guide captures the recurring engine patterns, optimization conventions, and test expectations that are only implicit in the source code.
+
 ### Regen Templating
 
 NumSharp uses Regen (a custom templating engine) to generate type-specific code. This results in approximately **200,000 lines of generated code**.

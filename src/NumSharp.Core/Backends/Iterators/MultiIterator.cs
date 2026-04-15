@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -25,6 +26,8 @@ namespace NumSharp
         public static void Assign(UnmanagedStorage lhs, UnmanagedStorage rhs)
         {
             NumSharpException.ThrowIfNotWriteable(lhs.Shape);
+            if (NpyIter.TryCopySameType(lhs, rhs))
+                return;
 #if _REGEN
             #region Compute
 		    switch (lhs.TypeCode)
