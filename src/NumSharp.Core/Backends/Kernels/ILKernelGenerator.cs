@@ -478,8 +478,10 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => 1,
                 NPTypeCode.Byte => 1,
+                NPTypeCode.SByte => 1,
                 NPTypeCode.Int16 => 2,
                 NPTypeCode.UInt16 => 2,
+                NPTypeCode.Half => 2,
                 NPTypeCode.Int32 => 4,
                 NPTypeCode.UInt32 => 4,
                 NPTypeCode.Int64 => 8,
@@ -488,6 +490,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Single => 4,
                 NPTypeCode.Double => 8,
                 NPTypeCode.Decimal => 16,
+                NPTypeCode.Complex => 16,
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -501,8 +504,10 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => typeof(bool),
                 NPTypeCode.Byte => typeof(byte),
+                NPTypeCode.SByte => typeof(sbyte),
                 NPTypeCode.Int16 => typeof(short),
                 NPTypeCode.UInt16 => typeof(ushort),
+                NPTypeCode.Half => typeof(Half),
                 NPTypeCode.Int32 => typeof(int),
                 NPTypeCode.UInt32 => typeof(uint),
                 NPTypeCode.Int64 => typeof(long),
@@ -511,6 +516,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Single => typeof(float),
                 NPTypeCode.Double => typeof(double),
                 NPTypeCode.Decimal => typeof(decimal),
+                NPTypeCode.Complex => typeof(System.Numerics.Complex),
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -524,12 +530,12 @@ namespace NumSharp.Backends.Kernels
 
             return type switch
             {
-                NPTypeCode.Byte => true,
+                NPTypeCode.Byte or NPTypeCode.SByte => true,
                 NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
                 NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
                 NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
                 NPTypeCode.Single or NPTypeCode.Double => true,
-                _ => false  // Boolean, Char, Decimal
+                _ => false  // Boolean, Char, Decimal, Half, Complex
             };
         }
 
@@ -553,12 +559,18 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldind_U1);
                     break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldind_I1);
+                    break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldind_I2);
                     break;
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
                     il.Emit(OpCodes.Ldind_U2);
+                    break;
+                case NPTypeCode.Half:
+                    il.Emit(OpCodes.Ldobj, typeof(Half));
                     break;
                 case NPTypeCode.Int32:
                     il.Emit(OpCodes.Ldind_I4);
@@ -579,6 +591,9 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldobj, typeof(decimal));
                     break;
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Ldobj, typeof(System.Numerics.Complex));
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported for ldind");
             }
@@ -593,12 +608,16 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                     il.Emit(OpCodes.Stind_I1);
                     break;
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
                     il.Emit(OpCodes.Stind_I2);
+                    break;
+                case NPTypeCode.Half:
+                    il.Emit(OpCodes.Stobj, typeof(Half));
                     break;
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
@@ -616,6 +635,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Stobj, typeof(decimal));
+                    break;
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Stobj, typeof(System.Numerics.Complex));
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported for stind");
@@ -637,6 +659,13 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special case: Half and Complex require method calls
+            if (from == NPTypeCode.Half || from == NPTypeCode.Complex || to == NPTypeCode.Half || to == NPTypeCode.Complex)
+            {
+                EmitHalfOrComplexConversion(il, from, to);
+                return;
+            }
+
             // For numeric types, use conv.* opcodes
             switch (to)
             {
@@ -647,6 +676,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
@@ -760,6 +792,79 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Half or Complex type conversions (require method calls).
+        /// </summary>
+        private static void EmitHalfOrComplexConversion(ILGenerator il, NPTypeCode from, NPTypeCode to)
+        {
+            // Half -> other: convert Half to double first, then to target
+            if (from == NPTypeCode.Half)
+            {
+                // Half.op_Explicit(Half) -> double
+                il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(Half) }, null)
+                    ?? throw new InvalidOperationException("Half.op_Explicit not found"), null);
+
+                if (to == NPTypeCode.Double)
+                    return;  // Already double
+
+                // Convert double to target type
+                EmitConvertTo(il, NPTypeCode.Double, to);
+                return;
+            }
+
+            // Complex -> other: get Real part as double, then convert
+            if (from == NPTypeCode.Complex)
+            {
+                // Complex.Real property getter
+                var realGetter = typeof(System.Numerics.Complex).GetProperty("Real")?.GetGetMethod()
+                    ?? throw new InvalidOperationException("Complex.Real not found");
+                il.EmitCall(OpCodes.Call, realGetter, null);
+
+                if (to == NPTypeCode.Double)
+                    return;  // Already double
+
+                // Convert double to target type
+                EmitConvertTo(il, NPTypeCode.Double, to);
+                return;
+            }
+
+            // other -> Half: convert to double first, then to Half
+            if (to == NPTypeCode.Half)
+            {
+                // First convert source to double
+                if (from != NPTypeCode.Double && from != NPTypeCode.Single)
+                    EmitConvertTo(il, from, NPTypeCode.Double);
+                else if (from == NPTypeCode.Single)
+                    il.Emit(OpCodes.Conv_R8);  // float to double
+
+                // double -> Half via explicit cast
+                il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(double) }, null)
+                    ?? throw new InvalidOperationException("Half.op_Explicit(double) not found"), null);
+                return;
+            }
+
+            // other -> Complex: convert to double, then create Complex with imaginary = 0
+            if (to == NPTypeCode.Complex)
+            {
+                // First convert source to double
+                if (from != NPTypeCode.Double && from != NPTypeCode.Single)
+                    EmitConvertTo(il, from, NPTypeCode.Double);
+                else if (from == NPTypeCode.Single)
+                    il.Emit(OpCodes.Conv_R8);  // float to double
+
+                // Load 0.0 for imaginary part
+                il.Emit(OpCodes.Ldc_R8, 0.0);
+
+                // new Complex(real, imaginary)
+                var ctor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                    ?? throw new InvalidOperationException("Complex constructor not found");
+                il.Emit(OpCodes.Newobj, ctor);
+                return;
+            }
+
+            throw new NotSupportedException($"Conversion from {from} to {to} not supported");
+        }
+
+        /// <summary>
         /// Check if type is unsigned.
         /// </summary>
         internal static bool IsUnsigned(NPTypeCode type)
@@ -778,6 +883,20 @@ namespace NumSharp.Backends.Kernels
             if (resultType == NPTypeCode.Decimal)
             {
                 EmitDecimalOperation(il, op);
+                return;
+            }
+
+            // Special handling for Half (uses operator methods)
+            if (resultType == NPTypeCode.Half)
+            {
+                EmitHalfOperation(il, op);
+                return;
+            }
+
+            // Special handling for Complex (uses operator methods)
+            if (resultType == NPTypeCode.Complex)
+            {
+                EmitComplexOperation(il, op);
                 return;
             }
 
@@ -1212,6 +1331,109 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Divide => CachedMethods.DecimalOpDivision,
                 _ => throw new NotSupportedException($"Operation {op} not supported for decimal")
             };
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit Half-specific operation using operator methods.
+        /// </summary>
+        private static void EmitHalfOperation(ILGenerator il, BinaryOp op)
+        {
+            // Bitwise operations not supported for Half
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+                throw new NotSupportedException($"Bitwise operation {op} not supported for Half type");
+
+            // Find the specific op_Explicit method: Half -> double
+            var halfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+
+            // For all other operations, convert to double, perform operation, convert back
+            // Stack: [half1, half2]
+            var locRight = il.DeclareLocal(typeof(Half));
+            il.Emit(OpCodes.Stloc, locRight);
+
+            // Convert left to double
+            il.EmitCall(OpCodes.Call, halfToDouble, null);
+
+            // Convert right to double
+            il.Emit(OpCodes.Ldloc, locRight);
+            il.EmitCall(OpCodes.Call, halfToDouble, null);
+
+            // Perform the operation in double
+            switch (op)
+            {
+                case BinaryOp.Add:
+                    il.Emit(OpCodes.Add);
+                    break;
+                case BinaryOp.Subtract:
+                    il.Emit(OpCodes.Sub);
+                    break;
+                case BinaryOp.Multiply:
+                    il.Emit(OpCodes.Mul);
+                    break;
+                case BinaryOp.Divide:
+                    il.Emit(OpCodes.Div);
+                    break;
+                case BinaryOp.Power:
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+                    break;
+                case BinaryOp.Mod:
+                    // NumPy floored modulo: a - floor(a/b) * b
+                    var locB = il.DeclareLocal(typeof(double));
+                    var locA = il.DeclareLocal(typeof(double));
+                    il.Emit(OpCodes.Stloc, locB);
+                    il.Emit(OpCodes.Stloc, locA);
+                    il.Emit(OpCodes.Ldloc, locA);
+                    il.Emit(OpCodes.Ldloc, locA);
+                    il.Emit(OpCodes.Ldloc, locB);
+                    il.Emit(OpCodes.Div);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    il.Emit(OpCodes.Ldloc, locB);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Sub);
+                    break;
+                case BinaryOp.FloorDivide:
+                    il.Emit(OpCodes.Div);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    break;
+                case BinaryOp.ATan2:
+                    il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })!, null);
+                    break;
+                default:
+                    throw new NotSupportedException($"Operation {op} not supported for Half");
+            }
+
+            // Convert result back to Half (double -> Half)
+            var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            il.EmitCall(OpCodes.Call, doubleToHalf, null);
+        }
+
+        /// <summary>
+        /// Emit Complex-specific operation using operator methods.
+        /// </summary>
+        private static void EmitComplexOperation(ILGenerator il, BinaryOp op)
+        {
+            // Bitwise operations not supported for Complex
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+                throw new NotSupportedException($"Bitwise operation {op} not supported for Complex type");
+
+            // Complex has operator overloads we can call
+            var complexType = typeof(System.Numerics.Complex);
+
+            var method = op switch
+            {
+                BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
+                BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
+                BinaryOp.Multiply => complexType.GetMethod("op_Multiplication", new[] { complexType, complexType }),
+                BinaryOp.Divide => complexType.GetMethod("op_Division", new[] { complexType, complexType }),
+                BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
+                _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
+            };
+
+            if (method == null)
+                throw new InvalidOperationException($"Could not find method for {op} on Complex");
 
             il.EmitCall(OpCodes.Call, method, null);
         }

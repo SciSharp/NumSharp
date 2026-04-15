@@ -37,11 +37,11 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
                 case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = (Half)Convert.ToDouble(val)};
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = val is Half h ? h : (Half)(val is IConvertible icH ? icH.ToDouble(CultureInfo.InvariantCulture) : (double)val)};
                 case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(Convert.ToDouble(val), 0)};
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(val is IConvertible icC ? icC.ToDouble(CultureInfo.InvariantCulture) : (double)val, 0)};
                 default:
                     throw new NotSupportedException();
 #endif
@@ -76,11 +76,11 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
                 case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = (Half)Convert.ToDouble(val)};
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = val is Half h ? h : (Half)(val is IConvertible icH ? icH.ToDouble(CultureInfo.InvariantCulture) : (double)val)};
                 case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
                 case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(Convert.ToDouble(val), 0)};
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(val is IConvertible icC ? icC.ToDouble(CultureInfo.InvariantCulture) : (double)val, 0)};
                 default:
                     throw new NotSupportedException();
 #endif

@@ -27,6 +27,8 @@ namespace NumSharp
         public static readonly Type uint8 = typeof(byte);
         public static readonly Type ubyte = uint8;
 
+        public static readonly Type @sbyte = typeof(sbyte);
+        public static readonly Type int8 = typeof(sbyte);
 
         public static readonly Type int16 = typeof(short);
 
@@ -45,6 +47,9 @@ namespace NumSharp
         public static readonly Type uint64 = typeof(ulong);
         public static readonly Type uint0 = uint64;
         public static readonly Type @uint = uint64;
+
+        public static readonly Type float16 = typeof(Half);
+        public static readonly Type half = float16;
 
         public static readonly Type float32 = typeof(float);
 

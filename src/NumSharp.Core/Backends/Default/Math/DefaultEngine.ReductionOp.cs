@@ -122,6 +122,7 @@ namespace NumSharp.Backends
             return retType switch
             {
                 NPTypeCode.Byte => ExecuteElementReduction<byte>(arr, ReductionOp.Sum, retType),
+                NPTypeCode.SByte => ExecuteElementReduction<sbyte>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Int16 => ExecuteElementReduction<short>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.UInt16 => ExecuteElementReduction<ushort>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Sum, retType),
@@ -131,6 +132,8 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Sum, retType),
+                NPTypeCode.Half => SumElementwiseHalfFallback(arr),
+                NPTypeCode.Complex => SumElementwiseComplexFallback(arr),
                 _ => throw new NotSupportedException($"Sum not supported for type {retType}")
             };
         }
@@ -443,6 +446,34 @@ namespace NumSharp.Backends
         protected NDArray min_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Min, outputTypeCode);
+        }
+
+        #endregion
+
+        #region Half/Complex Fallback Methods
+
+        /// <summary>
+        /// Fallback sum for Half type using iterator.
+        /// </summary>
+        private object SumElementwiseHalfFallback(NDArray arr)
+        {
+            double sum = 0.0;
+            var iter = arr.AsIterator<Half>();
+            while (iter.HasNext())
+                sum += (double)iter.MoveNext();
+            return (Half)sum;
+        }
+
+        /// <summary>
+        /// Fallback sum for Complex type using iterator.
+        /// </summary>
+        private object SumElementwiseComplexFallback(NDArray arr)
+        {
+            var sum = System.Numerics.Complex.Zero;
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            while (iter.HasNext())
+                sum += iter.MoveNext();
+            return sum;
         }
 
         #endregion
