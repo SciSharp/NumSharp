@@ -1,13 +1,15 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
+[TestClass]
 public class NpyIterReductionBattleTests
 {
     private const double Tolerance = 1e-10;
 
-    [Test]
+    [TestMethod]
     public void Var_ColumnBroadcast_Axis0_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -23,7 +25,7 @@ public class NpyIterReductionBattleTests
         result.Should().BeOfValuesApproximately(Tolerance, 2.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_ColumnBroadcast_Axis0_Keepdims_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -39,7 +41,7 @@ public class NpyIterReductionBattleTests
         result.Should().BeOfValuesApproximately(Tolerance, 2.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_ColumnBroadcast_Axis0_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -55,7 +57,7 @@ public class NpyIterReductionBattleTests
         result.Should().BeOfValuesApproximately(Tolerance, 0.816496580927726, 0.816496580927726, 0.816496580927726);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_ChainedTransposedReversedView_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -80,7 +82,7 @@ public class NpyIterReductionBattleTests
             10.666666666666666);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_ChainedTransposedReversedView_Axis1_Keepdims_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -108,7 +110,7 @@ public class NpyIterReductionBattleTests
             10.666666666666666);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_ChainedTransposedReversedView_Axis0_Ddof1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -128,7 +130,7 @@ public class NpyIterReductionBattleTests
         result.Should().BeOfValuesApproximately(Tolerance, 1.2909944487358056, 1.2909944487358056, 1.2909944487358056);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_ReversedStrideView_Axis0_Keepdims_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -148,7 +150,7 @@ public class NpyIterReductionBattleTests
         result.Should().BeOfValuesApproximately(Tolerance, 10.666666666666666, 10.666666666666666);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_ReversedStrideView_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:

@@ -1,11 +1,13 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
+[TestClass]
 public class NpyIterScanBattleTests
 {
-    [Test]
+    [TestMethod]
     public void Cumsum_RowBroadcast_Axis0_MatchesNumPyAndMaterializesWritableOutput()
     {
         // NumPy 2.4.2:
@@ -24,7 +26,7 @@ public class NpyIterScanBattleTests
         result.Shape.IsWriteable.Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_ColumnBroadcast_Axis0_MatchesNumPyAndMaterializesWritableOutput()
     {
         // NumPy 2.4.2:
@@ -44,7 +46,7 @@ public class NpyIterScanBattleTests
         result.Shape.IsWriteable.Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_ColumnBroadcast_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -62,7 +64,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 2L, 3L, 2L, 4L, 6L, 3L, 6L, 9L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_TransposedView_NoAxis_FollowsViewIterationOrder()
     {
         // NumPy 2.4.2:
@@ -81,7 +83,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 6L, 15L, 17L, 23L, 33L, 36L, 43L, 54L, 58L, 66L, 78L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_TransposedView_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -103,8 +105,8 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 6L, 15L, 2L, 8L, 18L, 3L, 10L, 21L, 4L, 12L, 24L);
     }
 
-    [Test]
-    [OpenBugs]
+    [TestMethod]
+    [TestCategory("OpenBugs")]
     public void Cumsum_ReversedColumns_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -125,7 +127,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(4L, 7L, 9L, 10L, 8L, 15L, 21L, 26L, 12L, 23L, 33L, 42L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_RowBroadcast_AxisNegative1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -142,7 +144,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 3L, 6L, 10L, 1L, 3L, 6L, 10L, 1L, 3L, 6L, 10L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumsum_ColumnBroadcast_Axis1_OnWiderBroadcast_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -160,7 +162,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 2L, 3L, 4L, 2L, 4L, 6L, 8L, 3L, 6L, 9L, 12L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumprod_RowBroadcast_Axis0_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -177,7 +179,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 2L, 3L, 1L, 4L, 9L, 1L, 8L, 27L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumprod_ColumnBroadcast_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -195,7 +197,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 1L, 1L, 1L, 2L, 4L, 8L, 16L, 3L, 9L, 27L, 81L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumprod_TransposedView_Axis0_MatchesNumPy()
     {
         // NumPy 2.4.2:
@@ -217,7 +219,7 @@ public class NpyIterScanBattleTests
         result.Should().BeOfValues(1L, 5L, 9L, 2L, 30L, 90L, 6L, 210L, 990L, 24L, 1680L, 11880L);
     }
 
-    [Test]
+    [TestMethod]
     public void Cumprod_ReversedColumns_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:

@@ -91,6 +91,18 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Range end for ranged iteration.</summary>
         public long IterEnd;
 
+        /// <summary>
+        /// Flat index for C_INDEX or F_INDEX tracking.
+        /// Updated by Advance() when HASINDEX flag is set.
+        /// </summary>
+        public long FlatIndex;
+
+        /// <summary>
+        /// True if tracking C-order index, false for F-order.
+        /// Only meaningful when HASINDEX flag is set.
+        /// </summary>
+        public bool IsCIndex;
+
         // =========================================================================
         // Legacy compatibility fields
         // =========================================================================
@@ -460,6 +472,17 @@ namespace NumSharp.Backends.Iteration
         {
             IterIndex++;
 
+            // Update flat index if tracking (C_INDEX or F_INDEX)
+            if ((ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
+            {
+                // For C-order, FlatIndex == IterIndex (assuming no axis reordering)
+                // For F-order, we need to compute from coordinates
+                if (IsCIndex)
+                    FlatIndex++;
+                else
+                    FlatIndex = ComputeFlatIndex();
+            }
+
             fixed (long* dataPtrs = DataPtrs)
             fixed (int* elemSizes = ElementSizes)
             {
@@ -498,6 +521,7 @@ namespace NumSharp.Backends.Iteration
         public void Reset()
         {
             IterIndex = IterStart;
+            FlatIndex = 0;
 
             for (int d = 0; d < NDim; d++)
                 Coords[d] = 0;
@@ -507,6 +531,24 @@ namespace NumSharp.Backends.Iteration
             {
                 for (int op = 0; op < NOp; op++)
                     dataPtrs[op] = resetPtrs[op];
+            }
+
+            // Invalidate all buffer reuse flags since position changed
+            InvalidateAllBufferReuse();
+        }
+
+        /// <summary>
+        /// Invalidate buffer reuse flags for all operands.
+        /// Called when iterator position changes (Reset, GotoIterIndex).
+        /// </summary>
+        private void InvalidateAllBufferReuse()
+        {
+            fixed (ushort* flags = OpItFlags)
+            {
+                for (int op = 0; op < NOp; op++)
+                {
+                    flags[op] = (ushort)(flags[op] & ~(ushort)NpyIterOpFlags.BUF_REUSABLE);
+                }
             }
         }
 
@@ -526,6 +568,12 @@ namespace NumSharp.Backends.Iteration
                 remaining /= dimSize;
             }
 
+            // Update flat index if tracking
+            if ((ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
+            {
+                FlatIndex = ComputeFlatIndex();
+            }
+
             // Update data pointers
             fixed (long* dataPtrs = DataPtrs)
             fixed (long* resetPtrs = ResetDataPtrs)
@@ -541,6 +589,41 @@ namespace NumSharp.Backends.Iteration
                     dataPtrs[op] = resetPtrs[op] + offset * elemSizes[op];
                 }
             }
+
+            // Invalidate all buffer reuse flags since position changed
+            InvalidateAllBufferReuse();
+        }
+
+        /// <summary>
+        /// Compute the flat index from current coordinates based on C or F order.
+        /// </summary>
+        private long ComputeFlatIndex()
+        {
+            if (NDim == 0)
+                return 0;
+
+            long index = 0;
+            if (IsCIndex)
+            {
+                // C-order: row-major, last dimension varies fastest
+                long multiplier = 1;
+                for (int d = NDim - 1; d >= 0; d--)
+                {
+                    index += Coords[d] * multiplier;
+                    multiplier *= Shape[d];
+                }
+            }
+            else
+            {
+                // F-order: column-major, first dimension varies fastest
+                long multiplier = 1;
+                for (int d = 0; d < NDim; d++)
+                {
+                    index += Coords[d] * multiplier;
+                    multiplier *= Shape[d];
+                }
+            }
+            return index;
         }
     }
 }

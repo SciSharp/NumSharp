@@ -1,10 +1,12 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using AwesomeAssertions;
 
 namespace NumSharp.UnitTest.Manipulation;
 
+[TestClass]
 public class NpyIterCopyTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Copyto_StridedDestination_SameDType()
     {
         var dst = np.zeros(8, np.int64);
@@ -16,7 +18,7 @@ public class NpyIterCopyTests : TestClass
         dst.Should().BeOfValues(10L, 0L, 20L, 0L, 30L, 0L, 40L, 0L);
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_BroadcastSource_ToStridedDestination_SameDType()
     {
         var dst = np.zeros(new Shape(2, 6), np.int64);
@@ -34,7 +36,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(dst, expected).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_TransposeView_SameDType()
     {
         var dst = np.zeros(new Shape(2, 3), np.int64);
@@ -56,7 +58,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(dst, expected).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copy_NonContiguousView_SameDType()
     {
         var src = np.arange(12).reshape(3, 4).T;
@@ -67,7 +69,7 @@ public class NpyIterCopyTests : TestClass
         clone.Shape.IsContiguous.Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_BoolColumnSlice_ToBoolColumnSlice_SameDType()
     {
         var src = np.array(new bool[,]
@@ -88,7 +90,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(dst, expected).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_BroadcastSource_ToNegativeStrideDestination_SameDType()
     {
         var backing = np.zeros(new Shape(3, 4), np.int64);
@@ -114,7 +116,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(dst, expectedView).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_TransposedOffsetDestination_SameDType()
     {
         var backing = np.zeros(new Shape(4, 5), np.int64);
@@ -139,7 +141,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(backing, expectedBacking).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copyto_BoolChainedViews_SameDType()
     {
         var src = np.array(new bool[,]
@@ -164,7 +166,7 @@ public class NpyIterCopyTests : TestClass
         np.array_equal(backing, expectedBacking).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copy_BroadcastColumnView_MaterializesContiguousWritableCopy()
     {
         var src = np.broadcast_to(np.array(new long[,] { { 1 }, { 2 }, { 3 } }), new Shape(3, 4));
@@ -178,7 +180,7 @@ public class NpyIterCopyTests : TestClass
         copy.Shape.IsWriteable.Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Copy_TransposedOffsetView_MaterializesExpectedOrder()
     {
         var src = np.arange(12).reshape(3, 4).T["1:, ::-1"];

@@ -138,8 +138,24 @@ namespace NumSharp.Backends.Iteration
             _state->MaskOp = -1;
             _state->IterStart = 0;
 
-            // Calculate broadcast shape
-            var broadcastShape = CalculateBroadcastShape(nop, op, opFlags);
+            // Calculate broadcast shape, optionally overridden by iterShape
+            int[] broadcastShape;
+            if (iterShape != null && iterShape.Length > 0)
+            {
+                // Use explicit iterShape - allows specifying iteration shape different from broadcast
+                // NumPy's NpyIter_AdvancedNew() uses this for reductions and custom iteration patterns
+                broadcastShape = new int[iterShape.Length];
+                for (int i = 0; i < iterShape.Length; i++)
+                {
+                    broadcastShape[i] = checked((int)iterShape[i]);
+                }
+                // Validate that operands are compatible with the specified shape
+                ValidateIterShape(nop, op, opFlags, broadcastShape);
+            }
+            else
+            {
+                broadcastShape = CalculateBroadcastShape(nop, op, opFlags);
+            }
 
             // =========================================================================
             // NUMSHARP DIVERGENCE: Allocate dimension arrays dynamically
@@ -236,10 +252,30 @@ namespace NumSharp.Backends.Iteration
                 _state->ItFlags |= (uint)NpyIterFlags.EXLOOP;
             }
 
+            // Set GROWINNER flag to maximize inner loop size during buffering
+            if ((flags & NpyIterGlobalFlags.GROWINNER) != 0)
+            {
+                _state->ItFlags |= (uint)NpyIterFlags.GROWINNER;
+            }
+
             // Track multi-index if requested
             if ((flags & NpyIterGlobalFlags.MULTI_INDEX) != 0)
             {
                 _state->ItFlags |= (uint)NpyIterFlags.HASMULTIINDEX;
+            }
+
+            // Track flat index if requested (C_INDEX or F_INDEX)
+            if ((flags & NpyIterGlobalFlags.C_INDEX) != 0)
+            {
+                _state->ItFlags |= (uint)NpyIterFlags.HASINDEX;
+                _state->IsCIndex = true;
+                _state->FlatIndex = 0;
+            }
+            else if ((flags & NpyIterGlobalFlags.F_INDEX) != 0)
+            {
+                _state->ItFlags |= (uint)NpyIterFlags.HASINDEX;
+                _state->IsCIndex = false;
+                _state->FlatIndex = 0;
             }
 
             // Update inner strides cache
@@ -304,6 +340,36 @@ namespace NumSharp.Backends.Iteration
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Validate that operands are compatible with the specified iterShape.
+        /// Each operand dimension must either equal the iterShape or be 1 (broadcastable).
+        /// </summary>
+        private static void ValidateIterShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags, int[] iterShape)
+        {
+            for (int opIdx = 0; opIdx < nop; opIdx++)
+            {
+                if ((opFlags[opIdx] & NpyIterPerOpFlags.NO_BROADCAST) != 0)
+                    continue;
+
+                var opShape = op[opIdx].shape;
+                int offset = iterShape.Length - opShape.Length;
+
+                // Operand must have fewer or equal dimensions
+                if (offset < 0)
+                    throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
+
+                for (int d = 0; d < opShape.Length; d++)
+                {
+                    int opDim = (int)opShape[d];
+                    int iterDim = iterShape[offset + d];
+
+                    // opDim must equal iterDim or be 1 (broadcastable)
+                    if (opDim != iterDim && opDim != 1)
+                        throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+                }
+            }
         }
 
         private static NpyIterOpFlags TranslateOpFlags(NpyIterPerOpFlags flags)
@@ -460,6 +526,9 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Whether iterator has external loop.</summary>
         public bool HasExternalLoop => (_state->ItFlags & (uint)NpyIterFlags.EXLOOP) != 0;
 
+        /// <summary>Whether iterator uses GROWINNER optimization for buffering.</summary>
+        public bool HasGrowInner => (_state->ItFlags & (uint)NpyIterFlags.GROWINNER) != 0;
+
         // =========================================================================
         // Iteration Methods
         // =========================================================================
@@ -581,6 +650,20 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// Advance to next position and return whether more iterations remain.
+        /// Matches NumPy's iternext() behavior.
+        /// Returns true if more elements exist, false when iteration is complete.
+        /// </summary>
+        public bool Iternext()
+        {
+            if (_state->IterIndex >= _state->IterEnd)
+                return false;
+
+            _state->Advance();
+            return _state->IterIndex < _state->IterEnd;
+        }
+
+        /// <summary>
         /// Reset iterator to a specific iteration range.
         /// Enables ranged iteration for parallel chunking.
         /// </summary>
@@ -651,7 +734,7 @@ namespace NumSharp.Backends.Iteration
             if (coords.Length < _state->NDim)
                 throw new ArgumentException($"Coordinates must have at least {_state->NDim} elements", nameof(coords));
 
-            // Validate coordinates and compute linear index
+            // Validate coordinates and compute linear index (C-order)
             long iterIndex = 0;
             long multiplier = 1;
 
@@ -666,6 +749,28 @@ namespace NumSharp.Backends.Iteration
             }
 
             _state->IterIndex = iterIndex;
+
+            // Update flat index if tracking (C_INDEX or F_INDEX)
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
+            {
+                if (_state->IsCIndex)
+                {
+                    // C-order: iterIndex is already the C-order flat index
+                    _state->FlatIndex = iterIndex;
+                }
+                else
+                {
+                    // F-order: compute column-major index
+                    long fIndex = 0;
+                    multiplier = 1;
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        fIndex += coords[d] * multiplier;
+                        multiplier *= _state->Shape[d];
+                    }
+                    _state->FlatIndex = fIndex;
+                }
+            }
 
             // Update data pointers
             for (int op = 0; op < _state->NOp; op++)
@@ -684,6 +789,48 @@ namespace NumSharp.Backends.Iteration
         public bool HasMultiIndex => (_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) != 0;
 
         /// <summary>
+        /// Check if iterator is tracking a flat index.
+        /// </summary>
+        public bool HasIndex => (_state->ItFlags & (uint)NpyIterFlags.HASINDEX) != 0;
+
+        /// <summary>
+        /// Check if iteration is finished.
+        /// </summary>
+        public bool Finished => _state->IterIndex >= _state->IterEnd;
+
+        /// <summary>
+        /// Get the current iterator shape.
+        /// This reflects the shape after coalescing (if any).
+        /// </summary>
+        public long[] Shape
+        {
+            get
+            {
+                var result = new long[_state->NDim];
+                for (int d = 0; d < _state->NDim; d++)
+                    result[d] = _state->Shape[d];
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Get the current iteration range as (start, end) tuple.
+        /// </summary>
+        public (long Start, long End) IterRange => (_state->IterStart, _state->IterEnd);
+
+        /// <summary>
+        /// Get the current flat index.
+        /// Requires C_INDEX or F_INDEX flag to be set during construction.
+        /// </summary>
+        public long GetIndex()
+        {
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking index. Use NpyIterGlobalFlags.C_INDEX or F_INDEX during construction.");
+
+            return _state->FlatIndex;
+        }
+
+        /// <summary>
         /// Get operand arrays.
         /// </summary>
         public NDArray[]? GetOperandArray() => _operands;
@@ -699,12 +846,40 @@ namespace NumSharp.Backends.Iteration
             return result;
         }
 
+        /// <summary>
+        /// Get pointer to current data for operand.
+        /// Matches NumPy's dataptrs[i] access.
+        /// </summary>
+        public void* GetDataPtr(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+            return _state->GetDataPtr(operand);
+        }
+
+        /// <summary>
+        /// Get current value for operand as T.
+        /// </summary>
+        public T GetValue<T>(int operand = 0) where T : unmanaged
+        {
+            return *(T*)GetDataPtr(operand);
+        }
+
+        /// <summary>
+        /// Set current value for operand.
+        /// </summary>
+        public void SetValue<T>(T value, int operand = 0) where T : unmanaged
+        {
+            *(T*)GetDataPtr(operand) = value;
+        }
+
         // =========================================================================
         // Configuration Methods
         // =========================================================================
 
         /// <summary>
         /// Remove axis from iteration (enables external loop for that axis).
+        /// Matches NumPy's NpyIter_RemoveAxis behavior.
         /// </summary>
         public bool RemoveAxis(int axis)
         {
@@ -725,8 +900,48 @@ namespace NumSharp.Backends.Iteration
 
             _state->NDim--;
 
+            // Recalculate itersize based on remaining shape
+            _state->IterSize = 1;
+            for (int d = 0; d < _state->NDim; d++)
+                _state->IterSize *= _state->Shape[d];
+            _state->IterEnd = _state->IterSize;
+
             // Update inner strides cache after dimension change
             _state->UpdateInnerStrides();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Remove multi-index tracking and enable coalescing.
+        /// Matches NumPy's NpyIter_RemoveMultiIndex behavior.
+        /// Note: Resets iterator position to the beginning.
+        /// </summary>
+        public bool RemoveMultiIndex()
+        {
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) == 0)
+                return false;
+
+            // Clear the multi-index flag
+            _state->ItFlags &= ~(uint)NpyIterFlags.HASMULTIINDEX;
+
+            // Perform axis reordering and coalescing now that multi-index is disabled
+            // This matches NumPy behavior: when MULTI_INDEX is set during construction,
+            // axis reordering is skipped. RemoveMultiIndex enables both reordering and coalescing.
+            if (_state->NDim > 1)
+            {
+                // Step 1: Reorder axes by stride (smallest first = innermost in memory)
+                NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, NPY_ORDER.NPY_KEEPORDER);
+
+                // Step 2: Coalesce adjacent axes that have compatible strides
+                NpyIterCoalescing.CoalesceAxes(ref *_state);
+            }
+
+            // Reset iterator to beginning (NumPy behavior)
+            _state->Reset();
+
+            // Clear cached iteration function
+            _cachedIterNext = null;
 
             return true;
         }
