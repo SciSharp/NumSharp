@@ -6,3 +6,6 @@ b1d1d543
 
 # Add [TestClass] attributes for MSTest discovery
 e0db3c3e
+
+# Convert async Task to void for sync test methods
+4eea9644
