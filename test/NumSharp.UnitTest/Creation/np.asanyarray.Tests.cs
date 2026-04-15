@@ -529,5 +529,59 @@ namespace NumSharp.UnitTest.Creation
         }
 
         #endregion
+
+        #region Non-generic IEnumerable fallback
+
+        [Test]
+        public void ArrayList_Int()
+        {
+            var arrayList = new System.Collections.ArrayList { 1, 2, 3, 4, 5 };
+            var result = np.asanyarray(arrayList);
+
+            result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
+            result.dtype.Should().Be(typeof(int));
+        }
+
+        [Test]
+        public void ArrayList_Double()
+        {
+            var arrayList = new System.Collections.ArrayList { 1.1, 2.2, 3.3 };
+            var result = np.asanyarray(arrayList);
+
+            result.Should().BeShaped(3);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        [Test]
+        public void Hashtable_Keys()
+        {
+            var hashtable = new System.Collections.Hashtable { { 1, "a" }, { 2, "b" }, { 3, "c" } };
+            var result = np.asanyarray(hashtable.Keys);
+
+            result.size.Should().Be(3);
+            result.dtype.Should().Be(typeof(int));
+        }
+
+        #endregion
+
+        #region IEnumerator fallback
+
+        [Test]
+        public void IEnumerator_Int()
+        {
+            static System.Collections.IEnumerator GetEnumerator()
+            {
+                yield return 10;
+                yield return 20;
+                yield return 30;
+            }
+
+            var result = np.asanyarray(GetEnumerator());
+
+            result.Should().BeShaped(3).And.BeOfValues(10, 20, 30);
+            result.dtype.Should().Be(typeof(int));
+        }
+
+        #endregion
     }
 }
