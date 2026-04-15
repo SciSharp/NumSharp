@@ -150,7 +150,8 @@ namespace NumSharp.Backends.Iteration
                     broadcastShape[i] = checked((int)iterShape[i]);
                 }
                 // Validate that operands are compatible with the specified shape
-                ValidateIterShape(nop, op, opFlags, broadcastShape);
+                // Pass opAxes so validation accounts for -1 entries (broadcast/reduce axes)
+                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
             }
             else
             {
@@ -230,19 +231,59 @@ namespace NumSharp.Backends.Iteration
 
                 _state->SetOpFlags(i, opFlag);
 
-                // Calculate broadcast strides for this operand
-                var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
-                var basePtr = (byte*)arr.Address + (broadcastArr.offset * arr.dtypesize);
+                // Calculate strides for this operand
+                var stridePtr = _state->GetStridesPointer(i);
+                byte* basePtr;
+
+                // Check if op_axes is provided for this operand
+                if (opAxes != null && i < opAxes.Length && opAxes[i] != null)
+                {
+                    // Use op_axes mapping to set up strides directly
+                    var opAxisMap = opAxes[i];
+                    var arrStrides = arrShape.strides;
+
+                    basePtr = (byte*)arr.Address;
+
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        if (d < opAxisMap.Length)
+                        {
+                            int opAxis = opAxisMap[d];
+                            if (opAxis < 0)
+                            {
+                                // -1 means broadcast/reduce this dimension
+                                stridePtr[d] = 0;
+                            }
+                            else if (opAxis < arrStrides.Length)
+                            {
+                                // Use stride from the mapped axis
+                                stridePtr[d] = arrStrides[opAxis];
+                            }
+                            else
+                            {
+                                stridePtr[d] = 0;
+                            }
+                        }
+                        else
+                        {
+                            stridePtr[d] = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // Standard broadcasting
+                    var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
+                    basePtr = (byte*)arr.Address + (broadcastArr.offset * arr.dtypesize);
+
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        stridePtr[d] = broadcastArr.strides[d];
+                    }
+                }
 
                 _state->SetDataPtr(i, basePtr);
                 _state->SetResetDataPtr(i, basePtr);
-
-                // Set strides (in source element units, not buffer element units)
-                var stridePtr = _state->GetStridesPointer(i);
-                for (int d = 0; d < _state->NDim; d++)
-                {
-                    stridePtr[d] = broadcastArr.strides[d];
-                }
 
                 // Check for broadcast
                 for (int d = 0; d < _state->NDim; d++)
@@ -269,7 +310,7 @@ namespace NumSharp.Backends.Iteration
             // Apply op_axes remapping if provided
             if (opAxes != null && opAxesNDim >= 0)
             {
-                ApplyOpAxes(opAxesNDim, opAxes);
+                ApplyOpAxes(opAxesNDim, opAxes, flags);
             }
 
             // Apply axis reordering based on iteration order.
@@ -430,8 +471,10 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Validate that operands are compatible with the specified iterShape.
         /// Each operand dimension must either equal the iterShape or be 1 (broadcastable).
+        /// When opAxes is provided, -1 entries indicate dimensions that don't need validation.
         /// </summary>
-        private static void ValidateIterShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags, int[] iterShape)
+        private static void ValidateIterShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
+            int[] iterShape, int opAxesNDim, int[][]? opAxes)
         {
             for (int opIdx = 0; opIdx < nop; opIdx++)
             {
@@ -439,20 +482,51 @@ namespace NumSharp.Backends.Iteration
                     continue;
 
                 var opShape = op[opIdx].shape;
-                int offset = iterShape.Length - opShape.Length;
 
-                // Operand must have fewer or equal dimensions
-                if (offset < 0)
-                    throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
-
-                for (int d = 0; d < opShape.Length; d++)
+                // When opAxes is provided for this operand, use it for validation
+                if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)
                 {
-                    int opDim = (int)opShape[d];
-                    int iterDim = iterShape[offset + d];
+                    var opAxisMap = opAxes[opIdx];
+                    int mapLength = Math.Min(opAxisMap.Length, iterShape.Length);
 
-                    // opDim must equal iterDim or be 1 (broadcastable)
-                    if (opDim != iterDim && opDim != 1)
-                        throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+                    for (int iterAxis = 0; iterAxis < mapLength; iterAxis++)
+                    {
+                        int opAxis = opAxisMap[iterAxis];
+
+                        // -1 means this dimension is broadcast/reduced, no validation needed
+                        if (opAxis < 0)
+                            continue;
+
+                        // Validate that the operand axis exists and is compatible
+                        if (opAxis >= opShape.Length)
+                            throw new IncorrectShapeException($"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+
+                        int opDim = (int)opShape[opAxis];
+                        int iterDim = iterShape[iterAxis];
+
+                        // opDim must equal iterDim or be 1 (broadcastable)
+                        if (opDim != iterDim && opDim != 1)
+                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}");
+                    }
+                }
+                else
+                {
+                    // No opAxes for this operand, use standard broadcasting validation
+                    int offset = iterShape.Length - opShape.Length;
+
+                    // Operand must have fewer or equal dimensions
+                    if (offset < 0)
+                        throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
+
+                    for (int d = 0; d < opShape.Length; d++)
+                    {
+                        int opDim = (int)opShape[d];
+                        int iterDim = iterShape[offset + d];
+
+                        // opDim must equal iterDim or be 1 (broadcastable)
+                        if (opDim != iterDim && opDim != 1)
+                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+                    }
                 }
             }
         }
@@ -540,14 +614,16 @@ namespace NumSharp.Backends.Iteration
         /// Apply op_axes remapping to operand strides.
         /// op_axes allows custom mapping of operand dimensions to iterator dimensions.
         /// A value of -1 indicates the dimension should be broadcast (stride = 0).
+        /// For READWRITE operands with stride=0, this indicates a reduction axis.
         /// </summary>
-        private void ApplyOpAxes(int opAxesNDim, int[][] opAxes)
+        private void ApplyOpAxes(int opAxesNDim, int[][] opAxes, NpyIterGlobalFlags globalFlags)
         {
             if (opAxes == null || opAxesNDim <= 0)
                 return;
 
             // Ensure we don't exceed iterator dimensions
             int iterNDim = Math.Min(opAxesNDim, _state->NDim);
+            bool reduceOkSet = (globalFlags & NpyIterGlobalFlags.REDUCE_OK) != 0;
 
             for (int op = 0; op < _state->NOp; op++)
             {
@@ -557,6 +633,11 @@ namespace NumSharp.Backends.Iteration
 
                 var opAxisMap = opAxes[op];
                 var stridePtr = _state->GetStridesPointer(op);
+                var opFlags = _state->GetOpFlags(op);
+                // Check if WRITE flag is set (includes both WRITE-only and READWRITE)
+                // Only WRITE flag indicates the operand will be written to (not READ alone)
+                bool isWriteable = (opFlags & NpyIterOpFlags.WRITE) != 0;
+                bool hasReductionAxis = false;
 
                 // Gather original strides before remapping
                 // NUMSHARP DIVERGENCE: Use actual ndim, not fixed MaxDims
@@ -571,10 +652,29 @@ namespace NumSharp.Backends.Iteration
 
                     if (opAxis < 0)
                     {
-                        // -1 means broadcast this dimension (reduction axis)
+                        // -1 means broadcast this dimension
                         stridePtr[iterAxis] = 0;
-                        // Mark as broadcast
-                        _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
+
+                        // Check if this is a reduction axis (READWRITE operand with forced stride=0)
+                        // and the iteration dimension is > 1 (otherwise it's just a scalar)
+                        if (isWriteable && _state->Shape[iterAxis] > 1)
+                        {
+                            hasReductionAxis = true;
+
+                            // Validate REDUCE_OK is set
+                            if (!reduceOkSet)
+                            {
+                                throw new ArgumentException(
+                                    $"Output operand {op} requires a reduction along dimension {iterAxis}, " +
+                                    "but the reduction is not enabled. " +
+                                    "Add NpyIterGlobalFlags.REDUCE_OK to allow reduction.");
+                            }
+                        }
+                        else
+                        {
+                            // Mark as broadcast (read-only operand with stride=0)
+                            _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
+                        }
                     }
                     else if (opAxis < iterNDim)
                     {
@@ -582,6 +682,13 @@ namespace NumSharp.Backends.Iteration
                         stridePtr[iterAxis] = originalStrides[opAxis];
                     }
                     // else: invalid axis, keep original
+                }
+
+                // Set reduction flags if this operand has reduction axes
+                if (hasReductionAxis)
+                {
+                    _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
+                    _state->SetOpFlags(op, opFlags | NpyIterOpFlags.REDUCE);
                 }
             }
         }
@@ -1317,6 +1424,64 @@ namespace NumSharp.Backends.Iteration
         {
             _state->ItFlags |= (uint)NpyIterFlags.EXLOOP;
             _cachedIterNext = null;
+            return true;
+        }
+
+        // =========================================================================
+        // Reduction Support
+        // =========================================================================
+
+        /// <summary>
+        /// Check if iteration includes reduction operands.
+        /// </summary>
+        public bool IsReduction => (_state->ItFlags & (uint)NpyIterFlags.REDUCE) != 0;
+
+        /// <summary>
+        /// Check if a specific operand is a reduction operand (has stride=0 for READWRITE).
+        /// </summary>
+        public bool IsOperandReduction(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+
+            return (_state->GetOpFlags(operand) & NpyIterOpFlags.REDUCE) != 0;
+        }
+
+        /// <summary>
+        /// Check if this is the first visit to the current element of a reduction operand.
+        /// This is used for initialization (e.g., set to 0 before summing).
+        ///
+        /// For reduction operands (stride=0 on some axes), returns true when all
+        /// coordinates on reduction axes are 0. Returns false when any coordinate
+        /// on a reduction axis is non-zero (meaning we've already visited this
+        /// output element from another input element).
+        ///
+        /// For non-reduction operands, always returns true (every visit is "first").
+        ///
+        /// Matches NumPy's NpyIter_IsFirstVisit behavior.
+        /// </summary>
+        public bool IsFirstVisit(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+
+            // If this operand is not a reduction, every visit is "first"
+            if ((_state->GetOpFlags(operand) & NpyIterOpFlags.REDUCE) == 0)
+                return true;
+
+            // For reduction operands, check if any reduction axis coordinate is non-zero
+            // A reduction axis is one where stride = 0 (but shape > 1)
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                long stride = _state->GetStride(d, operand);
+                long coord = _state->Coords[d];
+
+                // If this is a reduction dimension (stride=0) and coordinate is not 0,
+                // we've already visited this output element
+                if (stride == 0 && coord != 0)
+                    return false;
+            }
+
             return true;
         }
 
