@@ -101,6 +101,14 @@ namespace NumSharp.Backends.Kernels
                 // Perform operation on input type - produces bool
                 EmitUnaryScalarOperation(il, key.Op, key.InputType);
             }
+            else if (key.Op == UnaryOp.Abs && key.InputType == NPTypeCode.Complex)
+            {
+                // Special case: Complex abs returns magnitude (double), not Real part
+                // NumPy: np.abs(complex) returns float64
+                il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                if (key.OutputType != NPTypeCode.Double)
+                    EmitConvertTo(il, NPTypeCode.Double, key.OutputType);
+            }
             else
             {
                 // Convert to output type if different
