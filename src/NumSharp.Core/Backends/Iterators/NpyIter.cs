@@ -180,18 +180,54 @@ namespace NumSharp.Backends.Iteration
                 // Just allow it anyway for now
             }
 
+            // Determine common dtype if COMMON_DTYPE flag is set
+            NPTypeCode? commonDtype = null;
+            if ((flags & NpyIterGlobalFlags.COMMON_DTYPE) != 0)
+            {
+                commonDtype = NpyIterCasting.FindCommonDtype(op, nop);
+            }
+
             // Set up operands
+            bool anyNeedsCast = false;
             for (int i = 0; i < nop; i++)
             {
                 var arr = op[i];
                 var arrShape = arr.Shape;
 
-                // Set dtype
-                var dtype = opDtypes != null && i < opDtypes.Length ? opDtypes[i] : arr.typecode;
-                _state->SetOpDType(i, dtype);
+                // Store source dtype (actual array dtype)
+                _state->SetOpSrcDType(i, arr.typecode);
+
+                // Determine buffer/target dtype
+                NPTypeCode bufferDtype;
+                if (opDtypes != null && i < opDtypes.Length && opDtypes[i] != NPTypeCode.Empty)
+                {
+                    bufferDtype = opDtypes[i];
+                }
+                else if (commonDtype.HasValue)
+                {
+                    bufferDtype = commonDtype.Value;
+                }
+                else
+                {
+                    bufferDtype = arr.typecode;
+                }
+                _state->SetOpDType(i, bufferDtype);
+
+                // Track if any operand needs casting
+                if (arr.typecode != bufferDtype)
+                {
+                    anyNeedsCast = true;
+                }
 
                 // Set operand flags
                 var opFlag = TranslateOpFlags(opFlags[i]);
+
+                // If operand needs casting, add CAST flag
+                if (arr.typecode != bufferDtype)
+                {
+                    opFlag |= NpyIterOpFlags.CAST;
+                }
+
                 _state->SetOpFlags(i, opFlag);
 
                 // Calculate broadcast strides for this operand
@@ -201,7 +237,7 @@ namespace NumSharp.Backends.Iteration
                 _state->SetDataPtr(i, basePtr);
                 _state->SetResetDataPtr(i, basePtr);
 
-                // Set strides
+                // Set strides (in source element units, not buffer element units)
                 var stridePtr = _state->GetStridesPointer(i);
                 for (int d = 0; d < _state->NDim; d++)
                 {
@@ -218,6 +254,17 @@ namespace NumSharp.Backends.Iteration
                     }
                 }
             }
+
+            // Validate that casting requires BUFFERED flag
+            if (anyNeedsCast && (flags & NpyIterGlobalFlags.BUFFERED) == 0)
+            {
+                throw new ArgumentException(
+                    "Casting between different dtypes requires the BUFFERED flag. " +
+                    "Add NpyIterGlobalFlags.BUFFERED to enable type conversion.");
+            }
+
+            // Validate casting rules
+            NpyIterCasting.ValidateCasts(ref *_state, casting);
 
             // Apply op_axes remapping if provided
             if (opAxes != null && opAxesNDim >= 0)
@@ -316,6 +363,22 @@ namespace NumSharp.Backends.Iteration
             {
                 _state->ItFlags |= (uint)NpyIterFlags.BUFFER;
                 _state->BufferSize = bufferSize > 0 ? bufferSize : NpyIterBufferManager.DefaultBufferSize;
+
+                // Allocate buffers for each operand
+                NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+
+                // Copy initial data to buffers (with casting if needed)
+                long copyCount = Math.Min(_state->IterSize, _state->BufferSize);
+                for (int op1 = 0; op1 < nop; op1++)
+                {
+                    var opFlag = _state->GetOpFlags(op1);
+                    if ((opFlag & NpyIterOpFlags.READ) != 0 || (opFlag & NpyIterOpFlags.READWRITE) != 0)
+                    {
+                        NpyIterBufferManager.CopyToBuffer(ref *_state, op1, copyCount);
+                    }
+                }
+
+                _state->BufIterEnd = copyCount;
             }
 
             // Handle single iteration optimization
@@ -1132,17 +1195,33 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Get pointer to current data for operand.
+        /// When buffering is enabled, returns pointer to buffer position.
+        /// Otherwise returns pointer to source array position.
         /// Matches NumPy's dataptrs[i] access.
         /// </summary>
         public void* GetDataPtr(int operand)
         {
             if ((uint)operand >= (uint)_state->NOp)
                 throw new ArgumentOutOfRangeException(nameof(operand));
+
+            // If buffering is enabled and we have a buffer, use it
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                var buffer = _state->GetBuffer(operand);
+                if (buffer != null)
+                {
+                    // Return pointer to current position in buffer
+                    int elemSize = _state->GetElementSize(operand);
+                    return (byte*)buffer + _state->IterIndex * elemSize;
+                }
+            }
+
             return _state->GetDataPtr(operand);
         }
 
         /// <summary>
         /// Get current value for operand as T.
+        /// When buffering with casting is enabled, reads from buffer (which has target dtype).
         /// </summary>
         public T GetValue<T>(int operand = 0) where T : unmanaged
         {
@@ -1151,6 +1230,7 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Set current value for operand.
+        /// When buffering with casting is enabled, writes to buffer (which has target dtype).
         /// </summary>
         public void SetValue<T>(T value, int operand = 0) where T : unmanaged
         {
@@ -1306,18 +1386,11 @@ namespace NumSharp.Backends.Iteration
         {
             if (_ownsState && _state != null)
             {
-                // Free any buffers
+                // Free any buffers using NpyIterBufferManager.FreeBuffers
+                // NOTE: Buffers are allocated with AlignedAlloc, must be freed with AlignedFree
                 if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
                 {
-                    for (int op = 0; op < _state->NOp; op++)
-                    {
-                        var buf = _state->GetBuffer(op);
-                        if (buf != null)
-                        {
-                            NativeMemory.Free(buf);
-                            _state->SetBuffer(op, null);
-                        }
-                    }
+                    NpyIterBufferManager.FreeBuffers(ref *_state);
                 }
 
                 // Free dynamically allocated dimension arrays

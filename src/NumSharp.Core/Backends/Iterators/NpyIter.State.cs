@@ -183,11 +183,17 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Per-operand flags.</summary>
         public fixed ushort OpItFlags[MaxOperands];
 
-        /// <summary>Operand dtypes.</summary>
+        /// <summary>Buffer/target dtypes for each operand.</summary>
         public fixed byte OpDTypes[MaxOperands];
 
-        /// <summary>Element sizes for each operand.</summary>
+        /// <summary>Source array dtypes for each operand (used for casting).</summary>
+        public fixed byte OpSrcDTypes[MaxOperands];
+
+        /// <summary>Element sizes for each operand (based on buffer dtype).</summary>
         public fixed int ElementSizes[MaxOperands];
+
+        /// <summary>Source element sizes for each operand (based on source dtype).</summary>
+        public fixed int SrcElementSizes[MaxOperands];
 
         /// <summary>
         /// Inner strides for each operand (gathered from main Strides array for fast access).
@@ -375,7 +381,7 @@ namespace NumSharp.Backends.Iteration
                 return (NPTypeCode)p[op];
         }
 
-        /// <summary>Set operand dtype.</summary>
+        /// <summary>Set operand dtype (buffer/target dtype).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetOpDType(int op, NPTypeCode dtype)
         {
@@ -384,6 +390,40 @@ namespace NumSharp.Backends.Iteration
 
             fixed (int* s = ElementSizes)
                 s[op] = InfoOf.GetSize(dtype);
+        }
+
+        /// <summary>Get source array dtype for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public NPTypeCode GetOpSrcDType(int op)
+        {
+            fixed (byte* p = OpSrcDTypes)
+                return (NPTypeCode)p[op];
+        }
+
+        /// <summary>Set source array dtype for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetOpSrcDType(int op, NPTypeCode dtype)
+        {
+            fixed (byte* p = OpSrcDTypes)
+                p[op] = (byte)dtype;
+
+            fixed (int* s = SrcElementSizes)
+                s[op] = InfoOf.GetSize(dtype);
+        }
+
+        /// <summary>Get source element size for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetSrcElementSize(int op)
+        {
+            fixed (int* p = SrcElementSizes)
+                return p[op];
+        }
+
+        /// <summary>Check if operand needs casting (source dtype != buffer dtype).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool NeedsCast(int op)
+        {
+            return GetOpSrcDType(op) != GetOpDType(op);
         }
 
         /// <summary>Get operand flags.</summary>

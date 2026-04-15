@@ -2100,5 +2100,335 @@ namespace NumSharp.UnitTest.Backends.Iterators
             // After flipping, iteration is in memory order
             CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4, 5 }, viewValues.ToArray());
         }
+
+        // =========================================================================
+        // Cast Support Tests (Type Conversion During Iteration)
+        // =========================================================================
+        // NumPy nditer supports automatic type conversion when op_dtypes differ
+        // from the actual array dtypes. This requires BUFFERED flag and respects
+        // the casting parameter (no_casting, safe, same_kind, unsafe).
+        // =========================================================================
+
+        [TestMethod]
+        public void Cast_Int32ToFloat64_SafeCasting()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.array([1, 2, 3], dtype=np.int32)
+            // >>> it = np.nditer([arr], flags=['buffered'],
+            // ...                op_flags=[['readonly']],
+            // ...                op_dtypes=['float64'],
+            // ...                casting='safe')
+            // >>> [float(x) for x in it]
+            // [1.0, 2.0, 3.0]
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+            Assert.AreEqual(NPTypeCode.Int32, arr.typecode);
+
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                NPTypeCode.Double);
+
+            var values = new List<double>();
+            do
+            {
+                values.Add(iter.GetValue<double>(0));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new double[] { 1.0, 2.0, 3.0 }, values.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_Float64ToInt32_UnsafeCasting()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.array([1.5, 2.5, 3.5], dtype=np.float64)
+            // >>> it = np.nditer([arr], flags=['buffered'],
+            // ...                op_flags=[['readonly']],
+            // ...                op_dtypes=['int32'],
+            // ...                casting='unsafe')
+            // >>> [int(x) for x in it]
+            // [1, 2, 3]  # Truncated
+
+            var arr = np.array(new double[] { 1.5, 2.5, 3.5 });
+            Assert.AreEqual(NPTypeCode.Double, arr.typecode);
+
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_UNSAFE_CASTING,
+                NPTypeCode.Int32);
+
+            var values = new List<int>();
+            do
+            {
+                values.Add(iter.GetValue<int>(0));
+            } while (iter.Iternext());
+
+            // Values should be truncated
+            CollectionAssert.AreEqual(new int[] { 1, 2, 3 }, values.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_Float64ToInt32_SafeCasting_Throws()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.array([1.5, 2.5, 3.5], dtype=np.float64)
+            // >>> it = np.nditer([arr], flags=['buffered'],
+            // ...                op_flags=[['readonly']],
+            // ...                op_dtypes=['int32'],
+            // ...                casting='safe')
+            // TypeError: Iterator operand 0 dtype could not be cast from dtype('float64')
+            //            to dtype('int32') according to the rule 'safe'
+
+            var arr = np.array(new double[] { 1.5, 2.5, 3.5 });
+
+            bool threw = false;
+            try
+            {
+                using var iter = NpyIterRef.New(
+                    arr,
+                    NpyIterGlobalFlags.BUFFERED,
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_SAFE_CASTING,
+                    NPTypeCode.Int32);
+            }
+            catch (InvalidCastException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "Should throw InvalidCastException for unsafe cast with safe casting rule");
+        }
+
+        [TestMethod]
+        public void Cast_Int16ToInt32_SafeCasting()
+        {
+            // Safe widening cast: int16 -> int32
+
+            var arr = np.array(new short[] { 100, 200, 300 });
+            Assert.AreEqual(NPTypeCode.Int16, arr.typecode);
+
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                NPTypeCode.Int32);
+
+            var values = new List<int>();
+            do
+            {
+                values.Add(iter.GetValue<int>(0));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new int[] { 100, 200, 300 }, values.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_CommonDtype_TwoOperands()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.array([1, 2, 3], dtype=np.int32)
+            // >>> b = np.array([1.5, 2.5, 3.5], dtype=np.float64)
+            // >>> it = np.nditer([a, b], flags=['common_dtype', 'buffered'])
+            // >>> print([str(d) for d in it.dtypes])
+            // ['float64', 'float64']
+
+            var arrInt = np.array(new int[] { 1, 2, 3 });
+            var arrFloat = np.array(new double[] { 1.5, 2.5, 3.5 });
+
+            using var iter = NpyIterRef.MultiNew(
+                2,
+                new[] { arrInt, arrFloat },
+                NpyIterGlobalFlags.COMMON_DTYPE | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY },
+                null);  // null opDtypes = use common dtype
+
+            // Both operands should be promoted to float64
+            var dtypes = iter.GetDescrArray();
+            Assert.AreEqual(NPTypeCode.Double, dtypes[0], "First operand should be cast to float64");
+            Assert.AreEqual(NPTypeCode.Double, dtypes[1], "Second operand should be float64");
+
+            // Verify values
+            var vals0 = new List<double>();
+            var vals1 = new List<double>();
+            do
+            {
+                vals0.Add(iter.GetValue<double>(0));
+                vals1.Add(iter.GetValue<double>(1));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new double[] { 1.0, 2.0, 3.0 }, vals0.ToArray());
+            CollectionAssert.AreEqual(new double[] { 1.5, 2.5, 3.5 }, vals1.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_WriteOutput_WithConversion()
+        {
+            // NumPy 2.4.2:
+            // >>> out = np.zeros(3, dtype=np.float64)
+            // >>> arr = np.array([10, 20, 30], dtype=np.int32)
+            // >>> it = np.nditer([arr, out], flags=['buffered'],
+            // ...                op_flags=[['readonly'], ['writeonly']],
+            // ...                op_dtypes=['float64', 'float64'],
+            // ...                casting='safe')
+            // >>> for x, y in it:
+            // ...     y[...] = x * 2.5
+            // >>> out
+            // array([25., 50., 75.])
+
+            var arrIn = np.array(new int[] { 10, 20, 30 });
+            var arrOut = np.zeros(3, NPTypeCode.Double);
+
+            using var iter = NpyIterRef.MultiNew(
+                2,
+                new[] { arrIn, arrOut },
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY },
+                new[] { NPTypeCode.Double, NPTypeCode.Double });
+
+            do
+            {
+                var x = iter.GetValue<double>(0);
+                iter.SetValue(x * 2.5, 1);  // SetValue<T>(value, operand)
+            } while (iter.Iternext());
+
+            // Verify output
+            Assert.AreEqual(25.0, (double)arrOut[0], 0.001);
+            Assert.AreEqual(50.0, (double)arrOut[1], 0.001);
+            Assert.AreEqual(75.0, (double)arrOut[2], 0.001);
+        }
+
+        [TestMethod]
+        public void Cast_SameKindCasting_IntToInt()
+        {
+            // Same-kind casting allows int32 -> int64 (both integers)
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAME_KIND_CASTING,
+                NPTypeCode.Int64);
+
+            var values = new List<long>();
+            do
+            {
+                values.Add(iter.GetValue<long>(0));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new long[] { 1, 2, 3 }, values.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_SameKindCasting_IntToFloat_Throws()
+        {
+            // Same-kind casting does NOT allow int32 -> float64 (different kinds)
+            // NumPy: "Cannot cast array data from dtype('int32') to dtype('float64')
+            //         according to the rule 'same_kind'"
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+
+            bool threw = false;
+            try
+            {
+                using var iter = NpyIterRef.New(
+                    arr,
+                    NpyIterGlobalFlags.BUFFERED,
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_SAME_KIND_CASTING,
+                    NPTypeCode.Double);
+            }
+            catch (InvalidCastException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "Same-kind casting should not allow int -> float");
+        }
+
+        [TestMethod]
+        public void Cast_NoCasting_SameType_Allowed()
+        {
+            // No casting: same type should be allowed
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                NPTypeCode.Int32);  // Same as source
+
+            var values = new List<int>();
+            do
+            {
+                values.Add(iter.GetValue<int>(0));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new int[] { 1, 2, 3 }, values.ToArray());
+        }
+
+        [TestMethod]
+        public void Cast_NoCasting_DifferentType_Throws()
+        {
+            // No casting: different type should throw
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+
+            bool threw = false;
+            try
+            {
+                using var iter = NpyIterRef.New(
+                    arr,
+                    NpyIterGlobalFlags.BUFFERED,
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_NO_CASTING,
+                    NPTypeCode.Int64);  // Different from source
+            }
+            catch (InvalidCastException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "No casting should not allow different types");
+        }
+
+        [TestMethod]
+        public void Cast_RequiresBuffered_ThrowsWithoutBuffer()
+        {
+            // Casting requires BUFFERED flag
+
+            var arr = np.array(new int[] { 1, 2, 3 });
+
+            bool threw = false;
+            try
+            {
+                // Try to cast without BUFFERED flag
+                using var iter = NpyIterRef.New(
+                    arr,
+                    NpyIterGlobalFlags.None,  // No BUFFERED
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_SAFE_CASTING,
+                    NPTypeCode.Double);  // Different dtype
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "Casting without BUFFERED should throw");
+        }
     }
 }
