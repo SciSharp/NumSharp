@@ -1052,6 +1052,74 @@ namespace NumSharp.Backends.Iteration
         public NDArray[]? GetOperandArray() => _operands;
 
         /// <summary>
+        /// Returns a view of the i-th operand with the iterator's internal axes ordering.
+        /// A C-order iteration of this view is equivalent to the iterator's iteration order.
+        ///
+        /// For example, if a 3D array was coalesced to 1D, this returns a 1D view.
+        /// If axes were reordered for memory efficiency, this reflects that reordering.
+        ///
+        /// Not available when buffering is enabled.
+        /// Matches NumPy's NpyIter_GetIterView behavior.
+        /// </summary>
+        /// <param name="operand">The operand index (0 to NOp-1)</param>
+        /// <returns>An NDArray view with the iterator's internal shape and strides</returns>
+        public NDArray GetIterView(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand), $"Operand index {operand} out of range [0, {_state->NOp})");
+
+            // Cannot provide views when buffering is enabled (data may be in temporary buffers)
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+                throw new InvalidOperationException("Cannot provide an iterator view when buffering is enabled");
+
+            if (_operands == null || _operands.Length <= operand)
+                throw new InvalidOperationException("Operand array not available");
+
+            var original = _operands[operand];
+            int ndim = _state->NDim;
+
+            if (ndim == 0)
+            {
+                // Scalar case - return a scalar view
+                return original.flat[0];
+            }
+
+            // Build shape and strides from the iterator's internal state
+            // NumSharp's internal Shape[0] is already the outermost axis, matching standard convention
+            // (NumPy reverses because their axisdata iteration starts from innermost, but we don't need to)
+            var viewShape = new long[ndim];
+            var viewStrides = new long[ndim];
+
+            for (int d = 0; d < ndim; d++)
+            {
+                viewShape[d] = _state->Shape[d];
+                viewStrides[d] = _state->GetStride(d, operand);
+            }
+
+            // Get the reset data pointer (base pointer for this operand)
+            void* dataPtr = _state->GetResetDataPtr(operand);
+
+            // Create a view that shares storage with the original
+            // We need to create an NDArray that points to the same underlying storage
+            // but with the iterator's shape and strides
+            var storage = original.Storage;
+
+            // Calculate the offset from storage base to the reset data pointer
+            int elementSize = _state->GetElementSize(operand);
+            long offsetBytes = (long)dataPtr - (long)storage.Address;
+            long offsetElements = offsetBytes / elementSize;
+
+            // Calculate total buffer size (from original storage)
+            long bufferSize = storage.Count;
+
+            // Create a new shape with the offset using internal constructor
+            var viewShapeWithOffset = new Shape(viewShape, viewStrides, offsetElements, bufferSize);
+
+            // Create a view NDArray that shares the same storage
+            return new NDArray(storage, viewShapeWithOffset);
+        }
+
+        /// <summary>
         /// Get operand dtypes.
         /// </summary>
         public NPTypeCode[] GetDescrArray()
