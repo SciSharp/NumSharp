@@ -23,6 +23,8 @@ This document tracks the implementation of three new NumPy-compatible data types
 | `UnmanagedMemoryBlock.cs` | ✓ | Added FromArray and Allocate cases |
 | `ArraySlice.cs` | ✓ | Added all Scalar and Allocate cases |
 | `UnmanagedStorage.cs` | ✓ | Added typed fields and SetInternalArray cases |
+| `UnmanagedStorage.Getters.cs` | ✓ | Updated GetValue, GetAtIndex, direct getters |
+| `UnmanagedStorage.Setters.cs` | ✓ | Updated SetAtIndex |
 
 ### Updated NPTypeCode Extension Methods
 
@@ -53,8 +55,6 @@ The following files have switch statements that handle NPTypeCode but don't yet 
 These will throw `NotSupportedException` at runtime when using new types:
 
 #### High Priority (Core Functionality)
-- `Backends/Unmanaged/UnmanagedStorage.Getters.cs`
-- `Backends/Unmanaged/UnmanagedStorage.Setters.cs`
 - `Backends/Unmanaged/UnmanagedStorage.Cloning.cs`
 - `Backends/Unmanaged/UnmanagedMemoryBlock.Casting.cs`
 - `Backends/NDArray.cs`

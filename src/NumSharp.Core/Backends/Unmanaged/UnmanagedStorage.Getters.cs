@@ -28,6 +28,7 @@ namespace NumSharp.Backends
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
@@ -36,9 +37,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
 #endif
@@ -55,6 +58,7 @@ namespace NumSharp.Backends
             switch (TypeCode)
             {
                 case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Int16: return *((short*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt16: return *((ushort*)Address + _shape.GetOffset(indices));
@@ -63,9 +67,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
             }
@@ -86,6 +92,7 @@ namespace NumSharp.Backends
             switch (TypeCode)
             {
                 case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.SByte: return *((sbyte*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Byte: return *((byte*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Int16: return *((short*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.UInt16: return *((ushort*)Address + _shape.TransformOffset(index));
@@ -94,9 +101,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Half: return *((Half*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.TransformOffset(index));
                 default:
                     throw new NotSupportedException();
             }
@@ -448,6 +457,15 @@ namespace NumSharp.Backends
             => _arrayBoolean[_shape.GetOffset(indices)];
 
         /// <summary>
+        ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
+        public sbyte GetSByte(int[] indices)
+            => _arraySByte[_shape.GetOffset(indices)];
+
+        /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -520,6 +538,15 @@ namespace NumSharp.Backends
             => _arrayChar[_shape.GetOffset(indices)];
 
         /// <summary>
+        ///     Retrieves value of type <see cref="Half"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
+        public Half GetHalf(int[] indices)
+            => _arrayHalf[_shape.GetOffset(indices)];
+
+        /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -546,6 +573,15 @@ namespace NumSharp.Backends
         public decimal GetDecimal(int[] indices)
             => _arrayDecimal[_shape.GetOffset(indices)];
 
+        /// <summary>
+        ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
+        public System.Numerics.Complex GetComplex(int[] indices)
+            => _arrayComplex[_shape.GetOffset(indices)];
+
         #endregion
 
         #region Direct Getters (long[] overloads)
@@ -558,6 +594,15 @@ namespace NumSharp.Backends
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         public bool GetBoolean(params long[] indices)
             => _arrayBoolean[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="sbyte"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="sbyte"/></exception>
+        public sbyte GetSByte(params long[] indices)
+            => _arraySByte[_shape.GetOffset(indices)];
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/> from internal storage.
@@ -632,6 +677,15 @@ namespace NumSharp.Backends
             => _arrayChar[_shape.GetOffset(indices)];
 
         /// <summary>
+        ///     Retrieves value of type <see cref="Half"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="Half"/></exception>
+        public Half GetHalf(params long[] indices)
+            => _arrayHalf[_shape.GetOffset(indices)];
+
+        /// <summary>
         ///     Retrieves value of type <see cref="double"/> from internal storage.
         /// </summary>
         /// <param name="indices">The shape's indices to get (long version).</param>
@@ -657,6 +711,15 @@ namespace NumSharp.Backends
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(params long[] indices)
             => _arrayDecimal[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="System.Numerics.Complex"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="System.Numerics.Complex"/></exception>
+        public System.Numerics.Complex GetComplex(params long[] indices)
+            => _arrayComplex[_shape.GetOffset(indices)];
 
         #endregion
 #endif
