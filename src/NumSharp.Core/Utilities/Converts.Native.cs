@@ -2139,7 +2139,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(decimal value)
         {
-            return (Half)(double)value;
+            return (Half)value;
         }
 
         [MethodImpl(OptimizeAndInline)]

@@ -1243,5 +1243,89 @@ namespace NumSharp.Backends.Kernels
         }
 
         #endregion
+
+        #region NaN-aware Half Helpers
+
+        /// <summary>
+        /// Helper for NaN-aware sum of a contiguous Half array.
+        /// NaN values are treated as 0 (ignored in the sum).
+        /// </summary>
+        internal static unsafe Half NanSumHalfHelper(Half* src, long size)
+        {
+            if (size == 0)
+                return Half.Zero;
+
+            double sum = 0.0; // Use double for precision during accumulation
+            for (long i = 0; i < size; i++)
+            {
+                if (!Half.IsNaN(src[i]))
+                    sum += (double)src[i];
+            }
+            return (Half)sum;
+        }
+
+        /// <summary>
+        /// Helper for NaN-aware product of a contiguous Half array.
+        /// NaN values are treated as 1 (ignored in the product).
+        /// </summary>
+        internal static unsafe Half NanProdHalfHelper(Half* src, long size)
+        {
+            if (size == 0)
+                return (Half)1.0;
+
+            double prod = 1.0; // Use double for precision during accumulation
+            for (long i = 0; i < size; i++)
+            {
+                if (!Half.IsNaN(src[i]))
+                    prod *= (double)src[i];
+            }
+            return (Half)prod;
+        }
+
+        /// <summary>
+        /// Helper for NaN-aware min of a contiguous Half array.
+        /// NaN values are ignored. Returns NaN if all values are NaN.
+        /// </summary>
+        internal static unsafe Half NanMinHalfHelper(Half* src, long size)
+        {
+            if (size == 0)
+                return Half.NaN;
+
+            Half minVal = Half.PositiveInfinity;
+            bool foundNonNaN = false;
+            for (long i = 0; i < size; i++)
+            {
+                if (!Half.IsNaN(src[i]))
+                {
+                    if (src[i] < minVal) minVal = src[i];
+                    foundNonNaN = true;
+                }
+            }
+            return foundNonNaN ? minVal : Half.NaN;
+        }
+
+        /// <summary>
+        /// Helper for NaN-aware max of a contiguous Half array.
+        /// NaN values are ignored. Returns NaN if all values are NaN.
+        /// </summary>
+        internal static unsafe Half NanMaxHalfHelper(Half* src, long size)
+        {
+            if (size == 0)
+                return Half.NaN;
+
+            Half maxVal = Half.NegativeInfinity;
+            bool foundNonNaN = false;
+            for (long i = 0; i < size; i++)
+            {
+                if (!Half.IsNaN(src[i]))
+                {
+                    if (src[i] > maxVal) maxVal = src[i];
+                    foundNonNaN = true;
+                }
+            }
+            return foundNonNaN ? maxVal : Half.NaN;
+        }
+
+        #endregion
     }
 }

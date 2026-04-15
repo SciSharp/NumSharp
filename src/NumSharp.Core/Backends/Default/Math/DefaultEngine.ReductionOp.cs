@@ -254,6 +254,7 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                NPTypeCode.Complex => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Complex),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
         }
@@ -289,6 +290,7 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                NPTypeCode.Complex => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Complex),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
             };
         }

@@ -62,6 +62,14 @@ namespace NumSharp.Backends.Kernels
                     BindingFlags.NonPublic | BindingFlags.Static)!;
                 isGeneric = false;
             }
+            else if (key.InputType == NPTypeCode.Complex)
+            {
+                // Complex uses magnitude comparison
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxComplexHelper) : nameof(ArgMinComplexHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
             else
             {
                 // Generic SIMD path for integer types
@@ -556,6 +564,62 @@ namespace NumSharp.Backends.Kernels
                 }
             }
             return bestIndex; // All True, return 0
+        }
+
+        #endregion
+
+        #region Complex ArgMax/ArgMin Helpers
+
+        /// <summary>
+        /// ArgMax helper for Complex arrays.
+        /// NumPy: argmax uses magnitude |z| = sqrt(real² + imag²) for comparison.
+        /// On tie (equal magnitudes), returns first occurrence.
+        /// </summary>
+        internal static unsafe long ArgMaxComplexHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Complex* src = (Complex*)input;
+            double bestMagnitude = Complex.Abs(src[0]);
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                double mag = Complex.Abs(src[i]);
+                if (mag > bestMagnitude)
+                {
+                    bestMagnitude = mag;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMin helper for Complex arrays.
+        /// NumPy: argmin uses magnitude |z| = sqrt(real² + imag²) for comparison.
+        /// On tie (equal magnitudes), returns first occurrence.
+        /// </summary>
+        internal static unsafe long ArgMinComplexHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Complex* src = (Complex*)input;
+            double bestMagnitude = Complex.Abs(src[0]);
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                double mag = Complex.Abs(src[i]);
+                if (mag < bestMagnitude)
+                {
+                    bestMagnitude = mag;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
         }
 
         #endregion

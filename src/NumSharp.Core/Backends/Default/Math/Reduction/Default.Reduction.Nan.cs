@@ -14,7 +14,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             // Non-float types: fall back to regular sum (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
                 return Sum(arr, axis: axis, keepdims: keepdims);
 
             if (shape.IsEmpty)
@@ -32,6 +32,10 @@ namespace NumSharp.Backends
                     case NPTypeCode.Double:
                         if (double.IsNaN((double)val))
                             return NDArray.Scalar(0.0);
+                        break;
+                    case NPTypeCode.Half:
+                        if (Half.IsNaN((Half)val))
+                            return NDArray.Scalar(Half.Zero);
                         break;
                 }
                 return a.Clone();
@@ -56,7 +60,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             // Non-float types: fall back to regular prod (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
                 return ReduceProduct(arr, axis, keepdims: keepdims);
 
             if (shape.IsEmpty)
@@ -74,6 +78,10 @@ namespace NumSharp.Backends
                     case NPTypeCode.Double:
                         if (double.IsNaN((double)val))
                             return NDArray.Scalar(1.0);
+                        break;
+                    case NPTypeCode.Half:
+                        if (Half.IsNaN((Half)val))
+                            return NDArray.Scalar((Half)1.0);
                         break;
                 }
                 return a.Clone();
@@ -98,7 +106,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             // Non-float types: fall back to regular amin (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
                 return ReduceAMin(arr, axis, keepdims: keepdims);
 
             if (shape.IsEmpty)
@@ -128,7 +136,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             // Non-float types: fall back to regular amax (no NaN possible)
-            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
                 return ReduceAMax(arr, axis, keepdims: keepdims);
 
             if (shape.IsEmpty)
@@ -181,8 +189,18 @@ namespace NumSharp.Backends
                                 _ => throw new NotSupportedException($"Unsupported NaN reduction: {op}")
                             };
                             break;
+                        case NPTypeCode.Half:
+                            result = op switch
+                            {
+                                ReductionOp.NanSum => ILKernelGenerator.NanSumHalfHelper((Half*)arr.Address, arr.size),
+                                ReductionOp.NanProd => ILKernelGenerator.NanProdHalfHelper((Half*)arr.Address, arr.size),
+                                ReductionOp.NanMin => ILKernelGenerator.NanMinHalfHelper((Half*)arr.Address, arr.size),
+                                ReductionOp.NanMax => ILKernelGenerator.NanMaxHalfHelper((Half*)arr.Address, arr.size),
+                                _ => throw new NotSupportedException($"Unsupported NaN reduction: {op}")
+                            };
+                            break;
                         default:
-                            throw new NotSupportedException($"NaN reductions only support float/double, got {arr.GetTypeCode}");
+                            throw new NotSupportedException($"NaN reductions only support float/double/half, got {arr.GetTypeCode}");
                     }
                 }
 
@@ -217,8 +235,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Double:
                     result = NanReduceScalarDouble(arr, op);
                     break;
+                case NPTypeCode.Half:
+                    result = NanReduceScalarHalf(arr, op);
+                    break;
                 default:
-                    throw new NotSupportedException($"NaN reductions only support float/double, got {arr.GetTypeCode}");
+                    throw new NotSupportedException($"NaN reductions only support float/double/half, got {arr.GetTypeCode}");
             }
 
             var r = NDArray.Scalar(result);
@@ -350,6 +371,68 @@ namespace NumSharp.Backends
                         }
                     }
                     return foundNonNaN ? maxVal : double.NaN;
+                }
+                default:
+                    throw new NotSupportedException($"Unsupported NaN reduction: {op}");
+            }
+        }
+
+        private static Half NanReduceScalarHalf(NDArray arr, ReductionOp op)
+        {
+            var iter = arr.AsIterator<Half>();
+            switch (op)
+            {
+                case ReductionOp.NanSum:
+                {
+                    double sum = 0.0; // Use double for precision
+                    while (iter.HasNext())
+                    {
+                        Half val = iter.MoveNext();
+                        if (!Half.IsNaN(val))
+                            sum += (double)val;
+                    }
+                    return (Half)sum;
+                }
+                case ReductionOp.NanProd:
+                {
+                    double prod = 1.0; // Use double for precision
+                    while (iter.HasNext())
+                    {
+                        Half val = iter.MoveNext();
+                        if (!Half.IsNaN(val))
+                            prod *= (double)val;
+                    }
+                    return (Half)prod;
+                }
+                case ReductionOp.NanMin:
+                {
+                    Half minVal = Half.PositiveInfinity;
+                    bool foundNonNaN = false;
+                    while (iter.HasNext())
+                    {
+                        Half val = iter.MoveNext();
+                        if (!Half.IsNaN(val))
+                        {
+                            if (val < minVal) minVal = val;
+                            foundNonNaN = true;
+                        }
+                    }
+                    return foundNonNaN ? minVal : Half.NaN;
+                }
+                case ReductionOp.NanMax:
+                {
+                    Half maxVal = Half.NegativeInfinity;
+                    bool foundNonNaN = false;
+                    while (iter.HasNext())
+                    {
+                        Half val = iter.MoveNext();
+                        if (!Half.IsNaN(val))
+                        {
+                            if (val > maxVal) maxVal = val;
+                            foundNonNaN = true;
+                        }
+                    }
+                    return foundNonNaN ? maxVal : Half.NaN;
                 }
                 default:
                     throw new NotSupportedException($"Unsupported NaN reduction: {op}");

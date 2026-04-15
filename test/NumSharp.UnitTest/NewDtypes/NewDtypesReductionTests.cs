@@ -155,7 +155,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // NaN-aware reductions not supported for Half yet
         public void Half_NanSum()
         {
             // NumPy: np.nansum(np.array([0.0, 1.5, -2.5, nan, inf], dtype=np.float16)) = inf (dtype: float16)
@@ -179,7 +178,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // NaN-aware reductions not supported for Half yet
         public void Half_NanMin()
         {
             // NumPy: np.nanmin(np.array([0.0, 1.5, -2.5, nan, inf], dtype=np.float16)) = -2.5 (dtype: float16)
@@ -280,7 +278,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMax not supported for Complex yet
         public void Complex_ArgMax_ByMagnitude()
         {
             // NumPy: np.argmax(np.array([1+2j, 3+4j, 0+0j])) = 1 (by magnitude: [2.236, 5.0, 0.0])
@@ -290,7 +287,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMin not supported for Complex yet
         public void Complex_ArgMin_ByMagnitude()
         {
             // NumPy: np.argmin(np.array([1+2j, 3+4j, 0+0j])) = 2 (by magnitude: [2.236, 5.0, 0.0])

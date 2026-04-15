@@ -286,6 +286,24 @@ namespace NumSharp.Backends.Kernels
                         BindingFlags.NonPublic | BindingFlags.Static)!, null);
                     break;
 
+                case UnaryOp.IsNan:
+                    // Complex: IsNaN if either real or imaginary part is NaN
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsNaNHelper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
+                case UnaryOp.IsInf:
+                    // Complex: IsInfinity if either real or imaginary part is infinite
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsInfinityHelper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
+                case UnaryOp.IsFinite:
+                    // Complex: IsFinite if both real and imaginary parts are finite
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsFiniteHelper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported for Complex");
             }
@@ -300,6 +318,33 @@ namespace NumSharp.Backends.Kernels
             if (magnitude == 0)
                 return System.Numerics.Complex.Zero;
             return z / magnitude;
+        }
+
+        /// <summary>
+        /// Helper for Complex IsNaN: returns true if either real or imaginary part is NaN.
+        /// NumPy: np.isnan(complex) checks both real and imaginary parts.
+        /// </summary>
+        internal static bool ComplexIsNaNHelper(System.Numerics.Complex z)
+        {
+            return double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
+        }
+
+        /// <summary>
+        /// Helper for Complex IsInfinity: returns true if either real or imaginary part is infinite.
+        /// NumPy: np.isinf(complex) checks both real and imaginary parts.
+        /// </summary>
+        internal static bool ComplexIsInfinityHelper(System.Numerics.Complex z)
+        {
+            return double.IsInfinity(z.Real) || double.IsInfinity(z.Imaginary);
+        }
+
+        /// <summary>
+        /// Helper for Complex IsFinite: returns true if both real and imaginary parts are finite.
+        /// NumPy: np.isfinite(complex) checks both real and imaginary parts.
+        /// </summary>
+        internal static bool ComplexIsFiniteHelper(System.Numerics.Complex z)
+        {
+            return double.IsFinite(z.Real) && double.IsFinite(z.Imaginary);
         }
 
         #endregion

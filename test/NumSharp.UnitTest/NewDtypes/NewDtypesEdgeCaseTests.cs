@@ -16,7 +16,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Half Special Values
 
         [TestMethod]
-        [OpenBugs] // isinf/isnan/isfinite not supported for Half yet
         public void Half_Infinity_Operations()
         {
             var h = np.array(new Half[] { Half.PositiveInfinity, Half.NegativeInfinity, Half.NaN, (Half)0.0 });
@@ -66,7 +65,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Complex Special Values
 
         [TestMethod]
-        [OpenBugs] // isinf/isnan not supported for Complex yet
         public void Complex_Infinity_Operations()
         {
             var z = np.array(new Complex[] {
