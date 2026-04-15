@@ -152,15 +152,16 @@ public class DtypePromotionTests
     }
 
     [TestMethod]
-    public async Task Mean_Float32_ReturnsFloat64()
+    public async Task Mean_Float32_ReturnsFloat32()
     {
-        // NumSharp: np.mean(float32_array) returns float64 by default
-        // This differs from NumPy 2.x which returns float32 per NEP50
+        // NumPy 2.x (NEP50): np.mean(float32_array) returns float32
+        // NumSharp: element-wise mean preserves float32, axis mean returns float64
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.mean(a);
 
-        result.typecode.Should().Be(NPTypeCode.Double);
-        result.GetDouble(0).Should().Be(2.0);
+        // Element-wise mean now preserves dtype per NumPy 2.x
+        result.typecode.Should().Be(NPTypeCode.Single);
+        result.GetSingle(0).Should().Be(2.0f);
     }
 
     [TestMethod]

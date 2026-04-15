@@ -484,7 +484,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.UInt64:  return (Half)(double)Unsafe.As<T, ulong>(ref value);
                         case NPTypeCode.Char:    return (Half)(double)Unsafe.As<T, char>(ref value);
                         case NPTypeCode.Double:  return (Half)Unsafe.As<T, double>(ref value);
-                        case NPTypeCode.Single:  return (Half)(double)Unsafe.As<T, float>(ref value);
+                        case NPTypeCode.Single:  return (Half)Unsafe.As<T, float>(ref value);
                         case NPTypeCode.Decimal: return (Half)(double)Unsafe.As<T, decimal>(ref value);
                         default:
                             throw new NotSupportedException();
