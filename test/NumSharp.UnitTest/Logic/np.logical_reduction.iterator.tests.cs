@@ -2,9 +2,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class NpLogicalReductionIteratorTests
     {
-        [Test]
+        [TestMethod]
         public void All_Axis_OnTransposedView_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -19,7 +20,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void All_Axis_OnTransposedView_Keepdims_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_Axis_OnTransposedView_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -52,7 +53,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_Axis_OnTransposedView_Keepdims_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -68,7 +69,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void All_EmptyAxisReduction_UsesIdentity()
         {
             // NumPy 2.4.2:
@@ -88,7 +89,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result1, np.array(new[] { true, true })));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_EmptyAxisReduction_UsesIdentity()
         {
             // NumPy 2.4.2:
@@ -108,7 +109,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result1, np.array(new[] { false, false })));
         }
 
-        [Test]
+        [TestMethod]
         public void All_BroadcastColumn_Axis1_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -124,7 +125,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_BroadcastColumn_Axis0_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -140,7 +141,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void All_ChainedTransposedReversedView_Axis1_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -160,7 +161,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_ChainedTransposedReversedView_Axis0_Keepdims_MatchesNumPy()
         {
             // NumPy 2.4.2:
@@ -181,7 +182,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void All_EmptySliceView_Axis1_UsesIdentity()
         {
             // NumPy 2.4.2:
@@ -201,7 +202,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result, expected));
         }
 
-        [Test]
+        [TestMethod]
         public void Any_EmptySliceView_Axis1_UsesIdentity()
         {
             // NumPy 2.4.2:
