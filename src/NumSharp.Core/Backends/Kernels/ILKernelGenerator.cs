@@ -441,6 +441,36 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo Vector256DoubleMul = typeof(Vector256<double>).GetMethod("op_Multiply",
                 BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
                 ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Multiply");
+
+            // Half conversion methods (Half is a struct with operator methods, not IConvertible)
+            public static readonly MethodInfo HalfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+            public static readonly MethodInfo DoubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            public static readonly MethodInfo HalfIsNaN = typeof(Half).GetMethod("IsNaN", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "IsNaN");
+
+            // Half static properties (NaN, Zero, PositiveInfinity, NegativeInfinity are properties, not fields)
+            public static readonly MethodInfo HalfNaN = typeof(Half).GetProperty("NaN", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "NaN");
+            public static readonly MethodInfo HalfZero = typeof(Half).GetProperty("Zero", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Zero");
+            public static readonly MethodInfo HalfPositiveInfinity = typeof(Half).GetProperty("PositiveInfinity", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "PositiveInfinity");
+            public static readonly MethodInfo HalfNegativeInfinity = typeof(Half).GetProperty("NegativeInfinity", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
+
+            // Complex methods and fields (Complex uses static fields, not properties)
+            public static readonly MethodInfo ComplexAbs = typeof(System.Numerics.Complex).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Abs");
+            public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Division(Complex, double)");
+            public static readonly FieldInfo ComplexZero = typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(System.Numerics.Complex).FullName, "Zero");
+            public static readonly FieldInfo ComplexOne = typeof(System.Numerics.Complex).GetField("One", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(System.Numerics.Complex).FullName, "One");
+            public static readonly ConstructorInfo ComplexCtor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double, double)");
         }
 
         #endregion

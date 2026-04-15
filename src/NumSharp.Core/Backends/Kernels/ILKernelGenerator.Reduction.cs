@@ -744,12 +744,12 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalZero);
                     break;
                 case NPTypeCode.Half:
-                    // Load Half.Zero via static field
-                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("Zero", BindingFlags.Public | BindingFlags.Static)!);
+                    // Load Half.Zero via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfZero, null);
                     break;
                 case NPTypeCode.Complex:
                     // Load Complex.Zero via static field
-                    il.Emit(OpCodes.Ldsfld, typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexZero);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -787,13 +787,13 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalOne);
                     break;
                 case NPTypeCode.Half:
-                    // Load Half.One via static field (Half doesn't have One, use conversion)
+                    // Load Half.One via double conversion
                     il.Emit(OpCodes.Ldc_R8, 1.0);
-                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(double) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
                     break;
                 case NPTypeCode.Complex:
                     // Load Complex.One via static field
-                    il.Emit(OpCodes.Ldsfld, typeof(System.Numerics.Complex).GetField("One", BindingFlags.Public | BindingFlags.Static)!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -843,8 +843,8 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, double.NegativeInfinity);
                     break;
                 case NPTypeCode.Half:
-                    // Half.NegativeInfinity
-                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("NegativeInfinity", BindingFlags.Public | BindingFlags.Static)!);
+                    // Half.NegativeInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfNegativeInfinity, null);
                     break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMinValue);
@@ -900,8 +900,8 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
                     break;
                 case NPTypeCode.Half:
-                    // Half.PositiveInfinity
-                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("PositiveInfinity", BindingFlags.Public | BindingFlags.Static)!);
+                    // Half.PositiveInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfPositiveInfinity, null);
                     break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMaxValue);
