@@ -459,6 +459,9 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(3u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(3UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(3.7f, 0.001f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().BeApproximately(3.7, 0.001);
         }
 
         [TestMethod]
@@ -475,6 +478,9 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(4294967293u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(18446744073709551613UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(-3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(-3.7f, 0.001f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().BeApproximately(-3.7, 0.001);
         }
 
         [TestMethod]
@@ -491,6 +497,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L); // long.MinValue
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL); // 2^63
+            Half.IsNaN(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNaN(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNaN(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -509,6 +516,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsPositiveInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsPositiveInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsPositiveInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -527,6 +535,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsNegativeInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNegativeInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNegativeInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -603,6 +612,8 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(3u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(3UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(3.7f, 0.001f);
             arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(3.7);
         }
 
@@ -620,6 +631,8 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(4294967293u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(18446744073709551613UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(-3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(-3.7f, 0.001f);
             arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(-3.7);
         }
 
@@ -637,6 +650,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsNaN(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNaN(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNaN(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -655,6 +669,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsPositiveInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsPositiveInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsPositiveInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -673,6 +688,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsNegativeInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNegativeInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNegativeInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -750,6 +766,9 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(3u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(3UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(3.69921875f, 0.001f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().BeApproximately(3.69921875, 0.001);
         }
 
         [TestMethod]
@@ -766,6 +785,9 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(4294967293u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-3L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(18446744073709551613UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(-3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(-3.69921875f, 0.001f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().BeApproximately(-3.69921875, 0.001);
         }
 
         [TestMethod]
@@ -782,6 +804,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsNaN(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNaN(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNaN(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -800,6 +823,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsPositiveInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsPositiveInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsPositiveInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -818,6 +842,7 @@ namespace NumSharp.UnitTest.Casting
             arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
             arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
             arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+            Half.IsNegativeInfinity(arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
             float.IsNegativeInfinity(arr.astype(np.float32).GetAtIndex<float>(0)).Should().BeTrue();
             double.IsNegativeInfinity(arr.astype(np.float64).GetAtIndex<double>(0)).Should().BeTrue();
         }
@@ -1070,6 +1095,210 @@ namespace NumSharp.UnitTest.Casting
             result.GetAtIndex<int>(2).Should().Be(-1);
             result.GetAtIndex<int>(3).Should().Be(3);  // Truncate, not round
             result.GetAtIndex<int>(4).Should().Be(-3);
+        }
+
+        #endregion
+
+        #region MISSING: All Types → Half (Float16)
+
+        [TestMethod]
+        public void Bool_ToHalf()
+        {
+            np.array(new[] { false }).astype(NPTypeCode.Half).GetAtIndex<Half>(0).Should().Be((Half)0.0f);
+            np.array(new[] { true }).astype(NPTypeCode.Half).GetAtIndex<Half>(0).Should().Be((Half)1.0f);
+        }
+
+        [TestMethod]
+        public void Int8_ToHalf()
+        {
+            var values = new sbyte[] { 0, 1, -1, 127, -128 };
+            var expected = new float[] { 0.0f, 1.0f, -1.0f, 127.0f, -128.0f };
+
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Half);
+
+            for (int i = 0; i < values.Length; i++)
+                ((float)result.GetAtIndex<Half>(i)).Should().Be(expected[i]);
+        }
+
+        [TestMethod]
+        public void UInt8_ToHalf()
+        {
+            var values = new byte[] { 0, 1, 127, 128, 255 };
+            var expected = new float[] { 0.0f, 1.0f, 127.0f, 128.0f, 255.0f };
+
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Half);
+
+            for (int i = 0; i < values.Length; i++)
+                ((float)result.GetAtIndex<Half>(i)).Should().Be(expected[i]);
+        }
+
+        [TestMethod]
+        public void Int16_ToHalf()
+        {
+            // Note: int16(32767) -> float16 = 32768.0 (rounded due to precision)
+            var arr = np.array(new short[] { 0, 1, -1, 32767, -32768 });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(-1.0f);
+            ((float)result.GetAtIndex<Half>(3)).Should().Be(32768.0f); // Rounded
+            ((float)result.GetAtIndex<Half>(4)).Should().Be(-32768.0f);
+        }
+
+        [TestMethod]
+        public void UInt16_ToHalf()
+        {
+            var arr = np.array(new ushort[] { 0, 1, 32767, 32768, 65504 });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(32768.0f); // Rounded
+            ((float)result.GetAtIndex<Half>(3)).Should().Be(32768.0f);
+            ((float)result.GetAtIndex<Half>(4)).Should().Be(65504.0f); // Max finite float16
+        }
+
+        [TestMethod]
+        public void Int32_ToHalf()
+        {
+            var arr = np.array(new int[] { 0, 1, -1, 65504, -65504 });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(-1.0f);
+            ((float)result.GetAtIndex<Half>(3)).Should().Be(65504.0f);
+            ((float)result.GetAtIndex<Half>(4)).Should().Be(-65504.0f);
+        }
+
+        [TestMethod]
+        public void UInt32_ToHalf()
+        {
+            var arr = np.array(new uint[] { 0u, 1u, 65504u });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(65504.0f);
+        }
+
+        [TestMethod]
+        public void Int64_ToHalf()
+        {
+            var arr = np.array(new long[] { 0L, 1L, -1L, 65504L, -65504L });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(-1.0f);
+            ((float)result.GetAtIndex<Half>(3)).Should().Be(65504.0f);
+            ((float)result.GetAtIndex<Half>(4)).Should().Be(-65504.0f);
+        }
+
+        [TestMethod]
+        public void UInt64_ToHalf()
+        {
+            var arr = np.array(new ulong[] { 0UL, 1UL, 65504UL });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(65504.0f);
+        }
+
+        [TestMethod]
+        public void Float32_ToHalf()
+        {
+            var arr = np.array(new float[] { 0.0f, 1.0f, -1.0f, 3.7f, -3.7f });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(-1.0f);
+            ((float)result.GetAtIndex<Half>(3)).Should().BeApproximately(3.69921875f, 0.001f);
+            ((float)result.GetAtIndex<Half>(4)).Should().BeApproximately(-3.69921875f, 0.001f);
+        }
+
+        [TestMethod]
+        public void Float32_NaNInf_ToHalf()
+        {
+            Half.IsNaN(np.array(new[] { float.NaN }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+            Half.IsPositiveInfinity(np.array(new[] { float.PositiveInfinity }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+            Half.IsNegativeInfinity(np.array(new[] { float.NegativeInfinity }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Float64_ToHalf()
+        {
+            var arr = np.array(new double[] { 0.0, 1.0, -1.0, 3.7, -3.7 });
+            var result = arr.astype(NPTypeCode.Half);
+
+            ((float)result.GetAtIndex<Half>(0)).Should().Be(0.0f);
+            ((float)result.GetAtIndex<Half>(1)).Should().Be(1.0f);
+            ((float)result.GetAtIndex<Half>(2)).Should().Be(-1.0f);
+            ((float)result.GetAtIndex<Half>(3)).Should().BeApproximately(3.69921875f, 0.001f);
+            ((float)result.GetAtIndex<Half>(4)).Should().BeApproximately(-3.69921875f, 0.001f);
+        }
+
+        [TestMethod]
+        public void Float64_NaNInf_ToHalf()
+        {
+            Half.IsNaN(np.array(new[] { double.NaN }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+            Half.IsPositiveInfinity(np.array(new[] { double.PositiveInfinity }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+            Half.IsNegativeInfinity(np.array(new[] { double.NegativeInfinity }).astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeTrue();
+        }
+
+        #endregion
+
+        #region MISSING: Float Fractional → Float32/Float64
+
+        [TestMethod]
+        public void Float64_Fractional_ToFloat32()
+        {
+            var arr = np.array(new double[] { 3.7, -3.7 });
+            var result = arr.astype(np.float32);
+
+            result.GetAtIndex<float>(0).Should().BeApproximately(3.7f, 0.0001f);
+            result.GetAtIndex<float>(1).Should().BeApproximately(-3.7f, 0.0001f);
+        }
+
+        [TestMethod]
+        public void Float32_Fractional_ToFloat64()
+        {
+            var arr = np.array(new float[] { 3.7f, -3.7f });
+            var result = arr.astype(np.float64);
+
+            result.GetAtIndex<double>(0).Should().BeApproximately(3.7, 0.0001);
+            result.GetAtIndex<double>(1).Should().BeApproximately(-3.7, 0.0001);
+        }
+
+        [TestMethod]
+        public void Float16_ToFloat32()
+        {
+            var arr = np.array(new Half[] { (Half)0.0f, (Half)1.0f, (Half)(-1.0f), (Half)3.7f, (Half)(-3.7f) });
+            var result = arr.astype(np.float32);
+
+            result.GetAtIndex<float>(0).Should().Be(0.0f);
+            result.GetAtIndex<float>(1).Should().Be(1.0f);
+            result.GetAtIndex<float>(2).Should().Be(-1.0f);
+            result.GetAtIndex<float>(3).Should().BeApproximately(3.69921875f, 0.001f);
+            result.GetAtIndex<float>(4).Should().BeApproximately(-3.69921875f, 0.001f);
+        }
+
+        [TestMethod]
+        public void Float16_ToFloat64()
+        {
+            var arr = np.array(new Half[] { (Half)0.0f, (Half)1.0f, (Half)(-1.0f), (Half)3.7f, (Half)(-3.7f) });
+            var result = arr.astype(np.float64);
+
+            result.GetAtIndex<double>(0).Should().Be(0.0);
+            result.GetAtIndex<double>(1).Should().Be(1.0);
+            result.GetAtIndex<double>(2).Should().Be(-1.0);
+            result.GetAtIndex<double>(3).Should().BeApproximately(3.69921875, 0.001);
+            result.GetAtIndex<double>(4).Should().BeApproximately(-3.69921875, 0.001);
         }
 
         #endregion
