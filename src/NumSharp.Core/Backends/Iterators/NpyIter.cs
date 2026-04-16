@@ -342,15 +342,56 @@ namespace NumSharp.Backends.Iteration
 
             if (_state->NDim > 1)
             {
-                // Step 1: Reorder axes based on iteration order
-                // Pass forCoalescing=true when we will coalesce (no MULTI_INDEX)
-                // Pass forCoalescing=false when we need memory-order iteration (MULTI_INDEX with K-order)
-                NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: !hasMultiIndex);
+                // NumPy's coalescing strategy depends on the order parameter:
+                //
+                // Key insight: Coalescing produces MEMORY-order iteration. This is correct for:
+                // - K-order: Memory order is exactly what we want
+                // - C-order on C-contiguous: Memory order == C-order
+                // - F-order on F-contiguous: Memory order == F-order
+                //
+                // But for F-order on C-contiguous (or C-order on F-contiguous), coalescing
+                // would produce the WRONG iteration order, so we must not coalesce.
+                //
+                // NumPy's behavior:
+                // - K-order: Sort by stride, coalesce → memory order
+                // - C-order on C-contiguous: Sort by stride, coalesce → memory order (== C-order)
+                // - C-order on non-C-contiguous: Sort by stride, coalesce partial, iterate C-order
+                // - F-order on F-contiguous: Sort by stride, coalesce → memory order (== F-order)
+                // - F-order on C-contiguous: NO coalescing, reverse axes, iterate F-order
 
-                // Step 2: Coalesce only if not tracking multi-index
                 if (!hasMultiIndex)
                 {
-                    NpyIterCoalescing.CoalesceAxes(ref *_state);
+                    bool canCoalesce = order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER;
+
+                    if (!canCoalesce)
+                    {
+                        // For C/F order, check if coalescing would preserve iteration semantics
+                        // This is true only if the array is contiguous in the requested order
+                        bool isCContiguous = CheckAllOperandsContiguous(true);  // Check C-contiguous
+                        bool isFContiguous = CheckAllOperandsContiguous(false); // Check F-contiguous
+
+                        if (order == NPY_ORDER.NPY_CORDER && isCContiguous)
+                            canCoalesce = true;
+                        else if (order == NPY_ORDER.NPY_FORTRANORDER && isFContiguous)
+                            canCoalesce = true;
+                    }
+
+                    if (canCoalesce)
+                    {
+                        // Sort axes by stride, then coalesce
+                        NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, NPY_ORDER.NPY_KEEPORDER, forCoalescing: true);
+                        NpyIterCoalescing.CoalesceAxes(ref *_state);
+                    }
+                    else
+                    {
+                        // Can't coalesce - reorder for the requested iteration order
+                        NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: false);
+                    }
+                }
+                else
+                {
+                    // With MULTI_INDEX, just reorder axes without coalescing
+                    NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: false);
                 }
             }
 
@@ -610,6 +651,63 @@ namespace NumSharp.Backends.Iteration
                     if (strides[axis] != expected)
                         return false;
                     expected *= dim;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if all operands are contiguous in the specified order.
+        /// Uses the ORIGINAL operand arrays (before any axis reordering).
+        /// </summary>
+        /// <param name="cOrder">True for C-order (row-major), false for F-order (column-major)</param>
+        private bool CheckAllOperandsContiguous(bool cOrder)
+        {
+            if (_operands is null)
+                return false;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var arr = _operands[op];
+                if (arr is null)
+                    continue;
+
+                // Check if operand is contiguous in the requested order
+                var arrShape = arr.shape;
+                if (arr.ndim == 0 || arr.size <= 1)
+                    continue;  // Trivially contiguous
+
+                // Get strides from the original array
+                var strides = arr.strides;
+
+                // Check contiguity
+                long expected = 1;
+                if (cOrder)
+                {
+                    // C-order: last axis fastest, check from end to start
+                    for (int axis = arr.ndim - 1; axis >= 0; axis--)
+                    {
+                        long dim = arrShape[axis];
+                        if (dim == 1)
+                            continue;  // Size-1 dimensions are always contiguous
+                        if (strides[axis] != expected)
+                            return false;
+                        expected *= dim;
+                    }
+                }
+                else
+                {
+                    // F-order: first axis fastest, check from start to end
+                    for (int axis = 0; axis < arr.ndim; axis++)
+                    {
+                        long dim = arrShape[axis];
+                        if (dim == 1)
+                            continue;  // Size-1 dimensions are always contiguous
+                        if (strides[axis] != expected)
+                            return false;
+                        expected *= dim;
+                    }
                 }
             }
 

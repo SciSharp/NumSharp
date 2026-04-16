@@ -349,6 +349,48 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// Check if all operands are contiguous in the current internal axis order.
+        /// This determines whether coalescing would preserve the iteration semantics
+        /// for C/F order iteration.
+        ///
+        /// For coalescing to preserve iteration order, all operands must be contiguous
+        /// such that stride[i] * shape[i] == stride[i+1] for adjacent axes.
+        /// </summary>
+        public static bool IsContiguousForCoalescing(ref NpyIterState state)
+        {
+            if (state.NDim <= 1)
+                return true;  // Trivially contiguous
+
+            var shape = state.Shape;
+            var strides = state.Strides;
+            int stridesNDim = state.StridesNDim;
+
+            // Check each operand for contiguity in internal axis order
+            for (int op = 0; op < state.NOp; op++)
+            {
+                int baseIdx = op * stridesNDim;
+
+                // Check that stride[i] * shape[i] == stride[i+1] for all adjacent axes
+                for (int i = 0; i < state.NDim - 1; i++)
+                {
+                    long stride0 = strides[baseIdx + i];
+                    long shape0 = shape[i];
+                    long stride1 = strides[baseIdx + i + 1];
+
+                    // Handle broadcast dimensions (stride=0)
+                    if (stride0 == 0 || stride1 == 0)
+                        continue;  // Broadcast dims are always "contiguous" for coalescing
+
+                    // Check contiguity: inner_stride * inner_shape == outer_stride
+                    if (stride0 * shape0 != stride1)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Flip axes with all-negative strides for memory-order iteration.
         ///
         /// NumPy's npyiter_flip_negative_strides():
