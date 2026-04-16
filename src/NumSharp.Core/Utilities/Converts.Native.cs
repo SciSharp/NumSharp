@@ -532,8 +532,14 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
+            // NumPy uses int32 as intermediate for small types
+            // Values outside int32 range overflow to 0
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                return 0;
+            }
             // NumPy: truncate toward zero, then wrap modularly to sbyte
-            return unchecked((sbyte)(long)value);
+            return unchecked((sbyte)(int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -551,8 +557,8 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
-            // NumPy: truncate toward zero, then wrap modularly
-            return unchecked((sbyte)(long)(double)value);
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((sbyte)(int)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -702,10 +708,14 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
+            // NumPy uses int32 as intermediate for small types
+            // Values outside int32 range overflow to 0
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                return 0;
+            }
             // NumPy: truncate toward zero, then wrap modularly to byte
-            // For negative values like -3.7: truncate to -3, wrap to 253
-            // For overflow values like 1000: truncate to 1000, wrap to 232
-            return unchecked((byte)(long)value);
+            return unchecked((byte)(int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -723,8 +733,8 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
-            // NumPy: truncate toward zero, then wrap modularly
-            return unchecked((byte)(long)(double)value);
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((byte)(int)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -873,8 +883,14 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
+            // NumPy uses int32 as intermediate for small types
+            // Values outside int32 range overflow to 0
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                return 0;
+            }
             // NumPy: truncate toward zero, then wrap modularly to short
-            return unchecked((short)(long)value);
+            return unchecked((short)(int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -892,8 +908,8 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
-            // NumPy: truncate toward zero, then wrap modularly
-            return unchecked((short)(long)(double)value);
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((short)(int)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1047,8 +1063,14 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
+            // NumPy uses int32 as intermediate for small types
+            // Values outside int32 range overflow to 0
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                return 0;
+            }
             // NumPy: truncate toward zero, then wrap modularly to ushort
-            return unchecked((ushort)(long)value);
+            return unchecked((ushort)(int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1066,8 +1088,8 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
-            // NumPy: truncate toward zero, then wrap modularly
-            return unchecked((ushort)(long)(double)value);
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((ushort)(int)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
