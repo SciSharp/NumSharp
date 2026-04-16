@@ -353,27 +353,59 @@ namespace NumSharp.Backends.Iteration
                 // would produce the WRONG iteration order, so we must not coalesce.
                 //
                 // NumPy's behavior:
-                // - K-order: Sort by stride, coalesce → memory order
+                // - K-order on contiguous: Sort by stride, coalesce → memory order
+                // - K-order on non-contiguous: Fall back to C-order (no stride sorting)
                 // - C-order on C-contiguous: Sort by stride, coalesce → memory order (== C-order)
-                // - C-order on non-C-contiguous: Sort by stride, coalesce partial, iterate C-order
+                // - C-order on non-C-contiguous: Keep C-order, no coalescing
                 // - F-order on F-contiguous: Sort by stride, coalesce → memory order (== F-order)
                 // - F-order on C-contiguous: NO coalescing, reverse axes, iterate F-order
 
+                // Check contiguity once, use for all order decisions
+                // Note: CheckAllOperandsContiguous checks the ORIGINAL array strides.
+                // For reversed arrays (negative strides), FlipNegativeStrides has already
+                // negated the strides in the iterator state, so we also check absolute values.
+                bool isCContiguous = CheckAllOperandsContiguous(true);
+                bool isFContiguous = CheckAllOperandsContiguous(false);
+                bool hasBroadcast = HasBroadcastStrides();
+
+                // For coalescing to work correctly:
+                // 1. All operands must be contiguous (either C or F order)
+                //    - This includes reversed arrays (negative strides become positive after flip)
+                // 2. No broadcast dimensions (stride=0) - breaks stride-based sorting
+                bool isContiguous = (isCContiguous || isFContiguous) && !hasBroadcast;
+
+                // Determine effective order for non-contiguous arrays
+                // For K-order with non-contiguous/broadcast arrays, stride-based sorting
+                // produces wrong iteration order, so we fall back to C-order
+                NPY_ORDER effectiveOrder = order;
+                if ((order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER) && !isContiguous)
+                {
+                    effectiveOrder = NPY_ORDER.NPY_CORDER;
+                }
+
                 if (!hasMultiIndex)
                 {
-                    bool canCoalesce = order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER;
+                    // Coalescing is possible when:
+                    // - Arrays are contiguous in the REQUESTED order
+                    // - No broadcast dimensions that would break stride-based sorting
+                    // Example: F-order on C-contiguous array should NOT coalesce
+                    //          (coalescing produces memory-order which is C-order, wrong for F-order)
+                    bool canCoalesce;
 
-                    if (!canCoalesce)
+                    if (order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER)
                     {
-                        // For C/F order, check if coalescing would preserve iteration semantics
-                        // This is true only if the array is contiguous in the requested order
-                        bool isCContiguous = CheckAllOperandsContiguous(true);  // Check C-contiguous
-                        bool isFContiguous = CheckAllOperandsContiguous(false); // Check F-contiguous
-
-                        if (order == NPY_ORDER.NPY_CORDER && isCContiguous)
-                            canCoalesce = true;
-                        else if (order == NPY_ORDER.NPY_FORTRANORDER && isFContiguous)
-                            canCoalesce = true;
+                        // K-order: coalesce if contiguous in either C or F order
+                        canCoalesce = isContiguous;
+                    }
+                    else if (order == NPY_ORDER.NPY_CORDER)
+                    {
+                        // C-order: coalesce only if C-contiguous (no broadcast)
+                        canCoalesce = isCContiguous && !hasBroadcast;
+                    }
+                    else // NPY_FORTRANORDER
+                    {
+                        // F-order: coalesce only if F-contiguous (no broadcast)
+                        canCoalesce = isFContiguous && !hasBroadcast;
                     }
 
                     if (canCoalesce)
@@ -385,13 +417,14 @@ namespace NumSharp.Backends.Iteration
                     else
                     {
                         // Can't coalesce - reorder for the requested iteration order
-                        NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: false);
+                        NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
                     }
                 }
                 else
                 {
                     // With MULTI_INDEX, just reorder axes without coalescing
-                    NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: false);
+                    // Use effectiveOrder which applies K-order → C-order fallback for non-contiguous
+                    NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
                 }
             }
 
@@ -681,7 +714,9 @@ namespace NumSharp.Backends.Iteration
                 // Get strides from the original array
                 var strides = arr.strides;
 
-                // Check contiguity
+                // Check contiguity using absolute strides
+                // Negative strides indicate reversed arrays, which are handled by
+                // FlipNegativeStrides and become contiguous in the iterator
                 long expected = 1;
                 if (cOrder)
                 {
@@ -691,7 +726,8 @@ namespace NumSharp.Backends.Iteration
                         long dim = arrShape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        if (strides[axis] != expected)
+                        // Use absolute value to handle reversed arrays
+                        if (Math.Abs(strides[axis]) != expected)
                             return false;
                         expected *= dim;
                     }
@@ -704,7 +740,8 @@ namespace NumSharp.Backends.Iteration
                         long dim = arrShape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        if (strides[axis] != expected)
+                        // Use absolute value to handle reversed arrays
+                        if (Math.Abs(strides[axis]) != expected)
                             return false;
                         expected *= dim;
                     }
@@ -712,6 +749,32 @@ namespace NumSharp.Backends.Iteration
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Check if any operand has broadcast strides (stride=0) in the iterator state.
+        /// Broadcasting breaks stride-based sorting for K-order iteration.
+        /// </summary>
+        private bool HasBroadcastStrides()
+        {
+            if (_state->NDim <= 1)
+                return false;
+
+            int stridesNDim = _state->StridesNDim;
+            var strides = _state->Strides;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                int baseIdx = op * stridesNDim;
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    // stride=0 with shape > 1 indicates a broadcast dimension
+                    if (strides[baseIdx + d] == 0 && _state->Shape[d] > 1)
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
