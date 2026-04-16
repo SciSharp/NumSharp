@@ -514,10 +514,63 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void UnlimitedDimensions_MaxOperands()
+        public void UnlimitedOperands_ManyOperands()
         {
-            // MaxOperands is still 8 (reasonable limit for multi-operand iteration)
-            Assert.AreEqual(8, NpyIterState.MaxOperands);
+            // NUMSHARP DIVERGENCE: Unlike NumPy's NPY_MAXARGS=64, NumSharp supports unlimited operands.
+            // Test with 16 operands (more than NumPy 1.x's limit of 32, demonstrating unlimited support).
+            var arrays = new NDArray[16];
+            var opFlags = new NpyIterPerOpFlags[16];
+
+            for (int i = 0; i < 16; i++)
+            {
+                arrays[i] = np.array(new int[] { i, i + 1, i + 2 });
+                opFlags[i] = NpyIterPerOpFlags.READONLY;
+            }
+
+            using var iter = NpyIterRef.MultiNew(16, arrays, NpyIterGlobalFlags.None,
+                NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING, opFlags);
+
+            Assert.AreEqual(16, iter.NOp);
+            Assert.AreEqual(3, iter.IterSize);
+        }
+
+        [TestMethod]
+        public void UnlimitedOperands_100Operands_IteratesCorrectly()
+        {
+            // NUMSHARP DIVERGENCE: Test with 100 operands - well beyond NumPy's NPY_MAXARGS=64.
+            // This demonstrates NumSharp's truly unlimited operand support.
+            const int operandCount = 100;
+            var arrays = new NDArray[operandCount];
+            var opFlags = new NpyIterPerOpFlags[operandCount];
+
+            for (int i = 0; i < operandCount; i++)
+            {
+                arrays[i] = np.array(new int[] { i * 10, i * 10 + 1 });
+                opFlags[i] = NpyIterPerOpFlags.READONLY;
+            }
+
+            using var iter = NpyIterRef.MultiNew(operandCount, arrays, NpyIterGlobalFlags.None,
+                NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING, opFlags);
+
+            Assert.AreEqual(operandCount, iter.NOp);
+            Assert.AreEqual(2, iter.IterSize);
+
+            // Verify we can read from all operands at position 0
+            for (int op = 0; op < operandCount; op++)
+            {
+                int value = iter.GetValue<int>(op);
+                Assert.AreEqual(op * 10, value, $"Operand {op} value at position 0");
+            }
+
+            // Move to position 1
+            iter.Iternext();
+
+            // Verify we can read from all operands at position 1
+            for (int op = 0; op < operandCount; op++)
+            {
+                int value = iter.GetValue<int>(op);
+                Assert.AreEqual(op * 10 + 1, value, $"Operand {op} value at position 1");
+            }
         }
 
         // =========================================================================

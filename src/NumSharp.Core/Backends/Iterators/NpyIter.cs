@@ -89,8 +89,8 @@ namespace NumSharp.Backends.Iteration
             long[]? iterShape = null,
             long bufferSize = 0)
         {
-            if (nop < 1 || nop > NpyIterState.MaxOperands)
-                throw new ArgumentOutOfRangeException(nameof(nop), $"Number of operands must be between 1 and {NpyIterState.MaxOperands}");
+            if (nop < 1)
+                throw new ArgumentOutOfRangeException(nameof(nop), "At least one operand is required");
 
             if (op == null || op.Length < nop)
                 throw new ArgumentException("Operand array must contain at least nop elements", nameof(op));
@@ -1843,14 +1843,34 @@ namespace NumSharp.Backends.Iteration
 
             try
             {
-                // Copy fixed-size portion of state
-                *newStatePtr = *_state;
+                // Copy scalar fields (excludes pointers since they will be re-allocated)
+                newStatePtr->ItFlags = _state->ItFlags;
+                newStatePtr->NDim = _state->NDim;
+                newStatePtr->NOp = _state->NOp;
+                newStatePtr->MaskOp = _state->MaskOp;
+                newStatePtr->IterSize = _state->IterSize;
+                newStatePtr->IterIndex = _state->IterIndex;
+                newStatePtr->IterStart = _state->IterStart;
+                newStatePtr->IterEnd = _state->IterEnd;
+                newStatePtr->FlatIndex = _state->FlatIndex;
+                newStatePtr->IsCIndex = _state->IsCIndex;
+                newStatePtr->DType = _state->DType;
+                newStatePtr->StridesNDim = _state->StridesNDim;
+                newStatePtr->BufferSize = _state->BufferSize;
+                newStatePtr->BufIterEnd = _state->BufIterEnd;
+                newStatePtr->ReducePos = _state->ReducePos;
+                newStatePtr->ReduceOuterSize = _state->ReduceOuterSize;
+                newStatePtr->CoreSize = _state->CoreSize;
+                newStatePtr->CorePos = _state->CorePos;
+                newStatePtr->OuterDim = _state->OuterDim;
+                newStatePtr->CoreOffset = _state->CoreOffset;
 
-                // Allocate new dimension arrays and copy contents
+                // ALWAYS allocate new arrays (both dimension and operand arrays are dynamic now)
+                newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp);
+
+                // Copy dimension arrays (if NDim > 0)
                 if (_state->NDim > 0)
                 {
-                    newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp);
-
                     // Copy Shape
                     for (int d = 0; d < _state->NDim; d++)
                         newStatePtr->Shape[d] = _state->Shape[d];
@@ -1867,6 +1887,26 @@ namespace NumSharp.Backends.Iteration
                     int strideCount = _state->StridesNDim * _state->NOp;
                     for (int i = 0; i < strideCount; i++)
                         newStatePtr->Strides[i] = _state->Strides[i];
+                }
+
+                // Copy per-operand arrays
+                int nop = _state->NOp;
+                for (int op = 0; op < nop; op++)
+                {
+                    newStatePtr->DataPtrs[op] = _state->DataPtrs[op];
+                    newStatePtr->ResetDataPtrs[op] = _state->ResetDataPtrs[op];
+                    newStatePtr->BaseOffsets[op] = _state->BaseOffsets[op];
+                    newStatePtr->OpItFlags[op] = _state->OpItFlags[op];
+                    newStatePtr->OpDTypes[op] = _state->OpDTypes[op];
+                    newStatePtr->OpSrcDTypes[op] = _state->OpSrcDTypes[op];
+                    newStatePtr->ElementSizes[op] = _state->ElementSizes[op];
+                    newStatePtr->SrcElementSizes[op] = _state->SrcElementSizes[op];
+                    newStatePtr->InnerStrides[op] = _state->InnerStrides[op];
+                    newStatePtr->Buffers[op] = _state->Buffers[op];
+                    newStatePtr->BufStrides[op] = _state->BufStrides[op];
+                    newStatePtr->ReduceOuterStrides[op] = _state->ReduceOuterStrides[op];
+                    newStatePtr->ReduceOuterPtrs[op] = _state->ReduceOuterPtrs[op];
+                    newStatePtr->ArrayWritebackPtrs[op] = _state->ArrayWritebackPtrs[op];
                 }
 
                 // Create new iterator owning the state

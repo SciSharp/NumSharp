@@ -897,8 +897,10 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
-        public void TooManyOperands_Throws()
+        public void ManyOperands_Works()
         {
+            // NUMSHARP DIVERGENCE: Unlike NumPy's NPY_MAXARGS=64, NumSharp supports unlimited operands.
+            // Test with 10 operands to verify no artificial limit.
             var arrays = new NDArray[10];
             for (int i = 0; i < 10; i++)
                 arrays[i] = np.arange(10);
@@ -907,16 +909,16 @@ namespace NumSharp.UnitTest.Backends.Iterators
             for (int i = 0; i < 10; i++)
                 opFlags[i] = NpyIterPerOpFlags.READONLY;
 
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
-            {
-                using var iter = NpyIterRef.MultiNew(
-                    nop: 10,  // MaxOperands is 8
-                    op: arrays,
-                    flags: NpyIterGlobalFlags.None,
-                    order: NPY_ORDER.NPY_KEEPORDER,
-                    casting: NPY_CASTING.NPY_SAFE_CASTING,
-                    opFlags: opFlags);
-            });
+            using var iter = NpyIterRef.MultiNew(
+                nop: 10,  // NumSharp supports unlimited operands
+                op: arrays,
+                flags: NpyIterGlobalFlags.None,
+                order: NPY_ORDER.NPY_KEEPORDER,
+                casting: NPY_CASTING.NPY_SAFE_CASTING,
+                opFlags: opFlags);
+
+            Assert.AreEqual(10, iter.NOp);
+            Assert.AreEqual(10, iter.IterSize);
         }
 
         [TestMethod]

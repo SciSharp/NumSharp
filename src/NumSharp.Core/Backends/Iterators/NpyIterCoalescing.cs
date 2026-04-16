@@ -401,20 +401,16 @@ namespace NumSharp.Backends.Iteration
                     long shapeMinus1 = shape[axis] - 1;
 
                     // Flip strides and adjust reset data pointers
-                    fixed (long* resetPtrs = state.ResetDataPtrs)
-                    fixed (int* elemSizes = state.ElementSizes)
+                    for (int op = 0; op < nop; op++)
                     {
-                        for (int op = 0; op < nop; op++)
-                        {
-                            long stride = strides[op * stridesNDim + axis];
-                            int elemSize = elemSizes[op];
+                        long stride = strides[op * stridesNDim + axis];
+                        int elemSize = state.ElementSizes[op];
 
-                            // Adjust reset pointer to start at the end of this axis
-                            resetPtrs[op] += shapeMinus1 * stride * elemSize;
+                        // Adjust reset pointer to start at the end of this axis
+                        state.ResetDataPtrs[op] += shapeMinus1 * stride * elemSize;
 
-                            // Negate the stride
-                            strides[op * stridesNDim + axis] = -stride;
-                        }
+                        // Negate the stride
+                        strides[op * stridesNDim + axis] = -stride;
                     }
 
                     // Mark axis as flipped in permutation
@@ -429,13 +425,9 @@ namespace NumSharp.Backends.Iteration
             if (anyFlipped)
             {
                 // Also update current data pointers to match reset pointers
-                fixed (long* dataPtrs = state.DataPtrs)
-                fixed (long* resetPtrs = state.ResetDataPtrs)
+                for (int op = 0; op < nop; op++)
                 {
-                    for (int op = 0; op < nop; op++)
-                    {
-                        dataPtrs[op] = resetPtrs[op];
-                    }
+                    state.DataPtrs[op] = state.ResetDataPtrs[op];
                 }
 
                 // Set NEGPERM flag and clear IDENTPERM

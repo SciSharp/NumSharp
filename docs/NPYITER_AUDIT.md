@@ -1,7 +1,7 @@
 # NpyIter Implementation Audit
 
-**Date:** 2026-04-16
-**Test Results:** 252 tests passing, 0 failing
+**Date:** 2026-04-16 (Updated: Unlimited operands)
+**Test Results:** 253 tests passing, 0 failing
 
 ---
 
@@ -173,7 +173,7 @@ NumSharp's NpyIter implementation has achieved **comprehensive NumPy parity** fo
 | Aspect | NumPy | NumSharp | Reason |
 |--------|-------|----------|--------|
 | MaxDims | 64 | Unlimited | NumSharp design philosophy |
-| MaxOperands | Unlimited | 8 | Reasonable limit, fixed allocation |
+| MaxOperands | 64 | Unlimited | NumSharp design philosophy (full parity) |
 | Flag bit positions | Standard | Shifted | Legacy compatibility |
 | Index tracking | Stride-based | Computed | Simpler implementation |
 
@@ -214,7 +214,6 @@ NumSharp's NpyIter implementation has achieved **comprehensive NumPy parity** fo
 
 | Limitation | Impact | Workaround |
 |------------|--------|------------|
-| MaxOperands = 8 | Very rare to need more | Chain operations |
 | No object arrays | N/A for NumSharp | Not applicable |
 | No Python callbacks | N/A for NumSharp | Not applicable |
 
