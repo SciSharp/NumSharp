@@ -98,9 +98,15 @@ namespace NumSharp
                 case NPTypeCode.Complex:
                     one = new Complex(1d, 0d);
                     break;
+                case NPTypeCode.Half:
+                    one = (Half)1;
+                    break;
+                case NPTypeCode.SByte:
+                    one = (sbyte)1;
+                    break;
                 case NPTypeCode.String:
                     one = "1";
-                    break;                
+                    break;
                 case NPTypeCode.Char:
                     one = '1';
                     break;

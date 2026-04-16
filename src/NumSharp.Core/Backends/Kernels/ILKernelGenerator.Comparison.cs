@@ -1100,38 +1100,87 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Complex comparison using operator methods.
-        /// Note: Complex only supports == and !=, not ordered comparisons.
+        /// Emit Complex comparison using operator methods or lexicographic ordering.
+        /// NumPy 2.x supports ordered comparisons (&lt;, &gt;, &lt;=, &gt;=) using lexicographic ordering:
+        /// first by real part, then by imaginary part.
         /// </summary>
         private static void EmitComplexComparison(ILGenerator il, ComparisonOp op)
         {
-            // Complex only has equality and inequality operators
-            string? methodName = op switch
+            // For == and !=, use the built-in operators
+            if (op == ComparisonOp.Equal || op == ComparisonOp.NotEqual)
             {
-                ComparisonOp.Equal => "op_Equality",
-                ComparisonOp.NotEqual => "op_Inequality",
-                _ => null
-            };
+                string methodName = op == ComparisonOp.Equal ? "op_Equality" : "op_Inequality";
+                var method = typeof(System.Numerics.Complex).GetMethod(
+                    methodName,
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) },
+                    null
+                );
 
-            if (methodName == null)
-            {
-                throw new NotSupportedException(
-                    $"Comparison {op} not supported for Complex. " +
-                    "Complex numbers do not have a natural ordering - only == and != are valid.");
+                if (method == null)
+                    throw new InvalidOperationException($"Complex.{methodName} not found");
+
+                il.EmitCall(OpCodes.Call, method, null);
+                return;
             }
 
-            var method = typeof(System.Numerics.Complex).GetMethod(
-                methodName,
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) },
-                null
-            );
+            // For ordered comparisons, use lexicographic ordering (NumPy 2.x behavior)
+            // Stack: [lhs: Complex, rhs: Complex]
+            // Use helper method for lexicographic comparison
+            var helperMethod = op switch
+            {
+                ComparisonOp.Less => typeof(ILKernelGenerator).GetMethod(nameof(ComplexLessThanHelper), BindingFlags.NonPublic | BindingFlags.Static),
+                ComparisonOp.LessEqual => typeof(ILKernelGenerator).GetMethod(nameof(ComplexLessEqualHelper), BindingFlags.NonPublic | BindingFlags.Static),
+                ComparisonOp.Greater => typeof(ILKernelGenerator).GetMethod(nameof(ComplexGreaterThanHelper), BindingFlags.NonPublic | BindingFlags.Static),
+                ComparisonOp.GreaterEqual => typeof(ILKernelGenerator).GetMethod(nameof(ComplexGreaterEqualHelper), BindingFlags.NonPublic | BindingFlags.Static),
+                _ => throw new NotSupportedException($"Comparison {op} not supported for Complex")
+            };
 
-            if (method == null)
-                throw new InvalidOperationException($"Complex.{methodName} not found");
+            if (helperMethod == null)
+                throw new InvalidOperationException($"Complex comparison helper for {op} not found");
 
-            il.EmitCall(OpCodes.Call, method, null);
+            il.EmitCall(OpCodes.Call, helperMethod, null);
+        }
+
+        /// <summary>
+        /// Lexicographic less-than comparison for Complex: first by real, then by imaginary.
+        /// </summary>
+        internal static bool ComplexLessThanHelper(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (a.Real < b.Real) return true;
+            if (a.Real > b.Real) return false;
+            return a.Imaginary < b.Imaginary;
+        }
+
+        /// <summary>
+        /// Lexicographic less-than-or-equal comparison for Complex.
+        /// </summary>
+        internal static bool ComplexLessEqualHelper(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (a.Real < b.Real) return true;
+            if (a.Real > b.Real) return false;
+            return a.Imaginary <= b.Imaginary;
+        }
+
+        /// <summary>
+        /// Lexicographic greater-than comparison for Complex.
+        /// </summary>
+        internal static bool ComplexGreaterThanHelper(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (a.Real > b.Real) return true;
+            if (a.Real < b.Real) return false;
+            return a.Imaginary > b.Imaginary;
+        }
+
+        /// <summary>
+        /// Lexicographic greater-than-or-equal comparison for Complex.
+        /// </summary>
+        internal static bool ComplexGreaterEqualHelper(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (a.Real > b.Real) return true;
+            if (a.Real < b.Real) return false;
+            return a.Imaginary >= b.Imaginary;
         }
 
         #endregion

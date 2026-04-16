@@ -27,21 +27,22 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
 
-                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
-                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSByte(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = val is Half h ? h : (Half)(val is IConvertible icH ? icH.ToDouble(CultureInfo.InvariantCulture) : (double)val)};
-                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(val is IConvertible icC ? icC.ToDouble(CultureInfo.InvariantCulture) : (double)val, 0)};
+                // Use Converts.ToXxx for NumPy-compatible unchecked wrapping on integer overflow
+                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = Converts.ToBoolean(val)};
+                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = Converts.ToSByte(val)};
+                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = Converts.ToByte(val)};
+                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = Converts.ToInt16(val)};
+                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = Converts.ToUInt16(val)};
+                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = Converts.ToInt32(val)};
+                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = Converts.ToUInt32(val)};
+                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = Converts.ToInt64(val)};
+                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = Converts.ToUInt64(val)};
+                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = Converts.ToChar(val)};
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = Converts.ToHalf(val)};
+                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = Converts.ToDouble(val)};
+                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = Converts.ToSingle(val)};
+                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = Converts.ToDecimal(val)};
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = Converts.ToComplex(val)};
                 default:
                     throw new NotSupportedException();
 #endif
@@ -66,21 +67,22 @@ namespace NumSharp.Backends.Unmanaged
 		            throw new NotSupportedException();
 #else
 
-                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToBoolean(CultureInfo.InvariantCulture)};
-                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSByte(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToByte(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt16(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt16(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt32(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt32(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToInt64(CultureInfo.InvariantCulture)};
-                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToUInt64(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToChar(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = val is Half h ? h : (Half)(val is IConvertible icH ? icH.ToDouble(CultureInfo.InvariantCulture) : (double)val)};
-                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDouble(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToSingle(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = ((IConvertible)val).ToDecimal(CultureInfo.InvariantCulture)};
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = val is Complex c ? c : new Complex(val is IConvertible icC ? icC.ToDouble(CultureInfo.InvariantCulture) : (double)val, 0)};
+                // Use Converts.ToXxx for NumPy-compatible unchecked wrapping on integer overflow
+                case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = Converts.ToBoolean(val)};
+                case NPTypeCode.SByte: return new ArraySlice<SByte>(UnmanagedMemoryBlock<SByte>.FromPool(_buffer)) {[0] = Converts.ToSByte(val)};
+                case NPTypeCode.Byte: return new ArraySlice<Byte>(UnmanagedMemoryBlock<Byte>.FromPool(_buffer)) {[0] = Converts.ToByte(val)};
+                case NPTypeCode.Int16: return new ArraySlice<Int16>(UnmanagedMemoryBlock<Int16>.FromPool(_buffer)) {[0] = Converts.ToInt16(val)};
+                case NPTypeCode.UInt16: return new ArraySlice<UInt16>(UnmanagedMemoryBlock<UInt16>.FromPool(_buffer)) {[0] = Converts.ToUInt16(val)};
+                case NPTypeCode.Int32: return new ArraySlice<Int32>(UnmanagedMemoryBlock<Int32>.FromPool(_buffer)) {[0] = Converts.ToInt32(val)};
+                case NPTypeCode.UInt32: return new ArraySlice<UInt32>(UnmanagedMemoryBlock<UInt32>.FromPool(_buffer)) {[0] = Converts.ToUInt32(val)};
+                case NPTypeCode.Int64: return new ArraySlice<Int64>(UnmanagedMemoryBlock<Int64>.FromPool(_buffer)) {[0] = Converts.ToInt64(val)};
+                case NPTypeCode.UInt64: return new ArraySlice<UInt64>(UnmanagedMemoryBlock<UInt64>.FromPool(_buffer)) {[0] = Converts.ToUInt64(val)};
+                case NPTypeCode.Char: return new ArraySlice<Char>(UnmanagedMemoryBlock<Char>.FromPool(_buffer)) {[0] = Converts.ToChar(val)};
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromPool(_buffer)) {[0] = Converts.ToHalf(val)};
+                case NPTypeCode.Double: return new ArraySlice<Double>(UnmanagedMemoryBlock<Double>.FromPool(_buffer)) {[0] = Converts.ToDouble(val)};
+                case NPTypeCode.Single: return new ArraySlice<Single>(UnmanagedMemoryBlock<Single>.FromPool(_buffer)) {[0] = Converts.ToSingle(val)};
+                case NPTypeCode.Decimal: return new ArraySlice<Decimal>(UnmanagedMemoryBlock<Decimal>.FromPool(_buffer)) {[0] = Converts.ToDecimal(val)};
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = Converts.ToComplex(val)};
                 default:
                     throw new NotSupportedException();
 #endif
@@ -412,7 +414,7 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
                 case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
-                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, (Half)Convert.ToDouble(fill)));
+                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, fill is Half h ? h : (Half)Convert.ToDouble(fill)));
                 case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
@@ -487,7 +489,7 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, ((IConvertible)fill).ToInt64(CultureInfo.InvariantCulture)));
                 case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, ((IConvertible)fill).ToUInt64(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, ((IConvertible)fill).ToChar(CultureInfo.InvariantCulture)));
-                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, (Half)Convert.ToDouble(fill)));
+                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, fill is Half h ? h : (Half)Convert.ToDouble(fill)));
                 case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, ((IConvertible)fill).ToDouble(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, ((IConvertible)fill).ToSingle(CultureInfo.InvariantCulture)));
                 case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, ((IConvertible)fill).ToDecimal(CultureInfo.InvariantCulture)));
