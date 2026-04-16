@@ -221,20 +221,50 @@ namespace NumSharp.Backends.Iteration
         // Buffered Reduction Data (when BUFFERED + REDUCE flags are set)
         // =========================================================================
         // NumPy uses a double-loop pattern for buffered reduction:
-        // - Outer loop: iterates over non-reduce axes
-        // - Inner loop: iterates over reduce axis within buffer
+        // - Inner loop: iterates through CoreSize elements (non-reduce dimensions)
+        // - Outer loop: iterates ReduceOuterSize times (reduce dimension)
+        //
+        // The key insight: reduce operands have ReduceOuterStride=0, so their
+        // pointer stays fixed while input advances, accumulating values.
+        //
+        // Reference: numpy/_core/src/multiarray/nditer_templ.c.src lines 131-210
         // =========================================================================
 
         /// <summary>
-        /// Current position in reduce outer loop.
+        /// Current position in reduce outer loop [0, ReduceOuterSize).
         /// Used by IsFirstVisit for buffered reduction.
         /// </summary>
         public long ReducePos;
 
         /// <summary>
-        /// Size of reduce outer loop (number of reduction iterations).
+        /// Size of reduce outer loop (transfersize / CoreSize).
+        /// Number of times to iterate the reduce dimension within buffer.
         /// </summary>
         public long ReduceOuterSize;
+
+        /// <summary>
+        /// Inner loop size (number of inputs per output element).
+        /// When reducing, Size is set to CoreSize and we iterate ReduceOuterSize times.
+        /// </summary>
+        public long CoreSize;
+
+        /// <summary>
+        /// Current position within core [0, CoreSize).
+        /// Reset to 0 when advancing to next outer iteration.
+        /// Used by IsFirstVisit - returns true only when CorePos = 0.
+        /// </summary>
+        public long CorePos;
+
+        /// <summary>
+        /// Which dimension is the reduce outer dimension.
+        /// Used for stride calculation.
+        /// </summary>
+        public int OuterDim;
+
+        /// <summary>
+        /// Offset into core (for partial buffer fills).
+        /// </summary>
+        public long CoreOffset;
 
         /// <summary>
         /// Outer strides for reduction (stride per reduce outer iteration).
@@ -242,6 +272,13 @@ namespace NumSharp.Backends.Iteration
         /// When stride is 0, the operand is a reduction target for that axis.
         /// </summary>
         public fixed long ReduceOuterStrides[MaxOperands];
+
+        /// <summary>
+        /// Reset pointers for outer loop iteration.
+        /// After completing inner loop, we advance these by ReduceOuterStrides.
+        /// Layout: [op0_ptr, op1_ptr, ...]
+        /// </summary>
+        public fixed long ReduceOuterPtrs[MaxOperands];
 
         // =========================================================================
         // Allocation and Deallocation
@@ -492,6 +529,22 @@ namespace NumSharp.Backends.Iteration
                 p[op] = (long)ptr;
         }
 
+        /// <summary>Get buffer stride for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public long GetBufStride(int op)
+        {
+            fixed (long* p = BufStrides)
+                return p[op];
+        }
+
+        /// <summary>Set buffer stride for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetBufStride(int op, long stride)
+        {
+            fixed (long* p = BufStrides)
+                p[op] = stride;
+        }
+
         /// <summary>Get reduce outer stride for operand.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetReduceOuterStride(int op)
@@ -506,6 +559,22 @@ namespace NumSharp.Backends.Iteration
         {
             fixed (long* p = ReduceOuterStrides)
                 p[op] = stride;
+        }
+
+        /// <summary>Get reduce outer pointer for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void* GetReduceOuterPtr(int op)
+        {
+            fixed (long* p = ReduceOuterPtrs)
+                return (void*)p[op];
+        }
+
+        /// <summary>Set reduce outer pointer for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetReduceOuterPtr(int op, void* ptr)
+        {
+            fixed (long* p = ReduceOuterPtrs)
+                p[op] = (long)ptr;
         }
 
         /// <summary>
@@ -612,6 +681,93 @@ namespace NumSharp.Backends.Iteration
                     FlatIndex++;
                 else
                     FlatIndex = ComputeFlatIndex();
+            }
+        }
+
+        /// <summary>
+        /// Buffered reduce iteration advance.
+        /// Implements NumPy's double-loop pattern for efficient buffered reduction.
+        ///
+        /// Returns:
+        /// - 1: More elements in current buffer (inner or outer loop)
+        /// - 0: Buffer exhausted, need to refill
+        /// - -1: Iteration complete
+        ///
+        /// Reference: numpy/_core/src/multiarray/nditer_templ.c.src lines 131-210
+        /// </summary>
+        public int BufferedReduceAdvance()
+        {
+            // === INNER LOOP INCREMENT ===
+            // Check if we can advance within the current core (inner loop)
+            if (++IterIndex < BufIterEnd)
+            {
+                // Still within core - advance pointers by buffer strides
+                // Also track position within core for IsFirstVisit
+                CorePos++;
+
+                fixed (long* dataPtrs = DataPtrs)
+                fixed (long* bufStrides = BufStrides)
+                {
+                    for (int op = 0; op < NOp; op++)
+                    {
+                        dataPtrs[op] += bufStrides[op];
+                    }
+                }
+                return 1;  // More elements
+            }
+
+            // === OUTER LOOP INCREMENT (the double-loop magic) ===
+            // Inner loop exhausted, try advancing the reduce outer loop
+            if (++ReducePos < ReduceOuterSize)
+            {
+                // Reset core position for new outer iteration
+                CorePos = 0;
+
+                // Advance to next reduce position without re-buffering
+                fixed (long* dataPtrs = DataPtrs)
+                fixed (long* outerPtrs = ReduceOuterPtrs)
+                fixed (long* outerStrides = ReduceOuterStrides)
+                {
+                    for (int op = 0; op < NOp; op++)
+                    {
+                        // Advance outer pointer by reduce outer stride
+                        long ptr = outerPtrs[op] + outerStrides[op];
+                        dataPtrs[op] = ptr;       // Current pointer
+                        outerPtrs[op] = ptr;      // Save for next outer iteration
+                    }
+                }
+
+                // Reset inner loop bounds
+                // Note: Size holds CoreSize when reducing
+                BufIterEnd = IterIndex + CoreSize;
+                return 1;  // More elements (restart inner loop)
+            }
+
+            // === BUFFER EXHAUSTED ===
+            // Both inner and outer loops exhausted
+            // Check if we're past the end
+            if (IterIndex >= IterEnd)
+            {
+                return -1;  // Iteration complete
+            }
+
+            // Need to refill buffers - return 0 to signal caller
+            return 0;
+        }
+
+        /// <summary>
+        /// Initialize reduce outer pointers from current data pointers.
+        /// Called after buffer fill to set up the outer loop start positions.
+        /// </summary>
+        public void InitReduceOuterPtrs()
+        {
+            fixed (long* dataPtrs = DataPtrs)
+            fixed (long* outerPtrs = ReduceOuterPtrs)
+            {
+                for (int op = 0; op < NOp; op++)
+                {
+                    outerPtrs[op] = dataPtrs[op];
+                }
             }
         }
 

@@ -2750,5 +2750,238 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(message.Contains("write-only") || message.Contains("WRITEONLY"),
                 $"Error message should mention write-only: {message}");
         }
+
+        // =========================================================================
+        // Buffered Reduction Double-Loop Tests
+        // =========================================================================
+        // NumPy uses a double-loop pattern for buffered reduction to avoid
+        // re-buffering during reduction. These tests verify NumSharp matches
+        // this behavior.
+        // Reference: numpy/_core/src/multiarray/nditer_templ.c.src lines 131-210
+        // =========================================================================
+
+        [TestMethod]
+        public void BufferedReduction_1DToScalar_ProducesCorrectResult()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(10)
+            // >>> it = np.nditer([a, None], ['reduce_ok', 'buffered'],
+            // ...                [['readonly'], ['readwrite', 'allocate']],
+            // ...                op_axes=[[0], [-1]])
+            // >>> it.operands[1][...] = 0
+            // >>> for x, y in it:
+            // ...     y[...] += x
+            // >>> int(it.operands[1])
+            // 45
+
+            var a = np.arange(10);
+            var result = np.array(new long[] { 0 });
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                1,
+                new[] { new[] { 0 }, new[] { -1 } });
+
+            // Iterate and accumulate
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            // Sum of 0+1+2+...+9 = 45
+            Assert.AreEqual(45L, (long)result[0]);
+        }
+
+        [TestMethod]
+        public void BufferedReduction_2DAlongAxis1_ProducesCorrectResult()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(12).reshape(3, 4)
+            // >>> b = np.zeros(3, dtype=np.int64)
+            // >>> it = np.nditer([a, b], ['reduce_ok', 'buffered'],
+            // ...                [['readonly'], ['readwrite']],
+            // ...                op_axes=[[0, 1], [0, -1]])
+            // >>> for x, y in it:
+            // ...     y[...] += x
+            // >>> b
+            // array([ 6, 22, 38])  # Row sums: [0+1+2+3, 4+5+6+7, 8+9+10+11]
+
+            var a = np.arange(12).reshape(3, 4);
+            var b = np.zeros(new Shape(3), NPTypeCode.Int64);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, b },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { 0, -1 } },
+                new long[] { 3, 4 });
+
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            Assert.AreEqual(6L, (long)b[0], "Sum of row 0: 0+1+2+3=6");
+            Assert.AreEqual(22L, (long)b[1], "Sum of row 1: 4+5+6+7=22");
+            Assert.AreEqual(38L, (long)b[2], "Sum of row 2: 8+9+10+11=38");
+        }
+
+        [TestMethod]
+        public void BufferedReduction_IsFirstVisit_WorksWithBuffering()
+        {
+            // Test that IsFirstVisit correctly handles buffer reduce_pos
+            // This is the key test for the double-loop pattern
+
+            var a = np.arange(6).reshape(2, 3);
+            var b = np.zeros(new Shape(2), NPTypeCode.Int64);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, b },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { 0, -1 } },
+                new long[] { 2, 3 });
+
+            // Track IsFirstVisit pattern
+            var firstVisits = new List<bool>();
+
+            do
+            {
+                firstVisits.Add(iter.IsFirstVisit(1));
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            // Expected pattern for 2x3 reduction along axis 1:
+            // (0,0): first visit to output[0] = true
+            // (0,1): not first visit to output[0] = false
+            // (0,2): not first visit to output[0] = false
+            // (1,0): first visit to output[1] = true
+            // (1,1): not first visit to output[1] = false
+            // (1,2): not first visit to output[1] = false
+            Assert.AreEqual(6, firstVisits.Count, "Should have 6 visits");
+            Assert.IsTrue(firstVisits[0], "First visit to output[0]");
+            Assert.IsFalse(firstVisits[1], "Second visit to output[0]");
+            Assert.IsFalse(firstVisits[2], "Third visit to output[0]");
+            Assert.IsTrue(firstVisits[3], "First visit to output[1]");
+            Assert.IsFalse(firstVisits[4], "Second visit to output[1]");
+            Assert.IsFalse(firstVisits[5], "Third visit to output[1]");
+
+            // Verify results
+            Assert.AreEqual(3L, (long)b[0], "Sum of row 0: 0+1+2=3");
+            Assert.AreEqual(12L, (long)b[1], "Sum of row 1: 3+4+5=12");
+        }
+
+        [TestMethod]
+        public void BufferedReduction_LargeArray_ExceedsBuffer()
+        {
+            // Test reduction with an array larger than default buffer size
+            // This forces the double-loop to handle buffer refills
+
+            int size = 20000;  // Much larger than default buffer (8192)
+            var a = np.arange(size);
+            var result = np.array(new long[] { 0 });
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                1,
+                new[] { new[] { 0 }, new[] { -1 } },
+                bufferSize: 1024);  // Small buffer to force multiple refills
+
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            // Sum of 0+1+2+...+(size-1) = size*(size-1)/2
+            long expected = (long)size * (size - 1) / 2;
+            Assert.AreEqual(expected, (long)result[0], $"Sum of 0 to {size - 1}");
+        }
+
+        [TestMethod]
+        public void BufferedReduction_WithCasting_WorksCorrectly()
+        {
+            // Test buffered reduction with type casting
+            // Input is int32, output is float64
+
+            var a = np.arange(6).astype(NPTypeCode.Int32);
+            var result = np.array(new double[] { 0.0 });
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_UNSAFE_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                new[] { NPTypeCode.Double, NPTypeCode.Double },  // Cast all to double
+                1,
+                new[] { new[] { 0 }, new[] { -1 } });
+
+            do
+            {
+                var x = iter.GetValue<double>(0);
+                var y = iter.GetValue<double>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            Assert.AreEqual(15.0, (double)result[0], 1e-10, "Sum should be 15.0");
+        }
+
+        [TestMethod]
+        public void BufferedReduction_DoubleLoopFields_AreSetCorrectly()
+        {
+            // Verify that the double-loop fields are set up correctly
+
+            var a = np.arange(12).reshape(3, 4);
+            var b = np.zeros(new Shape(3), NPTypeCode.Int64);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, b },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { 0, -1 } },
+                new long[] { 3, 4 });
+
+            // Verify reduction is detected
+            Assert.IsTrue(iter.IsReduction, "Should detect reduction");
+            Assert.IsTrue(iter.RequiresBuffering, "Should have buffering enabled");
+            Assert.IsTrue(iter.IsOperandReduction(1), "Output should be reduction operand");
+            Assert.IsFalse(iter.IsOperandReduction(0), "Input should not be reduction operand");
+        }
     }
 }
