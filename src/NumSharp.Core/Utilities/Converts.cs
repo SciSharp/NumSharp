@@ -560,7 +560,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
         [MethodImpl(Optimize)]
-        public static Object ChangeType<T>(T value, NPTypeCode typeCode) where T : IConvertible
+        public static Object ChangeType<T>(T value, NPTypeCode typeCode)
         {
             if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
                 return null;
@@ -605,7 +605,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToBoolean(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToBoolean(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Byte:
                     switch (InfoOf<T>.NPTypeCode)
@@ -623,7 +623,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToByte(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToByte(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Int16:
                     switch (InfoOf<T>.NPTypeCode)
@@ -641,7 +641,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToInt16(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToInt16(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.UInt16:
                     switch (InfoOf<T>.NPTypeCode)
@@ -659,7 +659,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToUInt16(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToUInt16(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Int32:
                     switch (InfoOf<T>.NPTypeCode)
@@ -677,7 +677,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToInt32(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToInt32(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.UInt32:
                     switch (InfoOf<T>.NPTypeCode)
@@ -695,7 +695,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToUInt32(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToUInt32(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Int64:
                     switch (InfoOf<T>.NPTypeCode)
@@ -713,7 +713,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToInt64(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToInt64(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.UInt64:
                     switch (InfoOf<T>.NPTypeCode)
@@ -731,7 +731,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToUInt64(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToUInt64(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Char:
                     switch (InfoOf<T>.NPTypeCode)
@@ -749,7 +749,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToChar(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToChar(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Double:
                     switch (InfoOf<T>.NPTypeCode)
@@ -767,7 +767,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToDouble(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToDouble(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Single:
                     switch (InfoOf<T>.NPTypeCode)
@@ -785,7 +785,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToSingle(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToSingle(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Decimal:
                     switch (InfoOf<T>.NPTypeCode)
@@ -803,7 +803,7 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return Converts.ToDecimal(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToDecimal(Unsafe.As<T, decimal>(ref value));
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 case NPTypeCode.Half:
                     // Half target type - C# Half has direct casts from all numeric types except decimal
@@ -823,10 +823,10 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Single:  return (Half)Unsafe.As<T, float>(ref value);
                         case NPTypeCode.Decimal: return (Half)Unsafe.As<T, decimal>(ref value);
                         default:
-                            throw new NotSupportedException();
+                            return ChangeType((object)value, typeCode);
                     }
                 default:
-                    throw new NotSupportedException();
+                    return ChangeType((object)value, typeCode);
             }
 #endif
         }
@@ -847,7 +847,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
         [MethodImpl(Optimize)]
-        public static TOut ChangeType<TIn, TOut>(TIn value) where TIn : IConvertible where TOut : IConvertible
+        public static TOut ChangeType<TIn, TOut>(TIn value)
         {
             // This line is invalid for things like Enums that return a NPTypeCode
             // of Int32, but the object can't actually be cast to an Int32.
@@ -891,7 +891,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToBoolean(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<bool, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToBoolean(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<bool, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToBoolean(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<bool, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Byte: {
@@ -910,7 +910,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToByte(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<byte, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToByte(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<byte, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToByte(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<byte, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Int16: {
@@ -929,7 +929,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToInt16(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<short, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToInt16(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<short, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToInt16(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<short, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.UInt16: {
@@ -948,7 +948,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToUInt16(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToUInt16(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToUInt16(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Int32: {
@@ -967,7 +967,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToInt32(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<int, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToInt32(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<int, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToInt32(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<int, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.UInt32: {
@@ -986,7 +986,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToUInt32(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<uint, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToUInt32(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<uint, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToUInt32(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<uint, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Int64: {
@@ -1005,7 +1005,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToInt64(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<long, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToInt64(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<long, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToInt64(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<long, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.UInt64: {
@@ -1024,7 +1024,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToUInt64(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToUInt64(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToUInt64(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Char: {
@@ -1043,7 +1043,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToChar(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<char, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToChar(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<char, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToChar(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<char, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Double: {
@@ -1062,7 +1062,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToDouble(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<double, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToDouble(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<double, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToDouble(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<double, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Single: {
@@ -1081,7 +1081,7 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToSingle(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<float, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToSingle(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<float, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToSingle(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<float, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            case NPTypeCode.Decimal: {
@@ -1100,11 +1100,11 @@ namespace NumSharp.Utilities
 	                    case NPTypeCode.Double: res = Converts.ToDecimal(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
 	                    case NPTypeCode.Single: res = Converts.ToDecimal(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
 	                    case NPTypeCode.Decimal: res = Converts.ToDecimal(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
-                        default: throw new NotSupportedException();
+                        default: return ChangeType<TOut>((object)value);
                     }
                 }
 	            default:
-		            throw new NotSupportedException();
+		            return ChangeType<TOut>((object)value);
             }
 #endif
         }

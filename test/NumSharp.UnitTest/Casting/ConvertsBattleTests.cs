@@ -673,5 +673,171 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        // ============================================================
+        // ROUND 3: IConvertible constraint removed on generic ChangeType;
+        // Converts<T> gets ToHalf/ToComplex/From(Half)/From(Complex).
+        // ============================================================
+
+        #region Round 3: ChangeType<T>(T, NPTypeCode) now accepts Half/Complex
+
+        [TestMethod]
+        public void ChangeTypeGeneric_HalfSource_ToInt_Works()
+        {
+            var r = Converts.ChangeType((Half)(-1.5f), NPTypeCode.Int32);
+            r.Should().Be(-1);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_HalfSource_NaN_ToInt_ReturnsMinValue()
+        {
+            var r = Converts.ChangeType(Half.NaN, NPTypeCode.Int32);
+            r.Should().Be(int.MinValue);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_ComplexSource_ToInt_Works()
+        {
+            var r = Converts.ChangeType(new Complex(3.5, 4.5), NPTypeCode.Int32);
+            r.Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_ComplexSource_ToBool_PureImaginary_True()
+        {
+            var r = Converts.ChangeType(new Complex(0, 1), NPTypeCode.Boolean);
+            r.Should().Be(true);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_IntSource_ToHalf_Works()
+        {
+            var r = Converts.ChangeType(5, NPTypeCode.Half);
+            r.Should().BeOfType<Half>();
+            ((float)(Half)r).Should().Be(5.0f);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_IntSource_ToComplex_Works()
+        {
+            var r = Converts.ChangeType(5, NPTypeCode.Complex);
+            r.Should().Be(new Complex(5, 0));
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_SByteSource_ToInt_Works()
+        {
+            var r = Converts.ChangeType((sbyte)-1, NPTypeCode.Int32);
+            r.Should().Be(-1);
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_IntSource_ToSByte_Works()
+        {
+            var r = Converts.ChangeType(-1, NPTypeCode.SByte);
+            r.Should().Be((sbyte)-1);
+        }
+
+        #endregion
+
+        #region Round 3: ChangeType<TIn, TOut>(TIn) now accepts Half/Complex
+
+        [TestMethod]
+        public void ChangeType2Generic_HalfToInt_Works()
+        {
+            Converts.ChangeType<Half, int>((Half)3.5f).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ChangeType2Generic_IntToHalf_Works()
+        {
+            ((float)Converts.ChangeType<int, Half>(5)).Should().Be(5.0f);
+        }
+
+        [TestMethod]
+        public void ChangeType2Generic_ComplexToInt_Works()
+        {
+            Converts.ChangeType<Complex, int>(new Complex(3.5, 4.5)).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ChangeType2Generic_ComplexToHalf_Works()
+        {
+            ((float)Converts.ChangeType<Complex, Half>(new Complex(3.5, 4.5))).Should().Be(3.5f);
+        }
+
+        [TestMethod]
+        public void ChangeType2Generic_HalfNaN_ToDecimal_ReturnsZero()
+        {
+            Converts.ChangeType<Half, decimal>(Half.NaN).Should().Be(0m);
+        }
+
+        [TestMethod]
+        public void ChangeType2Generic_SByteToUInt64_Wraps()
+        {
+            Converts.ChangeType<sbyte, ulong>(-1).Should().Be(ulong.MaxValue);
+        }
+
+        #endregion
+
+        #region Round 3: Converts<T>.ToHalf/ToComplex + From(Half)/From(Complex)
+
+        [TestMethod]
+        public void ConvertsGeneric_ToHalf_FromInt_Works()
+        {
+            ((float)Converts<int>.ToHalf(5)).Should().Be(5.0f);
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_ToHalf_FromDouble_NaN_KeepsNaN()
+        {
+            // Half can represent NaN; Converts.ToHalf(double) uses (Half)d which preserves NaN
+            Half.IsNaN(Converts<double>.ToHalf(double.NaN)).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_ToComplex_FromDouble_Works()
+        {
+            Converts<double>.ToComplex(3.5).Should().Be(new Complex(3.5, 0));
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_ToComplex_FromSByte_Works()
+        {
+            Converts<sbyte>.ToComplex(-1).Should().Be(new Complex(-1, 0));
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_FromHalf_ToInt_Works()
+        {
+            Converts<int>.From((Half)3.5f).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_FromHalf_ToDouble_Works()
+        {
+            Converts<double>.From((Half)3.5f).Should().BeApproximately(3.5, 0.01);
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_FromComplex_ToInt_DiscardsImaginary()
+        {
+            Converts<int>.From(new Complex(3.5, 4.5)).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_FromComplex_ToDouble_DiscardsImaginary()
+        {
+            Converts<double>.From(new Complex(3.5, 4.5)).Should().Be(3.5);
+        }
+
+        [TestMethod]
+        public void ConvertsGeneric_FromComplex_ToBool_Any_NonZero()
+        {
+            Converts<bool>.From(new Complex(0, 1)).Should().BeTrue();
+            Converts<bool>.From(new Complex(0, 0)).Should().BeFalse();
+        }
+
+        #endregion
     }
 }
