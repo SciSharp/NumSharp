@@ -155,8 +155,56 @@ namespace NumSharp.Backends.Iteration
             }
             else
             {
-                broadcastShape = CalculateBroadcastShape(nop, op, opFlags);
+                broadcastShape = CalculateBroadcastShape(nop, op, opFlags, opAxesNDim, opAxes);
+                // Validate NO_BROADCAST operands match without stretching
+                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
             }
+
+            // Allocate null operands that have ALLOCATE flag set.
+            // NumPy: npyiter_allocate_arrays in nditer_constr.c
+            // Allocated output has shape = broadcastShape (accounting for op_axes)
+            // and dtype = opDtypes[opIdx] (required when ALLOCATE is set)
+            for (int opIdx = 0; opIdx < nop; opIdx++)
+            {
+                if (op[opIdx] is null && (opFlags[opIdx] & NpyIterPerOpFlags.ALLOCATE) != 0)
+                {
+                    if (opDtypes is null || opIdx >= opDtypes.Length)
+                        throw new ArgumentException(
+                            $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
+
+                    // Determine output shape: for op_axes, filter out -1 entries
+                    int[] outputShape;
+                    if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)
+                    {
+                        var axisMap = opAxes[opIdx];
+                        // Count non-negative entries
+                        int realNDim = 0;
+                        for (int i = 0; i < axisMap.Length; i++)
+                            if (axisMap[i] >= 0) realNDim++;
+
+                        outputShape = new int[realNDim];
+                        int outIdx = 0;
+                        for (int iterAxis = 0; iterAxis < axisMap.Length && iterAxis < broadcastShape.Length; iterAxis++)
+                        {
+                            // Non-negative entries map iterShape axes to output axes
+                            if (axisMap[iterAxis] >= 0)
+                                outputShape[axisMap[iterAxis]] = broadcastShape[iterAxis];
+                            // -1 entries are "reduced" dimensions - not in output shape
+                        }
+                    }
+                    else
+                    {
+                        // No op_axes: output has full broadcast shape
+                        outputShape = (int[])broadcastShape.Clone();
+                    }
+
+                    // Allocate the NDArray with specified dtype and shape
+                    var shape = outputShape.Length == 0 ? new Shape() : new Shape(outputShape);
+                    op[opIdx] = np.zeros(shape, opDtypes[opIdx]);
+                }
+            }
+            // Update _operands so it reflects the allocated arrays
+            _operands = op;
 
             // =========================================================================
             // NUMSHARP DIVERGENCE: Allocate dimension arrays dynamically
@@ -329,13 +377,29 @@ namespace NumSharp.Backends.Iteration
             // When MULTI_INDEX is NOT set:
             // - Axes are reordered AND coalesced for maximum efficiency
             bool hasMultiIndex = (flags & NpyIterGlobalFlags.MULTI_INDEX) != 0;
+            // HASINDEX (C_INDEX or F_INDEX): need original axis structure preserved
+            // to compute the flat index correctly. Coalescing loses this info.
+            bool hasFlatIndex = (flags & (NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.F_INDEX)) != 0;
 
             // Step 0: Flip negative strides for memory-order iteration
-            // NumPy's npyiter_flip_negative_strides():
-            // - When all operands have negative or zero strides for an axis, flip the axis
-            // - This allows memory-order iteration even for reversed arrays
-            // - Skip if DONT_NEGATE_STRIDES flag is set
-            if ((flags & NpyIterGlobalFlags.DONT_NEGATE_STRIDES) == 0)
+            // NumPy's npyiter_flip_negative_strides() (nditer_constr.c:297-307):
+            //   if (!(itflags & NPY_ITFLAG_FORCEDORDER)) {
+            //       if (!any_allocate && !(flags & NPY_ITER_DONT_NEGATE_STRIDES)) {
+            //           npyiter_flip_negative_strides(iter);
+            //       }
+            //   }
+            //
+            // Only K-order does NOT set FORCEDORDER. C, F, and A orders all set FORCEDORDER
+            // (see npyiter_apply_forced_iteration_order in nditer_constr.c:2490).
+            // So negative strides should only be flipped for K-order.
+            //
+            // User-visible behavior:
+            // - K-order on reversed array: iterate in memory order (faster)
+            // - C/F/A order on reversed array: iterate in logical order (user asked for it)
+            bool isForcedOrder = order == NPY_ORDER.NPY_CORDER
+                              || order == NPY_ORDER.NPY_FORTRANORDER
+                              || order == NPY_ORDER.NPY_ANYORDER;
+            if (!isForcedOrder && (flags & NpyIterGlobalFlags.DONT_NEGATE_STRIDES) == 0)
             {
                 NpyIterCoalescing.FlipNegativeStrides(ref *_state);
             }
@@ -360,12 +424,14 @@ namespace NumSharp.Backends.Iteration
                 // - F-order on F-contiguous: Sort by stride, coalesce → memory order (== F-order)
                 // - F-order on C-contiguous: NO coalescing, reverse axes, iterate F-order
 
-                // Check contiguity once, use for all order decisions
-                // Note: CheckAllOperandsContiguous checks the ORIGINAL array strides.
-                // For reversed arrays (negative strides), FlipNegativeStrides has already
-                // negated the strides in the iterator state, so we also check absolute values.
-                bool isCContiguous = CheckAllOperandsContiguous(true);
-                bool isFContiguous = CheckAllOperandsContiguous(false);
+                // Check contiguity once, use for all order decisions.
+                // allowFlip=true (absolute strides) only when FlipNegativeStrides will run,
+                // which is only for K-order (non-forced order).
+                // For C/F/A forced orders, negative strides are not contiguous since we
+                // preserve logical iteration order instead of memory order.
+                bool allowFlip = !isForcedOrder && (flags & NpyIterGlobalFlags.DONT_NEGATE_STRIDES) == 0;
+                bool isCContiguous = CheckAllOperandsContiguous(true, allowFlip);
+                bool isFContiguous = CheckAllOperandsContiguous(false, allowFlip);
                 bool hasBroadcast = HasBroadcastStrides();
 
                 // For coalescing to work correctly:
@@ -383,11 +449,12 @@ namespace NumSharp.Backends.Iteration
                     effectiveOrder = NPY_ORDER.NPY_CORDER;
                 }
 
-                if (!hasMultiIndex)
+                if (!hasMultiIndex && !hasFlatIndex)
                 {
                     // Coalescing is possible when:
                     // - Arrays are contiguous in the REQUESTED order
                     // - No broadcast dimensions that would break stride-based sorting
+                    // - No index tracking (C_INDEX/F_INDEX need original axis structure)
                     // Example: F-order on C-contiguous array should NOT coalesce
                     //          (coalescing produces memory-order which is C-order, wrong for F-order)
                     bool canCoalesce;
@@ -422,8 +489,9 @@ namespace NumSharp.Backends.Iteration
                 }
                 else
                 {
-                    // With MULTI_INDEX, just reorder axes without coalescing
-                    // Use effectiveOrder which applies K-order → C-order fallback for non-contiguous
+                    // With MULTI_INDEX or HASINDEX (C_INDEX/F_INDEX), just reorder axes
+                    // without coalescing. Use effectiveOrder which applies K-order → C-order
+                    // fallback for non-contiguous arrays.
                     NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
                 }
             }
@@ -509,43 +577,92 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        private static int[] CalculateBroadcastShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags)
+        /// <summary>
+        /// Compute iteration (broadcast) shape from operands.
+        /// Uses production NumSharp.Shape.ResolveReturnShape for standard broadcasting.
+        /// For op_axes, constructs a virtual shape per operand reflecting the mapping,
+        /// then broadcasts those virtual shapes together.
+        /// </summary>
+        private static int[] CalculateBroadcastShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
+            int opAxesNDim = -1, int[][]? opAxes = null)
         {
-            int maxNdim = 0;
+            // Validate null operands have ALLOCATE flag
             for (int i = 0; i < nop; i++)
             {
-                if (op[i].ndim > maxNdim)
-                    maxNdim = op[i].ndim;
+                if (op[i] is null && (opFlags[i] & NpyIterPerOpFlags.ALLOCATE) == 0)
+                    throw new ArgumentException($"Operand {i} is null but ALLOCATE flag is not set", nameof(op));
             }
 
-            if (maxNdim == 0)
+            // With op_axes, iteration ndim is set by opAxesNDim. Each operand's virtual
+            // shape per-iter-axis = opShape[op_axis] if op_axis >= 0, else 1.
+            if (opAxes != null && opAxesNDim > 0)
+            {
+                var virtualShapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
+                for (int opIdx = 0; opIdx < nop; opIdx++)
+                {
+                    if (op[opIdx] is null)
+                        continue;  // ALLOCATE operand adopts broadcast result
+
+                    var virtualDims = new long[opAxesNDim];
+                    if (opIdx < opAxes.Length && opAxes[opIdx] != null)
+                    {
+                        var axisMap = opAxes[opIdx];
+                        var opShape = op[opIdx].shape;
+                        for (int iterAxis = 0; iterAxis < opAxesNDim; iterAxis++)
+                        {
+                            int opAxis = iterAxis < axisMap.Length ? axisMap[iterAxis] : -1;
+                            if (opAxis < 0)
+                                virtualDims[iterAxis] = 1;  // broadcast this dim
+                            else if (opAxis >= opShape.Length)
+                                throw new IncorrectShapeException(
+                                    $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                            else
+                                virtualDims[iterAxis] = opShape[opAxis];
+                        }
+                    }
+                    else
+                    {
+                        // No op_axes for this operand: right-align shape to opAxesNDim
+                        var opShape = op[opIdx].shape;
+                        int offset = opAxesNDim - opShape.Length;
+                        if (offset < 0)
+                            throw new IncorrectShapeException(
+                                $"Operand {opIdx} has {opShape.Length} dims but opAxesNDim={opAxesNDim}");
+                        for (int d = 0; d < opAxesNDim; d++)
+                            virtualDims[d] = d < offset ? 1 : opShape[d - offset];
+                    }
+                    virtualShapes.Add(new NumSharp.Shape(virtualDims));
+                }
+
+                if (virtualShapes.Count == 0)
+                    return Array.Empty<int>();
+
+                var resolved = NumSharp.Shape.ResolveReturnShape(virtualShapes.ToArray());
+                var dims = resolved.dimensions;
+                var result = new int[dims.Length];
+                for (int i = 0; i < dims.Length; i++)
+                    result[i] = checked((int)dims[i]);
+                return result;
+            }
+
+            // Standard broadcasting: use production NumSharp.Shape.ResolveReturnShape
+            var shapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null)
+                    continue;  // ALLOCATE operand adopts broadcast result
+                shapes.Add(op[i].Shape);
+            }
+
+            if (shapes.Count == 0)
                 return Array.Empty<int>();
 
-            var result = new int[maxNdim];
-            for (int i = 0; i < maxNdim; i++)
-                result[i] = 1;
-
-            for (int opIdx = 0; opIdx < nop; opIdx++)
-            {
-                if ((opFlags[opIdx] & NpyIterPerOpFlags.NO_BROADCAST) != 0)
-                    continue;
-
-                var opShape = op[opIdx].shape;
-                int offset = maxNdim - opShape.Length;
-
-                for (int d = 0; d < opShape.Length; d++)
-                {
-                    int dim = (int)opShape[d];
-                    int rd = offset + d;
-
-                    if (result[rd] == 1)
-                        result[rd] = dim;
-                    else if (dim != 1 && dim != result[rd])
-                        throw new IncorrectShapeException($"Operands could not be broadcast together");
-                }
-            }
-
-            return result;
+            var resolvedShape = NumSharp.Shape.ResolveReturnShape(shapes.ToArray());
+            var resultDims = resolvedShape.dimensions;
+            var finalResult = new int[resultDims.Length];
+            for (int i = 0; i < resultDims.Length; i++)
+                finalResult[i] = checked((int)resultDims[i]);
+            return finalResult;
         }
 
         /// <summary>
@@ -558,9 +675,11 @@ namespace NumSharp.Backends.Iteration
         {
             for (int opIdx = 0; opIdx < nop; opIdx++)
             {
-                if ((opFlags[opIdx] & NpyIterPerOpFlags.NO_BROADCAST) != 0)
+                // Skip null (ALLOCATE) operands - they will adopt the iterShape
+                if (op[opIdx] is null)
                     continue;
 
+                bool noBroadcast = (opFlags[opIdx] & NpyIterPerOpFlags.NO_BROADCAST) != 0;
                 var opShape = op[opIdx].shape;
 
                 // When opAxes is provided for this operand, use it for validation
@@ -587,6 +706,12 @@ namespace NumSharp.Backends.Iteration
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
                             throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}");
+
+                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
+                        if (noBroadcast && opDim == 1 && iterDim != 1)
+                            throw new InvalidOperationException(
+                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
                     }
                 }
                 else
@@ -598,6 +723,12 @@ namespace NumSharp.Backends.Iteration
                     if (offset < 0)
                         throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
 
+                    // NO_BROADCAST: operand must match iterShape ndim (no prepending of size-1)
+                    if (noBroadcast && offset > 0)
+                        throw new InvalidOperationException(
+                            $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                            $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
+
                     for (int d = 0; d < opShape.Length; d++)
                     {
                         int opDim = (int)opShape[d];
@@ -606,6 +737,12 @@ namespace NumSharp.Backends.Iteration
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
                             throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+
+                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
+                        if (noBroadcast && opDim == 1 && iterDim != 1)
+                            throw new InvalidOperationException(
+                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
                     }
                 }
             }
@@ -695,7 +832,10 @@ namespace NumSharp.Backends.Iteration
         /// Uses the ORIGINAL operand arrays (before any axis reordering).
         /// </summary>
         /// <param name="cOrder">True for C-order (row-major), false for F-order (column-major)</param>
-        private bool CheckAllOperandsContiguous(bool cOrder)
+        /// <param name="allowFlip">True if negative strides will be flipped (K-order).
+        /// When true, uses absolute values for stride comparison. When false (C/F/A forced
+        /// orders), requires actual positive strides for contiguity.</param>
+        private bool CheckAllOperandsContiguous(bool cOrder, bool allowFlip = true)
         {
             if (_operands is null)
                 return false;
@@ -714,9 +854,11 @@ namespace NumSharp.Backends.Iteration
                 // Get strides from the original array
                 var strides = arr.strides;
 
-                // Check contiguity using absolute strides
-                // Negative strides indicate reversed arrays, which are handled by
-                // FlipNegativeStrides and become contiguous in the iterator
+                // Check contiguity using actual strides.
+                // Negative strides are only treated as "contiguous" when FlipNegativeStrides
+                // will run (K-order / A-order without FORCEDORDER). For forced C/F order,
+                // negative strides break contiguity because the iterator will traverse
+                // logical order, not memory order.
                 long expected = 1;
                 if (cOrder)
                 {
@@ -726,8 +868,9 @@ namespace NumSharp.Backends.Iteration
                         long dim = arrShape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Use absolute value to handle reversed arrays
-                        if (Math.Abs(strides[axis]) != expected)
+                        // Check stride (abs if flipping, actual if not)
+                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        if (stride != expected)
                             return false;
                         expected *= dim;
                     }
@@ -740,8 +883,9 @@ namespace NumSharp.Backends.Iteration
                         long dim = arrShape[axis];
                         if (dim == 1)
                             continue;  // Size-1 dimensions are always contiguous
-                        // Use absolute value to handle reversed arrays
-                        if (Math.Abs(strides[axis]) != expected)
+                        // Check stride (abs if flipping, actual if not)
+                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        if (stride != expected)
                             return false;
                         expected *= dim;
                     }
@@ -907,17 +1051,15 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Apply op_axes remapping to operand strides.
-        /// op_axes allows custom mapping of operand dimensions to iterator dimensions.
-        /// A value of -1 indicates the dimension should be broadcast (stride = 0).
-        /// For READWRITE operands with stride=0, this indicates a reduction axis.
+        /// Validate op_axes mappings and set reduction flags where applicable.
+        /// Strides are already correctly set in the main operand setup loop - this method
+        /// only handles the reduction semantics (detecting reduce axes, validating REDUCE_OK).
         /// </summary>
         private void ApplyOpAxes(int opAxesNDim, int[][] opAxes, NpyIterGlobalFlags globalFlags)
         {
             if (opAxes == null || opAxesNDim <= 0)
                 return;
 
-            // Ensure we don't exceed iterator dimensions
             int iterNDim = Math.Min(opAxesNDim, _state->NDim);
             bool reduceOkSet = (globalFlags & NpyIterGlobalFlags.REDUCE_OK) != 0;
 
@@ -928,36 +1070,23 @@ namespace NumSharp.Backends.Iteration
                     continue;
 
                 var opAxisMap = opAxes[op];
-                var stridePtr = _state->GetStridesPointer(op);
                 var opFlags = _state->GetOpFlags(op);
                 // Check if WRITE flag is set (includes both WRITE-only and READWRITE)
-                // Only WRITE flag indicates the operand will be written to (not READ alone)
                 bool isWriteable = (opFlags & NpyIterOpFlags.WRITE) != 0;
                 bool hasReductionAxis = false;
 
-                // Gather original strides before remapping
-                // NUMSHARP DIVERGENCE: Use actual ndim, not fixed MaxDims
-                var originalStrides = stackalloc long[iterNDim];
-                for (int d = 0; d < iterNDim; d++)
-                    originalStrides[d] = stridePtr[d];
-
-                // Apply remapping
+                // Scan for reduction axes (op_axis=-1 on a writeable operand)
                 for (int iterAxis = 0; iterAxis < iterNDim && iterAxis < opAxisMap.Length; iterAxis++)
                 {
                     int opAxis = opAxisMap[iterAxis];
 
                     if (opAxis < 0)
                     {
-                        // -1 means broadcast this dimension
-                        stridePtr[iterAxis] = 0;
-
-                        // Check if this is a reduction axis (READWRITE operand with forced stride=0)
-                        // and the iteration dimension is > 1 (otherwise it's just a scalar)
+                        // Check if this is a reduction axis (writeable operand + iter dim > 1)
                         if (isWriteable && _state->Shape[iterAxis] > 1)
                         {
                             hasReductionAxis = true;
 
-                            // Validate REDUCE_OK is set
                             if (!reduceOkSet)
                             {
                                 throw new ArgumentException(
@@ -968,16 +1097,10 @@ namespace NumSharp.Backends.Iteration
                         }
                         else
                         {
-                            // Mark as broadcast (read-only operand with stride=0)
+                            // Read-only operand with stride=0 is a broadcast
                             _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
                         }
                     }
-                    else if (opAxis < iterNDim)
-                    {
-                        // Remap: use stride from the specified axis
-                        stridePtr[iterAxis] = originalStrides[opAxis];
-                    }
-                    // else: invalid axis, keep original
                 }
 
                 // Set reduction flags if this operand has reduction axes
