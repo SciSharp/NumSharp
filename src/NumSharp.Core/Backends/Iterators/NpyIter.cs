@@ -420,6 +420,12 @@ namespace NumSharp.Backends.Iteration
                 }
 
                 _state->BufIterEnd = copyCount;
+
+                // Set up buffered reduction if REDUCE flag is also set
+                if ((_state->ItFlags & (uint)NpyIterFlags.REDUCE) != 0)
+                {
+                    SetupBufferedReduction(copyCount);
+                }
             }
 
             // Handle single iteration optimization
@@ -608,6 +614,121 @@ namespace NumSharp.Backends.Iteration
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Set up buffered reduction double-loop parameters.
+        /// Implements NumPy's pattern from nditer_api.c lines 2142-2149.
+        ///
+        /// The double-loop separates iteration into:
+        /// - Inner loop: CoreSize elements (non-reduce dimensions)
+        /// - Outer loop: ReduceOuterSize iterations (reduce dimension)
+        ///
+        /// Key insight: reduce operands have ReduceOuterStride=0, so their pointer
+        /// stays fixed while input advances, accumulating values without re-buffering.
+        /// </summary>
+        private void SetupBufferedReduction(long transferSize)
+        {
+            // Find the outermost reduce dimension (dimension with stride=0 for a reduce operand)
+            // For simplicity, we use the outermost dimension with any reduce operand having stride=0
+            int outerDim = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                for (int op = 0; op < _state->NOp; op++)
+                {
+                    var opFlags = _state->GetOpFlags(op);
+                    if ((opFlags & NpyIterOpFlags.REDUCE) != 0)
+                    {
+                        long stride = _state->GetStride(d, op);
+                        if (stride == 0 && _state->Shape[d] > 1)
+                        {
+                            outerDim = d;
+                            break;  // Found reduce dimension
+                        }
+                    }
+                }
+                if (outerDim >= 0)
+                    break;
+            }
+
+            if (outerDim < 0)
+            {
+                // No actual reduce dimension found, treat as normal buffering
+                _state->CoreSize = transferSize;
+                _state->ReduceOuterSize = 1;
+                _state->ReducePos = 0;
+                _state->OuterDim = 0;
+                return;
+            }
+
+            _state->OuterDim = outerDim;
+
+            // CoreSize = size of reduce dimension (how many inputs per output element)
+            // This is the size of the dimension where reduce operand has stride=0
+            long coreSize = _state->Shape[outerDim];
+            if (coreSize < 1)
+                coreSize = 1;
+
+            _state->CoreSize = coreSize;
+
+            // ReduceOuterSize = number of output elements (product of non-reduce dimensions)
+            // This is total iterations / inputs per output
+            _state->ReduceOuterSize = transferSize / coreSize;
+            if (_state->ReduceOuterSize < 1)
+                _state->ReduceOuterSize = 1;
+
+            // Reset reduce position and core position
+            _state->ReducePos = 0;
+            _state->CorePos = 0;
+
+            // Set up per-operand strides for double-loop:
+            // - BufStrides (inner loop): 0 for reduce operand (stay at same output), elemSize for others
+            // - ReduceOuterStrides (outer loop): elemSize for reduce operand (move to next output),
+            //   elemSize * coreSize for others (skip over processed elements)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var opFlags = _state->GetOpFlags(op);
+                long reduceStride = _state->GetStride(outerDim, op);
+                int elemSize = _state->GetElementSize(op);
+
+                if ((opFlags & NpyIterOpFlags.REDUCE) != 0 && reduceStride == 0)
+                {
+                    // Reduce operand:
+                    // - Inner loop: stays at same output position (stride=0)
+                    // - Outer loop: advances to next output position (stride=elemSize)
+                    _state->SetBufStride(op, 0);
+                    _state->SetReduceOuterStride(op, elemSize);
+                }
+                else
+                {
+                    // Non-reduce operand:
+                    // - Inner loop: advances through buffer (stride=elemSize)
+                    // - Outer loop: skips to next batch (stride=elemSize * coreSize)
+                    _state->SetBufStride(op, elemSize);
+                    _state->SetReduceOuterStride(op, elemSize * coreSize);
+                }
+            }
+
+            // If we have multiple reduce iterations, adjust buffer iteration end
+            if (_state->ReduceOuterSize > 1)
+            {
+                // Only iterate CoreSize elements at a time, outer loop handles the rest
+                _state->BufIterEnd = _state->CoreSize;
+            }
+
+            // For buffered reduce, DataPtrs need to point into buffers, not original arrays
+            // BufferedReduceAdvance will update these using BufStrides
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var buffer = _state->GetBuffer(op);
+                if (buffer != null)
+                {
+                    _state->SetDataPtr(op, buffer);
+                }
+            }
+
+            // Initialize reduce outer pointers from current data pointers (now pointing to buffers)
+            _state->InitReduceOuterPtrs();
         }
 
         /// <summary>
@@ -854,14 +975,174 @@ namespace NumSharp.Backends.Iteration
         /// Advance to next position and return whether more iterations remain.
         /// Matches NumPy's iternext() behavior.
         /// Returns true if more elements exist, false when iteration is complete.
+        ///
+        /// When BUFFERED + REDUCE flags are set, uses the double-loop pattern
+        /// from NumPy's npyiter_buffered_reduce_iternext (nditer_templ.c.src lines 131-210).
         /// </summary>
         public bool Iternext()
         {
             if (_state->IterIndex >= _state->IterEnd)
                 return false;
 
+            // Check for buffered reduce path
+            // Use double-loop for any buffered reduction (even when ReduceOuterSize = 1)
+            // because we need to use BufStrides which has 0 for reduce operands
+            uint itFlags = _state->ItFlags;
+            if ((itFlags & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (itFlags & (uint)NpyIterFlags.REDUCE) != 0 &&
+                _state->CoreSize > 0)
+            {
+                return BufferedReduceIternext();
+            }
+
             _state->Advance();
             return _state->IterIndex < _state->IterEnd;
+        }
+
+        /// <summary>
+        /// Buffered reduce iteration using NumPy's double-loop pattern.
+        /// Avoids re-buffering during reduction by separating iteration into:
+        /// - Inner loop: CoreSize elements
+        /// - Outer loop: ReduceOuterSize iterations
+        /// </summary>
+        private bool BufferedReduceIternext()
+        {
+            int result = _state->BufferedReduceAdvance();
+
+            if (result == 1)
+            {
+                // More elements in current buffer
+                return true;
+            }
+
+            if (result == -1)
+            {
+                // Iteration complete - write back remaining buffer contents
+                CopyReduceBuffersToArrays();
+                return false;
+            }
+
+            // result == 0: Buffer exhausted, need to refill
+
+            // Write back to arrays (copy from buffers)
+            CopyReduceBuffersToArrays();
+
+            // Check if we're past the end
+            if (_state->IterIndex >= _state->IterEnd)
+            {
+                return false;
+            }
+
+            // Move to next buffer position
+            _state->GotoIterIndex(_state->IterIndex);
+
+            // Calculate how much to copy for next buffer
+            long remaining = _state->IterEnd - _state->IterIndex;
+            long copyCount = Math.Min(remaining, _state->BufferSize);
+
+            // Copy to buffers
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var opFlags = _state->GetOpFlags(op);
+                if ((opFlags & NpyIterOpFlags.READ) != 0 || (opFlags & NpyIterOpFlags.READWRITE) != 0)
+                {
+                    NpyIterBufferManager.CopyToBuffer(ref *_state, op, copyCount);
+                }
+            }
+
+            // Reset DataPtrs to point to buffer start (BufferedReduceAdvance uses these)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var buffer = _state->GetBuffer(op);
+                if (buffer != null)
+                {
+                    _state->SetDataPtr(op, buffer);
+                }
+            }
+
+            // Reset reduce position and core position for new buffer
+            _state->ReducePos = 0;
+            _state->CorePos = 0;
+            _state->ReduceOuterSize = copyCount / _state->CoreSize;
+            if (_state->ReduceOuterSize < 1)
+                _state->ReduceOuterSize = 1;
+
+            // Adjust BufIterEnd for the new core iteration
+            if (_state->ReduceOuterSize > 1)
+            {
+                _state->BufIterEnd = _state->IterIndex + _state->CoreSize;
+            }
+            else
+            {
+                _state->BufIterEnd = _state->IterIndex + copyCount;
+            }
+
+            // Initialize reduce outer pointers (pointing to buffer start)
+            _state->InitReduceOuterPtrs();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Copy reduce buffers back to original arrays.
+        /// For reduce operands, only copies CoreSize elements (the accumulated results).
+        /// For non-reduce operands, copies CoreSize * ReduceOuterSize elements.
+        /// Uses ResetDataPtrs (original array position) as destination.
+        /// </summary>
+        private void CopyReduceBuffersToArrays()
+        {
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var opFlags = _state->GetOpFlags(op);
+
+                // Only copy WRITE or READWRITE operands
+                if ((opFlags & NpyIterOpFlags.WRITE) == 0 && (opFlags & NpyIterOpFlags.READWRITE) == 0)
+                    continue;
+
+                var buffer = _state->GetBuffer(op);
+                if (buffer == null)
+                    continue;
+
+                // Get original array pointer (not the buffer pointer)
+                void* dst = _state->GetResetDataPtr(op);
+                if (dst == null)
+                    continue;
+
+                int elemSize = _state->GetElementSize(op);
+
+                // For reduce operands, buffer has ReduceOuterSize unique output positions
+                // For non-reduce operands, buffer has full CoreSize * ReduceOuterSize elements
+                long copyCount;
+                if ((opFlags & NpyIterOpFlags.REDUCE) != 0)
+                {
+                    // Reduce operand: ReduceOuterSize unique output positions
+                    // (each position accumulated CoreSize inputs)
+                    copyCount = _state->ReduceOuterSize;
+                }
+                else
+                {
+                    // Non-reduce operand: full buffer contents
+                    copyCount = _state->CoreSize * _state->ReduceOuterSize;
+                }
+
+                // For reduce operands, we have stride=0 in the reduce dimension
+                // which means all output goes to the same position(s)
+                // Just copy CoreSize elements from buffer to array
+                if ((opFlags & NpyIterOpFlags.REDUCE) != 0)
+                {
+                    // Simple copy - buffer[0:CoreSize] to dst[0:CoreSize]
+                    Buffer.MemoryCopy(buffer, dst, copyCount * elemSize, copyCount * elemSize);
+                }
+                else
+                {
+                    // Non-reduce: need strided copy (handled by existing logic)
+                    // Temporarily set DataPtr to array position for CopyFromBuffer
+                    void* savedDataPtr = _state->GetDataPtr(op);
+                    _state->SetDataPtr(op, dst);
+                    NpyIterBufferManager.CopyFromBuffer(ref *_state, op, copyCount);
+                    _state->SetDataPtr(op, savedDataPtr);
+                }
+            }
         }
 
         /// <summary>
@@ -1320,15 +1601,27 @@ namespace NumSharp.Backends.Iteration
             if ((uint)operand >= (uint)_state->NOp)
                 throw new ArgumentOutOfRangeException(nameof(operand));
 
+            uint itFlags = _state->ItFlags;
+
             // If buffering is enabled and we have a buffer, use it
-            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            if ((itFlags & (uint)NpyIterFlags.BUFFER) != 0)
             {
                 var buffer = _state->GetBuffer(operand);
                 if (buffer != null)
                 {
-                    // Return pointer to current position in buffer
+                    // For buffered reduce, DataPtrs track current position
+                    // (updated by BufferedReduceAdvance using BufStrides)
+                    if ((itFlags & (uint)NpyIterFlags.REDUCE) != 0 && _state->CoreSize > 0)
+                    {
+                        return _state->GetDataPtr(operand);
+                    }
+
+                    // For simple buffered iteration, compute from IterIndex
+                    // (IterIndex directly maps to buffer position within current buffer)
                     int elemSize = _state->GetElementSize(operand);
-                    return (byte*)buffer + _state->IterIndex * elemSize;
+                    long bufferPos = _state->IterIndex - (_state->BufIterEnd - Math.Min(_state->BufferSize, _state->IterSize - _state->IterStart));
+                    if (bufferPos < 0) bufferPos = _state->IterIndex;
+                    return (byte*)buffer + bufferPos * elemSize;
                 }
             }
 
@@ -1492,12 +1785,14 @@ namespace NumSharp.Backends.Iteration
                     return false;
             }
 
-            // Part 2: Check buffer reduce_pos (buffered reduction check)
-            // When BUFFERED flag is set and we have a reduce outer loop, check if
-            // reduce_pos is non-zero and this operand's reduce outer stride is 0
-            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            // Part 2: Check buffer positions (buffered reduction check)
+            // When BUFFERED flag is set, use CorePos to determine first visit
+            // CorePos = 0 means we're at the start of a new output element
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0 && _state->CoreSize > 0)
             {
-                if (_state->ReducePos != 0 && _state->GetReduceOuterStride(operand) == 0)
+                // For buffered reduce, first visit is only when CorePos = 0
+                // (at the start of accumulation for each output element)
+                if (_state->CorePos != 0)
                     return false;
             }
 
