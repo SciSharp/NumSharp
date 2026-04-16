@@ -939,7 +939,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void NullOperand_Throws()
         {
-            Assert.ThrowsException<NullReferenceException>(() =>
+            // Null operand without ALLOCATE flag is an argument error
+            Assert.ThrowsException<ArgumentException>(() =>
             {
                 using var iter = NpyIterRef.New(null!);
             });
