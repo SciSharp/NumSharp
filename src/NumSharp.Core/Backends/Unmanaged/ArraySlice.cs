@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Unmanaged.Memory;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {

@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Security;
 using System.Threading;
@@ -122,13 +123,21 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value)
         {
-            return value != null && ((IConvertible)value).ToBoolean(null);
+            if (value == null) return false;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return ToBoolean(h);
+            if (value is Complex c) return ToBoolean(c);
+            return ((IConvertible)value).ToBoolean(null);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value, IFormatProvider provider)
         {
-            return value != null && ((IConvertible)value).ToBoolean(provider);
+            if (value == null) return false;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return ToBoolean(h);
+            if (value is Complex c) return ToBoolean(c);
+            return ((IConvertible)value).ToBoolean(provider);
         }
 
 
@@ -408,14 +417,33 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value)
         {
-            return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                sbyte sb => sb,
+                byte b => unchecked((sbyte)b),
+                short s => unchecked((sbyte)s),
+                ushort us => unchecked((sbyte)us),
+                int i => unchecked((sbyte)i),
+                uint u => unchecked((sbyte)u),
+                long l => unchecked((sbyte)l),
+                ulong ul => unchecked((sbyte)ul),
+                float f => ToSByte(f),
+                double d => ToSByte(d),
+                Half h => ToSByte(h),
+                Complex cx => ToSByte(cx),  // NumPy: discard imaginary
+                decimal m => ToSByte(m),
+                bool bo => bo ? (sbyte)1 : (sbyte)0,
+                char c => unchecked((sbyte)c),
+                _ => ((IConvertible)value).ToSByte(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value, IFormatProvider provider)
         {
-            return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(provider);
+            return ToSByte(value);
         }
 
 
@@ -499,12 +527,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for int8
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < sbyte.MinValue || value > sbyte.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for int8
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return 0;  // NumPy returns 0 for int8 special/overflow cases
+                return 0;
             }
-            return (sbyte)value;
+            // NumPy: truncate toward zero, then wrap modularly to sbyte
+            return unchecked((sbyte)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -517,12 +546,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(Half value)
         {
-            // NumPy behavior: special values -> 0 for int8
+            // NumPy behavior: NaN/Inf -> 0 for int8
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return 0;
             }
-            return (sbyte)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((sbyte)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -562,13 +592,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value)
         {
-            return value == null ? (byte)0 : ((IConvertible)value).ToByte(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                byte b => b,
+                sbyte sb => unchecked((byte)sb),
+                short s => unchecked((byte)s),
+                ushort us => unchecked((byte)us),
+                int i => unchecked((byte)i),
+                uint u => unchecked((byte)u),
+                long l => unchecked((byte)l),
+                ulong ul => unchecked((byte)ul),
+                float f => ToByte(f),
+                double d => ToByte(d),
+                Half h => ToByte(h),
+                Complex c => ToByte(c),  // NumPy: discard imaginary
+                decimal m => ToByte(m),
+                bool bo => bo ? (byte)1 : (byte)0,
+                char c => unchecked((byte)c),
+                _ => ((IConvertible)value).ToByte(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value, IFormatProvider provider)
         {
-            return value == null ? (byte)0 : ((IConvertible)value).ToByte(provider);
+            return ToByte(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -648,12 +697,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint8
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < byte.MinValue || value > byte.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for uint8
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return 0;  // NumPy returns 0 for uint8 special/overflow cases
+                return 0;
             }
-            return (byte)value;
+            // NumPy: truncate toward zero, then wrap modularly to byte
+            // For negative values like -3.7: truncate to -3, wrap to 253
+            // For overflow values like 1000: truncate to 1000, wrap to 232
+            return unchecked((byte)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -666,12 +718,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(Half value)
         {
-            // NumPy behavior: special values -> 0 for uint8
+            // NumPy behavior: NaN/Inf -> 0 for uint8
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return 0;
             }
-            return (byte)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((byte)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -711,13 +764,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value)
         {
-            return value == null ? (short)0 : ((IConvertible)value).ToInt16(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                short s => s,
+                ushort us => unchecked((short)us),
+                int i => unchecked((short)i),
+                uint u => unchecked((short)u),
+                long l => unchecked((short)l),
+                ulong ul => unchecked((short)ul),
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt16(f),
+                double d => ToInt16(d),
+                Half h => ToInt16(h),
+                Complex cx => ToInt16(cx),  // NumPy: discard imaginary
+                decimal m => ToInt16(m),
+                bool bo => bo ? (short)1 : (short)0,
+                char c => unchecked((short)c),
+                _ => ((IConvertible)value).ToInt16(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value, IFormatProvider provider)
         {
-            return value == null ? (short)0 : ((IConvertible)value).ToInt16(provider);
+            return ToInt16(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -796,12 +868,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for int16
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < short.MinValue || value > short.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for int16
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return 0;  // NumPy returns 0 for int16 special/overflow cases
+                return 0;
             }
-            return (short)value;
+            // NumPy: truncate toward zero, then wrap modularly to short
+            return unchecked((short)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -814,12 +887,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(Half value)
         {
-            // NumPy behavior: special values -> 0 for int16
+            // NumPy behavior: NaN/Inf -> 0 for int16
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return 0;
             }
-            return (short)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((short)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -860,13 +934,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value)
         {
-            return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                ushort us => us,
+                short s => unchecked((ushort)s),
+                int i => unchecked((ushort)i),
+                uint u => unchecked((ushort)u),
+                long l => unchecked((ushort)l),
+                ulong ul => unchecked((ushort)ul),
+                sbyte sb => unchecked((ushort)sb),
+                byte b => b,
+                float f => ToUInt16(f),
+                double d => ToUInt16(d),
+                Half h => ToUInt16(h),
+                Complex cx => ToUInt16(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt16(m),
+                bool bo => bo ? (ushort)1 : (ushort)0,
+                char c => c,
+                _ => ((IConvertible)value).ToUInt16(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value, IFormatProvider provider)
         {
-            return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(provider);
+            return ToUInt16(value);
         }
 
 
@@ -949,12 +1042,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint16
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < ushort.MinValue || value > ushort.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for uint16
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return 0;  // NumPy returns 0 for uint16 special/overflow cases
+                return 0;
             }
-            return (ushort)value;
+            // NumPy: truncate toward zero, then wrap modularly to ushort
+            return unchecked((ushort)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -967,12 +1061,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(Half value)
         {
-            // NumPy behavior: special values -> 0 for uint16
+            // NumPy behavior: NaN/Inf -> 0 for uint16
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return 0;
             }
-            return (ushort)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((ushort)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1014,13 +1109,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt32(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                int i => i,
+                uint u => unchecked((int)u),
+                long l => unchecked((int)l),
+                ulong ul => unchecked((int)ul),
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt32(f),
+                double d => ToInt32(d),
+                Half h => ToInt32(h),
+                Complex c => ToInt32(c),  // NumPy: discard imaginary
+                decimal m => ToInt32(m),
+                bool bo => bo ? 1 : 0,
+                char c => c,
+                _ => ((IConvertible)value).ToInt32(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt32(provider);
+            return ToInt32(value);
         }
 
 
@@ -1164,14 +1278,34 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt32(null);
+            if (value == null) return 0;
+            // Type dispatch for NumPy-compatible unchecked wrapping
+            return value switch
+            {
+                uint u => u,
+                int i => unchecked((uint)i),
+                long l => unchecked((uint)l),
+                ulong ul => unchecked((uint)ul),
+                short s => unchecked((uint)s),
+                ushort us => us,
+                sbyte sb => unchecked((uint)sb),
+                byte b => b,
+                float f => ToUInt32(f),
+                double d => ToUInt32(d),
+                Half h => ToUInt32(h),
+                Complex cx => ToUInt32(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt32(m),
+                bool bo => bo ? 1u : 0u,
+                char c => c,
+                _ => ((IConvertible)value).ToUInt32(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt32(provider);
+            return ToUInt32(value);
         }
 
 
@@ -1254,12 +1388,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint32
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < uint.MinValue || value > uint.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for uint32
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return 0;  // NumPy returns 0 for uint32 special/overflow cases
+                return 0;
             }
-            return (uint)value;
+            // NumPy: truncate toward zero, then wrap modularly to uint
+            return unchecked((uint)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1272,12 +1407,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(Half value)
         {
-            // NumPy behavior: special values -> 0 for uint32
+            // NumPy behavior: NaN/Inf -> 0 for uint32
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return 0;
             }
-            return (uint)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((uint)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1319,13 +1455,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt64(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                long l => l,
+                ulong ul => unchecked((long)ul),
+                int i => i,
+                uint u => u,
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt64(f),
+                double d => ToInt64(d),
+                Half h => ToInt64(h),
+                Complex cx => ToInt64(cx),  // NumPy: discard imaginary
+                decimal m => ToInt64(m),
+                bool bo => bo ? 1L : 0L,
+                char c => c,
+                _ => ((IConvertible)value).ToInt64(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt64(provider);
+            return ToInt64(value);
         }
 
 
@@ -1467,14 +1622,33 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt64(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                ulong ul => ul,
+                long l => unchecked((ulong)l),
+                uint u => u,
+                int i => unchecked((ulong)i),
+                ushort us => us,
+                short s => unchecked((ulong)s),
+                byte b => b,
+                sbyte sb => unchecked((ulong)sb),
+                float f => ToUInt64(f),
+                double d => ToUInt64(d),
+                Half h => ToUInt64(h),
+                Complex cx => ToUInt64(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt64(m),
+                bool bo => bo ? 1UL : 0UL,
+                char c => c,
+                _ => ((IConvertible)value).ToUInt64(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt64(provider);
+            return ToUInt64(value);
         }
 
 
@@ -1560,12 +1734,25 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(double value)
         {
-            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 2^63 for uint64
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value > ulong.MaxValue)
+            // NumPy behavior: NaN/Inf -> 2^63 for uint64
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return NumPyUInt64Overflow;  // NumPy returns 2^63 for uint64 special/overflow cases
+                return NumPyUInt64Overflow;
             }
-            return (ulong)value;
+            // NumPy: truncate toward zero, then wrap modularly to ulong
+            // For negative values like -1.0: truncate to -1, wrap to 2^64-1
+            // For -3.7: truncate to -3, wrap to 2^64-3
+            // Values outside long range get platform-specific behavior -> use 2^63 as fallback
+            if (value < long.MinValue || value > long.MaxValue)
+            {
+                // Value outside long range - try direct ulong conversion for large positives
+                if (value >= 0 && value <= (double)ulong.MaxValue)
+                {
+                    return (ulong)value;
+                }
+                return NumPyUInt64Overflow;
+            }
+            return unchecked((ulong)(long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1578,12 +1765,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(Half value)
         {
-            // NumPy behavior: special values -> 2^63 for uint64
+            // NumPy behavior: NaN/Inf -> 2^63 for uint64
             if (Half.IsNaN(value) || Half.IsInfinity(value))
             {
                 return NumPyUInt64Overflow;
             }
-            return (ulong)value;
+            // NumPy: truncate toward zero, then wrap modularly
+            // Half range is small enough to always fit in long
+            return unchecked((ulong)(long)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1625,13 +1814,21 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToSingle(null);
+            if (value == null) return 0;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return (float)h;
+            if (value is Complex c) return (float)c.Real;
+            return ((IConvertible)value).ToSingle(null);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToSingle(provider);
+            if (value == null) return 0;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return (float)h;
+            if (value is Complex c) return (float)c.Real;
+            return ((IConvertible)value).ToSingle(provider);
         }
 
 
@@ -1759,13 +1956,21 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDouble(null);
+            if (value == null) return 0;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return (double)h;
+            if (value is Complex c) return c.Real;  // NumPy: discard imaginary
+            return ((IConvertible)value).ToDouble(null);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDouble(provider);
+            if (value == null) return 0;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return (double)h;
+            if (value is Complex c) return c.Real;  // NumPy: discard imaginary
+            return ((IConvertible)value).ToDouble(provider);
         }
 
 
@@ -2026,13 +2231,21 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(object value)
         {
-            return value == null ? default : (Half)((IConvertible)value).ToDouble(null);
+            if (value == null) return default;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return h;
+            if (value is Complex c) return (Half)c.Real;
+            return (Half)((IConvertible)value).ToDouble(null);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(object value, IFormatProvider provider)
         {
-            return value == null ? default : (Half)((IConvertible)value).ToDouble(provider);
+            if (value == null) return default;
+            // Half and Complex don't implement IConvertible
+            if (value is Half h) return h;
+            if (value is Complex c) return (Half)c.Real;
+            return (Half)((IConvertible)value).ToDouble(provider);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2143,13 +2356,14 @@ namespace NumSharp.Utilities
         }
 
         // Conversions to Complex (complex128)
-        // Note: Complex doesn't implement IConvertible
+        // Note: Complex and Half don't implement IConvertible
 
         [MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(object value)
         {
             if (value == null) return default;
             if (value is System.Numerics.Complex c) return c;
+            if (value is Half h) return new System.Numerics.Complex((double)h, 0);
             return new System.Numerics.Complex(((IConvertible)value).ToDouble(null), 0);
         }
 
@@ -2158,6 +2372,7 @@ namespace NumSharp.Utilities
         {
             if (value == null) return default;
             if (value is System.Numerics.Complex c) return c;
+            if (value is Half h) return new System.Numerics.Complex((double)h, 0);
             return new System.Numerics.Complex(((IConvertible)value).ToDouble(provider), 0);
         }
 

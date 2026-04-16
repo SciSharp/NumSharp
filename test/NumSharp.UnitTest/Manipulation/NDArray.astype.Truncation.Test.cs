@@ -204,83 +204,67 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         // ================================================================
-        // OVERFLOW BEHAVIOR
+        // OVERFLOW BEHAVIOR - NumPy returns int.MinValue for all special/overflow cases
         // ================================================================
 
         [TestMethod]
-        public void Float64_ToInt32_Overflow_ThrowsException()
+        public void Float64_ToInt32_Overflow_ReturnsMinValue()
         {
+            // NumPy: np.array([2147484647.0]).astype(np.int32) -> array([-2147483648])
             var arr = np.array(new double[] { (double)int.MaxValue + 1000 });
+            var result = arr.astype(np.int32);
 
-            Action act = () => arr.astype(np.int32);
-
-            act.Should().Throw<OverflowException>(
-                "Converting value > int.MaxValue should throw OverflowException");
+            result.GetAtIndex<int>(0).Should().Be(int.MinValue,
+                "NumPy returns int.MinValue for overflow");
         }
 
         [TestMethod]
-        public void Float64_ToInt32_Underflow_ThrowsException()
+        public void Float64_ToInt32_Underflow_ReturnsMinValue()
         {
+            // NumPy: np.array([-2147484648.0]).astype(np.int32) -> array([-2147483648])
             var arr = np.array(new double[] { (double)int.MinValue - 1000 });
+            var result = arr.astype(np.int32);
 
-            Action act = () => arr.astype(np.int32);
-
-            act.Should().Throw<OverflowException>(
-                "Converting value < int.MinValue should throw OverflowException");
+            result.GetAtIndex<int>(0).Should().Be(int.MinValue,
+                "NumPy returns int.MinValue for underflow");
         }
 
         // ================================================================
         // NaN AND INFINITY HANDLING
-        // Note: NumPy behavior for NaN/Inf -> int is platform-dependent
-        // and raises a warning. NumSharp should throw or have defined behavior.
+        // NumPy returns int.MinValue for NaN/Inf -> int conversions
         // ================================================================
 
         [TestMethod]
-        public void Float64_ToInt32_NaN_ThrowsOrReturnsZero()
+        public void Float64_ToInt32_NaN_ReturnsMinValue()
         {
-            // NumPy: RuntimeWarning and returns -2147483648 (or platform dependent)
-            // In C#, (int)double.NaN is 0 or throws depending on checked context
+            // NumPy: np.array([np.nan]).astype(np.int32) -> array([-2147483648])
             var arr = np.array(new double[] { double.NaN });
+            var result = arr.astype(np.int32);
 
-            try
-            {
-                var result = arr.astype(np.int32);
-                // If it doesn't throw, document the behavior
-                // C# (int)double.NaN gives int.MinValue in unchecked context
-                // or 0 in some implementations
-                var value = result.GetAtIndex<int>(0);
-                // Accept either 0 or int.MinValue as valid implementation-defined behavior
-                (value == 0 || value == int.MinValue).Should().BeTrue(
-                    $"NaN conversion should yield 0 or int.MinValue, got {value}");
-            }
-            catch (OverflowException)
-            {
-                // Also acceptable - throwing on NaN conversion
-            }
+            result.GetAtIndex<int>(0).Should().Be(int.MinValue,
+                "NumPy returns int.MinValue for NaN");
         }
 
         [TestMethod]
-        public void Float64_ToInt32_PositiveInfinity_Throws()
+        public void Float64_ToInt32_PositiveInfinity_ReturnsMinValue()
         {
+            // NumPy: np.array([np.inf]).astype(np.int32) -> array([-2147483648])
             var arr = np.array(new double[] { double.PositiveInfinity });
+            var result = arr.astype(np.int32);
 
-            Action act = () => arr.astype(np.int32);
-
-            // Should throw because infinity is outside int range
-            act.Should().Throw<OverflowException>(
-                "Converting +Infinity should throw OverflowException");
+            result.GetAtIndex<int>(0).Should().Be(int.MinValue,
+                "NumPy returns int.MinValue for +Infinity");
         }
 
         [TestMethod]
-        public void Float64_ToInt32_NegativeInfinity_Throws()
+        public void Float64_ToInt32_NegativeInfinity_ReturnsMinValue()
         {
+            // NumPy: np.array([-np.inf]).astype(np.int32) -> array([-2147483648])
             var arr = np.array(new double[] { double.NegativeInfinity });
+            var result = arr.astype(np.int32);
 
-            Action act = () => arr.astype(np.int32);
-
-            // Should throw because infinity is outside int range
-            act.Should().Throw<OverflowException>(
-                "Converting -Infinity should throw OverflowException");
+            result.GetAtIndex<int>(0).Should().Be(int.MinValue,
+                "NumPy returns int.MinValue for -Infinity");
         }
 
         // ================================================================

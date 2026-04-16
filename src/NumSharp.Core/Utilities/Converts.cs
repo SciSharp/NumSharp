@@ -137,45 +137,40 @@ namespace NumSharp.Utilities
             if (value == null)
                 return default;
 
-            // This line is invalid for things like Enums that return a NPTypeCode
-            // of Int32, but the object can't actually be cast to an Int32.
-            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+            // NumPy-compatible conversion using Converts.ToXxx methods
+            // These methods handle NaN/Inf, overflow/wrapping, and truncation correctly
             switch (InfoOf<TOut>.NPTypeCode)
             {
                 case NPTypeCode.Boolean:
-                    return (TOut)(object)((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToBoolean_NumPy(value);
                 case NPTypeCode.Char:
-                    return (TOut)(object)((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                    return (TOut)(object)Converts.ToChar(ToLong_NumPy(value));
                 case NPTypeCode.Byte:
-                    return (TOut)(object)((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToByte_NumPy(value);
                 case NPTypeCode.SByte:
-                    return (TOut)(object)((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToSByte_NumPy(value);
                 case NPTypeCode.Int16:
-                    return (TOut)(object)((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToInt16_NumPy(value);
                 case NPTypeCode.UInt16:
-                    return (TOut)(object)((IConvertible)value).ToUInt16(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToUInt16_NumPy(value);
                 case NPTypeCode.Int32:
-                    return (TOut)(object)((IConvertible)value).ToInt32(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToInt32_NumPy(value);
                 case NPTypeCode.UInt32:
-                    return (TOut)(object)((IConvertible)value).ToUInt32(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToUInt32_NumPy(value);
                 case NPTypeCode.Int64:
-                    return (TOut)(object)((IConvertible)value).ToInt64(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToInt64_NumPy(value);
                 case NPTypeCode.UInt64:
-                    return (TOut)(object)((IConvertible)value).ToUInt64(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToUInt64_NumPy(value);
                 case NPTypeCode.Single:
-                    return (TOut)(object)((IConvertible)value).ToSingle(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToSingle_NumPy(value);
                 case NPTypeCode.Double:
-                    return (TOut)(object)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToDouble_NumPy(value);
                 case NPTypeCode.Decimal:
-                    return (TOut)(object)((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToDecimal_NumPy(value);
                 case NPTypeCode.Half:
-                    // Half doesn't implement IConvertible, convert through double
-                    if (value is Half h) return (TOut)(object)h;
-                    return (TOut)(object)(Half)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                    return (TOut)(object)ToHalf_NumPy(value);
                 case NPTypeCode.Complex:
-                    // Complex doesn't implement IConvertible
-                    if (value is System.Numerics.Complex c) return (TOut)(object)c;
-                    return (TOut)(object)new System.Numerics.Complex(((IConvertible)value).ToDouble(CultureInfo.InvariantCulture), 0);
+                    return (TOut)(object)ToComplex_NumPy(value);
                 case NPTypeCode.String:
                     return (TOut)(object)((IConvertible)value).ToString(CultureInfo.InvariantCulture);
                 case NPTypeCode.Empty:
@@ -206,53 +201,40 @@ namespace NumSharp.Utilities
             if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
                 return null;
 
-            // This line is invalid for things like Enums that return a NPTypeCode
-            // of Int32, but the object can't actually be cast to an Int32.
-            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+            // NumPy-compatible conversion using Converts.ToXxx methods
+            // These methods handle NaN/Inf, overflow/wrapping, and truncation correctly
             switch (typeCode)
             {
                 case NPTypeCode.Boolean:
-                    return ((IConvertible)value).ToBoolean(CultureInfo.InvariantCulture);
+                    return ToBoolean_NumPy(value);
                 case NPTypeCode.Char:
-                    return ((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
+                    return Converts.ToChar(ToLong_NumPy(value));
                 case NPTypeCode.Byte:
-                    return ((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                    return ToByte_NumPy(value);
                 case NPTypeCode.SByte:
-                    return ((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
+                    return ToSByte_NumPy(value);
                 case NPTypeCode.Int16:
-                    return ((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
+                    return ToInt16_NumPy(value);
                 case NPTypeCode.UInt16:
-                    return ((IConvertible)value).ToUInt16(CultureInfo.InvariantCulture);
+                    return ToUInt16_NumPy(value);
                 case NPTypeCode.Int32:
-                    return ((IConvertible)value).ToInt32(CultureInfo.InvariantCulture);
+                    return ToInt32_NumPy(value);
                 case NPTypeCode.UInt32:
-                    return ((IConvertible)value).ToUInt32(CultureInfo.InvariantCulture);
+                    return ToUInt32_NumPy(value);
                 case NPTypeCode.Int64:
-                    return ((IConvertible)value).ToInt64(CultureInfo.InvariantCulture);
+                    return ToInt64_NumPy(value);
                 case NPTypeCode.UInt64:
-                    return ((IConvertible)value).ToUInt64(CultureInfo.InvariantCulture);
+                    return ToUInt64_NumPy(value);
                 case NPTypeCode.Single:
-                    // Half doesn't implement IConvertible
-                    if (value is Half hs) return (float)hs;
-                    return ((IConvertible)value).ToSingle(CultureInfo.InvariantCulture);
+                    return ToSingle_NumPy(value);
                 case NPTypeCode.Double:
-                    // Half doesn't implement IConvertible
-                    if (value is Half hd) return (double)hd;
-                    // Complex doesn't implement IConvertible - return real part
-                    if (value is System.Numerics.Complex cd) return cd.Real;
-                    return ((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                    return ToDouble_NumPy(value);
                 case NPTypeCode.Decimal:
-                    // Half doesn't implement IConvertible
-                    if (value is Half hdec) return (decimal)(double)hdec;
-                    return ((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                    return ToDecimal_NumPy(value);
                 case NPTypeCode.Half:
-                    // Half doesn't implement IConvertible, convert through double
-                    if (value is Half h) return h;
-                    return (Half)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                    return ToHalf_NumPy(value);
                 case NPTypeCode.Complex:
-                    // Complex doesn't implement IConvertible
-                    if (value is System.Numerics.Complex c) return c;
-                    return new System.Numerics.Complex(((IConvertible)value).ToDouble(CultureInfo.InvariantCulture), 0);
+                    return ToComplex_NumPy(value);
                 case NPTypeCode.String:
                     return ((IConvertible)value).ToString(CultureInfo.InvariantCulture);
                 case NPTypeCode.Empty:
@@ -261,6 +243,321 @@ namespace NumSharp.Utilities
                     throw new ArgumentException("Arg_UnknownNPTypeCode");
             }
         }
+
+        // NumPy-compatible conversion helper methods
+        // These route to our Converts.ToXxx methods which handle NaN/Inf/overflow correctly
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool ToBoolean_NumPy(object value) => value switch
+        {
+            bool b => b,
+            double d => Converts.ToBoolean(d),
+            float f => Converts.ToBoolean(f),
+            Half h => Converts.ToBoolean(h),
+            Complex c => Converts.ToBoolean(c),
+            decimal m => Converts.ToBoolean(m),
+            long l => Converts.ToBoolean(l),
+            ulong ul => Converts.ToBoolean(ul),
+            int i => Converts.ToBoolean(i),
+            uint ui => Converts.ToBoolean(ui),
+            short s => Converts.ToBoolean(s),
+            ushort us => Converts.ToBoolean(us),
+            byte by => Converts.ToBoolean(by),
+            sbyte sb => Converts.ToBoolean(sb),
+            char c => Converts.ToBoolean(c),
+            _ => Converts.ToBoolean(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static byte ToByte_NumPy(object value) => value switch
+        {
+            byte b => b,
+            double d => Converts.ToByte(d),
+            float f => Converts.ToByte(f),
+            Half h => Converts.ToByte(h),
+            Complex c => Converts.ToByte(c),
+            decimal m => Converts.ToByte(m),
+            long l => Converts.ToByte(l),
+            ulong ul => Converts.ToByte(ul),
+            int i => Converts.ToByte(i),
+            uint ui => Converts.ToByte(ui),
+            short s => Converts.ToByte(s),
+            ushort us => Converts.ToByte(us),
+            sbyte sb => Converts.ToByte(sb),
+            char c => Converts.ToByte(c),
+            bool b => Converts.ToByte(b),
+            _ => Converts.ToByte(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static sbyte ToSByte_NumPy(object value) => value switch
+        {
+            sbyte sb => sb,
+            double d => Converts.ToSByte(d),
+            float f => Converts.ToSByte(f),
+            Half h => Converts.ToSByte(h),
+            Complex c => Converts.ToSByte(c),
+            decimal m => Converts.ToSByte(m),
+            long l => Converts.ToSByte(l),
+            ulong ul => Converts.ToSByte(ul),
+            int i => Converts.ToSByte(i),
+            uint ui => Converts.ToSByte(ui),
+            short s => Converts.ToSByte(s),
+            ushort us => Converts.ToSByte(us),
+            byte b => Converts.ToSByte(b),
+            char c => Converts.ToSByte(c),
+            bool b => Converts.ToSByte(b),
+            _ => Converts.ToSByte(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static short ToInt16_NumPy(object value) => value switch
+        {
+            short s => s,
+            double d => Converts.ToInt16(d),
+            float f => Converts.ToInt16(f),
+            Half h => Converts.ToInt16(h),
+            Complex c => Converts.ToInt16(c),
+            decimal m => Converts.ToInt16(m),
+            long l => Converts.ToInt16(l),
+            ulong ul => Converts.ToInt16(ul),
+            int i => Converts.ToInt16(i),
+            uint ui => Converts.ToInt16(ui),
+            ushort us => Converts.ToInt16(us),
+            byte b => Converts.ToInt16(b),
+            sbyte sb => Converts.ToInt16(sb),
+            char c => Converts.ToInt16(c),
+            bool b => Converts.ToInt16(b),
+            _ => Converts.ToInt16(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ushort ToUInt16_NumPy(object value) => value switch
+        {
+            ushort us => us,
+            double d => Converts.ToUInt16(d),
+            float f => Converts.ToUInt16(f),
+            Half h => Converts.ToUInt16(h),
+            Complex c => Converts.ToUInt16(c),
+            decimal m => Converts.ToUInt16(m),
+            long l => Converts.ToUInt16(l),
+            ulong ul => Converts.ToUInt16(ul),
+            int i => Converts.ToUInt16(i),
+            uint ui => Converts.ToUInt16(ui),
+            short s => Converts.ToUInt16(s),
+            byte b => Converts.ToUInt16(b),
+            sbyte sb => Converts.ToUInt16(sb),
+            char c => Converts.ToUInt16(c),
+            bool b => Converts.ToUInt16(b),
+            _ => Converts.ToUInt16(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int ToInt32_NumPy(object value) => value switch
+        {
+            int i => i,
+            double d => Converts.ToInt32(d),
+            float f => Converts.ToInt32(f),
+            Half h => Converts.ToInt32(h),
+            Complex c => Converts.ToInt32(c),
+            decimal m => Converts.ToInt32(m),
+            long l => Converts.ToInt32(l),
+            ulong ul => Converts.ToInt32(ul),
+            uint ui => Converts.ToInt32(ui),
+            short s => Converts.ToInt32(s),
+            ushort us => Converts.ToInt32(us),
+            byte b => Converts.ToInt32(b),
+            sbyte sb => Converts.ToInt32(sb),
+            char c => Converts.ToInt32(c),
+            bool b => Converts.ToInt32(b),
+            _ => Converts.ToInt32(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static uint ToUInt32_NumPy(object value) => value switch
+        {
+            uint ui => ui,
+            double d => Converts.ToUInt32(d),
+            float f => Converts.ToUInt32(f),
+            Half h => Converts.ToUInt32(h),
+            Complex c => Converts.ToUInt32(c),
+            decimal m => Converts.ToUInt32(m),
+            long l => Converts.ToUInt32(l),
+            ulong ul => Converts.ToUInt32(ul),
+            int i => Converts.ToUInt32(i),
+            short s => Converts.ToUInt32(s),
+            ushort us => Converts.ToUInt32(us),
+            byte b => Converts.ToUInt32(b),
+            sbyte sb => Converts.ToUInt32(sb),
+            char c => Converts.ToUInt32(c),
+            bool b => Converts.ToUInt32(b),
+            _ => Converts.ToUInt32(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long ToInt64_NumPy(object value) => value switch
+        {
+            long l => l,
+            double d => Converts.ToInt64(d),
+            float f => Converts.ToInt64(f),
+            Half h => Converts.ToInt64(h),
+            Complex c => Converts.ToInt64(c),
+            decimal m => Converts.ToInt64(m),
+            ulong ul => Converts.ToInt64(ul),
+            int i => Converts.ToInt64(i),
+            uint ui => Converts.ToInt64(ui),
+            short s => Converts.ToInt64(s),
+            ushort us => Converts.ToInt64(us),
+            byte b => Converts.ToInt64(b),
+            sbyte sb => Converts.ToInt64(sb),
+            char c => Converts.ToInt64(c),
+            bool b => Converts.ToInt64(b),
+            _ => Converts.ToInt64(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ulong ToUInt64_NumPy(object value) => value switch
+        {
+            ulong ul => ul,
+            double d => Converts.ToUInt64(d),
+            float f => Converts.ToUInt64(f),
+            Half h => Converts.ToUInt64(h),
+            Complex c => Converts.ToUInt64(c),
+            decimal m => Converts.ToUInt64(m),
+            long l => Converts.ToUInt64(l),
+            int i => Converts.ToUInt64(i),
+            uint ui => Converts.ToUInt64(ui),
+            short s => Converts.ToUInt64(s),
+            ushort us => Converts.ToUInt64(us),
+            byte b => Converts.ToUInt64(b),
+            sbyte sb => Converts.ToUInt64(sb),
+            char c => Converts.ToUInt64(c),
+            bool b => Converts.ToUInt64(b),
+            _ => Converts.ToUInt64(((IConvertible)value).ToDouble(null))
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float ToSingle_NumPy(object value) => value switch
+        {
+            float f => f,
+            double d => Converts.ToSingle(d),
+            Half h => Converts.ToSingle(h),
+            Complex c => Converts.ToSingle(c),
+            decimal m => Converts.ToSingle(m),
+            long l => Converts.ToSingle(l),
+            ulong ul => Converts.ToSingle(ul),
+            int i => Converts.ToSingle(i),
+            uint ui => Converts.ToSingle(ui),
+            short s => Converts.ToSingle(s),
+            ushort us => Converts.ToSingle(us),
+            byte b => Converts.ToSingle(b),
+            sbyte sb => Converts.ToSingle(sb),
+            char c => Converts.ToSingle(c),
+            bool b => Converts.ToSingle(b),
+            _ => ((IConvertible)value).ToSingle(null)
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double ToDouble_NumPy(object value) => value switch
+        {
+            double d => d,
+            float f => Converts.ToDouble(f),
+            Half h => Converts.ToDouble(h),
+            Complex c => c.Real,  // NumPy: discard imaginary
+            decimal m => Converts.ToDouble(m),
+            long l => Converts.ToDouble(l),
+            ulong ul => Converts.ToDouble(ul),
+            int i => Converts.ToDouble(i),
+            uint ui => Converts.ToDouble(ui),
+            short s => Converts.ToDouble(s),
+            ushort us => Converts.ToDouble(us),
+            byte b => Converts.ToDouble(b),
+            sbyte sb => Converts.ToDouble(sb),
+            char c => Converts.ToDouble(c),
+            bool b => Converts.ToDouble(b),
+            _ => ((IConvertible)value).ToDouble(null)
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static decimal ToDecimal_NumPy(object value) => value switch
+        {
+            decimal m => m,
+            double d => Converts.ToDecimal(d),
+            float f => Converts.ToDecimal(f),
+            Half h => Converts.ToDecimal(h),
+            long l => Converts.ToDecimal(l),
+            ulong ul => Converts.ToDecimal(ul),
+            int i => Converts.ToDecimal(i),
+            uint ui => Converts.ToDecimal(ui),
+            short s => Converts.ToDecimal(s),
+            ushort us => Converts.ToDecimal(us),
+            byte b => Converts.ToDecimal(b),
+            sbyte sb => Converts.ToDecimal(sb),
+            char c => Converts.ToDecimal(c),
+            bool b => Converts.ToDecimal(b),
+            _ => ((IConvertible)value).ToDecimal(null)
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Half ToHalf_NumPy(object value) => value switch
+        {
+            Half h => h,
+            double d => Converts.ToHalf(d),
+            float f => Converts.ToHalf(f),
+            decimal m => (Half)(double)m,
+            long l => Converts.ToHalf(l),
+            ulong ul => Converts.ToHalf(ul),
+            int i => Converts.ToHalf(i),
+            uint ui => Converts.ToHalf(ui),
+            short s => Converts.ToHalf(s),
+            ushort us => Converts.ToHalf(us),
+            byte b => Converts.ToHalf(b),
+            sbyte sb => Converts.ToHalf(sb),
+            char c => (Half)c,
+            bool b => b ? (Half)1 : (Half)0,
+            _ => (Half)((IConvertible)value).ToDouble(null)
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Complex ToComplex_NumPy(object value) => value switch
+        {
+            Complex c => c,
+            double d => new Complex(d, 0),
+            float f => new Complex(f, 0),
+            Half h => new Complex((double)h, 0),
+            decimal m => new Complex((double)m, 0),
+            long l => new Complex(l, 0),
+            ulong ul => new Complex(ul, 0),
+            int i => new Complex(i, 0),
+            uint ui => new Complex(ui, 0),
+            short s => new Complex(s, 0),
+            ushort us => new Complex(us, 0),
+            byte b => new Complex(b, 0),
+            sbyte sb => new Complex(sb, 0),
+            char c => new Complex(c, 0),
+            bool b => new Complex(b ? 1 : 0, 0),
+            _ => new Complex(((IConvertible)value).ToDouble(null), 0)
+        };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long ToLong_NumPy(object value) => value switch
+        {
+            long l => l,
+            int i => i,
+            short s => s,
+            sbyte sb => sb,
+            ulong ul => (long)ul,
+            uint ui => ui,
+            ushort us => us,
+            byte b => b,
+            char c => c,
+            double d => Converts.ToInt64(d),
+            float f => Converts.ToInt64(f),
+            Half h => Converts.ToInt64(h),
+            decimal m => Converts.ToInt64(m),
+            bool b => b ? 1L : 0L,
+            _ => Converts.ToInt64(((IConvertible)value).ToDouble(null))
+        };
 
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
         /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
