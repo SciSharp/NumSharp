@@ -269,19 +269,39 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value)
         {
-            return value == null ? (char)0 : ((IConvertible)value).ToChar(null);
+            if (value == null) return (char)0;
+            return value switch
+            {
+                char c => c,
+                byte b => (char)b,
+                sbyte sb => unchecked((char)sb),
+                short s => unchecked((char)s),
+                ushort us => (char)us,
+                int i => unchecked((char)i),
+                uint u => unchecked((char)u),
+                long l => unchecked((char)l),
+                ulong ul => unchecked((char)ul),
+                float f => ToChar(f),
+                double d => ToChar(d),
+                Half h => ToChar(h),
+                Complex cx => ToChar(cx),
+                decimal m => ToChar(m),
+                bool bo => ToChar(bo),
+                _ => ((IConvertible)value).ToChar(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value, IFormatProvider provider)
         {
-            return value == null ? (char)0 : ((IConvertible)value).ToChar(provider);
+            return ToChar(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(bool value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // NumPy bool -> integer: true=1, false=0
+            return value ? (char)1 : (char)0;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -365,40 +385,57 @@ namespace NumSharp.Utilities
             return value[0];
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(float value)
         {
-            return ((IConvertible)value).ToChar(null);
+            return ToChar((double)value);
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(double value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // NumPy behavior (char as 16-bit unsigned, uint16 analog):
+            // NaN/Inf -> 0, values outside int32 range -> 0, truncate toward zero and wrap
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return (char)0;
+            }
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                return (char)0;
+            }
+            return unchecked((char)(ushort)(int)value);
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(decimal value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // Truncate toward zero, wrap via int32 intermediate (matches NumPy uint16 pattern)
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return (char)0;
+            }
+            return unchecked((char)(ushort)(int)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(Half value)
         {
-            return (char)(ushort)value;
+            // NumPy behavior: NaN/Inf -> 0 for small integer types (char is 16-bit unsigned)
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return (char)0;
+            }
+            // Half always fits in int32; truncate toward zero then wrap to char (ushort)
+            return unchecked((char)(ushort)(int)(double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(System.Numerics.Complex value)
         {
-            return (char)(ushort)value.Real;
+            // NumPy: complex -> integer takes real part only
+            return ToChar(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -545,8 +582,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToSByte(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Decimal values outside int32 range return 0 (matches float->int8 NaN/overflow pattern).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((sbyte)(int)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -721,8 +764,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToByte(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Negative values wrap (e.g. -1m -> 255). Values outside int32 range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((byte)(int)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -896,8 +945,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToInt16(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((short)(int)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1076,8 +1130,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt16(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Negative values wrap (e.g. -1m -> 65535).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((ushort)(int)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1247,8 +1307,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(decimal value)
         {
-            // NumPy uses truncation toward zero for decimal->int conversion
-            return decimal.ToInt32(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Values outside int32 range -> int32.MinValue
+            // (matches NumPy float->int32 overflow behavior).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return int.MinValue;
+            }
+            return (int)truncated;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1422,8 +1488,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt32(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Negative values wrap via int64 intermediate.
+            // Values outside int64 range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((uint)(long)truncated);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1592,8 +1664,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToInt64(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Values outside int64 range -> int64.MinValue.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+            {
+                return long.MinValue;
+            }
+            return (long)truncated;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1780,8 +1857,22 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt64(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int64 intermediate for negatives.
+            // Positive values within ulong range convert directly. Values outside range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue)
+            {
+                return 0;
+            }
+            if (truncated < 0m)
+            {
+                return unchecked((ulong)(long)truncated);
+            }
+            if (truncated > (decimal)ulong.MaxValue)
+            {
+                return 0;
+            }
+            return (ulong)truncated;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2119,13 +2210,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDecimal(null);
+            if (value == null) return 0m;
+            return value switch
+            {
+                decimal m => m,
+                double d => ToDecimal(d),
+                float f => ToDecimal(f),
+                Half h => ToDecimal(h),
+                Complex cx => ToDecimal(cx),
+                long l => l,
+                ulong ul => ul,
+                int i => i,
+                uint u => u,
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                char c => c,
+                bool bo => bo ? 1m : 0m,
+                _ => ((IConvertible)value).ToDecimal(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDecimal(provider);
+            return ToDecimal(value);
         }
 
 
@@ -2189,25 +2299,41 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(float value)
         {
-            return (decimal)value;
+            return ToDecimal((double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(double value)
         {
+            // NaN/Inf and out-of-range values return 0 (consistent with small-integer NaN handling).
+            // Decimal cannot represent NaN/Inf and cast would throw OverflowException.
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return 0m;
+            }
+            if (value < (double)decimal.MinValue || value > (double)decimal.MaxValue)
+            {
+                return 0m;
+            }
             return (decimal)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(Half value)
         {
+            // Half range (~±65504) fits comfortably in decimal, but Half.NaN/Inf would throw
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0m;
+            }
             return (decimal)(double)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(System.Numerics.Complex value)
         {
-            return (decimal)value.Real;
+            // Discard imaginary part, route through double->decimal for NaN/Inf safety
+            return ToDecimal(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
