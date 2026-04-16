@@ -718,6 +718,8 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Conv_R4);
             else if (typeof(T) == typeof(byte))
                 il.Emit(OpCodes.Conv_U1);
+            else if (typeof(T) == typeof(sbyte))
+                il.Emit(OpCodes.Conv_I1);
             else if (typeof(T) == typeof(short))
                 il.Emit(OpCodes.Conv_I2);
             else if (typeof(T) == typeof(ushort))

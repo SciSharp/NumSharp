@@ -211,7 +211,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Power Operations
 
         [TestMethod]
-        [OpenBugs] // Power not supported for SByte yet
         public void SByte_Power()
         {
             // NumPy: np.power([1, 2, 3, 4], 2, dtype=int8)

@@ -1295,6 +1295,9 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
                     break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
+                    break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
                     break;

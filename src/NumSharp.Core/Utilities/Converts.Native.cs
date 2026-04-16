@@ -285,9 +285,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -299,9 +297,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
@@ -314,35 +310,27 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(int value)
         {
-            if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(uint value)
         {
-            if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(long value)
         {
-            if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(ulong value)
         {
-            if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         //
@@ -448,72 +436,57 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(char value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(byte value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(short value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ushort value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(int value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(uint value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(long value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ulong value)
         {
-            if (value > (ulong)sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
 
 
@@ -523,13 +496,16 @@ namespace NumSharp.Utilities
             return ToSByte((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(double value)
         {
-            return ToSByte(ToInt32(value));
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for int8
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < sbyte.MinValue || value > sbyte.MaxValue)
+            {
+                return 0;  // NumPy returns 0 for int8 special/overflow cases
+            }
+            return (sbyte)value;
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(decimal value)
@@ -541,13 +517,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(Half value)
         {
+            // NumPy behavior: special values -> 0 for int8
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
             return (sbyte)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(System.Numerics.Complex value)
         {
-            return (sbyte)value.Real;
+            return ToSByte(value.Real);
         }
 
 
@@ -605,69 +586,57 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(char value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(sbyte value)
         {
-            if (value < byte.MinValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(short value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ushort value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(int value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(uint value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(long value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ulong value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -679,7 +648,12 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
-            return ToByte(ToInt32(value));
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint8
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < byte.MinValue || value > byte.MaxValue)
+            {
+                return 0;  // NumPy returns 0 for uint8 special/overflow cases
+            }
+            return (byte)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -692,13 +666,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(Half value)
         {
+            // NumPy behavior: special values -> 0 for uint8
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
             return (byte)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(System.Numerics.Complex value)
         {
-            return (byte)value.Real;
+            return ToByte(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -750,9 +729,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(char value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            return unchecked((short)value);
         }
 
 
@@ -772,26 +749,22 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ushort value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(int value)
         {
-            if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(uint value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -803,18 +776,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(long value)
         {
-            if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ulong value)
         {
-            if (value > (ulong)short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -826,7 +796,12 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
-            return ToInt16(ToInt32(value));
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for int16
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < short.MinValue || value > short.MaxValue)
+            {
+                return 0;  // NumPy returns 0 for int16 special/overflow cases
+            }
+            return (short)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -839,13 +814,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(Half value)
         {
+            // NumPy behavior: special values -> 0 for int16
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
             return (short)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(System.Numerics.Complex value)
         {
-            return (short)value.Real;
+            return ToInt16(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -907,9 +887,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            return unchecked((ushort)value);
         }
 
 
@@ -923,20 +901,16 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(int value)
         {
-            if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ushort value)
@@ -944,31 +918,25 @@ namespace NumSharp.Utilities
             return value;
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(uint value)
         {
-            if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(long value)
         {
-            if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ulong value)
         {
-            if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
 
 
@@ -978,13 +946,16 @@ namespace NumSharp.Utilities
             return ToUInt16((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
-            return ToUInt16(ToInt32(value));
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint16
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < ushort.MinValue || value > ushort.MaxValue)
+            {
+                return 0;  // NumPy returns 0 for uint16 special/overflow cases
+            }
+            return (ushort)value;
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(decimal value)
@@ -996,13 +967,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(Half value)
         {
+            // NumPy behavior: special values -> 0 for uint16
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
             return (ushort)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(System.Numerics.Complex value)
         {
-            return (ushort)value.Real;
+            return ToUInt16(value.Real);
         }
 
 
@@ -1090,9 +1066,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(uint value)
         {
-            if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            return unchecked((int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1104,18 +1078,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(long value)
         {
-            if (value < int.MinValue || value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((int)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(ulong value)
         {
-            if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1127,14 +1098,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            // This matches np.astype(int) behavior: np.array([1.7, -1.7]).astype(int) -> [1, -1]
-            if (value >= int.MinValue && value <= int.MaxValue)
+            // NumPy behavior: truncation toward zero for normal values
+            // For special values (inf, -inf, nan, overflow): returns int.MinValue
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < int.MinValue || value > int.MaxValue)
             {
-                return (int)value;  // C# cast truncates toward zero
+                return int.MinValue;  // NumPy returns int32.min for all special/overflow cases
             }
-
-            throw new OverflowException(("Overflow_Int32"));
+            return (int)value;  // C# cast truncates toward zero
         }
 
         [System.Security.SecuritySafeCritical] // auto-generated
@@ -1148,13 +1118,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(Half value)
         {
+            // NumPy behavior: special values -> int.MinValue for int32
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return int.MinValue;
+            }
             return (int)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(System.Numerics.Complex value)
         {
-            return (int)value.Real;
+            return ToInt32(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1217,9 +1192,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1233,9 +1206,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1249,9 +1220,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(int value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1265,18 +1234,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(long value)
         {
-            if (value < 0 || value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(ulong value)
         {
-            if (value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1286,19 +1251,16 @@ namespace NumSharp.Utilities
             return ToUInt32((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            if (value >= 0 && value <= uint.MaxValue)
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 0 for uint32
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < uint.MinValue || value > uint.MaxValue)
             {
-                return (uint)value;  // C# cast truncates toward zero
+                return 0;  // NumPy returns 0 for uint32 special/overflow cases
             }
-
-            throw new OverflowException(("Overflow_UInt32"));
+            return (uint)value;
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(decimal value)
@@ -1310,13 +1272,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(Half value)
         {
+            // NumPy behavior: special values -> 0 for uint32
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
             return (uint)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(System.Numerics.Complex value)
         {
-            return (uint)value.Real;
+            return ToUInt32(value.Real);
         }
 
 
@@ -1417,9 +1384,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(ulong value)
         {
-            if (value > long.MaxValue) throw new OverflowException(("Overflow_Int64"));
-            Contract.EndContractBlock();
-            return (long)value;
+            return unchecked((long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1438,8 +1403,13 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            return checked((long)value);
+            // NumPy behavior: truncation toward zero for normal values
+            // For special values (inf, -inf, nan, overflow): returns long.MinValue
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < long.MinValue || value > long.MaxValue)
+            {
+                return long.MinValue;  // NumPy returns int64.min for all special/overflow cases
+            }
+            return (long)value;  // C# cast truncates toward zero
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1452,13 +1422,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(Half value)
         {
+            // NumPy behavior: special values -> long.MinValue
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return long.MinValue;
+            }
             return (long)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(System.Numerics.Complex value)
         {
-            return (long)value.Real;
+            return ToInt64(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1520,9 +1495,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1536,9 +1509,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1552,9 +1523,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(int value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1568,9 +1537,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(long value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1587,14 +1554,19 @@ namespace NumSharp.Utilities
             return ToUInt64((double)value);
         }
 
+        // NumPy special value for uint64 overflow: 2^63 = 9223372036854775808
+        private const ulong NumPyUInt64Overflow = 9223372036854775808UL;
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            return checked((ulong)value);
+            // NumPy behavior: special values (inf, -inf, nan, overflow) -> 2^63 for uint64
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value > ulong.MaxValue)
+            {
+                return NumPyUInt64Overflow;  // NumPy returns 2^63 for uint64 special/overflow cases
+            }
+            return (ulong)value;
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(decimal value)
@@ -1606,13 +1578,18 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(Half value)
         {
+            // NumPy behavior: special values -> 2^63 for uint64
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return NumPyUInt64Overflow;
+            }
             return (ulong)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(System.Numerics.Complex value)
         {
-            return (ulong)value.Real;
+            return ToUInt64(value.Real);
         }
 
 
@@ -2061,7 +2038,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(bool value)
         {
-            return value ? (Half)1.0 : (Half)0.0;
+            return (Half)(value ? 1 : 0);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2140,6 +2117,13 @@ namespace NumSharp.Utilities
         public static Half ToHalf(decimal value)
         {
             return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(System.Numerics.Complex value)
+        {
+            // NumPy: complex -> float16 uses the real part
+            return (Half)value.Real;
         }
 
         [MethodImpl(OptimizeAndInline)]

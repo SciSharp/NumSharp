@@ -258,7 +258,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Dot/MatMul
 
         [TestMethod]
-        [OpenBugs] // Dot not supported for SByte yet
         public void SByte_Dot()
         {
             // NumPy: np.dot([1, 2, 3], [4, 5, 6], dtype=int8) = 32 (dtype: int8)
