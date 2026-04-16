@@ -101,6 +101,62 @@ namespace NumSharp.UnitTest.NewDtypes
             result.GetAtIndex<Half>(2).Should().Be((Half)4.0);
         }
 
+        [TestMethod]
+        public void Half_Plus_Int16_PromotesToFloat32()
+        {
+            // NumPy 2.x: float16 + int16 = float32 (int16 has more precision than float16 can represent)
+            var h = np.array(new Half[] { (Half)1.0, (Half)2.0, (Half)3.0 });
+            var i16 = np.array(new short[] { 1, 2, 3 });
+            var result = h + i16;
+
+            result.typecode.Should().Be(NPTypeCode.Single);
+            result.GetAtIndex<float>(0).Should().Be(2.0f);
+            result.GetAtIndex<float>(1).Should().Be(4.0f);
+            result.GetAtIndex<float>(2).Should().Be(6.0f);
+        }
+
+        [TestMethod]
+        public void Half_Plus_UInt16_PromotesToFloat32()
+        {
+            // NumPy 2.x: float16 + uint16 = float32
+            var h = np.array(new Half[] { (Half)1.0, (Half)2.0, (Half)3.0 });
+            var u16 = np.array(new ushort[] { 1, 2, 3 });
+            var result = h + u16;
+
+            result.typecode.Should().Be(NPTypeCode.Single);
+            result.GetAtIndex<float>(0).Should().Be(2.0f);
+            result.GetAtIndex<float>(1).Should().Be(4.0f);
+            result.GetAtIndex<float>(2).Should().Be(6.0f);
+        }
+
+        [TestMethod]
+        public void Half_Plus_Int8_StaysHalf()
+        {
+            // NumPy 2.x: float16 + int8 = float16 (int8 fits in float16's precision)
+            var h = np.array(new Half[] { (Half)1.0, (Half)2.0, (Half)3.0 });
+            var i8 = np.array(new sbyte[] { 1, 2, 3 });
+            var result = h + i8;
+
+            result.typecode.Should().Be(NPTypeCode.Half);
+            result.GetAtIndex<Half>(0).Should().Be((Half)2.0);
+            result.GetAtIndex<Half>(1).Should().Be((Half)4.0);
+            result.GetAtIndex<Half>(2).Should().Be((Half)6.0);
+        }
+
+        [TestMethod]
+        public void Half_Plus_Int32_PromotesToFloat64()
+        {
+            // NumPy 2.x: float16 + int32 = float64 (int32 needs even more precision)
+            var h = np.array(new Half[] { (Half)1.0, (Half)2.0, (Half)3.0 });
+            var i32 = np.array(new int[] { 1, 2, 3 });
+            var result = h + i32;
+
+            result.typecode.Should().Be(NPTypeCode.Double);
+            result.GetAtIndex<double>(0).Should().Be(2.0);
+            result.GetAtIndex<double>(1).Should().Be(4.0);
+            result.GetAtIndex<double>(2).Should().Be(6.0);
+        }
+
         #endregion
 
         #region Complex + Other Types

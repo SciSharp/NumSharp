@@ -107,6 +107,82 @@ namespace NumSharp.UnitTest.NewDtypes
             result.GetAtIndex<bool>(1).Should().BeFalse();
         }
 
+        [TestMethod]
+        public void Complex_LessThan_Lexicographic()
+        {
+            // NumPy 2.x: complex < uses lexicographic ordering (first by real, then imaginary)
+            // c1: [1+2j, 3+4j, 1+5j, 2+0j]
+            // c2: [1+3j, 2+4j, 1+5j, 1+0j]
+            // Result: [True, False, False, False]
+            // (1,2) < (1,3): same real, 2<3 => True
+            // (3,4) < (2,4): 3>2 => False
+            // (1,5) < (1,5): equal => False
+            // (2,0) < (1,0): 2>1 => False
+            var c1 = np.array(new Complex[] { new(1, 2), new(3, 4), new(1, 5), new(2, 0) });
+            var c2 = np.array(new Complex[] { new(1, 3), new(2, 4), new(1, 5), new(1, 0) });
+            var result = c1 < c2;
+
+            result.typecode.Should().Be(NPTypeCode.Boolean);
+            result.GetAtIndex<bool>(0).Should().BeTrue();
+            result.GetAtIndex<bool>(1).Should().BeFalse();
+            result.GetAtIndex<bool>(2).Should().BeFalse();
+            result.GetAtIndex<bool>(3).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void Complex_GreaterThan_Lexicographic()
+        {
+            // NumPy 2.x: complex > uses lexicographic ordering
+            // c1: [1+2j, 3+4j, 1+5j, 2+0j]
+            // c2: [1+3j, 2+4j, 1+5j, 1+0j]
+            // Result: [False, True, False, True]
+            var c1 = np.array(new Complex[] { new(1, 2), new(3, 4), new(1, 5), new(2, 0) });
+            var c2 = np.array(new Complex[] { new(1, 3), new(2, 4), new(1, 5), new(1, 0) });
+            var result = c1 > c2;
+
+            result.typecode.Should().Be(NPTypeCode.Boolean);
+            result.GetAtIndex<bool>(0).Should().BeFalse();
+            result.GetAtIndex<bool>(1).Should().BeTrue();
+            result.GetAtIndex<bool>(2).Should().BeFalse();
+            result.GetAtIndex<bool>(3).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Complex_LessEqual_Lexicographic()
+        {
+            // NumPy 2.x: complex <= uses lexicographic ordering
+            // c1: [1+2j, 3+4j, 1+5j, 2+0j]
+            // c2: [1+3j, 2+4j, 1+5j, 1+0j]
+            // Result: [True, False, True, False]
+            var c1 = np.array(new Complex[] { new(1, 2), new(3, 4), new(1, 5), new(2, 0) });
+            var c2 = np.array(new Complex[] { new(1, 3), new(2, 4), new(1, 5), new(1, 0) });
+            var result = c1 <= c2;
+
+            result.typecode.Should().Be(NPTypeCode.Boolean);
+            result.GetAtIndex<bool>(0).Should().BeTrue();
+            result.GetAtIndex<bool>(1).Should().BeFalse();
+            result.GetAtIndex<bool>(2).Should().BeTrue();
+            result.GetAtIndex<bool>(3).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void Complex_GreaterEqual_Lexicographic()
+        {
+            // NumPy 2.x: complex >= uses lexicographic ordering
+            // c1: [1+2j, 3+4j, 1+5j, 2+0j]
+            // c2: [1+3j, 2+4j, 1+5j, 1+0j]
+            // Result: [False, True, True, True]
+            var c1 = np.array(new Complex[] { new(1, 2), new(3, 4), new(1, 5), new(2, 0) });
+            var c2 = np.array(new Complex[] { new(1, 3), new(2, 4), new(1, 5), new(1, 0) });
+            var result = c1 >= c2;
+
+            result.typecode.Should().Be(NPTypeCode.Boolean);
+            result.GetAtIndex<bool>(0).Should().BeFalse();
+            result.GetAtIndex<bool>(1).Should().BeTrue();
+            result.GetAtIndex<bool>(2).Should().BeTrue();
+            result.GetAtIndex<bool>(3).Should().BeTrue();
+        }
+
         #endregion
 
         #region astype Conversions
