@@ -877,5 +877,201 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        #region Additional Edge Cases - Large Floats
+
+        [TestMethod]
+        public void Float64_LargePositive_ToInt32_ReturnsMinValue()
+        {
+            // NumPy: 1e10 is outside int32 range, returns MIN_VALUE
+            var arr = np.array(new[] { 1e10 });
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(-2147483648);
+        }
+
+        [TestMethod]
+        public void Float64_LargePositive_ToUInt32_WrapsCorrectly()
+        {
+            // NumPy: 1e10 -> uint32 wraps to 1410065408 (not 0!)
+            var arr = np.array(new[] { 1e10 });
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(1410065408u);
+        }
+
+        [TestMethod]
+        public void Float64_LargeNegative_ToUInt32_WrapsCorrectly()
+        {
+            // NumPy: -1e10 -> uint32 wraps to 2884901888
+            var arr = np.array(new[] { -1e10 });
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(2884901888u);
+        }
+
+        [TestMethod]
+        public void Float64_ExtremelyLarge_ToInt64()
+        {
+            // NumPy: 1e18 fits, 1e19/1e20 overflow to MIN_VALUE
+            np.array(new[] { 1e18 }).astype(np.int64).GetAtIndex<long>(0).Should().Be(1000000000000000000L);
+            np.array(new[] { 1e19 }).astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
+            np.array(new[] { 1e20 }).astype(np.int64).GetAtIndex<long>(0).Should().Be(-9223372036854775808L);
+        }
+
+        [TestMethod]
+        public void Float64_ExtremelyLarge_ToUInt64()
+        {
+            // NumPy: 1e19 fits, 1e20 overflows to 2^63
+            np.array(new[] { 1e19 }).astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(10000000000000000000UL);
+            np.array(new[] { 1e20 }).astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(9223372036854775808UL);
+        }
+
+        #endregion
+
+        #region Additional Edge Cases - Exact Boundaries
+
+        [TestMethod]
+        public void Float64_AtInt8Boundaries_WrapsCorrectly()
+        {
+            // NumPy: exactly at boundary wraps
+            np.array(new[] { 127.0 }).astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(127);
+            np.array(new[] { 128.0 }).astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(-128);
+            np.array(new[] { -128.0 }).astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(-128);
+            np.array(new[] { -129.0 }).astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(127);
+        }
+
+        [TestMethod]
+        public void Float64_AtUInt8Boundaries_WrapsCorrectly()
+        {
+            np.array(new[] { 255.0 }).astype(np.uint8).GetAtIndex<byte>(0).Should().Be(255);
+            np.array(new[] { 256.0 }).astype(np.uint8).GetAtIndex<byte>(0).Should().Be(0);
+        }
+
+        [TestMethod]
+        public void Float64_SmallFractions_TruncateToZero()
+        {
+            // All values < 1.0 truncate to 0
+            np.array(new[] { 0.1 }).astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+            np.array(new[] { -0.1 }).astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+            np.array(new[] { 0.999999 }).astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+            np.array(new[] { -0.999999 }).astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+        }
+
+        #endregion
+
+        #region NumSharp-Specific: Char Type
+
+        [TestMethod]
+        public void Char_ToNumericTypes()
+        {
+            var arr = np.array(new char[] { 'A', 'Z', '\0', (char)255 });
+
+            // Char -> int32: ASCII values
+            var intResult = arr.astype(np.int32);
+            intResult.GetAtIndex<int>(0).Should().Be(65);  // 'A'
+            intResult.GetAtIndex<int>(1).Should().Be(90);  // 'Z'
+            intResult.GetAtIndex<int>(2).Should().Be(0);   // '\0'
+            intResult.GetAtIndex<int>(3).Should().Be(255);
+
+            // Char -> uint8
+            var byteResult = arr.astype(np.uint8);
+            byteResult.GetAtIndex<byte>(0).Should().Be(65);
+            byteResult.GetAtIndex<byte>(3).Should().Be(255);
+        }
+
+        [TestMethod]
+        public void Int_ToChar_UsesLowBits()
+        {
+            var arr = np.array(new int[] { 65, 90, 0, 255, 1000 });
+            var result = arr.astype(NPTypeCode.Char);
+
+            result.GetAtIndex<char>(0).Should().Be('A');
+            result.GetAtIndex<char>(1).Should().Be('Z');
+            result.GetAtIndex<char>(2).Should().Be('\0');
+            result.GetAtIndex<char>(3).Should().Be((char)255);
+            result.GetAtIndex<char>(4).Should().Be((char)1000);
+        }
+
+        #endregion
+
+        #region NumSharp-Specific: Complex Type
+
+        [TestMethod]
+        public void Complex_ToFloat64_TakesRealPart()
+        {
+            var arr = np.array(new System.Numerics.Complex[] {
+                new(0, 0), new(1, 0), new(3.7, 4.2), new(-1, -1)
+            });
+
+            var result = arr.astype(np.float64);
+            result.GetAtIndex<double>(0).Should().Be(0.0);
+            result.GetAtIndex<double>(1).Should().Be(1.0);
+            result.GetAtIndex<double>(2).Should().Be(3.7);
+            result.GetAtIndex<double>(3).Should().Be(-1.0);
+        }
+
+        [TestMethod]
+        public void Complex_ToInt32_TruncatesRealPart()
+        {
+            var arr = np.array(new System.Numerics.Complex[] {
+                new(0, 0), new(1, 0), new(3.7, 4.2), new(-1, -1)
+            });
+
+            var result = arr.astype(np.int32);
+            result.GetAtIndex<int>(0).Should().Be(0);
+            result.GetAtIndex<int>(1).Should().Be(1);
+            result.GetAtIndex<int>(2).Should().Be(3);
+            result.GetAtIndex<int>(3).Should().Be(-1);
+        }
+
+        [TestMethod]
+        public void Complex_ToBool_ZeroIsFalse()
+        {
+            var arr = np.array(new System.Numerics.Complex[] {
+                new(0, 0), new(1, 0), new(3.7, 4.2)
+            });
+
+            var result = arr.astype(np.@bool);
+            result.GetAtIndex<bool>(0).Should().BeFalse();  // 0+0i = False
+            result.GetAtIndex<bool>(1).Should().BeTrue();   // 1+0i = True
+            result.GetAtIndex<bool>(2).Should().BeTrue();   // nonzero = True
+        }
+
+        [TestMethod]
+        public void Complex_ToBool_PureImaginary_IsTrue()
+        {
+            // NumPy: np.array([0+1j]).astype(bool) -> array([True])
+            // Pure imaginary is nonzero, so should be True
+            var arr = np.array(new System.Numerics.Complex[] { new(0, 1) });
+            var result = arr.astype(np.@bool);
+            result.GetAtIndex<bool>(0).Should().BeTrue();
+        }
+
+        #endregion
+
+        #region NumSharp-Specific: Decimal Type
+
+        [TestMethod]
+        public void Decimal_ToFloat64_Preserves()
+        {
+            var arr = np.array(new decimal[] { 0m, 1m, -1m, 3.7m, -3.7m });
+
+            var result = arr.astype(np.float64);
+            result.GetAtIndex<double>(0).Should().Be(0.0);
+            result.GetAtIndex<double>(1).Should().Be(1.0);
+            result.GetAtIndex<double>(2).Should().Be(-1.0);
+            result.GetAtIndex<double>(3).Should().Be(3.7);
+            result.GetAtIndex<double>(4).Should().Be(-3.7);
+        }
+
+        [TestMethod]
+        public void Decimal_ToInt32_Truncates()
+        {
+            var arr = np.array(new decimal[] { 0m, 1m, -1m, 3.7m, -3.7m });
+
+            var result = arr.astype(np.int32);
+            result.GetAtIndex<int>(0).Should().Be(0);
+            result.GetAtIndex<int>(1).Should().Be(1);
+            result.GetAtIndex<int>(2).Should().Be(-1);
+            result.GetAtIndex<int>(3).Should().Be(3);  // Truncate, not round
+            result.GetAtIndex<int>(4).Should().Be(-3);
+        }
+
+        #endregion
     }
 }
