@@ -47,23 +47,18 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // =====================================================================
         // Test 2: F-order iteration
         // NumPy: [0, 3, 1, 4, 2, 5]
-        // MISALIGNED: NumSharp is C-order only (documented in CLAUDE.md)
-        // NumSharp gives: [0, 1, 2, 3, 4, 5] (ignores order parameter)
         // =====================================================================
         [TestMethod]
-        [Misaligned]
         public void Battle_FOrderIteration()
         {
             // NumPy:
             // arr = np.arange(6).reshape(2, 3)
             // with np.nditer(arr, order='F') as it:
             //     for x in it: values.append(int(x))
-            // NumPy Result: [0, 3, 1, 4, 2, 5]
-            // NumSharp Result: [0, 1, 2, 3, 4, 5] (C-order only)
+            // Result: [0, 3, 1, 4, 2, 5]
 
             var arr = np.arange(6).reshape(2, 3);
-            // NumSharp always uses C-order regardless of order parameter
-            var numsharpExpected = new[] { 0, 1, 2, 3, 4, 5 };
+            var expected = new[] { 0, 3, 1, 4, 2, 5 };
 
             using var iter = NpyIterRef.New(arr, order: NPY_ORDER.NPY_FORTRANORDER);
             var values = new List<int>();
@@ -73,8 +68,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 values.Add(iter.GetValue<int>(0));
             } while (iter.Iternext());
 
-            CollectionAssert.AreEqual(numsharpExpected, values.ToArray(),
-                "NumSharp uses C-order regardless of order parameter (documented limitation)");
+            CollectionAssert.AreEqual(expected, values.ToArray(),
+                "F-order iteration must match NumPy exactly");
         }
 
         // =====================================================================
