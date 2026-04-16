@@ -709,11 +709,25 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            // If we have multiple reduce iterations, adjust buffer iteration end
-            if (_state->ReduceOuterSize > 1)
+            // Set buffer iteration end
+            // When bufferSize < coreSize, we can't fit a full core in one buffer
+            // In this case, use bufferSize as the inner loop size, not coreSize
+            long effectiveInnerSize = Math.Min(_state->BufferSize, coreSize);
+            _state->BufIterEnd = effectiveInnerSize;
+
+            // Recalculate ReduceOuterSize based on what fits in buffer
+            // This represents how many complete output positions we can process per buffer
+            // When buffer is smaller than core, ReduceOuterSize = 1 (one partial core at a time)
+            if (_state->BufferSize < coreSize)
             {
-                // Only iterate CoreSize elements at a time, outer loop handles the rest
-                _state->BufIterEnd = _state->CoreSize;
+                _state->ReduceOuterSize = 1;  // Process one (partial) output at a time
+            }
+
+            // Save current array positions for writeback BEFORE overwriting with buffer pointers
+            // DataPtrs currently point to array positions (from initialization)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
             }
 
             // For buffered reduce, DataPtrs need to point into buffers, not original arrays
@@ -1024,7 +1038,7 @@ namespace NumSharp.Backends.Iteration
 
             // result == 0: Buffer exhausted, need to refill
 
-            // Write back to arrays (copy from buffers)
+            // Write back reduce buffers to arrays
             CopyReduceBuffersToArrays();
 
             // Check if we're past the end
@@ -1033,7 +1047,7 @@ namespace NumSharp.Backends.Iteration
                 return false;
             }
 
-            // Move to next buffer position
+            // Move to next buffer position - this updates DataPtrs to current array positions
             _state->GotoIterIndex(_state->IterIndex);
 
             // Calculate how much to copy for next buffer
@@ -1041,13 +1055,37 @@ namespace NumSharp.Backends.Iteration
             long copyCount = Math.Min(remaining, _state->BufferSize);
 
             // Copy to buffers
+            // For reduce operands, check if we're at a NEW output position
+            // (i.e., the reduce operand's array pointer changed from the previous writeback position)
             for (int op = 0; op < _state->NOp; op++)
             {
                 var opFlags = _state->GetOpFlags(op);
+
+                // For reduce operands, only reload if at a new output position
+                if ((opFlags & NpyIterOpFlags.REDUCE) != 0)
+                {
+                    void* currentArrayPos = _state->GetDataPtr(op);
+                    void* previousWritebackPos = _state->GetArrayWritebackPtr(op);
+
+                    // If pointer changed, we're at a new output position - reload
+                    // If same, we're continuing the same output - skip reload
+                    if (currentArrayPos == previousWritebackPos)
+                    {
+                        continue;  // Same output position, keep accumulating
+                    }
+                }
+
                 if ((opFlags & NpyIterOpFlags.READ) != 0 || (opFlags & NpyIterOpFlags.READWRITE) != 0)
                 {
                     NpyIterBufferManager.CopyToBuffer(ref *_state, op, copyCount);
                 }
+            }
+
+            // Save current array positions for writeback (after checking but before buffer overwrite)
+            // These are the positions where CopyReduceBuffersToArrays will write
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
             }
 
             // Reset DataPtrs to point to buffer start (BufferedReduceAdvance uses these)
@@ -1060,22 +1098,13 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            // Reset reduce position and core position for new buffer
+            // For small buffer handling, set ReduceOuterSize based on buffer capacity
+            _state->ReduceOuterSize = 1;
             _state->ReducePos = 0;
             _state->CorePos = 0;
-            _state->ReduceOuterSize = copyCount / _state->CoreSize;
-            if (_state->ReduceOuterSize < 1)
-                _state->ReduceOuterSize = 1;
 
-            // Adjust BufIterEnd for the new core iteration
-            if (_state->ReduceOuterSize > 1)
-            {
-                _state->BufIterEnd = _state->IterIndex + _state->CoreSize;
-            }
-            else
-            {
-                _state->BufIterEnd = _state->IterIndex + copyCount;
-            }
+            // Set buffer iteration end
+            _state->BufIterEnd = _state->IterIndex + copyCount;
 
             // Initialize reduce outer pointers (pointing to buffer start)
             _state->InitReduceOuterPtrs();
@@ -1087,7 +1116,7 @@ namespace NumSharp.Backends.Iteration
         /// Copy reduce buffers back to original arrays.
         /// For reduce operands, only copies CoreSize elements (the accumulated results).
         /// For non-reduce operands, copies CoreSize * ReduceOuterSize elements.
-        /// Uses ResetDataPtrs (original array position) as destination.
+        /// Uses ArrayWritebackPtrs (saved during buffer fill) as destination.
         /// </summary>
         private void CopyReduceBuffersToArrays()
         {
@@ -1103,8 +1132,11 @@ namespace NumSharp.Backends.Iteration
                 if (buffer == null)
                     continue;
 
-                // Get original array pointer (not the buffer pointer)
-                void* dst = _state->GetResetDataPtr(op);
+                // Get array writeback pointer (saved at buffer start)
+                // Falls back to ResetDataPtr if ArrayWritebackPtr not set
+                void* dst = _state->GetArrayWritebackPtr(op);
+                if (dst == null)
+                    dst = _state->GetResetDataPtr(op);
                 if (dst == null)
                     continue;
 

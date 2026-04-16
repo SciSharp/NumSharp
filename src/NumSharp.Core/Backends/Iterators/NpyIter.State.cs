@@ -280,6 +280,13 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public fixed long ReduceOuterPtrs[MaxOperands];
 
+        /// <summary>
+        /// Array positions at buffer start, used for writeback.
+        /// Stored separately from ResetDataPtrs which is the base for GotoIterIndex.
+        /// Layout: [op0_ptr, op1_ptr, ...]
+        /// </summary>
+        public fixed long ArrayWritebackPtrs[MaxOperands];
+
         // =========================================================================
         // Allocation and Deallocation
         // =========================================================================
@@ -574,6 +581,22 @@ namespace NumSharp.Backends.Iteration
         public void SetReduceOuterPtr(int op, void* ptr)
         {
             fixed (long* p = ReduceOuterPtrs)
+                p[op] = (long)ptr;
+        }
+
+        /// <summary>Get array writeback pointer for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void* GetArrayWritebackPtr(int op)
+        {
+            fixed (long* p = ArrayWritebackPtrs)
+                return (void*)p[op];
+        }
+
+        /// <summary>Set array writeback pointer for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetArrayWritebackPtr(int op, void* ptr)
+        {
+            fixed (long* p = ArrayWritebackPtrs)
                 p[op] = (long)ptr;
         }
 
