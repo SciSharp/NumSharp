@@ -1014,57 +1014,207 @@ namespace NumSharp.UnitTest.Casting
 
         #endregion
 
-        #region NumSharp-Specific: Complex Type
+        #region Complex Source → All 12 Targets
 
         [TestMethod]
-        public void Complex_ToFloat64_TakesRealPart()
+        public void Complex_Zero_ToAllTypes()
         {
-            var arr = np.array(new System.Numerics.Complex[] {
-                new(0, 0), new(1, 0), new(3.7, 4.2), new(-1, -1)
-            });
+            // Complex(0, 0) → all types
+            var arr = np.array(new System.Numerics.Complex[] { new(0, 0) });
 
-            var result = arr.astype(np.float64);
-            result.GetAtIndex<double>(0).Should().Be(0.0);
-            result.GetAtIndex<double>(1).Should().Be(1.0);
-            result.GetAtIndex<double>(2).Should().Be(3.7);
-            result.GetAtIndex<double>(3).Should().Be(-1.0);
+            arr.astype(np.@bool).GetAtIndex<bool>(0).Should().BeFalse();
+            arr.astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(0);
+            arr.astype(np.uint8).GetAtIndex<byte>(0).Should().Be(0);
+            arr.astype(np.int16).GetAtIndex<short>(0).Should().Be(0);
+            arr.astype(np.uint16).GetAtIndex<ushort>(0).Should().Be(0);
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
+            arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(0L);
+            arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(0UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().Be(0.0f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().Be(0.0f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(0.0);
         }
 
         [TestMethod]
-        public void Complex_ToInt32_TruncatesRealPart()
+        public void Complex_One_ToAllTypes()
         {
-            var arr = np.array(new System.Numerics.Complex[] {
-                new(0, 0), new(1, 0), new(3.7, 4.2), new(-1, -1)
-            });
+            // Complex(1, 0) → all types
+            var arr = np.array(new System.Numerics.Complex[] { new(1, 0) });
 
-            var result = arr.astype(np.int32);
-            result.GetAtIndex<int>(0).Should().Be(0);
-            result.GetAtIndex<int>(1).Should().Be(1);
-            result.GetAtIndex<int>(2).Should().Be(3);
-            result.GetAtIndex<int>(3).Should().Be(-1);
+            arr.astype(np.@bool).GetAtIndex<bool>(0).Should().BeTrue();
+            arr.astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(1);
+            arr.astype(np.uint8).GetAtIndex<byte>(0).Should().Be(1);
+            arr.astype(np.int16).GetAtIndex<short>(0).Should().Be(1);
+            arr.astype(np.uint16).GetAtIndex<ushort>(0).Should().Be(1);
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(1);
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(1u);
+            arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(1L);
+            arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(1UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().Be(1.0f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().Be(1.0f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(1.0);
         }
 
         [TestMethod]
-        public void Complex_ToBool_ZeroIsFalse()
+        public void Complex_NegativeOne_ToAllTypes()
         {
-            var arr = np.array(new System.Numerics.Complex[] {
-                new(0, 0), new(1, 0), new(3.7, 4.2)
-            });
+            // Complex(-1, 0) → all types (wraps for unsigned)
+            var arr = np.array(new System.Numerics.Complex[] { new(-1, 0) });
 
-            var result = arr.astype(np.@bool);
-            result.GetAtIndex<bool>(0).Should().BeFalse();  // 0+0i = False
-            result.GetAtIndex<bool>(1).Should().BeTrue();   // 1+0i = True
-            result.GetAtIndex<bool>(2).Should().BeTrue();   // nonzero = True
+            arr.astype(np.@bool).GetAtIndex<bool>(0).Should().BeTrue();
+            arr.astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(-1);
+            arr.astype(np.uint8).GetAtIndex<byte>(0).Should().Be(255);
+            arr.astype(np.int16).GetAtIndex<short>(0).Should().Be(-1);
+            arr.astype(np.uint16).GetAtIndex<ushort>(0).Should().Be(65535);
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(-1);
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(4294967295u);
+            arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(-1L);
+            arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(18446744073709551615UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().Be(-1.0f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().Be(-1.0f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(-1.0);
         }
 
         [TestMethod]
-        public void Complex_ToBool_PureImaginary_IsTrue()
+        public void Complex_Fractional_ToAllTypes()
         {
-            // NumPy: np.array([0+1j]).astype(bool) -> array([True])
-            // Pure imaginary is nonzero, so should be True
+            // Complex(3.7, 4.2) → all types (imaginary part discarded, real truncated for int)
+            var arr = np.array(new System.Numerics.Complex[] { new(3.7, 4.2) });
+
+            arr.astype(np.@bool).GetAtIndex<bool>(0).Should().BeTrue();
+            arr.astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(3);
+            arr.astype(np.uint8).GetAtIndex<byte>(0).Should().Be(3);
+            arr.astype(np.int16).GetAtIndex<short>(0).Should().Be(3);
+            arr.astype(np.uint16).GetAtIndex<ushort>(0).Should().Be(3);
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(3);
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(3u);
+            arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(3L);
+            arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(3UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().BeApproximately(3.69921875f, 0.001f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().BeApproximately(3.7f, 0.001f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(3.7);
+        }
+
+        [TestMethod]
+        public void Complex_PureImaginary_ToAllTypes()
+        {
+            // Complex(0, 1) → all types (real part is 0, but nonzero for bool)
             var arr = np.array(new System.Numerics.Complex[] { new(0, 1) });
-            var result = arr.astype(np.@bool);
-            result.GetAtIndex<bool>(0).Should().BeTrue();
+
+            arr.astype(np.@bool).GetAtIndex<bool>(0).Should().BeTrue(); // Nonzero magnitude
+            arr.astype(NPTypeCode.SByte).GetAtIndex<sbyte>(0).Should().Be(0); // Real part = 0
+            arr.astype(np.uint8).GetAtIndex<byte>(0).Should().Be(0);
+            arr.astype(np.int16).GetAtIndex<short>(0).Should().Be(0);
+            arr.astype(np.uint16).GetAtIndex<ushort>(0).Should().Be(0);
+            arr.astype(np.int32).GetAtIndex<int>(0).Should().Be(0);
+            arr.astype(np.uint32).GetAtIndex<uint>(0).Should().Be(0u);
+            arr.astype(np.int64).GetAtIndex<long>(0).Should().Be(0L);
+            arr.astype(np.uint64).GetAtIndex<ulong>(0).Should().Be(0UL);
+            ((float)arr.astype(NPTypeCode.Half).GetAtIndex<Half>(0)).Should().Be(0.0f);
+            arr.astype(np.float32).GetAtIndex<float>(0).Should().Be(0.0f);
+            arr.astype(np.float64).GetAtIndex<double>(0).Should().Be(0.0);
+        }
+
+        #endregion
+
+        #region All Types → Complex Target
+
+        [TestMethod]
+        public void Bool_ToComplex()
+        {
+            np.array(new[] { false }).astype(NPTypeCode.Complex).GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(0, 0));
+            np.array(new[] { true }).astype(NPTypeCode.Complex).GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(1, 0));
+        }
+
+        [TestMethod]
+        public void Int32_ToComplex()
+        {
+            var values = new int[] { 0, 1, -1, 127, -128 };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(0, 0));
+            result.GetAtIndex<System.Numerics.Complex>(1).Should().Be(new System.Numerics.Complex(1, 0));
+            result.GetAtIndex<System.Numerics.Complex>(2).Should().Be(new System.Numerics.Complex(-1, 0));
+            result.GetAtIndex<System.Numerics.Complex>(3).Should().Be(new System.Numerics.Complex(127, 0));
+            result.GetAtIndex<System.Numerics.Complex>(4).Should().Be(new System.Numerics.Complex(-128, 0));
+        }
+
+        [TestMethod]
+        public void Float64_ToComplex()
+        {
+            var values = new double[] { 0.0, 1.0, -1.0, 3.7 };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Should().Be(new System.Numerics.Complex(0, 0));
+            result.GetAtIndex<System.Numerics.Complex>(1).Should().Be(new System.Numerics.Complex(1, 0));
+            result.GetAtIndex<System.Numerics.Complex>(2).Should().Be(new System.Numerics.Complex(-1, 0));
+            result.GetAtIndex<System.Numerics.Complex>(3).Should().Be(new System.Numerics.Complex(3.7, 0));
+        }
+
+        [TestMethod]
+        public void Float64_NaNInf_ToComplex()
+        {
+            var nanResult = np.array(new[] { double.NaN }).astype(NPTypeCode.Complex).GetAtIndex<System.Numerics.Complex>(0);
+            double.IsNaN(nanResult.Real).Should().BeTrue();
+            nanResult.Imaginary.Should().Be(0);
+
+            var infResult = np.array(new[] { double.PositiveInfinity }).astype(NPTypeCode.Complex).GetAtIndex<System.Numerics.Complex>(0);
+            double.IsPositiveInfinity(infResult.Real).Should().BeTrue();
+            infResult.Imaginary.Should().Be(0);
+        }
+
+        [TestMethod]
+        public void Int8_ToComplex()
+        {
+            var values = new sbyte[] { 0, 1, -1, 127, -128 };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Real.Should().Be(0);
+            result.GetAtIndex<System.Numerics.Complex>(1).Real.Should().Be(1);
+            result.GetAtIndex<System.Numerics.Complex>(2).Real.Should().Be(-1);
+            result.GetAtIndex<System.Numerics.Complex>(3).Real.Should().Be(127);
+            result.GetAtIndex<System.Numerics.Complex>(4).Real.Should().Be(-128);
+        }
+
+        [TestMethod]
+        public void UInt8_ToComplex()
+        {
+            var values = new byte[] { 0, 1, 127, 128, 255 };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Real.Should().Be(0);
+            result.GetAtIndex<System.Numerics.Complex>(1).Real.Should().Be(1);
+            result.GetAtIndex<System.Numerics.Complex>(4).Real.Should().Be(255);
+        }
+
+        [TestMethod]
+        public void Float32_ToComplex()
+        {
+            var values = new float[] { 0.0f, 1.0f, -1.0f, 3.7f };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Real.Should().Be(0);
+            result.GetAtIndex<System.Numerics.Complex>(1).Real.Should().Be(1);
+            result.GetAtIndex<System.Numerics.Complex>(2).Real.Should().Be(-1);
+            result.GetAtIndex<System.Numerics.Complex>(3).Real.Should().BeApproximately(3.7, 0.001);
+        }
+
+        [TestMethod]
+        public void Half_ToComplex()
+        {
+            var values = new Half[] { (Half)0.0f, (Half)1.0f, (Half)(-1.0f) };
+            var arr = np.array(values);
+            var result = arr.astype(NPTypeCode.Complex);
+
+            result.GetAtIndex<System.Numerics.Complex>(0).Real.Should().Be(0);
+            result.GetAtIndex<System.Numerics.Complex>(1).Real.Should().Be(1);
+            result.GetAtIndex<System.Numerics.Complex>(2).Real.Should().Be(-1);
         }
 
         #endregion
