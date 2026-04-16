@@ -423,5 +423,255 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        // ============================================================
+        // ROUND 2 BUGS: char source broken paths, fallback converter
+        // issues, and the 3-arg ChangeType(obj, NPTypeCode, provider)
+        // ============================================================
+
+        #region Round 2 Group A: typed ToXxx(char) scalars throw via IConvertible
+
+        [TestMethod]
+        public void ToBoolean_Char_Zero_ReturnsFalse()
+        {
+            Converts.ToBoolean((char)0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void ToBoolean_Char_NonZero_ReturnsTrue()
+        {
+            Converts.ToBoolean('A').Should().BeTrue();
+            Converts.ToBoolean((char)1).Should().BeTrue();
+            Converts.ToBoolean(char.MaxValue).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ToSingle_Char_ReturnsNumeric()
+        {
+            Converts.ToSingle('A').Should().Be(65.0f);
+            Converts.ToSingle((char)0).Should().Be(0.0f);
+        }
+
+        [TestMethod]
+        public void ToDouble_Char_ReturnsNumeric()
+        {
+            Converts.ToDouble('A').Should().Be(65.0);
+            Converts.ToDouble((char)0).Should().Be(0.0);
+        }
+
+        [TestMethod]
+        public void ToDecimal_Char_ReturnsNumeric()
+        {
+            Converts.ToDecimal('A').Should().Be(65m);
+            Converts.ToDecimal((char)0).Should().Be(0m);
+        }
+
+        #endregion
+
+        #region Round 2 Group B: ToXxx(object) dispatchers must handle char
+
+        [TestMethod]
+        public void ToBoolean_Object_Char_Works()
+        {
+            Converts.ToBoolean((object)'A').Should().BeTrue();
+            Converts.ToBoolean((object)(char)0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void ToSingle_Object_Char_Works()
+        {
+            Converts.ToSingle((object)'A').Should().Be(65.0f);
+        }
+
+        [TestMethod]
+        public void ToDouble_Object_Char_Works()
+        {
+            Converts.ToDouble((object)'A').Should().Be(65.0);
+        }
+
+        [TestMethod]
+        public void ToHalf_Object_Char_Works()
+        {
+            ((float)Converts.ToHalf((object)'A')).Should().Be(65.0f);
+        }
+
+        [TestMethod]
+        public void ToComplex_Object_Char_Works()
+        {
+            var r = Converts.ToComplex((object)'A');
+            r.Real.Should().Be(65.0);
+            r.Imaginary.Should().Be(0.0);
+        }
+
+        [TestMethod]
+        public void ToDecimal_Object_Char_Works()
+        {
+            // Round 1 fix already handled this, but lock it in
+            Converts.ToDecimal((object)'A').Should().Be(65m);
+        }
+
+        #endregion
+
+        #region Round 2 Array path: char source to all targets
+
+        [TestMethod]
+        public void CharArray_AsType_Bool_Works()
+        {
+            var arr = np.array(new[] { 'A', (char)0, 'Z' });
+            var r = arr.astype(NPTypeCode.Boolean);
+            r.GetAtIndex<bool>(0).Should().BeTrue();
+            r.GetAtIndex<bool>(1).Should().BeFalse();
+            r.GetAtIndex<bool>(2).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void CharArray_AsType_Single_Works()
+        {
+            var arr = np.array(new[] { 'A', 'B' });
+            var r = arr.astype(NPTypeCode.Single);
+            r.GetAtIndex<float>(0).Should().Be(65.0f);
+            r.GetAtIndex<float>(1).Should().Be(66.0f);
+        }
+
+        [TestMethod]
+        public void CharArray_AsType_Double_Works()
+        {
+            var arr = np.array(new[] { 'A', 'B' });
+            var r = arr.astype(NPTypeCode.Double);
+            r.GetAtIndex<double>(0).Should().Be(65.0);
+            r.GetAtIndex<double>(1).Should().Be(66.0);
+        }
+
+        [TestMethod]
+        public void CharArray_AsType_Decimal_Works()
+        {
+            var arr = np.array(new[] { 'A', 'B' });
+            var r = arr.astype(NPTypeCode.Decimal);
+            r.GetAtIndex<decimal>(0).Should().Be(65m);
+            r.GetAtIndex<decimal>(1).Should().Be(66m);
+        }
+
+        [TestMethod]
+        public void CharArray_AsType_Half_Works()
+        {
+            var arr = np.array(new[] { 'A', 'B' });
+            var r = arr.astype(NPTypeCode.Half);
+            ((float)r.GetAtIndex<Half>(0)).Should().Be(65.0f);
+            ((float)r.GetAtIndex<Half>(1)).Should().Be(66.0f);
+        }
+
+        [TestMethod]
+        public void CharArray_AsType_Complex_Works()
+        {
+            var arr = np.array(new[] { 'A', 'B' });
+            var r = arr.astype(NPTypeCode.Complex);
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(65, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(new Complex(66, 0));
+        }
+
+        #endregion
+
+        #region Round 2 Group C: CreateFallbackConverter with char source
+
+        [TestMethod]
+        public void FindConverter_Char_To_Half_Works()
+        {
+            var f = Converts.FindConverter<char, Half>();
+            ((float)f('A')).Should().Be(65.0f);
+        }
+
+        [TestMethod]
+        public void FindConverter_Char_To_Complex_Works()
+        {
+            var f = Converts.FindConverter<char, Complex>();
+            f('A').Should().Be(new Complex(65, 0));
+        }
+
+        #endregion
+
+        #region Round 2 Group D: CreateDefaultConverter NaN safety
+
+        [TestMethod]
+        public void FindConverter_HalfNaN_To_Decimal_ReturnsZero()
+        {
+            // Routes through CreateDefaultConverter which must not throw on NaN
+            var f = Converts.FindConverter<Half, decimal>();
+            f(Half.NaN).Should().Be(0m);
+        }
+
+        [TestMethod]
+        public void FindConverter_HalfInf_To_Decimal_ReturnsZero()
+        {
+            var f = Converts.FindConverter<Half, decimal>();
+            f(Half.PositiveInfinity).Should().Be(0m);
+            f(Half.NegativeInfinity).Should().Be(0m);
+        }
+
+        [TestMethod]
+        public void HalfArray_NaN_AsType_Decimal_ReturnsZero()
+        {
+            var arr = np.array(new[] { Half.NaN, Half.PositiveInfinity, (Half)3.5f });
+            var r = arr.astype(NPTypeCode.Decimal);
+            r.GetAtIndex<decimal>(0).Should().Be(0m);
+            r.GetAtIndex<decimal>(1).Should().Be(0m);
+            ((double)r.GetAtIndex<decimal>(2)).Should().BeApproximately(3.5, 0.01);
+        }
+
+        #endregion
+
+        #region Round 2 Group E: ChangeType(obj, NPTypeCode, IFormatProvider)
+
+        [TestMethod]
+        public void ChangeType_WithProvider_Half_Source_Works()
+        {
+            Converts.ChangeType((object)Half.One, NPTypeCode.Int32, null).Should().Be(1);
+            Converts.ChangeType((object)(Half)(-1.5f), NPTypeCode.Int32, null).Should().Be(-1);
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_Complex_Source_Works()
+        {
+            Converts.ChangeType((object)new Complex(5, 0), NPTypeCode.Int32, null).Should().Be(5);
+            Converts.ChangeType((object)new Complex(3.5, 4.5), NPTypeCode.Int32, null).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_Half_Target_Works()
+        {
+            var result = Converts.ChangeType((object)5, NPTypeCode.Half, null);
+            result.Should().BeOfType<Half>();
+            ((float)(Half)result).Should().Be(5.0f);
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_Complex_Target_Works()
+        {
+            var result = Converts.ChangeType((object)5, NPTypeCode.Complex, null);
+            result.Should().BeOfType<Complex>();
+            ((Complex)result).Should().Be(new Complex(5, 0));
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_SByte_Target_Works()
+        {
+            var result = Converts.ChangeType((object)5, NPTypeCode.SByte, null);
+            result.Should().Be((sbyte)5);
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_NaN_To_Int_ReturnsMinValue()
+        {
+            // NumPy parity: NaN -> int32.MinValue
+            Converts.ChangeType((object)double.NaN, NPTypeCode.Int32, null).Should().Be(int.MinValue);
+        }
+
+        [TestMethod]
+        public void ChangeType_WithProvider_NaN_To_SmallInt_ReturnsZero()
+        {
+            Converts.ChangeType((object)double.NaN, NPTypeCode.Byte, null).Should().Be((byte)0);
+            Converts.ChangeType((object)double.NaN, NPTypeCode.Int16, null).Should().Be((short)0);
+        }
+
+        #endregion
     }
 }

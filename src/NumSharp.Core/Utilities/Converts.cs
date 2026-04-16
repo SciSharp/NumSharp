@@ -22,29 +22,17 @@ namespace NumSharp.Utilities
             var toutCode = InfoOf<TOut>.NPTypeCode;
             var tinCode = InfoOf<TIn>.NPTypeCode;
 
-            // Special handling for Half output (doesn't implement IConvertible)
+            // Special handling for Half output (doesn't implement IConvertible).
+            // Route through Converts.ToDouble(object) which handles char and Half/Complex.
             if (toutCode == NPTypeCode.Half)
             {
-                return @in => {
-                    double d;
-                    if (@in is Half h) d = (double)h;
-                    else if (@in is Complex c) d = c.Real;
-                    else if (@in is IConvertible ic) d = ic.ToDouble(null);
-                    else d = Convert.ToDouble(@in);
-                    return (TOut)(object)(Half)d;
-                };
+                return @in => (TOut)(object)Converts.ToHalf((object)@in);
             }
 
-            // Special handling for Complex output (doesn't implement IConvertible)
+            // Special handling for Complex output (doesn't implement IConvertible).
             if (toutCode == NPTypeCode.Complex)
             {
-                return @in => {
-                    double d;
-                    if (@in is Half h) d = (double)h;
-                    else if (@in is IConvertible ic) d = ic.ToDouble(null);
-                    else d = Convert.ToDouble(@in);
-                    return (TOut)(object)new Complex(d, 0);
-                };
+                return @in => (TOut)(object)Converts.ToComplex((object)@in);
             }
 
             // For integer output types, use Converts.ToXxx with unchecked wrapping (NumPy parity)
@@ -104,17 +92,13 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Creates a default converter for non-integer types (Single, Double, Decimal, Boolean).
+        /// Routes through Converts.ChangeType which is NumPy-aware for NaN/Inf/overflow/char.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Func<TIn, TOut> CreateDefaultConverter<TIn, TOut>()
         {
-            var tout = typeof(TOut);
-            return @in =>
-            {
-                if (@in is Half h) return (TOut)Convert.ChangeType((double)h, tout);
-                if (@in is Complex c) return (TOut)Convert.ChangeType(c.Real, tout);
-                return (TOut)Convert.ChangeType(@in, tout);
-            };
+            var toutCode = InfoOf<TOut>.NPTypeCode;
+            return @in => (TOut)Converts.ChangeType((object)@in, toutCode);
         }
 
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
@@ -485,6 +469,7 @@ namespace NumSharp.Utilities
             double d => Converts.ToDecimal(d),
             float f => Converts.ToDecimal(f),
             Half h => Converts.ToDecimal(h),
+            Complex c => Converts.ToDecimal(c),
             long l => Converts.ToDecimal(l),
             ulong ul => Converts.ToDecimal(ul),
             int i => Converts.ToDecimal(i),
@@ -493,8 +478,8 @@ namespace NumSharp.Utilities
             ushort us => Converts.ToDecimal(us),
             byte b => Converts.ToDecimal(b),
             sbyte sb => Converts.ToDecimal(sb),
-            char c => Converts.ToDecimal(c),
-            bool b => Converts.ToDecimal(b),
+            char ch => Converts.ToDecimal(ch),
+            bool bo => Converts.ToDecimal(bo),
             _ => ((IConvertible)value).ToDecimal(null)
         };
 
@@ -504,7 +489,8 @@ namespace NumSharp.Utilities
             Half h => h,
             double d => Converts.ToHalf(d),
             float f => Converts.ToHalf(f),
-            decimal m => (Half)(double)m,
+            Complex c => Converts.ToHalf(c),
+            decimal m => Converts.ToHalf(m),
             long l => Converts.ToHalf(l),
             ulong ul => Converts.ToHalf(ul),
             int i => Converts.ToHalf(i),
@@ -513,8 +499,8 @@ namespace NumSharp.Utilities
             ushort us => Converts.ToHalf(us),
             byte b => Converts.ToHalf(b),
             sbyte sb => Converts.ToHalf(sb),
-            char c => (Half)c,
-            bool b => b ? (Half)1 : (Half)0,
+            char ch => Converts.ToHalf(ch),
+            bool bo => Converts.ToHalf(bo),
             _ => (Half)((IConvertible)value).ToDouble(null)
         };
 
@@ -1140,45 +1126,14 @@ namespace NumSharp.Utilities
         [MethodImpl(Optimize)]
         public static Object ChangeType(Object value, NPTypeCode typeCode, IFormatProvider provider)
         {
-            if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
-                return null;
-
-            // This line is invalid for things like Enums that return a NPTypeCode
-            // of Int32, but the object can't actually be cast to an Int32.
-            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
-            switch (typeCode)
+            // Delegate to the 2-arg version which uses NumPy-aware helpers.
+            // IFormatProvider is only meaningful for String target.
+            if (typeCode == NPTypeCode.String)
             {
-                case NPTypeCode.Boolean:
-                    return ((IConvertible)value).ToBoolean(provider);
-                case NPTypeCode.Char:
-                    return ((IConvertible)value).ToChar(provider);
-                case NPTypeCode.Byte:
-                    return ((IConvertible)value).ToByte(provider);
-                case NPTypeCode.Int16:
-                    return ((IConvertible)value).ToInt16(provider);
-                case NPTypeCode.UInt16:
-                    return ((IConvertible)value).ToUInt16(provider);
-                case NPTypeCode.Int32:
-                    return ((IConvertible)value).ToInt32(provider);
-                case NPTypeCode.UInt32:
-                    return ((IConvertible)value).ToUInt32(provider);
-                case NPTypeCode.Int64:
-                    return ((IConvertible)value).ToInt64(provider);
-                case NPTypeCode.UInt64:
-                    return ((IConvertible)value).ToUInt64(provider);
-                case NPTypeCode.Single:
-                    return ((IConvertible)value).ToSingle(provider);
-                case NPTypeCode.Double:
-                    return ((IConvertible)value).ToDouble(provider);
-                case NPTypeCode.Decimal:
-                    return ((IConvertible)value).ToDecimal(provider);
-                case NPTypeCode.String:
-                    return ((IConvertible)value).ToString(provider);
-                case NPTypeCode.Empty:
-                    throw new InvalidCastException("InvalidCast_Empty");
-                default:
-                    throw new ArgumentException("Arg_UnknownNPTypeCode");
+                if (value == null) return null;
+                return value is IConvertible ic ? ic.ToString(provider) : value.ToString();
             }
+            return ChangeType(value, typeCode);
         }
 
 

@@ -124,20 +124,31 @@ namespace NumSharp.Utilities
         public static bool ToBoolean(object value)
         {
             if (value == null) return false;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return ToBoolean(h);
-            if (value is Complex c) return ToBoolean(c);
-            return ((IConvertible)value).ToBoolean(null);
+            return value switch
+            {
+                bool b => b,
+                double d => ToBoolean(d),
+                float f => ToBoolean(f),
+                Half h => ToBoolean(h),
+                Complex c => ToBoolean(c),
+                decimal m => ToBoolean(m),
+                long l => ToBoolean(l),
+                ulong ul => ToBoolean(ul),
+                int i => ToBoolean(i),
+                uint u => ToBoolean(u),
+                short s => ToBoolean(s),
+                ushort us => ToBoolean(us),
+                sbyte sb => ToBoolean(sb),
+                byte by => ToBoolean(by),
+                char ch => ToBoolean(ch),
+                _ => ((IConvertible)value).ToBoolean(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value, IFormatProvider provider)
         {
-            if (value == null) return false;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return ToBoolean(h);
-            if (value is Complex c) return ToBoolean(c);
-            return ((IConvertible)value).ToBoolean(provider);
+            return ToBoolean(value);
         }
 
 
@@ -154,12 +165,11 @@ namespace NumSharp.Utilities
             return value != 0;
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(char value)
         {
-            return ((IConvertible)value).ToBoolean(null);
+            // Char is a 16-bit unsigned integer in NumSharp; treat like ushort.
+            return value != (char)0;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1927,21 +1937,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
         {
-            if (value == null) return 0;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return (float)h;
-            if (value is Complex c) return (float)c.Real;
-            return ((IConvertible)value).ToSingle(null);
+            if (value == null) return 0f;
+            return value switch
+            {
+                float f => f,
+                double d => ToSingle(d),
+                Half h => ToSingle(h),
+                Complex c => ToSingle(c),
+                decimal m => ToSingle(m),
+                long l => ToSingle(l),
+                ulong ul => ToSingle(ul),
+                int i => ToSingle(i),
+                uint u => ToSingle(u),
+                short s => ToSingle(s),
+                ushort us => ToSingle(us),
+                sbyte sb => ToSingle(sb),
+                byte by => ToSingle(by),
+                char ch => ToSingle(ch),
+                bool bo => bo ? 1f : 0f,
+                _ => ((IConvertible)value).ToSingle(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value, IFormatProvider provider)
         {
-            if (value == null) return 0;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return (float)h;
-            if (value is Complex c) return (float)c.Real;
-            return ((IConvertible)value).ToSingle(provider);
+            return ToSingle(value);
         }
 
 
@@ -1960,7 +1981,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(char value)
         {
-            return ((IConvertible)value).ToSingle(null);
+            return (float)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2069,21 +2090,32 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
         {
-            if (value == null) return 0;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return (double)h;
-            if (value is Complex c) return c.Real;  // NumPy: discard imaginary
-            return ((IConvertible)value).ToDouble(null);
+            if (value == null) return 0d;
+            return value switch
+            {
+                double d => d,
+                float f => ToDouble(f),
+                Half h => ToDouble(h),
+                Complex c => c.Real, // NumPy: discard imaginary
+                decimal m => ToDouble(m),
+                long l => ToDouble(l),
+                ulong ul => ToDouble(ul),
+                int i => ToDouble(i),
+                uint u => ToDouble(u),
+                short s => ToDouble(s),
+                ushort us => ToDouble(us),
+                sbyte sb => ToDouble(sb),
+                byte by => ToDouble(by),
+                char ch => ToDouble(ch),
+                bool bo => bo ? 1d : 0d,
+                _ => ((IConvertible)value).ToDouble(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value, IFormatProvider provider)
         {
-            if (value == null) return 0;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return (double)h;
-            if (value is Complex c) return c.Real;  // NumPy: discard imaginary
-            return ((IConvertible)value).ToDouble(provider);
+            return ToDouble(value);
         }
 
 
@@ -2108,7 +2140,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(char value)
         {
-            return ((IConvertible)value).ToDouble(null);
+            return (double)value;
         }
 
 
@@ -2254,7 +2286,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(char value)
         {
-            return ((IConvertible)value).ToDecimal(null);
+            return (decimal)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2380,20 +2412,31 @@ namespace NumSharp.Utilities
         public static Half ToHalf(object value)
         {
             if (value == null) return default;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return h;
-            if (value is Complex c) return (Half)c.Real;
-            return (Half)((IConvertible)value).ToDouble(null);
+            return value switch
+            {
+                Half h => h,
+                double d => ToHalf(d),
+                float f => ToHalf(f),
+                Complex c => ToHalf(c),
+                decimal m => ToHalf(m),
+                long l => ToHalf(l),
+                ulong ul => ToHalf(ul),
+                int i => ToHalf(i),
+                uint u => ToHalf(u),
+                short s => ToHalf(s),
+                ushort us => ToHalf(us),
+                sbyte sb => ToHalf(sb),
+                byte by => ToHalf(by),
+                char ch => ToHalf(ch),
+                bool bo => ToHalf(bo),
+                _ => (Half)((IConvertible)value).ToDouble(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static Half ToHalf(object value, IFormatProvider provider)
         {
-            if (value == null) return default;
-            // Half and Complex don't implement IConvertible
-            if (value is Half h) return h;
-            if (value is Complex c) return (Half)c.Real;
-            return (Half)((IConvertible)value).ToDouble(provider);
+            return ToHalf(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -2510,18 +2553,31 @@ namespace NumSharp.Utilities
         public static System.Numerics.Complex ToComplex(object value)
         {
             if (value == null) return default;
-            if (value is System.Numerics.Complex c) return c;
-            if (value is Half h) return new System.Numerics.Complex((double)h, 0);
-            return new System.Numerics.Complex(((IConvertible)value).ToDouble(null), 0);
+            return value switch
+            {
+                Complex c => c,
+                Half h => ToComplex(h),
+                double d => ToComplex(d),
+                float f => ToComplex(f),
+                decimal m => ToComplex(m),
+                long l => ToComplex(l),
+                ulong ul => ToComplex(ul),
+                int i => ToComplex(i),
+                uint u => ToComplex(u),
+                short s => ToComplex(s),
+                ushort us => ToComplex(us),
+                sbyte sb => ToComplex(sb),
+                byte by => ToComplex(by),
+                char ch => ToComplex(ch),
+                bool bo => ToComplex(bo),
+                _ => new Complex(((IConvertible)value).ToDouble(null), 0)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static System.Numerics.Complex ToComplex(object value, IFormatProvider provider)
         {
-            if (value == null) return default;
-            if (value is System.Numerics.Complex c) return c;
-            if (value is Half h) return new System.Numerics.Complex((double)h, 0);
-            return new System.Numerics.Complex(((IConvertible)value).ToDouble(provider), 0);
+            return ToComplex(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
