@@ -12,15 +12,17 @@ namespace NumSharp.Utilities
     public static partial class Converts
     {
         /// <summary>
-        /// Creates a converter function that handles all types including Half and Complex.
+        /// Creates a converter function that handles all types including Half, Complex, and SByte.
         /// Used as fallback when explicit type pair not found in FindConverter.
+        /// Uses NumPy-compatible wrapping behavior for integer overflow (no exceptions).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static Func<TIn, TOut> CreateFallbackConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
+            var tinCode = InfoOf<TIn>.NPTypeCode;
 
-            // Special handling for Half (doesn't implement IConvertible)
+            // Special handling for Half output (doesn't implement IConvertible)
             if (toutCode == NPTypeCode.Half)
             {
                 return @in => {
@@ -33,7 +35,7 @@ namespace NumSharp.Utilities
                 };
             }
 
-            // Special handling for Complex (doesn't implement IConvertible)
+            // Special handling for Complex output (doesn't implement IConvertible)
             if (toutCode == NPTypeCode.Complex)
             {
                 return @in => {
@@ -45,19 +47,70 @@ namespace NumSharp.Utilities
                 };
             }
 
-            // Special handling for SByte conversion from non-IConvertible types
-            if (toutCode == NPTypeCode.SByte)
+            // For integer output types, use Converts.ToXxx with unchecked wrapping (NumPy parity)
+            // This handles SByte, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char
+            return toutCode switch
             {
-                return @in => {
-                    if (@in is Half h) return (TOut)(object)(sbyte)h;
-                    if (@in is Complex c) return (TOut)(object)(sbyte)c.Real;
-                    return (TOut)Convert.ChangeType(@in, typeof(TOut));
-                };
-            }
+                NPTypeCode.SByte => CreateIntegerConverter<TIn, TOut, sbyte>(tinCode, Converts.ToSByte, Converts.ToSByte, Converts.ToSByte),
+                NPTypeCode.Byte => CreateIntegerConverter<TIn, TOut, byte>(tinCode, Converts.ToByte, Converts.ToByte, Converts.ToByte),
+                NPTypeCode.Int16 => CreateIntegerConverter<TIn, TOut, short>(tinCode, Converts.ToInt16, Converts.ToInt16, Converts.ToInt16),
+                NPTypeCode.UInt16 => CreateIntegerConverter<TIn, TOut, ushort>(tinCode, Converts.ToUInt16, Converts.ToUInt16, Converts.ToUInt16),
+                NPTypeCode.Int32 => CreateIntegerConverter<TIn, TOut, int>(tinCode, Converts.ToInt32, Converts.ToInt32, Converts.ToInt32),
+                NPTypeCode.UInt32 => CreateIntegerConverter<TIn, TOut, uint>(tinCode, Converts.ToUInt32, Converts.ToUInt32, Converts.ToUInt32),
+                NPTypeCode.Int64 => CreateIntegerConverter<TIn, TOut, long>(tinCode, Converts.ToInt64, Converts.ToInt64, Converts.ToInt64),
+                NPTypeCode.UInt64 => CreateIntegerConverter<TIn, TOut, ulong>(tinCode, Converts.ToUInt64, Converts.ToUInt64, Converts.ToUInt64),
+                NPTypeCode.Char => CreateIntegerConverter<TIn, TOut, char>(tinCode, Converts.ToChar, Converts.ToChar, Converts.ToChar),
+                _ => CreateDefaultConverter<TIn, TOut>()
+            };
+        }
 
-            // Default: use Convert.ChangeType (works for IConvertible types)
+        /// <summary>
+        /// Creates a converter for integer types using Converts.ToXxx methods with unchecked wrapping.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Func<TIn, TOut> CreateIntegerConverter<TIn, TOut, TIntermediate>(
+            NPTypeCode tinCode,
+            Func<long, TIntermediate> fromLong,
+            Func<double, TIntermediate> fromDouble,
+            Func<Half, TIntermediate> fromHalf)
+        {
+            return @in =>
+            {
+                TIntermediate result;
+                if (@in is Half h)
+                    result = fromHalf(h);
+                else if (@in is Complex c)
+                    result = fromDouble(c.Real);
+                else if (@in is IConvertible ic)
+                    // Use ToInt64 for integer sources, ToDouble for float sources
+                    result = IsIntegerType(tinCode) ? fromLong(ic.ToInt64(null)) : fromDouble(ic.ToDouble(null));
+                else
+                    result = fromDouble(Convert.ToDouble(@in));
+                return (TOut)(object)result!;
+            };
+        }
+
+        /// <summary>
+        /// Returns true if the type code represents an integer type.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsIntegerType(NPTypeCode code) => code switch
+        {
+            NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
+            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
+            NPTypeCode.Char => true,
+            _ => false
+        };
+
+        /// <summary>
+        /// Creates a default converter for non-integer types (Single, Double, Decimal, Boolean).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Func<TIn, TOut> CreateDefaultConverter<TIn, TOut>()
+        {
             var tout = typeof(TOut);
-            return @in => {
+            return @in =>
+            {
                 if (@in is Half h) return (TOut)Convert.ChangeType((double)h, tout);
                 if (@in is Complex c) return (TOut)Convert.ChangeType(c.Real, tout);
                 return (TOut)Convert.ChangeType(@in, tout);
