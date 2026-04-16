@@ -2708,5 +2708,47 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter.IsOperandReduction(1), "Output operand should be marked as reduction");
             Assert.IsFalse(iter.IsOperandReduction(0), "Input operand should not be reduction");
         }
+
+        [TestMethod]
+        public void Reduction_WriteOnlyOperand_Throws()
+        {
+            // NumPy requires READWRITE (not WRITEONLY) for reduction operands
+            // because reduction must read existing value before accumulating.
+            //
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6)
+            // >>> it = np.nditer([a, None], ['reduce_ok'],
+            // ...                [['readonly'], ['writeonly', 'allocate']],  # WRITEONLY fails
+            // ...                op_axes=[[0], [-1]])
+            // ValueError: output operand 1 has a reduction but is flagged as WRITEONLY
+
+            var a = np.arange(6);
+            var result = np.array(new long[] { 0 });
+
+            bool threw = false;
+            string message = "";
+            try
+            {
+                using var iter = NpyIterRef.AdvancedNew(
+                    2,
+                    new[] { a, result },
+                    NpyIterGlobalFlags.REDUCE_OK,
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_NO_CASTING,
+                    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY },  // WRITEONLY instead of READWRITE
+                    null,
+                    1,
+                    new[] { new[] { 0 }, new[] { -1 } });
+            }
+            catch (ArgumentException ex)
+            {
+                threw = true;
+                message = ex.Message;
+            }
+
+            Assert.IsTrue(threw, "Should throw when reduction operand is WRITEONLY");
+            Assert.IsTrue(message.Contains("write-only") || message.Contains("WRITEONLY"),
+                $"Error message should mention write-only: {message}");
+        }
     }
 }

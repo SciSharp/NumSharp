@@ -687,6 +687,15 @@ namespace NumSharp.Backends.Iteration
                 // Set reduction flags if this operand has reduction axes
                 if (hasReductionAxis)
                 {
+                    // NumPy requires READWRITE, not WRITEONLY for reduction operands
+                    // because reduction must read existing value before accumulating
+                    if ((opFlags & NpyIterOpFlags.READ) == 0)
+                    {
+                        throw new ArgumentException(
+                            $"Output operand {op} requires a reduction, but is flagged as " +
+                            "write-only, not read-write. Use READWRITE instead of WRITEONLY.");
+                    }
+
                     _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
                     _state->SetOpFlags(op, opFlags | NpyIterOpFlags.REDUCE);
                 }
@@ -1469,6 +1478,7 @@ namespace NumSharp.Backends.Iteration
             if ((_state->GetOpFlags(operand) & NpyIterOpFlags.REDUCE) == 0)
                 return true;
 
+            // Part 1: Check coordinates (unbuffered reduction check)
             // For reduction operands, check if any reduction axis coordinate is non-zero
             // A reduction axis is one where stride = 0 (but shape > 1)
             for (int d = 0; d < _state->NDim; d++)
@@ -1479,6 +1489,15 @@ namespace NumSharp.Backends.Iteration
                 // If this is a reduction dimension (stride=0) and coordinate is not 0,
                 // we've already visited this output element
                 if (stride == 0 && coord != 0)
+                    return false;
+            }
+
+            // Part 2: Check buffer reduce_pos (buffered reduction check)
+            // When BUFFERED flag is set and we have a reduce outer loop, check if
+            // reduce_pos is non-zero and this operand's reduce outer stride is 0
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                if (_state->ReducePos != 0 && _state->GetReduceOuterStride(operand) == 0)
                     return false;
             }
 
