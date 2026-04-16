@@ -382,7 +382,7 @@ public fixed long BufStrides[MaxOperands];
 | Negative stride handling | Via permutation with negative entries | Not fully implemented |
 | Index computation | Pre-computed strides | On-demand from coords |
 | Buffer GROWINNER | Grows inner loop across axes | Implemented but simpler |
-| Reduction iteration | Double-loop with reduce_pos | Basic support via op_axes and IsFirstVisit |
+| Reduction iteration | Double-loop with reduce_pos | Full parity: op_axes, IsFirstVisit with buffer check |
 | Type casting | Via NPY_cast_info | Full support via BUFFERED + op_dtypes |
 | Error handling | Python exceptions | C# exceptions |
 
@@ -406,10 +406,12 @@ NpyIter now has full NumPy parity for the features needed by NumSharp operations
 
 ### Recently Completed (2026-04-16)
 
-- **Reduction support** - Basic reduction via op_axes with -1 entries. REDUCE_OK flag validation
-  for READWRITE operands. IsFirstVisit(operand) checks if current element is first visit
-  (for initialization). IsReduction and IsOperandReduction() properties. REDUCE flags set
-  on iterator and operands. Proper op_axes handling for stride calculation. 7 new tests.
+- **Reduction support** - Full NumPy parity: reduction via op_axes with -1 entries. REDUCE_OK flag
+  validation for READWRITE operands. **READWRITE required** - validates that reduction operands have
+  both READ and WRITE flags (WRITEONLY throws). IsFirstVisit(operand) checks both coordinates AND
+  buffer reduce_pos for buffered iteration (matches NumPy's two-part check). IsReduction and
+  IsOperandReduction() properties. REDUCE flags set on iterator and operands. Buffer reduction fields
+  (ReducePos, ReduceOuterSize, ReduceOuterStrides) added for future double-loop optimization. 8 tests.
 - **Cast support** - Full NumPy parity: Type conversion during buffered iteration via
   BUFFERED flag, op_dtypes parameter, and COMMON_DTYPE flag. Supports all casting rules
   (no_casting, equiv, safe, same_kind, unsafe). NpyIterCasting validates casts and performs

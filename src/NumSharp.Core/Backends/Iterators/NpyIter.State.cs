@@ -218,6 +218,32 @@ namespace NumSharp.Backends.Iteration
         public fixed long BufStrides[MaxOperands];
 
         // =========================================================================
+        // Buffered Reduction Data (when BUFFERED + REDUCE flags are set)
+        // =========================================================================
+        // NumPy uses a double-loop pattern for buffered reduction:
+        // - Outer loop: iterates over non-reduce axes
+        // - Inner loop: iterates over reduce axis within buffer
+        // =========================================================================
+
+        /// <summary>
+        /// Current position in reduce outer loop.
+        /// Used by IsFirstVisit for buffered reduction.
+        /// </summary>
+        public long ReducePos;
+
+        /// <summary>
+        /// Size of reduce outer loop (number of reduction iterations).
+        /// </summary>
+        public long ReduceOuterSize;
+
+        /// <summary>
+        /// Outer strides for reduction (stride per reduce outer iteration).
+        /// Layout: [op0_reduce_stride, op1_reduce_stride, ...]
+        /// When stride is 0, the operand is a reduction target for that axis.
+        /// </summary>
+        public fixed long ReduceOuterStrides[MaxOperands];
+
+        // =========================================================================
         // Allocation and Deallocation
         // =========================================================================
 
@@ -464,6 +490,22 @@ namespace NumSharp.Backends.Iteration
         {
             fixed (long* p = Buffers)
                 p[op] = (long)ptr;
+        }
+
+        /// <summary>Get reduce outer stride for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public long GetReduceOuterStride(int op)
+        {
+            fixed (long* p = ReduceOuterStrides)
+                return p[op];
+        }
+
+        /// <summary>Set reduce outer stride for operand.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetReduceOuterStride(int op, long stride)
+        {
+            fixed (long* p = ReduceOuterStrides)
+                p[op] = stride;
         }
 
         /// <summary>
