@@ -1710,7 +1710,12 @@ namespace NumSharp.Utilities
         {
             // NumPy behavior: truncation toward zero for normal values
             // For special values (inf, -inf, nan, overflow): returns long.MinValue
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < long.MinValue || value > long.MaxValue)
+            // NOTE: `value > long.MaxValue` isn't safe — (double)long.MaxValue rounds UP
+            // to 2^63 (same bit pattern as (double)(long.MaxValue+1)) so the check misses
+            // values that NumPy treats as overflow. Use exclusive upper bound at 2^63.
+            if (double.IsNaN(value) || double.IsInfinity(value)
+                || value < (double)long.MinValue
+                || value >= 9223372036854775808.0)   // 2^63, smallest double > long.MaxValue
             {
                 return long.MinValue;  // NumPy returns int64.min for all special/overflow cases
             }
@@ -2919,7 +2924,10 @@ namespace NumSharp.Utilities
             // Out-of-DateTime-range also collapses to MinValue (best we can do).
             if (double.IsNaN(value) || double.IsInfinity(value)) return DateTime.MinValue;
             if (value < 0d || value > DateTimeMaxTicksAsDouble) return DateTime.MinValue;
-            return new DateTime((long)value);
+            // (double)DateTime.MaxValue.Ticks rounds UP by precision loss, so even values
+            // inside the upper bound can cast to a long that exceeds MaxValue.Ticks.
+            // Route through TicksToDateTime which clamps again after the cast.
+            return TicksToDateTime((long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -3033,8 +3041,10 @@ namespace NumSharp.Utilities
         public static TimeSpan ToTimeSpan(double value)
         {
             // NumPy: NaN/Inf -> NaT = int64.MinValue = TimeSpan.MinValue.Ticks (exact parity).
+            // Precision note: (double)long.MaxValue rounds UP to 2^63, which is out of long
+            // range. Use exclusive upper bound at 2^63 so boundary values overflow to NaT.
             if (double.IsNaN(value) || double.IsInfinity(value)) return TimeSpan.MinValue;
-            if (value < long.MinValue || value > long.MaxValue) return TimeSpan.MinValue;
+            if (value < (double)long.MinValue || value >= 9223372036854775808.0) return TimeSpan.MinValue;
             return new TimeSpan((long)value);
         }
 

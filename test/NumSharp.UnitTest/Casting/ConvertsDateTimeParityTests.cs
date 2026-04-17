@@ -540,6 +540,59 @@ namespace NumSharp.UnitTest.Casting
             }
         }
 
+        // Boundary bugs found via the battletest:
+        //  1. ToDateTime((double)DateTime.MaxValue.Ticks) used to throw ArgumentOutOfRangeException
+        //     because (double)MaxValue.Ticks rounds UP past the actual long value — the range
+        //     guard missed it due to double precision. Fixed by routing through TicksToDateTime
+        //     which re-validates after the long cast.
+        //  2. ToInt64((double)long.MaxValue) used to return long.MaxValue instead of NaT.
+        //     NumPy says `double 9.223372036854776e+18 -> int64 = -9223372036854775808`
+        //     because (double)long.MaxValue rounds UP to 2^63 which is out of long range.
+        //     The check `value > long.MaxValue` was comparing doubles (both == 2^63) and
+        //     missed the overflow. Fixed by using exclusive upper bound at 2^63.
+        //  3. Same fix applied to ToTimeSpan(double).
+
+        [TestMethod]
+        public void NumPyParity_DateTimeMaxValue_DoubleRoundTrip_DoesNotThrow()
+        {
+            var asDbl = Converts.ToDouble(DateTime.MaxValue);
+            var back = Converts.ToDateTime(asDbl);
+            // (double)DateTime.MaxValue.Ticks overshoots the actual ticks by rounding;
+            // the NaT-equivalent (DateTime.MinValue) is the correct clamp here.
+            back.Should().Be(DateTime.MinValue);
+        }
+
+        [TestMethod]
+        public void NumPyParity_DoubleLongMaxValue_ToInt64_OverflowsToNaT()
+        {
+            // NumPy 2.4.2: np.float64(np.iinfo(np.int64).max).astype(np.int64) == int64.min
+            // because (double)long.MaxValue rounds to 2^63 which is out of range.
+            var result = Converts.ToInt64((double)long.MaxValue);
+            result.Should().Be(long.MinValue);
+        }
+
+        [TestMethod]
+        public void NumPyParity_DoubleLongMaxValue_ToTimeSpan_OverflowsToNaT()
+        {
+            var result = Converts.ToTimeSpan((double)long.MaxValue);
+            result.Should().Be(TimeSpan.MinValue);
+        }
+
+        [TestMethod]
+        public void NumPyParity_DoubleLongMinValue_ToInt64_DoesNotOverflow()
+        {
+            // (double)long.MinValue = -2^63 is EXACTLY representable as long.
+            // NumPy: -9.223372036854776e+18 -> int64 = -9223372036854775808 (no overflow).
+            Converts.ToInt64((double)long.MinValue).Should().Be(long.MinValue);
+        }
+
+        [TestMethod]
+        public void NumPyParity_1e20_ToTimeSpan_OverflowsToNaT()
+        {
+            Converts.ToTimeSpan(1e20).Should().Be(TimeSpan.MinValue);
+            Converts.ToTimeSpan(-1e20).Should().Be(TimeSpan.MinValue);
+        }
+
         #endregion
     }
 }
