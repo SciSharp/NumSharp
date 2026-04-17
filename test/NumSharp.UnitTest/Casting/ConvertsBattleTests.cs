@@ -990,5 +990,145 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        #region Round 5A: ArraySlice.Allocate(*,fill) + np.searchsorted Half/Complex
+
+        // H1: ArraySlice.Allocate(NPTypeCode, count, fill) used IConvertible cast on fill;
+        // throws when fill is Half or Complex (neither implements IConvertible).
+        // H2: ArraySlice.Allocate(Type, count, fill) had identical bug.
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Int32_FillHalf_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Int32, 3, Half.One);
+            ((int[])slice.ToArray()).Should().Equal(1, 1, 1);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Double_FillHalf_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Double, 3, (Half)3.5f);
+            var arr = (double[])slice.ToArray();
+            arr[0].Should().BeApproximately(3.5, 0.001);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Int32_FillComplex_DiscardsImaginary()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Int32, 3, new Complex(7, 9));
+            ((int[])slice.ToArray()).Should().Equal(7, 7, 7);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Half_FillComplex_DiscardsImaginary()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Half, 3, new Complex(3.5, 4));
+            var arr = (Half[])slice.ToArray();
+            ((float)arr[0]).Should().BeApproximately(3.5f, 0.01f);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Complex_FillHalf_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Complex, 3, Half.One);
+            var arr = (Complex[])slice.ToArray();
+            arr[0].Should().Be(new Complex(1, 0));
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Bool_FillComplex_NonZero()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Boolean, 2, new Complex(0, 1));
+            ((bool[])slice.ToArray()).Should().Equal(true, true);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Char_FillHalf_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Char, 2, (Half)65);
+            ((char[])slice.ToArray()).Should().Equal('A', 'A');
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_Type_Int32_FillHalf_Works()
+        {
+            // Type-based overload of Allocate
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(typeof(int), 3, Half.One);
+            ((int[])slice.ToArray()).Should().Equal(1, 1, 1);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_Type_Half_FillComplex_DiscardsImaginary()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(typeof(Half), 3, new Complex(3.5, 4));
+            var arr = (Half[])slice.ToArray();
+            ((float)arr[0]).Should().BeApproximately(3.5f, 0.01f);
+        }
+
+        [TestMethod]
+        public void ArraySliceAllocate_Type_Complex_FillHalf_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(typeof(Complex), 3, Half.One);
+            var arr = (Complex[])slice.ToArray();
+            arr[0].Should().Be(new Complex(1, 0));
+        }
+
+        // Regression: classic IConvertible source still works
+        [TestMethod]
+        public void ArraySliceAllocate_NPTypeCode_Int32_FillInt_Works()
+        {
+            var slice = NumSharp.Backends.Unmanaged.ArraySlice.Allocate(NPTypeCode.Int32, 2, 42);
+            ((int[])slice.ToArray()).Should().Equal(42, 42);
+        }
+
+        // H3: np.searchsorted used Convert.ToDouble on boxed array values.
+        // Throws when the source array dtype is Half or Complex.
+
+        [TestMethod]
+        public void Searchsorted_HalfArray_FindsPosition()
+        {
+            var arr = np.array(new[] { (Half)1, (Half)3, (Half)5, (Half)7 });
+            var idx = np.searchsorted(arr, np.asarray((Half)4));
+            idx.GetAtIndex<long>(0).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Searchsorted_HalfArray_DoubleValue_FindsPosition()
+        {
+            var arr = np.array(new[] { (Half)1, (Half)3, (Half)5, (Half)7 });
+            var idx = np.searchsorted(arr, np.asarray(2.5));
+            idx.GetAtIndex<long>(0).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void Searchsorted_ComplexArray_FindsPosition()
+        {
+            // Complex compared by real part (NumPy semantics — emits warning in NumPy)
+            var arr = np.array(new[] { new Complex(1, 0), new Complex(3, 0), new Complex(5, 0), new Complex(7, 0) });
+            var idx = np.searchsorted(arr, np.asarray(new Complex(4, 0)));
+            idx.GetAtIndex<long>(0).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Searchsorted_HalfArray_MultipleValues_Works()
+        {
+            var arr = np.array(new[] { (Half)1, (Half)3, (Half)5, (Half)7 });
+            var values = np.array(new[] { (Half)0, (Half)4, (Half)8 });
+            var idx = np.searchsorted(arr, values);
+            idx.GetAtIndex<long>(0).Should().Be(0);
+            idx.GetAtIndex<long>(1).Should().Be(2);
+            idx.GetAtIndex<long>(2).Should().Be(4);
+        }
+
+        // Regression: classic dtype still works
+        [TestMethod]
+        public void Searchsorted_DoubleArray_FindsPosition()
+        {
+            var arr = np.array(new[] { 1.0, 3.0, 5.0, 7.0 });
+            var idx = np.searchsorted(arr, np.asarray(4.0));
+            idx.GetAtIndex<long>(0).Should().Be(2);
+        }
+
+        #endregion
     }
 }
