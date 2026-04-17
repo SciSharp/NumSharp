@@ -1257,8 +1257,28 @@ namespace NumSharp.UnitTest.Casting
             r.GetAtIndex<Complex>(2).Should().Be(new Complex(8, 4));
         }
 
-        // Note: CumSum/CumProd with axis on Half throws "AxisCumSum not supported for type Half"
-        // earlier in the dispatch (separate from H7 scalar accumulator fix). Out of Round 5C scope.
+        // Misaligned: AxisCumSum on Half throws "AxisCumSum not supported for type Half" earlier
+        // in dispatch (separate from H7 scalar accumulator fix). Lock in current divergence —
+        // remove [Misaligned] + flip the assertion if axis cumsum gains Half support.
+        // NumPy: cumsum(half2D, axis=0) = [[1,2,3],[5,7,9]] (float16). NumSharp: throws.
+
+        [TestMethod]
+        [Misaligned]
+        public void CumSum_HalfMatrix_Axis0_NotSupported()
+        {
+            var arr = np.array(new Half[,] { { (Half)1, (Half)2, (Half)3 }, { (Half)4, (Half)5, (Half)6 } });
+            var act = () => np.cumsum(arr, axis: 0);
+            act.Should().Throw<NotSupportedException>().WithMessage("*AxisCumSum*Half*");
+        }
+
+        [TestMethod]
+        [Misaligned]
+        public void CumSum_HalfMatrix_Axis1_NotSupported()
+        {
+            var arr = np.array(new Half[,] { { (Half)1, (Half)2, (Half)3 }, { (Half)4, (Half)5, (Half)6 } });
+            var act = () => np.cumsum(arr, axis: 1);
+            act.Should().Throw<NotSupportedException>().WithMessage("*AxisCumSum*Half*");
+        }
 
         // Regression: classic CumSum/CumProd still works
         [TestMethod]
@@ -1294,15 +1314,104 @@ namespace NumSharp.UnitTest.Casting
         }
 
         // M2: Default.Shift fix replaces Convert.ToInt32(rhs) at ExecuteShiftOpScalar:136.
-        // Path-level test would route through np.left_shift which calls np.asanyarray(Half)
-        // — asanyarray itself doesn't support Half, so the M2 fix is defensive (only kicks
-        // in if a caller bypasses asanyarray). Verified by inspection; no end-to-end test.
+        // Two upstream paths reject Half before reaching the fix. Lock in both rejections —
+        // remove [Misaligned] + flip the assertion if either path gains Half support.
+
+        // np.left_shift(arr, object) → np.asanyarray(Half) which rejects Half upstream.
+        [TestMethod]
+        [Misaligned]
+        public void LeftShift_HalfShiftAmount_AsObject_NotSupported()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var act = () => np.left_shift(arr, (object)(Half)2);
+            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+        }
+
+        // np.left_shift(arr, NDArray) → LeftShift dtype validation rejects Half.
+        [TestMethod]
+        [Misaligned]
+        public void LeftShift_HalfShiftAmount_AsNDArray_NotSupported()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var rhs = NDArray.Scalar((Half)2);
+            var act = () => np.left_shift(arr, rhs);
+            act.Should().Throw<NotSupportedException>().WithMessage("*left_shift*integer*Half*");
+        }
+
+        // Note: NDArray does NOT define a `<<` operator (only &, |, ^, ~, arithmetic).
+        // So `arr << X` is a compile error regardless of X's type. The Misaligned tests
+        // above use the equivalent np.left_shift function calls instead.
 
         // M3+M4: Indexing.Selection.{Setter,Getter} fix adds Half/Complex cases to the
-        // slice-conversion switch. However the deeper validation switch (Getter.cs:70-87,
-        // Setter.cs:75-97) rejects Half/Complex with "Unsupported indexing type" BEFORE
-        // reaching the fixed switch. M3+M4 fix is defensive (kicks in if validation is
-        // expanded). End-to-end indexing tests would require additional validation changes.
+        // slice-conversion switch. However the deeper validation switch (Getter:70-87,
+        // Setter:75-97) rejects Half/Complex with "Unsupported indexing type" BEFORE
+        // reaching the fixed switch. Lock in current rejection — remove [Misaligned] +
+        // flip the assertion if validation is expanded to accept Half/Complex.
+        // NumPy: also rejects with IndexError, so this rejection is closer to NumPy than
+        // the silent-truncate alternative.
+
+        [TestMethod]
+        [Misaligned]
+        public void Indexing_HalfIndex_Getter_NotSupported()
+        {
+            var arr = np.array(new[] { 10, 20, 30, 40, 50 });
+            var act = () => arr[(Half)2];
+            act.Should().Throw<ArgumentException>().WithMessage("*Unsupported indexing type*Half*");
+        }
+
+        [TestMethod]
+        [Misaligned]
+        public void Indexing_ComplexIndex_Getter_NotSupported()
+        {
+            var arr = np.array(new[] { 10, 20, 30, 40, 50 });
+            var act = () => arr[new Complex(2, 0)];
+            act.Should().Throw<ArgumentException>().WithMessage("*Unsupported indexing type*Complex*");
+        }
+
+        #endregion
+
+        #region Round 5E: duplicate test forms (preserve original test cores)
+
+        // The earlier MatMul Complex test was changed from full-NumPy-parity to real-only
+        // because the scalar fallback uses double accumulator. Lock in the FULL NumPy-parity
+        // expectation here — remove [Misaligned] + flip if Complex matmul accumulator path
+        // is implemented. NumPy: matmul([[1+2j,3],[4,5]], [[1,2],[3,4]]) = [[10+2j,14+4j],[19,28]]
+
+        [TestMethod]
+        [Misaligned]
+        public void MatMul_ComplexMatrix_NumPyParity_DropsImaginary()
+        {
+            // Lock in current divergence: imaginary is silently dropped in matmul scalar fallback.
+            var a = np.array(new Complex[,] { { new Complex(1, 2), new Complex(3, 0) }, { new Complex(4, 0), new Complex(5, 0) } });
+            var b = np.array(new Complex[,] { { new Complex(1, 0), new Complex(2, 0) }, { new Complex(3, 0), new Complex(4, 0) } });
+            var r = np.matmul(a, b);
+            // NumPy: [0,0] = 10+2j. NumSharp: 10+0j (imaginary dropped).
+            r.GetValue<Complex>(0, 0).Imaginary.Should().Be(0, "Misaligned: NumPy returns 2 (imaginary preserved)");
+            // NumPy: [0,1] = 14+4j. NumSharp: 14+0j.
+            r.GetValue<Complex>(0, 1).Imaginary.Should().Be(0, "Misaligned: NumPy returns 4 (imaginary preserved)");
+        }
+
+        // The Mean_ScalarHalfArray_Works test asserts value 3.5 against Double dtype, but
+        // NumPy returns Float16. Lock in the dtype divergence — remove [Misaligned] + flip
+        // when np.mean preserves Half dtype.
+
+        [TestMethod]
+        [Misaligned]
+        public void Mean_ScalarHalfArray_DtypeMismatch()
+        {
+            var arr = np.array(new[] { (Half)3.5f });
+            var r = np.mean(arr);
+            // NumPy: float16. NumSharp: Double.
+            r.typecode.Should().Be(NPTypeCode.Double, "Misaligned: NumPy returns Half (float16)");
+            r.GetAtIndex<double>(0).Should().BeApproximately(3.5, 0.01);
+        }
+
+        // np.left_shift(arr, NDArray.Scalar((Half)2)) was the original test form before the
+        // change to np.left_shift(arr, (object)(Half)2). Both forms reject Half but via
+        // different upstream paths, so both are worth locking in. Already covered above
+        // by LeftShift_HalfShiftAmount_AsObject_NotSupported (object overload, asanyarray
+        // path) and LeftShift_HalfShiftAmount_AsNDArray_NotSupported (NDArray overload,
+        // dtype-validation path).
 
         #endregion
     }
