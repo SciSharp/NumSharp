@@ -73,41 +73,42 @@ namespace NumSharp.Utilities
             }
 
 
-            // This line is invalid for things like Enums that return a TypeCode
-            // of Int32, but the object can't actually be cast to an Int32.
-            //            if (v.GetTypeCode() == typeCode) return value;
+            // Route numeric/bool/char conversions through the NumPy-aware object dispatchers
+            // (Converts.ToXxx) so Half/Complex/char sources work and truncation/wrap/NaN match NumPy.
+            // Raw IConvertible is preserved only for DateTime (not a NumPy dtype).
             switch (typeCode)
             {
                 case TypeCode.Boolean:
-                    return ((IConvertible)value).ToBoolean(provider);
+                    return Converts.ToBoolean(value);
                 case TypeCode.Char:
-                    return ((IConvertible)value).ToChar(provider);
+                    return Converts.ToChar(value);
                 case TypeCode.SByte:
-                    return ((IConvertible)value).ToSByte(provider);
+                    return Converts.ToSByte(value);
                 case TypeCode.Byte:
-                    return ((IConvertible)value).ToByte(provider);
+                    return Converts.ToByte(value);
                 case TypeCode.Int16:
-                    return ((IConvertible)value).ToInt16(provider);
+                    return Converts.ToInt16(value);
                 case TypeCode.UInt16:
-                    return ((IConvertible)value).ToUInt16(provider);
+                    return Converts.ToUInt16(value);
                 case TypeCode.Int32:
-                    return ((IConvertible)value).ToInt32(provider);
+                    return Converts.ToInt32(value);
                 case TypeCode.UInt32:
-                    return ((IConvertible)value).ToUInt32(provider);
+                    return Converts.ToUInt32(value);
                 case TypeCode.Int64:
-                    return ((IConvertible)value).ToInt64(provider);
+                    return Converts.ToInt64(value);
                 case TypeCode.UInt64:
-                    return ((IConvertible)value).ToUInt64(provider);
+                    return Converts.ToUInt64(value);
                 case TypeCode.Single:
-                    return ((IConvertible)value).ToSingle(provider);
+                    return Converts.ToSingle(value);
                 case TypeCode.Double:
-                    return ((IConvertible)value).ToDouble(provider);
+                    return Converts.ToDouble(value);
                 case TypeCode.Decimal:
-                    return ((IConvertible)value).ToDecimal(provider);
+                    return Converts.ToDecimal(value);
                 case TypeCode.DateTime:
                     return ((IConvertible)value).ToDateTime(provider);
                 case TypeCode.String:
-                    return ((IConvertible)value).ToString(provider);
+                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
+                    return value is IFormattable f ? f.ToString(null, provider) : value.ToString();
                 case TypeCode.Object:
                     return value;
                 case TypeCode.DBNull:

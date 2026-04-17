@@ -156,7 +156,10 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return (TOut)(object)ToComplex_NumPy(value);
                 case NPTypeCode.String:
-                    return (TOut)(object)((IConvertible)value).ToString(CultureInfo.InvariantCulture);
+                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
+                    return (TOut)(object)(value is IFormattable f
+                        ? f.ToString(null, CultureInfo.InvariantCulture)
+                        : value.ToString());
                 case NPTypeCode.Empty:
                     throw new InvalidCastException("InvalidCast_Empty");
                 default:
@@ -220,7 +223,10 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Complex:
                     return ToComplex_NumPy(value);
                 case NPTypeCode.String:
-                    return ((IConvertible)value).ToString(CultureInfo.InvariantCulture);
+                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
+                    return value is IFormattable f
+                        ? f.ToString(null, CultureInfo.InvariantCulture)
+                        : value.ToString();
                 case NPTypeCode.Empty:
                     throw new InvalidCastException("InvalidCast_Empty");
                 default:

@@ -839,5 +839,156 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        #region Round 4: String target + .NET TypeCode-based ChangeType
+
+        // Group A: String target for Half/Complex sources.
+        // Previously ChangeType<string>(Half/Complex) and ChangeType(Half/Complex, NPTypeCode.String)
+        // cast to IConvertible which fails since Half/Complex don't implement it.
+
+        [TestMethod]
+        public void ChangeTypeGeneric_HalfToString_Works()
+        {
+            Converts.ChangeType<string>(Half.One).Should().Be("1");
+        }
+
+        [TestMethod]
+        public void ChangeTypeGeneric_ComplexToString_Works()
+        {
+            Converts.ChangeType<string>(new Complex(3, 4)).Should().Be("<3; 4>");
+        }
+
+        [TestMethod]
+        public void ChangeType_HalfToNPTypeCodeString_Works()
+        {
+            Converts.ChangeType((object)(Half)3.14f, NPTypeCode.String).Should().Be("3.14");
+        }
+
+        [TestMethod]
+        public void ChangeType_ComplexToNPTypeCodeString_Works()
+        {
+            Converts.ChangeType((object)new Complex(3, 4), NPTypeCode.String).Should().Be("<3; 4>");
+        }
+
+        // Group B: FindConverter<Half/Complex, string> routes through
+        // CreateFallbackConverter → CreateDefaultConverter → Converts.ChangeType(obj, NPTypeCode.String).
+
+        [TestMethod]
+        public void FindConverter_HalfToString_Works()
+        {
+            var conv = Converts.FindConverter<Half, string>();
+            conv(Half.One).Should().Be("1");
+        }
+
+        [TestMethod]
+        public void FindConverter_ComplexToString_Works()
+        {
+            var conv = Converts.FindConverter<Complex, string>();
+            conv(new Complex(3, 4)).Should().Be("<3; 4>");
+        }
+
+        // Group C: .NET-style ChangeType(Object, TypeCode) and (Object, TypeCode, IFormatProvider).
+        // These were never fixed and used raw IConvertible casts. Half/Complex throw, char→Boolean
+        // throws via IConvertible.ToBoolean (char doesn't support it).
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_HalfToInt32_Works()
+        {
+            Converts.ChangeType((object)Half.One, TypeCode.Int32).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_HalfToDouble_Works()
+        {
+            Converts.ChangeType((object)(Half)3.5f, TypeCode.Double).Should().Be((double)3.5);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_HalfToDecimal_Works()
+        {
+            Converts.ChangeType((object)Half.One, TypeCode.Decimal).Should().Be(1m);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_ComplexToInt32_DiscardsImaginary()
+        {
+            Converts.ChangeType((object)new Complex(7, 3), TypeCode.Int32).Should().Be(7);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_ComplexToDouble_DiscardsImaginary()
+        {
+            Converts.ChangeType((object)new Complex(3.5, 4.5), TypeCode.Double).Should().Be(3.5);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_CharToBoolean_Works()
+        {
+            // 'A' (65) is truthy per NumPy rules
+            Converts.ChangeType((object)'A', TypeCode.Boolean).Should().Be(true);
+            // (char)0 is falsy
+            Converts.ChangeType((object)(char)0, TypeCode.Boolean).Should().Be(false);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_CharToSingle_Works()
+        {
+            Converts.ChangeType((object)'A', TypeCode.Single).Should().Be(65f);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_HalfToString_UsesInvariantCulture()
+        {
+            // String target: use IFormattable with invariant culture
+            Converts.ChangeType((object)(Half)3.14f, TypeCode.String).Should().Be("3.14");
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_ComplexToString_Works()
+        {
+            Converts.ChangeType((object)new Complex(3, 4), TypeCode.String).Should().Be("<3; 4>");
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode3Arg_HalfToInt32_Works()
+        {
+            // 3-arg overload with IFormatProvider
+            Converts.ChangeType((object)Half.One, TypeCode.Int32, System.Globalization.CultureInfo.InvariantCulture).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode3Arg_ComplexToInt32_Works()
+        {
+            Converts.ChangeType((object)new Complex(7, 3), TypeCode.Int32, System.Globalization.CultureInfo.InvariantCulture).Should().Be(7);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode3Arg_CharToBoolean_Works()
+        {
+            Converts.ChangeType((object)'A', TypeCode.Boolean, System.Globalization.CultureInfo.InvariantCulture).Should().Be(true);
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_NullToString_ReturnsNull()
+        {
+            // Existing contract: null + String/Empty/Object → null
+            Converts.ChangeType(null, TypeCode.String).Should().BeNull();
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_Int32ToString_Works()
+        {
+            // Regression check: classic path still works
+            Converts.ChangeType((object)42, TypeCode.String).Should().Be("42");
+        }
+
+        [TestMethod]
+        public void ChangeTypeTypeCode_DoubleToInt32_Truncates()
+        {
+            // Regression check: classic numeric path still works with NumPy-parity truncation
+            Converts.ChangeType((object)3.7, TypeCode.Int32).Should().Be(3);
+        }
+
+        #endregion
     }
 }
