@@ -307,7 +307,8 @@ namespace NumSharp.Backends
                 var val = arr.GetAtIndex(0);
                 if (arr.GetTypeCode == NPTypeCode.Complex)
                     return val; // Complex mean of single element is the element itself
-                return typeCode.HasValue ? Converts.ChangeType(val, typeCode.Value) : Convert.ToDouble(val);
+                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                return typeCode.HasValue ? Converts.ChangeType(val, typeCode.Value) : Converts.ToDouble(val);
             }
 
             long count = arr.size;

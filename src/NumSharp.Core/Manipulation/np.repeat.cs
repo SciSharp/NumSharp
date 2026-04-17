@@ -71,8 +71,8 @@ namespace NumSharp
             long totalSize = 0;
             for (long i = 0; i < repeatsFlat.size; i++)
             {
-                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
-                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
+                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
                 if (count < 0)
                     throw new ArgumentException("repeats may not contain negative values");
                 totalSize += count;
@@ -168,8 +168,8 @@ namespace NumSharp
             long outIdx = 0;
             for (long i = 0; i < srcSize; i++)
             {
-                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
-                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
+                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
                 T val = src[i];
                 for (long j = 0; j < count; j++)
                     dst[outIdx++] = val;

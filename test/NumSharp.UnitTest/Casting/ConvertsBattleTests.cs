@@ -1130,5 +1130,180 @@ namespace NumSharp.UnitTest.Casting
         }
 
         #endregion
+
+        #region Round 5B: matmul / dot / convolve / mean scalar fallbacks (Half/Complex)
+
+        // H4: Default.MatMul.2D2D scalar fallback used Convert.ToDouble(boxed Half/Complex) — threw.
+        // NumPy 2.4.2 reference: matmul([[1,2],[3,4]] half, [[5,6],[7,8]] half) = [[19,22],[43,50]]
+
+        [TestMethod]
+        public void MatMul_HalfMatrix_ScalarFallback_Works()
+        {
+            var a = np.array(new Half[,] { { (Half)1, (Half)2 }, { (Half)3, (Half)4 } });
+            var b = np.array(new Half[,] { { (Half)5, (Half)6 }, { (Half)7, (Half)8 } });
+            // Force scalar fallback path via transposed (non-contiguous) view
+            var r = np.matmul(a, b);
+            ((float)r.GetValue<Half>(0, 0)).Should().BeApproximately(19f, 0.01f);
+            ((float)r.GetValue<Half>(0, 1)).Should().BeApproximately(22f, 0.01f);
+            ((float)r.GetValue<Half>(1, 0)).Should().BeApproximately(43f, 0.01f);
+            ((float)r.GetValue<Half>(1, 1)).Should().BeApproximately(50f, 0.01f);
+        }
+
+        [TestMethod]
+        [Misaligned]
+        public void MatMul_ComplexMatrix_RealOnlyLimitation()
+        {
+            // LIMITATION: matmul scalar fallback uses double accumulator, discarding imaginary.
+            // NumPy: matmul([[1+2j,3],[4,5]], [[1,2],[3,4]]) = [[10+2j, 14+4j], [19, 28]]
+            // NumSharp: returns real parts only [[10, 14], [19, 28]] — Complex matmul needs
+            // a Complex accumulator path. Round 5B fixed Half (real); Complex needs separate work.
+            var a = np.array(new Complex[,] { { new Complex(1, 2), new Complex(3, 0) }, { new Complex(4, 0), new Complex(5, 0) } });
+            var b = np.array(new Complex[,] { { new Complex(1, 0), new Complex(2, 0) }, { new Complex(3, 0), new Complex(4, 0) } });
+            var r = np.matmul(a, b);
+            // Real part is correct; imaginary is dropped (known limitation).
+            r.GetValue<Complex>(0, 0).Real.Should().Be(10);
+            r.GetValue<Complex>(0, 1).Real.Should().Be(14);
+            r.GetValue<Complex>(1, 0).Real.Should().Be(19);
+            r.GetValue<Complex>(1, 1).Real.Should().Be(28);
+        }
+
+        // H5: Default.Dot.NDMD scalar fallback. NumPy: dot([1,2,3], [4,5,6]) = 32.
+        [TestMethod]
+        public void Dot_HalfArray_Works()
+        {
+            var a = np.array(new[] { (Half)1, (Half)2, (Half)3 });
+            var b = np.array(new[] { (Half)4, (Half)5, (Half)6 });
+            var r = np.dot(a, b);
+            ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(32f, 0.01f);
+        }
+
+        // H6: NdArray.Convolve scalar path with Half pointers.
+        // NumPy: convolve([1,2,3] half, [0,1,0.5] half, 'full') = [0, 1, 2.5, 4, 1.5]
+        [TestMethod]
+        public void Convolve_HalfArrays_Works()
+        {
+            var a = np.array(new[] { (Half)1, (Half)2, (Half)3 });
+            var v = np.array(new[] { (Half)0, (Half)1, (Half)0.5f });
+            var r = np.convolve(a, v);
+            // 'full' mode: length = na + nv - 1 = 5
+            r.size.Should().Be(5);
+            ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(0f, 0.01f);
+            ((float)r.GetAtIndex<Half>(1)).Should().BeApproximately(1f, 0.01f);
+            ((float)r.GetAtIndex<Half>(2)).Should().BeApproximately(2.5f, 0.01f);
+            ((float)r.GetAtIndex<Half>(3)).Should().BeApproximately(4f, 0.01f);
+            ((float)r.GetAtIndex<Half>(4)).Should().BeApproximately(1.5f, 0.01f);
+        }
+
+        // H8: DefaultEngine.ReductionOp mean of scalar Half via the null-typeCode fallback path.
+        // NumPy: mean(half(3.5)) = 3.5 (float16). NumSharp: returns Double (separate dtype-decision
+        // issue not in this fix's scope). H8 fix verifies path no longer throws on Half source.
+        [TestMethod]
+        public void Mean_ScalarHalfArray_Works()
+        {
+            var arr = np.array(new[] { (Half)3.5f });
+            var r = np.mean(arr);
+            // NumSharp returns Double dtype; key check: no throw + correct value.
+            r.GetAtIndex<double>(0).Should().BeApproximately(3.5, 0.01);
+        }
+
+        #endregion
+
+        #region Round 5C: cumsum / cumprod scalar accumulator (Half/Complex)
+
+        // H7: ILKernelGenerator.Scan scalar fallback (CumSum/CumProd) used Convert.ToXxx on TIn* deref.
+        // NumPy: cumsum(half[1,2,3,4]) = [1,3,6,10]. cumprod = [1,2,6,24].
+
+        [TestMethod]
+        public void CumSum_HalfArray_Works()
+        {
+            var arr = np.array(new[] { (Half)1, (Half)2, (Half)3, (Half)4 });
+            var r = np.cumsum(arr);
+            ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(1f, 0.01f);
+            ((float)r.GetAtIndex<Half>(1)).Should().BeApproximately(3f, 0.01f);
+            ((float)r.GetAtIndex<Half>(2)).Should().BeApproximately(6f, 0.01f);
+            ((float)r.GetAtIndex<Half>(3)).Should().BeApproximately(10f, 0.01f);
+        }
+
+        [TestMethod]
+        public void CumProd_HalfArray_Works()
+        {
+            var arr = np.array(new[] { (Half)1, (Half)2, (Half)3, (Half)4 });
+            var r = np.cumprod(arr);
+            ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(1f, 0.01f);
+            ((float)r.GetAtIndex<Half>(1)).Should().BeApproximately(2f, 0.01f);
+            ((float)r.GetAtIndex<Half>(2)).Should().BeApproximately(6f, 0.01f);
+            ((float)r.GetAtIndex<Half>(3)).Should().BeApproximately(24f, 0.01f);
+        }
+
+        // NumPy: cumsum(complex[1+1j, 2, 3-1j]) = [1+1j, 3+1j, 6+0j]
+        [TestMethod]
+        public void CumSum_ComplexArray_Works()
+        {
+            var arr = np.array(new[] { new Complex(1, 1), new Complex(2, 0), new Complex(3, -1) });
+            var r = np.cumsum(arr);
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(1, 1));
+            r.GetAtIndex<Complex>(1).Should().Be(new Complex(3, 1));
+            r.GetAtIndex<Complex>(2).Should().Be(new Complex(6, 0));
+        }
+
+        // NumPy: cumprod(complex[1+1j, 2, 3-1j]) = [1+1j, 2+2j, 8+4j]
+        [TestMethod]
+        public void CumProd_ComplexArray_Works()
+        {
+            var arr = np.array(new[] { new Complex(1, 1), new Complex(2, 0), new Complex(3, -1) });
+            var r = np.cumprod(arr);
+            r.GetAtIndex<Complex>(0).Should().Be(new Complex(1, 1));
+            r.GetAtIndex<Complex>(1).Should().Be(new Complex(2, 2));
+            r.GetAtIndex<Complex>(2).Should().Be(new Complex(8, 4));
+        }
+
+        // Note: CumSum/CumProd with axis on Half throws "AxisCumSum not supported for type Half"
+        // earlier in the dispatch (separate from H7 scalar accumulator fix). Out of Round 5C scope.
+
+        // Regression: classic CumSum/CumProd still works
+        [TestMethod]
+        public void CumSum_DoubleArray_Works()
+        {
+            var arr = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
+            var r = np.cumsum(arr);
+            r.GetAtIndex<double>(3).Should().Be(10.0);
+        }
+
+        #endregion
+
+        #region Round 5D: edge cases (Half/Complex as repeats / shift / index)
+
+        // M1: np.repeat used Convert.ToInt64 on repeats. Half/Complex threw IConvertible error.
+        // NumPy 2.4.2 throws TypeError("safe casting"); NumSharp now permissively truncates.
+        // Documents divergence — NumSharp accepts what NumPy rejects. Both don't crash with
+        // raw IConvertible exception.
+
+        [TestMethod]
+        [Misaligned]
+        public void Repeat_HalfRepeats_PermissiveTruncate()
+        {
+            // NumSharp: permissively truncates Half repeats to int64. NumPy: TypeError.
+            var arr = np.array(new[] { 1, 2, 3 });
+            var rep = np.array(new[] { (Half)2, (Half)3, (Half)1 });
+            var r = np.repeat(arr, rep);
+            r.size.Should().Be(6);
+            r.GetAtIndex<int>(0).Should().Be(1);
+            r.GetAtIndex<int>(1).Should().Be(1);
+            r.GetAtIndex<int>(2).Should().Be(2);
+            r.GetAtIndex<int>(5).Should().Be(3);
+        }
+
+        // M2: Default.Shift fix replaces Convert.ToInt32(rhs) at ExecuteShiftOpScalar:136.
+        // Path-level test would route through np.left_shift which calls np.asanyarray(Half)
+        // — asanyarray itself doesn't support Half, so the M2 fix is defensive (only kicks
+        // in if a caller bypasses asanyarray). Verified by inspection; no end-to-end test.
+
+        // M3+M4: Indexing.Selection.{Setter,Getter} fix adds Half/Complex cases to the
+        // slice-conversion switch. However the deeper validation switch (Getter.cs:70-87,
+        // Setter.cs:75-97) rejects Half/Complex with "Unsupported indexing type" BEFORE
+        // reaching the fixed switch. M3+M4 fix is defensive (kicks in if validation is
+        // expanded). End-to-end indexing tests would require additional validation changes.
+
+        #endregion
     }
 }

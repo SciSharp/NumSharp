@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -133,7 +134,8 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
         {
-            int shiftAmount = Convert.ToInt32(rhs);
+            // Converts.ToInt32 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+            int shiftAmount = Converts.ToInt32(rhs);
 
             // For contiguous arrays, allocate result and use SIMD kernel
             // For sliced arrays, clone first then apply shift in-place

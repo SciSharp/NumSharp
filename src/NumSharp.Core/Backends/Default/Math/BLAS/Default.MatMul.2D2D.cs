@@ -320,13 +320,14 @@ namespace NumSharp.Backends
                     // Use GetValue which correctly handles strided/non-contiguous arrays
                     // Note: GetAtIndex with manual stride calculation was wrong for transposed arrays
                     // because GetAtIndex applies TransformOffset which double-transforms for non-contiguous
-                    double aik = Convert.ToDouble(left.GetValue(leftCoords));
+                    // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                    double aik = Converts.ToDouble(left.GetValue(leftCoords));
 
                     rightCoords[0] = k;
                     for (long j = 0; j < N; j++)
                     {
                         rightCoords[1] = j;
-                        double bkj = Convert.ToDouble(right.GetValue(rightCoords));
+                        double bkj = Converts.ToDouble(right.GetValue(rightCoords));
                         accumulator[j] += aik * bkj;
                     }
                 }

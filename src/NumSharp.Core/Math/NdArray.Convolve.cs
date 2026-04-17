@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -151,8 +152,9 @@ namespace NumSharp
                 for (long j = jMin; j <= jMax; j++)
                 {
                     // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
-                    double aVal = Convert.ToDouble(aPtr[j]);
-                    double vVal = Convert.ToDouble(vPtr[k - j]);
+                    // (object) boxing required since aPtr[j] is generic TIn; Converts.ToDouble dispatches on boxed type.
+                    double aVal = Converts.ToDouble((object)aPtr[j]);
+                    double vVal = Converts.ToDouble((object)vPtr[k - j]);
                     sum += aVal * vVal;
                 }
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Numerics;
 using System.Threading.Tasks;
 using NumSharp.Generic;
 using NumSharp.Utilities;
@@ -106,6 +107,8 @@ namespace NumSharp
                         case int o:          return Slice.Index(o);
                         case string o:       return new Slice(o);
                         case bool o:         return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
+                        case Half h:         return Slice.Index(Converts.ToInt64(h));
+                        case Complex c:      return Slice.Index(Converts.ToInt64(c));
                         case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
                         default:             throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
                     }
@@ -169,6 +172,12 @@ namespace NumSharp
                         }
                         else
                             return new NDArray<int>(); //false bool causes nullification of return.
+                    case Half h:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(h)));
+                        continue;
+                    case Complex c:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(c)));
+                        continue;
                     case IConvertible o:
                         indices.Add(NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture)));
                         continue;

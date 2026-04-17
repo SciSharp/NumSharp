@@ -368,11 +368,12 @@ namespace NumSharp.Backends
                         // Use GetValue(coords) which correctly applies Shape.GetOffset internally
                         // Note: GetAtIndex(Shape.GetOffset(coords)) is wrong because GetAtIndex
                         // applies TransformOffset again, double-transforming for non-contiguous arrays
-                        double lVal = Convert.ToDouble(lhs.GetValue(lhsCoords));
+                        // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                        double lVal = Converts.ToDouble(lhs.GetValue(lhsCoords));
 
                         // rhs[..., k, ...] - second-to-last dim is contract dim
                         rhsCoords[rhsNdim - 2] = k;
-                        double rVal = Convert.ToDouble(rhs.GetValue(rhsCoords));
+                        double rVal = Converts.ToDouble(rhs.GetValue(rhsCoords));
 
                         sum += lVal * rVal;
                     }
