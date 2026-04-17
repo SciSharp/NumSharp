@@ -105,7 +105,7 @@ namespace NumSharp.Utilities
                 case TypeCode.Decimal:
                     return Converts.ToDecimal(value);
                 case TypeCode.DateTime:
-                    return ((IConvertible)value).ToDateTime(provider);
+                    return ToDateTime(value, provider);
                 case TypeCode.String:
                     // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
                     return value is IFormattable f ? f.ToString(null, provider) : value.ToString();
@@ -142,6 +142,8 @@ namespace NumSharp.Utilities
                 sbyte sb => ToBoolean(sb),
                 byte by => ToBoolean(by),
                 char ch => ToBoolean(ch),
+                DateTime dt => ToBoolean(dt),
+                TimeSpan ts => ToBoolean(ts),
                 _ => ((IConvertible)value).ToBoolean(null)
             };
         }
@@ -265,14 +267,24 @@ namespace NumSharp.Utilities
             return value != System.Numerics.Complex.Zero;
         }
 
+        // DateTime/TimeSpan are not NumPy dtypes, but we provide conversions mirroring
+        // NumPy's datetime64/timedelta64 semantics: both are stored as int64 (Ticks).
+        // bool(dt/ts) = (Ticks != 0) mirrors NumPy's bool(datetime64/timedelta64).
+        // NaT equivalents: TimeSpan.MinValue (Ticks == long.MinValue, exact parity);
+        // DateTime.MinValue (Ticks == 0) for overflows/NaN where .NET DateTime cannot
+        // represent the full int64 range.
+
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(DateTime value)
         {
-            return ((IConvertible)value).ToBoolean(null);
+            return value.Ticks != 0L;
         }
 
-        // Disallowed conversions to Boolean
-        // [MethodImpl(OptimizeAndInline)] public static bool ToBoolean(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(TimeSpan value)
+        {
+            return value.Ticks != 0L;
+        }
 
         // Conversions to Char
 
@@ -298,6 +310,8 @@ namespace NumSharp.Utilities
                 Complex cx => ToChar(cx),
                 decimal m => ToChar(m),
                 bool bo => ToChar(bo),
+                DateTime dt => ToChar(dt),
+                TimeSpan tsv => ToChar(tsv),
                 _ => ((IConvertible)value).ToChar(null)
             };
         }
@@ -452,12 +466,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(DateTime value)
         {
-            return ((IConvertible)value).ToChar(null);
+            return ToChar(value.Ticks);
         }
 
-
-        // Disallowed conversions to Char
-        // [MethodImpl(OptimizeAndInline)] public static char ToChar(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(TimeSpan value)
+        {
+            return ToChar(value.Ticks);
+        }
 
         // Conversions to SByte
 
@@ -483,6 +499,8 @@ namespace NumSharp.Utilities
                 decimal m => ToSByte(m),
                 bool bo => bo ? (sbyte)1 : (sbyte)0,
                 char c => unchecked((sbyte)c),
+                DateTime dt => ToSByte(dt),
+                TimeSpan ts => ToSByte(ts),
                 _ => ((IConvertible)value).ToSByte(null)
             };
         }
@@ -641,11 +659,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(DateTime value)
         {
-            return ((IConvertible)value).ToSByte(null);
+            return unchecked((sbyte)value.Ticks);
         }
 
-        // Disallowed conversions to SByte
-        // [MethodImpl(OptimizeAndInline)] public static sbyte ToSByte(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(TimeSpan value)
+        {
+            return unchecked((sbyte)value.Ticks);
+        }
 
         // Conversions to Byte
 
@@ -670,6 +691,8 @@ namespace NumSharp.Utilities
                 decimal m => ToByte(m),
                 bool bo => bo ? (byte)1 : (byte)0,
                 char c => unchecked((byte)c),
+                DateTime dt => ToByte(dt),
+                TimeSpan ts => ToByte(ts),
                 _ => ((IConvertible)value).ToByte(null)
             };
         }
@@ -822,12 +845,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(DateTime value)
         {
-            return ((IConvertible)value).ToByte(null);
+            return unchecked((byte)value.Ticks);
         }
 
-
-        // Disallowed conversions to Byte
-        // [MethodImpl(OptimizeAndInline)] public static byte ToByte(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(TimeSpan value)
+        {
+            return unchecked((byte)value.Ticks);
+        }
 
         // Conversions to Int16
 
@@ -852,6 +877,8 @@ namespace NumSharp.Utilities
                 decimal m => ToInt16(m),
                 bool bo => bo ? (short)1 : (short)0,
                 char c => unchecked((short)c),
+                DateTime dt => ToInt16(dt),
+                TimeSpan ts => ToInt16(ts),
                 _ => ((IConvertible)value).ToInt16(null)
             };
         }
@@ -1002,12 +1029,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(DateTime value)
         {
-            return ((IConvertible)value).ToInt16(null);
+            return unchecked((short)value.Ticks);
         }
 
-
-        // Disallowed conversions to Int16
-        // [MethodImpl(OptimizeAndInline)] public static short ToInt16(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(TimeSpan value)
+        {
+            return unchecked((short)value.Ticks);
+        }
 
         // Conversions to UInt16
 
@@ -1033,6 +1062,8 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt16(m),
                 bool bo => bo ? (ushort)1 : (ushort)0,
                 char c => c,
+                DateTime dt => ToUInt16(dt),
+                TimeSpan ts => ToUInt16(ts),
                 _ => ((IConvertible)value).ToUInt16(null)
             };
         }
@@ -1191,11 +1222,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(DateTime value)
         {
-            return ((IConvertible)value).ToUInt16(null);
+            return unchecked((ushort)value.Ticks);
         }
 
-        // Disallowed conversions to UInt16
-        // [MethodImpl(OptimizeAndInline)] public static ushort ToUInt16(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(TimeSpan value)
+        {
+            return unchecked((ushort)value.Ticks);
+        }
 
         // Conversions to Int32
 
@@ -1220,6 +1254,8 @@ namespace NumSharp.Utilities
                 decimal m => ToInt32(m),
                 bool bo => bo ? 1 : 0,
                 char c => c,
+                DateTime dt => ToInt32(dt),
+                TimeSpan ts => ToInt32(ts),
                 _ => ((IConvertible)value).ToInt32(null)
             };
         }
@@ -1364,12 +1400,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(DateTime value)
         {
-            return ((IConvertible)value).ToInt32(null);
+            return unchecked((int)value.Ticks);
         }
 
-
-        // Disallowed conversions to Int32
-        // [MethodImpl(OptimizeAndInline)] public static int ToInt32(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(TimeSpan value)
+        {
+            return unchecked((int)value.Ticks);
+        }
 
         // Conversions to UInt32
 
@@ -1396,6 +1434,8 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt32(m),
                 bool bo => bo ? 1u : 0u,
                 char c => c,
+                DateTime dt => ToUInt32(dt),
+                TimeSpan ts => ToUInt32(ts),
                 _ => ((IConvertible)value).ToUInt32(null)
             };
         }
@@ -1549,11 +1589,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(DateTime value)
         {
-            return ((IConvertible)value).ToUInt32(null);
+            return unchecked((uint)value.Ticks);
         }
 
-        // Disallowed conversions to UInt32
-        // [MethodImpl(OptimizeAndInline)] public static uint ToUInt32(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(TimeSpan value)
+        {
+            return unchecked((uint)value.Ticks);
+        }
 
         // Conversions to Int64
 
@@ -1578,6 +1621,8 @@ namespace NumSharp.Utilities
                 decimal m => ToInt64(m),
                 bool bo => bo ? 1L : 0L,
                 char c => c,
+                DateTime dt => ToInt64(dt),
+                TimeSpan ts => ToInt64(ts),
                 _ => ((IConvertible)value).ToInt64(null)
             };
         }
@@ -1720,11 +1765,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(DateTime value)
         {
-            return ((IConvertible)value).ToInt64(null);
+            return value.Ticks;
         }
 
-        // Disallowed conversions to Int64
-        // [MethodImpl(OptimizeAndInline)] public static long ToInt64(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(TimeSpan value)
+        {
+            return value.Ticks;
+        }
 
         // Conversions to UInt64
 
@@ -1750,6 +1798,8 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt64(m),
                 bool bo => bo ? 1UL : 0UL,
                 char c => c,
+                DateTime dt => ToUInt64(dt),
+                TimeSpan ts => ToUInt64(ts),
                 _ => ((IConvertible)value).ToUInt64(null)
             };
         }
@@ -1927,11 +1977,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(DateTime value)
         {
-            return ((IConvertible)value).ToUInt64(null);
+            return unchecked((ulong)value.Ticks);
         }
 
-        // Disallowed conversions to UInt64
-        // [MethodImpl(OptimizeAndInline)] public static ulong ToUInt64(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(TimeSpan value)
+        {
+            return unchecked((ulong)value.Ticks);
+        }
 
         // Conversions to Single
 
@@ -1956,6 +2009,8 @@ namespace NumSharp.Utilities
                 byte by => ToSingle(by),
                 char ch => ToSingle(ch),
                 bool bo => bo ? 1f : 0f,
+                DateTime dt => ToSingle(dt),
+                TimeSpan ts => ToSingle(ts),
                 _ => ((IConvertible)value).ToSingle(null)
             };
         }
@@ -2080,11 +2135,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(DateTime value)
         {
-            return ((IConvertible)value).ToSingle(null);
+            return (float)value.Ticks;
         }
 
-        // Disallowed conversions to Single
-        // [MethodImpl(OptimizeAndInline)] public static float ToSingle(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(TimeSpan value)
+        {
+            return (float)value.Ticks;
+        }
 
         // Conversions to Double
 
@@ -2109,6 +2167,8 @@ namespace NumSharp.Utilities
                 byte by => ToDouble(by),
                 char ch => ToDouble(ch),
                 bool bo => bo ? 1d : 0d,
+                DateTime dt => ToDouble(dt),
+                TimeSpan ts => ToDouble(ts),
                 _ => ((IConvertible)value).ToDouble(null)
             };
         }
@@ -2232,11 +2292,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(DateTime value)
         {
-            return ((IConvertible)value).ToDouble(null);
+            return (double)value.Ticks;
         }
 
-        // Disallowed conversions to Double
-        // [MethodImpl(OptimizeAndInline)] public static double ToDouble(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(TimeSpan value)
+        {
+            return (double)value.Ticks;
+        }
 
         // Conversions to Decimal
 
@@ -2261,6 +2324,8 @@ namespace NumSharp.Utilities
                 byte b => b,
                 char c => c,
                 bool bo => bo ? 1m : 0m,
+                DateTime dt => ToDecimal(dt),
+                TimeSpan ts => ToDecimal(ts),
                 _ => ((IConvertible)value).ToDecimal(null)
             };
         }
@@ -2400,11 +2465,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(DateTime value)
         {
-            return ((IConvertible)value).ToDecimal(null);
+            return (decimal)value.Ticks;
         }
 
-        // Disallowed conversions to Decimal
-        // [MethodImpl(OptimizeAndInline)] public static decimal ToDecimal(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(TimeSpan value)
+        {
+            return (decimal)value.Ticks;
+        }
 
         // Conversions to Half (float16)
         // Note: Half doesn't implement IConvertible, so all conversions go through double
@@ -2430,6 +2498,8 @@ namespace NumSharp.Utilities
                 byte by => ToHalf(by),
                 char ch => ToHalf(ch),
                 bool bo => ToHalf(bo),
+                DateTime dt => ToHalf(dt),
+                TimeSpan ts => ToHalf(ts),
                 _ => (Half)((IConvertible)value).ToDouble(null)
             };
         }
@@ -2547,6 +2617,18 @@ namespace NumSharp.Utilities
             return Half.Parse(value, provider);
         }
 
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(DateTime value)
+        {
+            return (Half)(double)value.Ticks;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(TimeSpan value)
+        {
+            return (Half)(double)value.Ticks;
+        }
+
         // Conversions to Complex (complex128)
         // Note: Complex and Half don't implement IConvertible
 
@@ -2571,6 +2653,8 @@ namespace NumSharp.Utilities
                 byte by => ToComplex(by),
                 char ch => ToComplex(ch),
                 bool bo => ToComplex(bo),
+                DateTime dt => ToComplex(dt),
+                TimeSpan ts => ToComplex(ts),
                 _ => new Complex(((IConvertible)value).ToDouble(null), 0)
             };
         }
@@ -2671,7 +2755,37 @@ namespace NumSharp.Utilities
             return new System.Numerics.Complex((double)value, 0);
         }
 
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(DateTime value)
+        {
+            return new System.Numerics.Complex((double)value.Ticks, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(TimeSpan value)
+        {
+            return new System.Numerics.Complex((double)value.Ticks, 0);
+        }
+
         // Conversions to DateTime
+        //
+        // NumPy-parity semantics: numeric values are interpreted as DateTime.Ticks
+        // (mirrors NumPy datetime64 which stores the raw int64 count of units since epoch).
+        // .NET DateTime only permits ticks in [0, DateTime.MaxValue.Ticks]; out-of-range
+        // or invalid (NaN/Inf) values collapse to DateTime.MinValue (our NaT-equivalent).
+
+        // DateTime.MaxValue.Ticks (3155378975999999999) as double loses precision at the
+        // top of the range, so we keep the upper bound as a double constant for comparison.
+        private const double DateTimeMaxTicksAsDouble = 3.1553789759999999e18;
+
+        [MethodImpl(OptimizeAndInline)]
+        private static DateTime TicksToDateTime(long ticks)
+        {
+            // Clamp to valid DateTime range. Out-of-range -> DateTime.MinValue (NaT-like).
+            if ((ulong)ticks > (ulong)DateTime.MaxValue.Ticks)
+                return DateTime.MinValue;
+            return new DateTime(ticks);
+        }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(DateTime value)
@@ -2682,20 +2796,44 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value)
         {
-            return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(null);
+            if (value == null) return DateTime.MinValue;
+            return value switch
+            {
+                DateTime dt => dt,
+                TimeSpan ts => TicksToDateTime(ts.Ticks),
+                bool b => TicksToDateTime(b ? 1L : 0L),
+                sbyte sb => TicksToDateTime(sb),
+                byte by => TicksToDateTime(by),
+                short s => TicksToDateTime(s),
+                ushort us => TicksToDateTime(us),
+                int i => TicksToDateTime(i),
+                uint u => TicksToDateTime(u),
+                long l => TicksToDateTime(l),
+                ulong ul => TicksToDateTime(unchecked((long)ul)),
+                char c => TicksToDateTime(c),
+                float f => ToDateTime(f),
+                double d => ToDateTime(d),
+                Half h => ToDateTime(h),
+                Complex cx => ToDateTime(cx),
+                decimal m => ToDateTime(m),
+                string str => ToDateTime(str),
+                _ => ((IConvertible)value).ToDateTime(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value, IFormatProvider provider)
         {
-            return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(provider);
+            if (value == null) return DateTime.MinValue;
+            if (value is string s) return ToDateTime(s, provider);
+            return ToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(string value)
         {
             if (value == null)
-                return new DateTime(0);
+                return DateTime.MinValue;
             return DateTime.Parse(value, CultureInfo.CurrentCulture);
         }
 
@@ -2703,94 +2841,238 @@ namespace NumSharp.Utilities
         public static DateTime ToDateTime(string value, IFormatProvider provider)
         {
             if (value == null)
-                return new DateTime(0);
+                return DateTime.MinValue;
             return DateTime.Parse(value, provider);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(sbyte value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(byte value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(short value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ushort value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(int value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(uint value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(long value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ulong value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(unchecked((long)value));
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(bool value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            // NumPy: bool -> integer (true=1, false=0), then reinterpret as ticks.
+            return value ? new DateTime(1L) : DateTime.MinValue;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(char value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(float value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return ToDateTime((double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(double value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            // NumPy: NaN/Inf -> NaT, which we map to DateTime.MinValue.
+            // Out-of-DateTime-range also collapses to MinValue (best we can do).
+            if (double.IsNaN(value) || double.IsInfinity(value)) return DateTime.MinValue;
+            if (value < 0d || value > DateTimeMaxTicksAsDouble) return DateTime.MinValue;
+            return new DateTime((long)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(Half value)
+        {
+            if (Half.IsNaN(value) || Half.IsInfinity(value)) return DateTime.MinValue;
+            return ToDateTime((double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(System.Numerics.Complex value)
+        {
+            // NumPy: complex -> scalar uses the real part.
+            return ToDateTime(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(decimal value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            var truncated = decimal.Truncate(value);
+            if (truncated < 0m || truncated > (decimal)DateTime.MaxValue.Ticks)
+                return DateTime.MinValue;
+            return new DateTime((long)truncated);
         }
 
-        // Disallowed conversions to DateTime
-        // [MethodImpl(OptimizeAndInline)] public static DateTime ToDateTime(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(TimeSpan value)
+        {
+            return TicksToDateTime(value.Ticks);
+        }
+
+        // Conversions to TimeSpan
+        //
+        // NumPy-parity semantics: numeric values are interpreted as TimeSpan.Ticks.
+        // .NET TimeSpan covers the full int64 range, so NaT (long.MinValue) maps exactly
+        // to TimeSpan.MinValue — perfect parity with NumPy timedelta64 NaT.
+        // NaN/Inf/out-of-range values collapse to TimeSpan.MinValue.
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(TimeSpan value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(DateTime value)
+        {
+            return new TimeSpan(value.Ticks);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(object value)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return value switch
+            {
+                TimeSpan ts => ts,
+                DateTime dt => new TimeSpan(dt.Ticks),
+                bool b => b ? new TimeSpan(1L) : TimeSpan.Zero,
+                sbyte sb => new TimeSpan(sb),
+                byte by => new TimeSpan(by),
+                short s => new TimeSpan(s),
+                ushort us => new TimeSpan(us),
+                int i => new TimeSpan(i),
+                uint u => new TimeSpan(u),
+                long l => new TimeSpan(l),
+                ulong ul => new TimeSpan(unchecked((long)ul)),
+                char c => new TimeSpan(c),
+                float f => ToTimeSpan(f),
+                double d => ToTimeSpan(d),
+                Half h => ToTimeSpan(h),
+                Complex cx => ToTimeSpan(cx),
+                decimal m => ToTimeSpan(m),
+                string str => ToTimeSpan(str),
+                _ => TimeSpan.Zero
+            };
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(bool value)
+        {
+            return value ? new TimeSpan(1L) : TimeSpan.Zero;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(sbyte value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(byte value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(short value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(ushort value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(int value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(uint value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(long value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(ulong value) => new TimeSpan(unchecked((long)value));
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(char value) => new TimeSpan(value);
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(float value)
+        {
+            return ToTimeSpan((double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(double value)
+        {
+            // NumPy: NaN/Inf -> NaT = int64.MinValue = TimeSpan.MinValue.Ticks (exact parity).
+            if (double.IsNaN(value) || double.IsInfinity(value)) return TimeSpan.MinValue;
+            if (value < long.MinValue || value > long.MaxValue) return TimeSpan.MinValue;
+            return new TimeSpan((long)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(Half value)
+        {
+            if (Half.IsNaN(value) || Half.IsInfinity(value)) return TimeSpan.MinValue;
+            return new TimeSpan((long)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(System.Numerics.Complex value)
+        {
+            return ToTimeSpan(value.Real);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(decimal value)
+        {
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+                return TimeSpan.MinValue;
+            return new TimeSpan((long)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(string value)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return TimeSpan.Parse(value, CultureInfo.CurrentCulture);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(string value, IFormatProvider provider)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return TimeSpan.Parse(value, provider);
+        }
 
         // Conversions to String
 
