@@ -238,5 +238,60 @@ namespace NumSharp.UnitTest.View
             (shape.Flags & ArrayFlags.C_CONTIGUOUS).Should().Be(ArrayFlags.C_CONTIGUOUS);
             (shape.Flags & ArrayFlags.F_CONTIGUOUS).Should().Be(ArrayFlags.F_CONTIGUOUS);
         }
+
+        // ================================================================
+        //  Shape.Order property — derives from actual contiguity flags
+        // ================================================================
+
+        [TestMethod]
+        public void Order_CContig_ReportsC()
+        {
+            var shape = new Shape(new long[] { 3, 4 }, 'C');
+            shape.Order.Should().Be('C');
+        }
+
+        [TestMethod]
+        public void Order_FContig_ReportsF()
+        {
+            var shape = new Shape(new long[] { 3, 4 }, 'F');
+            shape.Order.Should().Be('F');
+        }
+
+        [TestMethod]
+        public void Order_Transpose_ReportsF()
+        {
+            // Transpose of C-contig produces F-contig memory; Order should reflect that
+            var arr = np.arange(24).reshape(2, 3, 4);
+            arr.Shape.Order.Should().Be('C');
+            arr.T.Shape.Order.Should().Be('F');
+        }
+
+        [TestMethod]
+        public void Order_1D_ReportsC()
+        {
+            // 1-D is both C and F contig; default to 'C'
+            var shape = new Shape(5L);
+            shape.Order.Should().Be('C');
+        }
+
+        [TestMethod]
+        public void Order_Scalar_ReportsC()
+        {
+            var scalar = new Shape();
+            scalar.Order.Should().Be('C');
+        }
+
+        // ================================================================
+        //  Empty arrays (any dim == 0) are trivially both C and F contig
+        // ================================================================
+
+        [TestMethod]
+        public void EmptyArray_IsBothCAndFContiguous()
+        {
+            // NumPy: np.empty((2, 0, 3)).flags -> C=True, F=True (any dim=0)
+            var shape = new Shape(2L, 0L, 3L);
+            shape.IsContiguous.Should().BeTrue();
+            shape.IsFContiguous.Should().BeTrue();
+        }
     }
 }
