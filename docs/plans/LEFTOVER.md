@@ -918,3 +918,104 @@ Each sprint ~½ day unless noted.
 
 Estimated total: 4 half-day sprints (vs 6 half-days in the previous plan) by exploiting
 the Complex-axis cluster.
+
+## Round 8 Edge-Case Battletest Findings (2026-04-19)
+
+Follow-up after Round 6 + Round 7 shipped. Created 111 new edge-case tests in
+`NewDtypesEdgeCasesRound6and7Tests.cs` to probe IEEE corners (±inf, NaN,
+subnormals, ±0), reduction shape corners (axis=-1, keepdims, 3D, single-element
+axis), and ddof boundaries. 106 pass; 5 identified new parity bugs (`[OpenBugs]`).
+
+### B21 — Half `log1p` / `expm1` lose subnormal precision
+
+```
+np.log1p(np.array([2**-24], dtype=np.float16))  → np.float16(5.96e-08)
+np.log1p(np.array([2**-24], dtype=np.float16)) in NumSharp → 0
+```
+
+**Root cause**: `Half.LogP1(2^-24)` in .NET BCL rounds `1 + 2^-24` to `1` in Half
+precision (Half epsilon = 2^-11 ≫ 2^-24) and returns `log(1) = 0`. NumPy computes
+`log1p` in double, then casts back — preserving the subnormal result.
+
+**Fix**: In `ILKernelGenerator.Unary.Decimal.cs` case `UnaryOp.Log1p` for Half,
+promote to double before the call: emit `Conv_R8` → `Math.Log1p` → `Conv_Half`.
+Same pattern for `Expm1` (check via tests once fixed).
+
+**Repro test**: `B11_Log1p_Half_SmallestSubnormal`.
+
+### B22 — Complex `exp2(±inf+0j)` returns `(NaN, NaN)` instead of `0+0j` / `inf+0j`
+
+```
+np.exp2(np.array([-inf+0j]))  → 0.+0.j    (NumSharp: nan+nanj)
+np.exp2(np.array([inf+0j]))   → inf+0.j   (NumSharp: nan+nanj)
+```
+
+**Root cause**: .NET's `Complex.Pow(new Complex(2, 0), z)` for z with Real = ±∞
+and Imag = 0 returns `NaN+NaNj` (BCL limitation: internally evaluates
+`exp(log(2) * z)` with `log(2)·±∞ = ±∞` and then `cos/sin(±∞) = NaN`).
+
+**Fix**: In the Complex branch of `EmitUnary` for `UnaryOp.Exp2`, add a two-way
+special case:
+- if `z.Real == -∞ && z.Imag == 0` → result `(0, 0)`
+- if `z.Real == +∞ && z.Imag == 0` → result `(+∞, 0)`
+
+Alternative: use `Complex.Exp(z * ln(2))` which also hits the BCL quirk.
+Cleanest is inline checks before falling through to `Complex.Pow`.
+
+**Repro tests**: `B11_Complex_Exp2_NegInf_Real_Is_Zero`, `B11_Complex_Exp2_PosInf_Real_Is_Inf`.
+
+### B23 — `np.var`/`np.std`(Complex, axis=N) returns Complex array for single-element axis
+
+```
+a = np.array([[1+2j]], dtype=np.complex128)   # shape (1,1)
+np.var(a, axis=0)  → array([0.], dtype=float64)   # NumPy
+np.var(a, axis=0)  → NDArray dtype=Complex       # NumSharp (wrong!)
+```
+
+**Root cause**: The trivial-axis fast path (when reduced axis size = 1) in the
+reduction dispatcher returns the input element verbatim without applying the
+Var/Std output-dtype promotion. For most dtypes this is harmless (returns the
+original element, variance = 0). For Complex, it yields the wrong dtype (Complex
+instead of Double) AND the wrong value (the element itself, not 0.0).
+
+**Fix**: In `ExecuteAxisVarReductionIL` / `ExecuteAxisStdReduction` dispatcher,
+route Complex through the Var/Std kernel even when `axisSize == 1` — the kernel
+already returns 0.0 correctly for that case. Alternatively, add a Complex-aware
+HandleTrivialAxisReduction that returns Double zeros.
+
+**Repro test**: `B20_Complex_Var_SingleElementAxis_Is_Zero`.
+
+### B24 — `np.var`/`np.std`(Complex, axis=N, ddof>n) returns negative value instead of `+inf`
+
+```
+np.var(np.array([[1+2j, 3+4j, 5+6j]]), axis=1, ddof=4)  → array([inf])
+# NumSharp returns array([-16])
+```
+
+**Root cause**: NumPy clamps `divisor = max(n - ddof, 0)` so when `ddof > n` the
+divisor becomes 0 and `sum/0 = +inf`. NumSharp's `AxisVarStdComplexHelper`
+computes `sum / (n - ddof)` directly, giving a negative value when `ddof > n`.
+
+**Fix**: In `AxisVarStdComplexHelper` (`ILKernelGenerator.Reduction.Axis.VarStd.cs`)
+change the divisor from `(n - ddof)` to `Math.Max(n - ddof, 0)`. Same change is
+probably needed in the per-type `AxisVarStdKernelTyped{Decimal,Single,Double}`
+helpers — verify with tests.
+
+Note: `ddof == n` (divisor = 0) already returns +inf correctly because
+`positive_sum / 0.0 = +inf` in float arithmetic; only `ddof > n` (negative
+divisor) is wrong.
+
+**Repro test**: `B20_Complex_Var_Ddof_Greater_Than_N_Returns_Inf`.
+
+### Summary
+
+| Bug | Severity | Fix scope |
+|-----|----------|-----------|
+| B21 | Minor — subnormal precision only | 1 line (promote to double in Half log1p IL) |
+| B22 | Minor — ±inf real edge | ~10 lines (inline exp2 special cases) |
+| B23 | Moderate — wrong dtype in output | ~15 lines (route trivial-axis through kernel) |
+| B24 | Minor — ddof>n only | 1 line (clamp divisor in AxisVarStdComplexHelper) |
+
+All four are minor surgical fixes. Total: ~30 lines. Each has a ready failing
+`[OpenBugs]` test that will automatically turn green once the corresponding fix
+lands — nothing more to write.
