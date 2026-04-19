@@ -421,7 +421,13 @@ namespace NumSharp.Backends.Kernels
                 {
                     ReductionOp.Sum or ReductionOp.Mean => cAccum + cVal,
                     ReductionOp.Prod => cAccum * cVal,
-                    _ => cAccum // Min/Max not supported for Complex
+                    // NumPy parity: lex ordering on (Real, Imaginary); NaN-first-wins
+                    // propagation (NaN-containing = Re or Im is NaN). Identity picked in
+                    // GetIdentityValueTyped as (+inf,+inf)/(-inf,-inf) so first finite
+                    // value beats it under lex comparison.
+                    ReductionOp.Min => ComplexLexPick(cAccum, cVal, pickGreater: false),
+                    ReductionOp.Max => ComplexLexPick(cAccum, cVal, pickGreater: true),
+                    _ => cAccum
                 };
                 return (TAccum)(object)cResult;
             }
@@ -459,6 +465,23 @@ namespace NumSharp.Backends.Kernels
             };
 
             return ConvertFromDouble<TAccum>(result);
+        }
+
+        /// <summary>
+        /// NumPy-parity pick for Complex Min/Max: NaN-containing operand (first wins) or
+        /// lex-compared (Real, Imaginary). Shared with CombineScalarsPromoted's Complex path.
+        /// </summary>
+        private static System.Numerics.Complex ComplexLexPick(System.Numerics.Complex a, System.Numerics.Complex b, bool pickGreater)
+        {
+            bool aNaN = double.IsNaN(a.Real) || double.IsNaN(a.Imaginary);
+            if (aNaN) return a;
+            bool bNaN = double.IsNaN(b.Real) || double.IsNaN(b.Imaginary);
+            if (bNaN) return b;
+
+            bool aGreater = a.Real > b.Real || (a.Real == b.Real && a.Imaginary > b.Imaginary);
+            if (pickGreater)
+                return aGreater ? a : b;
+            return aGreater ? b : a;
         }
 
         /// <summary>
@@ -538,11 +561,16 @@ namespace NumSharp.Backends.Kernels
             // Special handling for Complex
             if (typeof(T) == typeof(System.Numerics.Complex))
             {
+                // Min/Max: use (±inf, ±inf) so any finite lex-compared element displaces
+                // the identity on first combine (matches how double.PositiveInfinity works
+                // for scalar Min above).
                 var identity = op switch
                 {
                     ReductionOp.Sum or ReductionOp.Mean => System.Numerics.Complex.Zero,
                     ReductionOp.Prod => System.Numerics.Complex.One,
-                    _ => System.Numerics.Complex.Zero // Min/Max not supported for Complex
+                    ReductionOp.Min => new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity),
+                    ReductionOp.Max => new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity),
+                    _ => System.Numerics.Complex.Zero
                 };
                 return (T)(object)identity;
             }
