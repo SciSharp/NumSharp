@@ -495,6 +495,14 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Tan");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
+            public static readonly MethodInfo ComplexLog10 = typeof(System.Numerics.Complex).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log10");
+            // Complex doesn't have Log2/Exp2/Log1p/Expm1 directly — composed via Log(z, 2), Pow(2, z),
+            // Log(1+z), Exp(z)-1 in EmitUnaryComplexOperation.
+            public static readonly MethodInfo ComplexLogBase = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log(Complex, double)");
+            public static readonly MethodInfo ComplexOpSubtraction = typeof(System.Numerics.Complex).GetMethod("op_Subtraction", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Subtraction");
 
             // Half unary operator methods
             public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
@@ -519,6 +527,19 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Truncate");
             public static readonly MethodInfo HalfAbs = typeof(Half).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Abs");
+            public static readonly MethodInfo HalfLog10 = typeof(Half).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log10");
+            public static readonly MethodInfo HalfLog2 = typeof(Half).GetMethod("Log2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log2");
+            public static readonly MethodInfo HalfCbrt = typeof(Half).GetMethod("Cbrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Cbrt");
+            public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
+            // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
+            public static readonly MethodInfo HalfLogP1 = typeof(Half).GetMethod("LogP1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "LogP1");
+            public static readonly MethodInfo HalfExpM1 = typeof(Half).GetMethod("ExpM1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "ExpM1");
         }
 
         #endregion

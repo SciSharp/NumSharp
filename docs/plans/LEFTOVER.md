@@ -756,3 +756,165 @@ Ordering by impact ÷ effort:
 - Given the severity of B1 and B2 (silent data corruption), these two should also gain
   `[OpenBugs]`-tagged reproducers immediately so CI catches regressions while Round 6 is
   planned / before fix lands.
+
+---
+
+## Cross-Dtype Bug Scope Matrix (verified 2026-04-17)
+
+Initial battletest reported bugs on the first failing dtype then moved on. A second pass
+ran every bug scenario against all three new dtypes (SByte / Half / Complex) plus added a
+handful of ops not originally tested. Result: several bugs are broader than first reported,
+**4 new bugs (B17–B20) surfaced**, and multiple bugs appear to share root causes (esp.
+the Complex axis-reduction family).
+
+Legend: ✅ works / parity | ❌ throws | ⚠️ wrong values / data loss | — N/A
+
+| # | Description | SByte | Half | Complex |
+|---|---|---|---|---|
+| B1 | `min/max` elementwise returns identity | ✅ | ❌ returns ±∞ | — (see B8) |
+| B2 | `mean(axis=N)` dtype / data | ✅ | ⚠️ returns `Double` not `Half` | ⚠️ returns `Double`, drops imaginary |
+| B3 | `1/0` = `(inf, nan)` | — | — | ❌ returns `(NaN, NaN)` |
+| B4 | `prod` / `nanprod` | ✅ prod ✅ nanprod | ❌ prod ✅ nanprod | ❌ prod ❌ nanprod |
+| B5 | `min/max(axis=N)` dispatch | ❌ throws | ✅ | **⚠️ returns all zeros** — see B19 |
+| B6 | `cumsum/cumprod(axis=N)` | ✅ | ❌ cumsum ✅ cumprod | ❌ cumsum **⚠️ cumprod wrong** — see B18 |
+| B7 | `argmax/argmin(axis=N)` | ❌ throws | ❌ throws | ❌ throws |
+| B8 | `min/max` elementwise throws | — | — | ❌ throws |
+| B9 | `unique` | ✅ | ✅ | ❌ throws |
+| B10 | `maximum/minimum` binary | ✅ | ❌ throws | ❌ throws |
+| B11 | unary `log10/log2/cbrt/exp2/log1p/expm1` | ✅ | ❌ all 6 throw | ❌ all 6 throw |
+| B12 | `argmax/argmin` tiebreak uses real only | — | ✅ | ❌ wrong index |
+| B13 | `argmax/argmin` first-NaN-wins | — | ✅ | ❌ skips NaN |
+| B14 | `nanmean/nanstd/nanvar` propagate NaN | ✅ | ❌ return NaN | ❌ return NaN |
+| B15 | `nansum/nanmean` don't skip | — | ✅ nansum ❌ nanmean | ❌ nansum ❌ nanmean |
+| B16 | `std/var(axis=N)` dtype | ✅ | ⚠️ `Double` not `Half` | ⚠️ `Double` + **wrong values** — see B20 |
+| **B17** | **NEW:** `np.clip` for new float/complex | ✅ | ❌ throws | ❌ throws |
+| **B18** | **NEW:** `cumprod(axis=N)` Complex wrong values | ✅ | ✅ | ⚠️ drops imaginary |
+| **B19** | **NEW:** `min/max(axis=N)` Complex returns zeros | (B5 dispatch) | ✅ | ⚠️ returns `[0+0j, …]` |
+| **B20** | **NEW:** `std/var(axis=N)` Complex wrong values | — | — | ⚠️ drops imaginary in accumulator |
+
+### Four new bugs discovered in the cross-dtype pass
+
+#### B17. `np.clip(Half | Complex, lo, hi)` throws
+Same error string as B10 (`ClipNDArray not supported for dtype Half`) — **same code path
+as B10** in `Default.ClipNDArray.cs`. One fix covers both `np.clip` and `np.maximum`/
+`np.minimum` for Half. For Complex, `np.clip` needs a lex-comparison path (ties to B8/B9
+design).
+
+#### B18. `np.cumprod(Complex, axis=N)` drops imaginary part
+Elementwise `np.cumprod(complexArr)` works correctly. Only axis variant is broken:
+```
+Input axis=0 col[0]: [1+1j, 4+4j, 7+7j]
+Expected (NumPy):    [1+1j,      8j,  -56+56j]      (8j = (1+1j)(4+4j))
+NumSharp:            [1+0j, 4+0j, 28+0j]             (imaginary dropped)
+```
+Root cause likely shared with B2 / B16 / B20: axis-reduction path uses Double accumulator.
+
+#### B19. `np.max(Complex, axis=N)` / `np.min(Complex, axis=N)` return all zeros
+```
+Input: [[1+1j,2+2j,3+3j],[4+4j,5+5j,6+6j],[7+7j,8+8j,9+9j]]
+NumSharp: np.max(c_mat, axis=0) → [<0;0>, <0;0>, <0;0>]
+NumPy:                            [7+7j, 8+8j, 9+9j]
+```
+Complete data loss — likely the axis Max/Min dispatcher uses Complex default (zero) as
+identity and never updates (similar pattern to B1 but different mechanism).
+
+#### B20. `np.std(Complex, axis=N)` / `np.var(Complex, axis=N)` compute wrong values
+```
+NumSharp: std axis=0 → [2.449, 2.449, 2.449]    (= std of real parts only)
+NumPy:    std axis=0 → [3.464, 3.464, 3.464]    (= sqrt(mean(|z - mean|²)))
+```
+Not just dtype (B16) — **wrong math**: NumSharp computes variance of real component only
+instead of `E[|z - mean(z)|²]`. Elementwise `np.std(complexArr)` gives correct value, so
+only the axis path diverges.
+
+### Root-cause clusters (fixes may be shared)
+
+1. **Complex axis-reduction family** (B2, B16, B18, B19, B20): all manifest as
+   "axis reduction on Complex uses Double accumulator / drops imaginary". Likely a single
+   shared fix point in the axis-reduction dispatcher (probably
+   `DefaultEngine.ReductionOp.cs` output-type selection or the engine path for Complex
+   axis ops). **If located, one change could close 5 bugs.**
+
+2. **Half axis dtype family** (B2, B16): `mean/std/var(Half, axis)` return Double.
+   Same dispatcher as cluster 1 — one line to change (preserve Half instead of promoting
+   to Double's `GetComputingType`).
+
+3. **`Default.ClipNDArray` gap** (B10, B17): same "not supported for dtype" error from
+   the same file. One fix adds Half + Complex cases. For Complex, needs lex comparison.
+
+4. **Axis dispatcher missing type branches** (B5, B7, B6 cumsum): same class of bug —
+   `Type X not supported for axis reduction/ArgMin/AxisCumSum`. Each needs the missing
+   case added. B7 (argmax/argmin axis) affects **all three** new dtypes, making it the
+   highest-impact dispatcher fix.
+
+5. **Elementwise IL kernel fallback gaps** (B4 prod, B11 unary math): same pattern as
+   existing `SumElementwiseHalfFallback` — add fallback methods for the missing ops.
+
+6. **NaN-aware reduction gap for Half/Complex** (B14, B15): `np.nansum/nanprod` already
+   work on Half; the nanmean/nanstd/nanvar variants don't filter NaN before computing.
+   Likely a single helper (`SkipNaNHalfEnumerator`, `SkipNaNComplexEnumerator`) reused
+   across all three reductions would fix it.
+
+### Revised severity count (after cross-dtype pass)
+
+- **Silent data-corruption bugs: 7** (up from 2):
+  B1 Half min/max, B2 Complex axis mean, B3 Complex 1/0, B18 Complex axis cumprod,
+  B19 Complex axis min/max, B20 Complex axis std/var, B16 Complex axis std/var values
+- **NotSupportedException throws: 10**
+- **Wrong but not silent: 3** (B12, B13, B14 — caller sees NaN / wrong index, can detect)
+
+### Revised pick order (ease × impact, factoring cluster fixes)
+
+**🥇 Cluster wins — one PR closes multiple bugs:**
+
+1. **Complex axis-reduction dispatcher** (closes B2, B16, B18, B19, B20; potentially helps B6 cumsum)
+   - Single cluster = five data-corruption bugs. If the dispatcher can be made to use a
+     Complex accumulator for Complex axis reductions, all five likely fall.
+   - Risk: medium. Scope: probably 1-2 files, 50-150 lines. **Highest ROI fix in the list.**
+
+2. **Half axis dtype preservation** (closes Half parts of B2 and B16)
+   - Likely a one-line change in the same dispatcher as cluster 1 to pick `Half` instead of
+     `GetComputingType()` for float16 inputs.
+
+**🥈 Trivial cluster fixes:**
+
+3. **B5 + B7 + B6 cumsum — missing axis dispatcher cases**
+   - One PR adding `sbyte` to axis identity tables + adding Complex/Half to argmax/argmin
+     axis dispatcher + adding Half/Complex to AxisCumSum dispatcher.
+   - Size: ~50 lines across 3 files. All three bugs close.
+
+4. **B4 + B11 — missing elementwise fallbacks**
+   - Add `ProdElementwiseHalfFallback`, `ProdElementwiseComplexFallback`, `NanProdComplexFallback`,
+     and 12 unary Half/Complex math cases (log10 × 2, log2 × 2, cbrt × 2, exp2 × 2, log1p × 2, expm1 × 2).
+   - Size: ~80 lines, all in 2 files.
+
+5. **B10 + B17 — ClipNDArray adds Half + Complex**
+   - One file (`Default.ClipNDArray.cs`), fixes `np.clip`, `np.maximum`, `np.minimum` for
+     Half and Complex in one go.
+
+**🥉 Individual bug fixes (not in clusters):**
+
+6. B1 Half min/max helpers (~40 lines)
+7. B9 Complex unique via lex comparer (~40 lines)
+8. B8 Complex min/max via lex (~60 lines; share comparer with B9)
+9. B14 Half nanmean/nanstd/nanvar (~50 lines)
+10. B15 Complex nansum/nanmean (~50 lines)
+11. B12 + B13 Complex argmax/argmin tiebreak + NaN (~30 lines, one helper)
+
+**Defer:**
+
+12. B3 Complex 1/0 — rare, needs custom division kernel
+
+### Recommended sprint layout (revised)
+
+Each sprint ~½ day unless noted.
+
+- **Sprint 1:** Cluster 1 — the Complex axis-reduction dispatcher. Even partial progress here
+  potentially closes 5 bugs. Start here.
+- **Sprint 2:** Clusters 3, 4, 5 — dispatcher-case-missing trivia. Kills ~7 `NotSupportedException`s.
+- **Sprint 3:** B1 (Half min/max silent corruption) + B14/B15 (NaN-aware).
+- **Sprint 4:** B12+B13 (Complex argmax/argmin quality) + B8/B9 (Complex min/max/unique).
+- **Defer:** B3.
+
+Estimated total: 4 half-day sprints (vs 6 half-days in the previous plan) by exploiting
+the Complex-axis cluster.

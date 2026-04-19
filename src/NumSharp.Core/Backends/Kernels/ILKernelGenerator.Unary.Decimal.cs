@@ -304,6 +304,54 @@ namespace NumSharp.Backends.Kernels
                         BindingFlags.NonPublic | BindingFlags.Static)!, null);
                     break;
 
+                case UnaryOp.Log10:
+                    // Complex.Log10(z) — NumPy: np.log10(complex) returns complex (base-10 log, principal branch).
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog10, null);
+                    break;
+
+                case UnaryOp.Log2:
+                    // Route through helper — Complex.Log(z, 2.0) yields NaN imaginary for z=0+0j
+                    // (complex division by base uses component-wise division that breaks on -inf).
+                    // NumPy: np.log2(0+0j) = -inf+0j.
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexLog2Helper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
+                case UnaryOp.Exp2:
+                    // 2^z as Complex.Pow(new Complex(2,0), z). Only Pow(Complex,Complex) is available
+                    // for a complex exponent, so wrap the base in a Complex literal.
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        il.Emit(OpCodes.Stloc, locZ);
+                        il.Emit(OpCodes.Ldc_R8, 2.0);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexPow, null);
+                    }
+                    break;
+
+                case UnaryOp.Log1p:
+                    // Complex.Log(1 + z). NumPy principal branch: log1p(-1+0j) = -inf+0j (matches Complex.Log).
+                    {
+                        il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
+                        // Stack: z, 1.
+                        // op_Addition takes (Complex, Complex), emit in a way that the order is z+1 = 1+z.
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpAddition, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog, null);
+                    }
+                    break;
+
+                case UnaryOp.Expm1:
+                    // Complex.Exp(z) - 1.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexExp, null);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpSubtraction, null);
+                    break;
+
+                // Note: UnaryOp.Cbrt is deliberately NOT handled for Complex — NumPy's np.cbrt raises
+                // TypeError for complex inputs, so falling through to the default throw keeps parity.
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported for Complex");
             }
@@ -347,6 +395,19 @@ namespace NumSharp.Backends.Kernels
             return double.IsFinite(z.Real) && double.IsFinite(z.Imaginary);
         }
 
+        private static readonly double LogE_Inv_Ln2 = 1.0 / System.Math.Log(2.0);
+
+        /// <summary>
+        /// Helper for Complex log2. Matches NumPy: np.log2(0+0j) = -inf+0j (not -inf+NaNj).
+        /// Avoids Complex.Log(z, 2.0) which produces NaN imag for Complex(-inf, 0) due to
+        /// complex division by a non-zero base.
+        /// </summary>
+        internal static System.Numerics.Complex ComplexLog2Helper(System.Numerics.Complex z)
+        {
+            var logZ = System.Numerics.Complex.Log(z);
+            return new System.Numerics.Complex(logZ.Real * LogE_Inv_Ln2, logZ.Imaginary * LogE_Inv_Ln2);
+        }
+
         #endregion
 
         #region Unary Half IL Emission
@@ -388,6 +449,30 @@ namespace NumSharp.Backends.Kernels
 
                 case UnaryOp.Log:
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfLog, null);
+                    break;
+
+                case UnaryOp.Log10:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfLog10, null);
+                    break;
+
+                case UnaryOp.Log2:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfLog2, null);
+                    break;
+
+                case UnaryOp.Cbrt:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfCbrt, null);
+                    break;
+
+                case UnaryOp.Exp2:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfExp2, null);
+                    break;
+
+                case UnaryOp.Log1p:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfLogP1, null);
+                    break;
+
+                case UnaryOp.Expm1:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfExpM1, null);
                     break;
 
                 case UnaryOp.Floor:
