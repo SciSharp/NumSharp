@@ -1532,6 +1532,13 @@ namespace NumSharp.Utilities
             {
                 return 0;
             }
+            // Out-of-int64-range values: NumPy's int64 overflow returns int64.MinValue,
+            // and unchecked((uint)int64.MinValue) == 0. Use exclusive upper bound 2^63
+            // (since (double)long.MaxValue rounds to 2^63 and is itself overflow).
+            if (value < (double)long.MinValue || value >= 9223372036854775808.0)
+            {
+                return 0;
+            }
             // NumPy: truncate toward zero, then wrap modularly to uint
             return unchecked((uint)(long)value);
         }

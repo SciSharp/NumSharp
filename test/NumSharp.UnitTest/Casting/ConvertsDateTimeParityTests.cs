@@ -593,6 +593,23 @@ namespace NumSharp.UnitTest.Casting
             Converts.ToTimeSpan(-1e20).Should().Be(TimeSpan.MinValue);
         }
 
+        [TestMethod]
+        public void NumPyParity_DoubleToUInt32_LargePositiveOverflowsToZero()
+        {
+            // NumPy: 1e20 -> uint32 = 0 (overflow in int64 intermediate -> NaT -> low 32 bits = 0)
+            // Pre-existing NumSharp bug was returning uint.MaxValue due to .NET 7+ saturating
+            // (long)double cast yielding long.MaxValue whose low 32 bits are 0xFFFFFFFF.
+            Converts.ToUInt32(1e20).Should().Be(0u);
+            Converts.ToUInt32(-1e20).Should().Be(0u);
+            Converts.ToUInt32(1e25).Should().Be(0u);
+            Converts.ToUInt32(double.NaN).Should().Be(0u);
+            Converts.ToUInt32(double.PositiveInfinity).Should().Be(0u);
+            Converts.ToUInt32(double.NegativeInfinity).Should().Be(0u);
+            // Sanity: normal path still wraps correctly
+            Converts.ToUInt32(3.7d).Should().Be(3u);
+            Converts.ToUInt32(-3.7d).Should().Be(unchecked((uint)-3));
+        }
+
         #endregion
     }
 }
