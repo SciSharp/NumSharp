@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
 
@@ -76,8 +77,14 @@ namespace NumSharp.Utilities
                 case NPTypeCode.String:
                     break;
                 case NPTypeCode.Complex:
-                default:
                     Size = Marshal.SizeOf<T>();
+                    break;
+                default:
+                    // NPTypeCode.Empty covers non-NumPy types (DateTime, DateTimeOffset,
+                    // TimeSpan, DateTime64, user structs). Marshal.SizeOf requires
+                    // unmanaged structs and throws for DateTime; Unsafe.SizeOf works
+                    // for any struct layout.
+                    Size = Unsafe.SizeOf<T>();
                     break;
             }
         }

@@ -259,6 +259,7 @@ namespace NumSharp.Utilities
             byte by => Converts.ToBoolean(by),
             sbyte sb => Converts.ToBoolean(sb),
             char c => Converts.ToBoolean(c),
+            DateTime64 d64 => Converts.ToBoolean(d64),
             DateTime dt => Converts.ToBoolean(dt),
             TimeSpan ts => Converts.ToBoolean(ts),
             _ => Converts.ToBoolean(value)
@@ -282,6 +283,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToByte(sb),
             char c => Converts.ToByte(c),
             bool b => Converts.ToByte(b),
+            DateTime64 d64 => Converts.ToByte(d64),
             DateTime dt => Converts.ToByte(dt),
             TimeSpan ts => Converts.ToByte(ts),
             _ => Converts.ToByte(value)
@@ -305,6 +307,7 @@ namespace NumSharp.Utilities
             byte b => Converts.ToSByte(b),
             char c => Converts.ToSByte(c),
             bool b => Converts.ToSByte(b),
+            DateTime64 d64 => Converts.ToSByte(d64),
             DateTime dt => Converts.ToSByte(dt),
             TimeSpan ts => Converts.ToSByte(ts),
             _ => Converts.ToSByte(value)
@@ -328,6 +331,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToInt16(sb),
             char c => Converts.ToInt16(c),
             bool b => Converts.ToInt16(b),
+            DateTime64 d64 => Converts.ToInt16(d64),
             DateTime dt => Converts.ToInt16(dt),
             TimeSpan ts => Converts.ToInt16(ts),
             _ => Converts.ToInt16(value)
@@ -351,6 +355,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToUInt16(sb),
             char c => Converts.ToUInt16(c),
             bool b => Converts.ToUInt16(b),
+            DateTime64 d64 => Converts.ToUInt16(d64),
             DateTime dt => Converts.ToUInt16(dt),
             TimeSpan ts => Converts.ToUInt16(ts),
             _ => Converts.ToUInt16(value)
@@ -374,6 +379,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToInt32(sb),
             char c => Converts.ToInt32(c),
             bool b => Converts.ToInt32(b),
+            DateTime64 d64 => Converts.ToInt32(d64),
             DateTime dt => Converts.ToInt32(dt),
             TimeSpan ts => Converts.ToInt32(ts),
             _ => Converts.ToInt32(value)
@@ -397,6 +403,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToUInt32(sb),
             char c => Converts.ToUInt32(c),
             bool b => Converts.ToUInt32(b),
+            DateTime64 d64 => Converts.ToUInt32(d64),
             DateTime dt => Converts.ToUInt32(dt),
             TimeSpan ts => Converts.ToUInt32(ts),
             _ => Converts.ToUInt32(value)
@@ -420,6 +427,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToInt64(sb),
             char c => Converts.ToInt64(c),
             bool b => Converts.ToInt64(b),
+            DateTime64 d64 => Converts.ToInt64(d64),
             DateTime dt => Converts.ToInt64(dt),
             TimeSpan ts => Converts.ToInt64(ts),
             _ => Converts.ToInt64(value)
@@ -443,6 +451,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToUInt64(sb),
             char c => Converts.ToUInt64(c),
             bool b => Converts.ToUInt64(b),
+            DateTime64 d64 => Converts.ToUInt64(d64),
             DateTime dt => Converts.ToUInt64(dt),
             TimeSpan ts => Converts.ToUInt64(ts),
             _ => Converts.ToUInt64(value)
@@ -466,6 +475,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToSingle(sb),
             char c => Converts.ToSingle(c),
             bool b => Converts.ToSingle(b),
+            DateTime64 d64 => Converts.ToSingle(d64),
             DateTime dt => Converts.ToSingle(dt),
             TimeSpan ts => Converts.ToSingle(ts),
             _ => Converts.ToSingle(value)
@@ -489,6 +499,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToDouble(sb),
             char c => Converts.ToDouble(c),
             bool b => Converts.ToDouble(b),
+            DateTime64 d64 => Converts.ToDouble(d64),
             DateTime dt => Converts.ToDouble(dt),
             TimeSpan ts => Converts.ToDouble(ts),
             _ => Converts.ToDouble(value)
@@ -512,6 +523,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToDecimal(sb),
             char ch => Converts.ToDecimal(ch),
             bool bo => Converts.ToDecimal(bo),
+            DateTime64 d64 => Converts.ToDecimal(d64),
             DateTime dt => Converts.ToDecimal(dt),
             TimeSpan ts => Converts.ToDecimal(ts),
             _ => Converts.ToDecimal(value)
@@ -535,6 +547,7 @@ namespace NumSharp.Utilities
             sbyte sb => Converts.ToHalf(sb),
             char ch => Converts.ToHalf(ch),
             bool bo => Converts.ToHalf(bo),
+            DateTime64 d64 => Converts.ToHalf(d64),
             DateTime dt => Converts.ToHalf(dt),
             TimeSpan ts => Converts.ToHalf(ts),
             _ => Converts.ToHalf(value)
@@ -558,6 +571,7 @@ namespace NumSharp.Utilities
             sbyte sb => new Complex(sb, 0),
             char c => new Complex(c, 0),
             bool b => new Complex(b ? 1 : 0, 0),
+            DateTime64 d64 => Converts.ToComplex(d64),
             DateTime dt => Converts.ToComplex(dt),
             TimeSpan ts => Converts.ToComplex(ts),
             _ => Converts.ToComplex(value)
@@ -580,6 +594,7 @@ namespace NumSharp.Utilities
             Half h => Converts.ToInt64(h),
             decimal m => Converts.ToInt64(m),
             bool b => b ? 1L : 0L,
+            DateTime64 d64 => d64.Ticks,
             DateTime dt => dt.Ticks,
             TimeSpan ts => ts.Ticks,
             _ => Converts.ToInt64(value)

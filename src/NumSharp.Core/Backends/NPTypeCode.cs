@@ -102,6 +102,12 @@ namespace NumSharp
                 return NPTypeCode.Empty;
             }
 
+            // TypeCode.DateTime (16) collides with NPTypeCode.Half (16). DateTime/DateTimeOffset
+            // are not NumPy dtypes; return Empty so callers know to handle them via the
+            // dedicated Converts overloads (or NumSharp's DateTime64 wrapper struct).
+            if (tc == TypeCode.DateTime)
+                return NPTypeCode.Empty;
+
             try
             {
                 return (NPTypeCode)(int)tc;

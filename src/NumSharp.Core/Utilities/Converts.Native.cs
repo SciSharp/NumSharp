@@ -142,6 +142,7 @@ namespace NumSharp.Utilities
                 sbyte sb => ToBoolean(sb),
                 byte by => ToBoolean(by),
                 char ch => ToBoolean(ch),
+                DateTime64 d64 => ToBoolean(d64),
                 DateTime dt => ToBoolean(dt),
                 TimeSpan ts => ToBoolean(ts),
                 _ => ((IConvertible)value).ToBoolean(null)
@@ -310,6 +311,7 @@ namespace NumSharp.Utilities
                 Complex cx => ToChar(cx),
                 decimal m => ToChar(m),
                 bool bo => ToChar(bo),
+                DateTime64 d64 => ToChar(d64),
                 DateTime dt => ToChar(dt),
                 TimeSpan tsv => ToChar(tsv),
                 _ => ((IConvertible)value).ToChar(null)
@@ -419,8 +421,11 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(double value)
         {
-            // NumPy: int32 intermediate, wrap to uint16 (char is 16-bit unsigned).
-            // See ToSByte(double) rationale.
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap, while values outside int32 range collapse to int.MinValue whose low 16
+            // bits are 0 (NumPy's NaT-propagation convention for small ints). char is a
+            // 16-bit unsigned integer in NumSharp, so wrap to ushort then reinterpret as char.
             return unchecked((char)(ushort)ToInt32(value));
         }
 
@@ -491,6 +496,7 @@ namespace NumSharp.Utilities
                 decimal m => ToSByte(m),
                 bool bo => bo ? (sbyte)1 : (sbyte)0,
                 char c => unchecked((sbyte)c),
+                DateTime64 d64 => ToSByte(d64),
                 DateTime dt => ToSByte(dt),
                 TimeSpan ts => ToSByte(ts),
                 _ => ((IConvertible)value).ToSByte(null)
@@ -675,6 +681,7 @@ namespace NumSharp.Utilities
                 decimal m => ToByte(m),
                 bool bo => bo ? (byte)1 : (byte)0,
                 char c => unchecked((byte)c),
+                DateTime64 d64 => ToByte(d64),
                 DateTime dt => ToByte(dt),
                 TimeSpan ts => ToByte(ts),
                 _ => ((IConvertible)value).ToByte(null)
@@ -764,7 +771,10 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
-            // NumPy: int32 intermediate, wrap to uint8. See ToSByte(double) rationale.
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> 255), while values outside int32 range collapse to int.MinValue whose
+            // low byte is 0 (NumPy's NaT-propagation convention for small ints).
             return unchecked((byte)ToInt32(value));
         }
 
@@ -850,6 +860,7 @@ namespace NumSharp.Utilities
                 decimal m => ToInt16(m),
                 bool bo => bo ? (short)1 : (short)0,
                 char c => unchecked((short)c),
+                DateTime64 d64 => ToInt16(d64),
                 DateTime dt => ToInt16(dt),
                 TimeSpan ts => ToInt16(ts),
                 _ => ((IConvertible)value).ToInt16(null)
@@ -938,7 +949,10 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
-            // NumPy: int32 intermediate, wrap to int16. See ToSByte(double) rationale.
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> -1), while values outside int32 range collapse to int.MinValue whose
+            // low 16 bits are 0 (NumPy's NaT-propagation convention for small ints).
             return unchecked((short)ToInt32(value));
         }
 
@@ -1024,6 +1038,7 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt16(m),
                 bool bo => bo ? (ushort)1 : (ushort)0,
                 char c => c,
+                DateTime64 d64 => ToUInt16(d64),
                 DateTime dt => ToUInt16(dt),
                 TimeSpan ts => ToUInt16(ts),
                 _ => ((IConvertible)value).ToUInt16(null)
@@ -1116,7 +1131,10 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
-            // NumPy: int32 intermediate, wrap to uint16. See ToSByte(double) rationale.
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> 65535), while values outside int32 range collapse to int.MinValue whose
+            // low 16 bits are 0 (NumPy's NaT-propagation convention for small ints).
             return unchecked((ushort)ToInt32(value));
         }
 
@@ -1205,6 +1223,7 @@ namespace NumSharp.Utilities
                 decimal m => ToInt32(m),
                 bool bo => bo ? 1 : 0,
                 char c => c,
+                DateTime64 d64 => ToInt32(d64),
                 DateTime dt => ToInt32(dt),
                 TimeSpan ts => ToInt32(ts),
                 _ => ((IConvertible)value).ToInt32(null)
@@ -1386,6 +1405,7 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt32(m),
                 bool bo => bo ? 1u : 0u,
                 char c => c,
+                DateTime64 d64 => ToUInt32(d64),
                 DateTime dt => ToUInt32(dt),
                 TimeSpan ts => ToUInt32(ts),
                 _ => ((IConvertible)value).ToUInt32(null)
@@ -1580,6 +1600,7 @@ namespace NumSharp.Utilities
                 decimal m => ToInt64(m),
                 bool bo => bo ? 1L : 0L,
                 char c => c,
+                DateTime64 d64 => ToInt64(d64),
                 DateTime dt => ToInt64(dt),
                 TimeSpan ts => ToInt64(ts),
                 _ => ((IConvertible)value).ToInt64(null)
@@ -1762,6 +1783,7 @@ namespace NumSharp.Utilities
                 decimal m => ToUInt64(m),
                 bool bo => bo ? 1UL : 0UL,
                 char c => c,
+                DateTime64 d64 => ToUInt64(d64),
                 DateTime dt => ToUInt64(dt),
                 TimeSpan ts => ToUInt64(ts),
                 _ => ((IConvertible)value).ToUInt64(null)
@@ -1979,6 +2001,7 @@ namespace NumSharp.Utilities
                 byte by => ToSingle(by),
                 char ch => ToSingle(ch),
                 bool bo => bo ? 1f : 0f,
+                DateTime64 d64 => ToSingle(d64),
                 DateTime dt => ToSingle(dt),
                 TimeSpan ts => ToSingle(ts),
                 _ => ((IConvertible)value).ToSingle(null)
@@ -2137,6 +2160,7 @@ namespace NumSharp.Utilities
                 byte by => ToDouble(by),
                 char ch => ToDouble(ch),
                 bool bo => bo ? 1d : 0d,
+                DateTime64 d64 => ToDouble(d64),
                 DateTime dt => ToDouble(dt),
                 TimeSpan ts => ToDouble(ts),
                 _ => ((IConvertible)value).ToDouble(null)
@@ -2294,6 +2318,7 @@ namespace NumSharp.Utilities
                 byte b => b,
                 char c => c,
                 bool bo => bo ? 1m : 0m,
+                DateTime64 d64 => ToDecimal(d64),
                 DateTime dt => ToDecimal(dt),
                 TimeSpan ts => ToDecimal(ts),
                 _ => ((IConvertible)value).ToDecimal(null)
@@ -2468,6 +2493,7 @@ namespace NumSharp.Utilities
                 byte by => ToHalf(by),
                 char ch => ToHalf(ch),
                 bool bo => ToHalf(bo),
+                DateTime64 d64 => ToHalf(d64),
                 DateTime dt => ToHalf(dt),
                 TimeSpan ts => ToHalf(ts),
                 _ => (Half)((IConvertible)value).ToDouble(null)
@@ -2623,6 +2649,7 @@ namespace NumSharp.Utilities
                 byte by => ToComplex(by),
                 char ch => ToComplex(ch),
                 bool bo => ToComplex(bo),
+                DateTime64 d64 => ToComplex(d64),
                 DateTime dt => ToComplex(dt),
                 TimeSpan ts => ToComplex(ts),
                 _ => new Complex(((IConvertible)value).ToDouble(null), 0)
@@ -2950,6 +2977,7 @@ namespace NumSharp.Utilities
             return value switch
             {
                 TimeSpan ts => ts,
+                DateTime64 d64 => new TimeSpan(d64.Ticks),
                 DateTime dt => new TimeSpan(dt.Ticks),
                 bool b => b ? new TimeSpan(1L) : TimeSpan.Zero,
                 sbyte sb => new TimeSpan(sb),
