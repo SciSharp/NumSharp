@@ -1338,9 +1338,9 @@ namespace NumSharp.UnitTest.Casting
             act.Should().Throw<NotSupportedException>().WithMessage("*left_shift*integer*Half*");
         }
 
-        // Note: NDArray does NOT define a `<<` operator (only &, |, ^, ~, arithmetic).
-        // So `arr << X` is a compile error regardless of X's type. The Misaligned tests
-        // above use the equivalent np.left_shift function calls instead.
+        // Round 6 adds `<<` / `>>` operators to NDArray. Operator-form equivalents of the
+        // two tests above are added in the Round 6 region below — they exercise the same
+        // dispatch paths and lock in the same rejection.
 
         // M3+M4: Indexing.Selection.{Setter,Getter} fix adds Half/Complex cases to the
         // slice-conversion switch. However the deeper validation switch (Getter:70-87,
@@ -1412,6 +1412,169 @@ namespace NumSharp.UnitTest.Casting
         // by LeftShift_HalfShiftAmount_AsObject_NotSupported (object overload, asanyarray
         // path) and LeftShift_HalfShiftAmount_AsNDArray_NotSupported (NDArray overload,
         // dtype-validation path).
+
+        #endregion
+
+        #region Round 6: Operator overloads (<<, >>) — function-form duplicates
+
+        // Round 6 adds `operator <<` / `operator >>` to NDArray. C# shift-operator rules
+        // require the declaring type on the LHS, so `object << NDArray` is not possible —
+        // callers needing that form use np.left_shift(object, NDArray). Compound <<= / >>=
+        // are synthesized by the C# compiler from the binary operators.
+        //
+        // NumPy parity (verified via Python):
+        //   arr=[1,2,4,8] << 2        = [4, 8, 16, 32]
+        //   [16,8,4,2]    >> 1        = [8, 4, 2, 1]
+        //   [1,2,4,8]     << [0,1,2,3] = [1, 4, 16, 64]
+        //   arr3 <<= 2 mutates arr3 reference (C# compound = re-assigns, NumPy is in-place)
+
+        [TestMethod]
+        public void LeftShift_Operator_IntScalar_Works()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var r = arr << 2;
+            r.GetAtIndex<int>(0).Should().Be(4);
+            r.GetAtIndex<int>(1).Should().Be(8);
+            r.GetAtIndex<int>(2).Should().Be(16);
+            r.GetAtIndex<int>(3).Should().Be(32);
+        }
+
+        [TestMethod]
+        public void LeftShift_Operator_NDArrayRhs_Works()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var shifts = np.array(new[] { 0, 1, 2, 3 });
+            var r = arr << shifts;
+            r.GetAtIndex<int>(0).Should().Be(1);
+            r.GetAtIndex<int>(1).Should().Be(4);
+            r.GetAtIndex<int>(2).Should().Be(16);
+            r.GetAtIndex<int>(3).Should().Be(64);
+        }
+
+        [TestMethod]
+        public void LeftShift_Operator_NDArrayScalarRhs_Works()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var r = arr << NDArray.Scalar(1);
+            r.GetAtIndex<int>(0).Should().Be(2);
+            r.GetAtIndex<int>(1).Should().Be(4);
+            r.GetAtIndex<int>(2).Should().Be(8);
+            r.GetAtIndex<int>(3).Should().Be(16);
+        }
+
+        [TestMethod]
+        public void LeftShift_Operator_ObjectRhs_Works()
+        {
+            // object path: goes through np.asanyarray(rhs) and then NDArray<<NDArray.
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            object shift = 2;
+            var r = arr << shift;
+            r.GetAtIndex<int>(0).Should().Be(4);
+            r.GetAtIndex<int>(3).Should().Be(32);
+        }
+
+        [TestMethod]
+        public void LeftShift_Operator_Compound_ReassignsReference()
+        {
+            // C# semantics: `a <<= b` is sugar for `a = a << b`. This re-assigns `a` to a
+            // new NDArray — the original storage is NOT mutated (NumPy-like in-place is
+            // impossible for C# compound operators on class types).
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var original = arr;
+            arr <<= 2;
+            arr.GetAtIndex<int>(0).Should().Be(4);
+            arr.GetAtIndex<int>(3).Should().Be(32);
+            // Original reference untouched.
+            original.GetAtIndex<int>(0).Should().Be(1);
+            original.GetAtIndex<int>(3).Should().Be(8);
+        }
+
+        [TestMethod]
+        public void RightShift_Operator_IntScalar_Works()
+        {
+            var arr = np.array(new[] { 16, 8, 4, 2 });
+            var r = arr >> 1;
+            r.GetAtIndex<int>(0).Should().Be(8);
+            r.GetAtIndex<int>(1).Should().Be(4);
+            r.GetAtIndex<int>(2).Should().Be(2);
+            r.GetAtIndex<int>(3).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void RightShift_Operator_NDArrayRhs_Works()
+        {
+            var arr = np.array(new[] { 16, 16, 16, 16 });
+            var shifts = np.array(new[] { 0, 1, 2, 3 });
+            var r = arr >> shifts;
+            r.GetAtIndex<int>(0).Should().Be(16);
+            r.GetAtIndex<int>(1).Should().Be(8);
+            r.GetAtIndex<int>(2).Should().Be(4);
+            r.GetAtIndex<int>(3).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void RightShift_Operator_Compound_ReassignsReference()
+        {
+            var arr = np.array(new[] { 16, 8, 4, 2 });
+            arr >>= 1;
+            arr.GetAtIndex<int>(0).Should().Be(8);
+            arr.GetAtIndex<int>(3).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void LeftShift_Operator_UnsignedByte_TypePromotion_Works()
+        {
+            // int32 << uint8 → result dtype promotes (NumPy: int32).
+            var arr = np.array(new[] { 1, 2 });
+            var shifts = np.array(new byte[] { 2, 3 });
+            var r = arr << shifts;
+            r.GetAtIndex<int>(0).Should().Be(4);
+            r.GetAtIndex<int>(1).Should().Be(16);
+        }
+
+        // ----- Half-rhs Misaligned duplicates: operator form reaches the same rejection -----
+
+        // operator<<(NDArray, object) → np.asanyarray((Half)2) → rejects Half upstream.
+        [TestMethod]
+        [Misaligned]
+        public void LeftShift_Operator_HalfObjectRhs_NotSupported()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var act = () => arr << (object)(Half)2;
+            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+        }
+
+        // operator<<(NDArray, NDArray) → TensorEngine.LeftShift validates dtype, rejects Half.
+        [TestMethod]
+        [Misaligned]
+        public void LeftShift_Operator_HalfNDArrayRhs_NotSupported()
+        {
+            var arr = np.array(new[] { 1, 2, 4, 8 });
+            var rhs = NDArray.Scalar((Half)2);
+            var act = () => arr << rhs;
+            act.Should().Throw<NotSupportedException>().WithMessage("*left_shift*integer*Half*");
+        }
+
+        // operator>>(NDArray, object) → np.asanyarray((Half)2) → rejects Half upstream.
+        [TestMethod]
+        [Misaligned]
+        public void RightShift_Operator_HalfObjectRhs_NotSupported()
+        {
+            var arr = np.array(new[] { 16, 8, 4, 2 });
+            var act = () => arr >> (object)(Half)2;
+            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+        }
+
+        // operator>>(NDArray, NDArray) → TensorEngine.RightShift validates dtype, rejects Half.
+        [TestMethod]
+        [Misaligned]
+        public void RightShift_Operator_HalfNDArrayRhs_NotSupported()
+        {
+            var arr = np.array(new[] { 16, 8, 4, 2 });
+            var rhs = NDArray.Scalar((Half)2);
+            var act = () => arr >> rhs;
+            act.Should().Throw<NotSupportedException>().WithMessage("*right_shift*integer*Half*");
+        }
 
         #endregion
     }
