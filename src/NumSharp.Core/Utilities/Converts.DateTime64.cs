@@ -143,14 +143,8 @@ namespace NumSharp.Utilities
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime64 ToDateTime64(double value)
-        {
-            // NumPy: NaN, ±Inf → NaT (long.MinValue); overflow → NaT; else truncate.
-            if (double.IsNaN(value) || double.IsInfinity(value))
-                return DateTime64.NaT;
-            if (value >= 9223372036854775808.0 || value < (double)long.MinValue)
-                return DateTime64.NaT;
-            return new DateTime64((long)value);
-        }
+            // Centralised hardened float → int64 rule (NaN / ±Inf / overflow → NaT).
+            => DateTime64.FromDoubleOrNaT(value);
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime64 ToDateTime64(Half value)

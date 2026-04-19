@@ -363,16 +363,34 @@ namespace NumSharp.UnitTest.Casting
         // ================================================================
 
         [TestMethod]
-        public void NaT_EqualityFollowsNumPy()
+        public void NaT_OperatorEqualityFollowsNumPy()
         {
-            // NumPy: NaT == NaT → False (NaN-like)
-            DateTime64.NaT.Equals(DateTime64.NaT).Should().BeFalse();
+            // operator == / != / <, >, <=, >= follow NumPy (NaT vs anything → false for ==/</>/<=/>=, true for !=).
             (DateTime64.NaT == DateTime64.NaT).Should().BeFalse();
             (DateTime64.NaT != DateTime64.NaT).Should().BeTrue();
-
-            // NaT != value
             (DateTime64.NaT == new DateTime64(0L)).Should().BeFalse();
             (DateTime64.NaT != new DateTime64(0L)).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void NaT_EqualsFollowsDotNetContract()
+        {
+            // Equals() follows .NET's IEquatable convention (like double.NaN.Equals(double.NaN) == true),
+            // so hash/dictionary contract holds and NaT can be used as a dictionary key.
+            DateTime64.NaT.Equals(DateTime64.NaT).Should().BeTrue();
+            DateTime64.NaT.GetHashCode().Should().Be(DateTime64.NaT.GetHashCode());
+
+            // Distinct ticks never Equals-equal.
+            DateTime64.NaT.Equals(new DateTime64(0L)).Should().BeFalse();
+
+            // Can be used as a dictionary key.
+            var dict = new System.Collections.Generic.Dictionary<DateTime64, string>
+            {
+                { DateTime64.NaT, "nat" },
+                { new DateTime64(0L), "epoch" },
+            };
+            dict[DateTime64.NaT].Should().Be("nat");
+            dict.ContainsKey(DateTime64.NaT).Should().BeTrue();
         }
 
         [TestMethod]
@@ -390,8 +408,20 @@ namespace NumSharp.UnitTest.Casting
         {
             (DateTime64.NaT + TimeSpan.FromDays(1)).IsNaT.Should().BeTrue();
             (DateTime64.NaT - TimeSpan.FromDays(1)).IsNaT.Should().BeTrue();
-            (DateTime64.NaT.AddDays(1)).IsNaT.Should().BeTrue();
-            (DateTime64.NaT.AddHours(1)).IsNaT.Should().BeTrue();
+            DateTime64.NaT.Add(TimeSpan.FromDays(1)).IsNaT.Should().BeTrue();
+            DateTime64.NaT.Subtract(TimeSpan.FromDays(1)).IsNaT.Should().BeTrue();
+            DateTime64.NaT.AddTicks(1).IsNaT.Should().BeTrue();
+
+            // NaT - anything or anything - NaT → TimeSpan.MinValue (td's NaT-equivalent).
+            DateTime64.NaT.Subtract(new DateTime64(0L)).Should().Be(TimeSpan.MinValue);
+            new DateTime64(0L).Subtract(DateTime64.NaT).Should().Be(TimeSpan.MinValue);
+        }
+
+        [TestMethod]
+        public void Arithmetic_OverflowSaturatesToNaT()
+        {
+            // DateTime64.MaxValue + TimeSpan.FromTicks(1) overflows → NaT.
+            DateTime64.MaxValue.Add(new TimeSpan(1)).IsNaT.Should().BeTrue();
         }
 
         // ================================================================
@@ -415,6 +445,131 @@ namespace NumSharp.UnitTest.Casting
         {
             new DateTime64(-1L).ToString().Should().Contain("-1");
             new DateTime64(long.MaxValue).ToString().Should().Contain(long.MaxValue.ToString());
+        }
+
+        [TestMethod]
+        public void ToString_CustomFormat_DelegatesToDateTime()
+        {
+            var d64 = new DateTime64(new DateTime(2024, 1, 2, 3, 4, 5));
+            d64.ToString("yyyy-MM-dd").Should().Be("2024-01-02");
+            d64.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture).Should().Be("03:04:05");
+        }
+
+        [TestMethod]
+        public void TryFormat_WritesDirectlyIntoSpan()
+        {
+            Span<char> buffer = stackalloc char[64];
+
+            // NaT
+            DateTime64.NaT.TryFormat(buffer, out int n1).Should().BeTrue();
+            buffer.Slice(0, n1).ToString().Should().Be("NaT");
+
+            // Out-of-range
+            new DateTime64(-1L).TryFormat(buffer, out int n2).Should().BeTrue();
+            buffer.Slice(0, n2).ToString().Should().Contain("-1");
+
+            // Valid date with default format ("o" ISO-8601)
+            new DateTime64(new DateTime(2024, 1, 1)).TryFormat(buffer, out int n3).Should().BeTrue();
+            buffer.Slice(0, n3).ToString().Should().Contain("2024-01-01");
+
+            // Destination too small
+            Span<char> tiny = stackalloc char[2];
+            DateTime64.NaT.TryFormat(tiny, out int n4).Should().BeFalse();
+            n4.Should().Be(0);
+        }
+
+        [TestMethod]
+        public void Parse_NaTLiteral_IsCaseSensitive()
+        {
+            // NumPy's datetime64('NaT') is case-sensitive; we match that.
+            DateTime64.Parse("NaT").IsNaT.Should().BeTrue();
+
+            Action lowerCase = () => DateTime64.Parse("nat");
+            lowerCase.Should().Throw<FormatException>();
+        }
+
+        [TestMethod]
+        public void Parse_ValidISO_RoundTripsFromToString()
+        {
+            var original = new DateTime64(new DateTime(2024, 5, 17, 13, 45, 30));
+            var text = original.ToString();
+            var parsed = DateTime64.Parse(text);
+            parsed.Ticks.Should().Be(original.Ticks);
+        }
+
+        [TestMethod]
+        public void TryParse_InvalidInput_ReturnsFalse()
+        {
+            DateTime64.TryParse("not-a-date", out _).Should().BeFalse();
+            DateTime64.TryParse(null, out _).Should().BeFalse();
+            DateTime64.TryParse("NaT", out var nat).Should().BeTrue();
+            nat.IsNaT.Should().BeTrue();
+        }
+
+        // ================================================================
+        // IConvertible round-trip
+        // ================================================================
+
+        [TestMethod]
+        public void IConvertible_GetTypeCode_IsObject()
+        {
+            // Must NOT be TypeCode.DateTime — that would conflict with System.DateTime
+            // in Convert.ChangeType's fast-path. We want the fallback (ToType).
+            ((IConvertible)new DateTime64(0L)).GetTypeCode().Should().Be(TypeCode.Object);
+            ((IConvertible)DateTime64.NaT).GetTypeCode().Should().Be(TypeCode.Object);
+        }
+
+        [TestMethod]
+        public void IConvertible_ToType_HandlesCommonTargets()
+        {
+            IConvertible c = new DateTime64(Jan1_2024_Ticks);
+
+            // long, ulong, double
+            c.ToType(typeof(long), null).Should().Be(Jan1_2024_Ticks);
+            c.ToType(typeof(ulong), null).Should().Be((ulong)Jan1_2024_Ticks);
+            c.ToType(typeof(double), null).Should().Be((double)Jan1_2024_Ticks);
+
+            // DateTime (valid range → materialise)
+            c.ToType(typeof(DateTime), null).Should().Be(new DateTime(2024, 1, 1));
+
+            // DateTimeOffset (UTC)
+            var dto = (DateTimeOffset)c.ToType(typeof(DateTimeOffset), null);
+            dto.UtcTicks.Should().Be(Jan1_2024_Ticks);
+            dto.Offset.Should().Be(TimeSpan.Zero);
+
+            // TimeSpan (same tick count)
+            ((TimeSpan)c.ToType(typeof(TimeSpan), null)).Ticks.Should().Be(Jan1_2024_Ticks);
+
+            // DateTime64 → self
+            ((DateTime64)c.ToType(typeof(DateTime64), null)).Ticks.Should().Be(Jan1_2024_Ticks);
+
+            // String
+            ((string)c.ToType(typeof(string), null)).Should().Contain("2024-01-01");
+        }
+
+        [TestMethod]
+        public void IConvertible_NaT_ToDateTime_ClampsToMinValue()
+        {
+            IConvertible c = DateTime64.NaT;
+            c.ToDateTime(null).Should().Be(DateTime.MinValue);  // clamp (doesn't throw)
+
+            // Numeric IConvertible members return raw tick bits (NumPy parity).
+            c.ToInt64(null).Should().Be(long.MinValue);
+            c.ToBoolean(null).Should().BeTrue();      // NumPy: bool(NaT) = True (bits ≠ 0)
+            c.ToInt32(null).Should().Be(0);           // low 32 of long.MinValue
+        }
+
+        [TestMethod]
+        public void ConvertChangeType_RoundTripViaIConvertible()
+        {
+            // NumSharp.Converts.ChangeType uses its own dispatch, but the standard
+            // System.Convert.ChangeType path via IConvertible must also work.
+            object boxed = new DateTime64(Jan1_2024_Ticks);
+            object asLong = Convert.ChangeType(boxed, typeof(long));
+            asLong.Should().Be(Jan1_2024_Ticks);
+
+            object asDouble = Convert.ChangeType(boxed, typeof(double));
+            asDouble.Should().Be((double)Jan1_2024_Ticks);
         }
 
         // ================================================================

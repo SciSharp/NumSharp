@@ -4,43 +4,39 @@
 // ADAPTED FROM: .NET 10 System.DateTime
 //   src/dotnet/src/libraries/System.Private.CoreLib/src/System/DateTime.cs
 //
-// Motivation:
-//   NumPy's np.datetime64 is an int64-based scalar with full long.MinValue…
-//   long.MaxValue range and a NaT sentinel at long.MinValue. .NET's
-//   System.DateTime stores Ticks in the low 62 bits of a ulong (the top 2
-//   bits hold DateTimeKind), so its Ticks range is [0, 3,155,378,975,999,999,999].
-//   That leaves ~64 dtype-conversion cases where np.datetime64 can round-trip
-//   int64 values that System.DateTime physically cannot. DateTime64 fills that
-//   gap with the same public API shape as DateTime but without the Kind bits,
-//   yielding full int64 Ticks and NaT semantics.
+// SCOPE:
+//   DateTime64 is a CONVERSION HELPER TYPE, not a NumSharp NPTypeCode dtype.
+//   It exists so Converts.ToDateTime64(X) / Converts.ToX(DateTime64) can match
+//   NumPy's datetime64 semantics exactly (full int64 range, NaT sentinel).
+//   Calendar arithmetic, parsing, formatting helpers, etc. are delegated to
+//   System.DateTime (via interop) rather than duplicated here.
 //
 // Key differences from System.DateTime:
-//   • Storage: `long _ticks` (no Kind; full int64 range) vs `ulong _dateData`.
-//   • Range: long.MinValue … long.MaxValue vs [0, 3_155_378_975_999_999_999].
+//   • Storage: `long _ticks` (no Kind bits; full int64 range) vs `ulong _dateData`.
+//   • Range: long.MinValue…long.MaxValue vs [0, 3_155_378_975_999_999_999].
 //   • NaT: long.MinValue sentinel — `IsNaT`, NumPy-style propagation through
-//     arithmetic, and NumPy-style equality (NaT never equals anything).
-//   • No Kind/timezone state: NumPy datetime64 has no timezone. Interop with
+//     arithmetic. Operators (==, !=, <, >, <=, >=) follow NumPy (NaT never
+//     compares equal to anything, orderings involving NaT return false);
+//     `Equals(DateTime64)` follows the .NET convention (bit-equal → true) so
+//     the hash contract holds and NaT can be used as a dictionary key.
+//   • No Kind / timezone: NumPy datetime64 has no timezone. Interop with
 //     DateTime loses Kind; interop with DateTimeOffset uses `UtcTicks`.
-//   • No leap-second or calendar machinery beyond what DateTime exposes —
-//     year/month/day/… properties delegate to System.DateTime for values
-//     inside [0, DateTime.MaxTicks] and throw for NaT / out-of-range.
 //
 // Interop:
-//   • Implicit DateTime → DateTime64 (always lossless, drops Kind)
-//   • Implicit DateTimeOffset → DateTime64 (via UtcTicks, drops offset)
-//   • Implicit long → DateTime64 (raw tick count)
-//   • Explicit DateTime64 → DateTime (throws for NaT / out-of-range)
-//   • Explicit DateTime64 → DateTimeOffset (throws for NaT / out-of-range)
-//   • Explicit DateTime64 → long (returns raw ticks; NaT = long.MinValue)
+//   • Implicit: DateTime → DateTime64 (drops Kind)
+//   • Implicit: DateTimeOffset → DateTime64 (UtcTicks, offset discarded)
+//   • Implicit: long → DateTime64 (raw tick count)
+//   • Explicit: DateTime64 → DateTime / DateTimeOffset (throws if NaT / out-of-range)
+//   • Explicit: DateTime64 → long (raw ticks; NaT = long.MinValue)
+//   • Non-throwing alternatives: ToDateTime(fallback), TryToDateTime(out),
+//     ToDateTimeOffset(fallback), TryToDateTimeOffset(out).
 //
-// Calendar methods (Year, Month, Day, Hour, …) delegate to System.DateTime
-// when Ticks is in [0, DateTime.MaxTicks]; otherwise they throw
-// InvalidOperationException. Use IsNaT / IsValidDateTime to guard.
+// This file intentionally does NOT expose: Year/Month/Day, AddMonths/AddYears,
+// Parse/ParseExact, IsLeapYear, DaysInMonth, Now/UtcNow/Today, or Unix-time
+// helpers. If you need calendar arithmetic, convert to System.DateTime first.
 // =============================================================================
 
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -51,25 +47,29 @@ namespace NumSharp
     /// <summary>
     /// A 64-bit signed tick count representing a date/time value with full
     /// <c>long</c> range and a <see cref="NaT"/> sentinel, matching NumPy's
-    /// <c>np.datetime64</c> semantics.
+    /// <c>np.datetime64</c> semantics. Used as a conversion-helper type in
+    /// <see cref="Utilities.Converts"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// One "tick" equals 100 nanoseconds, matching <see cref="DateTime.Ticks"/>.
-    /// The zero-tick value represents midnight on 1 January 0001 (the Gregorian
-    /// epoch used by <see cref="DateTime"/>), which is <i>not</i> the Unix epoch.
-    /// Use <see cref="UnixEpoch"/> for Unix-epoch-relative calculations.
+    /// One tick equals 100 nanoseconds (same unit as <see cref="DateTime.Ticks"/>).
+    /// <see cref="Ticks"/> <c>== 0</c> is midnight of 1 January 0001 (the
+    /// Gregorian epoch of <see cref="DateTime"/>), which is <i>not</i> the Unix
+    /// epoch.
     /// </para>
     /// <para>
-    /// The <see cref="NaT"/> sentinel (<c>Ticks == long.MinValue</c>) is
-    /// <c>Not-a-Time</c>. It propagates through all arithmetic operations and
-    /// — following NumPy's rules — never compares equal to anything (including
-    /// itself), analogous to IEEE 754 <c>NaN</c>.
+    /// <b>NaT semantics.</b> <see cref="NaT"/> (<c>Ticks == long.MinValue</c>)
+    /// is <c>Not-a-Time</c>, analogous to IEEE 754 <c>NaN</c>:
+    /// <list type="bullet">
+    /// <item><description>NaT propagates through arithmetic.</description></item>
+    /// <item><description><c>operator ==</c> / <c>!=</c> / <c>&lt;</c> / <c>&gt;</c> / <c>&lt;=</c> / <c>&gt;=</c> follow NumPy: any comparison involving NaT is <c>false</c> for <c>==</c>/&lt;/&gt;/&lt;=/&gt;=, and <c>true</c> for <c>!=</c>.</description></item>
+    /// <item><description><see cref="Equals(DateTime64)"/> follows the <see cref="IEquatable{T}"/> convention (two NaTs are considered equal bit-wise) so that <see cref="object.GetHashCode"/> is contract-compliant and NaT can be used as a <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/> key. This mirrors how .NET handles <see cref="double.NaN"/>: <c>double.NaN.Equals(double.NaN)</c> is <c>true</c> but <c>double.NaN == double.NaN</c> is <c>false</c>.</description></item>
+    /// </list>
     /// </para>
     /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     [Serializable]
-    public readonly partial struct DateTime64
+    public readonly struct DateTime64
         : IComparable,
           IComparable<DateTime64>,
           IEquatable<DateTime64>,
@@ -78,28 +78,23 @@ namespace NumSharp
           ISpanFormattable
     {
         // ---------------------------------------------------------------------
-        // Constants (mirroring DateTime's layout, minus Kind bits)
+        // Constants
         // ---------------------------------------------------------------------
 
-        /// <summary>Ticks per 100-ns unit — for symmetry with DateTime constants.</summary>
-        internal const long TicksPerMicrosecond = TimeSpan.TicksPerMicrosecond;
-        internal const long TicksPerMillisecond = TimeSpan.TicksPerMillisecond;
-        internal const long TicksPerSecond = TimeSpan.TicksPerSecond;
-        internal const long TicksPerMinute = TimeSpan.TicksPerMinute;
-        internal const long TicksPerHour = TimeSpan.TicksPerHour;
-        internal const long TicksPerDay = TimeSpan.TicksPerDay;
-
-        /// <summary>The minimum legal tick value for a <see cref="System.DateTime"/>.</summary>
+        /// <summary>The minimum legal tick value of a <see cref="System.DateTime"/>.</summary>
         internal const long DotNetMinTicks = 0L;
 
-        /// <summary>The maximum legal tick value for a <see cref="System.DateTime"/> (9999-12-31 23:59:59.9999999).</summary>
+        /// <summary>The maximum legal tick value of a <see cref="System.DateTime"/> (9999-12-31 23:59:59.9999999).</summary>
         internal const long DotNetMaxTicks = 3_155_378_975_999_999_999L;
 
         /// <summary>NaT sentinel tick value, matching NumPy (<c>long.MinValue</c>).</summary>
         internal const long NaTTicks = long.MinValue;
 
-        /// <summary>Ticks at the Unix epoch (1970-01-01 UTC), matching <see cref="DateTime.UnixEpoch"/>.</summary>
-        internal const long UnixEpochTicks = 621_355_968_000_000_000L;
+        // NumPy datetime64 boundaries as doubles, for hardened float → int64 cast.
+        // (double)long.MinValue is exactly representable; (double)long.MaxValue
+        // rounds up to 2^63 which is NOT representable as a signed int64.
+        private const double Int64MaxAsDoubleUpperExclusive = 9223372036854775808.0;   // 2^63
+        private const double Int64MinAsDoubleLowerExclusive = -9223372036854775808.0;  // -2^63 = (double)long.MinValue
 
         // ---------------------------------------------------------------------
         // Static Fields
@@ -117,21 +112,14 @@ namespace NumSharp
         /// <summary>The .NET calendar epoch (midnight 0001-01-01), same as <see cref="DateTime.MinValue"/>.</summary>
         public static readonly DateTime64 Epoch = default;
 
-        /// <summary>The Unix epoch (midnight 1970-01-01 UTC).</summary>
-        public static readonly DateTime64 UnixEpoch = new DateTime64(UnixEpochTicks);
-
         // ---------------------------------------------------------------------
-        // Instance Field (single long — full int64 range, no Kind bits)
+        // Instance field — single long, full int64 range, no Kind bits
         // ---------------------------------------------------------------------
 
-        /// <summary>
-        /// Raw 100-ns tick count as a signed int64. Full <c>long</c> range is
-        /// legal; <c>long.MinValue</c> is the NaT sentinel.
-        /// </summary>
         private readonly long _ticks;
 
         // ---------------------------------------------------------------------
-        // Constructors
+        // Constructors (minimal surface; calendar construction goes via DateTime)
         // ---------------------------------------------------------------------
 
         /// <summary>Constructs a <see cref="DateTime64"/> from a raw tick count (any int64, including NaT).</summary>
@@ -151,42 +139,18 @@ namespace NumSharp
 
         /// <summary>
         /// Constructs a <see cref="DateTime64"/> from a <see cref="System.DateTimeOffset"/>.
-        /// The value is stored as <see cref="DateTimeOffset.UtcTicks"/> (offset discarded).
+        /// Stored as <see cref="DateTimeOffset.UtcTicks"/> (offset discarded).
         /// </summary>
         public DateTime64(DateTimeOffset dateTimeOffset)
         {
             _ticks = dateTimeOffset.UtcTicks;
         }
 
-        /// <summary>Constructs a <see cref="DateTime64"/> from a <see cref="DateOnly"/> + <see cref="TimeOnly"/>.</summary>
-        public DateTime64(DateOnly date, TimeOnly time)
-        {
-            _ticks = date.DayNumber * TicksPerDay + time.Ticks;
-        }
-
-        /// <summary>Constructs a <see cref="DateTime64"/> from year/month/day (Gregorian, midnight).</summary>
-        public DateTime64(int year, int month, int day)
-        {
-            _ticks = new DateTime(year, month, day).Ticks;
-        }
-
-        /// <summary>Constructs a <see cref="DateTime64"/> from year/month/day/hour/minute/second.</summary>
-        public DateTime64(int year, int month, int day, int hour, int minute, int second)
-        {
-            _ticks = new DateTime(year, month, day, hour, minute, second).Ticks;
-        }
-
-        /// <summary>Constructs a <see cref="DateTime64"/> from year/month/day/hour/minute/second/millisecond.</summary>
-        public DateTime64(int year, int month, int day, int hour, int minute, int second, int millisecond)
-        {
-            _ticks = new DateTime(year, month, day, hour, minute, second, millisecond).Ticks;
-        }
-
         // ---------------------------------------------------------------------
         // Core properties
         // ---------------------------------------------------------------------
 
-        /// <summary>The raw 100-ns tick count (full int64, may equal <c>long.MinValue</c> for NaT).</summary>
+        /// <summary>The raw 100-ns tick count (full int64; <c>long.MinValue</c> for NaT).</summary>
         public long Ticks
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -201,8 +165,8 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// <see langword="true"/> iff <see cref="Ticks"/> is inside the legal range
-        /// of <see cref="System.DateTime"/>, i.e. <c>[0, DateTime.MaxValue.Ticks]</c>.
+        /// <see langword="true"/> iff <see cref="Ticks"/> is inside the legal range of
+        /// <see cref="System.DateTime"/>, i.e. <c>[0, DateTime.MaxValue.Ticks]</c>.
         /// </summary>
         public bool IsValidDateTime
         {
@@ -211,85 +175,14 @@ namespace NumSharp
         }
 
         // ---------------------------------------------------------------------
-        // Calendar properties — delegate to System.DateTime when in range.
-        // These throw InvalidOperationException for NaT / out-of-range values.
-        // ---------------------------------------------------------------------
-
-        /// <summary>Gets the year component [1..9999]. Throws for NaT / out-of-range.</summary>
-        public int Year => RequireValidDateTime().Year;
-
-        /// <summary>Gets the month component [1..12]. Throws for NaT / out-of-range.</summary>
-        public int Month => RequireValidDateTime().Month;
-
-        /// <summary>Gets the day component [1..31]. Throws for NaT / out-of-range.</summary>
-        public int Day => RequireValidDateTime().Day;
-
-        /// <summary>Gets the hour component [0..23]. Throws for NaT / out-of-range.</summary>
-        public int Hour => RequireValidDateTime().Hour;
-
-        /// <summary>Gets the minute component [0..59]. Throws for NaT / out-of-range.</summary>
-        public int Minute => RequireValidDateTime().Minute;
-
-        /// <summary>Gets the second component [0..59]. Throws for NaT / out-of-range.</summary>
-        public int Second => RequireValidDateTime().Second;
-
-        /// <summary>Gets the millisecond component [0..999]. Throws for NaT / out-of-range.</summary>
-        public int Millisecond => RequireValidDateTime().Millisecond;
-
-        /// <summary>Gets the microsecond component [0..999]. Throws for NaT / out-of-range.</summary>
-        public int Microsecond => RequireValidDateTime().Microsecond;
-
-        /// <summary>Gets the nanosecond component [0..900, step 100]. Throws for NaT / out-of-range.</summary>
-        public int Nanosecond => RequireValidDateTime().Nanosecond;
-
-        /// <summary>Gets the day-of-week. Throws for NaT / out-of-range.</summary>
-        public DayOfWeek DayOfWeek => RequireValidDateTime().DayOfWeek;
-
-        /// <summary>Gets the day-of-year [1..366]. Throws for NaT / out-of-range.</summary>
-        public int DayOfYear => RequireValidDateTime().DayOfYear;
-
-        /// <summary>Gets the date portion (time-of-day zeroed). Throws for NaT / out-of-range.</summary>
-        public DateTime64 Date
-        {
-            get
-            {
-                var dt = RequireValidDateTime();
-                return new DateTime64(dt.Date.Ticks);
-            }
-        }
-
-        /// <summary>Gets the time-of-day component as a <see cref="TimeSpan"/>. Throws for NaT / out-of-range.</summary>
-        public TimeSpan TimeOfDay
-        {
-            get
-            {
-                var dt = RequireValidDateTime();
-                return dt.TimeOfDay;
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Now / UtcNow / Today — mirror DateTime
-        // ---------------------------------------------------------------------
-
-        /// <summary>Current local time as a <see cref="DateTime64"/>.</summary>
-        public static DateTime64 Now => new DateTime64(DateTime.Now);
-
-        /// <summary>Current UTC time as a <see cref="DateTime64"/>.</summary>
-        public static DateTime64 UtcNow => new DateTime64(DateTime.UtcNow);
-
-        /// <summary>Current date (midnight) as a <see cref="DateTime64"/>.</summary>
-        public static DateTime64 Today => new DateTime64(DateTime.Today);
-
-        // ---------------------------------------------------------------------
-        // Interop — implicit/explicit conversions
+        // Interop: implicit widening, explicit narrowing
         // ---------------------------------------------------------------------
 
         /// <summary>Implicit widening from <see cref="System.DateTime"/> (drops Kind).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator DateTime64(DateTime value) => new DateTime64(value.Ticks);
 
-        /// <summary>Implicit widening from <see cref="System.DateTimeOffset"/> (via UtcTicks; offset discarded).</summary>
+        /// <summary>Implicit widening from <see cref="System.DateTimeOffset"/> (via UtcTicks).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator DateTime64(DateTimeOffset value) => new DateTime64(value.UtcTicks);
 
@@ -309,90 +202,72 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static explicit operator long(DateTime64 value) => value._ticks;
 
-        /// <summary>Convert to <see cref="System.DateTime"/>. Throws for NaT / out-of-range.</summary>
+        /// <summary>Convert to <see cref="System.DateTime"/>. Throws <see cref="InvalidOperationException"/> for NaT / out-of-range.</summary>
         public DateTime ToDateTime()
         {
-            var dt = RequireValidDateTime();
-            return dt;
+            if (IsNaT)
+                throw new InvalidOperationException("DateTime64 is NaT (Not a Time); cannot be converted to System.DateTime.");
+            if (!IsValidDateTime)
+                throw new InvalidOperationException($"DateTime64 ticks {_ticks} are outside System.DateTime's legal range [0, {DotNetMaxTicks}].");
+            return new DateTime(_ticks);
         }
 
         /// <summary>
-        /// Convert to <see cref="System.DateTime"/>, clamping NaT / out-of-range
-        /// values to <paramref name="fallback"/> rather than throwing.
+        /// Convert to <see cref="System.DateTime"/>, returning <paramref name="fallback"/>
+        /// for NaT / out-of-range values instead of throwing.
         /// </summary>
         public DateTime ToDateTime(DateTime fallback)
         {
-            if (IsNaT || !IsValidDateTime)
-                return fallback;
+            if (IsNaT || !IsValidDateTime) return fallback;
             return new DateTime(_ticks);
         }
 
         /// <summary>
         /// Try to convert to <see cref="System.DateTime"/>. Returns <see langword="false"/>
-        /// for NaT / out-of-range values (<paramref name="result"/> is set to <see cref="DateTime.MinValue"/>).
+        /// for NaT / out-of-range values (<paramref name="result"/> set to <see cref="DateTime.MinValue"/>).
         /// </summary>
         public bool TryToDateTime(out DateTime result)
         {
-            if (IsNaT || !IsValidDateTime)
-            {
-                result = DateTime.MinValue;
-                return false;
-            }
+            if (IsNaT || !IsValidDateTime) { result = DateTime.MinValue; return false; }
             result = new DateTime(_ticks);
             return true;
         }
 
-        /// <summary>Convert to <see cref="System.DateTimeOffset"/> at UTC offset. Throws for NaT / out-of-range.</summary>
+        /// <summary>Convert to <see cref="System.DateTimeOffset"/> at UTC. Throws for NaT / out-of-range.</summary>
         public DateTimeOffset ToDateTimeOffset()
         {
-            var dt = RequireValidDateTime();
-            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc));
-        }
-
-        /// <summary>Convert to <see cref="System.DateTimeOffset"/> at the given offset. Throws for NaT / out-of-range.</summary>
-        public DateTimeOffset ToDateTimeOffset(TimeSpan offset)
-        {
-            var dt = RequireValidDateTime();
-            return new DateTimeOffset(dt, offset);
+            if (IsNaT)
+                throw new InvalidOperationException("DateTime64 is NaT; cannot be converted to System.DateTimeOffset.");
+            if (!IsValidDateTime)
+                throw new InvalidOperationException($"DateTime64 ticks {_ticks} are outside System.DateTime's legal range.");
+            return new DateTimeOffset(_ticks, TimeSpan.Zero);
         }
 
         /// <summary>
-        /// Convert to Unix time in seconds (UTC), matching <see cref="DateTimeOffset.ToUnixTimeSeconds"/>.
-        /// NaT → <see cref="long.MinValue"/>; out-of-.NET-range values use raw tick arithmetic.
+        /// Convert to <see cref="System.DateTimeOffset"/>, returning <paramref name="fallback"/>
+        /// for NaT / out-of-range values instead of throwing.
         /// </summary>
-        public long ToUnixTimeSeconds()
+        public DateTimeOffset ToDateTimeOffset(DateTimeOffset fallback)
         {
-            if (IsNaT) return long.MinValue;
-            // Use raw tick math so we don't lose values outside DateTime's range.
-            return (_ticks - UnixEpochTicks) / TicksPerSecond;
+            if (IsNaT || !IsValidDateTime) return fallback;
+            return new DateTimeOffset(_ticks, TimeSpan.Zero);
         }
 
-        /// <summary>Convert to Unix time in milliseconds (UTC). NaT → <see cref="long.MinValue"/>.</summary>
-        public long ToUnixTimeMilliseconds()
+        /// <summary>Try to convert to <see cref="System.DateTimeOffset"/>.</summary>
+        public bool TryToDateTimeOffset(out DateTimeOffset result)
         {
-            if (IsNaT) return long.MinValue;
-            return (_ticks - UnixEpochTicks) / TicksPerMillisecond;
-        }
-
-        /// <summary>Construct from Unix time (seconds since 1970-01-01 UTC).</summary>
-        public static DateTime64 FromUnixTimeSeconds(long seconds)
-        {
-            if (seconds == long.MinValue) return NaT;
-            // Saturate overflow to NaT (NumPy behavior).
-            try { return new DateTime64(checked(seconds * TicksPerSecond + UnixEpochTicks)); }
-            catch (OverflowException) { return NaT; }
-        }
-
-        /// <summary>Construct from Unix time (milliseconds since 1970-01-01 UTC).</summary>
-        public static DateTime64 FromUnixTimeMilliseconds(long milliseconds)
-        {
-            if (milliseconds == long.MinValue) return NaT;
-            try { return new DateTime64(checked(milliseconds * TicksPerMillisecond + UnixEpochTicks)); }
-            catch (OverflowException) { return NaT; }
+            if (IsNaT || !IsValidDateTime)
+            {
+                result = new DateTimeOffset(DateTime.MinValue, TimeSpan.Zero);
+                return false;
+            }
+            result = new DateTimeOffset(_ticks, TimeSpan.Zero);
+            return true;
         }
 
         // ---------------------------------------------------------------------
-        // Arithmetic (NaT propagates; overflow saturates to NaT, matching NumPy)
+        // Arithmetic — the minimum needed for NumPy-style dt64 + td64 math.
+        // NaT propagates; overflow saturates to NaT.
         // ---------------------------------------------------------------------
 
         /// <summary>Add a raw tick delta. NaT propagates; overflow saturates to NaT.</summary>
@@ -407,54 +282,17 @@ namespace NumSharp
         }
 
         /// <summary>Add a <see cref="TimeSpan"/>. NaT propagates; overflow saturates to NaT.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DateTime64 Add(TimeSpan value) => AddTicks(value.Ticks);
 
-        /// <summary>Add whole and fractional days. NaT propagates; overflow saturates to NaT.</summary>
-        public DateTime64 AddDays(double value) => AddTicks((long)(value * TicksPerDay));
-
-        /// <summary>Add whole and fractional hours. NaT propagates.</summary>
-        public DateTime64 AddHours(double value) => AddTicks((long)(value * TicksPerHour));
-
-        /// <summary>Add whole and fractional minutes. NaT propagates.</summary>
-        public DateTime64 AddMinutes(double value) => AddTicks((long)(value * TicksPerMinute));
-
-        /// <summary>Add whole and fractional seconds. NaT propagates.</summary>
-        public DateTime64 AddSeconds(double value) => AddTicks((long)(value * TicksPerSecond));
-
-        /// <summary>Add whole and fractional milliseconds. NaT propagates.</summary>
-        public DateTime64 AddMilliseconds(double value) => AddTicks((long)(value * TicksPerMillisecond));
-
-        /// <summary>Add whole and fractional microseconds. NaT propagates.</summary>
-        public DateTime64 AddMicroseconds(double value) => AddTicks((long)(value * TicksPerMicrosecond));
-
-        /// <summary>Add the specified number of months. NaT / out-of-range propagate to NaT.</summary>
-        public DateTime64 AddMonths(int months)
-        {
-            if (IsNaT || !IsValidDateTime) return NaT;
-            try { return new DateTime64(new DateTime(_ticks).AddMonths(months)); }
-            catch (ArgumentOutOfRangeException) { return NaT; }
-        }
-
-        /// <summary>Add the specified number of years. NaT / out-of-range propagate to NaT.</summary>
-        public DateTime64 AddYears(int value)
-        {
-            if (IsNaT || !IsValidDateTime) return NaT;
-            try { return new DateTime64(new DateTime(_ticks).AddYears(value)); }
-            catch (ArgumentOutOfRangeException) { return NaT; }
-        }
-
-        /// <summary>Gets the number of days in the specified month of the specified year.</summary>
-        public static int DaysInMonth(int year, int month) => DateTime.DaysInMonth(year, month);
-
-        /// <summary>Returns whether the specified year is a leap year in the Gregorian calendar.</summary>
-        public static bool IsLeapYear(int year) => DateTime.IsLeapYear(year);
-
-        /// <summary>Subtract a <see cref="TimeSpan"/>. NaT propagates.</summary>
+        /// <summary>Subtract a <see cref="TimeSpan"/>. NaT propagates; overflow saturates to NaT.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DateTime64 Subtract(TimeSpan value) => AddTicks(unchecked(-value.Ticks));
 
         /// <summary>
         /// Difference as a <see cref="TimeSpan"/>. If either operand is NaT,
-        /// returns <see cref="TimeSpan.MinValue"/> (closest NaT-equivalent for TimeSpan).
+        /// returns <see cref="TimeSpan.MinValue"/> (TimeSpan's NaT-equivalent,
+        /// since <c>TimeSpan.MinValue.Ticks == long.MinValue</c>).
         /// </summary>
         public TimeSpan Subtract(DateTime64 other)
         {
@@ -462,26 +300,31 @@ namespace NumSharp
             return new TimeSpan(unchecked(_ticks - other._ticks));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime64 operator +(DateTime64 d, TimeSpan t) => d.Add(t);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime64 operator -(DateTime64 d, TimeSpan t) => d.Subtract(t);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan operator -(DateTime64 d1, DateTime64 d2) => d1.Subtract(d2);
 
         // ---------------------------------------------------------------------
-        // Equality / Comparison (NumPy NaT semantics)
-        // NumPy: NaT != NaT (NaN-like); ordering of NaT is implementation-defined
-        //        but equality is the commonly-observed behavior. We follow that.
+        // Equality / Comparison
+        //
+        // .NET convention vs NumPy semantics:
+        //   • Equals() returns true for bit-equal ticks (NaT.Equals(NaT) == true)
+        //     so GetHashCode honors the Equals → equal-hash contract, and NaT
+        //     can be used as a Dictionary/HashSet key. Mirrors System.Double,
+        //     where double.NaN.Equals(double.NaN) is true.
+        //   • operator == / != / < / > / <= / >= follow NumPy (NaT vs anything
+        //     → false for ==/</>/<=/>=, true for !=). Mirrors System.Double,
+        //     where double.NaN == double.NaN is false.
         // ---------------------------------------------------------------------
 
-        /// <summary>
-        /// Equality test following NumPy datetime64 semantics: <see cref="NaT"/>
-        /// never equals anything (including itself).
-        /// </summary>
-        public bool Equals(DateTime64 other)
-        {
-            // NumPy: NaT == anything → False (NaN-like).
-            if (IsNaT || other.IsNaT) return false;
-            return _ticks == other._ticks;
-        }
+        /// <summary>Bitwise tick equality (<c>NaT.Equals(NaT)</c> returns <see langword="true"/>).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool Equals(DateTime64 other) => _ticks == other._ticks;
 
         public override bool Equals([NotNullWhen(true)] object? value)
             => value is DateTime64 d && Equals(d);
@@ -490,7 +333,7 @@ namespace NumSharp
 
         public override int GetHashCode() => _ticks.GetHashCode();
 
-        /// <summary>Compare two <see cref="DateTime64"/> values by ticks (NaT ordering follows int64).</summary>
+        /// <summary>Compares by ticks. NaT sorts before every other value (as the smallest int64).</summary>
         public static int Compare(DateTime64 t1, DateTime64 t2)
         {
             long a = t1._ticks, b = t2._ticks;
@@ -499,6 +342,7 @@ namespace NumSharp
             return 0;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int CompareTo(DateTime64 value) => Compare(this, value);
 
         public int CompareTo(object? value)
@@ -509,9 +353,12 @@ namespace NumSharp
             throw new ArgumentException("Object must be of type DateTime64 or DateTime.", nameof(value));
         }
 
-        // Strict comparison operators: any NaT operand → False (NumPy semantics).
-        public static bool operator ==(DateTime64 d1, DateTime64 d2) => d1.Equals(d2);
-        public static bool operator !=(DateTime64 d1, DateTime64 d2) => !d1.Equals(d2);
+        // Operator semantics follow NumPy (NaT vs anything = false for ordering / ==).
+        public static bool operator ==(DateTime64 d1, DateTime64 d2)
+            => !d1.IsNaT && !d2.IsNaT && d1._ticks == d2._ticks;
+
+        public static bool operator !=(DateTime64 d1, DateTime64 d2)
+            => d1.IsNaT || d2.IsNaT || d1._ticks != d2._ticks;
 
         public static bool operator <(DateTime64 d1, DateTime64 d2)
             => !d1.IsNaT && !d2.IsNaT && d1._ticks < d2._ticks;
@@ -529,13 +376,16 @@ namespace NumSharp
         // Formatting
         // ---------------------------------------------------------------------
 
+        private const string NaTString = "NaT";
+
         /// <summary>
-        /// Formats as ISO-8601 for in-range values, <c>"NaT"</c> for NaT, and
-        /// <c>"DateTime64(ticks=N)"</c> for values outside <see cref="System.DateTime"/>'s range.
+        /// Formats as ISO-8601 (<see cref="DateTime"/>'s <c>"o"</c> format) for
+        /// in-range values, <c>"NaT"</c> for NaT, and <c>"DateTime64(ticks=N)"</c>
+        /// for values outside <see cref="System.DateTime"/>'s range.
         /// </summary>
         public override string ToString()
         {
-            if (IsNaT) return "NaT";
+            if (IsNaT) return NaTString;
             if (!IsValidDateTime) return $"DateTime64(ticks={_ticks})";
             return new DateTime(_ticks).ToString("o", CultureInfo.InvariantCulture);
         }
@@ -546,98 +396,123 @@ namespace NumSharp
 
         public string ToString(string? format, IFormatProvider? provider)
         {
-            if (IsNaT) return "NaT";
+            if (IsNaT) return NaTString;
             if (!IsValidDateTime) return $"DateTime64(ticks={_ticks})";
-            // Default to ISO-8601 (matches NumPy's datetime64 text representation).
+            // ISO-8601 by default (NumPy's datetime64 str() uses ISO-8601-like text).
             if (string.IsNullOrEmpty(format)) format = "o";
             return new DateTime(_ticks).ToString(format, provider ?? CultureInfo.InvariantCulture);
         }
 
-        public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
+        /// <summary>
+        /// Non-allocating formatter: writes directly to <paramref name="destination"/>
+        /// when possible via <see cref="DateTime.TryFormat"/>.
+        /// </summary>
+        public bool TryFormat(Span<char> destination, out int charsWritten,
+                              ReadOnlySpan<char> format = default, IFormatProvider? provider = null)
         {
-            string s = ToString(format.ToString(), provider);
-            if (s.Length > destination.Length)
+            if (IsNaT)
+                return TryCopy(NaTString, destination, out charsWritten);
+
+            if (!IsValidDateTime)
+            {
+                // Cold path for out-of-.NET-range values. Allocate here only — rare.
+                string s = $"DateTime64(ticks={_ticks})";
+                return TryCopy(s, destination, out charsWritten);
+            }
+
+            if (format.IsEmpty) format = "o";
+            return new DateTime(_ticks).TryFormat(destination, out charsWritten, format,
+                                                   provider ?? CultureInfo.InvariantCulture);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool TryCopy(string source, Span<char> destination, out int charsWritten)
+        {
+            if (destination.Length < source.Length)
             {
                 charsWritten = 0;
                 return false;
             }
-            s.AsSpan().CopyTo(destination);
-            charsWritten = s.Length;
+            source.AsSpan().CopyTo(destination);
+            charsWritten = source.Length;
             return true;
         }
 
         // ---------------------------------------------------------------------
-        // Parsing (delegate to DateTime for in-range values; "NaT" for NaT)
+        // Minimal Parse / TryParse — just enough to round-trip our ToString()
+        // and handle the "NaT" literal. Full calendar parsing delegates to
+        // System.DateTime, which already has exhaustive locale / format support.
         // ---------------------------------------------------------------------
 
+        /// <summary>
+        /// Parses a string produced by <see cref="ToString()"/>. Case-sensitive
+        /// <c>"NaT"</c> literal returns <see cref="NaT"/>. Otherwise delegates
+        /// to <see cref="DateTime.Parse(string, IFormatProvider?)"/>.
+        /// </summary>
         public static DateTime64 Parse(string s)
         {
-            if (s == "NaT") return NaT;
-            return new DateTime64(DateTime.Parse(s, CultureInfo.CurrentCulture));
+            if (s is null) throw new ArgumentNullException(nameof(s));
+            if (s == NaTString) return NaT;
+            return new DateTime64(DateTime.Parse(s, CultureInfo.InvariantCulture));
         }
 
         public static DateTime64 Parse(string s, IFormatProvider? provider)
         {
-            if (s == "NaT") return NaT;
+            if (s is null) throw new ArgumentNullException(nameof(s));
+            if (s == NaTString) return NaT;
             return new DateTime64(DateTime.Parse(s, provider));
         }
 
         public static bool TryParse([NotNullWhen(true)] string? s, out DateTime64 result)
         {
-            if (s == "NaT") { result = NaT; return true; }
-            if (DateTime.TryParse(s, out var dt)) { result = new DateTime64(dt); return true; }
+            if (s is null) { result = default; return false; }
+            if (s == NaTString) { result = NaT; return true; }
+            if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            {
+                result = new DateTime64(dt);
+                return true;
+            }
             result = default;
             return false;
         }
 
-        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, DateTimeStyles styles, out DateTime64 result)
+        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider,
+                                    DateTimeStyles styles, out DateTime64 result)
         {
-            if (s == "NaT") { result = NaT; return true; }
-            if (DateTime.TryParse(s, provider, styles, out var dt)) { result = new DateTime64(dt); return true; }
-            result = default;
-            return false;
-        }
-
-        public static DateTime64 ParseExact(string s, string format, IFormatProvider? provider)
-        {
-            if (s == "NaT") return NaT;
-            return new DateTime64(DateTime.ParseExact(s, format, provider));
-        }
-
-        public static DateTime64 ParseExact(string s, string[] formats, IFormatProvider? provider, DateTimeStyles style)
-        {
-            if (s == "NaT") return NaT;
-            return new DateTime64(DateTime.ParseExact(s, formats, provider, style));
-        }
-
-        public static bool TryParseExact([NotNullWhen(true)] string? s, [NotNullWhen(true)] string? format,
-            IFormatProvider? provider, DateTimeStyles style, out DateTime64 result)
-        {
-            if (s == "NaT") { result = NaT; return true; }
-            if (DateTime.TryParseExact(s, format, provider, style, out var dt)) { result = new DateTime64(dt); return true; }
+            if (s is null) { result = default; return false; }
+            if (s == NaTString) { result = NaT; return true; }
+            if (DateTime.TryParse(s, provider, styles, out var dt))
+            {
+                result = new DateTime64(dt);
+                return true;
+            }
             result = default;
             return false;
         }
 
         // ---------------------------------------------------------------------
-        // IConvertible — needed for Convert.ChangeType + NumSharp's type-switch paths.
-        // Value is converted using the raw int64 tick count (matching NumPy).
+        // IConvertible — needed for Convert.ChangeType + NumSharp's type-switch
+        // paths. Values convert using the raw int64 tick count (NumPy parity).
+        //
+        // GetTypeCode returns TypeCode.Object (NOT TypeCode.DateTime) because
+        // DateTime64 is NOT System.DateTime; we want Convert.ChangeType to treat
+        // it as "unknown-to-IConvertible-fast-path" and fall back to ToType.
         // ---------------------------------------------------------------------
 
-        TypeCode IConvertible.GetTypeCode() => TypeCode.DateTime;
+        TypeCode IConvertible.GetTypeCode() => TypeCode.Object;
 
-        bool IConvertible.ToBoolean(IFormatProvider? provider) => _ticks != 0L;  // NaT ticks=long.MinValue ≠ 0 → true (matches NumPy)
-        sbyte IConvertible.ToSByte(IFormatProvider? provider) => unchecked((sbyte)_ticks);
-        byte IConvertible.ToByte(IFormatProvider? provider) => unchecked((byte)_ticks);
-        short IConvertible.ToInt16(IFormatProvider? provider) => unchecked((short)_ticks);
-        ushort IConvertible.ToUInt16(IFormatProvider? provider) => unchecked((ushort)_ticks);
-        int IConvertible.ToInt32(IFormatProvider? provider) => unchecked((int)_ticks);
-        uint IConvertible.ToUInt32(IFormatProvider? provider) => unchecked((uint)_ticks);
-        long IConvertible.ToInt64(IFormatProvider? provider) => _ticks;
+        bool IConvertible.ToBoolean(IFormatProvider? provider) => _ticks != 0L;     // NaT.Ticks = long.MinValue ≠ 0 → True (NumPy parity)
+        sbyte IConvertible.ToSByte(IFormatProvider? provider)  => unchecked((sbyte)_ticks);
+        byte IConvertible.ToByte(IFormatProvider? provider)    => unchecked((byte)_ticks);
+        short IConvertible.ToInt16(IFormatProvider? provider)  => unchecked((short)_ticks);
+        ushort IConvertible.ToUInt16(IFormatProvider? provider)=> unchecked((ushort)_ticks);
+        int IConvertible.ToInt32(IFormatProvider? provider)    => unchecked((int)_ticks);
+        uint IConvertible.ToUInt32(IFormatProvider? provider)  => unchecked((uint)_ticks);
+        long IConvertible.ToInt64(IFormatProvider? provider)   => _ticks;
         ulong IConvertible.ToUInt64(IFormatProvider? provider) => unchecked((ulong)_ticks);
-        char IConvertible.ToChar(IFormatProvider? provider) => unchecked((char)_ticks);
+        char IConvertible.ToChar(IFormatProvider? provider)    => unchecked((char)_ticks);
         float IConvertible.ToSingle(IFormatProvider? provider) => (float)_ticks;
-        double IConvertible.ToDouble(IFormatProvider? provider) => (double)_ticks;
+        double IConvertible.ToDouble(IFormatProvider? provider)=> (double)_ticks;
         decimal IConvertible.ToDecimal(IFormatProvider? provider) => (decimal)_ticks;
         DateTime IConvertible.ToDateTime(IFormatProvider? provider) => ToDateTime(DateTime.MinValue);
         string IConvertible.ToString(IFormatProvider? provider) => ToString(null, provider);
@@ -646,27 +521,43 @@ namespace NumSharp
         {
             if (conversionType == typeof(DateTime64)) return this;
             if (conversionType == typeof(DateTime)) return ToDateTime(DateTime.MinValue);
-            if (conversionType == typeof(DateTimeOffset)) return IsValidDateTime && !IsNaT ? ToDateTimeOffset() : (object)new DateTimeOffset(DateTime.MinValue);
+            if (conversionType == typeof(DateTimeOffset))
+                return ToDateTimeOffset(new DateTimeOffset(DateTime.MinValue, TimeSpan.Zero));
+            if (conversionType == typeof(TimeSpan)) return new TimeSpan(_ticks);
             if (conversionType == typeof(long)) return _ticks;
             if (conversionType == typeof(ulong)) return unchecked((ulong)_ticks);
             if (conversionType == typeof(double)) return (double)_ticks;
-            if (conversionType == typeof(int)) return unchecked((int)_ticks);
             if (conversionType == typeof(string)) return ToString(null, provider);
             return Convert.ChangeType(_ticks, conversionType, provider);
         }
 
         // ---------------------------------------------------------------------
-        // Helpers
+        // Hardened float → int64 bounds check
+        //
+        // Used by Converts.ToDateTime64(double). Keeping it here (as an
+        // internal helper) ensures the rule stays in sync with the struct's
+        // NaT semantics and is not duplicated across call sites.
         // ---------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private DateTime RequireValidDateTime()
+        /// <summary>
+        /// Converts a <see cref="double"/> to a <see cref="DateTime64"/> using
+        /// NumPy's <c>float → datetime64</c> rules: NaN, ±Inf, and values
+        /// outside <c>[long.MinValue, long.MaxValue]</c> → <see cref="NaT"/>;
+        /// otherwise truncate toward zero and wrap in <see cref="DateTime64"/>.
+        /// </summary>
+        internal static DateTime64 FromDoubleOrNaT(double value)
         {
-            if (IsNaT)
-                throw new InvalidOperationException("DateTime64 is NaT (Not a Time); cannot be converted to System.DateTime.");
-            if (!IsValidDateTime)
-                throw new InvalidOperationException($"DateTime64 ticks {_ticks} are outside System.DateTime's legal range [0, {DotNetMaxTicks}].");
-            return new DateTime(_ticks);
+            if (double.IsNaN(value) || double.IsInfinity(value)) return NaT;
+            // 2^63 is the exclusive upper bound: (double)long.MaxValue rounds up
+            // to 2^63 which cannot be represented as a signed int64.
+            if (value >= Int64MaxAsDoubleUpperExclusive) return NaT;
+            // 2^63 negated is exactly (double)long.MinValue. Anything strictly
+            // smaller overflows; anything ≥ long.MinValue is castable. We must
+            // exclude the exact long.MinValue value too because a DateTime64
+            // with that tick count is NaT — returning "valid dt64 == NaT" would
+            // be indistinguishable from an actual overflow in downstream logic.
+            if (value <= Int64MinAsDoubleLowerExclusive) return NaT;
+            return new DateTime64((long)value);
         }
     }
 }
