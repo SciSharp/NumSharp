@@ -419,17 +419,9 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(double value)
         {
-            // NumPy behavior (char as 16-bit unsigned, uint16 analog):
-            // NaN/Inf -> 0, values outside int32 range -> 0, truncate toward zero and wrap
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return (char)0;
-            }
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                return (char)0;
-            }
-            return unchecked((char)(ushort)(int)value);
+            // NumPy: int32 intermediate, wrap to uint16 (char is 16-bit unsigned).
+            // See ToSByte(double) rationale.
+            return unchecked((char)(ushort)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -593,19 +585,11 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(double value)
         {
-            // NumPy behavior: NaN/Inf -> 0 for int8
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return 0;
-            }
-            // NumPy uses int32 as intermediate for small types
-            // Values outside int32 range overflow to 0
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                return 0;
-            }
-            // NumPy: truncate toward zero, then wrap modularly to sbyte
-            return unchecked((sbyte)(int)value);
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> -1), while values outside int32 range collapse to int.MinValue whose
+            // low byte is 0 (NumPy's NaT-propagation convention for small ints).
+            return unchecked((sbyte)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -780,19 +764,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
-            // NumPy behavior: NaN/Inf -> 0 for uint8
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return 0;
-            }
-            // NumPy uses int32 as intermediate for small types
-            // Values outside int32 range overflow to 0
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                return 0;
-            }
-            // NumPy: truncate toward zero, then wrap modularly to byte
-            return unchecked((byte)(int)value);
+            // NumPy: int32 intermediate, wrap to uint8. See ToSByte(double) rationale.
+            return unchecked((byte)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -965,19 +938,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
-            // NumPy behavior: NaN/Inf -> 0 for int16
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return 0;
-            }
-            // NumPy uses int32 as intermediate for small types
-            // Values outside int32 range overflow to 0
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                return 0;
-            }
-            // NumPy: truncate toward zero, then wrap modularly to short
-            return unchecked((short)(int)value);
+            // NumPy: int32 intermediate, wrap to int16. See ToSByte(double) rationale.
+            return unchecked((short)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1154,19 +1116,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
-            // NumPy behavior: NaN/Inf -> 0 for uint16
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return 0;
-            }
-            // NumPy uses int32 as intermediate for small types
-            // Values outside int32 range overflow to 0
-            if (value < int.MinValue || value > int.MaxValue)
-            {
-                return 0;
-            }
-            // NumPy: truncate toward zero, then wrap modularly to ushort
-            return unchecked((ushort)(int)value);
+            // NumPy: int32 intermediate, wrap to uint16. See ToSByte(double) rationale.
+            return unchecked((ushort)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1341,13 +1292,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(double value)
         {
-            // NumPy behavior: truncation toward zero for normal values
-            // For special values (inf, -inf, nan, overflow): returns int.MinValue
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < int.MinValue || value > int.MaxValue)
-            {
-                return int.MinValue;  // NumPy returns int32.min for all special/overflow cases
-            }
-            return (int)value;  // C# cast truncates toward zero
+            // NumPy: truncate toward zero FIRST, then overflow-check the truncated integer.
+            // NaN/Inf/overflow -> int32.MinValue. Comparing `value > int.MaxValue` directly
+            // breaks for fractional values like 2147483647.4 which NumPy truncates to
+            // 2147483647 (in-range), but the naive comparison rejects as overflow.
+            if (double.IsNaN(value) || double.IsInfinity(value)) return int.MinValue;
+            double t = Math.Truncate(value);
+            if (t < int.MinValue || t > int.MaxValue) return int.MinValue;
+            return (int)t;
         }
 
         [System.Security.SecuritySafeCritical] // auto-generated
@@ -1911,19 +1863,25 @@ namespace NumSharp.Utilities
             {
                 return NumPyUInt64Overflow;
             }
-            // NumPy: truncate toward zero, then wrap modularly to ulong
-            // For negative values like -1.0: truncate to -1, wrap to 2^64-1
-            // For -3.7: truncate to -3, wrap to 2^64-3
-            // Values outside long range get platform-specific behavior -> use 2^63 as fallback
-            if (value < long.MinValue || value > long.MaxValue)
+            // Precision note: (double)long.MaxValue rounds to 2^63 (out of long range);
+            // (double)ulong.MaxValue rounds to 2^64 (out of ulong range). Both bounds must
+            // be exclusive or NumPy parity breaks.
+            //   value < -2^63               -> overflow (NaT sentinel)
+            //   value in [-2^63, 2^63)      -> cast via signed long, unchecked wrap
+            //   value in [2^63, 2^64)       -> direct ulong cast (upper half)
+            //   value >= 2^64               -> overflow (NaT sentinel)
+            const double twoPow63 = 9223372036854775808.0;           // 2^63  (= NaT / overflow marker)
+            const double twoPow64 = 18446744073709551616.0;           // 2^64  (= (double)ulong.MaxValue after rounding)
+            if (value < (double)long.MinValue || value >= twoPow64)
             {
-                // Value outside long range - try direct ulong conversion for large positives
-                if (value >= 0 && value <= (double)ulong.MaxValue)
-                {
-                    return (ulong)value;
-                }
                 return NumPyUInt64Overflow;
             }
+            if (value >= twoPow63)
+            {
+                return (ulong)value;
+            }
+            // NumPy: truncate toward zero, then wrap modularly to ulong.
+            // For -1.0: truncate to -1, wrap to 2^64-1. For -3.7: truncate to -3, wrap to 2^64-3.
             return unchecked((ulong)(long)value);
         }
 
