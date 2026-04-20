@@ -536,10 +536,16 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
             // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
-            public static readonly MethodInfo HalfLogP1 = typeof(Half).GetMethod("LogP1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "LogP1");
-            public static readonly MethodInfo HalfExpM1 = typeof(Half).GetMethod("ExpM1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "ExpM1");
+            // Half.LogP1/ExpM1 lose subnormal precision because internally they compute (1 + x) in
+            // Half, which rounds x < Half.Epsilon (≈ 2^-11) to 0. NumPy promotes to a higher-precision
+            // intermediate before log1p/expm1, then casts back — we replicate that with double
+            // (via existing HalfToDouble / DoubleToHalf op_Explicit helpers).
+            public static readonly MethodInfo DoubleLogP1 = typeof(double)
+                .GetMethod("LogP1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, "LogP1");
+            public static readonly MethodInfo DoubleExpM1 = typeof(double)
+                .GetMethod("ExpM1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, "ExpM1");
         }
 
         #endregion

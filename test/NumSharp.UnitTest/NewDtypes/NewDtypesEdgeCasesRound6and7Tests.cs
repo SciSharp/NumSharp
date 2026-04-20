@@ -179,9 +179,8 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs]  // B21: Half.LogP1(2^-24) returns 0 because (1 + 2^-24) rounds to 1 in Half
-                    // precision. NumPy computes log1p in double then casts back, preserving
-                    // subnormal detail. Fix requires promoting to double intermediate.
+        // Round 9 fix for B21: Half log1p/expm1 IL branch now promotes Half → double
+        // → double.LogP1/ExpM1 → Half, preserving subnormal precision per NumPy.
         public void B11_Log1p_Half_SmallestSubnormal()
         {
             // np.log1p(np.array([2**-24], dtype=float16)) → 5.96e-08 (float16; log1p near 0 ≈ x)
@@ -349,10 +348,8 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs]  // B22: Complex exp2 at ±inf real returns (NaN, NaN) instead of NumPy's
-                    // 0+0j (for -inf) and inf+0j (for +inf). Root cause: IL uses
-                    // Complex.Pow(Complex(2,0), z) which in .NET BCL yields NaN for inf inputs.
-                    // Fix requires a special case in the Complex exp2 IL branch.
+        // Round 9 fix for B22: Complex exp2 routes pure-real inputs through Math.Pow(2, r)
+        // instead of Complex.Pow(2+0j, z), handling ±inf correctly.
         public void B11_Complex_Exp2_NegInf_Real_Is_Zero()
         {
             // np.exp2(-inf+0j) → 0 + 0j
@@ -363,7 +360,7 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs]  // B22: see sibling test.
+        // Round 9 fix for B22: see sibling test.
         public void B11_Complex_Exp2_PosInf_Real_Is_Inf()
         {
             // np.exp2(inf+0j) → inf + 0j
@@ -1137,10 +1134,8 @@ namespace NumSharp.UnitTest.NewDtypes
         #region B20 edges
 
         [TestMethod]
-        [OpenBugs]  // B23: np.var(Complex, axis=N) where the reduced axis has size 1 returns a
-                    // Complex array (the original element) instead of a Double array of zeros.
-                    // NumPy returns float64 [0.0, ...]. Root cause: trivial-axis fast path
-                    // bypasses the Var/Std output-dtype promotion.
+        // Round 9 fix for B23: Complex trivial-axis path now returns Double zeros, matching
+        // NumPy's convention that complex variance is real-valued.
         public void B20_Complex_Var_SingleElementAxis_Is_Zero()
         {
             // np.var([[1+2j]], axis=0) → [0.0];  axis=1 → [0.0] (single-element variance = 0)
@@ -1167,10 +1162,8 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs]  // B24: np.var(Complex, axis=N, ddof > n) returns sum/(n-ddof) (a negative
-                    // value) instead of NumPy's +inf. NumPy clamps divisor = max(n - ddof, 0)
-                    // so the division by zero yields +inf. NumSharp's AxisVarStdComplexHelper
-                    // uses unclamped (n - ddof) giving negative variance.
+        // Round 9 fix for B24: ddof adjustment in ExecuteAxisVar/StdReductionIL now clamps
+        // divisor = max(n - ddof, 0), yielding +inf for ddof >= n per NumPy.
         public void B20_Complex_Var_Ddof_Greater_Than_N_Returns_Inf()
         {
             // np.var(axis=1, ddof=4) for n=3 → [inf] (divisor clamped to 0 → inf)

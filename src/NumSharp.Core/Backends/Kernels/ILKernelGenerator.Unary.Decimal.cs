@@ -318,17 +318,12 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp2:
-                    // 2^z as Complex.Pow(new Complex(2,0), z). Only Pow(Complex,Complex) is available
-                    // for a complex exponent, so wrap the base in a Complex literal.
-                    {
-                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
-                        il.Emit(OpCodes.Stloc, locZ);
-                        il.Emit(OpCodes.Ldc_R8, 2.0);
-                        il.Emit(OpCodes.Ldc_R8, 0.0);
-                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
-                        il.Emit(OpCodes.Ldloc, locZ);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexPow, null);
-                    }
+                    // Route through helper — Complex.Pow(Complex(2,0), z) returns NaN+NaNj for
+                    // z = ±inf+0j because the internal exp(z·log(2)) computes (±inf)·0 = NaN
+                    // in the imaginary dimension. NumPy parity: exp2(-inf+0j) = 0+0j, and
+                    // exp2(+inf+0j) = inf+0j — both satisfied by Math.Pow(2, r) for pure-real z.
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexExp2Helper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
                     break;
 
                 case UnaryOp.Log1p:
@@ -408,6 +403,18 @@ namespace NumSharp.Backends.Kernels
             return new System.Numerics.Complex(logZ.Real * LogE_Inv_Ln2, logZ.Imaginary * LogE_Inv_Ln2);
         }
 
+        /// <summary>
+        /// Helper for Complex exp2. For pure-real input, routes through Math.Pow(2, r) so
+        /// that exp2(±inf+0j) returns 0+0j / inf+0j matching NumPy. General input falls
+        /// through to Complex.Pow(2, z). See B22 in docs/plans/LEFTOVER.md.
+        /// </summary>
+        internal static System.Numerics.Complex ComplexExp2Helper(System.Numerics.Complex z)
+        {
+            if (z.Imaginary == 0.0)
+                return new System.Numerics.Complex(System.Math.Pow(2.0, z.Real), 0.0);
+            return System.Numerics.Complex.Pow(new System.Numerics.Complex(2.0, 0.0), z);
+        }
+
         #endregion
 
         #region Unary Half IL Emission
@@ -468,11 +475,21 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Log1p:
-                    il.EmitCall(OpCodes.Call, CachedMethods.HalfLogP1, null);
+                    // B21: Half.LogP1(x) computes (1 + x) in Half precision, which rounds
+                    // subnormal x to 0 because Half epsilon ≫ 2^-24. Promote to double (NumPy's
+                    // own model: float32 isn't enough either — float32 epsilon near 1 is ~2^-23,
+                    // already coarser than Half's smallest subnormal 2^-24).
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleLogP1, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
                     break;
 
                 case UnaryOp.Expm1:
-                    il.EmitCall(OpCodes.Call, CachedMethods.HalfExpM1, null);
+                    // B21: Half.ExpM1(x) suffers the same subnormal-precision loss as LogP1
+                    // (internal exp(x)-1 step loses bits). Promote through double.
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleExpM1, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
                     break;
 
                 case UnaryOp.Floor:

@@ -117,14 +117,20 @@ namespace NumSharp.Backends
             {
                 //if the given div axis is 1 - std of a single element is 0
                 //Return zeros with the appropriate shape (NumPy behavior)
+                // B23: Complex std collapses to float64 in NumPy. GetComputingType preserves
+                // Complex→Complex which would give the wrong dtype here; override for Complex.
+                var zerosType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
                 if (keepdims)
                 {
                     var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
+                    return np.zeros(keepdimsShapeDims, zerosType);
                 }
-                return np.zeros(Shape.GetAxis(shape, axis), typeCode ?? arr.GetTypeCode.GetComputingType());
+                return np.zeros(Shape.GetAxis(shape, axis), zerosType);
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
@@ -351,11 +357,15 @@ namespace NumSharp.Backends
                 // The kernel computes std with ddof=0 by default
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
 
-                // For ddof != 0, adjust: std_ddof = std_0 * sqrt(n / (n - ddof))
+                // For ddof != 0, adjust: std_ddof = std_0 * sqrt(n / max(n - ddof, 0))
+                // B24: same NumPy-parity clamp as in Var's dispatcher — ddof >= n yields +inf
+                // because sqrt(inf) = inf. Without the clamp, ddof > n would take sqrt of a
+                // negative number (NaN) or produce a negative-scaled std.
                 if (ddof != 0)
                 {
                     double* resultPtr = (double*)result.Address;
-                    double adjustment = Math.Sqrt((double)axisSize / (axisSize - ddof));
+                    double divisor = Math.Max(axisSize - ddof, 0);
+                    double adjustment = Math.Sqrt((double)axisSize / divisor);
                     for (long i = 0; i < outputSize; i++)
                         resultPtr[i] *= adjustment;
                 }
