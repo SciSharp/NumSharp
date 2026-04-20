@@ -45,11 +45,14 @@ namespace NumSharp.Backends.Iteration
                     long stride1 = strides[op * stridesNDim + nextAxis];
 
                     // Can coalesce if:
-                    // - Either axis has shape 1 (trivial dimension)
+                    // - Either axis has shape 1 (trivial dimension, contributes no iteration)
+                    //   Unlike NumPy's stricter rule (requires stride==0), NumSharp absorbs
+                    //   any size-1 axis into its neighbor since it's a no-op iteration-wise.
+                    //   This is needed for correctness with cases like (2,4,1) contiguous.
                     // - Strides are compatible: stride0 * shape0 == stride1
                     bool opCanCoalesce =
-                        (shape0 == 1 && stride0 == 0) ||
-                        (shape1 == 1 && stride1 == 0) ||
+                        shape0 == 1 ||
+                        shape1 == 1 ||
                         (stride0 * shape0 == stride1);
 
                     if (!opCanCoalesce)
@@ -442,14 +445,19 @@ namespace NumSharp.Backends.Iteration
                 {
                     long shapeMinus1 = shape[axis] - 1;
 
-                    // Flip strides and adjust reset data pointers
+                    // Flip strides and accumulate byte offset into BaseOffsets.
+                    // NumPy nditer_constr.c:2579-2593 — baseoffsets records the cumulative
+                    // offset from the array's origin to the iterator's start after flipping.
+                    // This allows NpyIter_ResetBasePointers(baseptrs) to recompute
+                    // resetdataptr[iop] = baseptrs[iop] + baseoffsets[iop].
                     for (int op = 0; op < nop; op++)
                     {
                         long stride = strides[op * stridesNDim + axis];
                         int elemSize = state.ElementSizes[op];
+                        long byteOffset = shapeMinus1 * stride * elemSize;
 
-                        // Adjust reset pointer to start at the end of this axis
-                        state.ResetDataPtrs[op] += shapeMinus1 * stride * elemSize;
+                        // Track cumulative byte offset per-operand (negative because stride<0).
+                        state.BaseOffsets[op] += byteOffset;
 
                         // Negate the stride
                         strides[op * stridesNDim + axis] = -stride;
@@ -466,9 +474,13 @@ namespace NumSharp.Backends.Iteration
 
             if (anyFlipped)
             {
-                // Also update current data pointers to match reset pointers
+                // Propagate accumulated BaseOffsets into ResetDataPtrs and DataPtrs.
+                // NumPy nditer_constr.c:2599-2605: "If any strides were flipped,
+                // the base pointers were adjusted in the first AXISDATA, and need
+                // to be copied to all the rest."
                 for (int op = 0; op < nop; op++)
                 {
+                    state.ResetDataPtrs[op] += state.BaseOffsets[op];
                     state.DataPtrs[op] = state.ResetDataPtrs[op];
                 }
 

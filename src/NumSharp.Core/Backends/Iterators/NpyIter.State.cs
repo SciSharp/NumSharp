@@ -837,20 +837,15 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Reset iterator to the beginning.
+        /// Reset iterator to IterStart (which may be >0 for ranged iterators).
+        /// Matches NumPy's NpyIter_Reset + npyiter_goto_iterindex(ITERSTART) semantics.
         /// </summary>
         public void Reset()
         {
-            IterIndex = IterStart;
+            // Delegate to GotoIterIndex so Coords, FlatIndex, and DataPtrs all
+            // agree with IterStart (critical for ranged iterators where IterStart > 0).
             FlatIndex = 0;
-
-            for (int d = 0; d < NDim; d++)
-                Coords[d] = 0;
-
-            for (int op = 0; op < NOp; op++)
-                DataPtrs[op] = ResetDataPtrs[op];
-
-            // Invalidate all buffer reuse flags since position changed
+            GotoIterIndex(IterStart);
             InvalidateAllBufferReuse();
         }
 
