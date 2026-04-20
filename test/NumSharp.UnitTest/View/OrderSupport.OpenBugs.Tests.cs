@@ -2229,5 +2229,226 @@ namespace NumSharp.UnitTest.View
             rhs.Shape.IsContiguous.Should().BeFalse();
             rhs.Shape.IsFContiguous.Should().BeFalse();
         }
+
+        // ============================================================================
+        // Section 45: Manipulation ops — layout preservation / parity
+        // NumPy behavior on F-contig (4,3) source arr = np.arange(12).reshape(3,4).T:
+        //   repeat(F, 2)                    → 1-D (24,), both C&F
+        //   repeat(F, 2, axis=0/1)          → C-contig (always, NumPy convention)
+        //   roll(F, 1)                      → C-contig (uses ravel)
+        //   roll(F, 1, axis=0/1)            → F-contig preserved
+        //   stack([F,F])                    → neither (new axis)
+        //   expand_dims(F, 0/1/2)           → F-contig preserved
+        //   squeeze(F(2,1,3))               → F-contig preserved
+        //   moveaxis(F, 0, -1)              → effectively transpose; layout flips
+        //   swapaxes(F(4,3), 0, 1)          → C-contig (stride flip)
+        //   swapaxes(C(3,4), 0, 1)          → F-contig (stride flip)
+        //   atleast_1d/2d/3d                → 1-D/trivially-both/F-preserved
+        // ============================================================================
+
+        [TestMethod]
+        public void Repeat_FContig_NoAxis_Is1DBothContig()
+        {
+            // NumPy: repeat(F(4,3), 2) flattens then repeats -> 1-D (24,), both-contig.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.repeat(f, 2);
+            r.shape.Should().Equal(new long[] { 24 });
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue("1-D result is trivially F-contig");
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp's np.repeat does NOT support the `axis` parameter
+                   // (see src/NumSharp.Core/Manipulation/np.repeat.cs — always ravels first).
+                   // NumPy: repeat(F(4,3), 2, axis=0) duplicates each row, shape (8,3).
+        public void Repeat_FContig_Axis0_ApiGap()
+        {
+            // Expected NumPy values once axis is supported:
+            //   [[0,4,8],[0,4,8],[1,5,9],[1,5,9],[2,6,10],[2,6,10],[3,7,11],[3,7,11]]
+            var f = np.arange(12).reshape(3, 4).T;
+            // This call will compile error until axis is supported; once supported,
+            // remove the [OpenBugs] and uncomment the assertions below.
+            // var r = np.repeat(f, 2, axis: 0);
+            // r.shape.Should().Equal(new long[] { 8, 3 });
+            // ((long)r[1, 0]).Should().Be(0);  // duplicated row
+            false.Should().BeTrue("np.repeat does not support axis parameter yet");
+        }
+
+        [TestMethod]
+        public void Repeat_FContig_Values_MatchNumPy()
+        {
+            // NumPy: repeat(F(4,3), 2) flattens in C-order then repeats.
+            // F.ravel('C') = [0,4,8, 1,5,9, 2,6,10, 3,7,11]
+            // After repeat by 2 = [0,0,4,4,8,8, 1,1,5,5,9,9, ...]
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.repeat(f, 2);
+            r.size.Should().Be(24);
+            ((long)r[0]).Should().Be(0);
+            ((long)r[1]).Should().Be(0);
+            ((long)r[2]).Should().Be(4);
+            ((long)r[3]).Should().Be(4);
+            ((long)r[22]).Should().Be(11);
+            ((long)r[23]).Should().Be(11);
+        }
+
+        [TestMethod]
+        public void Roll_FContig_Axis0_Values_MatchNumPy()
+        {
+            // NumPy: roll(F(4,3), 1, axis=0) rotates rows by 1
+            // [[0,4,8],[1,5,9],[2,6,10],[3,7,11]] -> [[3,7,11],[0,4,8],[1,5,9],[2,6,10]]
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.roll(f, 1, axis: 0);
+            ((long)r[0, 0]).Should().Be(3);
+            ((long)r[0, 1]).Should().Be(7);
+            ((long)r[0, 2]).Should().Be(11);
+            ((long)r[1, 0]).Should().Be(0);
+            ((long)r[3, 2]).Should().Be(10);
+        }
+
+        [TestMethod]
+        public void Roll_FContig_Axis0_PreservesFContig()
+        {
+            // NumPy: roll(F, 1, axis=0) preserves F-contig layout (axis roll is a
+            // strides-only operation, not a copy).
+            var f = np.arange(12).reshape(3, 4).T;  // F-contig (4,3)
+            var r = np.roll(f, 1, axis: 0);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: roll with axis preserves input F-contig layout");
+        }
+
+        [TestMethod]
+        public void Stack_FF_Values_MatchNumPy()
+        {
+            // NumPy: stack([F,F]) yields (2,4,3) with arr[0]==arr[1]==F.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.stack(new[] { f, f });
+            r.shape.Should().Equal(new long[] { 2, 4, 3 });
+            ((long)r[0, 0, 0]).Should().Be(0);
+            ((long)r[0, 3, 2]).Should().Be(11);
+            ((long)r[1, 0, 0]).Should().Be(0);
+            ((long)r[1, 3, 2]).Should().Be(11);
+        }
+
+        [TestMethod]
+        public void ExpandDims_FContig_Axis0_Shape_MatchesNumPy()
+        {
+            // NumPy: expand_dims(F(4,3), axis=0) -> (1,4,3) with F-contig preserved.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.expand_dims(f, 0);
+            r.shape.Should().Equal(new long[] { 1, 4, 3 });
+            ((long)r[0, 0, 0]).Should().Be(0);
+            ((long)r[0, 3, 2]).Should().Be(11);
+        }
+
+        [TestMethod]
+        public void ExpandDims_FContig_Axis0_PreservesFContig()
+        {
+            // NumPy: expand_dims inserts a size-1 dim; stride of the new dim is anything
+            // (size-1), and the other strides shift by one position. F-contig preserved.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.expand_dims(f, 0);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: expand_dims preserves F-contig layout");
+        }
+
+        [TestMethod]
+        public void ExpandDims_FContig_AxisMiddle_PreservesFContig()
+        {
+            // NumPy: expand_dims(F(4,3), axis=1) -> (4,1,3) F-contig.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.expand_dims(f, 1);
+            r.shape.Should().Equal(new long[] { 4, 1, 3 });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ExpandDims_FContig_AxisLast_PreservesFContig()
+        {
+            // NumPy: expand_dims(F(4,3), axis=2) -> (4,3,1) F-contig.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.expand_dims(f, 2);
+            r.shape.Should().Equal(new long[] { 4, 3, 1 });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumPy: squeeze(F(2,1,3)) -> (2,3) F-contig preserved.
+                   // NumSharp: produces (2,3) C-contig — squeeze doesn't carry the
+                   // F-strides pattern through the shape rebuild.
+        public void Squeeze_FContigWithUnitDim_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 1L, 3L), order: 'F', dtype: typeof(double));
+            f3[0, 0, 0] = 1.0;
+            f3[1, 0, 2] = 99.0;
+            var r = np.squeeze(f3);
+            r.shape.Should().Equal(new long[] { 2, 3 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: squeeze preserves F-contig layout");
+        }
+
+        [TestMethod]
+        public void SwapAxes_CContig2D_ProducesFContig()
+        {
+            // NumPy: swapaxes(C(3,4), 0, 1) -> (4,3) F-contig (just a stride swap).
+            var c = np.arange(12).reshape(3, 4);
+            var r = np.swapaxes(c, 0, 1);
+            r.shape.Should().Equal(new long[] { 4, 3 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: swapaxes(C, 0, 1) on 2D yields F-contig (stride flip)");
+        }
+
+        [TestMethod]
+        public void SwapAxes_FContig2D_ProducesCContig()
+        {
+            // NumPy: swapaxes(F(4,3), 0, 1) -> (3,4) C-contig (just a stride swap).
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.swapaxes(f, 0, 1);
+            r.shape.Should().Equal(new long[] { 3, 4 });
+            r.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: swapaxes(F, 0, 1) on 2D yields C-contig (stride flip)");
+        }
+
+        [TestMethod]
+        public void AtLeast1d_Scalar_Is1DBothContig()
+        {
+            // NumPy: atleast_1d(scalar) -> (1,) both-contig.
+            var r = np.atleast_1d(np.array(5));
+            r.ndim.Should().Be(1);
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void AtLeast2d_1D_IsBothContig()
+        {
+            // NumPy: atleast_2d([1,2,3]) -> (1,3) both-contig (size-1 dim).
+            var v = np.array(new[] { 1, 2, 3 });
+            var r = np.atleast_2d(v);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void AtLeast3d_FContig2D_PreservesFContig()
+        {
+            // NumPy: atleast_3d(F(4,3)) -> (4,3,1), F-contig preserved.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.atleast_3d(f);
+            r.shape.Should().Equal(new long[] { 4, 3, 1 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: atleast_3d adds trailing unit dim, preserves F-contig");
+        }
+
+        [TestMethod]
+        public void MoveAxis_FContig2D_Effectively_Transposes()
+        {
+            // NumPy: moveaxis(F(4,3), 0, -1) on 2D is equivalent to transpose -> (3,4) C-contig.
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.moveaxis(f, 0, -1);
+            r.shape.Should().Equal(new long[] { 3, 4 });
+            r.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: moveaxis(F, 0, -1) on 2D = transpose -> C-contig");
+        }
     }
 }
