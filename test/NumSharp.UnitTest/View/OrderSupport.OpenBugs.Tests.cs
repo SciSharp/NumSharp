@@ -2911,5 +2911,95 @@ namespace NumSharp.UnitTest.View
             s.Shape.IsContiguous.Should().BeFalse();
             s.Shape.IsFContiguous.Should().BeFalse();
         }
+
+        // ============================================================================
+        // Section 51: Fancy-write scalar/array RHS — isolation repros
+        // Existing Section 40 flags FancyWrite_FContig_PreservesFContig as [OpenBugs]
+        // pointing at Selection/NDArray.Indexing.Selection.Setter.cs:552 where
+        // SetIndicesND asserts dstOffsets.size == values.size.
+        //
+        // These tests isolate exactly WHICH fancy-write patterns trigger the bug,
+        // so the fix (in Setter.cs) has a minimal reproducing test matrix.
+        //
+        // Observed crash condition: target is 2-D+ AND selecting rows (ndsCount < ndim).
+        // The offsets array counts SELECTED INDICES; values array counts ELEMENTS.
+        // For a (3,4) with [0,2] → dstOffsets.size=2, values.size=8 → assert fires.
+        // ============================================================================
+
+        [TestMethod]
+        public void FancyWrite_1D_ScalarRHS_Works()
+        {
+            // 1-D target: ndsCount == ndim, so dstOffsets.size == number of selected
+            // elements == values.size (trivially 1 per selected index). Assert holds.
+            var v = np.arange(10).astype(typeof(int));
+            v[np.array(new[] { 1, 3, 5 })] = 99;
+            ((int)v[1]).Should().Be(99);
+            ((int)v[3]).Should().Be(99);
+            ((int)v[5]).Should().Be(99);
+            ((int)v[0]).Should().Be(0);  // unmodified
+            ((int)v[2]).Should().Be(2);  // unmodified
+        }
+
+        [TestMethod]
+        public void FancyWrite_1D_ArrayRHS_MatchingSize_Works()
+        {
+            // 1-D with matching-size array RHS: dstOffsets.size == values.size == 3.
+            var v = np.arange(10).astype(typeof(int));
+            v[np.array(new[] { 1, 3, 5 })] = np.array(new[] { 100, 200, 300 });
+            ((int)v[1]).Should().Be(100);
+            ((int)v[3]).Should().Be(200);
+            ((int)v[5]).Should().Be(300);
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same SetIndicesND assert as Section 40. Confirmed on C-contig 2-D,
+                   // so the bug is NOT F-order specific — it's an indexing-shape bug.
+                   // dstOffsets.size=2 (two selected rows) vs values.size=8 (2*4 elements).
+        public void FancyWrite_2D_CContig_ScalarRHS_Crashes()
+        {
+            // NumPy: arr[[0,2]] = 99 broadcasts scalar across 2 rows * 4 cols.
+            var c = np.arange(12).reshape(3, 4).astype(typeof(int));
+            c[np.array(new[] { 0, 2 })] = 99;
+            ((int)c[0, 0]).Should().Be(99);
+            ((int)c[0, 3]).Should().Be(99);
+            ((int)c[2, 0]).Should().Be(99);
+            ((int)c[1, 0]).Should().Be(4);  // row 1 unchanged
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same SetIndicesND assert, now with a matching-shape value array
+                   // instead of a scalar. Still dstOffsets.size=2 (per index) vs
+                   // values.size=8 (per element) — assertion cares about size match,
+                   // not broadcast compatibility.
+        public void FancyWrite_2D_CContig_MatchingArrayRHS_Crashes()
+        {
+            // NumPy: arr[[0,2]] = 2-D (2,4) array assigns per row.
+            var c = np.arange(12).reshape(3, 4).astype(typeof(int));
+            var values = np.array(new int[,] { { 90, 91, 92, 93 }, { 94, 95, 96, 97 } });
+            c[np.array(new[] { 0, 2 })] = values;
+            ((int)c[0, 0]).Should().Be(90);
+            ((int)c[0, 3]).Should().Be(93);
+            ((int)c[2, 0]).Should().Be(94);
+            ((int)c[2, 3]).Should().Be(97);
+            ((int)c[1, 0]).Should().Be(4);  // row 1 unchanged
+        }
+
+        [TestMethod]
+        [OpenBugs] // F-contig variant of FancyWrite_2D_CContig_ScalarRHS_Crashes —
+                   // confirms layout is orthogonal to the bug.
+        public void FancyWrite_2D_FContig_ScalarRHS_Crashes()
+        {
+            var f = np.empty(new Shape(4L, 3L), order: 'F', dtype: typeof(int));
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    f[i, j] = i * 3 + j;
+            f.Shape.IsFContiguous.Should().BeTrue();
+
+            f[np.array(new[] { 0, 2 })] = 99;
+            ((int)f[0, 0]).Should().Be(99);
+            ((int)f[2, 2]).Should().Be(99);
+            f.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: in-place fancy write preserves F-contig layout");
+        }
     }
 }
