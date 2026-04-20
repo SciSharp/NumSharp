@@ -290,7 +290,7 @@ namespace NumSharp.Backends.Kernels
         /// Caching these avoids repeated GetMethod() lookups during kernel generation.
         /// All fields use ?? throw to fail fast at type load if a method is not found.
         /// </summary>
-        private static class CachedMethods
+        private static partial class CachedMethods
         {
             // Math methods (double versions)
             public static readonly MethodInfo MathPow = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) })
