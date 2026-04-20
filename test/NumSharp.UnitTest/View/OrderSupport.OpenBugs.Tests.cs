@@ -1231,5 +1231,528 @@ namespace NumSharp.UnitTest.View
             // NumPy: np.flip(arr, axis=0) reverses along axis - not implemented in NumSharp
             false.Should().BeTrue("np.flip is not implemented");
         }
+
+        // ============================================================================
+        // Section 31: Extended unary math ops preserve F-contig
+        // NumPy: ceil/floor/trunc/reciprocal/sign/cos/tan/log/log10/log2/exp2/expm1/cbrt
+        //        all preserve F-contig on F-contig input
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.ceil doesn't preserve F-contig
+        public void Ceil_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.ceil(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.floor doesn't preserve F-contig
+        public void Floor_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.floor(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.trunc doesn't preserve F-contig
+        public void Trunc_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.trunc(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.reciprocal doesn't preserve F-contig
+        public void Reciprocal_FContig_PreservesFContig()
+        {
+            var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
+            var r = np.reciprocal(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.sign doesn't preserve F-contig
+        public void Sign_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.sign(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.cos doesn't preserve F-contig
+        public void Cos_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.cos(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.tan doesn't preserve F-contig
+        public void Tan_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.tan(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.log doesn't preserve F-contig
+        public void Log_FContig_PreservesFContig()
+        {
+            var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
+            var r = np.log(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.log10 doesn't preserve F-contig
+        public void Log10_FContig_PreservesFContig()
+        {
+            var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
+            var r = np.log10(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.log2 doesn't preserve F-contig
+        public void Log2_FContig_PreservesFContig()
+        {
+            var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
+            var r = np.log2(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.exp2 doesn't preserve F-contig
+        public void Exp2_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.exp2(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.expm1 doesn't preserve F-contig
+        public void Expm1_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.expm1(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.cbrt doesn't preserve F-contig
+        public void Cbrt_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.cbrt(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        // Math correctness — values must match regardless of layout (one representative)
+        [TestMethod]
+        public void Ceil_FContig_ValuesCorrect()
+        {
+            var fArr = np.array(new double[,] { { 1.3, 2.7 }, { 3.1, 4.9 } }).T;
+            var r = np.ceil(fArr);
+            ((double)r[0, 0]).Should().Be(2.0);
+            ((double)r[1, 1]).Should().Be(5.0);
+        }
+
+        // ============================================================================
+        // Section 32: Division / remainder / power preserve F-contig
+        // NumPy: /, //, %, ** all preserve F-contig layout when both operands are F
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // true_divide doesn't preserve F-contig
+        public void TrueDivide_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T.astype(typeof(double)) + 1.0;
+            var b = np.arange(12).reshape(3, 4).T.astype(typeof(double)) + 1.0;
+            var r = a / b;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: F/F produces F-contig output");
+        }
+
+        [TestMethod]
+        [OpenBugs] // floor_divide doesn't preserve F-contig
+        public void FloorDivide_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T + 1;
+            var b = np.arange(12).reshape(3, 4).T + 1;
+            var r = np.floor_divide(a, b);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // mod doesn't preserve F-contig
+        public void Mod_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T + 1;
+            var b = np.arange(12).reshape(3, 4).T + 1;
+            var r = a % b;
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // power doesn't preserve F-contig
+        public void Power_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var b = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.power(a, b);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        // Math correctness for these
+        [TestMethod]
+        public void TrueDivide_Values_MatchNumPy()
+        {
+            var a = np.array(new double[] { 10, 20, 30 });
+            var b = np.array(new double[] { 2, 4, 5 });
+            var r = a / b;
+            ((double)r[0]).Should().Be(5.0);
+            ((double)r[1]).Should().Be(5.0);
+            ((double)r[2]).Should().Be(6.0);
+        }
+
+        // ============================================================================
+        // Section 33: In-place ops should preserve F-contig (mutate same buffer)
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // in-place add may rebuild array as C-contig
+        public void InPlaceAdd_FContig_PreservesFContig()
+        {
+            // NumPy: f_arr += 1 preserves F-contig (same buffer, just values mutated)
+            var fArr = np.empty(new Shape(4L, 3L), order: 'F', dtype: typeof(int));
+            // Seed values
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    fArr[i, j] = i * 3 + j;
+            fArr.Shape.IsFContiguous.Should().BeTrue();
+
+            fArr += 1;  // should mutate in place
+            fArr.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: in-place ops don't change layout");
+        }
+
+        // ============================================================================
+        // Section 34: Selection / clip / pairwise (where/clip/maximum/minimum/modf)
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.where doesn't exist in NumSharp (listed in Missing Functions)
+        public void Where_ApiGap()
+        {
+            // NumPy: np.where(f_arr > 5, f_arr, 0) -> F-contig output
+            false.Should().BeTrue("np.where is not implemented (Missing Functions)");
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.clip doesn't preserve F-contig
+        public void Clip_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.clip(fArr, 2, 8);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: clip preserves F-contig output");
+        }
+
+        [TestMethod]
+        public void Clip_Values_MatchNumPy()
+        {
+            var arr = np.array(new[] { 1, 5, 10, 15, 20 });
+            var r = np.clip(arr, 5, 15);
+            ((int)r[0]).Should().Be(5);
+            ((int)r[1]).Should().Be(5);
+            ((int)r[2]).Should().Be(10);
+            ((int)r[3]).Should().Be(15);
+            ((int)r[4]).Should().Be(15);
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.maximum doesn't preserve F-contig
+        public void Maximum_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.maximum(fArr, 5);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.minimum doesn't preserve F-contig
+        public void Minimum_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.minimum(fArr, 5);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.modf doesn't preserve F-contig
+        public void Modf_FContig_PreservesFContig()
+        {
+            var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 0.5;
+            var (frac, whole) = np.modf(fArr);
+            frac.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: modf fractional output preserves F-contig");
+            whole.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: modf integral output preserves F-contig");
+        }
+
+        // ============================================================================
+        // Section 35: NaN-aware reductions — math correctness on F-contig
+        // ============================================================================
+
+        [TestMethod]
+        public void NanSum_FContig_ValuesMatchNumPy()
+        {
+            // NumPy: np.nansum([0..11] with nan at [0]) = 66
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            ((double)np.nansum(fArr)).Should().Be(66.0);
+        }
+
+        [TestMethod]
+        public void NanMean_FContig_ValuesMatchNumPy()
+        {
+            // NumPy: np.nanmean with one nan out of 12 = 66/11 = 6.0
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            ((double)np.nanmean(fArr)).Should().BeApproximately(6.0, 0.001);
+        }
+
+        [TestMethod]
+        public void NanMax_FContig_ValuesMatchNumPy()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            ((double)np.nanmax(fArr)).Should().Be(11.0);
+        }
+
+        [TestMethod]
+        public void NanMin_FContig_ValuesMatchNumPy()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            // NumPy: nanmin skips nan, gives 1.0 (next smallest non-nan)
+            ((double)np.nanmin(fArr)).Should().Be(1.0);
+        }
+
+        // ============================================================================
+        // Section 36: Boolean reductions / nonzero
+        // ============================================================================
+
+        [TestMethod]
+        public void Any_FContig_MatchesNumPy()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            ((bool)np.any(fArr > 5)).Should().BeTrue();
+            ((bool)np.any(fArr > 100)).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void All_FContig_MatchesNumPy()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            ((bool)np.all(fArr >= 0)).Should().BeTrue();
+            ((bool)np.all(fArr > 5)).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void CountNonzero_FContig_MatchesNumPy()
+        {
+            // NumPy: np.count_nonzero(arange(12) reshape 4x3 F-contig) = 11 (all except the 0)
+            var fArr = np.arange(12).reshape(3, 4).T;
+            ((long)np.count_nonzero(fArr)).Should().Be(11);
+        }
+
+        // ============================================================================
+        // Section 37: isnan / isinf / isfinite preserve F-contig
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.isnan doesn't preserve F-contig
+        public void IsNan_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.isnan(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.isinf doesn't preserve F-contig
+        public void IsInf_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.isinf(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.isfinite doesn't preserve F-contig
+        public void IsFinite_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.isfinite(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void IsNan_Values_MatchNumPy()
+        {
+            var arr = np.array(new double[] { 1.0, double.NaN, 3.0, double.NaN });
+            var r = np.isnan(arr);
+            ((bool)r[0]).Should().BeFalse();
+            ((bool)r[1]).Should().BeTrue();
+            ((bool)r[2]).Should().BeFalse();
+            ((bool)r[3]).Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 38: Broadcasting / axis manipulation on F-contig
+        // ============================================================================
+
+        [TestMethod]
+        public void BroadcastTo_FromVector_ProducesZeroStrideFirstAxis()
+        {
+            // NumPy: broadcast_to([1,2,3], (4,3)) -> strides (0, 8) for float/(0,4) for int
+            // flags: C=False, F=False (broadcasted arrays are neither)
+            var v = np.array(new[] { 1, 2, 3 });
+            var r = np.broadcast_to(v, new Shape(4L, 3L));
+            r.Shape.IsContiguous.Should().BeFalse(
+                "NumPy: broadcast_to result is neither C nor F contig (has stride=0)");
+            r.Shape.IsFContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void BroadcastTo_Values_MatchNumPy()
+        {
+            var v = np.array(new[] { 1, 2, 3 });
+            var r = np.broadcast_to(v, new Shape(4L, 3L));
+            ((int)r[0, 0]).Should().Be(1);
+            ((int)r[0, 1]).Should().Be(2);
+            ((int)r[0, 2]).Should().Be(3);
+            ((int)r[3, 0]).Should().Be(1);
+            ((int)r[3, 2]).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void MoveAxis_FContig3D_MatchesCOrder()
+        {
+            // NumPy: moveaxis(F-contig 3D, 0, -1) -> neither C nor F
+            // NumSharp should match (moveaxis reorders strides so neither pattern holds)
+            var fArr3D = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(int));
+            fArr3D.Shape.IsFContiguous.Should().BeTrue();
+            var r = np.moveaxis(fArr3D, 0, -1);
+            r.Shape.IsContiguous.Should().BeFalse();
+            r.Shape.IsFContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void SwapAxes_FContig_ReturnsCContig()
+        {
+            // NumPy: swapaxes of F-contig 3D with outer axes swapped -> C-contig
+            var fArr3D = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(int));
+            var r = np.swapaxes(fArr3D, 0, 2);
+            r.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: swapaxes(F, 0, 2) reverses stride order -> C-contig");
+        }
+
+        // ============================================================================
+        // Section 39: argsort / unique / np.outer
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.argsort throws on F-contig arrays (GetAtIndex type mismatch)
+        public void ArgSort_FContig_ProducesCContig()
+        {
+            // NumPy: argsort of F-contig produces C-contig output
+            // NumSharp: throws DebugAssertException when called on F-contig input.
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.argsort<int>(fArr, axis: 0);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Unique_FContig_Is1DBothContig()
+        {
+            // NumPy: np.unique returns 1-D sorted unique values - both C and F contig
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.unique(fArr);
+            r.ndim.Should().Be(1);
+            r.size.Should().Be(12);
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Outer_Values_MatchNumPy()
+        {
+            // NumPy: np.outer([1,2,3], [4,5]) = [[4,5],[8,10],[12,15]]
+            var a = np.array(new[] { 1.0, 2.0, 3.0 });
+            var b = np.array(new[] { 4.0, 5.0 });
+            var r = np.outer(a, b);
+            r.shape.Should().Equal(new long[] { 3, 2 });
+            ((double)r[0, 0]).Should().Be(4.0);
+            ((double)r[0, 1]).Should().Be(5.0);
+            ((double)r[1, 0]).Should().Be(8.0);
+            ((double)r[2, 1]).Should().Be(15.0);
+        }
+
+        [TestMethod]
+        public void Outer_OutputIsCContig()
+        {
+            // NumPy: np.outer result is always C-contig
+            var a = np.array(new[] { 1.0, 2.0, 3.0 });
+            var b = np.array(new[] { 4.0, 5.0 });
+            var r = np.outer(a, b);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 40: Fancy index write / slice write preserves F-contig
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // Fancy write may trigger reallocation that breaks F-contig
+        public void FancyWrite_FContig_PreservesFContig()
+        {
+            // NumPy: f_arr[[0,2]] = 99 preserves F-contig (in-place)
+            var fArr = np.empty(new Shape(4L, 3L), order: 'F', dtype: typeof(int));
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    fArr[i, j] = i * 3 + j;
+            fArr.Shape.IsFContiguous.Should().BeTrue();
+
+            // Fancy index write
+            fArr[np.array(new[] { 0, 2 })] = 99;
+            fArr.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: fancy write mutates in place, preserves F-contig");
+        }
+
+        [TestMethod]
+        public void SliceWrite_FContig_PreservesFContig()
+        {
+            // NumPy: slice assignment mutates in place, preserves F-contig.
+            // NumSharp correctly preserves F-contig here because slice write
+            // doesn't allocate new storage — it writes through the view.
+            var fArr = np.empty(new Shape(4L, 3L), order: 'F', dtype: typeof(int));
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    fArr[i, j] = i * 3 + j;
+            fArr.Shape.IsFContiguous.Should().BeTrue();
+
+            fArr["1:3, :"] = 99;
+            fArr.Shape.IsFContiguous.Should().BeTrue();
+        }
     }
 }
