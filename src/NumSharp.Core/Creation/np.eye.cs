@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
 using NumSharp.Utilities;
 
@@ -25,9 +25,10 @@ namespace NumSharp
         /// <param name="M">Number of columns in the output. If None, defaults to N.</param>
         /// <param name="k">Index of the diagonal: 0 (the default) refers to the main diagonal, a positive value refers to an upper diagonal, and a negative value to a lower diagonal.</param>
         /// <param name="dtype">Data-type of the returned array.</param>
+        /// <param name="order">Memory layout: 'C' (row-major, default) or 'F' (column-major).</param>
         /// <returns>An array where all elements are equal to zero, except for the k-th diagonal, whose values are equal to one.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.eye.html</remarks>
-        public static NDArray eye(int N, int? M = null, int k = 0, Type dtype = null)
+        public static NDArray eye(int N, int? M = null, int k = 0, Type dtype = null, char order = 'C')
         {
             int cols = M ?? N;
             if (N < 0)
@@ -35,16 +36,18 @@ namespace NumSharp
             if (cols < 0)
                 throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
 
+            char physical = OrderResolver.Resolve(order);
+
             var resolvedType = dtype ?? typeof(double);
             var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
             if (N == 0 || cols == 0)
-                return m;
+                return physical == 'F' ? m.copy('F') : m;
 
             // Diagonal element count: rows where 0 <= i < N and 0 <= i+k < cols
             int rowStart = Math.Max(0, -k);
             int rowEnd = Math.Min(N, cols - k);
             if (rowEnd <= rowStart)
-                return m;
+                return physical == 'F' ? m.copy('F') : m;
 
             var typeCode = resolvedType.GetTypeCode();
             object one;
@@ -63,7 +66,7 @@ namespace NumSharp
             for (int i = rowStart; i < rowEnd; i++)
                 flat.SetAtIndex(one, (long)i * cols + (i + k));
 
-            return m;
+            return physical == 'F' ? m.copy('F') : m;
         }
     }
 }
