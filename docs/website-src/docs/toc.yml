@@ -16,6 +16,8 @@
   href: array-api-standard.md
 - name: IL Generation
   href: il-generation.md
+- name: NDIter (Kerneling NDArray)
+  href: NDIter.md
 - name: Extending Libraries
   href: extensions/index.md
   expanded: false
