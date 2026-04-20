@@ -1125,62 +1125,97 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // For ordered comparisons, use lexicographic ordering (NumPy 2.x behavior)
-            // Stack: [lhs: Complex, rhs: Complex]
-            // Use helper method for lexicographic comparison
-            var helperMethod = op switch
+            // For ordered comparisons, use lexicographic ordering (NumPy 2.x behavior):
+            //   a vs b  =  first by Real, then by Imaginary.
+            // Stack: [lhs: Complex a, rhs: Complex b]
+            EmitComplexLexCompare(il, op);
+        }
+
+        /// <summary>
+        /// Emit IL for Complex lexicographic ordered comparison. Pseudo-C#:
+        /// <code>
+        ///   if (strict(a.Real, b.Real)) return true;    // Real strictly on the "true" side
+        ///   if (strict(b.Real, a.Real)) return false;   // Real strictly on the "false" side
+        ///   return strict(a.Imag, b.Imag) || (inclusive &amp;&amp; a.Imag == b.Imag);
+        /// </code>
+        /// where <c>strict</c> is &lt; for Less/LessEqual and &gt; for Greater/GreaterEqual,
+        /// and <c>inclusive</c> accepts equality for LessEqual / GreaterEqual.
+        ///
+        /// Stack contract: expects [Complex a, Complex b] (a pushed first, b on top),
+        /// leaves [bool] on top.
+        /// </summary>
+        private static void EmitComplexLexCompare(ILGenerator il, ComparisonOp op)
+        {
+            // Map the 4 ops to the 3 opcode choices that fully parameterize the emit.
+            // realBranchTrue  — branch to "return true" when real parts are strictly on the "true" side
+            //                   (Less/LessEqual: aR < bR → true; Greater/GreaterEqual: aR > bR → true)
+            // realBranchFalse — branch to "return false" when reals are strictly on the reverse side
+            //                   (Less/LessEqual: aR > bR → false; Greater/GreaterEqual: aR < bR → false)
+            // imagStrictCmp   — Clt or Cgt for the final imaginary compare; inclusive adds |Ceq.
+            OpCode realBranchTrue, realBranchFalse, imagStrictCmp;
+            bool inclusive;
+            switch (op)
             {
-                ComparisonOp.Less => typeof(ILKernelGenerator).GetMethod(nameof(ComplexLessThanHelper), BindingFlags.NonPublic | BindingFlags.Static),
-                ComparisonOp.LessEqual => typeof(ILKernelGenerator).GetMethod(nameof(ComplexLessEqualHelper), BindingFlags.NonPublic | BindingFlags.Static),
-                ComparisonOp.Greater => typeof(ILKernelGenerator).GetMethod(nameof(ComplexGreaterThanHelper), BindingFlags.NonPublic | BindingFlags.Static),
-                ComparisonOp.GreaterEqual => typeof(ILKernelGenerator).GetMethod(nameof(ComplexGreaterEqualHelper), BindingFlags.NonPublic | BindingFlags.Static),
-                _ => throw new NotSupportedException($"Comparison {op} not supported for Complex")
-            };
+                case ComparisonOp.Less:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = false; break;
+                case ComparisonOp.LessEqual:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = true; break;
+                case ComparisonOp.Greater:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = false; break;
+                case ComparisonOp.GreaterEqual:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = true; break;
+                default:
+                    throw new NotSupportedException($"Comparison {op} not supported for Complex");
+            }
 
-            if (helperMethod == null)
-                throw new InvalidOperationException($"Complex comparison helper for {op} not found");
+            var locA = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locB = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locAR = il.DeclareLocal(typeof(double));
+            var locBR = il.DeclareLocal(typeof(double));
+            var lblTrue = il.DefineLabel();
+            var lblFalse = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
 
-            il.EmitCall(OpCodes.Call, helperMethod, null);
-        }
+            // Pop b then a (stack LIFO)
+            il.Emit(OpCodes.Stloc, locB);
+            il.Emit(OpCodes.Stloc, locA);
 
-        /// <summary>
-        /// Lexicographic less-than comparison for Complex: first by real, then by imaginary.
-        /// </summary>
-        internal static bool ComplexLessThanHelper(System.Numerics.Complex a, System.Numerics.Complex b)
-        {
-            if (a.Real < b.Real) return true;
-            if (a.Real > b.Real) return false;
-            return a.Imaginary < b.Imaginary;
-        }
+            // Cache the Real components — they're referenced twice in the real-branch chain.
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locAR);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locBR);
 
-        /// <summary>
-        /// Lexicographic less-than-or-equal comparison for Complex.
-        /// </summary>
-        internal static bool ComplexLessEqualHelper(System.Numerics.Complex a, System.Numerics.Complex b)
-        {
-            if (a.Real < b.Real) return true;
-            if (a.Real > b.Real) return false;
-            return a.Imaginary <= b.Imaginary;
-        }
+            // if (strict(aR, bR)) goto lblTrue;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchTrue, lblTrue);
+            // if (reverseStrict(aR, bR)) goto lblFalse;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchFalse, lblFalse);
 
-        /// <summary>
-        /// Lexicographic greater-than comparison for Complex.
-        /// </summary>
-        internal static bool ComplexGreaterThanHelper(System.Numerics.Complex a, System.Numerics.Complex b)
-        {
-            if (a.Real > b.Real) return true;
-            if (a.Real < b.Real) return false;
-            return a.Imaginary > b.Imaginary;
-        }
+            // Reals tied — compare imaginaries: strict(aI, bI) [| ceq(aI, bI) if inclusive]
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(imagStrictCmp);
+            if (inclusive)
+            {
+                il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ceq);
+                il.Emit(OpCodes.Or);
+            }
+            il.Emit(OpCodes.Br, lblEnd);
 
-        /// <summary>
-        /// Lexicographic greater-than-or-equal comparison for Complex.
-        /// </summary>
-        internal static bool ComplexGreaterEqualHelper(System.Numerics.Complex a, System.Numerics.Complex b)
-        {
-            if (a.Real > b.Real) return true;
-            if (a.Real < b.Real) return false;
-            return a.Imaginary >= b.Imaginary;
+            il.MarkLabel(lblTrue);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblFalse);
+            il.Emit(OpCodes.Ldc_I4_0);
+
+            il.MarkLabel(lblEnd);
         }
 
         #endregion

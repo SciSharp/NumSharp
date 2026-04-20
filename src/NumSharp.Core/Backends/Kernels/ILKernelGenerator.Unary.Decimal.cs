@@ -280,28 +280,25 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Sign:
-                    // Complex Sign: returns unit vector z / |z|, or 0 if z = 0
-                    // NumPy: sign(1+2j) = (0.447+0.894j), sign(0+0j) = (0+0j)
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexSignHelper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // Complex Sign: returns unit vector z / |z|, or 0 if z = 0.
+                    // NumPy: sign(1+2j) = (0.447+0.894j), sign(0+0j) = (0+0j).
+                    // EmitSignCall already has inline IL for Complex at Unary.Math.cs — reuse.
+                    EmitSignCall(il, NPTypeCode.Complex);
                     break;
 
                 case UnaryOp.IsNan:
-                    // Complex: IsNaN if either real or imaginary part is NaN
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsNaNHelper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // Complex.IsNaN = double.IsNaN(z.Real) || double.IsNaN(z.Imaginary)
+                    EmitComplexComponentPredicate(il, CachedMethods.DoubleIsNaN, combineWithAnd: false);
                     break;
 
                 case UnaryOp.IsInf:
-                    // Complex: IsInfinity if either real or imaginary part is infinite
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsInfinityHelper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // Complex.IsInfinity = double.IsInfinity(z.Real) || double.IsInfinity(z.Imaginary)
+                    EmitComplexComponentPredicate(il, CachedMethods.DoubleIsInfinity, combineWithAnd: false);
                     break;
 
                 case UnaryOp.IsFinite:
-                    // Complex: IsFinite if both real and imaginary parts are finite
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexIsFiniteHelper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // Complex.IsFinite = double.IsFinite(z.Real) && double.IsFinite(z.Imaginary)
+                    EmitComplexComponentPredicate(il, CachedMethods.DoubleIsFinite, combineWithAnd: true);
                     break;
 
                 case UnaryOp.Log10:
@@ -310,11 +307,27 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Log2:
-                    // Route through helper — Complex.Log(z, 2.0) yields NaN imaginary for z=0+0j
-                    // (complex division by base uses component-wise division that breaks on -inf).
-                    // NumPy: np.log2(0+0j) = -inf+0j.
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexLog2Helper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // Complex.Log(z, 2.0) yields NaN imaginary for z=0+0j because its component-wise
+                    // division by the base loses sign info when |z|=0. Work around by computing
+                    // Complex.Log(z) and scaling both components by 1/ln(2) manually. Pseudo-C#:
+                    //   var logZ = Complex.Log(z);
+                    //   return new Complex(logZ.Real * (1/ln2), logZ.Imaginary * (1/ln2));
+                    {
+                        var locLog = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog, null);      // [Complex logZ]
+                        il.Emit(OpCodes.Stloc, locLog);
+
+                        // newobj Complex(logZ.Real * k, logZ.Imaginary * k) — k = 1/ln(2)
+                        il.Emit(OpCodes.Ldloca, locLog);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
+                        il.Emit(OpCodes.Ldsfld, CachedMethods.LogE_Inv_Ln2Field);
+                        il.Emit(OpCodes.Mul);
+                        il.Emit(OpCodes.Ldloca, locLog);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                        il.Emit(OpCodes.Ldsfld, CachedMethods.LogE_Inv_Ln2Field);
+                        il.Emit(OpCodes.Mul);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                    }
                     break;
 
                 case UnaryOp.Exp2:
@@ -388,55 +401,34 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Helper for Complex sign: returns unit vector z / |z|, or 0 if z = 0.
+        /// Emit a component-wise predicate on a Complex value: <c>predicate(z.Real) OP predicate(z.Imaginary)</c>
+        /// where OP is <c>and</c> (combineWithAnd=true, used for IsFinite) or <c>or</c>
+        /// (combineWithAnd=false, used for IsNaN / IsInfinity).
+        ///
+        /// Stack contract: expects [Complex z] on top, leaves [bool] on top.
         /// </summary>
-        internal static System.Numerics.Complex ComplexSignHelper(System.Numerics.Complex z)
+        private static void EmitComplexComponentPredicate(ILGenerator il, MethodInfo doublePredicate, bool combineWithAnd)
         {
-            var magnitude = System.Numerics.Complex.Abs(z);
-            if (magnitude == 0)
-                return System.Numerics.Complex.Zero;
-            return z / magnitude;
+            var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+            il.Emit(OpCodes.Stloc, locZ);
+
+            // predicate(z.Real)
+            il.Emit(OpCodes.Ldloca, locZ);
+            il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
+            il.EmitCall(OpCodes.Call, doublePredicate, null);
+
+            // predicate(z.Imaginary)
+            il.Emit(OpCodes.Ldloca, locZ);
+            il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, doublePredicate, null);
+
+            il.Emit(combineWithAnd ? OpCodes.And : OpCodes.Or);
         }
 
-        /// <summary>
-        /// Helper for Complex IsNaN: returns true if either real or imaginary part is NaN.
-        /// NumPy: np.isnan(complex) checks both real and imaginary parts.
-        /// </summary>
-        internal static bool ComplexIsNaNHelper(System.Numerics.Complex z)
-        {
-            return double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
-        }
-
-        /// <summary>
-        /// Helper for Complex IsInfinity: returns true if either real or imaginary part is infinite.
-        /// NumPy: np.isinf(complex) checks both real and imaginary parts.
-        /// </summary>
-        internal static bool ComplexIsInfinityHelper(System.Numerics.Complex z)
-        {
-            return double.IsInfinity(z.Real) || double.IsInfinity(z.Imaginary);
-        }
-
-        /// <summary>
-        /// Helper for Complex IsFinite: returns true if both real and imaginary parts are finite.
-        /// NumPy: np.isfinite(complex) checks both real and imaginary parts.
-        /// </summary>
-        internal static bool ComplexIsFiniteHelper(System.Numerics.Complex z)
-        {
-            return double.IsFinite(z.Real) && double.IsFinite(z.Imaginary);
-        }
-
-        private static readonly double LogE_Inv_Ln2 = 1.0 / System.Math.Log(2.0);
-
-        /// <summary>
-        /// Helper for Complex log2. Matches NumPy: np.log2(0+0j) = -inf+0j (not -inf+NaNj).
-        /// Avoids Complex.Log(z, 2.0) which produces NaN imag for Complex(-inf, 0) due to
-        /// complex division by a non-zero base.
-        /// </summary>
-        internal static System.Numerics.Complex ComplexLog2Helper(System.Numerics.Complex z)
-        {
-            var logZ = System.Numerics.Complex.Log(z);
-            return new System.Numerics.Complex(logZ.Real * LogE_Inv_Ln2, logZ.Imaginary * LogE_Inv_Ln2);
-        }
+        // Log-base-2 conversion constant: 1 / ln(2) = log2(e). Loaded via Ldsfld in the
+        // inline IL for UnaryOp.Log2 (Complex branch). Kept at file scope (not inside
+        // CachedMethods) because it's a runtime-computed double, not a reflection lookup.
+        internal static readonly double LogE_Inv_Ln2 = 1.0 / System.Math.Log(2.0);
 
         #endregion
 

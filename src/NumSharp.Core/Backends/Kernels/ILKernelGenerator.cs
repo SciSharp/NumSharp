@@ -417,11 +417,15 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathSignDouble = typeof(Math).GetMethod(nameof(Math.Sign), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, "Sign(double)");
 
-            // IsNaN methods
+            // IsNaN / IsInfinity / IsFinite methods
             public static readonly MethodInfo FloatIsNaN = typeof(float).GetMethod(nameof(float.IsNaN), new[] { typeof(float) })
                 ?? throw new MissingMethodException(typeof(float).FullName, nameof(float.IsNaN));
             public static readonly MethodInfo DoubleIsNaN = typeof(double).GetMethod(nameof(double.IsNaN), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsNaN));
+            public static readonly MethodInfo DoubleIsInfinity = typeof(double).GetMethod(nameof(double.IsInfinity), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsInfinity));
+            public static readonly MethodInfo DoubleIsFinite = typeof(double).GetMethod(nameof(double.IsFinite), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsFinite));
 
             // Unsafe methods
             public static readonly MethodInfo UnsafeInitBlockUnaligned = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
@@ -512,6 +516,11 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo ComplexGetImaginary = typeof(System.Numerics.Complex)
                 .GetProperty("Imaginary", BindingFlags.Public | BindingFlags.Instance)!.GetGetMethod()
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "get_Imaginary");
+
+            // Field handle for the runtime-computed 1/ln(2) constant used by Complex log2 inline IL.
+            public static readonly FieldInfo LogE_Inv_Ln2Field = typeof(ILKernelGenerator)
+                .GetField(nameof(ILKernelGenerator.LogE_Inv_Ln2), BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(ILKernelGenerator).FullName, nameof(ILKernelGenerator.LogE_Inv_Ln2));
 
             // Half unary operator methods
             public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
