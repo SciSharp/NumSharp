@@ -16,14 +16,10 @@ namespace NumSharp.Backends
         /// - Complex: True if either real or imaginary part is Inf
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
+        /// - Empty arrays: Returns empty bool array
         /// </remarks>
         public override NDArray<bool> IsInf(NDArray a)
         {
-            // Use IL kernel with UnaryOp.IsInf
-            // The kernel handles:
-            // - Float/Double/Half: calls *.IsInfinity
-            // - Complex: checks if real or imag is infinity
-            // - All other types: returns false (integers cannot be Inf)
             var result = ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean);
             return result.MakeGeneric<bool>();
         }

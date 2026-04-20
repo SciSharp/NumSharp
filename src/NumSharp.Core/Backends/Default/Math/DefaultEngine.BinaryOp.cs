@@ -98,7 +98,56 @@ namespace NumSharp.Backends
                 FallbackBinaryOp(lhs, rhs, result, op, leftShape, rightShape);
             }
 
+            // NumPy-aligned layout preservation: element-wise ops preserve F-contig
+            // when every non-scalar operand is strictly F-contig.
+            // Kernels write in linear C-order, so we relay out via copy('F') when needed.
+            if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+                return result.copy('F');
+
             return result;
+        }
+
+        /// <summary>
+        /// NumPy-aligned rule: the output is F-contiguous when every non-scalar operand
+        /// is strictly F-contiguous (IsFContiguous && !IsContiguous).
+        /// Scalars (and 1-element shapes, both C and F) do not change the decision.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool ShouldProduceFContigOutput(NDArray a, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+            var s = a.Shape;
+            // Scalars and size-1 shapes don't force a preference.
+            if (s.IsScalar || s.size <= 1)
+                return false;
+            return s.IsFContiguous && !s.IsContiguous;
+        }
+
+        /// <summary>
+        /// Binary variant — require that every non-scalar operand is strictly F-contiguous
+        /// and at least one of them is (otherwise the scalar+scalar case is excluded upstream).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool ShouldProduceFContigOutput(NDArray lhs, NDArray rhs, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
+
+            bool lhsPureF = !lhsScalar && lhs.Shape.IsFContiguous && !lhs.Shape.IsContiguous;
+            bool rhsPureF = !rhsScalar && rhs.Shape.IsFContiguous && !rhs.Shape.IsContiguous;
+            bool lhsPureC = !lhsScalar && lhs.Shape.IsContiguous && !lhs.Shape.IsFContiguous;
+            bool rhsPureC = !rhsScalar && rhs.Shape.IsContiguous && !rhs.Shape.IsFContiguous;
+
+            // If any non-scalar operand is strictly C-contig, fall through to the C default.
+            if (lhsPureC || rhsPureC)
+                return false;
+
+            // At least one non-scalar operand must be strictly F-contig to trigger F output.
+            return lhsPureF || rhsPureF;
         }
 
         /// <summary>

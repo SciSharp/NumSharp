@@ -67,6 +67,10 @@ namespace NumSharp.Backends
                     "Please report this as a bug.");
             }
 
+            // NumPy-aligned layout preservation: comparisons preserve F-contig.
+            if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+                return (NDArray<bool>)result.copy('F').MakeGeneric<bool>();
+
             return result;
         }
 
