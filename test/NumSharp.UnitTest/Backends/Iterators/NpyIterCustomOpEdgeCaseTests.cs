@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Size-boundary: all via Tier C: out = 2*in + 1
+        // Size-boundary: all via Tier 3C: out = 2*in + 1
         // =====================================================================
 
         private static void RunLinear(int count)
@@ -476,7 +476,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Auto-derived cache key (Tier C) & cache behavior
+        // Auto-derived cache key (Tier 3C) & cache behavior
         // =====================================================================
 
         [TestMethod]
@@ -613,7 +613,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         [TestMethod]
         [ExpectedException(typeof(ArgumentNullException))]
-        public void Validate_TierA_NullBody_Throws()
+        public void Validate_Tier3A_NullBody_Throws()
         {
             var a = np.arange(4).astype(np.float32);
             var b = np.empty(new Shape(4), np.float32);
@@ -624,7 +624,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         [TestMethod]
         [ExpectedException(typeof(ArgumentNullException))]
-        public void Validate_TierA_NullKey_Throws()
+        public void Validate_Tier3A_NullKey_Throws()
         {
             var a = np.arange(4).astype(np.float32);
             var b = np.empty(new Shape(4), np.float32);
@@ -776,7 +776,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Integer Tier C
+        // Integer Tier 3C
         // =====================================================================
 
         [TestMethod]

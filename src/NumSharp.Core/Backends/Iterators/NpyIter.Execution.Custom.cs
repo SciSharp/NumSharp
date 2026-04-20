@@ -4,17 +4,17 @@ using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
-// NpyIter.Execution.Custom.cs — Tier A / B / C entry points for user-defined
+// NpyIter.Execution.Custom.cs — Tier 3A / 3B / 3C entry points for user-defined
 // inner-loop kernels. All three routes funnel into the same
 // NpyIterRef.ForEach(NpyInnerLoopFunc, aux) driver; only kernel creation
 // differs.
 //
-//   Tier A (ExecuteRawIL)        — caller emits the entire IL body
-//   Tier B (ExecuteElementWise)  — caller emits per-element scalar + vector
+//   Tier 3A (ExecuteRawIL)        — caller emits the entire IL body
+//   Tier 3B (ExecuteElementWise)  — caller emits per-element scalar + vector
 //                                  bodies; the factory wraps them in the
 //                                  4×-unrolled SIMD + scalar-strided shell
-//   Tier C (ExecuteExpression)   — caller composes an NpyExpr tree which is
-//                                  compiled to a Tier-B kernel
+//   Tier 3C (ExecuteExpression)   — caller composes an NpyExpr tree which is
+//                                  compiled to a Tier-3B kernel
 //
 // All entry points validate that the iterator's NOp matches the operand type
 // array length so common mistakes fail fast.
@@ -25,7 +25,7 @@ namespace NumSharp.Backends.Iteration
     internal unsafe ref partial struct NpyIterRef
     {
         // =====================================================================
-        // Tier A — Raw IL escape hatch
+        // Tier 3A — Raw IL escape hatch
         // =====================================================================
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         // =====================================================================
-        // Tier B — Templated inner loop
+        // Tier 3B — Templated inner loop
         // =====================================================================
 
         /// <summary>
@@ -115,7 +115,7 @@ namespace NumSharp.Backends.Iteration
             => ExecuteElementWise(new[] { a, b, c, outType }, scalarBody, vectorBody, cacheKey);
 
         // =====================================================================
-        // Tier C — Expression DSL
+        // Tier 3C — Expression DSL
         // =====================================================================
 
         /// <summary>

@@ -4,7 +4,7 @@ using System.Text;
 using NumSharp.Backends.Kernels;
 
 // =============================================================================
-// NpyExpr.cs — Expression DSL (Tier C of the custom-op API)
+// NpyExpr.cs — Expression DSL (Tier 3C of the custom-op API)
 // =============================================================================
 //
 // A small algebraic AST over NpyIter operands. Compiles to an
@@ -18,7 +18,7 @@ using NumSharp.Backends.Kernels;
 // mirrors NumPy's casting-by-output behavior for simple ufunc composition
 // and keeps the AST trivial to type-check.
 //
-// For fine-grained type control, use ExecuteElementWise directly (Tier B).
+// For fine-grained type control, use ExecuteElementWise directly (Tier 3B).
 //
 // SIMD
 // ----
