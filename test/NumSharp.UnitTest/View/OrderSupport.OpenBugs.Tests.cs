@@ -1957,5 +1957,24 @@ namespace NumSharp.UnitTest.View
             r.Shape.IsFContiguous.Should().BeTrue(
                 "NumPy: nansum(F3, axis=0, keepdims=True) preserves F-contig layout");
         }
+
+        // ============================================================================
+        // Section 42: np.sort — API gap
+        // NumPy: np.sort(a, axis=-1) returns a sorted copy. Default axis=-1 flattens last
+        // axis. For 1-D arrays, the result is trivially both-contig. For 2-D+, the output
+        // is C-contig regardless of input layout (NumPy's default).
+        // NumSharp: np.sort is listed in Missing Functions (docs/CLAUDE.md); only argsort
+        // exists. Document the gap so it's visible to anyone porting NumPy code.
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.sort is missing from NumSharp (listed in docs/CLAUDE.md Missing Functions).
+                   // NumPy: np.sort(arr) returns a sorted copy; axis=-1 by default.
+                   // Workaround: argsort + fancy-index, but layout semantics diverge.
+        public void Sort_ApiGap()
+        {
+            // NumPy: np.sort(np.array([3,1,2])) == [1,2,3]
+            false.Should().BeTrue("np.sort is not implemented — only argsort exists");
+        }
     }
 }
