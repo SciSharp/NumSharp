@@ -1708,5 +1708,254 @@ namespace NumSharp.UnitTest.View
             fArr["1:3, :"] = 99;
             fArr.Shape.IsFContiguous.Should().BeTrue();
         }
+
+        // ============================================================================
+        // Section 41: Reductions with keepdims=True on F-contig inputs
+        // NumPy: reductions preserve input layout when keepdims=True.
+        // For 2-D F-contig, result shape is (1,N) or (M,1) — trivially both C and F contig.
+        // For 3-D+ F-contig, reduction along an axis yields a shape with one size-1 dim
+        // where only F-strides stay contiguous; NumSharp currently flips to C-contig.
+        // ============================================================================
+
+        [TestMethod]
+        public void Sum_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.sum(F(4,3), axis=0, keepdims=True) shape=(1,3) vals=[6,22,38], both C&F
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.sum(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            r.Shape.IsContiguous.Should().BeTrue("(1,N) is trivially C-contig");
+            r.Shape.IsFContiguous.Should().BeTrue("(1,N) is trivially F-contig");
+            ((double)r[0, 0]).Should().Be(6.0);
+            ((double)r[0, 1]).Should().Be(22.0);
+            ((double)r[0, 2]).Should().Be(38.0);
+        }
+
+        [TestMethod]
+        public void Sum_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.sum(F(4,3), axis=1, keepdims=True) shape=(4,1) vals=[12,15,18,21]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.sum(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((double)r[0, 0]).Should().Be(12.0);
+            ((double)r[3, 0]).Should().Be(21.0);
+        }
+
+        [TestMethod]
+        public void Mean_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.mean(F(4,3), axis=0, keepdims=True) shape=(1,3) vals=[1.5, 5.5, 9.5]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.mean(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((double)r[0, 0]).Should().BeApproximately(1.5, 1e-9);
+            ((double)r[0, 1]).Should().BeApproximately(5.5, 1e-9);
+            ((double)r[0, 2]).Should().BeApproximately(9.5, 1e-9);
+        }
+
+        [TestMethod]
+        public void Mean_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.mean(F(4,3), axis=1, keepdims=True) shape=(4,1) vals=[4,5,6,7]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.mean(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            ((double)r[0, 0]).Should().BeApproximately(4.0, 1e-9);
+            ((double)r[3, 0]).Should().BeApproximately(7.0, 1e-9);
+        }
+
+        [TestMethod]
+        public void Max_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.max(F(4,3), axis=0, keepdims=True) shape=(1,3) vals=[3,7,11]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.max(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((double)r[0, 0]).Should().Be(3.0);
+            ((double)r[0, 1]).Should().Be(7.0);
+            ((double)r[0, 2]).Should().Be(11.0);
+        }
+
+        [TestMethod]
+        public void Min_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.min(F(4,3), axis=1, keepdims=True) shape=(4,1) vals=[0,1,2,3]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.min(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            ((double)r[0, 0]).Should().Be(0.0);
+            ((double)r[3, 0]).Should().Be(3.0);
+        }
+
+        [TestMethod]
+        public void Prod_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.prod(F(4,3), axis=0, keepdims=True) shape=(1,3) vals=[0, 840, 7920]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.prod(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            ((double)r[0, 0]).Should().Be(0.0);
+            ((double)r[0, 1]).Should().Be(840.0);
+            ((double)r[0, 2]).Should().Be(7920.0);
+        }
+
+        [TestMethod]
+        public void Std_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.std(F(4,3), axis=0, keepdims=True, ddof=0) = [1.118, 1.118, 1.118]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.std(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            ((double)r[0, 0]).Should().BeApproximately(1.118, 0.01);
+            ((double)r[0, 1]).Should().BeApproximately(1.118, 0.01);
+            ((double)r[0, 2]).Should().BeApproximately(1.118, 0.01);
+        }
+
+        [TestMethod]
+        public void Var_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: np.var(F(4,3), axis=1, keepdims=True, ddof=0) = [10.6667, 10.6667, 10.6667, 10.6667]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.var(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            ((double)r[0, 0]).Should().BeApproximately(10.6667, 0.01);
+            ((double)r[3, 0]).Should().BeApproximately(10.6667, 0.01);
+        }
+
+        // --- 3-D F-contig tests: F-preservation fails (documented) ---
+
+        [TestMethod]
+        [OpenBugs] // Reductions with keepdims=True on 3-D F-contig flip to C-contig output.
+                   // NumPy: shape (1,3,4) on 3-D (2,3,4) F-contig stays F-contig (C=0, F=1).
+                   // NumSharp: returns C=1, F=0.
+        public void Sum_FContig3D_Axis0_KeepDims_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = i * 12 + j * 4 + k;
+
+            var r = np.sum(f3, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3, 4 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: sum(F3, axis=0, keepdims=True) preserves F-contig layout");
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same gap as Sum_FContig3D_Axis0_KeepDims — mean doesn't preserve F either.
+        public void Mean_FContig3D_Axis1_KeepDims_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = i * 12 + j * 4 + k;
+
+            var r = np.mean(f3, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 2, 1, 4 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: mean(F3, axis=1, keepdims=True) preserves F-contig layout");
+        }
+
+        [TestMethod]
+        [OpenBugs] // Reductions without keepdims on 3-D F-contig also flip to C-contig.
+                   // NumPy: shape (3,4) from reducing axis=0 of (2,3,4) F-contig stays F-contig (C=0, F=1).
+        public void Sum_FContig3D_Axis0_NoKeepDims_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = i * 12 + j * 4 + k;
+
+            var r = np.sum(f3, axis: 0);
+            r.shape.Should().Equal(new long[] { 3, 4 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: sum(F3, axis=0) on F-contig 3D produces F-contig 2D");
+        }
+
+        // --- NaN-aware reductions with keepdims=True ---
+
+        [TestMethod]
+        public void NanSum_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: nansum of (4,3) F with nan at [0,0], axis=0, kd=True
+            // -> shape (1,3) vals=[6, 22, 38] (nan contributes 0 to sum)
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            var r = np.nansum(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            ((double)r[0, 0]).Should().Be(6.0);
+            ((double)r[0, 1]).Should().Be(22.0);
+            ((double)r[0, 2]).Should().Be(38.0);
+        }
+
+        [TestMethod]
+        public void NanMean_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: nanmean axis=1, kd=True shape=(4,1) vals=[6, 5, 6, 7]
+            // (row 0: nan + 4 + 8 -> mean of 2 non-nan = 6)
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            var r = np.nanmean(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            ((double)r[0, 0]).Should().BeApproximately(6.0, 1e-9);
+            ((double)r[1, 0]).Should().BeApproximately(5.0, 1e-9);
+            ((double)r[2, 0]).Should().BeApproximately(6.0, 1e-9);
+            ((double)r[3, 0]).Should().BeApproximately(7.0, 1e-9);
+        }
+
+        [TestMethod]
+        public void NanStd_FContig2D_Axis0_KeepDims_MatchesNumPy()
+        {
+            // NumPy: nanstd axis=0, kd=True, ddof=0 on (4,3) F with nan at [0,0]
+            // -> shape (1,3) vals=[0.8165, 1.118, 1.118]
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            var r = np.nanstd(fArr, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3 });
+            ((double)r[0, 0]).Should().BeApproximately(0.8165, 0.01);
+            ((double)r[0, 1]).Should().BeApproximately(1.118, 0.01);
+            ((double)r[0, 2]).Should().BeApproximately(1.118, 0.01);
+        }
+
+        [TestMethod]
+        public void NanVar_FContig2D_Axis1_KeepDims_MatchesNumPy()
+        {
+            // NumPy: nanvar axis=1, kd=True, ddof=0 -> shape (4,1) vals=[4, 10.6667, 10.6667, 10.6667]
+            // (row 0: variance of {4, 8} around 6 = (4+4)/2 = 4)
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            fArr[0, 0] = double.NaN;
+            var r = np.nanvar(fArr, axis: 1, keepdims: true);
+            r.shape.Should().Equal(new long[] { 4, 1 });
+            ((double)r[0, 0]).Should().BeApproximately(4.0, 1e-6);
+            ((double)r[1, 0]).Should().BeApproximately(10.6667, 0.01);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NaN-aware 3-D F-contig reduction doesn't preserve F-contig either.
+                   // NumPy: nansum(F3, axis=0, keepdims=True) shape (1,3,4) stays F-contig.
+        public void NanSum_FContig3D_Axis0_KeepDims_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = i * 12 + j * 4 + k;
+            f3[0, 0, 0] = double.NaN;
+
+            var r = np.nansum(f3, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3, 4 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: nansum(F3, axis=0, keepdims=True) preserves F-contig layout");
+        }
     }
 }
