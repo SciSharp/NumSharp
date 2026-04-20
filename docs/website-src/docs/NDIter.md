@@ -843,6 +843,27 @@ Unlike NumPy's comparison ufuncs (which return `bool` arrays), Tier C's single-o
 
 NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `NaN == NaN → 0`, `NaN < 5 → 0`, `NaN >= 5 → 0`. To test for NaN, use `IsNaN(x)`.
 
+**Call — invoke any .NET method.** The escape hatch for math not in the node catalog. Scalar path only.
+
+| Factory | Semantics |
+|---------|-----------|
+| `Call<T1…Tn, TR>(Func<T1…Tn, TR> f, NpyExpr a1, …)` | Typed generic overloads for arity 0–4. Accept method groups without cast (`NpyExpr.Call(Math.Sqrt, x)`, `NpyExpr.Call(Math.Pow, x, y)`). |
+| `Call(Delegate func, params NpyExpr[] args)` | Catch-all for pre-constructed delegates. Use when the arity exceeds 4 or when the typed overload is ambiguous. Cast the method group to the matching `Func<…>` if passing a method group. |
+| `Call(MethodInfo staticMethod, params NpyExpr[] args)` | Invoke a reflection-obtained static method. |
+| `Call(MethodInfo instanceMethod, object target, params NpyExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
+
+Three dispatch paths, selected automatically:
+
+| Condition | Emitted IL | Per-element cost |
+|-----------|------------|------------------|
+| Static method (`Target == null && Method.IsStatic`) | `call <methodinfo>` | Direct call; JIT may inline |
+| Instance `MethodInfo` with explicit `target` | `ldc_i4 slotId` → `DelegateSlots.LookupTarget` → `castclass target type` → `callvirt <methodinfo>` | ~5 ns lookup + virtual call |
+| Any other delegate (captured lambda, instance-method delegate) | `ldc_i4 slotId` → `DelegateSlots.LookupDelegate` → `castclass delegate type` → `callvirt Invoke` | ~5-10 ns lookup + `Delegate.Invoke` dispatch |
+
+Argument values are auto-converted from `ctx.OutputType` to each parameter's dtype (same `EmitConvertTo` primitive as `InputNode`). The return value is converted from the method's return dtype back to `ctx.OutputType`. So `NpyExpr.Call(Math.Sqrt, Input(0))` works when the input is `Int32` and the output is `Double` — the int gets promoted to double at the call site, `Math.Sqrt(double)` runs, and the double falls through to the output as-is.
+
+**Supported method signatures.** Every parameter and the return type must be one of the 12 supported NPTypeCode dtypes (`Boolean`, `Byte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Char`, `Single`, `Double`, `Decimal`). Methods with `ref`, `out`, `params`, generic unbound, or `void` return signatures are rejected at node-construction time with `ArgumentException`. `Complex`, `string`, or custom struct types are also rejected.
+
 ##### Operator overloads
 
 An expression tree reads like ordinary C#:
@@ -886,7 +907,7 @@ What the emitted IL does per element: load `int32`, `Conv_R8` (promote to double
 A node's `SupportsSimd` determines whether Tier C emits the vector body:
 
 - **Yes:** `Input`, `Const`, the four arithmetic binary ops (`+ - * /`), the three bitwise binary ops (`& | ^`), and the unary ops `Negate`, `Abs`, `Sqrt`, `Floor`, `Ceil`, `Square`, `Reciprocal`, `Deg2Rad`, `Rad2Deg`, `BitwiseNot`.
-- **No:** `Mod`, `Power`, `FloorDivide`, `ATan2`, `Min`/`Max`/`Clamp`/`Where`, all comparisons, `Round`, `Truncate` (no net8 SIMD method), all trig (except `Deg2Rad`/`Rad2Deg`), all log/exp, `Sign`, `Cbrt`, `LogicalNot`, predicates (`IsNaN`/`IsFinite`/`IsInf`).
+- **No:** `Mod`, `Power`, `FloorDivide`, `ATan2`, `Min`/`Max`/`Clamp`/`Where`, all comparisons, `Round`, `Truncate` (no net8 SIMD method), all trig (except `Deg2Rad`/`Rad2Deg`), all log/exp, `Sign`, `Cbrt`, `LogicalNot`, predicates (`IsNaN`/`IsFinite`/`IsInf`), `Call` (user methods are always scalar — there is no vectorization path for arbitrary managed calls).
 
 **Predicate / LogicalNot result handling.** Predicates (`IsNaN`/`IsFinite`/`IsInf`) and `LogicalNot` emit an I4 0/1 on the stack, not a value of the output dtype. `UnaryNode` detects these ops and inserts a trailing `EmitConvertTo(Int32, outType)` so the factory's final `Stind` matches. `LogicalNot` in particular routes through `EmitComparisonOperation(Equal, outType)` with an output-dtype zero literal, because the default `ILKernelGenerator` emit path uses `Ldc_I4_0 + Ceq` which is only correct when the value fits in I4 — broken for Int64, Single, Double, Decimal. NpyExpr takes the safer route.
 
@@ -906,6 +927,8 @@ NpyExpr:LogicalNot(In[0]):in=Double:out=Double
 NpyExpr:BitwiseNot(In[0]):in=Int32:out=Int32
 NpyExpr:Mod(In[0],Const[3]):in=Double:out=Double
 NpyExpr:Sqrt(In[0]):in=Int32:out=Double           ← int input, double output
+NpyExpr:Call[System.Math.Sqrt#100663308@<guid>](In[0]):in=Double:out=Double
+NpyExpr:Call[MyApp.Activations.Swish#167772171@<guid>,target#7](In[0]):in=Double:out=Double
 ```
 
 Enum names appear verbatim (e.g. `Multiply`, not `Mul`; `IsNan`, not `IsNaN` — the enum is spelled `IsNan`).
@@ -921,6 +944,7 @@ Two trees with identical structure and types get the same auto-derived key and s
 | `ComparisonNode` | `Cmp<Op>(L,R)` (e.g. `CmpEqual(...)`, `CmpGreater(...)`) |
 | `MinMaxNode` | `Min(L,R)` or `Max(L,R)` |
 | `WhereNode` | `Where(C,A,B)` |
+| `CallNode` | `Call[<declaringType>.<name>#<metadataToken>@<moduleGuid>](args)` — for instance methods, additionally `,target#<slotId>` |
 
 > **Constant value sensitivity.** Two trees that differ only in a constant value (e.g. `x + 1` vs `x + 2`) generate distinct keys — the constant is part of the signature, because it's baked into the emitted IL. If you need many kernels parameterized by a scalar, consider passing the scalar as a second input operand (as a 0-d `NDArray` or a broadcast view) rather than a compile-time constant.
 >
@@ -973,6 +997,14 @@ A non-exhaustive list of pitfalls worth internalizing:
 - **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is almost never what you intended. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
 
 - **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier B.
+
+- **`Call` delegates are held forever.** `CallNode` stashes captured delegates and bound instance targets in a process-wide `DelegateSlots` dictionary so the emitted IL can look them up. There is no eviction. If you call `NpyExpr.Call(x => x * scale, in0)` inside a hot loop (creating a new closure each iteration), the dictionary grows without bound. Register delegates once at startup — a `static readonly Func<double, double>` field or a DI singleton — and reuse them.
+
+- **`Call` method-group ambiguity.** `NpyExpr.Call(Math.Abs, x)` fails to compile because `Math.Abs` has nine overloads (`double`, `float`, `int`, `long`, etc.) and the compiler can't pick one. Cast to the specific `Func<...>` you want: `NpyExpr.Call((Func<double, double>)Math.Abs, x)`. Single-overload methods like `Math.Sqrt`, `Math.Cbrt`, `Math.Log` bind without cast.
+
+- **`Call` runs at scalar speed.** A managed method call per element forfeits SIMD. For a sustained throughput-critical op, it's ~30-50% slower than the equivalent built-in DSL node because the call itself has overhead beyond just computing the result. Use `Call` for math the DSL doesn't expose (user-defined activations, `MathNet.Numerics` routines, lookup tables via a method), not for things like `Sqrt` where `NpyExpr.Sqrt(x)` is the right answer.
+
+- **`Call` return type widening is lossy for NaN.** If a delegate returns `int` and the tree output is `double`, `Math.Floor(NaN) = NaN` gets cast to `int` (yielding `0` or some CPU-dependent value), which widens back to the float representation of that integer. NaN information is lost across integer-returning calls. Match return dtype to output dtype when NaN correctness matters.
 
 ##### Debugging compiled kernels
 
@@ -1045,6 +1077,8 @@ Seventeen worked examples grouped by API tier.
 15. [Heaviside step function](#15-heaviside-step-function)
 16. [Polynomial evaluation via Horner's method](#16-polynomial-evaluation-via-horners-method)
 17. [Piecewise: absolute value of sine (abs(sin(x)))](#17-piecewise-absolute-value-of-sine-abssinx)
+18. [User-defined activation via NpyExpr.Call](#18-user-defined-activation-via-npyexprcall)
+19. [Reflected MethodInfo with an instance method](#19-reflected-methodinfo-with-an-instance-method)
 
 ### 1. Three-operand binary over a 3-D contiguous array
 
@@ -1339,6 +1373,45 @@ iter.ExecuteExpression(expr,
 ```
 
 `Sin` is scalar-only, so the whole tree runs scalar (no 4× unroll). But both ops fuse into one pass — a single `Math.Sin` call + `Math.Abs` per element. The alternative — two Layer 3 calls on three arrays — would allocate a `sin(x)` temporary.
+
+### 18. User-defined activation via `NpyExpr.Call`
+
+Say you want **Swish** (`x * sigmoid(x)`, used in EfficientNet and family) but Tier C doesn't have a `Sigmoid` node. Drop to `Call`:
+
+```csharp
+// Registered once at startup — static readonly field, not a per-call lambda.
+static readonly Func<double, double> SwishActivation =
+    x => x / (1.0 + Math.Exp(-x));
+
+// Tree: out = Swish(x) + bias  (bias is a broadcast-scalar Input, not a Const)
+var expr = NpyExpr.Call(SwishActivation, NpyExpr.Input(0)) + NpyExpr.Input(1);
+iter.ExecuteExpression(expr,
+    new[] { NPTypeCode.Double, NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+The `SwishActivation` delegate is registered exactly once into `DelegateSlots`; every subsequent iter reuses the same slot ID and the same compiled kernel (auto-derived cache key is stable because it's keyed by `MethodInfo.MetadataToken`, not delegate identity). Runtime overhead is ~5 ns per element for the slot lookup + one `Delegate.Invoke` call per element — still single-pass, still zero intermediates.
+
+For maximum speed, if your activation is hot enough to matter, compose it out of DSL primitives:
+```csharp
+var x = NpyExpr.Input(0);
+var swish = x / (NpyExpr.Const(1.0) + NpyExpr.Exp(-x));   // same op, no Call overhead
+```
+
+### 19. Reflected MethodInfo with an instance method
+
+Sometimes you're calling a method you discovered via reflection (e.g. an op registered through a plugin system). Use the `MethodInfo + target` overload:
+
+```csharp
+var provider = new PluginActivations { Temperature = 1.5 };
+var method = provider.GetType().GetMethod("ApplyTempered")!;
+// ApplyTempered(double x) => Math.Pow(x, 1.0 / Temperature);
+
+var expr = NpyExpr.Call(method, provider, NpyExpr.Input(0));
+iter.ExecuteExpression(expr,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+The `provider` object's state (`Temperature`) is captured into the compiled kernel via a `DelegateSlots` slot ID. Mutating `provider.Temperature` between calls is visible to subsequent invocations — the slot holds the reference, not a snapshot.
 
 ---
 
