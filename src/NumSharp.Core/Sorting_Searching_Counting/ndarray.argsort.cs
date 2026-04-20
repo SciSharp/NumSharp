@@ -20,6 +20,13 @@ namespace NumSharp
                 throw new IndexOutOfRangeException($"Axis = {axis} is out bounds for dimension = {ndim}");
             }
 
+            // argsort's internal GetAtIndex<T> / SortLong<T> paths assume a C-contiguous
+            // logical layout. For non-C-contig inputs (F-contig, sliced, transposed),
+            // materialize a C-contig copy up front — matches NumPy's behavior of
+            // returning a C-contig index array regardless of input layout.
+            if (!Shape.IsContiguous)
+                return this.copy('C').argsort<T>(axis);
+
             // Axis -1 means that sort with respect to last axis
             if (axis == -1) {
                 axis = ndim-1;
