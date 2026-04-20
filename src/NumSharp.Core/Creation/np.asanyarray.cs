@@ -16,16 +16,25 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype = null) //todo support order
+        public static NDArray asanyarray(in object a, Type dtype = null)
+            => asanyarray(in a, dtype, 'K');
+
+        /// <summary>
+        ///     Convert the input to an ndarray with a specified memory layout.
+        /// </summary>
+        /// <param name="a">Input data.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
+        /// <param name="order">'C', 'F', 'A' or 'K' (default — resolved against a).</param>
+        /// <returns>Array interpretation of a in the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        public static NDArray asanyarray(in object a, Type dtype, char order)
         {
             NDArray ret;
             switch (a) {
                 case null:
                     throw new ArgumentNullException(nameof(a));
                 case NDArray nd:
-                    if (dtype == null || Equals(nd.dtype, dtype))
-                        return nd;
-                    return nd.astype(dtype, true);
+                    return asarray(nd, dtype, order);
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.
                     // new NDArray(object[]) throws NotSupportedException since object isn't a
@@ -100,8 +109,16 @@ namespace NumSharp
             }
 
             if (dtype != null && !Equals(ret.dtype, dtype))
-                return ret.astype(dtype, true);
+                ret = ret.astype(dtype, true);
 
+            // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
+            char physical = OrderResolver.Resolve(order, ret.Shape);
+            if (ret.Shape.NDim > 1 && ret.size > 1)
+            {
+                bool layoutMatches = physical == 'C' ? ret.Shape.IsContiguous : ret.Shape.IsFContiguous;
+                if (!layoutMatches)
+                    ret = ret.copy(physical);
+            }
             return ret;
         }
 
