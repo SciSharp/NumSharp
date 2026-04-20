@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using NumSharp.Backends.Kernels;
-using TUnit.Core;
 using NumSharp.UnitTest.Utilities;
 using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
@@ -11,11 +10,12 @@ namespace NumSharp.UnitTest.Backends.Kernels
     /// Tests for SIMD-optimized np.where implementation.
     /// Verifies correctness of the SIMD path for all supported dtypes.
     /// </summary>
+    [TestClass]
     public class WhereSimdTests
     {
         #region SIMD Correctness
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Float32_Correctness()
         {
             var rng = np.random.RandomState(42);
@@ -34,7 +34,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Float64_Correctness()
         {
             var rng = np.random.RandomState(43);
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Int32_Correctness()
         {
             var rng = np.random.RandomState(44);
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Int64_Correctness()
         {
             var rng = np.random.RandomState(45);
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Byte_Correctness()
         {
             var rng = np.random.RandomState(46);
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Int16_Correctness()
         {
             var rng = np.random.RandomState(47);
@@ -124,7 +124,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_UInt16_Correctness()
         {
             var rng = np.random.RandomState(48);
@@ -142,7 +142,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_UInt32_Correctness()
         {
             var rng = np.random.RandomState(49);
@@ -160,7 +160,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_UInt64_Correctness()
         {
             var rng = np.random.RandomState(50);
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Boolean_Correctness()
         {
             var rng = np.random.RandomState(51);
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Char_Correctness()
         {
             var rng = np.random.RandomState(52);
@@ -225,7 +225,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Path Selection
 
-        [Test]
+        [TestMethod]
         public void Where_NonContiguous_Works()
         {
             // Sliced arrays are non-contiguous, should work correctly
@@ -244,7 +244,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Broadcast_Works()
         {
             // Broadcasted arrays
@@ -265,7 +265,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(20, (int)result[1, 1]);  // cond[1]=false -> y=20
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Decimal_Works()
         {
             var cond = np.array(new[] { true, false, true });
@@ -280,7 +280,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(3.3m, (decimal)result[2]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_NonBoolCondition_Works()
         {
             // Non-bool condition requires truthiness check
@@ -294,7 +294,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_SmallArray()
         {
             // Array smaller than vector width
@@ -307,7 +307,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             result.Should().BeOfValues(1, 20, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_VectorAlignedSize()
         {
             var rng = np.random.RandomState(53);
@@ -327,7 +327,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_WithScalarTail()
         {
             // Size that requires scalar tail processing
@@ -344,7 +344,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_AllTrue()
         {
             var size = 100;
@@ -360,7 +360,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_AllFalse()
         {
             var size = 100;
@@ -376,7 +376,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Alternating()
         {
             var size = 100;
@@ -395,7 +395,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_NaN_Propagates()
         {
             var cond = np.array(new[] { true, false, true });
@@ -409,7 +409,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             Assert.AreEqual(2.0, (double)result[2], 1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_Infinity()
         {
             var cond = np.array(new[] { true, false, true, false });
@@ -428,7 +428,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Performance Sanity Check
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_LargeArray_Correctness()
         {
             var rng = np.random.RandomState(54);
@@ -458,7 +458,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region 2D/Multi-dimensional
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_2D_Contiguous()
         {
             var rng = np.random.RandomState(55);
@@ -483,7 +483,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Simd_3D_Contiguous()
         {
             var rng = np.random.RandomState(56);

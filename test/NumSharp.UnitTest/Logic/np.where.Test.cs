@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using TUnit.Core;
 using NumSharp.UnitTest.Utilities;
 using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
@@ -13,11 +12,12 @@ namespace NumSharp.UnitTest.Logic
     /// - Single arg: returns np.nonzero(condition)
     /// - Three args: element-wise selection with broadcasting
     /// </summary>
+    [TestClass]
     public class np_where_Test
     {
         #region Single Argument (nonzero equivalent)
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_1D_ReturnsIndices()
         {
             // np.where([0, 1, 0, 2, 0, 3]) -> (array([1, 3, 5]),)
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Logic
             result[0].Should().BeOfValues(1L, 3L, 5L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_2D_ReturnsTupleOfIndices()
         {
             // np.where([[0, 1, 0], [2, 0, 3]]) -> (array([0, 1, 1]), array([1, 0, 2]))
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.Logic
             result[1].Should().BeOfValues(1L, 0L, 2L);  // col indices
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_Boolean_ReturnsNonzero()
         {
             var arr = np.array(new[] { true, false, true, false, true });
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.Logic
             result[0].Should().BeOfValues(0L, 2L, 4L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_Empty_ReturnsEmptyIndices()
         {
             var arr = np.array(new int[0]);
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(0, result[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_AllFalse_ReturnsEmptyIndices()
         {
             var arr = np.array(new[] { false, false, false });
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(0, result[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_AllTrue_ReturnsAllIndices()
         {
             var arr = np.array(new[] { true, true, true });
@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest.Logic
             result[0].Should().BeOfValues(0L, 1L, 2L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleArg_3D_ReturnsTupleOfThreeArrays()
         {
             // 2x2x2 array with some non-zero elements
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Three Arguments (element-wise selection)
 
-        [Test]
+        [TestMethod]
         public void Where_ThreeArgs_Basic_SelectsCorrectly()
         {
             // np.where(a < 5, a, 10*a) for a = arange(10)
@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L, 50L, 60L, 70L, 80L, 90L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_ThreeArgs_BooleanCondition()
         {
             var cond = np.array(new[] { true, false, true, false });
@@ -119,7 +119,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1, 20, 3, 40);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_ThreeArgs_2D()
         {
             // np.where([[True, False], [True, True]], [[1, 2], [3, 4]], [[9, 8], [7, 6]])
@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(4, (int)result[1, 1]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_ThreeArgs_NonBoolCondition_TreatsAsTruthy()
         {
             // np.where([0, 1, 2, 0], 100, -100) -> [-100, 100, 100, -100]
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Scalar Arguments
 
-        [Test]
+        [TestMethod]
         public void Where_ScalarX()
         {
             var cond = np.array(new[] { true, false, true, false });
@@ -159,7 +159,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(99, 20, 99, 40);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_ScalarY()
         {
             var cond = np.array(new[] { true, false, true, false });
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1, -1, 3, -1);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_BothScalars()
         {
             var cond = np.array(new[] { true, false, true, false });
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1, 0, 1, 0);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_ScalarFloat()
         {
             var cond = np.array(new[] { true, false });
@@ -193,7 +193,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Broadcasting
 
-        [Test]
+        [TestMethod]
         public void Where_Broadcasting_ScalarY()
         {
             // np.where(a < 4, a, -1) for 3x3 array
@@ -208,7 +208,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(-1, (int)result[2, 2]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Broadcasting_DifferentShapes()
         {
             // cond: (2,1), x: (3,), y: (1,3) -> result: (2,3)
@@ -228,7 +228,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(30, (int)result[1, 2]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Broadcasting_ColumnVector()
         {
             // cond: (3,1), x: scalar, y: (1,4) -> result: (3,4)
@@ -253,7 +253,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Type Promotion
 
-        [Test]
+        [TestMethod]
         public void Where_TypePromotion_IntFloat_ReturnsFloat64()
         {
             var cond = np.array(new[] { true, false });
@@ -264,7 +264,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(2.5, (double)result[1], 1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_TypePromotion_Int32Int64_ReturnsInt64()
         {
             var cond = np.array(new[] { true, false });
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(typeof(long), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_TypePromotion_FloatDouble_ReturnsDouble()
         {
             var cond = np.array(new[] { true, false });
@@ -290,7 +290,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void Where_EmptyArrays_ThreeArgs()
         {
             var cond = np.array(new bool[0]);
@@ -301,7 +301,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(0, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_SingleElement()
         {
             var cond = np.array(new[] { true });
@@ -312,7 +312,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(42, (int)result[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_AllTrue_ReturnsAllX()
         {
             var cond = np.array(new[] { true, true, true });
@@ -323,7 +323,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_AllFalse_ReturnsAllY()
         {
             var cond = np.array(new[] { false, false, false });
@@ -334,7 +334,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(10, 20, 30);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_LargeArray()
         {
             var size = 100000;
@@ -354,7 +354,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region NumPy Output Verification
 
-        [Test]
+        [TestMethod]
         public void Where_NumPyExample1()
         {
             // From NumPy docs: np.where([[True, False], [True, True]],
@@ -371,7 +371,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(4, (int)result[1, 1]);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_NumPyExample2()
         {
             // From NumPy docs: np.where(a < 5, a, 10*a) for a = arange(10)
@@ -382,7 +382,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L, 50L, 60L, 70L, 80L, 90L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_NumPyExample3()
         {
             // From NumPy docs: np.where(a < 4, a, -1) for specific array
@@ -405,7 +405,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Dtype Coverage
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Byte()
         {
             var cond = np.array(new[] { true, false });
@@ -417,7 +417,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues((byte)1, (byte)20);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Int16()
         {
             var cond = np.array(new[] { true, false });
@@ -429,7 +429,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues((short)1, (short)20);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Int32()
         {
             var cond = np.array(new[] { true, false });
@@ -441,7 +441,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1, 20);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Int64()
         {
             var cond = np.array(new[] { true, false });
@@ -453,7 +453,7 @@ namespace NumSharp.UnitTest.Logic
             result.Should().BeOfValues(1L, 20L);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Single()
         {
             var cond = np.array(new[] { true, false });
@@ -466,7 +466,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(20.5f, (float)result[1], 1e-6f);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Double()
         {
             var cond = np.array(new[] { true, false });
@@ -479,7 +479,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(20.5, (double)result[1], 1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Where_Dtype_Boolean()
         {
             var cond = np.array(new[] { true, false });

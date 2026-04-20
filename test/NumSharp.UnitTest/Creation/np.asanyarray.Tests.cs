@@ -11,11 +11,12 @@ namespace NumSharp.UnitTest.Creation
     /// <summary>
     /// Tests for np.asanyarray covering all built-in C# collection types.
     /// </summary>
+    [TestClass]
     public class np_asanyarray_tests
     {
         #region NDArray passthrough
 
-        [Test]
+        [TestMethod]
         public void NDArray_ReturnsAsIs()
         {
             var original = np.array(1, 2, 3, 4, 5);
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.Creation
             ReferenceEquals(original, result).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void NDArray_WithDtype_ReturnsConverted()
         {
             var original = np.array(1, 2, 3, 4, 5);
@@ -35,7 +36,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5);
         }
 
-        [Test]
+        [TestMethod]
         public void NDArray_WithSameDtype_ReturnsAsIs()
         {
             var original = np.array(1, 2, 3, 4, 5);
@@ -49,7 +50,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region Array types
 
-        [Test]
+        [TestMethod]
         public void Array_1D()
         {
             var arr = new int[] { 1, 2, 3, 4, 5 };
@@ -59,7 +60,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Array_2D()
         {
             var arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -68,7 +69,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(2, 3).And.BeOfValues(1, 2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_WithDtype()
         {
             var arr = new int[] { 1, 2, 3 };
@@ -82,7 +83,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region Scalars
 
-        [Test]
+        [TestMethod]
         public void Scalar_Int()
         {
             var result = np.asanyarray(42);
@@ -91,7 +92,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Scalar_Double()
         {
             var result = np.asanyarray(3.14);
@@ -100,7 +101,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Scalar_Decimal()
         {
             var result = np.asanyarray(123.456m);
@@ -109,7 +110,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(decimal));
         }
 
-        [Test]
+        [TestMethod]
         public void Scalar_Bool()
         {
             var result = np.asanyarray(true);
@@ -122,7 +123,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region List<T>
 
-        [Test]
+        [TestMethod]
         public void List_Int()
         {
             var list = new List<int> { 1, 2, 3, 4, 5 };
@@ -132,7 +133,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void List_Double()
         {
             var list = new List<double> { 1.1, 2.2, 3.3 };
@@ -142,7 +143,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void List_Bool()
         {
             var list = new List<bool> { true, false, true };
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(bool));
         }
 
-        [Test]
+        [TestMethod]
         public void List_Empty()
         {
             var list = new List<int>();
@@ -162,7 +163,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void List_WithDtype()
         {
             var list = new List<int> { 1, 2, 3 };
@@ -176,7 +177,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region IList<T> / ICollection<T> / IEnumerable<T>
 
-        [Test]
+        [TestMethod]
         public void IList_Int()
         {
             IList<int> list = new List<int> { 1, 2, 3, 4, 5 };
@@ -185,7 +186,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void ICollection_Int()
         {
             ICollection<int> collection = new List<int> { 1, 2, 3, 4, 5 };
@@ -194,7 +195,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void IEnumerable_Int()
         {
             IEnumerable<int> enumerable = new List<int> { 1, 2, 3, 4, 5 };
@@ -203,7 +204,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void IEnumerable_FromLinq()
         {
             var enumerable = Enumerable.Range(1, 5);
@@ -212,7 +213,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void IEnumerable_FromLinqSelect()
         {
             var enumerable = new[] { 1, 2, 3 }.Select(x => x * 2);
@@ -225,7 +226,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region IReadOnlyList<T> / IReadOnlyCollection<T>
 
-        [Test]
+        [TestMethod]
         public void IReadOnlyList_Int()
         {
             IReadOnlyList<int> list = new List<int> { 1, 2, 3, 4, 5 };
@@ -234,7 +235,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void IReadOnlyCollection_Int()
         {
             IReadOnlyCollection<int> collection = new List<int> { 1, 2, 3, 4, 5 };
@@ -247,7 +248,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region ReadOnlyCollection<T>
 
-        [Test]
+        [TestMethod]
         public void ReadOnlyCollection_Int()
         {
             var collection = new ReadOnlyCollection<int>(new List<int> { 1, 2, 3, 4, 5 });
@@ -260,7 +261,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region LinkedList<T>
 
-        [Test]
+        [TestMethod]
         public void LinkedList_Int()
         {
             var linkedList = new LinkedList<int>();
@@ -276,7 +277,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region HashSet<T> / SortedSet<T>
 
-        [Test]
+        [TestMethod]
         public void HashSet_Int()
         {
             var set = new HashSet<int> { 3, 1, 4, 1, 5, 9 }; // Duplicates removed
@@ -286,7 +287,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void SortedSet_Int()
         {
             var set = new SortedSet<int> { 3, 1, 4, 1, 5, 9 };
@@ -299,7 +300,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region Queue<T> / Stack<T>
 
-        [Test]
+        [TestMethod]
         public void Queue_Int()
         {
             var queue = new Queue<int>();
@@ -311,7 +312,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Stack_Int()
         {
             var stack = new Stack<int>();
@@ -327,7 +328,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region ArraySegment<T>
 
-        [Test]
+        [TestMethod]
         public void ArraySegment_Int()
         {
             var array = new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -337,7 +338,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySegment_Empty()
         {
             var array = new int[] { 1, 2, 3 };
@@ -347,7 +348,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(0);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySegment_Full()
         {
             var array = new int[] { 1, 2, 3, 4, 5 };
@@ -361,7 +362,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region Memory<T> / ReadOnlyMemory<T>
 
-        [Test]
+        [TestMethod]
         public void Memory_Int()
         {
             var array = new int[] { 1, 2, 3, 4, 5 };
@@ -371,7 +372,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3).And.BeOfValues(2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void ReadOnlyMemory_Int()
         {
             var array = new int[] { 1, 2, 3, 4, 5 };
@@ -385,7 +386,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region ImmutableArray<T> / ImmutableList<T>
 
-        [Test]
+        [TestMethod]
         public void ImmutableArray_Int()
         {
             var immutableArray = ImmutableArray.Create(1, 2, 3, 4, 5);
@@ -394,7 +395,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void ImmutableList_Int()
         {
             var immutableList = ImmutableList.Create(1, 2, 3, 4, 5);
@@ -403,7 +404,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(5).And.BeOfValues(1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void ImmutableHashSet_Int()
         {
             var immutableSet = ImmutableHashSet.Create(3, 1, 4, 1, 5);
@@ -416,7 +417,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region All supported dtypes via List<T>
 
-        [Test]
+        [TestMethod]
         public void List_Byte()
         {
             var list = new List<byte> { 1, 2, 3 };
@@ -427,7 +428,7 @@ namespace NumSharp.UnitTest.Creation
 
         // Note: sbyte is NOT supported by NumSharp (12 supported types: bool, byte, short, ushort, int, uint, long, ulong, char, float, double, decimal)
 
-        [Test]
+        [TestMethod]
         public void List_Short()
         {
             var list = new List<short> { 1, 2, 3 };
@@ -436,7 +437,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_UShort()
         {
             var list = new List<ushort> { 1, 2, 3 };
@@ -445,7 +446,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_UInt()
         {
             var list = new List<uint> { 1, 2, 3 };
@@ -454,7 +455,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_Long()
         {
             var list = new List<long> { 1, 2, 3 };
@@ -463,7 +464,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_ULong()
         {
             var list = new List<ulong> { 1, 2, 3 };
@@ -472,7 +473,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_Float()
         {
             var list = new List<float> { 1.1f, 2.2f, 3.3f };
@@ -481,7 +482,7 @@ namespace NumSharp.UnitTest.Creation
             result.Should().BeShaped(3);
         }
 
-        [Test]
+        [TestMethod]
         public void List_Char()
         {
             var list = new List<char> { 'a', 'b', 'c' };
@@ -494,13 +495,13 @@ namespace NumSharp.UnitTest.Creation
 
         #region Error cases
 
-        [Test]
+        [TestMethod]
         public void Null_ThrowsArgumentNullException()
         {
             Assert.ThrowsException<ArgumentNullException>(() => np.asanyarray(null));
         }
 
-        [Test]
+        [TestMethod]
         public void UnsupportedType_ThrowsNotSupportedException()
         {
             // String collections are not supported (string is not primitive/decimal)
@@ -508,7 +509,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.ThrowsException<NotSupportedException>(() => np.asanyarray(stringList));
         }
 
-        [Test]
+        [TestMethod]
         public void CustomClass_ThrowsNotSupportedException()
         {
             var customObject = new object();
@@ -519,7 +520,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region String special case
 
-        [Test]
+        [TestMethod]
         public void String_CreatesCharArray()
         {
             var result = np.asanyarray("hello");
@@ -532,7 +533,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region Non-generic IEnumerable fallback
 
-        [Test]
+        [TestMethod]
         public void ArrayList_Int()
         {
             var arrayList = new System.Collections.ArrayList { 1, 2, 3, 4, 5 };
@@ -542,7 +543,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void ArrayList_Double()
         {
             var arrayList = new System.Collections.ArrayList { 1.1, 2.2, 3.3 };
@@ -552,7 +553,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Hashtable_Keys()
         {
             var hashtable = new System.Collections.Hashtable { { 1, "a" }, { 2, "b" }, { 3, "c" } };
@@ -566,7 +567,7 @@ namespace NumSharp.UnitTest.Creation
 
         #region IEnumerator fallback
 
-        [Test]
+        [TestMethod]
         public void IEnumerator_Int()
         {
             static System.Collections.IEnumerator GetEnumerator()
@@ -591,7 +592,7 @@ namespace NumSharp.UnitTest.Creation
         /// NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0 (SCALAR)
         /// NumSharp: dtype=Char, shape=(5), ndim=1 (ARRAY)
         /// </summary>
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void String_IsCharArray_NotScalar()
         {
@@ -611,7 +612,7 @@ namespace NumSharp.UnitTest.Creation
         /// NumPy: np.asanyarray({1,2,3}) -> dtype=object, shape=() (SCALAR)
         /// NumSharp: dtype=Int32, shape=(3) (ARRAY)
         /// </summary>
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void HashSet_IsIterated_NotObjectScalar()
         {
@@ -631,7 +632,7 @@ namespace NumSharp.UnitTest.Creation
         /// NumSharp consumes IEnumerable and converts to array.
         /// This is arguably more useful behavior for C#.
         /// </summary>
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void LinqEnumerable_IsConsumed_NotObjectScalar()
         {
@@ -650,7 +651,7 @@ namespace NumSharp.UnitTest.Creation
         /// NumPy defaults to float64 for untyped empty lists.
         /// This is a design choice: C# generics provide type information that NumPy doesn't have.
         /// </summary>
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void EmptyTypedList_PreservesTypeParameter()
         {
@@ -672,7 +673,7 @@ namespace NumSharp.UnitTest.Creation
         /// C# ValueTuples are iterable like Python tuples.
         /// NumPy: np.asanyarray((1,2,3)) -> dtype=int64, shape=(3,)
         /// </summary>
-        [Test]
+        [TestMethod]
         public void ValueTuple_IsIterable()
         {
             var tuple = (1, 2, 3);
@@ -685,7 +686,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         /// C# Tuple class is iterable like Python tuples.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Tuple_IsIterable()
         {
             var tuple = Tuple.Create(1, 2, 3);
@@ -695,7 +696,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void ValueTuple_MixedTypes_PromotesToCommonType()
         {
             // Mixed int + double promotes to double (NumPy behavior)
@@ -706,7 +707,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(double)); // Promoted from int to double
         }
 
-        [Test]
+        [TestMethod]
         public void ValueTuple_IntAndBool_PromotesToInt()
         {
             // Mixed int + bool promotes to int (NumPy behavior)
@@ -717,7 +718,7 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void EmptyTuple_ReturnsEmptyDoubleArray()
         {
             var tuple = ValueTuple.Create();
@@ -734,7 +735,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         /// Empty non-generic collections return empty double[] (NumPy defaults to float64).
         /// </summary>
-        [Test]
+        [TestMethod]
         public void EmptyArrayList_ReturnsEmptyDoubleArray()
         {
             var arrayList = new System.Collections.ArrayList();
