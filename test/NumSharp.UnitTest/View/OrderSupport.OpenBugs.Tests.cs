@@ -182,7 +182,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // arr.flatten ignores order parameter
         public void Flatten_CContig_FOrder_MatchesNumPy()
         {
             // NumPy: arr.flatten('F') = [0,4,8,1,5,9,2,6,10,3,7,11]
@@ -207,7 +206,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // arr.flatten ignores order parameter
         public void Flatten_FContig_FOrder_MatchesNumPy()
         {
             // NumPy: arrT.flatten('F') = [0,1,2,3,4,5,6,7,8,9,10,11] (memory order for F-contig)
@@ -219,16 +217,11 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // ravel has no order overload (np.ravel.cs / NDArray.ravel.cs)
         public void Ravel_FOrder_ApiGap()
         {
             // NumPy: arr.ravel('F') = [0,4,8,1,5,9,2,6,10,3,7,11]
-            // NumSharp's NDArray.ravel() and np.ravel() have no order parameter.
-            // This test documents the API gap; once an order-aware overload is added,
-            // remove [OpenBugs] and assert the expected NumPy values.
             var arr = np.arange(12).reshape(3, 4);
-            var r = arr.ravel();
-            // Current (default) behavior is C-order; test fails if order='F' is wired.
+            var r = arr.ravel('F');
             var expectedFOrder = new int[] { 0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11 };
             for (int i = 0; i < 12; i++)
                 ((int)r[i]).Should().Be(expectedFOrder[i]);
@@ -612,17 +605,17 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.eye has no order parameter (see np.eye.cs:30)
         public void Eye_FOrder_IsFContig_ApiGap()
         {
             // NumPy: np.eye(3, order='F') -> F=True with same identity values
-            // NumSharp has no overload — this test documents the gap.
-            // Until an overload is added, this test cannot express the F-order case.
-            // Compile-time workaround: construct manually
-            var manualFEye = np.empty(new Shape(3L, 3L), order: 'F', dtype: typeof(int));
-            manualFEye.Shape.IsFContiguous.Should().BeTrue();
-            // But there's no np.eye(N, order='F') public API
-            false.Should().BeTrue("np.eye needs an order parameter to match NumPy");
+            var r = np.eye(3, dtype: typeof(int), order: 'F');
+            r.Shape.IsFContiguous.Should().BeTrue();
+            r.Shape.IsContiguous.Should().BeFalse();
+            ((int)r[0, 0]).Should().Be(1);
+            ((int)r[1, 1]).Should().Be(1);
+            ((int)r[2, 2]).Should().Be(1);
+            ((int)r[0, 1]).Should().Be(0);
+            ((int)r[1, 2]).Should().Be(0);
         }
 
         // ============================================================================
@@ -703,14 +696,22 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NDArray.reshape has no order parameter
         public void Reshape_FOrder_FillColumnMajor()
         {
             // NumPy: np.arange(12).reshape((3,4), order='F')
             //   values: [[0,3,6,9],[1,4,7,10],[2,5,8,11]]
             //   flags: C=False, F=True
-            // NumSharp: no order overload exists.
-            false.Should().BeTrue("NDArray.reshape needs order parameter for F-order fill");
+            var r = np.arange(12).reshape(new Shape(3L, 4L), order: 'F');
+            r.Shape.IsFContiguous.Should().BeTrue();
+            r.Shape.IsContiguous.Should().BeFalse();
+            ((int)r[0, 0]).Should().Be(0);
+            ((int)r[0, 1]).Should().Be(3);
+            ((int)r[0, 2]).Should().Be(6);
+            ((int)r[0, 3]).Should().Be(9);
+            ((int)r[1, 0]).Should().Be(1);
+            ((int)r[1, 3]).Should().Be(10);
+            ((int)r[2, 0]).Should().Be(2);
+            ((int)r[2, 3]).Should().Be(11);
         }
 
         // ============================================================================
@@ -740,20 +741,25 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.ravel has no order parameter
         public void NpRavel_CContig_FOrder_MatchesNumPy_ApiGap()
         {
             // NumPy: np.ravel(arr, order='F') = [0,3,1,4,2,5]
-            // NumSharp: no overload — documents the gap.
-            false.Should().BeTrue("np.ravel needs order parameter");
+            var arr = np.arange(6).reshape(2, 3);
+            var r = np.ravel(arr, 'F');
+            var expected = new int[] { 0, 3, 1, 4, 2, 5 };
+            for (int i = 0; i < 6; i++)
+                ((int)r[i]).Should().Be(expected[i]);
         }
 
         [TestMethod]
-        [OpenBugs] // np.ravel has no order parameter
         public void NpRavel_FContig_FOrder_MatchesNumPy_ApiGap()
         {
             // NumPy: np.ravel(arrT, order='F') = [0,1,2,3,4,5] (memory order for F)
-            false.Should().BeTrue("np.ravel needs order parameter");
+            var arrT = np.arange(6).reshape(2, 3).T;  // F-contig (3,2)
+            var r = np.ravel(arrT, 'F');
+            var expected = new int[] { 0, 1, 2, 3, 4, 5 };
+            for (int i = 0; i < 6; i++)
+                ((int)r[i]).Should().Be(expected[i]);
         }
 
         // ============================================================================

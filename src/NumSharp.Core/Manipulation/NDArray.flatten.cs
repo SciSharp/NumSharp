@@ -1,4 +1,4 @@
-﻿using NumSharp.Backends;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -8,9 +8,10 @@ namespace NumSharp
         ///     Return a copy of the array collapsed into one dimension.
         /// </summary>
         /// <param name="order">
-        ///     The order in which to read the elements. 'C' means row-major (C-style),
-        ///     'F' means column-major (Fortran-style). NumSharp only supports 'C' order;
-        ///     this parameter is accepted for API compatibility but 'F' is ignored.
+        ///     The order in which to read the elements.
+        ///     'C' - row-major (C-style), 'F' - column-major (Fortran-style),
+        ///     'A' - 'F' if this is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' - memory order (reads the elements in the order they occur in memory).
         /// </param>
         /// <returns>A copy of the input array, flattened to one dimension.</returns>
         /// <remarks>
@@ -19,11 +20,16 @@ namespace NumSharp
         /// </remarks>
         public NDArray flatten(char order = 'C')
         {
-            // NumPy: flatten() ALWAYS returns a copy, regardless of memory layout.
-            // For non-contiguous arrays (broadcast, sliced, transposed), CloneData()
-            // correctly copies elements in logical (C-order) sequence.
-            // Note: 'order' parameter is accepted for API compatibility but NumSharp
-            // only supports C-order (row-major). F-order is silently treated as C-order.
+            char physical = OrderResolver.Resolve(order, this.Shape);
+
+            if (physical == 'F' && this.Shape.NDim > 1 && this.size > 1)
+            {
+                // F-order flatten: the memory of a fresh F-contiguous copy contains
+                // the values in column-major read-out order; interpret it as 1-D.
+                var fcopy = this.copy('F');
+                return new NDArray(new UnmanagedStorage(fcopy.Array.Clone(), Shape.Vector(size)));
+            }
+
             return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size)));
         }
     }
