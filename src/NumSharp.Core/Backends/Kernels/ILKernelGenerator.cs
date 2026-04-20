@@ -504,6 +504,15 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo ComplexOpSubtraction = typeof(System.Numerics.Complex).GetMethod("op_Subtraction", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Subtraction");
 
+            // Complex instance property getters — called via Ldloca + Call (struct instance method
+            // requires a managed reference for 'this').
+            public static readonly MethodInfo ComplexGetReal = typeof(System.Numerics.Complex)
+                .GetProperty("Real", BindingFlags.Public | BindingFlags.Instance)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "get_Real");
+            public static readonly MethodInfo ComplexGetImaginary = typeof(System.Numerics.Complex)
+                .GetProperty("Imaginary", BindingFlags.Public | BindingFlags.Instance)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "get_Imaginary");
+
             // Half unary operator methods
             public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "op_UnaryNegation");

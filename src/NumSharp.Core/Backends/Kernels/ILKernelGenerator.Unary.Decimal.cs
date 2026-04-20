@@ -318,12 +318,47 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp2:
-                    // Route through helper — Complex.Pow(Complex(2,0), z) returns NaN+NaNj for
-                    // z = ±inf+0j because the internal exp(z·log(2)) computes (±inf)·0 = NaN
-                    // in the imaginary dimension. NumPy parity: exp2(-inf+0j) = 0+0j, and
-                    // exp2(+inf+0j) = inf+0j — both satisfied by Math.Pow(2, r) for pure-real z.
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexExp2Helper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    // B22: Complex.Pow(Complex(2,0), z) returns NaN+NaNj for z = ±inf+0j because
+                    // the internal exp(z·log(2)) computes (±inf)·0 = NaN in the imaginary
+                    // dimension. NumPy: exp2(-inf+0j) = 0+0j, exp2(+inf+0j) = inf+0j. Both are
+                    // satisfied by Math.Pow(2, r) for pure-real inputs. Pseudo-C#:
+                    //   if (z.Imaginary == 0.0)
+                    //       return new Complex(Math.Pow(2.0, z.Real), 0.0);
+                    //   return Complex.Pow(new Complex(2.0, 0.0), z);
+                    // Bne_Un also branches on NaN, so imag=NaN correctly falls through to
+                    // Complex.Pow (which propagates NaN per NumPy: exp2(r+nanj) = nan+nanj).
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        var lblImagNonZero = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
+
+                        il.Emit(OpCodes.Stloc, locZ);
+
+                        // if (z.Imaginary != 0.0 || double.IsNaN(z.Imaginary)) goto general;
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Bne_Un, lblImagNonZero);
+
+                        // Pure-real: new Complex(Math.Pow(2.0, z.Real), 0.0)
+                        il.Emit(OpCodes.Ldc_R8, 2.0);
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        // General: Complex.Pow(new Complex(2.0, 0.0), z)
+                        il.MarkLabel(lblImagNonZero);
+                        il.Emit(OpCodes.Ldc_R8, 2.0);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexPow, null);
+
+                        il.MarkLabel(lblEnd);
+                    }
                     break;
 
                 case UnaryOp.Log1p:
@@ -401,18 +436,6 @@ namespace NumSharp.Backends.Kernels
         {
             var logZ = System.Numerics.Complex.Log(z);
             return new System.Numerics.Complex(logZ.Real * LogE_Inv_Ln2, logZ.Imaginary * LogE_Inv_Ln2);
-        }
-
-        /// <summary>
-        /// Helper for Complex exp2. For pure-real input, routes through Math.Pow(2, r) so
-        /// that exp2(±inf+0j) returns 0+0j / inf+0j matching NumPy. General input falls
-        /// through to Complex.Pow(2, z). See B22 in docs/plans/LEFTOVER.md.
-        /// </summary>
-        internal static System.Numerics.Complex ComplexExp2Helper(System.Numerics.Complex z)
-        {
-            if (z.Imaginary == 0.0)
-                return new System.Numerics.Complex(System.Math.Pow(2.0, z.Real), 0.0);
-            return System.Numerics.Complex.Pow(new System.Numerics.Complex(2.0, 0.0), z);
         }
 
         #endregion
