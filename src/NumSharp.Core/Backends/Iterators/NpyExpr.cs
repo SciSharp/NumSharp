@@ -237,6 +237,61 @@ namespace NumSharp.Backends.Iteration
         public static NpyExpr GreaterEqual(NpyExpr a, NpyExpr b) => new ComparisonNode(ComparisonOp.GreaterEqual, a, b);
 
         // ===================================================================
+        // Call — invoke an arbitrary .NET delegate or MethodInfo per element.
+        // ===================================================================
+        //
+        // Three entry points:
+        //   (a) Typed Func<...> overloads — allow passing method groups
+        //       (e.g. `Math.Sqrt`, `Math.Pow`) without an explicit cast.
+        //       C# overload resolution picks these when the compiler can infer
+        //       the delegate signature from the method group.
+        //
+        //   (b) `Call(Delegate func, params NpyExpr[] args)` — catch-all for
+        //       any pre-constructed delegate. Method groups will NOT bind to
+        //       this directly (the C# compiler needs a specific delegate
+        //       target type). Cast or use a typed Func<...> overload.
+        //
+        //   (c) `Call(MethodInfo, ...)` and `Call(MethodInfo, object target, ...)`
+        //       — bypass the delegate layer entirely. Static and instance methods
+        //       respectively. Useful when reflecting over types at runtime.
+        //
+        // Implementation notes:
+        //   * Static methods with no target are emitted as a direct `call`
+        //     opcode to the underlying `MethodInfo` — no indirection.
+        //   * Instance methods or delegates with captured state are stored in a
+        //     process-wide slot dictionary (`DelegateSlots`). The emitted IL
+        //     loads the delegate via an integer ID and invokes it through
+        //     `Delegate.Invoke` (callvirt).
+        //   * SIMD is always disabled for trees containing a CallNode.
+        //   * Argument values are auto-converted from `ctx.OutputType` to each
+        //     parameter's dtype; the return value is converted back to
+        //     `ctx.OutputType` before leaving the node.
+
+        /// <summary>Invoke a static method (no target).</summary>
+        public static NpyExpr Call(System.Reflection.MethodInfo method, params NpyExpr[] args)
+            => new CallNode(method, target: null, args);
+
+        /// <summary>Invoke an instance method on a target object.</summary>
+        public static NpyExpr Call(System.Reflection.MethodInfo method, object target, params NpyExpr[] args)
+            => new CallNode(method, target, args);
+
+        /// <summary>Invoke any delegate. Method-group arguments need a typed Func overload; use a cast or the typed overloads below.</summary>
+        public static NpyExpr Call(Delegate func, params NpyExpr[] args)
+            => new CallNode(func, args);
+
+        // Typed Func<...> overloads — enable `NpyExpr.Call(Math.Sqrt, x)` without cast.
+        public static NpyExpr Call<TR>(Func<TR> func)
+            => new CallNode(func, Array.Empty<NpyExpr>());
+        public static NpyExpr Call<T1, TR>(Func<T1, TR> func, NpyExpr a1)
+            => new CallNode(func, new[] { a1 });
+        public static NpyExpr Call<T1, T2, TR>(Func<T1, T2, TR> func, NpyExpr a1, NpyExpr a2)
+            => new CallNode(func, new[] { a1, a2 });
+        public static NpyExpr Call<T1, T2, T3, TR>(Func<T1, T2, T3, TR> func, NpyExpr a1, NpyExpr a2, NpyExpr a3)
+            => new CallNode(func, new[] { a1, a2, a3 });
+        public static NpyExpr Call<T1, T2, T3, T4, TR>(Func<T1, T2, T3, T4, TR> func, NpyExpr a1, NpyExpr a2, NpyExpr a3, NpyExpr a4)
+            => new CallNode(func, new[] { a1, a2, a3, a4 });
+
+        // ===================================================================
         // Operator overloads (syntactic sugar)
         // ===================================================================
 
@@ -750,6 +805,319 @@ namespace NumSharp.Backends.Iteration
             sb.Append(',');
             _b.AppendSignature(sb);
             sb.Append(')');
+        }
+    }
+
+    // =========================================================================
+    // Node: Call — invoke an arbitrary .NET method (delegate or MethodInfo).
+    //
+    // THREE PATHS
+    // -----------
+    // 1. Static method, no captures  → emit `call <methodinfo>` directly.
+    //    Zero indirection. Used when `Target == null && Method.IsStatic` for a
+    //    Delegate, or when the user passes a MethodInfo without an instance.
+    //
+    // 2. Instance method with a target object → stash the target in the slot
+    //    dictionary, emit a lookup for the target, then `callvirt <methodinfo>`.
+    //
+    // 3. Delegate with captured state (closure / instance method wrapper) →
+    //    stash the whole delegate, emit a lookup, then `callvirt Invoke`.
+    //
+    // TYPE DISCIPLINE
+    // ---------------
+    // Per-argument auto-conversion from `ctx.OutputType` to the method's param
+    // dtype; return value converted from the method's return dtype to
+    // `ctx.OutputType`. Same model as InputNode's auto-convert — keeps the DSL
+    // uniform.
+    //
+    // Unsupported param/return types (anything not in the 12-type set) are
+    // rejected at node construction time.
+    //
+    // SIMD
+    // ----
+    // Always false. A managed call from inside a vector loop kills SIMD.
+    // =========================================================================
+
+    internal sealed class CallNode : NpyExpr
+    {
+        private enum Kind
+        {
+            StaticMethod,  // direct `call <methodinfo>`
+            BoundTarget,   // load target from slots, then `callvirt <methodinfo>`
+            Delegate,      // load delegate from slots, then `callvirt Invoke`
+        }
+
+        private readonly Kind _kind;
+        private readonly System.Reflection.MethodInfo _method;
+        private readonly Type _delegateType; // only for Kind.Delegate
+        private readonly int _slotId;        // only for Kind.BoundTarget / Kind.Delegate
+        private readonly NpyExpr[] _args;
+        private readonly NPTypeCode[] _paramCodes;
+        private readonly NPTypeCode _returnCode;
+        private readonly string _signatureId;
+
+        public CallNode(Delegate func, NpyExpr[] args)
+        {
+            if (func is null) throw new ArgumentNullException(nameof(func));
+            if (args is null) throw new ArgumentNullException(nameof(args));
+            foreach (var a in args)
+                if (a is null) throw new ArgumentNullException(nameof(args), "No arg may be null.");
+
+            _args = args;
+            _delegateType = func.GetType();
+
+            var mi = func.Method;
+            var parameters = mi.GetParameters();
+            if (parameters.Length != args.Length)
+                throw new ArgumentException(
+                    $"Delegate {mi.Name} expects {parameters.Length} arg(s), got {args.Length}.",
+                    nameof(args));
+
+            _paramCodes = MapParamCodes(parameters);
+            _returnCode = MapReturnCode(mi.ReturnType, mi);
+
+            if (func.Target is null && mi.IsStatic)
+            {
+                // Fast path: compile to a direct static call.
+                _kind = Kind.StaticMethod;
+                _method = mi;
+                _slotId = -1;
+            }
+            else
+            {
+                // Slow path: stash whole delegate and call Invoke through slots.
+                _kind = Kind.Delegate;
+                _method = _delegateType.GetMethod("Invoke")
+                    ?? throw new InvalidOperationException("Delegate has no Invoke method.");
+                _slotId = DelegateSlots.RegisterDelegate(func);
+            }
+
+            _signatureId = BuildMethodSignatureId(mi);
+        }
+
+        public CallNode(System.Reflection.MethodInfo method, object? target, NpyExpr[] args)
+        {
+            if (method is null) throw new ArgumentNullException(nameof(method));
+            if (args is null) throw new ArgumentNullException(nameof(args));
+            foreach (var a in args)
+                if (a is null) throw new ArgumentNullException(nameof(args), "No arg may be null.");
+
+            _args = args;
+            _delegateType = null!;
+
+            var parameters = method.GetParameters();
+            if (parameters.Length != args.Length)
+                throw new ArgumentException(
+                    $"Method {method.Name} expects {parameters.Length} arg(s), got {args.Length}.",
+                    nameof(args));
+
+            _paramCodes = MapParamCodes(parameters);
+            _returnCode = MapReturnCode(method.ReturnType, method);
+
+            if (target is null)
+            {
+                if (!method.IsStatic)
+                    throw new ArgumentException(
+                        $"Method {method.Name} is an instance method; pass a target object.",
+                        nameof(target));
+                _kind = Kind.StaticMethod;
+                _method = method;
+                _slotId = -1;
+            }
+            else
+            {
+                if (method.IsStatic)
+                    throw new ArgumentException(
+                        $"Method {method.Name} is static; do not pass a target object.",
+                        nameof(target));
+                if (!method.DeclaringType!.IsInstanceOfType(target))
+                    throw new ArgumentException(
+                        $"Target is {target.GetType().FullName}, method declares {method.DeclaringType.FullName}.",
+                        nameof(target));
+                _kind = Kind.BoundTarget;
+                _method = method;
+                _slotId = DelegateSlots.RegisterTarget(target);
+            }
+
+            _signatureId = BuildMethodSignatureId(method);
+        }
+
+        private static NPTypeCode[] MapParamCodes(System.Reflection.ParameterInfo[] parameters)
+        {
+            var codes = new NPTypeCode[parameters.Length];
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var pt = parameters[i].ParameterType;
+                var tc = pt.GetTypeCode();
+                if (!IsSupported(tc))
+                    throw new ArgumentException(
+                        $"Parameter {i} type {pt.Name} is not one of the 12 supported NPTypeCode dtypes.",
+                        nameof(parameters));
+                codes[i] = tc;
+            }
+            return codes;
+        }
+
+        private static NPTypeCode MapReturnCode(Type returnType, System.Reflection.MethodInfo mi)
+        {
+            if (returnType == typeof(void))
+                throw new ArgumentException(
+                    $"Method {mi.Name} returns void; NpyExpr.Call requires a value-returning method.");
+            var tc = returnType.GetTypeCode();
+            if (!IsSupported(tc))
+                throw new ArgumentException(
+                    $"Return type {returnType.Name} of {mi.Name} is not one of the 12 supported NPTypeCode dtypes.");
+            return tc;
+        }
+
+        private static bool IsSupported(NPTypeCode code)
+            => code switch
+            {
+                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
+                NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
+                NPTypeCode.Char or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                _ => false,
+            };
+
+        private static string BuildMethodSignatureId(System.Reflection.MethodInfo mi)
+        {
+            var sb = new StringBuilder();
+            sb.Append(mi.DeclaringType?.FullName ?? "_");
+            sb.Append('.').Append(mi.Name);
+            sb.Append('#').Append(mi.MetadataToken);
+            // Module handle disambiguates when the same metadata token collides
+            // across dynamic assemblies (can happen with DynamicMethod).
+            sb.Append('@').Append(mi.Module.ModuleVersionId);
+            return sb.ToString();
+        }
+
+        internal override bool SupportsSimd => false;
+
+        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        {
+            switch (_kind)
+            {
+                case Kind.StaticMethod:
+                    EmitArgs(il, ctx);
+                    il.EmitCall(OpCodes.Call, _method, null);
+                    break;
+
+                case Kind.BoundTarget:
+                    // Load target: DelegateSlots.LookupTarget(slotId)  → object
+                    il.Emit(OpCodes.Ldc_I4, _slotId);
+                    il.EmitCall(OpCodes.Call, DelegateSlots.LookupTargetMethod, null);
+                    // Cast to the method's declaring type
+                    var declaring = _method.DeclaringType!;
+                    if (declaring.IsValueType)
+                    {
+                        // Unbox to a managed reference; call uses managed ref for value-type 'this'
+                        il.Emit(OpCodes.Unbox, declaring);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Castclass, declaring);
+                    }
+                    EmitArgs(il, ctx);
+                    il.EmitCall(OpCodes.Callvirt, _method, null);
+                    break;
+
+                case Kind.Delegate:
+                    // Load delegate: DelegateSlots.LookupDelegate(slotId) → Delegate
+                    il.Emit(OpCodes.Ldc_I4, _slotId);
+                    il.EmitCall(OpCodes.Call, DelegateSlots.LookupDelegateMethod, null);
+                    il.Emit(OpCodes.Castclass, _delegateType);
+                    EmitArgs(il, ctx);
+                    il.EmitCall(OpCodes.Callvirt, _method, null);
+                    break;
+            }
+
+            if (_returnCode != ctx.OutputType)
+                ILKernelGenerator.EmitConvertTo(il, _returnCode, ctx.OutputType);
+        }
+
+        private void EmitArgs(ILGenerator il, NpyExprCompileContext ctx)
+        {
+            for (int i = 0; i < _args.Length; i++)
+            {
+                _args[i].EmitScalar(il, ctx);
+                // Every arg leaves ctx.OutputType on the stack — convert if the
+                // method's parameter dtype is different.
+                if (_paramCodes[i] != ctx.OutputType)
+                    ILKernelGenerator.EmitConvertTo(il, ctx.OutputType, _paramCodes[i]);
+            }
+        }
+
+        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        {
+            throw new InvalidOperationException("CallNode has no vector path.");
+        }
+
+        internal override void AppendSignature(StringBuilder sb)
+        {
+            sb.Append("Call[").Append(_signatureId);
+            if (_kind == Kind.BoundTarget)
+                sb.Append(",target#").Append(_slotId);
+            sb.Append("](");
+            for (int i = 0; i < _args.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                _args[i].AppendSignature(sb);
+            }
+            sb.Append(')');
+        }
+    }
+
+    // =========================================================================
+    // DelegateSlots — process-wide registry of captured delegates and bound
+    // instance targets, keyed by a monotonically-increasing int.
+    //
+    // The IL emitter stores an integer ID in the kernel's bytecode and looks
+    // up the managed object at runtime. Strong references — entries live for
+    // the process lifetime. Users should register delegates once at startup
+    // (static field or DI singleton), not inside a hot loop.
+    //
+    // Thread-safe: ConcurrentDictionary + Interlocked.Increment.
+    // =========================================================================
+
+    internal static class DelegateSlots
+    {
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Delegate> _delegates = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, object> _targets = new();
+        private static int _nextId;
+
+        public static readonly System.Reflection.MethodInfo LookupDelegateMethod =
+            typeof(DelegateSlots).GetMethod(nameof(LookupDelegate),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+
+        public static readonly System.Reflection.MethodInfo LookupTargetMethod =
+            typeof(DelegateSlots).GetMethod(nameof(LookupTarget),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+
+        public static int RegisterDelegate(Delegate d)
+        {
+            int id = System.Threading.Interlocked.Increment(ref _nextId);
+            _delegates[id] = d;
+            return id;
+        }
+
+        public static int RegisterTarget(object t)
+        {
+            int id = System.Threading.Interlocked.Increment(ref _nextId);
+            _targets[id] = t;
+            return id;
+        }
+
+        // Called from emitted IL.
+        public static Delegate LookupDelegate(int id) => _delegates[id];
+        public static object LookupTarget(int id) => _targets[id];
+
+        // Test hook.
+        internal static int RegisteredCount => _delegates.Count + _targets.Count;
+
+        internal static void Clear()
+        {
+            _delegates.Clear();
+            _targets.Clear();
         }
     }
 }
