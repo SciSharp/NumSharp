@@ -2134,5 +2134,100 @@ namespace NumSharp.UnitTest.View
             ((int)r[1]).Should().Be(4);
             ((int)r[2]).Should().Be(2);
         }
+
+        // ============================================================================
+        // Section 44: Broadcasting from F-contig inputs
+        // NumPy:
+        //   broadcast_to(any, bigger_shape) always inserts a stride=0 dim, so the
+        //     result is BROADCASTED (both C- and F-contig flags = False).
+        //   broadcast_arrays([F, scalar]) keeps F-contig array's flag; scalar becomes
+        //     all-stride-0 view (neither flag).
+        //   broadcast_arrays([F(m,n), F(m,1)]) keeps F-contig on the non-broadcasted
+        //     input; broadcast input has stride=0 on broadcast dim (neither flag).
+        // ============================================================================
+
+        [TestMethod]
+        public void BroadcastTo_FContig_ResultIsNeitherContig()
+        {
+            // NumPy: broadcast_to(F(4,3), (2,4,3)) strides=(0,8,32) -> neither C nor F contig.
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));  // F-contig (4,3)
+            f.Shape.IsFContiguous.Should().BeTrue();
+
+            var r = np.broadcast_to(f, new Shape(2L, 4L, 3L));
+            r.shape.Should().Equal(new long[] { 2, 4, 3 });
+            r.Shape.IsContiguous.Should().BeFalse(
+                "NumPy: broadcast_to result has stride=0 dim, not C-contig");
+            r.Shape.IsFContiguous.Should().BeFalse(
+                "NumPy: broadcast_to result has stride=0 dim, not F-contig");
+        }
+
+        [TestMethod]
+        public void BroadcastTo_FContig_Values_MatchNumPy()
+        {
+            // NumPy: broadcast_to replicates along the new leading dim.
+            // F(4,3) looks like [[0,4,8],[1,5,9],[2,6,10],[3,7,11]]
+            var f = np.arange(12).reshape(3, 4).T;
+            var r = np.broadcast_to(f, new Shape(2L, 4L, 3L));
+            // First replica
+            ((long)r[0, 0, 0]).Should().Be(0);
+            ((long)r[0, 0, 1]).Should().Be(4);
+            ((long)r[0, 3, 2]).Should().Be(11);
+            // Second replica — same values
+            ((long)r[1, 0, 0]).Should().Be(0);
+            ((long)r[1, 3, 2]).Should().Be(11);
+        }
+
+        [TestMethod]
+        public void BroadcastTo_CContig_ResultIsNeitherContig()
+        {
+            // NumPy: broadcast_to(C(3,4), (2,3,4)) strides=(0,32,8) -> neither C nor F contig.
+            var c = np.arange(12).reshape(3, 4).astype(typeof(double));
+            c.Shape.IsContiguous.Should().BeTrue();
+
+            var r = np.broadcast_to(c, new Shape(2L, 3L, 4L));
+            r.shape.Should().Equal(new long[] { 2, 3, 4 });
+            r.Shape.IsContiguous.Should().BeFalse();
+            r.Shape.IsFContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void BroadcastArrays_FAndScalar_PreservesFContig()
+        {
+            // NumPy: broadcast_arrays([F(3,2), scalar]) -> first output keeps F-contig
+            // flag (only its shape is broadcast-expanded from itself, so no stride=0 on
+            // the non-singleton dim); scalar becomes all-stride-0 (neither flag).
+            var f = np.arange(6).reshape(2, 3).T.astype(typeof(double));  // F-contig (3,2)
+            f.Shape.IsFContiguous.Should().BeTrue();
+            var scalar = np.array(5.0);
+
+            var (lhs, rhs) = np.broadcast_arrays(f, scalar);
+            // First output has the same shape as F, so strides are preserved.
+            lhs.shape.Should().Equal(new long[] { 3, 2 });
+            lhs.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: broadcast_arrays first output keeps F-contig flag when no broadcasting happens");
+            // Second output is all-stride-0 (stretched scalar).
+            rhs.shape.Should().Equal(new long[] { 3, 2 });
+            rhs.Shape.IsContiguous.Should().BeFalse();
+            rhs.Shape.IsFContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void BroadcastArrays_FAndColumnVec_FirstPreservesFContig()
+        {
+            // NumPy: broadcast_arrays([F(2,3), F(2,1)]) -> first F-contig preserved,
+            // second has stride=0 on axis 1 (broadcast dim).
+            var f = np.arange(6).reshape(3, 2).T.astype(typeof(double));  // F-contig (2,3)
+            var col = np.array(new double[,] { { 10.0 }, { 20.0 } }).copy('F');  // F-contig (2,1)
+            f.Shape.IsFContiguous.Should().BeTrue();
+
+            var (lhs, rhs) = np.broadcast_arrays(f, col);
+            lhs.shape.Should().Equal(new long[] { 2, 3 });
+            lhs.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: broadcast_arrays preserves F-contig when shape already matches target");
+            // Second becomes broadcasted (stride=0 on axis 1).
+            rhs.shape.Should().Equal(new long[] { 2, 3 });
+            rhs.Shape.IsContiguous.Should().BeFalse();
+            rhs.Shape.IsFContiguous.Should().BeFalse();
+        }
     }
 }
