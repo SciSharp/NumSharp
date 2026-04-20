@@ -9,19 +9,19 @@ namespace NumSharp.UnitTest.Backends.Iterators
 {
     /// <summary>
     /// Exercises the three-tier custom-op API on NpyIterRef:
-    ///   Tier A — ExecuteRawIL (user emits entire inner-loop body)
-    ///   Tier B — ExecuteElementWise (user supplies scalar + vector body emitters)
-    ///   Tier C — ExecuteExpression (NpyExpr DSL compiled to inner-loop IL)
+    ///   Tier 3A — ExecuteRawIL (user emits entire inner-loop body)
+    ///   Tier 3B — ExecuteElementWise (user supplies scalar + vector body emitters)
+    ///   Tier 3C — ExecuteExpression (NpyExpr DSL compiled to inner-loop IL)
     /// </summary>
     [TestClass]
     public unsafe class NpyIterCustomOpTests
     {
         // =====================================================================
-        // Tier A: Raw IL
+        // Tier 3A: Raw IL
         // =====================================================================
 
         [TestMethod]
-        public void TierA_RawIL_AddsTwoInt32Arrays()
+        public void Tier3A_RawIL_AddsTwoInt32Arrays()
         {
             var a = np.arange(10).astype(np.int32);
             var b = np.arange(10, 20).astype(np.int32);
@@ -97,11 +97,11 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Tier B: Templated inner loop
+        // Tier 3B: Templated inner loop
         // =====================================================================
 
         [TestMethod]
-        public void TierB_ElementWiseBinary_FusedMultiplyAdd_Float32()
+        public void Tier3B_ElementWiseBinary_FusedMultiplyAdd_Float32()
         {
             // out = a * b + 1.0f
             var a = np.arange(16).astype(np.float32);
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierB_ElementWiseUnary_Sqrt_Float32_Simd()
+        public void Tier3B_ElementWiseUnary_Sqrt_Float32_Simd()
         {
             var input = np.arange(1, 33).astype(np.float32);      // 32 floats -> full Vector256 occupancy
             var output = np.empty(new Shape(32), np.float32);
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierB_Ternary_Float32()
+        public void Tier3B_Ternary_Float32()
         {
             // out = a*b + c
             var a = np.arange(8).astype(np.float32);
@@ -231,7 +231,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierB_StridedInput_UsesScalarFallback()
+        public void Tier3B_StridedInput_UsesScalarFallback()
         {
             // Slice every other element — inner stride = 2*elemSize, not elemSize.
             // The iterator keeps EXTERNAL_LOOP so ForEach runs a single inner-loop
@@ -269,7 +269,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierB_CacheReuse_SameKeyReturnsIdenticalDelegate()
+        public void Tier3B_CacheReuse_SameKeyReturnsIdenticalDelegate()
         {
             // Two distinct iters calling ExecuteElementWise with the same
             // cacheKey should hit the same compiled delegate.
@@ -311,11 +311,11 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Tier C: Expression DSL
+        // Tier 3C: Expression DSL
         // =====================================================================
 
         [TestMethod]
-        public void TierC_Expression_AddConstant()
+        public void Tier3C_Expression_AddConstant()
         {
             var a = np.arange(12).astype(np.float32);
             var b = np.empty(new Shape(12), np.float32);
@@ -335,7 +335,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierC_Expression_CompoundFma()
+        public void Tier3C_Expression_CompoundFma()
         {
             // out = (a + b) * c + 1
             var a = np.arange(8).astype(np.float32);
@@ -369,7 +369,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierC_Expression_SqrtOfSumSquares()
+        public void Tier3C_Expression_SqrtOfSumSquares()
         {
             // out = sqrt(a^2 + b^2)   — hypot, single-kernel
             var a = np.array(new float[] { 3, 6, 5, 8 });
@@ -398,7 +398,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierC_Expression_NegateAndAbs()
+        public void Tier3C_Expression_NegateAndAbs()
         {
             var a = np.array(new float[] { 3, -4, 5, -6 });
             var b = np.empty(new Shape(4), np.float32);
@@ -420,7 +420,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierC_Expression_DoubleDtype()
+        public void Tier3C_Expression_DoubleDtype()
         {
             var a = np.arange(10).astype(np.float64);
             var b = np.empty(new Shape(10), np.float64);
@@ -440,7 +440,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void TierC_Expression_StridedPath()
+        public void Tier3C_Expression_StridedPath()
         {
             // Expression tree must also work on strided views (kernel's
             // runtime contig check routes to the scalar-strided fallback).
@@ -471,7 +471,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
-        public void TierB_WrongOperandCount_Throws()
+        public void Tier3B_WrongOperandCount_Throws()
         {
             var a = np.arange(4).astype(np.float32);
             var b = np.empty(new Shape(4), np.float32);
@@ -493,7 +493,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
-        public void TierC_WrongInputCount_Throws()
+        public void Tier3C_WrongInputCount_Throws()
         {
             var a = np.arange(4).astype(np.float32);
             var b = np.empty(new Shape(4), np.float32);

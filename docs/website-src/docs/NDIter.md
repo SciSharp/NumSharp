@@ -25,10 +25,10 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
   - [Layer 1 — Canonical Inner-Loop API](#layer-1--canonical-inner-loop-api)
   - [Layer 2 — Struct-Generic Dispatch](#layer-2--struct-generic-dispatch)
   - [Layer 3 — Typed ufunc Dispatch](#layer-3--typed-ufunc-dispatch)
-  - [Custom Operations (Tier A / B / C)](#custom-operations-tier-a--b--c)
-    - [Tier A — Raw IL](#tier-a--raw-il)
-    - [Tier B — Templated Inner Loop](#tier-b--templated-inner-loop)
-    - [Tier C — Expression DSL](#tier-c--expression-dsl)
+  - [Custom Operations (Tier 3A / 3B / 3C)](#custom-operations-tier-3a--3b--3c)
+    - [Tier 3A — Raw IL](#tier-3a--raw-il)
+    - [Tier 3B — Templated Inner Loop](#tier-3b--templated-inner-loop)
+    - [Tier 3C — Expression DSL](#tier-3c--expression-dsl)
       - [Node catalog](#node-catalog)
       - [Operator overloads](#operator-overloads)
       - [Call — invoke any .NET method](#call--invoke-any-net-method)
@@ -39,7 +39,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
       - [Validation and errors](#validation-and-errors)
       - [Gotchas](#gotchas)
       - [Debugging compiled kernels](#debugging-compiled-kernels)
-      - [When to use Tier C](#when-to-use-tier-c)
+      - [When to use Tier 3C](#when-to-use-tier-3c)
 - [Path Detection](#path-detection)
 - [Worked Examples](#worked-examples)
 - [Performance](#performance)
@@ -438,16 +438,16 @@ The layer is a partial declaration of `NpyIterRef` that exposes **seven entry po
   Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
               │  "one call, NumPy-style — one line per op"                   │
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier C      │  ExecuteExpression(NpyExpr)                                  │  compose
+  Tier 3C      │  ExecuteExpression(NpyExpr)                                  │  compose
               │  "build a tree with operators; no IL in caller"              │  with DSL
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier C+Call │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
+  Tier 3C+Call │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
               │  "invoke arbitrary managed method per element"               │  BCL / user op
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier B      │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
+  Tier 3B      │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
               │  "write per-element IL; factory wraps the unroll shell"      │  the vector body
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier A      │  ExecuteRawIL(emit, key, aux)                                │  emit
+  Tier 3A      │  ExecuteRawIL(emit, key, aux)                                │  emit
               │  "emit the whole inner-loop body including ret"              │  everything
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
   Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
@@ -483,19 +483,19 @@ Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
   no ↓
 
 Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, …)?
-  yes → Tier C. Fused, SIMD-or-scalar automatic, no IL.
+  yes → Tier 3C. Fused, SIMD-or-scalar automatic, no IL.
   no ↓
 
 Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
-  yes → Tier C + Call. Scalar-only but fused. Done.
+  yes → Tier 3C + Call. Scalar-only but fused. Done.
   no ↓
 
 Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, Gather, …)?
-  yes → Tier B. Hand-write the vector body; factory wraps the shell.
+  yes → Tier 3B. Hand-write the vector body; factory wraps the shell.
   no ↓
 
 Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
-  yes → Tier A. Emit the whole inner-loop IL yourself.
+  yes → Tier 3A. Emit the whole inner-loop IL yourself.
   no ↓
 
 Do I need an early-exit reduction (Any / All / find-first)?
@@ -513,11 +513,11 @@ Benchmarked on 1M-element arrays, post-warmup, via the showcase script in this d
 | Technique | Operation | Time / run | Notes |
 |-----------|-----------|-----------:|-------|
 | Layer 3 | `a + b` (f32) | 0.58 ms | baked, 4×-unrolled V256, cache hit |
-| Tier B | `2a + 3b` hand V256 (f32) | 0.61 ms | within ~7% of baked — same shell |
+| Tier 3B | `2a + 3b` hand V256 (f32) | 0.61 ms | within ~7% of baked — same shell |
 | Layer 2 reduction | `AnyNonZero` early-exit (hit @ 500) | 0.001 ms | returns `false` from kernel, bridge bails |
-| Tier A | `abs(a - b)` raw IL (i32) | 1.27 ms | scalar loop, JIT autovectorizes post tier-1 |
+| Tier 3A | `abs(a - b)` raw IL (i32) | 1.27 ms | scalar loop, JIT autovectorizes post tier-1 |
 | Call | `GELU` via captured lambda (f64) | 8.08 ms | `Math.Tanh` dominates |
-| Tier C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
+| Tier 3C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
 
 Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT caveat: when run from a dynamic host (ephemeral script, `dotnet_run`, first-call cold start) they can look 30-50× slower than production code. Post-tier-1 promotion (~100 hot-loop iterations) brings them within 2-3 ms for hypot on 1M f32. See [JIT Warmup Caveat](#jit-warmup-caveat).
 
@@ -693,7 +693,7 @@ Under the hood each helper does four things:
 
 For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (which are always element-sized for the buffer dtype) rather than the original-array strides. This sidesteps a known issue with the in-state pointer-advance, discussed in [Known Bugs](#known-bugs-and-workarounds).
 
-### Custom Operations (Tier A / B / C)
+### Custom Operations (Tier 3A / 3B / 3C)
 
 The enum-driven `Execute{Binary,Unary,Reduction,...}` methods cover every primitive NumPy ufunc, but they're a closed set. The moment you want `a*b + c` as one pass, or `sqrt(a² + b²)` without materializing intermediates, or a brand-new op that isn't in `BinaryOp`/`UnaryOp`, you're outside the baked catalog.
 
@@ -701,9 +701,9 @@ The Custom Operations extension solves this by letting the bridge **IL-generate 
 
 ```
               ┌─────────────────── You provide ────────────────────┐
- Tier A       │  the entire inner-loop IL body                     │  Maximum control
- Tier B       │  per-element scalar + (optional) vector IL body    │  Shared unroll shell
- Tier C       │  an expression tree (NpyExpr)                      │  No IL required
+ Tier 3A       │  the entire inner-loop IL body                     │  Maximum control
+ Tier 3B       │  per-element scalar + (optional) vector IL body    │  Shared unroll shell
+ Tier 3C       │  an expression tree (NpyExpr)                      │  No IL required
               └────────────────────────────────────────────────────┘
                            │
                            ▼
@@ -723,7 +723,7 @@ The Custom Operations extension solves this by letting the bridge **IL-generate 
                  NpyIterRef.ForEach → do { kernel(...); } while (iternext)
 ```
 
-All three tiers produce the same delegate shape (`NpyInnerLoopFunc`) and funnel through `ForEach`. The factory emits a runtime contig check at the top of the kernel: if every operand's byte stride equals its element size, take the SIMD path; otherwise fall into the scalar-strided loop. Cache keys are user-supplied strings; Tier C derives a structural signature automatically if you don't provide one.
+All three tiers produce the same delegate shape (`NpyInnerLoopFunc`) and funnel through `ForEach`. The factory emits a runtime contig check at the top of the kernel: if every operand's byte stride equals its element size, take the SIMD path; otherwise fall into the scalar-strided loop. Cache keys are user-supplied strings; Tier 3C derives a structural signature automatically if you don't provide one.
 
 | Method on `NpyIterRef` | Tier | What you supply |
 |------------------------|------|------------------|
@@ -732,7 +732,7 @@ All three tiers produce the same delegate shape (`NpyInnerLoopFunc`) and funnel 
 | `ExecuteElementWiseUnary/Binary/Ternary(...)` | B | Typed convenience overloads |
 | `ExecuteExpression(expr, inputTypes, outputType, key?)` | C | An `NpyExpr` tree |
 
-#### Tier A — Raw IL
+#### Tier 3A — Raw IL
 
 You emit everything. Arguments are the canonical inner-loop shape: `arg0 = void** dataptrs`, `arg1 = long* byteStrides`, `arg2 = long count`, `arg3 = void* auxdata`. Your body must emit its own `ret`. Cached by the string key you pass — same key returns the same compiled delegate.
 
@@ -763,7 +763,7 @@ iter.ExecuteRawIL(il =>
 
 Use when: you need a loop shape the templated shell can't express (gather, scatter, cross-element dependencies, non-rectangular write patterns).
 
-#### Tier B — Templated Inner Loop
+#### Tier 3B — Templated Inner Loop
 
 Supply only the per-element work; the factory wraps it in the standard 4×-unrolled SIMD + 1-vector remainder + scalar tail + scalar-strided fallback. The two `Action<ILGenerator>` callbacks are stack-based:
 
@@ -810,7 +810,7 @@ For arity > 3 or variable operand counts, use the array form `ExecuteElementWise
 
 Use when: you want SIMD + 4× unrolling for a fused or non-standard op but don't want to hand-roll the whole loop.
 
-#### Tier C — Expression DSL
+#### Tier 3C — Expression DSL
 
 The expression DSL lets you compose ops with C# operator syntax, and `Compile()` emits the IL for you. No `ILGenerator` exposure in your code.
 
@@ -931,7 +931,7 @@ iter.ExecuteExpression(expr,
 | `Greater(a,b)` | `a > b` | `np.greater` |
 | `GreaterEqual(a,b)` | `a >= b` | `np.greater_equal` |
 
-Unlike NumPy's comparison ufuncs (which return `bool` arrays), Tier C's single-output-dtype model collapses comparisons to `0 or 1` at the output dtype. This composes cleanly with arithmetic — e.g. ReLU becomes `(x > 0) * x`.
+Unlike NumPy's comparison ufuncs (which return `bool` arrays), Tier 3C's single-output-dtype model collapses comparisons to `0 or 1` at the output dtype. This composes cleanly with arithmetic — e.g. ReLU becomes `(x > 0) * x`.
 
 NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `NaN == NaN → 0`, `NaN < 5 → 0`, `NaN >= 5 → 0`. To test for NaN, use `IsNaN(x)`.
 
@@ -1113,7 +1113,7 @@ What the emitted IL does per element: load `int32`, `Conv_R8` (promote to double
 
 ##### SIMD coverage rules
 
-A node's `SupportsSimd` determines whether Tier C emits the vector body:
+A node's `SupportsSimd` determines whether Tier 3C emits the vector body:
 
 - **Yes:** `Input`, `Const`, the four arithmetic binary ops (`+ - * /`), the three bitwise binary ops (`& | ^`), and the unary ops `Negate`, `Abs`, `Sqrt`, `Floor`, `Ceil`, `Square`, `Reciprocal`, `Deg2Rad`, `Rad2Deg`, `BitwiseNot`.
 - **No:** `Mod`, `Power`, `FloorDivide`, `ATan2`, `Min`/`Max`/`Clamp`/`Where`, all comparisons, `Round`, `Truncate` (no net8 SIMD method), all trig (except `Deg2Rad`/`Rad2Deg`), all log/exp, `Sign`, `Cbrt`, `LogicalNot`, predicates (`IsNaN`/`IsFinite`/`IsInf`), `Call` (user methods are always scalar — there is no vectorization path for arbitrary managed calls).
@@ -1161,7 +1161,7 @@ Two trees with identical structure and types get the same auto-derived key and s
 
 ##### Memory model and lifetime
 
-Three things live longer than you might expect when you use Tier C. Knowing what they are, where they hide, and how long they stick around is enough to avoid every subtle memory-creep footgun in practice.
+Three things live longer than you might expect when you use Tier 3C. Knowing what they are, where they hide, and how long they stick around is enough to avoid every subtle memory-creep footgun in practice.
 
 **1. Compiled kernels (`_innerLoopCache`).**
 
@@ -1202,7 +1202,7 @@ DelegateSlots.Clear();          // wipe for testing (invalidates kernels that re
 
 **3. NDArrays referenced by the iterator.**
 
-Orthogonal to Tier C, but worth mentioning in the same section for completeness: `NpyIterRef` holds a managed `NDArray[]` field so the operands' backing memory isn't collected mid-iteration. The field is released when you `Dispose()` the ref — the `using var iter = ...` pattern handles this automatically. Forgetting to dispose keeps the NDArrays alive for however long the iterator lives.
+Orthogonal to Tier 3C, but worth mentioning in the same section for completeness: `NpyIterRef` holds a managed `NDArray[]` field so the operands' backing memory isn't collected mid-iteration. The field is released when you `Dispose()` the ref — the `using var iter = ...` pattern handles this automatically. Forgetting to dispose keeps the NDArrays alive for however long the iterator lives.
 
 **Registration-once pattern.**
 
@@ -1267,11 +1267,11 @@ A non-exhaustive list of pitfalls worth internalizing:
 
 - **`LogicalNot` is `x == 0`, not `x != 0`.** It returns 1 when the input is zero and 0 otherwise. Same as Python's `not` applied to a numeric value. If you want "non-zero as 1", use `NpyExpr.NotEqual(x, NpyExpr.Const(0))`.
 
-- **Input dtype mismatch is silent.** If your `inputTypes[]` says `Int32` but the actual NDArray operand is `Int16`, the kernel reads 4 bytes starting at the int16 pointer — garbage. The iterator's buffer/cast machinery only kicks in with `BUFFERED | NPY_*_CASTING`. For ad-hoc Tier C use, make sure `inputTypes[i]` matches the actual NDArray dtype, or run the iterator with casting flags.
+- **Input dtype mismatch is silent.** If your `inputTypes[]` says `Int32` but the actual NDArray operand is `Int16`, the kernel reads 4 bytes starting at the int16 pointer — garbage. The iterator's buffer/cast machinery only kicks in with `BUFFERED | NPY_*_CASTING`. For ad-hoc Tier 3C use, make sure `inputTypes[i]` matches the actual NDArray dtype, or run the iterator with casting flags.
 
 - **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is almost never what you intended. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
 
-- **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier B.
+- **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier 3B.
 
 - **`Call` delegates are held forever.** `CallNode` stashes captured delegates and bound instance targets in a process-wide `DelegateSlots` dictionary so the emitted IL can look them up. There is no eviction. If you call `NpyExpr.Call(x => x * scale, in0)` inside a hot loop (creating a new closure each iteration), the dictionary grows without bound. Register delegates once at startup — a `static readonly Func<double, double>` field or a DI singleton — and reuse them.
 
@@ -1283,7 +1283,7 @@ A non-exhaustive list of pitfalls worth internalizing:
 
 ##### Debugging compiled kernels
 
-Tier C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
+Tier 3C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
 
 - **Inspect the kernel cache.** `ILKernelGenerator.InnerLoopCachedCount` (internal; use `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) gives you a count. `ILKernelGenerator.ClearInnerLoopCache()` (internal) lets you force recompilation in a test.
 - **Inspect the delegate slot registry** (only relevant when `Call` is in play). `DelegateSlots.RegisteredCount` (internal) returns the sum of registered delegates + registered instance targets. Growing unboundedly means a per-call lambda or target allocation somewhere — find it by comparing counts before and after your suspected hot path. `DelegateSlots.Clear()` wipes the registry; always pair with `ClearInnerLoopCache()` because cleared-but-cached kernels will throw `KeyNotFoundException` on their next invocation.
@@ -1291,13 +1291,13 @@ Tier C kernels are `DynamicMethod` delegates — you can't step into their IL wi
 - **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
 - **Watch the output dtype.** `ExecuteExpression` expects `outputType` to match the output NDArray's dtype. If they disagree, the kernel reads/writes wrong byte counts. Double-check both.
 - **Diagnose "method group ambiguous" errors.** If you see `CS0121: The call is ambiguous between the following methods` when writing `NpyExpr.Call(Math.X, ...)`, the method has multiple overloads (e.g. `Math.Abs` has 9). Cast to the specific `Func<...>` you want, or use the `MethodInfo` overload with an explicit parameter-types array to `GetMethod`.
-- **Diagnose "Method X returns void"** errors — you passed a method with no return value to `Call`. Tier C requires every node to contribute a value to the output dtype.
+- **Diagnose "Method X returns void"** errors — you passed a method with no return value to `Call`. Tier 3C requires every node to contribute a value to the output dtype.
 - **Diagnose "Target is X, method declares Y"** errors — your instance `MethodInfo` call received a target that isn't an instance of the method's declaring type. Confirm both the method and the target came from the same type, especially if you're reflecting across a plugin boundary.
 - **Enable IL dumps** by emitting into a persistent assembly instead of `DynamicMethod` — not a supported build configuration, but `ILKernelGenerator.InnerLoop.cs` is a single partial file you can modify in a workspace-only diff if you need to dump bytes during development.
 
-##### When to use Tier C
+##### When to use Tier 3C
 
-Reach for Tier C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog (e.g. intrinsics the runtime exposes but the DSL doesn't wrap) — drop to Tier B and hand-tune the vector body.
+Reach for Tier 3C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog (e.g. intrinsics the runtime exposes but the DSL doesn't wrap) — drop to Tier 3B and hand-tune the vector body.
 
 **Decision tree: which tier do I need?**
 
@@ -1307,19 +1307,19 @@ Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
   no ↓
 
 Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, etc.)?
-  yes → Tier C. Fused, SIMD-or-scalar automatic, no IL.
+  yes → Tier 3C. Fused, SIMD-or-scalar automatic, no IL.
   no ↓
 
 Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
-  yes → Tier C with Call. Scalar but fused. Done.
+  yes → Tier 3C with Call. Scalar but fused. Done.
   no ↓
 
 Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, ...)?
-  yes → Tier B. Hand-write the vector body; factory wraps the shell.
+  yes → Tier 3B. Hand-write the vector body; factory wraps the shell.
   no ↓
 
 Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
-  yes → Tier A. Emit the whole inner-loop IL yourself.
+  yes → Tier 3A. Emit the whole inner-loop IL yourself.
 ```
 
 **Caching is shared across all tiers.** All three write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `InnerLoopCachedCount` (internal) exposes the size for tests.
@@ -1362,14 +1362,14 @@ Seventeen worked examples grouped by API tier.
 4. [Fused hypot via Layer 1](#4-fused-hypot-via-layer-1)
 5. [Early-exit Any over 1M elements](#5-early-exit-any-over-1m-elements)
 
-**Tier B (templated scalar + vector bodies):**
+**Tier 3B (templated scalar + vector bodies):**
 
-6. [Fused hypot via Tier C expression](#6-fused-hypot-via-tier-c-expression)
-7. [Fused linear transform via Tier B with vector body](#7-fused-linear-transform-via-tier-b-with-vector-body)
+6. [Fused hypot via Tier 3C expression](#6-fused-hypot-via-tier-3c-expression)
+7. [Fused linear transform via Tier 3B with vector body](#7-fused-linear-transform-via-tier-3b-with-vector-body)
 
-**Tier C (expression DSL):**
+**Tier 3C (expression DSL):**
 
-8. [ReLU via Tier C comparison-multiply](#8-relu-via-tier-c-comparison-multiply)
+8. [ReLU via Tier 3C comparison-multiply](#8-relu-via-tier-3c-comparison-multiply)
 9. [Clamp with Min/Max](#9-clamp-with-minmax)
 10. [Softmax-ish: exp then divide-by-sum](#10-softmax-ish-exp-then-divide-by-sum)
 11. [Sigmoid via Where for numerical stability](#11-sigmoid-via-where-for-numerical-stability)
@@ -1472,7 +1472,7 @@ bool found = iter.ExecuteReducing<AnyNonZero, bool>(default, false);
 // found = true, after exactly one ForEach call (SIMD early exit inside kernel).
 ```
 
-### 6. Fused hypot via Tier C expression
+### 6. Fused hypot via Tier 3C expression
 
 The same hypot operation written as an expression tree — no IL, no hand-written stride branch. The factory emits a 4×-unrolled V256 kernel on the contiguous path and a scalar-strided fallback on non-contiguous input.
 
@@ -1491,9 +1491,9 @@ iter.ExecuteExpression(expr,
 
 Compare with example 4 — same output, same performance envelope, no IL emission visible in your code. The tree's structural signature `"Sqrt(Add(Square(In[0]),Square(In[1])))"` becomes the cache key, so every iterator that runs the same expression reuses the same compiled delegate.
 
-### 7. Fused linear transform via Tier B with vector body
+### 7. Fused linear transform via Tier 3B with vector body
 
-When you want the Tier C ergonomics but also want the vector body under your control (e.g. to insert a Vector256 intrinsic the DSL doesn't expose):
+When you want the Tier 3C ergonomics but also want the vector body under your control (e.g. to insert a Vector256 intrinsic the DSL doesn't expose):
 
 ```csharp
 iter.ExecuteElementWiseBinary(
@@ -1522,11 +1522,11 @@ iter.ExecuteElementWiseBinary(
     cacheKey: "linear_2a_3b_f32");
 ```
 
-Single pass, no temporaries, SIMD-unrolled. Conceptually the same as `2*a + 3*b` written via Tier C, but lets you drop in `Vector256.Fma` or similar intrinsics if you ever need them.
+Single pass, no temporaries, SIMD-unrolled. Conceptually the same as `2*a + 3*b` written via Tier 3C, but lets you drop in `Vector256.Fma` or similar intrinsics if you ever need them.
 
-### 8. ReLU via Tier C comparison-multiply
+### 8. ReLU via Tier 3C comparison-multiply
 
-ReLU in one fused kernel, leveraging Tier C's "comparison returns 0/1 at output dtype" semantics:
+ReLU in one fused kernel, leveraging Tier 3C's "comparison returns 0/1 at output dtype" semantics:
 
 ```csharp
 using var iter = NpyIterRef.MultiNew(2, new[] { input, output },
@@ -1553,7 +1553,7 @@ iter.ExecuteExpression(clamped,
 
 ### 10. Softmax-ish: exp then divide-by-sum
 
-Tier C is element-wise; reductions (like summing all elements) aren't expressible directly. But the element-wise half of softmax is:
+Tier 3C is element-wise; reductions (like summing all elements) aren't expressible directly. But the element-wise half of softmax is:
 
 ```csharp
 // out = exp(x - max_x) / sum_exp   — where max_x and sum_exp are precomputed scalars.
@@ -1678,7 +1678,7 @@ iter.ExecuteExpression(expr,
 
 ### 18. User-defined activation via `NpyExpr.Call`
 
-Say you want **Swish** (`x * sigmoid(x)`, used in EfficientNet and family) but Tier C doesn't have a `Sigmoid` node. Drop to `Call`:
+Say you want **Swish** (`x * sigmoid(x)`, used in EfficientNet and family) but Tier 3C doesn't have a `Sigmoid` node. Drop to `Call`:
 
 ```csharp
 // Registered once at startup — static readonly field, not a per-call lambda.
@@ -1733,9 +1733,9 @@ Benchmarking 1M `sqrt` on a contiguous float32 array after 300 warmup iterations
 
 Layer 1 and Layer 2 give you control and fusion. For any standard elementwise ufunc, **Layer 3 is the right default**. Drop to Layer 1/2 when fusing several ops (one pass, zero temporaries), when the op isn't in `ILKernelGenerator`, or when your kernel has a structure the generator can't express.
 
-**Custom ops (Tier B / Tier C) hit the Layer 3 envelope.** Because the factory wraps user bodies in the same 4×-unrolled SIMD + remainder + scalar-tail shell, a Tier B or Tier C kernel for sqrt lands within rounding distance of `ExecuteUnary(Sqrt)` — the only overhead is the runtime contig check (a few stride comparisons at kernel entry). Fused ops like `sqrt(a² + b²)` via Tier C are typically faster than composing three Layer 3 calls, because there are no intermediate arrays and the whole computation stays in V256 registers between operations.
+**Custom ops (Tier 3B / Tier 3C) hit the Layer 3 envelope.** Because the factory wraps user bodies in the same 4×-unrolled SIMD + remainder + scalar-tail shell, a Tier 3B or Tier 3C kernel for sqrt lands within rounding distance of `ExecuteUnary(Sqrt)` — the only overhead is the runtime contig check (a few stride comparisons at kernel entry). Fused ops like `sqrt(a² + b²)` via Tier 3C are typically faster than composing three Layer 3 calls, because there are no intermediate arrays and the whole computation stays in V256 registers between operations.
 
-**Custom op overhead breakdown.** Tier A and Tier B kernels share the same `NpyInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier C adds:
+**Custom op overhead breakdown.** Tier 3A and Tier 3B kernels share the same `NpyInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier 3C adds:
 
 | Overhead source | When | Cost |
 |----------------|------|------|
@@ -1746,7 +1746,7 @@ Layer 1 and Layer 2 give you control and fusion. For any standard elementwise uf
 | `Call` dispatch (Path A) | Every element — static method | One `call <methodinfo>`; JIT may inline |
 | `Call` dispatch (Path B/C) | Every element — instance or delegate | `ldc.i4 + DelegateSlots.Lookup + castclass + callvirt` (~5-10 ns) |
 
-**When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
+**When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier 3C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier 3C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
 
 **When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NpyExpr.Input(0) * NpyExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
 
@@ -1806,10 +1806,10 @@ Layer 3 allocates exactly once per call: the stackalloc stride arrays (NDim long
 
 | Tier | Per-call allocation | One-time allocation |
 |------|--------------------|--------------------|
-| Tier A (`ExecuteRawIL`) | stackalloc strides + the user's `Action<ILGenerator>` closure on first compile | compiled `DynamicMethod` cached by key; stays live for process lifetime (~2-5 KB native + runtime metadata) |
-| Tier B (`ExecuteElementWise`) | stackalloc strides + (on first compile) two `Action<ILGenerator>` closures | compiled kernel cached by key |
-| Tier C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NpyExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
-| Tier C with `Call` | same as Tier C, plus one `DelegateSlots` entry per unique captured delegate / bound target | registered references live for process lifetime; see [Memory model and lifetime](#memory-model-and-lifetime) |
+| Tier 3A (`ExecuteRawIL`) | stackalloc strides + the user's `Action<ILGenerator>` closure on first compile | compiled `DynamicMethod` cached by key; stays live for process lifetime (~2-5 KB native + runtime metadata) |
+| Tier 3B (`ExecuteElementWise`) | stackalloc strides + (on first compile) two `Action<ILGenerator>` closures | compiled kernel cached by key |
+| Tier 3C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NpyExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
+| Tier 3C with `Call` | same as Tier 3C, plus one `DelegateSlots` entry per unique captured delegate / bound target | registered references live for process lifetime; see [Memory model and lifetime](#memory-model-and-lifetime) |
 
 The one case where allocations grow without bound is the anti-pattern of constructing a new `Call` delegate per iteration — each new delegate reference gets a new slot ID and a new cache entry. Register delegates once at startup to avoid this.
 
@@ -1887,7 +1887,7 @@ Fixed in the commit that introduced the custom-op API (`32 → 16`). All decimal
 
 `ILKernelGenerator.CanUseUnarySimd` lists `UnaryOp.Round` and `UnaryOp.Truncate` as SIMD-supported, and `EmitUnaryVectorOperation` looks up `Vector256.Round(Vector256<double>)` and `Vector256.Truncate(Vector256<double>)` at compile time. Those methods exist in .NET 9+ but **not in .NET 8** — the lookup returns null and throws `InvalidOperationException("Could not find Round/Truncate for Vector256\`1")`.
 
-The existing Unary kernel cache never hit this bug because production `np.round` / `np.trunc` paths are exercised mostly in tests and tests are usually run against one framework. Tier C exercises every op for every SIMD-eligible dtype, and surfaces it immediately.
+The existing Unary kernel cache never hit this bug because production `np.round` / `np.trunc` paths are exercised mostly in tests and tests are usually run against one framework. Tier 3C exercises every op for every SIMD-eligible dtype, and surfaces it immediately.
 
 **Fix (in NpyExpr only, not in `ILKernelGenerator`):** `NpyExpr.UnaryNode.IsSimdUnary` excludes `Round` and `Truncate`, routing them to the scalar path on both net8 and net9+. Scalar rounding is still JIT-autovectorized post-tier-1, so the practical performance delta is small.
 

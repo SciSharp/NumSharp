@@ -17,15 +17,15 @@ using NumSharp.Backends.Iteration;
 // THREE ENTRY POINTS
 // ------------------
 // 1. CompileRawInnerLoop(body, key)
-//      Caller emits the entire IL body. Full control. Used by Tier A of the
+//      Caller emits the entire IL body. Full control. Used by Tier 3A of the
 //      NpyIter custom-op API.
 //
 // 2. CompileInnerLoop(operandTypes, scalarBody, vectorBody, key)
 //      Caller supplies per-element scalar/vector bodies; the factory wraps
 //      them in the standard 4× unrolled SIMD + remainder + scalar-tail shell,
-//      plus a strided fallback for non-contiguous inner loops. Used by Tier B.
+//      plus a strided fallback for non-contiguous inner loops. Used by Tier 3B.
 //
-// 3. Indirectly via NpyExpr.Compile — the expression DSL compiles to Tier B.
+// 3. Indirectly via NpyExpr.Compile — the expression DSL compiles to Tier 3B.
 //
 // STRIDE CONTRACT
 // ---------------
@@ -58,7 +58,7 @@ namespace NumSharp.Backends.Kernels
         private static readonly ConcurrentDictionary<string, NpyInnerLoopFunc> _innerLoopCache = new();
 
         /// <summary>
-        /// Number of cached inner-loop kernels (Tier A and Tier B combined).
+        /// Number of cached inner-loop kernels (Tier 3A and Tier 3B combined).
         /// </summary>
         internal static int InnerLoopCachedCount => _innerLoopCache.Count;
 
@@ -69,7 +69,7 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region Tier A: Raw IL
+        #region Tier 3A: Raw IL
 
         /// <summary>
         /// Compile a custom inner-loop kernel from user-emitted IL. The body
@@ -102,7 +102,7 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region Tier B: Templated inner loop (element-wise)
+        #region Tier 3B: Templated inner loop (element-wise)
 
         /// <summary>
         /// Compile an element-wise inner-loop kernel. Operand layout:
@@ -253,7 +253,7 @@ namespace NumSharp.Backends.Kernels
         /// templated SIMD path — the shell loads every operand through the
         /// same Vector{W}&lt;T&gt; instantiation. Mixed-type SIMD (e.g.
         /// int32+float32) is too ambiguous for a generic shell; users needing
-        /// that should either call CompileRawInnerLoop (Tier A) with their
+        /// that should either call CompileRawInnerLoop (Tier 3A) with their
         /// own mixed-type IL, or accept the scalar fallback where the body
         /// handles conversion.
         /// </summary>
