@@ -2450,5 +2450,105 @@ namespace NumSharp.UnitTest.View
             r.Shape.IsContiguous.Should().BeTrue(
                 "NumPy: moveaxis(F, 0, -1) on 2D = transpose -> C-contig");
         }
+
+        // ============================================================================
+        // Section 46: File I/O — .npy fortran_order flag
+        // NumPy:
+        //   save(F-contig) writes header 'fortran_order': True and F-strided bytes.
+        //   load(fortran_order=True .npy) returns an F-contig NDArray.
+        //   Round-trip through np.save + np.load preserves both values AND layout.
+        // NumSharp (current state, all documented gaps):
+        //   1. np.save.cs:172 hardcodes "'fortran_order': False" in header.
+        //   2. np.save writes C-order bytes (via (Array)nd → ToMuliDimArray<T>()).
+        //   3. np.load.cs:322 throws if header says 'fortran_order': True.
+        //   4. np.load always returns C-contig (matches #1/#2 but not NumPy).
+        // ============================================================================
+
+        [TestMethod]
+        public void NpSave_FContig_RoundTrip_Values_Preserved()
+        {
+            // Values must match after round-trip, regardless of layout.
+            // NumSharp: (Array)nd materializes a C-order copy, so save writes
+            // C-order bytes + "fortran_order: False" header. The values survive;
+            // only the layout flag diverges from NumPy.
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            using var stream = new System.IO.MemoryStream();
+            np.Save((Array)f, stream);
+            stream.Position = 0;
+            var loaded = np.load(stream);
+
+            loaded.shape.Should().Equal(new long[] { 4, 3 });
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    ((double)loaded[i, j]).Should().Be((double)f[i, j]);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumPy: save(F-contig) writes 'fortran_order': True in header.
+                   // NumSharp: np.save.cs:172 hardcodes "'fortran_order': False" — the
+                   // header is a lie when the caller passes an F-contig NDArray, and
+                   // also loses round-trip layout info.
+        public void NpSave_FContig_Header_ContainsFortranOrderTrue()
+        {
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            using var stream = new System.IO.MemoryStream();
+            np.Save((Array)f, stream);
+
+            // Read just the header bytes — magic(6) + version(2) + header_len(2) + header.
+            var bytes = stream.ToArray();
+            int headerLen = bytes[8] | (bytes[9] << 8);
+            var header = System.Text.Encoding.ASCII.GetString(bytes, 10, headerLen);
+
+            header.Should().Contain("'fortran_order': True",
+                "NumPy writes fortran_order: True when saving an F-contig array");
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumPy: loading a .npy with fortran_order: True yields an F-contig array.
+                   // NumSharp: np.load.cs:322 throws Exception on fortran_order: True.
+        public void NpLoad_NumPyFortranOrderTrue_DoesNotThrow()
+        {
+            // Synthesize a minimal .npy header with 'fortran_order': True.
+            // dtype '<f8' (little-endian float64), shape (4,3), then 96 bytes of payload.
+            var header = "{'descr': '<f8', 'fortran_order': True, 'shape': (4, 3), }";
+            int preamble = 10;
+            int pad = 16 - ((header.Length + 1 + preamble) % 16);
+            header = header.PadRight(header.Length + pad) + "\n";
+
+            using var stream = new System.IO.MemoryStream();
+            using (var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.ASCII, leaveOpen: true))
+            {
+                writer.Write((byte)147);
+                writer.Write(new[] { 'N', 'U', 'M', 'P', 'Y' });
+                writer.Write((byte)1);
+                writer.Write((byte)0);
+                writer.Write((ushort)header.Length);
+                for (int i = 0; i < header.Length; i++)
+                    writer.Write((byte)header[i]);
+                for (int i = 0; i < 12; i++)
+                    writer.Write((double)i);  // 12 doubles of payload
+            }
+
+            stream.Position = 0;
+            Action act = () => np.load(stream);
+            act.Should().NotThrow(
+                "NumPy saves F-contig arrays with fortran_order:True — NumSharp must accept them");
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumPy: round-trip of F-contig preserves layout flag.
+                   // NumSharp: load always returns C-contig (even if bytes/layout could
+                   // be preserved, the loader discards that info).
+        public void NpSave_FContig_RoundTrip_PreservesFContigFlag()
+        {
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            using var stream = new System.IO.MemoryStream();
+            np.Save((Array)f, stream);
+            stream.Position = 0;
+            var loaded = np.load(stream);
+
+            loaded.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: round-tripping an F-contig array via save+load preserves layout");
+        }
     }
 }
