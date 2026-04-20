@@ -27,7 +27,9 @@ namespace NumSharp
                 return Clone();
 
             // Allocate destination with F-contiguous strides and copy values logically.
-            var destShape = new Shape(this.Shape.dimensions, 'F');
+            // Clone dimensions to avoid aliasing — Shape(long[], char) does not clone,
+            // and Shape exposes an indexer setter that could otherwise mutate both shapes.
+            var destShape = new Shape((long[])this.Shape.dimensions.Clone(), 'F');
             var dest = new NDArray(this.typecode, destShape, false);
             if (!NpyIter.TryCopySameType(dest.Storage, this.Storage))
                 MultiIterator.Assign(dest.Storage, this.Storage);

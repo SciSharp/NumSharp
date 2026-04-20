@@ -68,8 +68,9 @@ namespace NumSharp.Backends
             }
 
             // NumPy-aligned layout preservation: comparisons preserve F-contig.
+            // copy('F') returns an NDArray; wrap it back as NDArray<bool> via MakeGeneric.
             if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
-                return (NDArray<bool>)result.copy('F').MakeGeneric<bool>();
+                return result.copy('F').MakeGeneric<bool>();
 
             return result;
         }
