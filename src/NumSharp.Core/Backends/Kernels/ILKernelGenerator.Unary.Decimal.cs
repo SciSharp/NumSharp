@@ -353,12 +353,16 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_R8, 0.0);
                         il.Emit(OpCodes.Bne_Un, lblImagNonZero);
 
-                        // Pure-real: new Complex(Math.Pow(2.0, z.Real), 0.0)
+                        // Pure-real: new Complex(Math.Pow(2.0, z.Real), z.Imaginary)
+                        // Preserve input's imag (which is ±0 in this branch, per the Bne_Un
+                        // check above) so NumPy's sign-of-zero propagation is retained:
+                        // exp2(-0-0j) = 1-0j, exp2(r+0j) = 2^r+0j.
                         il.Emit(OpCodes.Ldc_R8, 2.0);
                         il.Emit(OpCodes.Ldloca, locZ);
                         il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
                         il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
-                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
                         il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                         il.Emit(OpCodes.Br, lblEnd);
 
@@ -494,17 +498,39 @@ namespace NumSharp.Backends.Kernels
                     // subnormal x to 0 because Half epsilon ≫ 2^-24. Promote to double (NumPy's
                     // own model: float32 isn't enough either — float32 epsilon near 1 is ~2^-23,
                     // already coarser than Half's smallest subnormal 2^-24).
-                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
-                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleLogP1, null);
-                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    //
+                    // Sign-of-zero: .NET's double.LogP1(-0.0) returns +0.0, dropping the sign.
+                    // NumPy preserves sign through log1p. Wrap the result in CopySign(result, x)
+                    // to restore the input's sign. This happens to be correct over log1p's
+                    // entire domain because log1p(x) always has the same sign as x when
+                    // x ∈ (-1, ∞).
+                    {
+                        var locIn = il.DeclareLocal(typeof(double));
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                        il.Emit(OpCodes.Stloc, locIn);
+                        il.Emit(OpCodes.Ldloc, locIn);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleLogP1, null);
+                        il.Emit(OpCodes.Ldloc, locIn);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    }
                     break;
 
                 case UnaryOp.Expm1:
                     // B21: Half.ExpM1(x) suffers the same subnormal-precision loss as LogP1
-                    // (internal exp(x)-1 step loses bits). Promote through double.
-                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
-                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleExpM1, null);
-                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    // (internal exp(x)-1 step loses bits). Promote through double. Same
+                    // CopySign sign-of-zero correction as Log1p — expm1(x) has the same sign
+                    // as x over its entire domain.
+                    {
+                        var locIn = il.DeclareLocal(typeof(double));
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                        il.Emit(OpCodes.Stloc, locIn);
+                        il.Emit(OpCodes.Ldloc, locIn);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleExpM1, null);
+                        il.Emit(OpCodes.Ldloc, locIn);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    }
                     break;
 
                 case UnaryOp.Floor:

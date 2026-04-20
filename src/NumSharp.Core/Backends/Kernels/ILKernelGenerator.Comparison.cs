@@ -1188,6 +1188,23 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locAR);
             il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locBR);
 
+            // B25: NaN short-circuit. NumPy returns False for any ordered comparison when
+            // *any* component of either operand is NaN. Without this guard, aR=NaN would
+            // fall through Blt/Bgt (both false for NaN) into the imag compare which could
+            // return true. Check all four components up front; bail to lblFalse on NaN.
+            il.Emit(OpCodes.Ldloc, locAR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloc, locBR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+
             // if (strict(aR, bR)) goto lblTrue;
             il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
             il.Emit(realBranchTrue, lblTrue);

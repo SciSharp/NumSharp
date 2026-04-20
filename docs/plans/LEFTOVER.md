@@ -1063,3 +1063,111 @@ ddof adjustment formula, not in the Complex kernel helper as originally tagged.
 The fix applies to *all* dtypes that use the IL Var/Std path. Any prior user
 code that called `np.var(x, axis=N, ddof>n)` on float/int inputs would have
 silently received negative variance — now correctly returns +inf.
+
+## Round 10 Kernel Battletest (2026-04-20)
+
+After Round 9 closed B21-B24, the 6 Complex helper methods that were still
+round-tripped through reflection-based IL calls were inlined as direct IL
+emission (commits `c3d49540` and `b4e6fdfb`). A side-by-side battletest of
+the inlined kernels vs NumPy 2.4.2 then uncovered two more pre-existing
+parity bugs that had been masked by the helpers:
+
+### B25 — Complex ordered comparison with NaN returns True ✅ CLOSED (Round 10)
+
+```
+np.array([complex(nan, 0)]) >= np.array([complex(1, 0)])  → False   # NumPy
+                                                          → True    # NumSharp (wrong)
+```
+
+**Root cause**: The lex-compare emit (originally 4 helper methods
+`ComplexLessThanHelper` etc., now the `EmitComplexLexCompare(il, op)`
+inline) uses `Blt`/`Bgt` opcodes which are *ordered* (NaN → branch not
+taken). For `aR = NaN, bR = 1`, both ordered branches skip, and the code
+falls through to the imaginary-component compare which returns `True`
+when imag parts happen to be equal.
+
+NumPy's rule: any NaN in either operand's real OR imag → result is False.
+
+**Fix**: Added a NaN short-circuit at the top of `EmitComplexLexCompare`:
+if any of `aR`, `aI`, `bR`, `bI` is NaN, branch directly to `lblFalse`
+before the real-part compares. This matches NumPy exactly for all 4 ops.
+
+Bug was present in the original pre-inlining helpers too — just never
+exercised by a test until the battletest.
+
+### B26 — Complex Sign for infinite magnitude returns NaN+NaNj ✅ CLOSED (Round 10)
+
+```
+np.sign(complex(+inf, 0))   → (1+0j)     # NumPy
+                            → (nan+nanj)  # NumSharp (wrong)
+np.sign(complex(-inf, 0))   → (-1+0j)
+np.sign(complex(0, +inf))   → (0+1j)
+np.sign(complex(0, -inf))   → (0-1j)
+np.sign(complex(+inf, +inf)) → (nan+nanj)  # both diverged — indeterminate
+```
+
+**Root cause**: The Complex Sign emit used `z / |z|` unconditionally.
+For single-component infinite inputs, `|z| = inf`, so `inf/inf` in
+`Complex.op_Division(Complex, double)` evaluates to NaN+NaNj.
+
+NumPy's rule: when magnitude is infinite but only one component is,
+return the unit vector along that component. Only when both components
+are infinite is the direction indeterminate → NaN+NaNj.
+
+**Fix**: Added branching in the `EmitSignCall` Complex branch
+(`Unary.Math.cs:712`). When `|z|` is infinite:
+- both components infinite → `nan+nanj`
+- only real infinite → `(CopySign(1, r), 0)`
+- only imag infinite → `(0, CopySign(1, i))`
+
+Otherwise fall through to the existing `z / |z|` path.
+Added `MathCopySign` MethodInfo to `CachedMethods`.
+
+### Sign-of-zero preservation (minor IEEE fix, Round 10)
+
+Three small sign-of-zero divergences also surfaced:
+- `np.log1p(float16(-0))` → -0 (NumPy); NumSharp returned +0
+- `np.expm1(float16(-0))` → -0 (NumPy); NumSharp returned +0
+- `np.exp2(complex(-0, -0))` → 1-0j (NumPy); NumSharp returned 1+0j
+
+Root cause:
+- .NET's `double.LogP1(-0.0)` returns `+0.0`, dropping the sign. Same for
+  `double.ExpM1(-0.0)`.
+- The Complex exp2 inline IL hardcoded `0.0` for the imag component in the
+  pure-real branch instead of passing through `z.Imaginary`.
+
+**Fix**:
+- Half Log1p/Expm1 IL now wraps the result in `Math.CopySign(result, input)`.
+  Safe because `log1p`/`expm1` preserve the sign of their argument over their
+  entire domain.
+- Complex exp2 pure-real branch now calls `z.get_Imaginary` instead of
+  `ldc.r8 0.0`. Since this branch is only taken when `z.Imaginary == 0` (per
+  the up-front `Bne_Un` check), the value is always ±0 — the switch preserves
+  the input's sign-of-zero.
+
+### Battletest parity — 230 of 232 cases match NumPy exactly
+
+Remaining 2 divergences (documented as acceptable):
+1. `np.exp2(complex(1e300, 0))` — NumPy: `inf+nanj`, NumSharp: `inf+0j`. NumPy
+   computes via `exp(z·ln2)` where `1e300·ln2 = inf`, then `sin(0)·inf = NaN`
+   in the imag dimension. NumSharp's `Math.Pow(2, 1e300) = inf` path skips
+   this IEEE quirk and returns a clean `inf+0j`. Arguably preferable.
+2. `np.exp2(complex(inf, inf))` — NumPy: `inf+nanj`, NumSharp: `nan+nanj`.
+   The general case `z.Imaginary != 0` routes through .NET's `Complex.Pow`,
+   which has its own BCL quirk returning `nan+nanj` for this input. Fixing
+   would require a full `exp(z·ln2)` inline rewrite — not justified for a
+   single-input edge.
+
+Both divergences are in the `Complex exp2` overflow / dual-infinity regime,
+which is far outside practical numerical-computing usage.
+
+### Round 10 test coverage
+
+15 new tests added to `NewDtypesEdgeCasesRound6and7Tests.cs`:
+- 4× B25 (NaN in real/imag of a/b, plus regression for non-NaN)
+- 7× B26 (±inf real/imag, both-inf, finite+non-zero regression, zero regression)
+- 4× sign-of-zero (Half log1p/expm1 of -0, Complex exp2 -0 imag preservation,
+  plus +0 regression)
+
+Full suite after Round 10: **6733 / 0 / 11** per framework (up 15 from
+Round 9's 6718). OpenBugs count unchanged.

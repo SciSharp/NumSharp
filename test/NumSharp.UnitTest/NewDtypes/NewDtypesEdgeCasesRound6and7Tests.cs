@@ -1427,5 +1427,195 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         #endregion
+
+        // ======================================================================
+        // Kernel battletest fixes — Round 10
+        // Parity bugs surfaced by side-by-side comparison vs NumPy 2.4.2 on the
+        // IL kernels refactored into inline emit.
+        // ======================================================================
+
+        #region B25 — Complex ordered comparison with NaN returns False
+
+        [TestMethod]
+        public void B25_Complex_LessThan_With_NaN_Real_Is_False()
+        {
+            // np.array([complex(nan, 0)]) < np.array([complex(1, 0)]) → False
+            // Prior inline IL fell through Blt/Bgt (both false for NaN) into the imag
+            // compare, which returned True because aI == bI == 0.
+            var a = np.array(new Complex[] { C(double.NaN, 0) });
+            var b = np.array(new Complex[] { C(1, 0) });
+            (a < b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a <= b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a > b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a >= b).GetAtIndex<bool>(0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void B25_Complex_Compare_With_NaN_Imag_Is_False()
+        {
+            // NaN in imag of either operand → all four ops return False.
+            var a = np.array(new Complex[] { C(1, double.NaN) });
+            var b = np.array(new Complex[] { C(1, 0) });
+            (a < b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a <= b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a > b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a >= b).GetAtIndex<bool>(0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void B25_Complex_Compare_With_NaN_In_RHS_Is_False()
+        {
+            // NaN in b, finite in a → still False.
+            var a = np.array(new Complex[] { C(1, 0) });
+            var b = np.array(new Complex[] { C(double.NaN, 0) });
+            (a < b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a <= b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a > b).GetAtIndex<bool>(0).Should().BeFalse();
+            (a >= b).GetAtIndex<bool>(0).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void B25_Complex_Compare_NonNaN_Unchanged()
+        {
+            // Regression: the NaN guard must not affect finite-compare results.
+            var a = np.array(new Complex[] { C(1, 5), C(2, 3), C(2, 3), C(3, 0) });
+            var b = np.array(new Complex[] { C(2, 0), C(2, 7), C(2, 3), C(2, 0) });
+            // Less:      T, T, F, F
+            var lt = a < b;
+            lt.GetAtIndex<bool>(0).Should().BeTrue();
+            lt.GetAtIndex<bool>(1).Should().BeTrue();
+            lt.GetAtIndex<bool>(2).Should().BeFalse();
+            lt.GetAtIndex<bool>(3).Should().BeFalse();
+            // LessEqual: T, T, T, F
+            var le = a <= b;
+            le.GetAtIndex<bool>(0).Should().BeTrue();
+            le.GetAtIndex<bool>(1).Should().BeTrue();
+            le.GetAtIndex<bool>(2).Should().BeTrue();
+            le.GetAtIndex<bool>(3).Should().BeFalse();
+        }
+
+        #endregion
+
+        #region B26 — Complex Sign for infinite magnitude
+
+        [TestMethod]
+        public void B26_Complex_Sign_PosInf_Real_Is_One()
+        {
+            // np.sign(complex(+inf, 0)) → (1+0j)
+            var a = np.array(new Complex[] { C(double.PositiveInfinity, 0) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(1.0);
+            r.Imaginary.Should().Be(0.0);
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_NegInf_Real_Is_MinusOne()
+        {
+            // np.sign(complex(-inf, 0)) → (-1+0j)
+            var a = np.array(new Complex[] { C(double.NegativeInfinity, 0) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(-1.0);
+            r.Imaginary.Should().Be(0.0);
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_PosInf_Imag_Is_Unit_J()
+        {
+            // np.sign(complex(0, +inf)) → 1j
+            var a = np.array(new Complex[] { C(0, double.PositiveInfinity) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(0.0);
+            r.Imaginary.Should().Be(1.0);
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_NegInf_Imag_Is_MinusUnit_J()
+        {
+            // np.sign(complex(0, -inf)) → -1j
+            var a = np.array(new Complex[] { C(0, double.NegativeInfinity) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(0.0);
+            r.Imaginary.Should().Be(-1.0);
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_BothInf_Is_NaN()
+        {
+            // np.sign(complex(inf, inf)) → (nan+nanj)  (direction indeterminate)
+            var a = np.array(new Complex[] { C(double.PositiveInfinity, double.PositiveInfinity) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            double.IsNaN(r.Real).Should().BeTrue();
+            double.IsNaN(r.Imaginary).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_FiniteNonZero_Unchanged()
+        {
+            // Regression: normal case still z / |z|.
+            // np.sign(3+4j) = (0.6+0.8j)
+            var a = np.array(new Complex[] { C(3, 4) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().BeApproximately(0.6, Tol);
+            r.Imaginary.Should().BeApproximately(0.8, Tol);
+        }
+
+        [TestMethod]
+        public void B26_Complex_Sign_Zero_Is_Zero()
+        {
+            // Regression: zero input still yields Complex.Zero.
+            var a = np.array(new Complex[] { C(0, 0) });
+            var r = np.sign(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(0.0);
+            r.Imaginary.Should().Be(0.0);
+        }
+
+        #endregion
+
+        #region Sign-of-zero preservation
+
+        [TestMethod]
+        public void SignOfZero_Half_Log1p_Preserves_Negative_Zero()
+        {
+            // np.log1p(np.array([-0.0], dtype=float16)) → -0.0 (sign preserved)
+            // .NET's double.LogP1(-0.0) returns +0.0; the Half kernel wraps the result
+            // in Math.CopySign(result, input) to restore NumPy parity.
+            var a = np.array(new Half[] { Half.NegativeZero });
+            var r = np.log1p(a).GetAtIndex<Half>(0);
+            ((double)r).Should().Be(0.0);  // magnitude zero
+            // Verify bit pattern: 0x8000 for -0, 0x0000 for +0
+            BitConverter.HalfToUInt16Bits(r).Should().Be(0x8000);
+        }
+
+        [TestMethod]
+        public void SignOfZero_Half_Expm1_Preserves_Negative_Zero()
+        {
+            var a = np.array(new Half[] { Half.NegativeZero });
+            var r = np.expm1(a).GetAtIndex<Half>(0);
+            BitConverter.HalfToUInt16Bits(r).Should().Be(0x8000);
+        }
+
+        [TestMethod]
+        public void SignOfZero_Complex_Exp2_Preserves_Negative_Zero_Imag()
+        {
+            // np.exp2(-0-0j) → 1+(-0)j
+            // NumSharp's inline IL now passes z.Imaginary through the pure-real branch
+            // instead of hardcoding 0.0, preserving the sign of zero.
+            var a = np.array(new Complex[] { C(-0.0, -0.0) });
+            var r = np.exp2(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(1.0);
+            double.IsNegative(r.Imaginary).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void SignOfZero_Complex_Exp2_PlusZero_ImagStays_PlusZero()
+        {
+            // Regression: +0 imag input stays +0 (don't accidentally flip).
+            var a = np.array(new Complex[] { C(1, 0) });
+            var r = np.exp2(a).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(2.0);
+            double.IsNegative(r.Imaginary).Should().BeFalse();
+        }
+
+        #endregion
     }
 }

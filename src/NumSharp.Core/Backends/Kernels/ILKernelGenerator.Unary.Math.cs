@@ -710,32 +710,95 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case NPTypeCode.Complex:
-                    // NumPy: sign(z) = z / |z| for complex numbers (unit vector in same direction)
-                    // For z = 0, return 0
+                    // NumPy sign(z):
+                    //   |z| == 0            → 0+0j
+                    //   |z| finite, nonzero → z / |z|                         (unit vector)
+                    //   |z| infinite:
+                    //     both components infinite → nan+nanj                 (indeterminate direction)
+                    //     only real infinite       → CopySign(1, z.R) + 0j    (pure-real unit)
+                    //     only imag infinite       → 0 + CopySign(1, z.I)·j   (pure-imag unit)
+                    //   any NaN in z        → nan+nanj                        (falls naturally out of z/|z|
+                    //                                                          because |nan|=nan propagates)
+                    //
+                    // B26: the prior impl used `z / |z|` unconditionally, which for |z|=inf
+                    // (single-component infinite) produced `inf/inf = nan+nanj` instead of
+                    // the unit vector. Now we branch on isinf(|z|) and handle per-component.
                     {
                         var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
                         var locMag = il.DeclareLocal(typeof(double));
+                        var locR = il.DeclareLocal(typeof(double));
+                        var locI = il.DeclareLocal(typeof(double));
                         var lblNonZero = il.DefineLabel();
+                        var lblFiniteMag = il.DefineLabel();
+                        var lblBothInf = il.DefineLabel();
+                        var lblImagInf = il.DefineLabel();
                         var lblEnd = il.DefineLabel();
 
                         il.Emit(OpCodes.Stloc, locZ);
 
-                        // Get magnitude
+                        // Compute |z|
                         il.Emit(OpCodes.Ldloc, locZ);
                         il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
                         il.Emit(OpCodes.Stloc, locMag);
 
-                        // Check if magnitude is zero
+                        // Check if magnitude is zero → return Zero
                         il.Emit(OpCodes.Ldloc, locMag);
                         il.Emit(OpCodes.Ldc_R8, 0.0);
                         il.Emit(OpCodes.Bne_Un, lblNonZero);
-
-                        // Magnitude is zero - return Zero
                         il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexZero);
                         il.Emit(OpCodes.Br, lblEnd);
 
                         il.MarkLabel(lblNonZero);
-                        // return z / |z|
+                        // Check if magnitude is finite → fall through to z/|z|
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Brfalse, lblFiniteMag);
+
+                        // Infinite magnitude — extract components to locals
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
+                        il.Emit(OpCodes.Stloc, locR);
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                        il.Emit(OpCodes.Stloc, locI);
+
+                        // if (isinf(r) && isinf(i)) return nan+nanj
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Ldloc, locI);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.And);
+                        il.Emit(OpCodes.Brfalse, lblBothInf);      // branch if NOT both-inf
+                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblBothInf);
+                        // Exactly one component is infinite. Check which.
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Brfalse, lblImagInf);
+                        // Real is infinite → (CopySign(1, r), 0)
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblImagInf);
+                        // Imag is infinite → (0, CopySign(1, i))
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldloc, locI);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblFiniteMag);
+                        // Normal case: z / |z|. Complex.op_Division(Complex, double) handles
+                        // NaN-in-z naturally by propagating NaN through component-wise divide.
                         il.Emit(OpCodes.Ldloc, locZ);
                         il.Emit(OpCodes.Ldloc, locMag);
                         il.EmitCall(OpCodes.Call, CachedMethods.ComplexDivisionByDouble, null);

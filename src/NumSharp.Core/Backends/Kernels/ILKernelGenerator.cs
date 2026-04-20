@@ -426,6 +426,8 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsInfinity));
             public static readonly MethodInfo DoubleIsFinite = typeof(double).GetMethod(nameof(double.IsFinite), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsFinite));
+            public static readonly MethodInfo MathCopySign = typeof(Math).GetMethod(nameof(Math.CopySign), new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.CopySign));
 
             // Unsafe methods
             public static readonly MethodInfo UnsafeInitBlockUnaligned = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
