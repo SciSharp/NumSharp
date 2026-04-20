@@ -112,7 +112,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.copy ignores order parameter (see np.copy.cs:12 TODO)
         public void NpCopy_FOrder_ProducesFContig()
         {
             // NumPy: np.copy(c_src, order='F') -> F=True
@@ -123,7 +122,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.copy ignores order parameter
         public void NpCopy_AOrder_FSource_ProducesFContig()
         {
             // NumPy: np.copy(f_src, order='A') with F-contig src -> F=True
@@ -133,7 +131,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.copy ignores order parameter
         public void NpCopy_KOrder_FSource_ProducesFContig()
         {
             var fSrc = np.arange(12).reshape(3, 4).T;
@@ -144,15 +141,13 @@ namespace NumSharp.UnitTest.View
         [TestMethod]
         public void NpCopy_AOrder_CSource_ProducesCContig()
         {
-            // Passes because current np.copy ignores order and always produces C-contig —
-            // for 'A' with C-contig source, NumPy also expects C output.
+            // NumPy: np.copy(c_src, order='A') -> C=True (A resolves to C for C-contig source).
             var src = np.arange(12).reshape(3, 4);
             var copy = np.copy(src, order: 'A');
             copy.Shape.IsContiguous.Should().BeTrue();
         }
 
         [TestMethod]
-        [OpenBugs] // NDArray.copy ignores order parameter (see NDArray.Copy.cs:11 TODO)
         public void NDArrayCopy_FOrder_ProducesFContig()
         {
             var src = np.arange(12).reshape(3, 4);
@@ -161,7 +156,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NDArray.copy ignores order parameter
         public void NDArrayCopy_AOrder_FSource_ProducesFContig()
         {
             var fSrc = np.arange(12).reshape(3, 4).T;
@@ -491,7 +485,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.empty_like doesn't preserve F-contig from source (K default)
         public void EmptyLike_FSource_KDefault_PreservesFContig()
         {
             // NumPy: np.empty_like(f_src) (order='K' default) -> F=True (preserves F)
@@ -514,7 +507,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.zeros_like doesn't preserve F-contig from source (K default)
         public void ZerosLike_FSource_KDefault_PreservesFContig()
         {
             var fSrc = np.arange(12).reshape(3, 4).T;
@@ -546,7 +538,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.ones_like doesn't preserve F-contig from source (K default)
         public void OnesLike_FSource_KDefault_PreservesFContig()
         {
             var fSrc = np.arange(12).reshape(3, 4).T;
@@ -578,7 +569,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.full_like doesn't preserve F-contig from source (K default)
         public void FullLike_FSource_KDefault_PreservesFContig()
         {
             var fSrc = np.arange(12).reshape(3, 4).T;
@@ -675,7 +665,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // astype has no order parameter; always produces C-contig
         public void Astype_FSource_KDefault_PreservesFContig()
         {
             // NumPy: f_src.astype(np.int64) (K default) -> F=True (preserves)
@@ -782,7 +771,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.array(Array, ..., order='F') is accepted but ignored
         public void NpArray_FromManaged_FOrder_ProducesFContig()
         {
             // NumPy: np.array([[1,2],[3,4]], order='F') -> F-contig

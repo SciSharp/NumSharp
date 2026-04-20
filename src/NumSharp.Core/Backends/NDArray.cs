@@ -468,16 +468,59 @@ namespace NumSharp
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy = true) => TensorEngine.Cast(this, dtype, copy);
+        public NDArray astype(Type dtype, bool copy = true) => astype(dtype, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray astype(Type dtype, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, dtype, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         ///     Copy of the array, cast to a specified type.
         /// </summary>
-        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="typeCode">The dtype to cast this array.</param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy = true) => TensorEngine.Cast(this, typeCode, copy);
+        public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="typeCode">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        public NDArray astype(NPTypeCode typeCode, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, typeCode, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         /// Clone the whole NDArray
