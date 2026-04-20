@@ -2632,5 +2632,148 @@ namespace NumSharp.UnitTest.View
             r.Shape.IsFContiguous.Should().BeTrue(
                 "NumPy: around on 3-D F-contig preserves F-contig layout");
         }
+
+        // ============================================================================
+        // Section 49: Decimal dtype on scalar-full (non-SIMD) path
+        // NumSharp's element-wise dispatcher routes Decimal to a scalar-full kernel
+        // (no Vector<T>). This section verifies F-contig preservation and values for
+        // the Decimal code path specifically.
+        // ============================================================================
+
+        [TestMethod]
+        public void Decimal_FContig2D_BinaryAdd_PreservesFContig()
+        {
+            var c = np.array(new decimal[,] { { 1m, 2m }, { 3m, 4m } });
+            var f = c.copy('F');
+            f.Shape.IsFContiguous.Should().BeTrue();
+
+            var r = f + f;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "Decimal scalar-full dispatcher must preserve F-contig for F+F");
+            ((decimal)r[0, 0]).Should().Be(2m);
+            ((decimal)r[0, 1]).Should().Be(4m);
+            ((decimal)r[1, 0]).Should().Be(6m);
+            ((decimal)r[1, 1]).Should().Be(8m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_UnaryNegate_PreservesFContig()
+        {
+            var f = np.array(new decimal[,] { { 1m, 2m }, { 3m, 4m } }).copy('F');
+
+            var r = -f;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "Decimal unary negate must preserve F-contig");
+            ((decimal)r[0, 0]).Should().Be(-1m);
+            ((decimal)r[1, 1]).Should().Be(-4m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_Abs_PreservesFContig()
+        {
+            var neg = np.array(new decimal[,] { { -1m, -2m }, { -3m, -4m } }).copy('F');
+
+            var r = np.abs(neg);
+            r.Shape.IsFContiguous.Should().BeTrue("Decimal abs must preserve F-contig");
+            ((decimal)r[0, 0]).Should().Be(1m);
+            ((decimal)r[1, 1]).Should().Be(4m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_Comparison_PreservesFContig()
+        {
+            var f = np.array(new decimal[,] { { 1m, 2m }, { 3m, 4m } }).copy('F');
+            var f2 = f * 2m;
+
+            var r = f2 > f;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "Decimal comparison must preserve F-contig");
+            ((bool)r[0, 0]).Should().BeTrue();
+            ((bool)r[1, 1]).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_ScalarMultiply_PreservesFContig()
+        {
+            var f = np.array(new decimal[,] { { 1m, 2m }, { 3m, 4m } }).copy('F');
+
+            var r = f * 2m;
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((decimal)r[0, 0]).Should().Be(2m);
+            ((decimal)r[1, 1]).Should().Be(8m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_Astype_FromFloat_PreservesFContig()
+        {
+            // Converting an F-contig float array to Decimal via astype should preserve
+            // F-contig layout (astype defaults to 'K' which keeps the source layout).
+            var fd = np.array(new double[,] { { 1.1, 2.2 }, { 3.3, 4.4 } }).copy('F');
+
+            var rd = fd.astype(typeof(decimal));
+            rd.Shape.IsFContiguous.Should().BeTrue(
+                "astype with default 'K' order preserves F-contig");
+            ((decimal)rd[0, 0]).Should().BeApproximately(1.1m, 1e-6m);
+            ((decimal)rd[1, 1]).Should().BeApproximately(4.4m, 1e-6m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig3D_BinaryAdd_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(decimal));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = (decimal)(i * 12 + j * 4 + k);
+
+            var r = f3 + f3;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "Decimal 3-D F+F through scalar-full path preserves F-contig");
+            ((decimal)r[0, 0, 0]).Should().Be(0m);
+            ((decimal)r[1, 2, 3]).Should().Be(46m);  // 2 * 23
+        }
+
+        [TestMethod]
+        public void Decimal_FContig3D_UnaryNegate_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(decimal));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = (decimal)(i * 12 + j * 4 + k);
+
+            var r = -f3;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "Decimal 3-D unary through scalar-full path preserves F-contig");
+            ((decimal)r[1, 2, 3]).Should().Be(-23m);
+        }
+
+        [TestMethod]
+        public void Decimal_FContig2D_Sum_NoAxis_MatchesNumPy()
+        {
+            // Values-only test: scalar reduction doesn't have a layout to worry about.
+            var data = new decimal[,] { { 1m, 2m, 3m }, { 4m, 5m, 6m } };
+            var f = np.array(data).copy('F');
+
+            var r = np.sum(f);
+            ((decimal)r).Should().Be(21m);
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same 3-D reduction F-preservation gap as Section 41 — confirmed
+                   // here for the Decimal scalar-full path as well.
+        public void Decimal_FContig3D_SumKeepDims_PreservesFContig()
+        {
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(decimal));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = (decimal)(i * 12 + j * 4 + k);
+
+            var r = np.sum(f3, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3, 4 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: sum(F3, axis=0, keepdims=True) preserves F-contig for Decimal too");
+        }
     }
 }
