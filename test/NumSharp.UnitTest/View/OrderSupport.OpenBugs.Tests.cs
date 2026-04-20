@@ -1667,13 +1667,12 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.argsort throws on F-contig arrays (GetAtIndex type mismatch)
         public void ArgSort_FContig_ProducesCContig()
         {
-            // NumPy: argsort of F-contig produces C-contig output
-            // NumSharp: throws DebugAssertException when called on F-contig input.
+            // NumPy: argsort of F-contig produces C-contig output.
+            // np.arange returns Int64, so argsort<long> matches the source dtype.
             var fArr = np.arange(12).reshape(3, 4).T;
-            var r = np.argsort<int>(fArr, axis: 0);
+            var r = np.argsort<long>(fArr, axis: 0);
             r.Shape.IsContiguous.Should().BeTrue();
         }
 
@@ -1718,7 +1717,7 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // Fancy write may trigger reallocation that breaks F-contig
+        [OpenBugs] // SetIndicesND asserts dstOffsets.size == values.size, breaks for scalar values on multi-row fancy writes regardless of layout. Not F-order specific — a pre-existing bug.
         public void FancyWrite_FContig_PreservesFContig()
         {
             // NumPy: f_arr[[0,2]] = 99 preserves F-contig (in-place)
