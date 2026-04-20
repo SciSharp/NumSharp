@@ -2550,5 +2550,87 @@ namespace NumSharp.UnitTest.View
             loaded.Shape.IsFContiguous.Should().BeTrue(
                 "NumPy: round-tripping an F-contig array via save+load preserves layout");
         }
+
+        // ============================================================================
+        // Section 47: around / round_ layout and values
+        // NumPy: both around and round_ are element-wise rounding — preserves F-contig
+        // input layout for both 2-D and 3-D, at all decimal precisions.
+        // ============================================================================
+
+        [TestMethod]
+        public void Around_FContig2D_Values_MatchNumPy()
+        {
+            // NumPy: around(F[[1.345, 2.678], [3.123, 4.567]], decimals=1)
+            //      = [[1.3, 2.7], [3.1, 4.6]]
+            var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
+            f.Shape.IsFContiguous.Should().BeTrue();
+
+            var r = np.around(f, decimals: 1);
+            ((double)r[0, 0]).Should().BeApproximately(1.3, 1e-9);
+            ((double)r[0, 1]).Should().BeApproximately(2.7, 1e-9);
+            ((double)r[1, 0]).Should().BeApproximately(3.1, 1e-9);
+            ((double)r[1, 1]).Should().BeApproximately(4.6, 1e-9);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumPy: around is element-wise, preserves F-contig layout.
+                   // NumSharp: np.around doesn't route through the element-wise
+                   // dispatcher's F-preservation helper — result is C-contig.
+        public void Around_FContig2D_PreservesFContig()
+        {
+            var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
+            var r = np.around(f, decimals: 1);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: around is element-wise, preserves F-contig layout");
+        }
+
+        [TestMethod]
+        public void Around_FContig2D_Decimals2_MatchesNumPy()
+        {
+            // NumPy: around(F..., decimals=2) preserves two decimal places.
+            var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
+            var r = np.around(f, decimals: 2);
+            ((double)r[0, 0]).Should().BeApproximately(1.34, 1e-9);  // banker's rounding: 1.345 -> 1.34
+            ((double)r[0, 1]).Should().BeApproximately(2.68, 1e-9);
+            ((double)r[1, 0]).Should().BeApproximately(3.12, 1e-9);
+            ((double)r[1, 1]).Should().BeApproximately(4.57, 1e-9);
+        }
+
+        [TestMethod]
+        public void Round_FContig2D_Values_MatchNumPy()
+        {
+            // NumPy: round_ is alias for around — same values and layout.
+            var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
+            var r = np.round_(f, decimals: 1);
+            ((double)r[0, 0]).Should().BeApproximately(1.3, 1e-9);
+            ((double)r[1, 1]).Should().BeApproximately(4.6, 1e-9);
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same gap as Around_FContig2D_PreservesFContig — round_ is an alias
+                   // of around and shares the same dispatcher that bypasses F-preservation.
+        public void Round_FContig2D_PreservesFContig()
+        {
+            var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
+            var r = np.round_(f, decimals: 1);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: round_ preserves F-contig layout (same as around)");
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same root cause as Around_FContig2D_PreservesFContig, confirmed on
+                   // a 3-D shape where the F-strides pattern is non-trivial.
+        public void Around_FContig3D_PreservesFContig()
+        {
+            // NumPy: around on 3-D F-contig stays F-contig.
+            var f3 = np.empty(new Shape(2L, 3L, 4L), order: 'F', dtype: typeof(double));
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int k = 0; k < 4; k++)
+                        f3[i, j, k] = i * 12 + j * 4 + k + 0.5;
+            var r = np.around(f3, decimals: 0);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: around on 3-D F-contig preserves F-contig layout");
+        }
     }
 }
