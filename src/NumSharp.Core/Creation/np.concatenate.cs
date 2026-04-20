@@ -73,7 +73,19 @@ namespace NumSharp
 
             //prepare return shape
             firstShape[axis] = axisSize;
-            var retShape = new Shape(firstShape);
+
+            // NumPy-aligned: when every input is F-contiguous and not C-contiguous,
+            // produce an F-contiguous destination; otherwise default to C.
+            bool allF = true;
+            foreach (var src in arrays)
+            {
+                if (!src.Shape.IsFContiguous || src.Shape.IsContiguous)
+                {
+                    allF = false;
+                    break;
+                }
+            }
+            var retShape = allF ? new Shape(firstShape, 'F') : new Shape(firstShape);
 
             var dst = new NDArray(retType, retShape);
             var accessorDst = new Slice[retShape.NDim];

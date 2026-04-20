@@ -624,22 +624,23 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.asarray has no NDArray overload accepting order
         public void Asarray_FOrder_ProducesFContig_ApiGap()
         {
             // NumPy: np.asarray(c_src, order='F') -> F=True
-            // NumSharp's asarray only accepts struct/T[] types, not NDArray.
-            // When asarray(NDArray, order) is added, this should match NumPy.
-            false.Should().BeTrue("np.asarray needs NDArray+order overload");
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.asarray(src, order: 'F');
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((int)r[2, 3]).Should().Be(11);
         }
 
         [TestMethod]
-        [OpenBugs] // np.asanyarray has TODO for order support (see np.asanyarray.cs:14)
         public void Asanyarray_FOrder_ProducesFContig_ApiGap()
         {
             // NumPy: np.asanyarray(src, order='F') -> F=True
-            // NumSharp signature: asanyarray(in object a, Type dtype) — no order
-            false.Should().BeTrue("np.asanyarray needs order parameter");
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.asanyarray(src, dtype: null, order: 'F');
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((int)r[2, 3]).Should().Be(11);
         }
 
         // ============================================================================
@@ -791,20 +792,24 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.asfortranarray doesn't exist in NumSharp
         public void AsFortranArray_ProducesFContig_ApiGap()
         {
             // NumPy: np.asfortranarray(arr) always returns F-contig
-            // NumSharp has no such function.
-            false.Should().BeTrue("np.asfortranarray is not implemented");
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.asfortranarray(src);
+            r.Shape.IsFContiguous.Should().BeTrue();
+            ((int)r[2, 3]).Should().Be(11);
         }
 
         [TestMethod]
-        [OpenBugs] // np.ascontiguousarray doesn't exist in NumSharp
         public void AsContiguousArray_ProducesCContig_ApiGap()
         {
             // NumPy: np.ascontiguousarray(arr) always returns C-contig
-            false.Should().BeTrue("np.ascontiguousarray is not implemented");
+            var fSrc = np.arange(12).reshape(3, 4).T;
+            var r = np.ascontiguousarray(fSrc);
+            r.Shape.IsContiguous.Should().BeTrue();
+            ((int)r[0, 0]).Should().Be(0);
+            ((int)r[3, 2]).Should().Be(11);
         }
 
         // ============================================================================
@@ -1023,7 +1028,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // cumsum axis op doesn't preserve F-contig
         public void CumSumAxis0_FContig_PreservesFContig()
         {
             // NumPy: cumsum axis=0 on F-contig -> F-contig output
@@ -1050,7 +1054,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // concatenate of F-arrays doesn't preserve F
         public void Concatenate_FF_Axis0_PreservesFContig()
         {
             // NumPy: concatenate([F,F], axis=0) -> F-contig output
@@ -1062,7 +1065,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // vstack of F-arrays doesn't preserve F
         public void VStack_FF_PreservesFContig()
         {
             var a = np.arange(6).reshape(2, 3).T;
@@ -1072,7 +1074,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // hstack of F-arrays doesn't preserve F
         public void HStack_FF_PreservesFContig()
         {
             var a = np.arange(6).reshape(2, 3).T;
