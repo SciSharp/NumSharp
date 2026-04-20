@@ -115,8 +115,17 @@ namespace NumSharp.Backends.Kernels
         {
             int elementSize = Unsafe.SizeOf<T>();
 
-            // Determine if we can use SIMD
-            bool canSimd = elementSize <= 8 && IsSimdSupported<T>();
+            // SIMD eligibility:
+            //  - 1-byte types (byte) only touch portable Vector128/Vector256 APIs, so they work
+            //    on any SIMD-capable platform (including ARM64/Neon).
+            //  - 2/4/8-byte types need Sse41.ConvertToVector128Int* (V128 path) or
+            //    Avx2.ConvertToVector256Int* (V256 path) to expand the bool-mask lanes.
+            //    These x86 intrinsics throw PlatformNotSupportedException on ARM64.
+            bool canSimdDtype = elementSize <= 8 && IsSimdSupported<T>();
+            bool needsX86 = elementSize > 1;
+            bool useV256 = VectorBits >= 256 && (!needsX86 || Avx2.IsSupported);
+            bool useV128 = !useV256 && VectorBits >= 128 && (!needsX86 || Sse41.IsSupported);
+            bool emitSimd = canSimdDtype && (useV256 || useV128);
 
             var dm = new DynamicMethod(
                 name: $"IL_Where_{typeof(T).Name}",
@@ -139,10 +148,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
-            if (canSimd && VectorBits >= 128)
+            if (emitSimd)
             {
-                // Generate SIMD path
-                EmitWhereSIMDLoop<T>(il, locI);
+                EmitWhereSIMDLoop<T>(il, locI, useV256);
             }
 
             // Scalar loop for remainder
@@ -170,13 +178,12 @@ namespace NumSharp.Backends.Kernels
             return (WhereKernel<T>)dm.CreateDelegate(typeof(WhereKernel<T>));
         }
 
-        private static void EmitWhereSIMDLoop<T>(ILGenerator il, LocalBuilder locI) where T : unmanaged
+        private static void EmitWhereSIMDLoop<T>(ILGenerator il, LocalBuilder locI, bool useV256) where T : unmanaged
         {
             long elementSize = Unsafe.SizeOf<T>();
-            long vectorCount = VectorBits >= 256 ? (32 / elementSize) : (16 / elementSize);
+            long vectorCount = useV256 ? (32 / elementSize) : (16 / elementSize);
             long unrollFactor = 4;
             long unrollStep = vectorCount * unrollFactor;
-            bool useV256 = VectorBits >= 256;
 
             var locUnrollEnd = il.DeclareLocal(typeof(long));
             var locVectorEnd = il.DeclareLocal(typeof(long));
