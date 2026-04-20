@@ -26,6 +26,14 @@ namespace NumSharp
                     if (dtype == null || Equals(nd.dtype, dtype))
                         return nd;
                     return nd.astype(dtype, true);
+                case object[] objArr:
+                    // object[] has no fixed dtype — route through type-promotion path.
+                    // new NDArray(object[]) throws NotSupportedException since object isn't a
+                    // supported element type.
+                    ret = ConvertNonGenericEnumerable(objArr);
+                    if (ret is null)
+                        throw new NotSupportedException($"Unable to resolve asanyarray for object array of length {objArr.Length}.");
+                    break;
                 case Array array:
                     ret = new NDArray(array);
                     break;

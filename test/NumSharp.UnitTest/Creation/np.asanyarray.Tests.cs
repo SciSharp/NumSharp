@@ -747,5 +747,50 @@ namespace NumSharp.UnitTest.Creation
         }
 
         #endregion
+
+        #region object[] regression
+
+        [TestMethod]
+        public void ObjectArray_Homogeneous_Int()
+        {
+            var arr = new object[] { 1, 2, 3 };
+            var result = np.asanyarray(arr);
+
+            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
+        }
+
+        [TestMethod]
+        public void ObjectArray_MixedIntFloat_PromotesToDouble()
+        {
+            var arr = new object[] { 1, 2.5, 3 };
+            var result = np.asanyarray(arr);
+
+            result.dtype.Should().Be(typeof(double));
+            result.Should().BeShaped(3).And.BeOfValues(1.0, 2.5, 3.0);
+        }
+
+        [TestMethod]
+        public void ObjectArray_MixedBoolInt_PromotesToInt()
+        {
+            var arr = new object[] { true, 2, false };
+            var result = np.asanyarray(arr);
+
+            result.dtype.Should().Be(typeof(int));
+            result.Should().BeShaped(3).And.BeOfValues(1, 2, 0);
+        }
+
+        [TestMethod]
+        public void ObjectArray_Empty_ReturnsFloat64()
+        {
+            var arr = new object[0];
+            var result = np.asanyarray(arr);
+
+            result.size.Should().Be(0);
+            result.ndim.Should().Be(1);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        #endregion
     }
 }
