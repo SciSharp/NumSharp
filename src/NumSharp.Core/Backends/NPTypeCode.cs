@@ -211,7 +211,7 @@ namespace NumSharp
                 case NPTypeCode.Half: return 2;
                 case NPTypeCode.Double: return 8;
                 case NPTypeCode.Single: return 4;
-                case NPTypeCode.Decimal: return 32;
+                case NPTypeCode.Decimal: return 16;
                 case NPTypeCode.String: return 1; //because it is a char basically.
                 default:
                     throw new NotSupportedException();

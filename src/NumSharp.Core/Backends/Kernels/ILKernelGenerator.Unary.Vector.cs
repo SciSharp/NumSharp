@@ -27,7 +27,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit Vector unary operation (adapts to V128/V256/V512).
         /// </summary>
-        private static void EmitUnaryVectorOperation(ILGenerator il, UnaryOp op, NPTypeCode type)
+        internal static void EmitUnaryVectorOperation(ILGenerator il, UnaryOp op, NPTypeCode type)
         {
             var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
