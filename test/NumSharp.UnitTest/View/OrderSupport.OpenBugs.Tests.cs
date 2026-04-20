@@ -468,5 +468,349 @@ namespace NumSharp.UnitTest.View
             sliced.Shape.IsFContiguous.Should().BeFalse();
             sliced.Shape.Order.Should().Be('C');
         }
+
+        // ============================================================================
+        // Section 11: np.empty_like — default order='K' in NumPy
+        // NumPy: preserves source layout by default.
+        // NumSharp: has no order parameter (see np.empty_like.cs).
+        //
+        // Expected matrix:
+        //   | source    | order=C | order=F | order=A | order=K |
+        //   |-----------|---------|---------|---------|---------|
+        //   | C-contig  | C       | F       | C       | C       |
+        //   | F-contig  | C       | F       | F       | F       |
+        // ============================================================================
+
+        [TestMethod]
+        public void EmptyLike_CSource_DefaultIsCContig()
+        {
+            // NumPy: np.empty_like(c_src) (order='K' default) -> C=True (preserves C)
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.empty_like(src);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.empty_like doesn't preserve F-contig from source (K default)
+        public void EmptyLike_FSource_KDefault_PreservesFContig()
+        {
+            // NumPy: np.empty_like(f_src) (order='K' default) -> F=True (preserves F)
+            var fSrc = np.arange(12).reshape(3, 4).T;  // F-contig
+            var r = np.empty_like(fSrc);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy order='K' (default) should preserve F-contig from F-contig source");
+        }
+
+        // ============================================================================
+        // Section 12: np.zeros_like — default order='K' in NumPy
+        // ============================================================================
+
+        [TestMethod]
+        public void ZerosLike_CSource_DefaultIsCContig()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.zeros_like(src);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.zeros_like doesn't preserve F-contig from source (K default)
+        public void ZerosLike_FSource_KDefault_PreservesFContig()
+        {
+            var fSrc = np.arange(12).reshape(3, 4).T;
+            var r = np.zeros_like(fSrc);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy order='K' should preserve F-contig from F-contig source");
+        }
+
+        [TestMethod]
+        public void ZerosLike_ValuesAllZero()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.zeros_like(src);
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++)
+                    ((int)r[i, j]).Should().Be(0);
+        }
+
+        // ============================================================================
+        // Section 13: np.ones_like — default order='K' in NumPy
+        // ============================================================================
+
+        [TestMethod]
+        public void OnesLike_CSource_DefaultIsCContig()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.ones_like(src);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.ones_like doesn't preserve F-contig from source (K default)
+        public void OnesLike_FSource_KDefault_PreservesFContig()
+        {
+            var fSrc = np.arange(12).reshape(3, 4).T;
+            var r = np.ones_like(fSrc);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy order='K' should preserve F-contig from F-contig source");
+        }
+
+        [TestMethod]
+        public void OnesLike_ValuesAllOne()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.ones_like(src);
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++)
+                    ((int)r[i, j]).Should().Be(1);
+        }
+
+        // ============================================================================
+        // Section 14: np.full_like — default order='K' in NumPy
+        // ============================================================================
+
+        [TestMethod]
+        public void FullLike_CSource_DefaultIsCContig()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.full_like(src, 7);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.full_like doesn't preserve F-contig from source (K default)
+        public void FullLike_FSource_KDefault_PreservesFContig()
+        {
+            var fSrc = np.arange(12).reshape(3, 4).T;
+            var r = np.full_like(fSrc, 7);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy order='K' should preserve F-contig from F-contig source");
+        }
+
+        [TestMethod]
+        public void FullLike_ValuesAllFillValue()
+        {
+            var src = np.arange(12).reshape(3, 4);
+            var r = np.full_like(src, 42);
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++)
+                    ((int)r[i, j]).Should().Be(42);
+        }
+
+        // ============================================================================
+        // Section 15: np.eye — NumPy accepts order='C' (default) or 'F'
+        // ============================================================================
+
+        [TestMethod]
+        public void Eye_Default_IsCContig()
+        {
+            // NumPy: np.eye(3) -> C=True
+            var r = np.eye(3, dtype: typeof(int));
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Eye_Values_MatchIdentity()
+        {
+            // Identity matrix diagonal is 1, off-diagonal 0
+            var r = np.eye(3, dtype: typeof(int));
+            ((int)r[0, 0]).Should().Be(1);
+            ((int)r[1, 1]).Should().Be(1);
+            ((int)r[2, 2]).Should().Be(1);
+            ((int)r[0, 1]).Should().Be(0);
+            ((int)r[1, 2]).Should().Be(0);
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.eye has no order parameter (see np.eye.cs:30)
+        public void Eye_FOrder_IsFContig_ApiGap()
+        {
+            // NumPy: np.eye(3, order='F') -> F=True with same identity values
+            // NumSharp has no overload — this test documents the gap.
+            // Until an overload is added, this test cannot express the F-order case.
+            // Compile-time workaround: construct manually
+            var manualFEye = np.empty(new Shape(3L, 3L), order: 'F', dtype: typeof(int));
+            manualFEye.Shape.IsFContiguous.Should().BeTrue();
+            // But there's no np.eye(N, order='F') public API
+            false.Should().BeTrue("np.eye needs an order parameter to match NumPy");
+        }
+
+        // ============================================================================
+        // Section 16: np.asarray / np.asanyarray
+        // NumPy: accept order parameter; NumSharp versions don't (no NDArray overload either)
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.asarray has no NDArray overload accepting order
+        public void Asarray_FOrder_ProducesFContig_ApiGap()
+        {
+            // NumPy: np.asarray(c_src, order='F') -> F=True
+            // NumSharp's asarray only accepts struct/T[] types, not NDArray.
+            // When asarray(NDArray, order) is added, this should match NumPy.
+            false.Should().BeTrue("np.asarray needs NDArray+order overload");
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.asanyarray has TODO for order support (see np.asanyarray.cs:14)
+        public void Asanyarray_FOrder_ProducesFContig_ApiGap()
+        {
+            // NumPy: np.asanyarray(src, order='F') -> F=True
+            // NumSharp signature: asanyarray(in object a, Type dtype) — no order
+            false.Should().BeTrue("np.asanyarray needs order parameter");
+        }
+
+        // ============================================================================
+        // Section 17: astype — NumPy default order='K'
+        // NumPy: ndarray.astype(dtype, order='K') preserves layout by default
+        // NumSharp: astype(Type, bool copy) — no order parameter
+        // ============================================================================
+
+        [TestMethod]
+        public void Astype_CSource_DefaultIsCContig()
+        {
+            // NumPy: c_src.astype(np.int64) (K default) -> C=True (preserves)
+            var src = np.arange(12).reshape(3, 4);
+            var r = src.astype(typeof(long));
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // astype has no order parameter; always produces C-contig
+        public void Astype_FSource_KDefault_PreservesFContig()
+        {
+            // NumPy: f_src.astype(np.int64) (K default) -> F=True (preserves)
+            var fSrc = np.arange(12).reshape(3, 4).T;
+            var r = fSrc.astype(typeof(long));
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy astype order='K' default preserves F-contig");
+        }
+
+        [TestMethod]
+        public void Astype_ValuesPreserved()
+        {
+            // Math result: same values regardless of layout
+            var src = np.arange(12).reshape(3, 4);
+            var r = src.astype(typeof(long));
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++)
+                    ((long)r[i, j]).Should().Be(i * 4 + j);
+        }
+
+        // ============================================================================
+        // Section 18: np.reshape — NumPy accepts order='C'/'F'/'A'
+        // NumPy: np.reshape(arange(12), (3,4), order='F') produces F-contig with
+        //        values [[0,3,6,9],[1,4,7,10],[2,5,8,11]] (column-major fill)
+        // NumSharp: np.reshape is not a static function (only NDArray.reshape method)
+        // ============================================================================
+
+        [TestMethod]
+        public void Reshape_Default_COrderFill()
+        {
+            // NumPy: np.arange(12).reshape(3, 4) -> [[0,1,2,3],[4,5,6,7],[8,9,10,11]]
+            var r = np.arange(12).reshape(3, 4);
+            ((int)r[0, 0]).Should().Be(0);
+            ((int)r[0, 3]).Should().Be(3);
+            ((int)r[2, 3]).Should().Be(11);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NDArray.reshape has no order parameter
+        public void Reshape_FOrder_FillColumnMajor()
+        {
+            // NumPy: np.arange(12).reshape((3,4), order='F')
+            //   values: [[0,3,6,9],[1,4,7,10],[2,5,8,11]]
+            //   flags: C=False, F=True
+            // NumSharp: no order overload exists.
+            false.Should().BeTrue("NDArray.reshape needs order parameter for F-order fill");
+        }
+
+        // ============================================================================
+        // Section 19: np.ravel — NumPy accepts order='C'/'F'/'A'/'K'
+        // NumPy on C-contig arr = arange(6).reshape(2,3):
+        //   ravel('C') = [0,1,2,3,4,5]
+        //   ravel('F') = [0,3,1,4,2,5]
+        //   ravel('A') = [0,1,2,3,4,5]  (C-contig source -> C)
+        //   ravel('K') = [0,1,2,3,4,5]  (memory order for C-contig)
+        // NumPy on F-contig arrT:
+        //   ravel('C') = [0,3,1,4,2,5]  (logical C-order traversal)
+        //   ravel('F') = [0,1,2,3,4,5]  (logical F-order = memory for F-contig)
+        //   ravel('A') = [0,1,2,3,4,5]  (F-contig source -> F = memory)
+        //   ravel('K') = [0,1,2,3,4,5]  (memory order)
+        // NumSharp: np.ravel(NDArray) has no order parameter.
+        // ============================================================================
+
+        [TestMethod]
+        public void NpRavel_CContig_Default_COrder()
+        {
+            // NumPy: np.ravel(arr) default 'C' -> [0..5]
+            var arr = np.arange(6).reshape(2, 3);
+            var r = np.ravel(arr);
+            var expected = new int[] { 0, 1, 2, 3, 4, 5 };
+            for (int i = 0; i < 6; i++)
+                ((int)r[i]).Should().Be(expected[i]);
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.ravel has no order parameter
+        public void NpRavel_CContig_FOrder_MatchesNumPy_ApiGap()
+        {
+            // NumPy: np.ravel(arr, order='F') = [0,3,1,4,2,5]
+            // NumSharp: no overload — documents the gap.
+            false.Should().BeTrue("np.ravel needs order parameter");
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.ravel has no order parameter
+        public void NpRavel_FContig_FOrder_MatchesNumPy_ApiGap()
+        {
+            // NumPy: np.ravel(arrT, order='F') = [0,1,2,3,4,5] (memory order for F)
+            false.Should().BeTrue("np.ravel needs order parameter");
+        }
+
+        // ============================================================================
+        // Section 20: np.array with order (Array input overload)
+        // NumPy: np.array(list, order='F') produces F-contig from Python list
+        // NumSharp: np.array(Array, dtype, ndmin, copy, order) accepts order but ignores it
+        // ============================================================================
+
+        [TestMethod]
+        public void NpArray_FromManaged_DefaultCContig()
+        {
+            // NumPy: np.array([[1,2],[3,4]]) -> C-contig
+            var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+            arr.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.array(Array, ..., order='F') is accepted but ignored
+        public void NpArray_FromManaged_FOrder_ProducesFContig()
+        {
+            // NumPy: np.array([[1,2],[3,4]], order='F') -> F-contig
+            var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } }, order: 'F');
+            arr.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: order='F' should produce F-contig output from list input");
+        }
+
+        // ============================================================================
+        // Section 21: asfortranarray / ascontiguousarray (NumPy: no order param)
+        // These are order-specific shortcuts. NumPy lacks these in NumSharp.
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.asfortranarray doesn't exist in NumSharp
+        public void AsFortranArray_ProducesFContig_ApiGap()
+        {
+            // NumPy: np.asfortranarray(arr) always returns F-contig
+            // NumSharp has no such function.
+            false.Should().BeTrue("np.asfortranarray is not implemented");
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.ascontiguousarray doesn't exist in NumSharp
+        public void AsContiguousArray_ProducesCContig_ApiGap()
+        {
+            // NumPy: np.ascontiguousarray(arr) always returns C-contig
+            false.Should().BeTrue("np.ascontiguousarray is not implemented");
+        }
     }
 }
