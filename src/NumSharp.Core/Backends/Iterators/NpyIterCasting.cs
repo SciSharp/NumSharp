@@ -154,21 +154,62 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Validate all operand casts in an iterator state.
         /// Throws InvalidCastException if any cast is not allowed.
+        /// Also packs combined transfer flags into the top 8 bits of state.ItFlags
+        /// per NumPy nditer_constr.c:3542.
         /// </summary>
         public static void ValidateCasts(ref NpyIterState state, NPY_CASTING casting)
         {
+            NpyArrayMethodFlags combinedFlags = NpyArrayMethodFlags.None;
+            bool anyCast = false;
+
             for (int op = 0; op < state.NOp; op++)
             {
                 var srcType = state.GetOpSrcDType(op);
                 var dstType = state.GetOpDType(op);
 
-                if (srcType != dstType && !CanCast(srcType, dstType, casting))
+                if (srcType != dstType)
                 {
-                    throw new InvalidCastException(
-                        $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
-                        $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'");
+                    if (!CanCast(srcType, dstType, casting))
+                    {
+                        throw new InvalidCastException(
+                            $"Iterator operand {op} dtype could not be cast from {srcType.AsNumpyDtypeName()} " +
+                            $"to {dstType.AsNumpyDtypeName()} according to the rule '{GetCastingName(casting)}'");
+                    }
+
+                    anyCast = true;
+                    combinedFlags |= ComputeCastTransferFlags(srcType, dstType);
+                }
+                else
+                {
+                    // Same-type copies also have transfer characteristics
+                    combinedFlags |= NpyArrayMethodFlags.SUPPORTS_UNALIGNED |
+                                     NpyArrayMethodFlags.NO_FLOATINGPOINT_ERRORS |
+                                     NpyArrayMethodFlags.IS_REORDERABLE;
                 }
             }
+
+            // Pack into top 8 bits of ItFlags (NumPy parity: nditer_constr.c:3542)
+            if (anyCast || state.NOp > 0)
+            {
+                uint packed = ((uint)combinedFlags & 0xFFu) << NpyIterConstants.TRANSFERFLAGS_SHIFT;
+                state.ItFlags = (state.ItFlags & ~NpyIterConstants.TRANSFERFLAGS_MASK) | packed;
+            }
+        }
+
+        /// <summary>
+        /// Compute the NpyArrayMethodFlags that characterize a single cast transfer.
+        /// In .NET:
+        /// - REQUIRES_PYAPI is never set (no Python).
+        /// - SUPPORTS_UNALIGNED is always set (raw byte-pointer loops).
+        /// - NO_FLOATINGPOINT_ERRORS is always set (.NET casts truncate silently).
+        /// - IS_REORDERABLE is set for numeric↔numeric casts (element-wise, commutative).
+        /// </summary>
+        private static NpyArrayMethodFlags ComputeCastTransferFlags(NPTypeCode srcType, NPTypeCode dstType)
+        {
+            var flags = NpyArrayMethodFlags.SUPPORTS_UNALIGNED |
+                        NpyArrayMethodFlags.NO_FLOATINGPOINT_ERRORS |
+                        NpyArrayMethodFlags.IS_REORDERABLE;
+            return flags;
         }
 
         private static string GetCastingName(NPY_CASTING casting)

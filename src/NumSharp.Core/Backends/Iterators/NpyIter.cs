@@ -29,7 +29,7 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// High-performance multi-operand iterator matching NumPy's nditer API.
     /// </summary>
-    internal unsafe ref struct NpyIterRef
+    internal unsafe ref partial struct NpyIterRef
     {
         private NpyIterState* _state;
         private bool _ownsState;
@@ -138,6 +138,11 @@ namespace NumSharp.Backends.Iteration
             _state->MaskOp = -1;
             _state->IterStart = 0;
 
+            // Pre-check WRITEMASKED/ARRAYMASK pairing BEFORE allocation (nop arg, not state).
+            // The actual MaskOp assignment happens after AllocateDimArrays when NOp is set.
+            if (opFlags != null)
+                PreCheckMaskOpPairing(nop, opFlags);
+
             // Calculate broadcast shape, optionally overridden by iterShape
             int[] broadcastShape;
             if (iterShape != null && iterShape.Length > 0)
@@ -212,6 +217,16 @@ namespace NumSharp.Backends.Iteration
             // Arrays are allocated based on actual ndim for memory efficiency.
             // =========================================================================
             _state->AllocateDimArrays(broadcastShape.Length, nop);
+
+            // Set IDENTPERM on construction. Perm starts as identity (set by AllocateDimArrays);
+            // reordering (ReorderAxesForCoalescing) and flipping (FlipNegativeStrides) clear
+            // this flag when they mutate perm. Matches NumPy nditer_constr.c:262-264.
+            _state->ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+
+            // Set MaskOp for ARRAYMASK operand (if any). Requires NOp to be set by
+            // AllocateDimArrays above. NumPy nditer_constr.c:1184-1196.
+            if (opFlags != null)
+                SetMaskOpFromFlags(opFlags);
 
             _state->IterSize = 1;
 
@@ -440,11 +455,19 @@ namespace NumSharp.Backends.Iteration
                 // 2. No broadcast dimensions (stride=0) - breaks stride-based sorting
                 bool isContiguous = (isCContiguous || isFContiguous) && !hasBroadcast;
 
-                // Determine effective order for non-contiguous arrays
-                // For K-order with non-contiguous/broadcast arrays, stride-based sorting
-                // produces wrong iteration order, so we fall back to C-order
+                // Determine effective order for non-contiguous arrays.
+                //
+                // NumPy K-order reorders axes by |stride| to match memory traversal even for
+                // non-contiguous views (e.g., transposed arrays). The only case where the
+                // stride-based sort produces wrong results is with BROADCAST axes (stride=0),
+                // because stride=0 breaks the ordering signal — we can't tell which broadcast
+                // axis should be innermost.
+                //
+                // So: fall back to C-order only when broadcast is present. For merely
+                // non-contiguous (transposed, strided views, negative strides), K-order does
+                // a proper descending-stride sort to match NumPy memory-order iteration.
                 NPY_ORDER effectiveOrder = order;
-                if ((order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER) && !isContiguous)
+                if ((order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER) && hasBroadcast)
                 {
                     effectiveOrder = NPY_ORDER.NPY_CORDER;
                 }
@@ -610,14 +633,47 @@ namespace NumSharp.Backends.Iteration
                         var opShape = op[opIdx].shape;
                         for (int iterAxis = 0; iterAxis < opAxesNDim; iterAxis++)
                         {
-                            int opAxis = iterAxis < axisMap.Length ? axisMap[iterAxis] : -1;
-                            if (opAxis < 0)
+                            int rawOpAxis = iterAxis < axisMap.Length ? axisMap[iterAxis] : -1;
+                            // Decode NPY_ITER_REDUCTION_AXIS encoding (common.h:347).
+                            int opAxis = NpyIterUtils.GetOpAxis(rawOpAxis, out bool isReduction);
+
+                            if (isReduction)
+                            {
+                                // Explicit reduction axis: operand's axis length must be exactly 1.
+                                // If opAxis == -1, treat as broadcast (virtual dim = 1).
+                                if (opAxis < 0)
+                                {
+                                    virtualDims[iterAxis] = 1;
+                                }
+                                else if (opAxis >= opShape.Length)
+                                {
+                                    throw new IncorrectShapeException(
+                                        $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                                }
+                                else
+                                {
+                                    long len = opShape[opAxis];
+                                    if (len != 1)
+                                    {
+                                        throw new IncorrectShapeException(
+                                            $"Operand {opIdx} reduction axis {opAxis} has length {len}, must be 1.");
+                                    }
+                                    virtualDims[iterAxis] = 1;
+                                }
+                            }
+                            else if (opAxis < 0)
+                            {
                                 virtualDims[iterAxis] = 1;  // broadcast this dim
+                            }
                             else if (opAxis >= opShape.Length)
+                            {
                                 throw new IncorrectShapeException(
                                     $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                            }
                             else
+                            {
                                 virtualDims[iterAxis] = opShape[opAxis];
+                            }
                         }
                     }
                     else
@@ -690,15 +746,21 @@ namespace NumSharp.Backends.Iteration
 
                     for (int iterAxis = 0; iterAxis < mapLength; iterAxis++)
                     {
-                        int opAxis = opAxisMap[iterAxis];
+                        // Decode NPY_ITER_REDUCTION_AXIS encoding (common.h:347)
+                        int opAxis = NpyIterUtils.GetOpAxis(opAxisMap[iterAxis], out bool isReduction);
 
-                        // -1 means this dimension is broadcast/reduced, no validation needed
+                        // Broadcast or reduction-broadcast: no further shape validation needed
                         if (opAxis < 0)
                             continue;
 
                         // Validate that the operand axis exists and is compatible
                         if (opAxis >= opShape.Length)
                             throw new IncorrectShapeException($"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+
+                        // Explicit reduction axis must have length 1 on the operand
+                        if (isReduction && opShape[opAxis] != 1)
+                            throw new IncorrectShapeException(
+                                $"Operand {opIdx} explicit reduction axis {opAxis} has length {opShape[opAxis]}, must be 1.");
 
                         int opDim = (int)opShape[opAxis];
                         int iterDim = iterShape[iterAxis];
@@ -762,8 +824,97 @@ namespace NumSharp.Backends.Iteration
                 result |= NpyIterOpFlags.FORCECOPY;
             if ((flags & NpyIterPerOpFlags.CONTIG) != 0)
                 result |= NpyIterOpFlags.CONTIG;
+            // WRITEMASKED: the operand is written only where the mask (ARRAYMASK) is true.
+            // Requires a corresponding ARRAYMASK operand. NumPy nditer_constr.c:950-965.
+            if ((flags & NpyIterPerOpFlags.WRITEMASKED) != 0)
+                result |= NpyIterOpFlags.WRITEMASKED;
 
             return result;
+        }
+
+        /// <summary>
+        /// Pre-construction check for WRITEMASKED/ARRAYMASK pairing.
+        /// Matches NumPy's prepare_operands checks (nditer_constr.c:1176-1230).
+        /// Runs before state allocation (uses the raw <paramref name="nop"/> arg).
+        /// </summary>
+        private static void PreCheckMaskOpPairing(int nop, NpyIterPerOpFlags[] opFlags)
+        {
+            int maskOp = -1;
+            bool anyWriteMasked = false;
+
+            for (int iop = 0; iop < nop && iop < opFlags.Length; iop++)
+            {
+                bool isArrayMask = (opFlags[iop] & NpyIterPerOpFlags.ARRAYMASK) != 0;
+                bool isWriteMasked = (opFlags[iop] & NpyIterPerOpFlags.WRITEMASKED) != 0;
+
+                if (isArrayMask && isWriteMasked)
+                    throw new ArgumentException(
+                        $"Operand {iop} cannot be both ARRAYMASK and WRITEMASKED.");
+
+                if (isArrayMask)
+                {
+                    if (maskOp >= 0)
+                        throw new ArgumentException(
+                            $"At most one operand may be flagged ARRAYMASK " +
+                            $"(currently {maskOp} and {iop}).");
+                    maskOp = iop;
+                }
+
+                if (isWriteMasked) anyWriteMasked = true;
+            }
+
+            if (anyWriteMasked && maskOp < 0)
+                throw new ArgumentException(
+                    "Iterator operand has WRITEMASKED but no operand has ARRAYMASK.");
+            if (!anyWriteMasked && maskOp >= 0)
+                throw new ArgumentException(
+                    $"Operand {maskOp} has ARRAYMASK but no operand has WRITEMASKED.");
+        }
+
+        /// <summary>
+        /// Sets <see cref="NpyIterState.MaskOp"/> from the ARRAYMASK operand (if any).
+        /// Pre-validated by <see cref="PreCheckMaskOpPairing"/>.
+        /// </summary>
+        private void SetMaskOpFromFlags(NpyIterPerOpFlags[] opFlags)
+        {
+            for (int iop = 0; iop < _state->NOp && iop < opFlags.Length; iop++)
+            {
+                if ((opFlags[iop] & NpyIterPerOpFlags.ARRAYMASK) != 0)
+                {
+                    _state->MaskOp = iop;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Validates that a WRITEMASKED + REDUCE operand has exactly one mask value per
+        /// reduction element. Matches NumPy's check_mask_for_writemasked_reduction
+        /// (nditer_constr.c:1328-1377).
+        ///
+        /// The pathological case: maskstride != 0 && operand_stride == 0 on any axis
+        /// means the operand is being broadcast but the mask is not — producing
+        /// multiple mask values per reduction element, which is invalid.
+        /// </summary>
+        private void CheckMaskForWriteMaskedReduction(int iop)
+        {
+            int maskOp = _state->MaskOp;
+            if (maskOp < 0) return;
+
+            int stridesNDim = _state->StridesNDim;
+            for (int idim = 0; idim < _state->NDim; idim++)
+            {
+                long iStride = _state->Strides[iop * stridesNDim + idim];
+                long maskStride = _state->Strides[maskOp * stridesNDim + idim];
+
+                if (maskStride != 0 && iStride == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Iterator reduction operand is WRITEMASKED, but also broadcasts " +
+                        "to multiple mask values. There can be only one mask value per " +
+                        "WRITEMASKED element.");
+                }
+            }
         }
 
         private void UpdateContiguityFlags()
@@ -968,16 +1119,43 @@ namespace NumSharp.Backends.Iteration
 
             _state->OuterDim = outerDim;
 
-            // CoreSize = size of reduce dimension (how many inputs per output element)
-            // This is the size of the dimension where reduce operand has stride=0
+            // Count non-reduce axes. The double-loop (inner reduce-axis, outer non-reduce-axis)
+            // only supports ONE non-reduce axis. For multiple non-reduce axes, the outer
+            // advance needs multi-axis carry which single-stride double-loop can't express.
+            int nonReduceAxisCount = 0;
+            int firstNonReduceAxis = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                if (d != outerDim && _state->Shape[d] > 1)
+                {
+                    nonReduceAxisCount++;
+                    if (firstNonReduceAxis < 0) firstNonReduceAxis = d;
+                }
+            }
+
+            // When the iteration fits entirely in the buffer AND has >1 non-reduce axis,
+            // defer to the regular N-D Advance() path (which correctly carries multiple
+            // non-reduce axes via Coords + per-axis strides). Setting CoreSize = 0
+            // short-circuits the BUFFER+REDUCE fast path in Iternext().
+            if (nonReduceAxisCount > 1)
+            {
+                _state->CoreSize = 0;
+                _state->ReduceOuterSize = 1;
+                _state->ReducePos = 0;
+                _state->CorePos = 0;
+                return;
+            }
+
+            // CoreSize = size of the REDUCE dimension (how many inputs accumulate per output).
+            // Inner loop iterates CoreSize times along the reduce axis, with the reduce
+            // operand fixed (stride=0) and non-reduce operands advancing along that axis.
             long coreSize = _state->Shape[outerDim];
             if (coreSize < 1)
                 coreSize = 1;
 
             _state->CoreSize = coreSize;
 
-            // ReduceOuterSize = number of output elements (product of non-reduce dimensions)
-            // This is total iterations / inputs per output
+            // ReduceOuterSize = number of output slots = total iterations / inputs per output
             _state->ReduceOuterSize = transferSize / coreSize;
             if (_state->ReduceOuterSize < 1)
                 _state->ReduceOuterSize = 1;
@@ -986,32 +1164,44 @@ namespace NumSharp.Backends.Iteration
             _state->ReducePos = 0;
             _state->CorePos = 0;
 
-            // Set up per-operand strides for double-loop:
-            // - BufStrides (inner loop): 0 for reduce operand (stay at same output), elemSize for others
-            // - ReduceOuterStrides (outer loop): elemSize for reduce operand (move to next output),
-            //   elemSize * coreSize for others (skip over processed elements)
+            // Identify a non-reduce axis: any axis with Shape > 1 that is not the reduce axis.
+            // For 2D single-reduce cases this is unambiguous. For higher-dim cases, NumPy
+            // splits across multiple levels; we pick the first non-reduce axis found (limited
+            // support for >2D reduce — caller should broadcast into 2D when possible).
+            int nonReduceAxis = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                if (d != outerDim && _state->Shape[d] > 1)
+                {
+                    nonReduceAxis = d;
+                    break;
+                }
+            }
+
+            int stridesNDim = _state->StridesNDim;
+
+            // Set up per-operand strides for the double-loop.
+            //
+            // Inner loop (BufStride): advances along the REDUCE axis (outerDim).
+            //   - Reduce operand: stride 0 on reduce axis → BufStride = 0 (stays on same output)
+            //   - Non-reduce operand: array stride along reduce axis (in bytes)
+            //
+            // Outer loop (ReduceOuterStride): advances along the NON-reduce axis.
+            //   - Reduce operand: stride along non-reduce axis (in bytes) — moves to next output
+            //   - Non-reduce operand: stride along non-reduce axis (in bytes) — moves to next input column
+            //
+            // Matches NumPy nditer_api.c:npyiter_copy_to_buffers buffered-reduce path.
             for (int op = 0; op < _state->NOp; op++)
             {
-                var opFlags = _state->GetOpFlags(op);
-                long reduceStride = _state->GetStride(outerDim, op);
                 int elemSize = _state->GetElementSize(op);
 
-                if ((opFlags & NpyIterOpFlags.REDUCE) != 0 && reduceStride == 0)
-                {
-                    // Reduce operand:
-                    // - Inner loop: stays at same output position (stride=0)
-                    // - Outer loop: advances to next output position (stride=elemSize)
-                    _state->SetBufStride(op, 0);
-                    _state->SetReduceOuterStride(op, elemSize);
-                }
-                else
-                {
-                    // Non-reduce operand:
-                    // - Inner loop: advances through buffer (stride=elemSize)
-                    // - Outer loop: skips to next batch (stride=elemSize * coreSize)
-                    _state->SetBufStride(op, elemSize);
-                    _state->SetReduceOuterStride(op, elemSize * coreSize);
-                }
+                long innerElemStride = _state->Strides[op * stridesNDim + outerDim];
+                long outerElemStride = nonReduceAxis >= 0
+                    ? _state->Strides[op * stridesNDim + nonReduceAxis]
+                    : 0;
+
+                _state->SetBufStride(op, innerElemStride * elemSize);
+                _state->SetReduceOuterStride(op, outerElemStride * elemSize);
             }
 
             // Set buffer iteration end
@@ -1075,14 +1265,31 @@ namespace NumSharp.Backends.Iteration
                 bool isWriteable = (opFlags & NpyIterOpFlags.WRITE) != 0;
                 bool hasReductionAxis = false;
 
-                // Scan for reduction axes (op_axis=-1 on a writeable operand)
+                // Scan for reduction axes (op_axis=-1 on a writeable operand,
+                // OR explicit encoding via NpyIterUtils.ReductionAxis).
                 for (int iterAxis = 0; iterAxis < iterNDim && iterAxis < opAxisMap.Length; iterAxis++)
                 {
-                    int opAxis = opAxisMap[iterAxis];
+                    int rawOpAxis = opAxisMap[iterAxis];
+                    int opAxis = NpyIterUtils.GetOpAxis(rawOpAxis, out bool explicitReduction);
 
-                    if (opAxis < 0)
+                    if (explicitReduction)
                     {
-                        // Check if this is a reduction axis (writeable operand + iter dim > 1)
+                        // Explicit reduction axis: must be READWRITE and REDUCE_OK set.
+                        // NumPy nditer_constr.c:1621-1638 additionally validates operand's
+                        // axis length is exactly 1; that check is handled during broadcast
+                        // shape resolution via CalculateBroadcastShape.
+                        if (!reduceOkSet)
+                        {
+                            throw new ArgumentException(
+                                $"Operand {op} uses an explicit reduction axis at iter dim {iterAxis}, " +
+                                "but REDUCE_OK is not set. Add NpyIterGlobalFlags.REDUCE_OK.");
+                        }
+
+                        hasReductionAxis = true;
+                    }
+                    else if (opAxis < 0)
+                    {
+                        // Implicit reduction or broadcast: op_axis = -1
                         if (isWriteable && _state->Shape[iterAxis] > 1)
                         {
                             hasReductionAxis = true;
@@ -1117,6 +1324,14 @@ namespace NumSharp.Backends.Iteration
 
                     _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
                     _state->SetOpFlags(op, opFlags | NpyIterOpFlags.REDUCE);
+
+                    // If this reduction operand is also WRITEMASKED, enforce the
+                    // "one mask value per reduction element" constraint.
+                    // NumPy: check_mask_for_writemasked_reduction (nditer_constr.c:1328).
+                    if ((opFlags & NpyIterOpFlags.WRITEMASKED) != 0)
+                    {
+                        CheckMaskForWriteMaskedReduction(op);
+                    }
                 }
             }
         }
@@ -1127,6 +1342,29 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>Number of operands.</summary>
         public int NOp => _state->NOp;
+
+        /// <summary>
+        /// Index of the ARRAYMASK operand (used by WRITEMASKED operands), or -1 if none.
+        /// Matches NumPy's NIT_MASKOP(iter).
+        /// </summary>
+        public int MaskOp => _state->MaskOp;
+
+        /// <summary>
+        /// True if any operand is flagged WRITEMASKED (and a corresponding ARRAYMASK exists).
+        /// </summary>
+        public bool HasWriteMaskedOperand
+        {
+            get
+            {
+                if (_state->MaskOp < 0) return false;
+                for (int iop = 0; iop < _state->NOp; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) & NpyIterOpFlags.WRITEMASKED) != 0)
+                        return true;
+                }
+                return false;
+            }
+        }
 
         /// <summary>Number of dimensions after coalescing.</summary>
         public int NDim => _state->NDim;
@@ -1267,6 +1505,467 @@ namespace NumSharp.Backends.Iteration
         {
             _state->Reset();
             return true;
+        }
+
+        /// <summary>
+        /// Fetch the NpyArrayMethodFlags (runtime) flags for all transfer functions
+        /// (i.e. copy to buffer/casts). Matches NumPy's NpyIter_GetTransferFlags
+        /// (nditer_api.c:903). Decoded from the top 8 bits of ItFlags.
+        ///
+        /// In .NET context, REQUIRES_PYAPI is never set — included for API parity only.
+        /// </summary>
+        public NpyArrayMethodFlags GetTransferFlags()
+        {
+            return (NpyArrayMethodFlags)(_state->ItFlags >> NpyIterConstants.TRANSFERFLAGS_SHIFT);
+        }
+
+        /// <summary>
+        /// Copies the array of strides that are fixed during iteration into <paramref name="outStrides"/>.
+        /// Matches NumPy's NpyIter_GetInnerFixedStrideArray (nditer_api.c:1357).
+        ///
+        /// - Buffered: copies <see cref="NpyIterState.BufStrides"/> (one entry per operand).
+        /// - Non-buffered: copies the innermost-axis stride from <see cref="NpyIterState.Strides"/>
+        ///   (equivalent to NumPy's NAD_STRIDES(axisdata[0]) in its reverse-C ordering).
+        ///
+        /// Once the iterator is ready to iterate, call this to obtain strides guaranteed
+        /// not to change between inner-loop iterations — enabling the caller to choose an
+        /// optimized inner loop function.
+        ///
+        /// GIL-safe (no allocation, no exceptions under valid inputs).
+        /// </summary>
+        /// <param name="outStrides">Output span of length ≥ NOp.</param>
+        /// <summary>
+        /// Dumps a verbose textual representation of the iterator's internal state to
+        /// the specified TextWriter. Matches NumPy's NpyIter_DebugPrint (nditer_api.c:1402)
+        /// format as closely as possible.
+        ///
+        /// Output includes: ItFlags (decoded), NDim, NOp, IterSize/Start/End/Index,
+        /// Perm, DTypes, DataPtrs, BaseOffsets, OpItFlags, BufferData, and per-axis data.
+        /// </summary>
+        public void DebugPrint(System.IO.TextWriter writer)
+        {
+            if (writer == null) throw new ArgumentNullException(nameof(writer));
+
+            uint itf = _state->ItFlags;
+            int ndim = _state->NDim;
+            int nop = _state->NOp;
+
+            writer.WriteLine();
+            writer.WriteLine("------ BEGIN ITERATOR DUMP ------");
+            writer.WriteLine($"| Iterator Address: 0x{(nuint)_state:X}");
+
+            // Decode ItFlags
+            writer.Write("| ItFlags: ");
+            if ((itf & (uint)NpyIterFlags.IDENTPERM) != 0) writer.Write("IDENTPERM ");
+            if ((itf & (uint)NpyIterFlags.NEGPERM) != 0) writer.Write("NEGPERM ");
+            if ((itf & (uint)NpyIterFlags.HASINDEX) != 0) writer.Write("HASINDEX ");
+            if ((itf & (uint)NpyIterFlags.HASMULTIINDEX) != 0) writer.Write("HASMULTIINDEX ");
+            if ((itf & (uint)NpyIterFlags.FORCEDORDER) != 0) writer.Write("FORCEDORDER ");
+            if ((itf & (uint)NpyIterFlags.EXLOOP) != 0) writer.Write("EXLOOP ");
+            if ((itf & (uint)NpyIterFlags.RANGE) != 0) writer.Write("RANGE ");
+            if ((itf & (uint)NpyIterFlags.BUFFER) != 0) writer.Write("BUFFER ");
+            if ((itf & (uint)NpyIterFlags.GROWINNER) != 0) writer.Write("GROWINNER ");
+            if ((itf & (uint)NpyIterFlags.ONEITERATION) != 0) writer.Write("ONEITERATION ");
+            if ((itf & (uint)NpyIterFlags.DELAYBUF) != 0) writer.Write("DELAYBUF ");
+            if ((itf & (uint)NpyIterFlags.REDUCE) != 0) writer.Write("REDUCE ");
+            if ((itf & (uint)NpyIterFlags.REUSE_REDUCE_LOOPS) != 0) writer.Write("REUSE_REDUCE_LOOPS ");
+            writer.WriteLine();
+
+            writer.WriteLine($"| NDim: {ndim}");
+            writer.WriteLine($"| NOp: {nop}");
+            if (_state->MaskOp >= 0) writer.WriteLine($"| MaskOp: {_state->MaskOp}");
+            writer.WriteLine($"| IterSize: {_state->IterSize}");
+            writer.WriteLine($"| IterStart: {_state->IterStart}");
+            writer.WriteLine($"| IterEnd: {_state->IterEnd}");
+            writer.WriteLine($"| IterIndex: {_state->IterIndex}");
+            writer.WriteLine("|");
+
+            // Perm array
+            writer.Write("| Perm: ");
+            for (int idim = 0; idim < ndim; idim++)
+                writer.Write($"{_state->Perm[idim]} ");
+            writer.WriteLine();
+
+            // DTypes (per operand, NPTypeCode names since we don't have PyArray_Descr)
+            writer.Write("| DTypes: ");
+            for (int iop = 0; iop < nop; iop++)
+            {
+                var dt = _state->GetOpDType(iop);
+                writer.Write($"{dt.AsNumpyDtypeName()} ");
+            }
+            writer.WriteLine();
+
+            // Initial data ptrs (reset ptrs)
+            writer.Write("| InitDataPtrs: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"0x{_state->ResetDataPtrs[iop]:X} ");
+            writer.WriteLine();
+
+            // Base offsets
+            writer.Write("| BaseOffsets: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"{_state->BaseOffsets[iop]} ");
+            writer.WriteLine();
+
+            // Current data pointers
+            writer.Write("| Ptrs: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"0x{_state->DataPtrs[iop]:X} ");
+            writer.WriteLine();
+
+            if ((itf & (uint)NpyIterFlags.HASINDEX) != 0)
+                writer.WriteLine($"| FlatIndex: {_state->FlatIndex}");
+
+            // OpItFlags
+            writer.WriteLine("| OpItFlags:");
+            for (int iop = 0; iop < nop; iop++)
+            {
+                writer.Write($"|   Flags[{iop}]: ");
+                var of = _state->GetOpFlags(iop);
+                if ((of & NpyIterOpFlags.READ) != 0) writer.Write("READ ");
+                if ((of & NpyIterOpFlags.WRITE) != 0) writer.Write("WRITE ");
+                if ((of & NpyIterOpFlags.CAST) != 0) writer.Write("CAST ");
+                if ((of & NpyIterOpFlags.BUFNEVER) != 0) writer.Write("BUFNEVER ");
+                if ((of & NpyIterOpFlags.REDUCE) != 0) writer.Write("REDUCE ");
+                if ((of & NpyIterOpFlags.VIRTUAL) != 0) writer.Write("VIRTUAL ");
+                if ((of & NpyIterOpFlags.WRITEMASKED) != 0) writer.Write("WRITEMASKED ");
+                if ((of & NpyIterOpFlags.BUF_SINGLESTRIDE) != 0) writer.Write("BUF_SINGLESTRIDE ");
+                if ((of & NpyIterOpFlags.CONTIG) != 0) writer.Write("CONTIG ");
+                if ((of & NpyIterOpFlags.BUF_REUSABLE) != 0) writer.Write("BUF_REUSABLE ");
+                writer.WriteLine();
+            }
+            writer.WriteLine("|");
+
+            // Buffer data
+            if ((itf & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                writer.WriteLine("| BufferData:");
+                writer.WriteLine($"|   BufferSize: {_state->BufferSize}");
+                writer.WriteLine($"|   BufIterEnd: {_state->BufIterEnd}");
+                writer.WriteLine($"|   CoreSize: {_state->CoreSize}");
+                if ((itf & (uint)NpyIterFlags.REDUCE) != 0)
+                {
+                    writer.WriteLine($"|   REDUCE Pos: {_state->ReducePos}");
+                    writer.WriteLine($"|   REDUCE OuterSize: {_state->ReduceOuterSize}");
+                    writer.WriteLine($"|   REDUCE OuterDim: {_state->OuterDim}");
+                }
+                writer.Write("|   BufStrides: ");
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"{_state->BufStrides[iop]} ");
+                writer.WriteLine();
+                if ((itf & (uint)NpyIterFlags.REDUCE) != 0)
+                {
+                    writer.Write("|   REDUCE Outer Strides: ");
+                    for (int iop = 0; iop < nop; iop++)
+                        writer.Write($"{_state->ReduceOuterStrides[iop]} ");
+                    writer.WriteLine();
+                    writer.Write("|   REDUCE Outer Ptrs: ");
+                    for (int iop = 0; iop < nop; iop++)
+                        writer.Write($"0x{_state->ReduceOuterPtrs[iop]:X} ");
+                    writer.WriteLine();
+                }
+                writer.Write("|   Buffers: ");
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"0x{_state->Buffers[iop]:X} ");
+                writer.WriteLine();
+                writer.WriteLine("|");
+            }
+
+            // Per-axis data
+            for (int idim = 0; idim < ndim; idim++)
+            {
+                writer.WriteLine($"| AxisData[{idim}]:");
+                writer.WriteLine($"|   Shape: {_state->Shape[idim]}");
+                writer.WriteLine($"|   Index: {_state->Coords[idim]}");
+                writer.Write("|   Strides: ");
+                int stridesNDim = _state->StridesNDim;
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"{_state->Strides[iop * stridesNDim + idim]} ");
+                writer.WriteLine();
+            }
+
+            writer.WriteLine("------- END ITERATOR DUMP -------");
+            writer.Flush();
+        }
+
+        /// <summary>
+        /// Dumps iterator state to standard output. See <see cref="DebugPrint(System.IO.TextWriter)"/>.
+        /// </summary>
+        public void DebugPrint()
+        {
+            DebugPrint(Console.Out);
+        }
+
+        /// <summary>
+        /// Returns the debug dump as a string.
+        /// </summary>
+        public string DebugPrintToString()
+        {
+            using var sw = new System.IO.StringWriter();
+            DebugPrint(sw);
+            return sw.ToString();
+        }
+
+        /// <summary>
+        /// Builds a set of strides that match the iterator's axis ordering for a
+        /// hypothetical contiguous array (like the result of NPY_ITER_ALLOCATE).
+        /// Matches NumPy's NpyIter_CreateCompatibleStrides (nditer_api.c:1058).
+        ///
+        /// Use case: match the shape/layout of an iterator while tacking on extra
+        /// dimensions (e.g., gradient vector per element, Hessian matrix).
+        /// If an array is created with these strides, adding <paramref name="itemsize"/>
+        /// each iteration traverses the array matching the iterator.
+        ///
+        /// Requirements:
+        /// - Iterator must be tracking a multi-index (HASMULTIINDEX flag).
+        /// - No axis may be flipped (NPY_ITER_DONT_NEGATE_STRIDES must have been used,
+        ///   or the iterator must have no negative-stride axes to flip).
+        /// </summary>
+        /// <param name="itemsize">Base stride (typically element size in bytes).</param>
+        /// <param name="outStrides">Output span of length ≥ NDim, one stride per axis
+        ///                          in original array order (C-order).</param>
+        public bool CreateCompatibleStrides(long itemsize, scoped Span<long> outStrides)
+        {
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) == 0)
+            {
+                throw new InvalidOperationException(
+                    "Iterator CreateCompatibleStrides may only be called if a multi-index is being tracked.");
+            }
+
+            if (outStrides.Length < _state->NDim)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NDim} elements.", nameof(outStrides));
+
+            // Walk from innermost axis outward, accumulating itemsize.
+            // NumSharp's innermost is at NDim-1 (opposite of NumPy's reversed storage
+            // where idim=0 is innermost). So we iterate NDim-1 down to 0.
+            for (int idim = _state->NDim - 1; idim >= 0; idim--)
+            {
+                int p = _state->Perm[idim];
+                bool flipped = p < 0;
+                int originalAxis;
+
+                if (flipped)
+                {
+                    throw new InvalidOperationException(
+                        "Iterator CreateCompatibleStrides may only be called if " +
+                        "DONT_NEGATE_STRIDES was used to prevent reverse iteration of an axis.");
+                }
+                else
+                {
+                    originalAxis = p;
+                }
+
+                outStrides[originalAxis] = itemsize;
+                itemsize *= _state->Shape[idim];
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the array of strides for the specified axis, one stride per operand.
+        /// Matches NumPy's NpyIter_GetAxisStrideArray (nditer_api.c:1309).
+        ///
+        /// If the iterator is tracking a multi-index, returns strides for the user-supplied
+        /// axis in original-array coordinates (perm is walked to locate the internal axis).
+        /// Otherwise returns strides for iteration axis <paramref name="axis"/> in Fortran
+        /// order (fastest-changing axis first).
+        ///
+        /// Strides are returned in BYTES (multiplying NumSharp's internal element-count
+        /// strides by the operand's element size) to match NumPy's byte-stride convention.
+        /// </summary>
+        /// <param name="axis">Axis index (0-based). With HASMULTIINDEX: original-array axis.
+        ///                    Without: fastest-changing-first (Fortran) ordering.</param>
+        /// <param name="outStrides">Output span of length ≥ NOp; filled with byte strides.</param>
+        public void GetAxisStrideArray(int axis, scoped Span<long> outStrides)
+        {
+            if (axis < 0 || axis >= _state->NDim)
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} out of bounds for iterator with NDim={_state->NDim}");
+
+            if (outStrides.Length < _state->NOp)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+
+            int nop = _state->NOp;
+            int stridesNDim = _state->StridesNDim;
+            int internalIdim;
+
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) != 0)
+            {
+                // Walk perm to find the internal axis corresponding to the user's axis.
+                // NumSharp's perm[idim] = original_axis (or -1-original if flipped).
+                // (Unlike NumPy, NumSharp does NOT reverse axis storage, so no axis reversal
+                // is needed on the input.)
+                internalIdim = -1;
+                for (int idim = 0; idim < _state->NDim; idim++)
+                {
+                    int p = _state->Perm[idim];
+                    if (p == axis || -1 - p == axis)
+                    {
+                        internalIdim = idim;
+                        break;
+                    }
+                }
+                if (internalIdim < 0)
+                    throw new InvalidOperationException("internal error in iterator perm");
+            }
+            else
+            {
+                // Non-MULTI_INDEX: axis is in Fortran order (fastest-first).
+                // NumSharp's innermost axis is at NDim-1, so internal idim = NDim-1-axis.
+                internalIdim = _state->NDim - 1 - axis;
+            }
+
+            // Return byte strides (NumPy convention); internal strides are element counts.
+            for (int op = 0; op < nop; op++)
+            {
+                long elemStride = _state->Strides[op * stridesNDim + internalIdim];
+                outStrides[op] = elemStride * _state->ElementSizes[op];
+            }
+        }
+
+        public void GetInnerFixedStrideArray(scoped Span<long> outStrides)
+        {
+            if (outStrides.Length < _state->NOp)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+
+            int nop = _state->NOp;
+
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                // Buffered: BufStrides already stored in bytes (NpyIterBufferManager assigns
+                // BufStrides[op] = GetElementSize(op)).
+                for (int op = 0; op < nop; op++)
+                    outStrides[op] = _state->BufStrides[op];
+            }
+            else
+            {
+                // Non-buffered: innermost-axis stride for each operand, converted to BYTE units
+                // to match NumPy (NumSharp internally stores element-count strides).
+                if (_state->NDim == 0)
+                {
+                    for (int op = 0; op < nop; op++)
+                        outStrides[op] = 0;
+                }
+                else
+                {
+                    int innermost = _state->NDim - 1;
+                    int stridesNDim = _state->StridesNDim;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        long elemStride = _state->Strides[op * stridesNDim + innermost];
+                        outStrides[op] = elemStride * _state->ElementSizes[op];
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Resets the iterator to its initial state with new base data pointers.
+        /// Matches NumPy's NpyIter_ResetBasePointers (nditer_api.c:314).
+        ///
+        /// For each operand, sets resetdataptr[iop] = baseptrs[iop] + baseoffsets[iop],
+        /// where baseoffsets is the cumulative byte offset recorded by FlipNegativeStrides.
+        /// Then repositions the iterator to IterStart.
+        ///
+        /// The new arrays pointed to by baseptrs MUST have the exact same shape, dtype,
+        /// and memory layout as the original operands. This is typically used in nested
+        /// iteration (ufunc-style) where one iterator feeds data pointers to another.
+        ///
+        /// Throws ArgumentException if baseptrs.Length != NOp.
+        /// </summary>
+        /// <param name="baseptrs">Array of new base data pointers, one per operand.</param>
+        /// <returns>True on success.</returns>
+        public bool ResetBasePointers(scoped ReadOnlySpan<IntPtr> baseptrs)
+        {
+            if (baseptrs.Length != _state->NOp)
+            {
+                throw new ArgumentException(
+                    $"baseptrs length {baseptrs.Length} does not match operand count {_state->NOp}.",
+                    nameof(baseptrs));
+            }
+
+            uint itFlags = _state->ItFlags;
+
+            // If buffering, handle pending buffer state first
+            if ((itFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                if ((itFlags & (uint)NpyIterFlags.DELAYBUF) != 0)
+                {
+                    // Delayed buffer allocation: allocate now
+                    if (!NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                    {
+                        return false;
+                    }
+                    _state->ItFlags &= ~(uint)NpyIterFlags.DELAYBUF;
+                }
+                else
+                {
+                    // Flush any pending writes before replacing pointers
+                    CopyReduceBuffersToArrays();
+                }
+            }
+
+            // Install new reset pointers: resetdataptr[iop] = baseptrs[iop] + baseoffsets[iop].
+            // NumPy nditer_api.c:343-345.
+            for (int iop = 0; iop < _state->NOp; iop++)
+            {
+                _state->ResetDataPtrs[iop] = (long)baseptrs[iop] + _state->BaseOffsets[iop];
+            }
+
+            // Reposition to IterStart using the new base pointers.
+            _state->GotoIterIndex(_state->IterStart);
+
+            // Re-prime buffers if buffered
+            if ((itFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                long remaining = _state->IterEnd - _state->IterIndex;
+                long copyCount = Math.Min(remaining, _state->BufferSize);
+                if (copyCount > 0)
+                {
+                    for (int iop = 0; iop < _state->NOp; iop++)
+                    {
+                        var opFlags = _state->GetOpFlags(iop);
+                        if ((opFlags & NpyIterOpFlags.READ) != 0)
+                        {
+                            NpyIterBufferManager.CopyToBuffer(ref *_state, iop, copyCount);
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Convenience overload: resets base pointers using the data pointers of new NDArray operands.
+        /// The new arrays must have the same shape, dtype, and layout as the original operands.
+        /// </summary>
+        public unsafe bool ResetBasePointers(NDArray[] newOperands)
+        {
+            if (newOperands == null)
+                throw new ArgumentNullException(nameof(newOperands));
+            if (newOperands.Length != _state->NOp)
+            {
+                throw new ArgumentException(
+                    $"newOperands length {newOperands.Length} does not match operand count {_state->NOp}.",
+                    nameof(newOperands));
+            }
+
+            Span<IntPtr> baseptrs = stackalloc IntPtr[newOperands.Length];
+            for (int i = 0; i < newOperands.Length; i++)
+            {
+                var arr = newOperands[i];
+                if (arr is null)
+                    throw new ArgumentException($"newOperands[{i}] is null.");
+                byte* basePtr = (byte*)arr.Address + (arr.Shape.offset * arr.dtypesize);
+                baseptrs[i] = (IntPtr)basePtr;
+            }
+
+            return ResetBasePointers(baseptrs);
         }
 
         /// <summary>
@@ -1505,13 +2204,116 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// Returns a specialized delegate for computing multi-index based on iterator flags.
+        /// Matches NumPy's NpyIter_GetGetMultiIndex (nditer_templ.c.src:481).
+        ///
+        /// NumPy generates 12 specializations on (HASINDEX × IDENTPERM × NEGPERM × BUFFER).
+        /// NumSharp dispatches to 3 variants (BUFFER and HASINDEX don't affect coords):
+        ///   1. IDENTPERM — direct copy of internal coords
+        ///   2. Positive perm — apply perm[] mapping
+        ///   3. NEGPERM — apply perm[] with flip decoding
+        ///
+        /// The returned delegate takes raw NpyIterState and a pointer to output coords.
+        /// </summary>
+        /// <param name="errmsg">Set on failure; null on success.</param>
+        /// <returns>Delegate, or null if iterator is not tracking multi-index.</returns>
+        public NpyIterGetMultiIndexFunc? GetMultiIndexFunc(out string? errmsg)
+        {
+            errmsg = null;
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) == 0)
+            {
+                errmsg = "Iterator not tracking multi-index. Use NpyIterGlobalFlags.MULTI_INDEX during construction.";
+                return null;
+            }
+
+            uint itf = _state->ItFlags;
+            if ((itf & (uint)NpyIterFlags.IDENTPERM) != 0)
+                return GetMultiIndex_Identity;
+            if ((itf & (uint)NpyIterFlags.NEGPERM) != 0)
+                return GetMultiIndex_NegPerm;
+            return GetMultiIndex_PosPerm;
+        }
+
+        /// <summary>
+        /// Returns a specialized delegate for computing multi-index.
+        /// Matches NumPy's NpyIter_GetGetMultiIndex. Throws on failure instead of
+        /// returning null (thin wrapper over the out-errmsg overload).
+        /// </summary>
+        public NpyIterGetMultiIndexFunc GetMultiIndexFunc()
+        {
+            var fn = GetMultiIndexFunc(out string? errmsg);
+            if (fn == null) throw new InvalidOperationException(errmsg ?? "GetMultiIndexFunc unavailable");
+            return fn;
+        }
+
+        /// <summary>
+        /// Invokes the specialized multi-index delegate with this iterator's internal state.
+        /// This mirrors NumPy's pattern: <c>fn(iter, outcoords)</c>, where NumSharp's iterator
+        /// handle is a ref struct and the state is held internally.
+        /// </summary>
+        public void InvokeMultiIndex(NpyIterGetMultiIndexFunc fn, long* outCoords)
+        {
+            if (fn == null) throw new ArgumentNullException(nameof(fn));
+            fn(ref *_state, outCoords);
+        }
+
+        /// <summary>
+        /// Span overload of <see cref="InvokeMultiIndex"/>.
+        /// </summary>
+        public void InvokeMultiIndex(NpyIterGetMultiIndexFunc fn, scoped Span<long> outCoords)
+        {
+            if (fn == null) throw new ArgumentNullException(nameof(fn));
+            if (outCoords.Length < _state->NDim)
+                throw new ArgumentException($"outCoords must have at least {_state->NDim} elements.", nameof(outCoords));
+            fixed (long* ptr = outCoords)
+            {
+                fn(ref *_state, ptr);
+            }
+        }
+
+        // Specialized implementations — matches NumPy's 3 structural patterns
+        // (HASINDEX and BUFFER don't affect coord output so they're not specialized).
+
+        private static void GetMultiIndex_Identity(ref NpyIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+                outCoords[d] = state.Coords[d];
+        }
+
+        private static void GetMultiIndex_PosPerm(ref NpyIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+            {
+                int p = state.Perm[d];
+                outCoords[p] = state.Coords[d];
+            }
+        }
+
+        private static void GetMultiIndex_NegPerm(ref NpyIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+            {
+                int p = state.Perm[d];
+                if (p < 0)
+                {
+                    int originalAxis = -1 - p;
+                    outCoords[originalAxis] = state.Shape[d] - state.Coords[d] - 1;
+                }
+                else
+                {
+                    outCoords[p] = state.Coords[d];
+                }
+            }
+        }
+
+        /// <summary>
         /// Get the current multi-index (coordinates) in original axis order.
         /// Uses the Perm array to map internal coordinates to original array coordinates.
         /// When NEGPERM is set, flipped axes have negative perm entries and their
         /// coordinates are reversed (shape - coord - 1).
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
-        public void GetMultiIndex(Span<long> outCoords)
+        public void GetMultiIndex(scoped Span<long> outCoords)
         {
             if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) == 0)
                 throw new InvalidOperationException("Iterator not tracking multi-index. Use NpyIterGlobalFlags.MULTI_INDEX during construction.");
@@ -1555,7 +2357,7 @@ namespace NumSharp.Backends.Iteration
         /// coordinates are reversed when mapping to internal coordinates.
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
-        public void GotoMultiIndex(ReadOnlySpan<long> coords)
+        public void GotoMultiIndex(scoped ReadOnlySpan<long> coords)
         {
             if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) == 0)
                 throw new InvalidOperationException("Iterator not tracking multi-index. Use NpyIterGlobalFlags.MULTI_INDEX during construction.");
@@ -1925,14 +2727,17 @@ namespace NumSharp.Backends.Iteration
                 var buffer = _state->GetBuffer(operand);
                 if (buffer != null)
                 {
-                    // For buffered reduce, DataPtrs track current position
-                    // (updated by BufferedReduceAdvance using BufStrides)
-                    if ((itFlags & (uint)NpyIterFlags.REDUCE) != 0 && _state->CoreSize > 0)
+                    // REDUCE mode: DataPtrs track the current array/buffer position.
+                    // - With CoreSize > 0 (double-loop active): BufferedReduceAdvance maintains DataPtrs.
+                    // - With CoreSize == 0 (fallback to regular Advance): DataPtrs maintained by
+                    //   Advance() using per-axis strides (stride=0 on reduce axis keeps pointer fixed).
+                    // In both cases, DataPtrs is correct; don't override via IterIndex-indexed buffer.
+                    if ((itFlags & (uint)NpyIterFlags.REDUCE) != 0)
                     {
                         return _state->GetDataPtr(operand);
                     }
 
-                    // For simple buffered iteration, compute from IterIndex
+                    // For simple buffered iteration (non-reduce), compute from IterIndex
                     // (IterIndex directly maps to buffer position within current buffer)
                     int elemSize = _state->GetElementSize(operand);
                     long bufferPos = _state->IterIndex - (_state->BufIterEnd - Math.Min(_state->BufferSize, _state->IterSize - _state->IterStart));
