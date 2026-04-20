@@ -32,7 +32,7 @@ namespace NumSharp
                     // supported element type.
                     ret = ConvertNonGenericEnumerable(objArr);
                     if (ret is null)
-                        throw new NotSupportedException($"Unable to resolve asanyarray for object array of length {objArr.Length}.");
+                        throw new NotSupportedException($"Unable to resolve asanyarray for object[] (length {objArr.Length}): element type is not a supported NumSharp dtype.");
                     break;
                 case Array array:
                     ret = new NDArray(array);
@@ -206,8 +206,6 @@ namespace NumSharp
         {
             var span = CollectionsMarshal.AsSpan(items);
 
-            bool hasDouble = false;
-            bool hasFloat = false;
             Type firstType = null;
 
             // At most 12 unique NPTypeCode values exist; bound the stackalloc accordingly
@@ -221,11 +219,9 @@ namespace NumSharp
                 var t = span[i].GetType();
                 firstType ??= t;
 
+                // decimal wins everything in NumPy promotion
                 if (t == typeof(decimal))
                     return typeof(decimal);
-
-                if (t == typeof(double)) hasDouble = true;
-                else if (t == typeof(float)) hasFloat = true;
 
                 var code = t.GetTypeCode();
                 var bit = 1u << (int)code;
@@ -235,9 +231,6 @@ namespace NumSharp
                     typeCodes[uniqueCount++] = code;
                 }
             }
-
-            if (hasDouble || hasFloat)
-                return typeof(double);
 
             if (uniqueCount == 1)
                 return firstType ?? typeof(double);

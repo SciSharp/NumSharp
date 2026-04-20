@@ -251,18 +251,27 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblVectorLoopEnd);
         }
 
+        // Generic method definitions are cached once at class init; MakeGenericMethod is the
+        // only per-T work needed during kernel generation.
+        private static readonly MethodInfo _v256LoadGeneric = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!;
+        private static readonly MethodInfo _v256StoreGeneric = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!;
+        private static readonly MethodInfo _v256ConditionalSelectGeneric = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!;
+
+        private static readonly MethodInfo _v128LoadGeneric = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!;
+        private static readonly MethodInfo _v128StoreGeneric = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!;
+        private static readonly MethodInfo _v128ConditionalSelectGeneric = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!;
+
         private static void EmitWhereV256BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            // Get Vector256 methods via reflection - need to find generic method definitions first
-            var loadMethod = Array.Find(typeof(Vector256).GetMethods(),
-                m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
-                .MakeGenericMethod(typeof(T));
-            var storeMethod = Array.Find(typeof(Vector256).GetMethods(),
-                m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!
-                .MakeGenericMethod(typeof(T));
-            var selectMethod = Array.Find(typeof(Vector256).GetMethods(),
-                m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!
-                .MakeGenericMethod(typeof(T));
+            var loadMethod = _v256LoadGeneric.MakeGenericMethod(typeof(T));
+            var storeMethod = _v256StoreGeneric.MakeGenericMethod(typeof(T));
+            var selectMethod = _v256ConditionalSelectGeneric.MakeGenericMethod(typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);  // cond
@@ -327,16 +336,9 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereV128BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            // Get Vector128 methods via reflection - need to find generic method definitions first
-            var loadMethod = Array.Find(typeof(Vector128).GetMethods(),
-                m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
-                .MakeGenericMethod(typeof(T));
-            var storeMethod = Array.Find(typeof(Vector128).GetMethods(),
-                m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!
-                .MakeGenericMethod(typeof(T));
-            var selectMethod = Array.Find(typeof(Vector128).GetMethods(),
-                m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!
-                .MakeGenericMethod(typeof(T));
+            var loadMethod = _v128LoadGeneric.MakeGenericMethod(typeof(T));
+            var storeMethod = _v128StoreGeneric.MakeGenericMethod(typeof(T));
+            var selectMethod = _v128ConditionalSelectGeneric.MakeGenericMethod(typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);

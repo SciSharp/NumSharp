@@ -791,6 +791,29 @@ namespace NumSharp.UnitTest.Creation
             result.dtype.Should().Be(typeof(double));
         }
 
+        [TestMethod]
+        public void ObjectArray_AllFloat_PreservesSingle()
+        {
+            // Regression: an earlier FindCommonNumericType short-circuit promoted any float
+            // to double. NumPy preserves float32 for homogeneous float32 inputs.
+            var arr = new object[] { 1.5f, 2.5f, 3.5f };
+            var result = np.asanyarray(arr);
+
+            result.dtype.Should().Be(typeof(float));
+            result.Should().BeShaped(3).And.BeOfValues(1.5f, 2.5f, 3.5f);
+        }
+
+        [TestMethod]
+        public void ObjectArray_MixedIntAndFloat32_PromotesToDouble()
+        {
+            // int + float32 -> float64 per NumPy NEP50.
+            var arr = new object[] { 1, 2.5f, 3 };
+            var result = np.asanyarray(arr);
+
+            result.dtype.Should().Be(typeof(double));
+            result.Should().BeShaped(3);
+        }
+
         #endregion
     }
 }

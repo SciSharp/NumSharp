@@ -7,10 +7,11 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Return elements chosen from `x` or `y` depending on `condition`.
+        ///     Equivalent to <see cref="nonzero(NDArray)"/>: returns the indices where
+        ///     <paramref name="condition"/> is non-zero.
         /// </summary>
-        /// <param name="condition">Where True, yield `x`, otherwise yield `y`.</param>
-        /// <returns>Tuple of arrays with indices where condition is non-zero (equivalent to np.nonzero).</returns>
+        /// <param name="condition">Input array. Non-zero entries yield their indices.</param>
+        /// <returns>Tuple of arrays with indices where condition is non-zero, one per dimension.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.where.html</remarks>
         public static NDArray<long>[] where(NDArray condition)
         {
@@ -62,17 +63,29 @@ namespace NumSharp
         /// </summary>
         private static NDArray where_internal(NDArray condition, NDArray x, NDArray y)
         {
-            // Broadcast all three arrays to common shape
-            var broadcasted = broadcast_arrays(condition, x, y);
-            var cond = broadcasted[0];
-            var xArr = broadcasted[1];
-            var yArr = broadcasted[2];
+            // Skip broadcast_arrays (which allocates 3 NDArrays + helper arrays) when all three
+            // already share a shape — the frequent case of np.where(mask, arr, other_arr).
+            NDArray cond, xArr, yArr;
+            if (condition.Shape == x.Shape && x.Shape == y.Shape)
+            {
+                cond = condition;
+                xArr = x;
+                yArr = y;
+            }
+            else
+            {
+                var broadcasted = broadcast_arrays(condition, x, y);
+                cond = broadcasted[0];
+                xArr = broadcasted[1];
+                yArr = broadcasted[2];
+            }
 
-            // Determine output dtype using existing type promotion system
-            // _FindCommonType already handles NEP50: scalar+array → array wins
-            var outType = _FindCommonType(x, y);
+            // When x and y already agree, skip the NEP50 promotion lookup. Otherwise defer to
+            // _FindCommonType which handles the scalar+array NEP50 rules.
+            var outType = x.GetTypeCode == y.GetTypeCode
+                ? x.GetTypeCode
+                : _FindCommonType(x, y);
 
-            // Convert x and y to output type if needed (required for kernel and iterator paths)
             if (xArr.GetTypeCode != outType)
                 xArr = xArr.astype(outType, copy: false);
             if (yArr.GetTypeCode != outType)
