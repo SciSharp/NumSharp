@@ -1976,5 +1976,163 @@ namespace NumSharp.UnitTest.View
             // NumPy: np.sort(np.array([3,1,2])) == [1,2,3]
             false.Should().BeTrue("np.sort is not implemented — only argsort exists");
         }
+
+        // ============================================================================
+        // Section 43: matmul / dot / outer / convolve — output layout
+        // NumPy (always C-contig output, regardless of input layout):
+        //   matmul(F,F) → C-contig; matmul(C,F) → C-contig; matmul(F,C) → C-contig
+        //   dot(F,F)    → C-contig (same reasoning)
+        //   outer(1D,1D)→ C-contig
+        //   convolve    → 1-D, trivially both C & F contig
+        // Values must match NumPy exactly regardless of F-contig inputs.
+        // ============================================================================
+
+        [TestMethod]
+        public void MatMul_FF_Values_MatchNumPy()
+        {
+            // NumPy: matmul([[1,2],[3,4]].F, [[5,6],[7,8]].F) = [[19,22],[43,50]]
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_a = c_a.copy('F');
+            var f_b = c_b.copy('F');
+            f_a.Shape.IsFContiguous.Should().BeTrue();
+            f_b.Shape.IsFContiguous.Should().BeTrue();
+
+            var r = np.matmul(f_a, f_b);
+            ((double)r[0, 0]).Should().Be(19);
+            ((double)r[0, 1]).Should().Be(22);
+            ((double)r[1, 0]).Should().Be(43);
+            ((double)r[1, 1]).Should().Be(50);
+        }
+
+        [TestMethod]
+        public void MatMul_FF_ProducesCContigOutput()
+        {
+            // NumPy: matmul always produces C-contig output, regardless of input layout.
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_a = c_a.copy('F');
+            var f_b = c_b.copy('F');
+
+            var r = np.matmul(f_a, f_b);
+            r.Shape.IsContiguous.Should().BeTrue("NumPy: matmul(F,F) -> C-contig");
+        }
+
+        [TestMethod]
+        public void MatMul_CF_Mixed_Values_MatchNumPy()
+        {
+            // NumPy: matmul(C, F) = matmul(C, C) (output is C-contig, values identical)
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_b = c_b.copy('F');
+
+            var r = np.matmul(c_a, f_b);
+            ((double)r[0, 0]).Should().Be(19);
+            ((double)r[0, 1]).Should().Be(22);
+            ((double)r[1, 0]).Should().Be(43);
+            ((double)r[1, 1]).Should().Be(50);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void MatMul_FC_Mixed_Values_MatchNumPy()
+        {
+            // NumPy: matmul(F, C) yields same values and C-contig output.
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_a = c_a.copy('F');
+
+            var r = np.matmul(f_a, c_b);
+            ((double)r[0, 0]).Should().Be(19);
+            ((double)r[1, 1]).Should().Be(50);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Dot_FF_Values_MatchNumPy()
+        {
+            // NumPy: dot(F,F) same values as dot(C,C).
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_a = c_a.copy('F');
+            var f_b = c_b.copy('F');
+
+            var r = np.dot(f_a, f_b);
+            ((double)r[0, 0]).Should().Be(19);
+            ((double)r[0, 1]).Should().Be(22);
+            ((double)r[1, 0]).Should().Be(43);
+            ((double)r[1, 1]).Should().Be(50);
+        }
+
+        [TestMethod]
+        public void Dot_FF_ProducesCContigOutput()
+        {
+            var c_a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var c_b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var f_a = c_a.copy('F');
+            var f_b = c_b.copy('F');
+
+            var r = np.dot(f_a, f_b);
+            r.Shape.IsContiguous.Should().BeTrue("NumPy: dot(F,F) -> C-contig");
+        }
+
+        [TestMethod]
+        public void Outer_FVectorInput_ProducesCContigOutput()
+        {
+            // NumPy: outer(a, b) flattens inputs then builds C-contig (M,N) result.
+            var a = np.array(new[] { 1.0, 2.0, 3.0 });
+            var b = np.array(new[] { 4.0, 5.0 });
+            var r = np.outer(a, b);
+            r.shape.Should().Equal(new long[] { 3, 2 });
+            r.Shape.IsContiguous.Should().BeTrue("NumPy: outer result is C-contig");
+            ((double)r[0, 0]).Should().Be(4);
+            ((double)r[0, 1]).Should().Be(5);
+            ((double)r[1, 0]).Should().Be(8);
+            ((double)r[1, 1]).Should().Be(10);
+            ((double)r[2, 0]).Should().Be(12);
+            ((double)r[2, 1]).Should().Be(15);
+        }
+
+        [TestMethod]
+        public void Convolve_Valid_Mode_MatchesNumPy()
+        {
+            // NumPy: convolve([1,2,3], [1,0,1], 'valid') = [4]
+            var a = np.array(new[] { 1, 2, 3 });
+            var b = np.array(new[] { 1, 0, 1 });
+            var r = np.convolve(a, b, "valid");
+            r.shape.Should().Equal(new long[] { 1 });
+            ((int)r[0]).Should().Be(4);
+            // 1-D result: trivially both-contig.
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Convolve_Full_Mode_MatchesNumPy()
+        {
+            // NumPy: convolve([1,2,3], [1,0,1], 'full') = [1, 2, 4, 2, 3]
+            var a = np.array(new[] { 1, 2, 3 });
+            var b = np.array(new[] { 1, 0, 1 });
+            var r = np.convolve(a, b, "full");
+            r.shape.Should().Equal(new long[] { 5 });
+            ((int)r[0]).Should().Be(1);
+            ((int)r[1]).Should().Be(2);
+            ((int)r[2]).Should().Be(4);
+            ((int)r[3]).Should().Be(2);
+            ((int)r[4]).Should().Be(3);
+        }
+
+        [TestMethod]
+        public void Convolve_Same_Mode_MatchesNumPy()
+        {
+            // NumPy: convolve([1,2,3], [1,0,1], 'same') = [2, 4, 2]
+            var a = np.array(new[] { 1, 2, 3 });
+            var b = np.array(new[] { 1, 0, 1 });
+            var r = np.convolve(a, b, "same");
+            r.shape.Should().Equal(new long[] { 3 });
+            ((int)r[0]).Should().Be(2);
+            ((int)r[1]).Should().Be(4);
+            ((int)r[2]).Should().Be(2);
+        }
     }
 }
