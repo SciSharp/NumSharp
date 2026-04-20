@@ -25,6 +25,15 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
     - [Tier A — Raw IL](#tier-a--raw-il)
     - [Tier B — Templated Inner Loop](#tier-b--templated-inner-loop)
     - [Tier C — Expression DSL](#tier-c--expression-dsl)
+      - [Node catalog](#node-catalog)
+      - [Operator overloads](#operator-overloads)
+      - [Type discipline](#type-discipline)
+      - [SIMD coverage rules](#simd-coverage-rules)
+      - [Caching and auto-keys](#caching-and-auto-keys)
+      - [Validation and errors](#validation-and-errors)
+      - [Gotchas](#gotchas)
+      - [Debugging compiled kernels](#debugging-compiled-kernels)
+      - [When to use Tier C](#when-to-use-tier-c)
 - [Path Detection](#path-detection)
 - [Worked Examples](#worked-examples)
 - [Performance](#performance)
@@ -727,110 +736,116 @@ iter.ExecuteExpression(expr,
 
 **Leaves.**
 
-| Factory | Semantics |
-|---------|-----------|
-| `NpyExpr.Input(i)` | Reference operand `i` (0-based input index). Auto-converts to output dtype on load. |
-| `NpyExpr.Const(value)` | Literal — `int / long / float / double` overloads. Emitted at the output dtype. |
+| Factory | Semantics | NumPy |
+|---------|-----------|-------|
+| `NpyExpr.Input(i)` | Reference operand `i` (0-based input index). Auto-converts to output dtype on load. | — |
+| `NpyExpr.Const(value)` | Literal — `int / long / float / double` overloads. Emitted at the output dtype. | — |
 
 **Binary arithmetic.**
 
-| Factory | Operator | SIMD | Notes |
-|---------|----------|:----:|-------|
-| `Add(a,b)` | `a + b` | ✓ | |
-| `Subtract(a,b)` | `a - b` | ✓ | |
-| `Multiply(a,b)` | `a * b` | ✓ | |
-| `Divide(a,b)` | `a / b` | ✓ | |
-| `Mod(a,b)` | `a % b` | — | NumPy floored modulo (result sign follows divisor, not dividend). |
-| `Power(a,b)` | — | — | `Math.Pow` via scalar path. |
-| `FloorDivide(a,b)` | — | — | NumPy floor-toward-negative-infinity. |
-| `ATan2(y,x)` | — | — | Four-quadrant arctan. |
+| Factory | Operator | SIMD | NumPy equivalent | Notes |
+|---------|----------|:----:|------------------|-------|
+| `Add(a,b)` | `a + b` | ✓ | `np.add` | |
+| `Subtract(a,b)` | `a - b` | ✓ | `np.subtract` | |
+| `Multiply(a,b)` | `a * b` | ✓ | `np.multiply` | |
+| `Divide(a,b)` | `a / b` | ✓ | `np.divide` | True-division for floats; integer division for ints. |
+| `Mod(a,b)` | `a % b` | — | `np.mod` | Floored modulo — result sign follows divisor (like Python `%`), unlike C# `%` which truncates toward zero. |
+| `Power(a,b)` | — | — | `np.power` | Routed through `Math.Pow(double, double)`; integer operands are promoted to double and the result converted back. |
+| `FloorDivide(a,b)` | — | — | `np.floor_divide` | Floor toward negative infinity. For signed int operands, correctly returns `-4` (not `-3`) for `-10 // 3`. |
+| `ATan2(y,x)` | — | — | `np.arctan2` | Four-quadrant arctan via `Math.Atan2`. |
 
-**Binary bitwise.**
+**Binary bitwise.** Integer types only; floating-point operands are a compile-time IL emission error.
 
-| Factory | Operator | SIMD |
-|---------|----------|:----:|
-| `BitwiseAnd(a,b)` | `a & b` | ✓ |
-| `BitwiseOr(a,b)` | `a \| b` | ✓ |
-| `BitwiseXor(a,b)` | `a ^ b` | ✓ |
+| Factory | Operator | SIMD | NumPy equivalent |
+|---------|----------|:----:|------------------|
+| `BitwiseAnd(a,b)` | `a & b` | ✓ | `np.bitwise_and` |
+| `BitwiseOr(a,b)` | `a \| b` | ✓ | `np.bitwise_or` |
+| `BitwiseXor(a,b)` | `a ^ b` | ✓ | `np.bitwise_xor` |
 
 **Scalar-branchy combinators** (scalar path only).
 
-| Factory | Semantics |
-|---------|-----------|
-| `Min(a,b)` | Delegates to `Math.Min` — matches `np.minimum` (propagates NaN per IEEE 754). |
-| `Max(a,b)` | Delegates to `Math.Max` — matches `np.maximum` (propagates NaN per IEEE 754). |
-| `Clamp(x,lo,hi)` | `Min(Max(x,lo),hi)` — sugar. |
-| `Where(cond,a,b)` | Branchy ternary select: if `cond != 0` return `a` else `b`. `cond` is evaluated in the output dtype, so floats, integers, and decimals all work uniformly. |
+| Factory | Semantics | NumPy equivalent |
+|---------|-----------|------------------|
+| `Min(a,b)` | Delegates to `Math.Min` — NaN-propagating per IEEE 754. | `np.minimum` (**not** `np.fmin`) |
+| `Max(a,b)` | Delegates to `Math.Max` — NaN-propagating per IEEE 754. | `np.maximum` (**not** `np.fmax`) |
+| `Clamp(x,lo,hi)` | `Min(Max(x,lo),hi)` — sugar, shares the compiled kernel structure with the underlying pair. | `np.clip` |
+| `Where(cond,a,b)` | Branchy ternary select: if `cond != 0` return `a` else `b`. `cond` is evaluated in the output dtype, so floats, integers, and decimals all work uniformly. | `np.where` (with eager eval of both branches) |
+
+> `Where`'s branches are **both emitted** into the kernel but only the taken one runs per element — the `brfalse` branches past the untaken side. If one side is much more expensive (e.g. `Exp`), the cost is only paid on elements where it's selected, making `Where` a real optimization over `cond * a + (1-cond) * b` for expensive alternatives.
 
 **Unary — arithmetic.**
 
-| Factory | Operator | SIMD |
-|---------|----------|:----:|
-| `Negate(x)` | unary `-x` | ✓ |
-| `Abs(x)` | — | ✓ |
-| `Sqrt(x)` | — | ✓ |
-| `Square(x)` | — | ✓ |
-| `Reciprocal(x)` | — | ✓ |
-| `Cbrt(x)` | — | — |
-| `Sign(x)` | — | — |
+| Factory | Operator | SIMD | NumPy equivalent |
+|---------|----------|:----:|------------------|
+| `Negate(x)` | unary `-x` | ✓ | `np.negative` |
+| `Abs(x)` | — | ✓ | `np.abs` / `np.absolute` |
+| `Sqrt(x)` | — | ✓ | `np.sqrt` |
+| `Square(x)` | — | ✓ | `np.square` |
+| `Reciprocal(x)` | — | ✓ | `np.reciprocal` |
+| `Cbrt(x)` | — | — | `np.cbrt` |
+| `Sign(x)` | — | — | `np.sign` |
 
-**Unary — exp / log.**
+**Unary — exp / log.** All route through `Math.Exp / Log / ...` (or `MathF` for `Single`); integer inputs are auto-promoted to double around the call and cast back at the end.
 
-| Factory | Semantics | SIMD |
-|---------|-----------|:----:|
-| `Exp(x)` | eˣ | — |
-| `Exp2(x)` | 2ˣ | — |
-| `Expm1(x)` | eˣ − 1 | — |
-| `Log(x)` | ln x | — |
-| `Log2(x)` | log₂ x | — |
-| `Log10(x)` | log₁₀ x | — |
-| `Log1p(x)` | ln(1 + x) | — |
+| Factory | Semantics | SIMD | NumPy equivalent |
+|---------|-----------|:----:|------------------|
+| `Exp(x)` | eˣ | — | `np.exp` |
+| `Exp2(x)` | 2ˣ | — | `np.exp2` |
+| `Expm1(x)` | eˣ − 1 (accurate for small x) | — | `np.expm1` |
+| `Log(x)` | ln x | — | `np.log` |
+| `Log2(x)` | log₂ x | — | `np.log2` |
+| `Log10(x)` | log₁₀ x | — | `np.log10` |
+| `Log1p(x)` | ln(1 + x) (accurate for small x) | — | `np.log1p` |
 
 **Unary — trigonometric.**
 
-| Factory | Semantics | SIMD |
-|---------|-----------|:----:|
-| `Sin(x)`, `Cos(x)`, `Tan(x)` | Standard trig | — |
-| `Sinh(x)`, `Cosh(x)`, `Tanh(x)` | Hyperbolic | — |
-| `ASin(x)`, `ACos(x)`, `ATan(x)` | Inverse | — |
-| `Deg2Rad(x)` | x · π/180 | ✓ |
-| `Rad2Deg(x)` | x · 180/π | ✓ |
+| Factory | Semantics | SIMD | NumPy equivalent |
+|---------|-----------|:----:|------------------|
+| `Sin(x)`, `Cos(x)`, `Tan(x)` | Standard trig | — | `np.sin / cos / tan` |
+| `Sinh(x)`, `Cosh(x)`, `Tanh(x)` | Hyperbolic | — | `np.sinh / cosh / tanh` |
+| `ASin(x)`, `ACos(x)`, `ATan(x)` | Inverse | — | `np.arcsin / arccos / arctan` |
+| `Deg2Rad(x)` | x · π/180 | ✓ | `np.deg2rad` / `np.radians` |
+| `Rad2Deg(x)` | x · 180/π | ✓ | `np.rad2deg` / `np.degrees` |
 
 **Unary — rounding.**
 
-| Factory | Semantics | SIMD |
-|---------|-----------|:----:|
-| `Floor(x)` | ⌊x⌋ | ✓ |
-| `Ceil(x)` | ⌈x⌉ | ✓ |
-| `Round(x)` | Banker's rounding | — |
-| `Truncate(x)` | Toward zero | — |
+| Factory | Semantics | SIMD | NumPy equivalent |
+|---------|-----------|:----:|------------------|
+| `Floor(x)` | ⌊x⌋ | ✓ | `np.floor` |
+| `Ceil(x)` | ⌈x⌉ | ✓ | `np.ceil` |
+| `Round(x)` | Banker's rounding (half-to-even) | — | `np.rint` (matches NumPy's half-to-even default) |
+| `Truncate(x)` | Toward zero | — | `np.trunc` |
 
 > `Round` and `Truncate` have a working SIMD path on .NET 9+, but NumSharp's library targets .NET 8 as well, where `Vector256.Round/Truncate` don't exist. NpyExpr gates them to the scalar path unconditionally so the compiled kernel works on both frameworks. Other contiguous rounding ops autovectorize after tier-1 JIT promotion.
 
 **Unary — bitwise / logical / predicates.**
 
-| Factory | Operator | SIMD | Notes |
-|---------|----------|:----:|-------|
-| `BitwiseNot(x)` | `~x` | ✓ | |
-| `LogicalNot(x)` | `!x` | — | Boolean NOT. |
-| `IsNaN(x)` | — | — | Returns 0/1 at output dtype. |
-| `IsFinite(x)` | — | — | Returns 0/1 at output dtype. |
-| `IsInf(x)` | — | — | Returns 0/1 at output dtype. |
+| Factory | Operator | SIMD | NumPy equivalent | Notes |
+|---------|----------|:----:|------------------|-------|
+| `BitwiseNot(x)` | `~x` | ✓ | `np.invert` / `np.bitwise_not` | Integer types only. |
+| `LogicalNot(x)` | `!x` | — | `np.logical_not` | Returns 1 if `x == 0` else 0. Routes through `EmitComparisonOperation(Equal, outType)` — correct for all dtypes including Int64, Single, Double, Decimal (see [Gotchas](#gotchas)). |
+| `IsNaN(x)` | — | — | `np.isnan` | Returns 0/1 at output dtype. For integer types: always 0. |
+| `IsFinite(x)` | — | — | `np.isfinite` | Returns 0/1 at output dtype. For integer types: always 1. |
+| `IsInf(x)` | — | — | `np.isinf` | Returns 0/1 at output dtype. For integer types: always 0. |
 
 **Comparisons** (produce numeric 0 or 1 at output dtype; scalar path only).
 
-| Factory | Semantics |
-|---------|-----------|
-| `Equal(a,b)` | `a == b` |
-| `NotEqual(a,b)` | `a != b` |
-| `Less(a,b)` | `a < b` |
-| `LessEqual(a,b)` | `a <= b` |
-| `Greater(a,b)` | `a > b` |
-| `GreaterEqual(a,b)` | `a >= b` |
+| Factory | Semantics | NumPy equivalent |
+|---------|-----------|------------------|
+| `Equal(a,b)` | `a == b` | `np.equal` |
+| `NotEqual(a,b)` | `a != b` | `np.not_equal` |
+| `Less(a,b)` | `a < b` | `np.less` |
+| `LessEqual(a,b)` | `a <= b` | `np.less_equal` |
+| `Greater(a,b)` | `a > b` | `np.greater` |
+| `GreaterEqual(a,b)` | `a >= b` | `np.greater_equal` |
 
 Unlike NumPy's comparison ufuncs (which return `bool` arrays), Tier C's single-output-dtype model collapses comparisons to `0 or 1` at the output dtype. This composes cleanly with arithmetic — e.g. ReLU becomes `(x > 0) * x`.
 
-**Operator overloads.** An expression tree reads like ordinary C#:
+NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `NaN == NaN → 0`, `NaN < 5 → 0`, `NaN >= 5 → 0`. To test for NaN, use `IsNaN(x)`.
+
+##### Operator overloads
+
+An expression tree reads like ordinary C#:
 
 ```csharp
 // (a + b) * c + 1
@@ -843,11 +858,28 @@ var relu = NpyExpr.Greater(NpyExpr.Input(0), NpyExpr.Const(0.0f)) * NpyExpr.Inpu
 var clamped = NpyExpr.Min(NpyExpr.Max(NpyExpr.Input(0), NpyExpr.Const(0f)), NpyExpr.Const(1f));
 ```
 
-Overloads: `+ - * /` (arithmetic), `%` (NumPy mod), `& | ^` (bitwise), unary `-` (negate), `~` (bitwise not), `!` (logical not). No overloads for `<`, `>`, `==`, `!=` (those need to return `bool` in C#) — use the factory methods for comparisons.
+Overloads: `+ - * /` (arithmetic), `%` (NumPy mod), `& | ^` (bitwise), unary `-` (negate), `~` (bitwise not), `!` (logical not). No overloads for `<`, `>`, `==`, `!=` (those need to return `bool` in C#, which would collide with `object.Equals` and similar) — use the factory methods (`Less`, `Greater`, `Equal`, `NotEqual`, `LessEqual`, `GreaterEqual`) for comparisons.
 
 ##### Type discipline
 
-Every intermediate value flows through the output dtype: `Input(i)` loads the i-th operand's dtype and auto-converts (via `EmitConvertTo`) to the output dtype; constants are emitted directly in the output dtype. The vector path is enabled only when **every** input dtype equals the output dtype (so a single `Vector<T>` instantiation covers the whole tree) **and every node in the tree has a SIMD emit**. If any node (e.g. `Min`, `Sin`, any comparison) lacks a SIMD path, the whole compilation falls back to scalar — correctness preserved, but no 4× unroll.
+Every intermediate value flows through the output dtype: `Input(i)` loads the i-th operand's dtype and auto-converts (via `EmitConvertTo`) to the output dtype; constants are emitted directly in the output dtype. This **single-type intermediate invariant** keeps the DSL simple — you don't need to reason about mixed-type arithmetic inside the tree.
+
+**Concrete example — integer to float promotion.**
+
+```csharp
+// Input is int32, output is float64. The DSL handles the promotion automatically.
+var a = np.array(new int[] { 1, 4, 9, 16, 25 });
+var r = np.empty(new Shape(5), np.float64);
+
+using var iter = NpyIterRef.MultiNew(2, new[] { a, r }, ...);
+iter.ExecuteExpression(NpyExpr.Sqrt(NpyExpr.Input(0)),
+    inputTypes: new[] { NPTypeCode.Int32 }, outputType: NPTypeCode.Double);
+// r = [1.0, 2.0, 3.0, 4.0, 5.0]
+```
+
+What the emitted IL does per element: load `int32`, `Conv_R8` (promote to double), call `Math.Sqrt(double)`, store `double`. The conversion is emitted at the `Input` node, not at the `Sqrt` node — all subsequent operations see the output-dtype value.
+
+**SIMD gate.** The vector path is enabled only when **every** input dtype equals the output dtype (so a single `Vector<T>` instantiation covers the whole tree) **and every node in the tree has a SIMD emit**. If any node lacks a SIMD path, the whole compilation falls back to scalar — correctness preserved, but no 4× unroll. For mixed-dtype work you're in the scalar-strided fallback regardless.
 
 ##### SIMD coverage rules
 
@@ -860,19 +892,101 @@ A node's `SupportsSimd` determines whether Tier C emits the vector body:
 
 A tree's `SupportsSimd` is true only if **every** node in it does. One unsupported node demotes the whole tree to scalar-only — which is usually still autovectorized by the JIT after tier-1 promotion, just without the 4× unroll.
 
-##### Caching
+##### Caching and auto-keys
 
-Pass `cacheKey` to share the compiled delegate across iterators; omit it and the compiler auto-derives one from the tree's structural signature plus input/output dtypes:
+Pass `cacheKey` to share the compiled delegate across iterators; omit it and the compiler auto-derives one from the tree's structural signature plus input/output dtypes. Actual examples (verified against `NpyExpr.AppendSignature`):
 
 ```
-NpyExpr:Add(Mul(In[0],Const[2]),Const[3]):in=Double:out=Double
+NpyExpr:Add(Multiply(In[0],Const[2]),Const[3]):in=Double:out=Double
+NpyExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single
+NpyExpr:Where(CmpGreater(In[0],Const[0]),In[0],Multiply(Const[0.1],In[0])):in=Double:out=Double
+NpyExpr:Min(In[0],In[1]):in=Int32,Int32:out=Int32
+NpyExpr:IsNan(In[0]):in=Double:out=Double
+NpyExpr:LogicalNot(In[0]):in=Double:out=Double
+NpyExpr:BitwiseNot(In[0]):in=Int32:out=Int32
+NpyExpr:Mod(In[0],Const[3]):in=Double:out=Double
+NpyExpr:Sqrt(In[0]):in=Int32:out=Double           ← int input, double output
 ```
 
-Two trees with identical structure and types get the same auto-derived key and share a cached kernel. Comparisons appear as `Cmp<Op>(...)`, Min/Max as `Min(...)`/`Max(...)`, and Where as `Where(...)` — all influence the cache key.
+Enum names appear verbatim (e.g. `Multiply`, not `Mul`; `IsNan`, not `IsNaN` — the enum is spelled `IsNan`).
+
+Two trees with identical structure and types get the same auto-derived key and share a cached kernel. Each node class contributes a distinct signature prefix:
+
+| Node class | Signature fragment |
+|------------|--------------------|
+| `InputNode` | `In[i]` |
+| `ConstNode` | `Const[value]` (integer form if constructed from int/long; decimal form for float/double) |
+| `BinaryNode` | `<BinaryOp>(L,R)` (e.g. `Add(...)`, `Mod(...)`, `ATan2(...)`) |
+| `UnaryNode` | `<UnaryOp>(C)` (e.g. `Sqrt(...)`, `IsNan(...)`, `BitwiseNot(...)`) |
+| `ComparisonNode` | `Cmp<Op>(L,R)` (e.g. `CmpEqual(...)`, `CmpGreater(...)`) |
+| `MinMaxNode` | `Min(L,R)` or `Max(L,R)` |
+| `WhereNode` | `Where(C,A,B)` |
+
+> **Constant value sensitivity.** Two trees that differ only in a constant value (e.g. `x + 1` vs `x + 2`) generate distinct keys — the constant is part of the signature, because it's baked into the emitted IL. If you need many kernels parameterized by a scalar, consider passing the scalar as a second input operand (as a 0-d `NDArray` or a broadcast view) rather than a compile-time constant.
+>
+> **Integer/float const collision.** `NpyExpr.Const(1)` and `NpyExpr.Const(1.0)` both serialize to `Const[1]` when the `double` value is whole. With the same output dtype they produce identical IL, so sharing a cache entry is correct. If you need to distinguish — say, to force a specific integer vs float constant interpretation — construct both trees separately and supply an explicit `cacheKey`.
+
+##### Validation and errors
+
+The DSL fails fast at tree-construction time for structural errors and at compile time for type-mismatch or arity errors:
+
+| Error condition | Where | Exception |
+|----------------|-------|-----------|
+| `NpyExpr.Input(-1)` | Factory | `ArgumentOutOfRangeException` |
+| `NpyExpr.Sqrt(null)` | Node constructor | `ArgumentNullException` |
+| `NpyExpr.Add(null, x)` / `Add(x, null)` | Node constructor | `ArgumentNullException` |
+| `ExecuteExpression(expr, null, outType)` | Bridge entry | `ArgumentNullException` |
+| `ExecuteExpression(expr, inputTypes, outType)` with too-few inputs vs operand count | Bridge entry | `ArgumentException` |
+| `Input(5)` when tree compiled with 2 inputs | Compile-time IL emission | `InvalidOperationException` — message: `"Input(5) out of range; compile provided 2 inputs."` |
+| Tree calls a vector-only path on a non-SIMD type (shouldn't happen via public API) | Compile-time | `NotSupportedException` |
+
+Runtime errors depend on the op and dtype:
+
+- `Divide` / `Mod` / `FloorDivide` with a zero integer divisor → `DivideByZeroException` from the CLI. Float division by zero produces `±Infinity` / `NaN` per IEEE 754, no exception.
+- `Power(neg, fractional)` → `NaN` via `Math.Pow`, no exception.
+- Overflow during `Conv_*` from a float that's outside the target integer range → silently wraps or saturates per the CLI's conv opcode semantics (matches `unchecked {}` casts in C#). Use `Conv_Ovf_*` if you need checked behavior — not exposed through the DSL.
+
+##### Gotchas
+
+A non-exhaustive list of pitfalls worth internalizing:
+
+- **NaN propagation in `Min`/`Max` matches `np.minimum`/`np.maximum`, not `np.fmin`/`np.fmax`.** If you need NaN-skipping min/max, compose with `IsNaN` and `Where`:
+  ```csharp
+  // fmin(a, b): return non-NaN if one is NaN, else min
+  var fmin = NpyExpr.Where(NpyExpr.IsNaN(a),
+      b,
+      NpyExpr.Where(NpyExpr.IsNaN(b), a, NpyExpr.Min(a, b)));
+  ```
+
+- **`Mod` doesn't match C# `%` for negative operands.** C# truncates toward zero (`-10 % 3 == -1`); NumPy (and `NpyExpr.Mod`) floor toward negative infinity (`-10 mod 3 == 2`). This matches Python `%`.
+
+- **Integer division by zero throws.** `Divide(int_arr, int_arr_with_zero)` raises `DivideByZeroException` at runtime. Float division is silent (produces `±Infinity`/`NaN`).
+
+- **Constants widen to the output dtype.** `NpyExpr.Const(1_000_000_000) + NpyExpr.Input(0)` where the output is `Byte` will emit `Ldc_I4 1000000000` followed by `Conv_U1` — the billion wraps to a small byte. The DSL won't check that the constant fits; you get silent truncation.
+
+- **Bitwise ops require integer output dtype.** `NpyExpr.Input(0) & NpyExpr.Input(1)` with `outputType = Double` is a malformed tree — `EmitScalarOperation(BitwiseAnd, Double)` doesn't emit `And` for floats. You'll get an `InvalidOperationException` or unverifiable IL at compile time. Use an integer output dtype, or convert through `BitwiseNot`/`BitwiseAnd` in integer land and cast to float separately.
+
+- **`LogicalNot` is `x == 0`, not `x != 0`.** It returns 1 when the input is zero and 0 otherwise. Same as Python's `not` applied to a numeric value. If you want "non-zero as 1", use `NpyExpr.NotEqual(x, NpyExpr.Const(0))`.
+
+- **Input dtype mismatch is silent.** If your `inputTypes[]` says `Int32` but the actual NDArray operand is `Int16`, the kernel reads 4 bytes starting at the int16 pointer — garbage. The iterator's buffer/cast machinery only kicks in with `BUFFERED | NPY_*_CASTING`. For ad-hoc Tier C use, make sure `inputTypes[i]` matches the actual NDArray dtype, or run the iterator with casting flags.
+
+- **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is almost never what you intended. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
+
+- **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier B.
+
+##### Debugging compiled kernels
+
+Tier C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
+
+- **Inspect the cache.** `ILKernelGenerator.InnerLoopCachedCount` (internal; use `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) gives you a count. `ILKernelGenerator.ClearInnerLoopCache()` (internal) lets you force recompilation in a test.
+- **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?".
+- **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
+- **Watch the output dtype.** `ExecuteExpression` expects `outputType` to match the output NDArray's dtype. If they disagree, the kernel reads/writes wrong byte counts. Double-check both.
+- **Enable IL dumps** by emitting into a persistent assembly instead of `DynamicMethod` — not a supported build configuration, but `ILKernelGenerator.InnerLoop.cs` is a single partial file you can modify in a workspace-only diff if you need to dump bytes during development.
 
 ##### When to use Tier C
 
-Reach for Tier C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog — drop to Tier B and hand-tune the vector body.
+Reach for Tier C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog (e.g. intrinsics the runtime exposes but the DSL doesn't wrap) — drop to Tier B and hand-tune the vector body.
 
 **Shared caching.** All three tiers write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `InnerLoopCachedCount` (internal) exposes the size for tests.
 
@@ -904,6 +1018,33 @@ Different paths get different IL. `SimdFull` emits a flat 4× unrolled SIMD loop
 ---
 
 ## Worked Examples
+
+Seventeen worked examples grouped by API tier.
+
+**Layers 1–3 (baked kernels):**
+1. [Three-operand binary over a 3-D contiguous array](#1-three-operand-binary-over-a-3-d-contiguous-array)
+2. [Array × scalar with broadcast detection](#2-array--scalar-with-broadcast-detection)
+3. [Sliced view — non-contiguous input](#3-sliced-view--non-contiguous-input)
+4. [Fused hypot via Layer 1](#4-fused-hypot-via-layer-1)
+5. [Early-exit Any over 1M elements](#5-early-exit-any-over-1m-elements)
+
+**Tier B (templated scalar + vector bodies):**
+
+6. [Fused hypot via Tier C expression](#6-fused-hypot-via-tier-c-expression)
+7. [Fused linear transform via Tier B with vector body](#7-fused-linear-transform-via-tier-b-with-vector-body)
+
+**Tier C (expression DSL):**
+
+8. [ReLU via Tier C comparison-multiply](#8-relu-via-tier-c-comparison-multiply)
+9. [Clamp with Min/Max](#9-clamp-with-minmax)
+10. [Softmax-ish: exp then divide-by-sum](#10-softmax-ish-exp-then-divide-by-sum)
+11. [Sigmoid via Where for numerical stability](#11-sigmoid-via-where-for-numerical-stability)
+12. [NaN-replacement using IsNaN + Where](#12-nan-replacement-using-isnan--where)
+13. [Leaky ReLU via piecewise Where](#13-leaky-relu-via-piecewise-where)
+14. [Manual abs via comparison + Where](#14-manual-abs-via-comparison--where)
+15. [Heaviside step function](#15-heaviside-step-function)
+16. [Polynomial evaluation via Horner's method](#16-polynomial-evaluation-via-horners-method)
+17. [Piecewise: absolute value of sine (abs(sin(x)))](#17-piecewise-absolute-value-of-sine-abssinx)
 
 ### 1. Three-operand binary over a 3-D contiguous array
 
@@ -1134,6 +1275,71 @@ iter.ExecuteExpression(leaky,
 
 Contrast with the "branchless" ReLU (`(x > 0) * x`): that works for plain ReLU because the false branch is zero, but doesn't handle Leaky ReLU's non-zero negative side. `Where` is the general escape hatch.
 
+### 14. Manual abs via comparison + Where
+
+A worked example of combining comparisons with `Where` for pedagogical purposes (the DSL's `Abs` is faster — it has a SIMD path):
+
+```csharp
+var x = NpyExpr.Input(0);
+var manualAbs = NpyExpr.Where(
+    NpyExpr.Less(x, NpyExpr.Const(0.0)),
+    -x,           // operator overload for Negate
+    x);
+iter.ExecuteExpression(manualAbs,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+This is ~10% slower than `NpyExpr.Abs(x)` because it runs the scalar-only `Where` instead of the SIMD-vectorized `Abs`. Use the built-in where possible; `Where` is the generalization when no built-in fits.
+
+### 15. Heaviside step function
+
+```csharp
+// heaviside(x, h0) = 0 if x < 0, h0 if x == 0, 1 if x > 0
+// NumPy's np.heaviside(x, 0.5) is the default "midpoint" convention.
+var x = NpyExpr.Input(0);
+var step = NpyExpr.Where(
+    NpyExpr.Less(x, NpyExpr.Const(0.0)),
+    NpyExpr.Const(0.0),
+    NpyExpr.Where(
+        NpyExpr.Greater(x, NpyExpr.Const(0.0)),
+        NpyExpr.Const(1.0),
+        NpyExpr.Const(0.5)));   // h0 value at x == 0
+
+iter.ExecuteExpression(step,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+Three-way nested `Where` flattens to linear IL — two `brfalse` branches at runtime. The auto-derived cache key becomes `Where(CmpLess(In[0],Const[0]),Const[0],Where(CmpGreater(In[0],Const[0]),Const[1],Const[0.5]))`. Reused automatically across iterators.
+
+### 16. Polynomial evaluation via Horner's method
+
+Evaluate `p(x) = 1·x⁴ + 2·x³ + 3·x² + 4·x + 5` with optimal multiplications:
+
+```csharp
+// ((((1·x + 2)·x + 3)·x + 4)·x + 5
+var x = NpyExpr.Input(0);
+var poly = (((NpyExpr.Const(1.0) * x + NpyExpr.Const(2.0)) * x
+             + NpyExpr.Const(3.0)) * x
+             + NpyExpr.Const(4.0)) * x
+             + NpyExpr.Const(5.0);
+iter.ExecuteExpression(poly,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+Four `Multiply`s, four `Add`s — all SIMD-capable. Whole tree emits the 4×-unrolled V256 path. For a degree-N polynomial this stays in registers end-to-end, with no intermediate array allocations. Compare with the naïve `1*x*x*x*x + 2*x*x*x + 3*x*x + 4*x + 5` — ten multiplications, same IL size after constant folding by the JIT, but less readable.
+
+### 17. Piecewise: absolute value of sine (abs(sin(x)))
+
+Combine the two unary SIMD-capable ops for the pattern `|sin x|`:
+
+```csharp
+var expr = NpyExpr.Abs(NpyExpr.Sin(NpyExpr.Input(0)));
+iter.ExecuteExpression(expr,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
+```
+
+`Sin` is scalar-only, so the whole tree runs scalar (no 4× unroll). But both ops fuse into one pass — a single `Math.Sin` call + `Math.Abs` per element. The alternative — two Layer 3 calls on three arrays — would allocate a `sin(x)` temporary.
+
 ---
 
 ## Performance
@@ -1153,6 +1359,17 @@ Benchmarking 1M `sqrt` on a contiguous float32 array after 300 warmup iterations
 Layer 1 and Layer 2 give you control and fusion. For any standard elementwise ufunc, **Layer 3 is the right default**. Drop to Layer 1/2 when fusing several ops (one pass, zero temporaries), when the op isn't in `ILKernelGenerator`, or when your kernel has a structure the generator can't express.
 
 **Custom ops (Tier B / Tier C) hit the Layer 3 envelope.** Because the factory wraps user bodies in the same 4×-unrolled SIMD + remainder + scalar-tail shell, a Tier B or Tier C kernel for sqrt lands within rounding distance of `ExecuteUnary(Sqrt)` — the only overhead is the runtime contig check (a few stride comparisons at kernel entry). Fused ops like `sqrt(a² + b²)` via Tier C are typically faster than composing three Layer 3 calls, because there are no intermediate arrays and the whole computation stays in V256 registers between operations.
+
+**Custom op overhead breakdown.** Tier A and Tier B kernels share the same `NpyInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier C adds:
+
+| Overhead source | When | Cost |
+|----------------|------|------|
+| Compile (first call per key) | First `ExecuteExpression` with a given cache key | 1-10 ms one-time (IL emission + JIT) |
+| Auto-key derivation | When `cacheKey: null` | ~O(tree size) StringBuilder walk — typically < 1 μs |
+| Runtime contig check | Every inner-loop entry | 2-4 stride comparisons (~ns) |
+| Scalar-strided fallback | When any operand has non-contig inner stride | Per-element pointer arithmetic; JIT autovectorizes post-tier-1 |
+
+**When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
 
 ### JIT Warmup Caveat
 
@@ -1259,6 +1476,44 @@ Historically `WhereNode.EmitScalar` had an incomplete prelude that threw `Invali
 Historically `NPTypeCode.SizeOf(Decimal)` returned **32** while the actual `decimal` type is 16 bytes (verified: `UnmanagedStorage` lays decimals out at 16-byte stride). The iterator used `NPTypeCode.SizeOf` for `ElementSizes`, so any custom-op kernel that multiplied element strides by `ElementSizes` read at 32-byte offsets into 16-byte-stride storage, producing `System.OverflowException` when the garbage happened to decode as a huge decimal.
 
 Fixed in the commit that introduced the custom-op API (`32 → 16`). All decimal-using code benefits, not just the bridge.
+
+### Bug E (fixed): predicates silently wrote garbage to the output slot
+
+`IsNaN` / `IsFinite` / `IsInf` emit via `double.IsNaN(x)` etc., which leaves a `bool` (I4 0/1) on the evaluation stack. The factory's `Stind` takes the output dtype — storing an I4 into an 8-byte double slot reinterprets the bit pattern as a tiny denormal (0.0 or ~4.94e-324), not as the intended 0.0 or 1.0 result. Output arrays filled with near-zero garbage looked "mostly correct" for mixed inputs, hiding the bug in casual use.
+
+**Fix:** `UnaryNode.EmitScalar` inspects the op and emits a trailing `EmitConvertTo(Int32, outType)` for predicate results. The I4 0/1 becomes a properly-typed 0.0 or 1.0.
+
+**Caught by:** `NpyExprExtensiveTests.IsNaN_Double` — a test deliberately run early in the battletest phase, because NaN behavior is usually the first thing to go wrong.
+
+### Bug F (fixed): `LogicalNot` broken for Int64 / float / decimal
+
+`EmitUnaryScalarOperation(UnaryOp.LogicalNot, outType)` in `ILKernelGenerator` emits `Ldc_I4_0` + `Ceq` — correct when the operand is I4-sized (bool, byte, int16, int32), broken when the operand is anything else. For a `Double` on the stack, the comparison `ceq(double, I4_0)` is type-mismatched IL that produces undefined output (in practice, always-1 on our test hardware).
+
+**Fix:** `UnaryNode.EmitScalar` special-cases `UnaryOp.LogicalNot`: it routes through `EmitComparisonOperation(Equal, outType)` with a properly-typed zero literal (emitted by `EmitPushZero` — `Ldc_R8 0.0` for Double, `Ldc_I8 0L` for Int64, `decimal.Zero` for Decimal, etc.), then converts the I4 result to the output dtype. The underlying `ILKernelGenerator` emit path is still broken for direct use; NpyExpr simply doesn't use it for this op.
+
+**Caught by:** `LogicalNot_Double_Operator` test — all outputs came back as `1.0` regardless of input, because the type-mismatched `ceq` always returned true on this CPU.
+
+### Bug G (library, exposed): `Vector256.Round/Truncate` don't exist on .NET 8
+
+`ILKernelGenerator.CanUseUnarySimd` lists `UnaryOp.Round` and `UnaryOp.Truncate` as SIMD-supported, and `EmitUnaryVectorOperation` looks up `Vector256.Round(Vector256<double>)` and `Vector256.Truncate(Vector256<double>)` at compile time. Those methods exist in .NET 9+ but **not in .NET 8** — the lookup returns null and throws `InvalidOperationException("Could not find Round/Truncate for Vector256\`1")`.
+
+The existing Unary kernel cache never hit this bug because production `np.round` / `np.trunc` paths are exercised mostly in tests and tests are usually run against one framework. Tier C exercises every op for every SIMD-eligible dtype, and surfaces it immediately.
+
+**Fix (in NpyExpr only, not in `ILKernelGenerator`):** `NpyExpr.UnaryNode.IsSimdUnary` excludes `Round` and `Truncate`, routing them to the scalar path on both net8 and net9+. Scalar rounding is still JIT-autovectorized post-tier-1, so the practical performance delta is small.
+
+**Caught by:** `Truncate_Double` in the extensive tests — crashed at compile time on net8 with the "Could not find" error.
+
+**Upstream fix would be:** conditionally compile `ILKernelGenerator.CanUseUnarySimd` to exclude `Round`/`Truncate` on `#if !NET9_0_OR_GREATER`, or explicitly check `method != null` with a fallback emit.
+
+### Bug H (fixed): `MinMaxNode` didn't propagate NaN
+
+Originally `MinMaxNode` emitted a branchy select via `EmitComparisonOperation(LessEqual / GreaterEqual, outType)`. IEEE 754 says any comparison with NaN is false, so `Min(NaN, 3.0)` with the branchy approach returned `3.0` — but NumPy's `np.minimum(np.nan, 3.0)` returns `NaN`. The implementation matched C# `<=` semantics rather than NumPy.
+
+**Fix:** `MinMaxNode.EmitBranchy` delegates to `Math.Min` / `Math.Max` via reflection lookup on `typeof(Math)`. Those methods explicitly propagate NaN per IEEE 754 (any NaN operand yields NaN), matching NumPy's `np.minimum`/`np.maximum`. For `Char` / `Boolean` outputs, where no `Math.Min(Char, Char)` overload exists, the node falls back to the branchy path (NaN propagation irrelevant for those types).
+
+**Caught by:** `Min_Double_NaNPropagation` test — expected NaN, got the non-NaN operand.
+
+> NumPy has two variants: `np.minimum` (NaN-propagating, our choice) and `np.fmin` (NaN-skipping). If you need `fmin`/`fmax` semantics, compose with `IsNaN` and `Where` — see the [Gotchas](#gotchas) section.
 
 ---
 
