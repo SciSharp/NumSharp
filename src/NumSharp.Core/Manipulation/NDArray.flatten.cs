@@ -25,9 +25,11 @@ namespace NumSharp
             if (physical == 'F' && this.Shape.NDim > 1 && this.size > 1)
             {
                 // F-order flatten: the memory of a fresh F-contiguous copy contains
-                // the values in column-major read-out order; interpret it as 1-D.
+                // the values in column-major read-out order; reinterpret that buffer
+                // as a 1-D array. copy('F') already allocated a fresh MemoryBlock that
+                // nothing else references, so we reuse the ArraySlice directly.
                 var fcopy = this.copy('F');
-                return new NDArray(new UnmanagedStorage(fcopy.Array.Clone(), Shape.Vector(size)));
+                return new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size)));
             }
 
             return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size)));
