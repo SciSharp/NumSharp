@@ -375,5 +375,188 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         #endregion
+
+        #region B9 — np.unique(Complex)
+
+        [TestMethod]
+        public void B9_Unique_Complex_BasicDedup()
+        {
+            // NumPy: np.unique([1+2j, 1+2j, 3+0j, 0+0j, 3+0j]) = [0+0j, 1+2j, 3+0j]
+            var a = np.array(new Complex[] { C(1, 2), C(1, 2), C(3, 0), C(0, 0), C(3, 0) });
+            var r = np.unique(a);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            r.size.Should().Be(3);
+            r.GetAtIndex<Complex>(0).Should().Be(C(0, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(C(1, 2));
+            r.GetAtIndex<Complex>(2).Should().Be(C(3, 0));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_AlreadySorted()
+        {
+            var a = np.array(new Complex[] { C(0, 0), C(1, 2), C(3, 0) });
+            var r = np.unique(a);
+            r.size.Should().Be(3);
+            r.GetAtIndex<Complex>(0).Should().Be(C(0, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(C(1, 2));
+            r.GetAtIndex<Complex>(2).Should().Be(C(3, 0));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_ReverseOrder()
+        {
+            var a = np.array(new Complex[] { C(3, 0), C(1, 2), C(0, 0) });
+            var r = np.unique(a);
+            r.size.Should().Be(3);
+            r.GetAtIndex<Complex>(0).Should().Be(C(0, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(C(1, 2));
+            r.GetAtIndex<Complex>(2).Should().Be(C(3, 0));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_AllDuplicates()
+        {
+            var a = np.array(new Complex[] { C(1, 2), C(1, 2), C(1, 2) });
+            var r = np.unique(a);
+            r.size.Should().Be(1);
+            r.GetAtIndex<Complex>(0).Should().Be(C(1, 2));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_SingleElement()
+        {
+            var a = np.array(new Complex[] { C(5, 5) });
+            var r = np.unique(a);
+            r.size.Should().Be(1);
+            r.GetAtIndex<Complex>(0).Should().Be(C(5, 5));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_SameRealDifferentImag()
+        {
+            // Lex sort: (1,1) < (1,2) < (1,3)
+            var a = np.array(new Complex[] { C(1, 3), C(1, 2), C(1, 2), C(1, 1) });
+            var r = np.unique(a);
+            r.size.Should().Be(3);
+            r.GetAtIndex<Complex>(0).Should().Be(C(1, 1));
+            r.GetAtIndex<Complex>(1).Should().Be(C(1, 2));
+            r.GetAtIndex<Complex>(2).Should().Be(C(1, 3));
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_NaNSortsToEnd()
+        {
+            // NaN any-component sorts to end; non-NaN lex-sorted first
+            var a = np.array(new Complex[] { C(1, 2), C(double.NaN, 0), C(1, 2) });
+            var r = np.unique(a);
+            r.size.Should().Be(2);
+            r.GetAtIndex<Complex>(0).Should().Be(C(1, 2));
+            var last = r.GetAtIndex<Complex>(1);
+            double.IsNaN(last.Real).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_PureImagNaN()
+        {
+            // NaN in imag component also triggers NaN-at-end classification
+            var a = np.array(new Complex[] { C(2, 0), C(1, double.NaN), C(0, 0) });
+            var r = np.unique(a);
+            r.size.Should().Be(3);
+            r.GetAtIndex<Complex>(0).Should().Be(C(0, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(C(2, 0));
+            var last = r.GetAtIndex<Complex>(2);
+            double.IsNaN(last.Imaginary).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void B9_Unique_Complex_NonContiguousView()
+        {
+            // Non-contiguous flat path (strided slice)
+            var full = np.array(new Complex[] { C(3, 0), C(1, 2), C(5, 0), C(1, 2), C(3, 0), C(0, 0) });
+            var view = full["::2"];  // [3+0j, 5+0j, 3+0j]
+            var r = np.unique(view);
+            r.size.Should().Be(2);
+            r.GetAtIndex<Complex>(0).Should().Be(C(3, 0));
+            r.GetAtIndex<Complex>(1).Should().Be(C(5, 0));
+        }
+
+        #endregion
+
+        #region B13 — Complex argmax/argmin with NaN
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_NaNInMiddle()
+        {
+            // NumPy: np.argmax([1+2j, nan+0j, 3+1j]) == 1 (first NaN wins)
+            var a = np.array(new Complex[] { C(1, 2), C(double.NaN, 0), C(3, 1) });
+            np.argmax(a).Should().Be(1L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_NaNFirst()
+        {
+            var a = np.array(new Complex[] { C(double.NaN, 0), C(1, 2), C(3, 1) });
+            np.argmax(a).Should().Be(0L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_NaNLast()
+        {
+            var a = np.array(new Complex[] { C(1, 2), C(3, 0), C(double.NaN, 1) });
+            np.argmax(a).Should().Be(2L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_NaNInImagOnly()
+        {
+            // Imag NaN also counts as "NaN" for argmax purposes
+            var a = np.array(new Complex[] { C(1, 2), C(3, double.NaN), C(5, 1) });
+            np.argmax(a).Should().Be(1L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMin_Complex_NaNInMiddle()
+        {
+            var a = np.array(new Complex[] { C(3, 1), C(double.NaN, 0), C(1, 2) });
+            np.argmin(a).Should().Be(1L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMin_Complex_NaNFirst()
+        {
+            var a = np.array(new Complex[] { C(double.NaN, 0), C(1, 2) });
+            np.argmin(a).Should().Be(0L);
+        }
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_NoNaN_Regression_B12()
+        {
+            // Regression: B12 lex compare must still work when no NaN present
+            var a = np.array(new Complex[] { C(1, 0), C(1, 5), C(1, 3) });
+            np.argmax(a).Should().Be(1L);  // (1,5) has highest imag
+        }
+
+        [TestMethod]
+        public void B13_ArgMin_Complex_NoNaN_Regression_B12()
+        {
+            var a = np.array(new Complex[] { C(1, 0), C(1, -5), C(1, 3) });
+            np.argmin(a).Should().Be(1L);  // (1,-5) has lowest imag
+        }
+
+        [TestMethod]
+        public void B13_ArgMax_Complex_Axis_NaNPropagates()
+        {
+            // Axis variant: B7 fallback uses argmax_elementwise_il per slice → NaN semantics preserved
+            var a = np.array(new Complex[,] {
+                { C(1, 0), C(5, 0) },
+                { C(double.NaN, 0), C(2, 0) },
+                { C(3, 0), C(1, 0) }
+            });
+            var r = np.argmax(a, 0);
+            r.GetAtIndex<long>(0).Should().Be(1L);  // NaN at row 1 wins column 0
+            r.GetAtIndex<long>(1).Should().Be(0L);  // column 1: 5 > 2 > 1
+        }
+
+        #endregion
     }
 }

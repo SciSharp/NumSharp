@@ -418,6 +418,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Fallback argmax for Complex using lexicographic comparison (real, then imag).
         /// Returns index of first occurrence of the maximum (NumPy tiebreak semantics).
+        /// NaN propagates: a Complex value with NaN in either component "wins" argmax at its first occurrence.
         /// </summary>
         private long ArgMaxComplexFallback(NDArray arr)
         {
@@ -425,10 +426,12 @@ namespace NumSharp.Backends
             long bestIdx = 0;
             long idx = 0;
             var best = iter.MoveNext();
+            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
             idx = 1;
             while (iter.HasNext())
             {
                 var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
                 if (v.Real > best.Real || (v.Real == best.Real && v.Imaginary > best.Imaginary))
                 {
                     best = v;
@@ -441,6 +444,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Fallback argmin for Complex using lexicographic comparison (real, then imag).
+        /// NaN propagates: a Complex value with NaN in either component "wins" argmin at its first occurrence.
         /// </summary>
         private long ArgMinComplexFallback(NDArray arr)
         {
@@ -448,10 +452,12 @@ namespace NumSharp.Backends
             long bestIdx = 0;
             long idx = 0;
             var best = iter.MoveNext();
+            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
             idx = 1;
             while (iter.HasNext())
             {
                 var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
                 if (v.Real < best.Real || (v.Real == best.Real && v.Imaginary < best.Imaginary))
                 {
                     best = v;
