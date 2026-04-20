@@ -235,7 +235,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // NumSharp element-wise ops always produce C-contig output
         public void Arithmetic_FContig_ScalarMul_PreservesFContig()
         {
             // NumPy: f_arr * 2 preserves F-contig output
@@ -257,7 +256,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp element-wise on both F-contig produces C output
         public void Arithmetic_FPlusF_PreservesFContig()
         {
             // NumPy: when both operands F-contig, output is F-contig
@@ -359,7 +357,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // NumSharp broadcast ops always produce C-contig output
         public void Broadcast_FContig_PlusFCol_PreservesFContig()
         {
             // NumPy: F-contig (4,3) + F-contig (4,1) -> F-contig output
@@ -818,7 +815,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // NumSharp unary ops don't preserve F-contig
         public void Abs_FContig_PreservesFContig()
         {
             // NumPy: np.abs(f_arr) -> F=True
@@ -839,7 +835,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp negative doesn't preserve F-contig
         public void Negative_FContig_PreservesFContig()
         {
             // NumPy: np.negative(f_arr) -> F=True
@@ -858,7 +853,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp sqrt doesn't preserve F-contig
         public void Sqrt_FContig_PreservesFContig()
         {
             // NumPy: np.sqrt(f_arr) -> F=True
@@ -868,7 +862,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp exp doesn't preserve F-contig
         public void Exp_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -877,7 +870,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp log1p doesn't preserve F-contig
         public void Log1p_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -886,7 +878,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp sin doesn't preserve F-contig
         public void Sin_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -895,7 +886,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp square doesn't preserve F-contig
         public void Square_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T;
@@ -909,7 +899,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // NumSharp equality on F-contig doesn't preserve F
         public void Equal_FPlusF_PreservesFContig()
         {
             // NumPy: f_arr == f_arr -> F=True
@@ -921,7 +910,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp less-than on F-contig doesn't preserve F
         public void LessThan_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T;
@@ -931,7 +919,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp greater-equal on F-contig doesn't preserve F
         public void GreaterEqual_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T;
@@ -958,7 +945,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // NumSharp bitwise_and on F-contig doesn't preserve F
         public void BitwiseAnd_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T;
@@ -969,7 +955,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumSharp bitwise_or on F-contig doesn't preserve F
         public void BitwiseOr_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T;
@@ -1234,7 +1219,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.ceil doesn't preserve F-contig
         public void Ceil_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1243,7 +1227,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.floor doesn't preserve F-contig
         public void Floor_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1252,7 +1235,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.trunc doesn't preserve F-contig
         public void Trunc_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1261,7 +1243,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.reciprocal doesn't preserve F-contig
         public void Reciprocal_FContig_PreservesFContig()
         {
             var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
@@ -1270,7 +1251,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.sign doesn't preserve F-contig
         public void Sign_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T;
@@ -1279,7 +1259,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.cos doesn't preserve F-contig
         public void Cos_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1288,7 +1267,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.tan doesn't preserve F-contig
         public void Tan_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1297,7 +1275,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.log doesn't preserve F-contig
         public void Log_FContig_PreservesFContig()
         {
             var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
@@ -1306,7 +1283,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.log10 doesn't preserve F-contig
         public void Log10_FContig_PreservesFContig()
         {
             var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
@@ -1315,7 +1291,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.log2 doesn't preserve F-contig
         public void Log2_FContig_PreservesFContig()
         {
             var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 1.0;
@@ -1324,7 +1299,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.exp2 doesn't preserve F-contig
         public void Exp2_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1333,7 +1307,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.expm1 doesn't preserve F-contig
         public void Expm1_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1342,7 +1315,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.cbrt doesn't preserve F-contig
         public void Cbrt_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1366,7 +1338,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // true_divide doesn't preserve F-contig
         public void TrueDivide_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T.astype(typeof(double)) + 1.0;
@@ -1377,7 +1348,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // floor_divide doesn't preserve F-contig
         public void FloorDivide_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T + 1;
@@ -1387,7 +1357,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // mod doesn't preserve F-contig
         public void Mod_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T + 1;
@@ -1397,7 +1366,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // power doesn't preserve F-contig
         public void Power_FPlusF_PreservesFContig()
         {
             var a = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1423,7 +1391,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // in-place add may rebuild array as C-contig
         public void InPlaceAdd_FContig_PreservesFContig()
         {
             // NumPy: f_arr += 1 preserves F-contig (same buffer, just values mutated)
@@ -1452,7 +1419,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.clip doesn't preserve F-contig
         public void Clip_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T;
@@ -1474,7 +1440,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.maximum doesn't preserve F-contig
         public void Maximum_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T;
@@ -1483,7 +1448,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.minimum doesn't preserve F-contig
         public void Minimum_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T;
@@ -1492,7 +1456,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.modf doesn't preserve F-contig
         public void Modf_FContig_PreservesFContig()
         {
             var fArr = (np.arange(12).reshape(3, 4).T.astype(typeof(double))) + 0.5;
@@ -1575,7 +1538,6 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.isnan doesn't preserve F-contig
         public void IsNan_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1584,7 +1546,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.isinf doesn't preserve F-contig
         public void IsInf_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -1593,7 +1554,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // np.isfinite doesn't preserve F-contig
         public void IsFinite_FContig_PreservesFContig()
         {
             var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));

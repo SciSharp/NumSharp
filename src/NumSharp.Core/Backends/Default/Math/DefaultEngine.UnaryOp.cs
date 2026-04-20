@@ -83,6 +83,11 @@ namespace NumSharp.Backends
                     "Please report this as a bug.");
             }
 
+            // NumPy-aligned layout preservation: unary ops preserve F-contig.
+            // The kernel writes in linear C-order; relay out when the input is strictly F-contig.
+            if (ShouldProduceFContigOutput(nd, result.Shape))
+                return result.copy('F');
+
             return result;
         }
 
