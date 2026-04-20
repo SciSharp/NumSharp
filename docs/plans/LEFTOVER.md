@@ -1292,3 +1292,114 @@ Next sweep target: **Math — Arithmetic** (`add`/`sub`/`mul`/`div`/`power`/`mod
 Remaining open bugs after Round 11: **B1, B2, B3, B4, B5, B6, B7, B8, B9, B12,
 B13, B15, B16** (13 open, 15 closed so far). Many of these will surface in the
 upcoming sweep rounds.
+
+---
+
+## Round 12 — Extended Creation Sweep (2026-04-20)
+
+Second-pass coverage search of gaps left by Round 11. Three new probe matrices
+(`ref_creation2.py`, `ref_creation3.py`, `ref_creation4.py`) targeting:
+dtype inference from fill, linspace/arange error paths, empty_like shape
+override, 4D+ arrays, asanyarray with list/scalar inputs, copy of views,
+np.array with Array+Type, frombuffer with string dtype codes, byte-order
+prefix (`<f2`, `>c16`), scalar 0-dim arrays, Shape.NewScalar, meshgrid sparse /
+ij indexing, eye boundary diagonals and negative dimensions, large-N arange,
+integer truncation in arange with float step.
+
+Total new cases: 141 (68 + 41 + 32). Pre-fix parity: 92% (130/141).
+Post-fix parity: **100% (141/141)**.
+
+### B30 — `frombuffer(buffer, string dtype)` parser missing Half/Complex, wrong SByte mapping ✅ CLOSED (Round 12)
+
+**Surfaced in:** `frombuffer(bytes, "f2"/"e")`, `frombuffer(bytes, "c16"/"D")`,
+`frombuffer(bytes, "i1"/"b")`.
+
+**Root cause:** The `ParseDtypeString` switch expression in `np.frombuffer.cs`
+hard-coded only a subset of NumPy's type codes. Missing entirely:
+`"f2"` and `"e"` (half), `"c16"` / `"D"` (complex128), `"c8"` / `"F"` (single-
+precision complex — NumSharp only ships complex128 so these widen). Worse,
+`"i1"` / `"b"` mapped to `NPTypeCode.Byte` (uint8) when they mean *signed*
+8-bit int (int8/SByte) — the existing inline comment even admitted this
+("// signed byte maps to byte"). That meant `frombuffer(buf, "i1")` returned
+a uint8 array even when the bytes were meant to be interpreted as signed.
+
+**Fix (`src/NumSharp.Core/Creation/np.frombuffer.cs`):** Extended the switch
+with Half (`f2`/`e`), Complex (`c16`/`D`/`c8`/`F`), and corrected SByte
+(`i1`/`b` → `NPTypeCode.SByte`).
+
+### B31 — `ByteSwapInPlace` doesn't handle Half or Complex ✅ CLOSED (Round 12)
+
+**Surfaced in:** `frombuffer(bytes, ">f2")`, `frombuffer(bytes, ">c16")` —
+big-endian-prefixed dtypes that require byte swapping on little-endian systems.
+
+**Root cause:** After B30 expanded `ParseDtypeString` to accept `f2`/`c16`,
+the `needsByteSwap` path triggered `ByteSwapInPlace`, which only had branches
+for Int16/UInt16, Int32/UInt32/Single, Int64/UInt64/Double. Half (16-bit) and
+Complex (two 64-bit doubles) fell through silently, leaving swapped or
+unswapped bytes in ambiguous state. Half read as BE came back as subnormals;
+Complex read as BE came back as denormals.
+
+**Fix (`src/NumSharp.Core/Creation/np.frombuffer.cs`):** Added:
+- `NPTypeCode.Half` → same 2-byte swap as Int16/UInt16 (reuses `ushort*` path).
+- `NPTypeCode.Complex` → loop swaps `count * 2` 8-byte doubles (real + imag
+  independently) since the BCL `Complex` struct is stored as `[real, imag]`.
+
+Note: SByte (1 byte) doesn't need swapping — documented with comment in the
+switch's fall-through.
+
+Accepted divergence: the *dtype string* NumPy reports for a BE array is
+`>f2` / `>c16`, but NumSharp returns `float16` / `complex128`. NumSharp doesn't
+track byte-order in dtype (bytes are always swapped to native on read), so
+the values are correct but the dtype string differs. This is marked
+[Misaligned] not a bug.
+
+### B32 — `np.eye(N, M, k)` doesn't validate negative dimensions ✅ CLOSED (Round 12)
+
+**Surfaced in:** `np.eye(-1, dtype=X)` for all three new dtypes.
+
+**Root cause:** Prior to B27, `eye` used `Shape.Matrix(N, M)` directly without
+validation. If `N = -1`, `Shape.Matrix(-1, -1)` built a shape with negative
+dimensions but computed size as `(-1) * (-1) = 1` (integer multiply overflows
+to positive). The result was a 1-element array with `shape = (-1, -1)`.
+NumPy raises `ValueError: negative dimensions are not allowed`.
+
+**Fix (`src/NumSharp.Core/Creation/np.eye.cs`):** Added explicit validation
+at the top of `eye()`:
+```csharp
+if (N < 0) throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
+if (cols < 0) throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
+```
+
+### Round 12 test coverage
+
+28 new tests added to `NewDtypesCoverageSweep_Creation_Tests.cs`:
+
+| Bug / Area | Tests |
+|------------|-------|
+| B30 (frombuffer string dtype) | 6 (`f2`, `e`, `c16`, `D`, `i1`, `b`) |
+| B31 (byte-order swap) | 2 (`>f2`, `>c16`) |
+| B32 (negative-dim eye) | 3 (-N, -M, 0×0 valid) |
+| Full inference | 3 |
+| Arange int-truncation | 1 |
+| Eye extreme diagonals | 1 |
+| Linspace n=2 noep | 1 |
+| 4D/5D zeros/ones | 2 |
+| 3D np.array | 1 |
+| Meshgrid sparse/ij | 2 |
+| _like from views | 2 |
+| Large-N arange | 1 |
+| All-zero shape / scalar shape | 2 |
+| Frombuffer count=0 | 1 |
+
+Full suite after Round 12: **6844 / 0 / 11** per framework (up 28 from
+Round 11's 6816). OpenBugs count unchanged.
+
+Total Creation sweep coverage: 330 probe cases (189 + 68 + 41 + 32) at
+100% parity, 111 systematic regression tests.
+
+### Remaining open bugs baseline
+
+**B1, B2, B3, B4, B5, B6, B7, B8, B9, B12, B13, B15, B16** — 13 open, 18
+closed so far. Next round will target Math — Arithmetic (operators, +, -, *, /,
+%, operator overloads) across the three new dtypes; expect B3 (Complex 1/0)
+to surface.

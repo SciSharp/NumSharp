@@ -797,6 +797,318 @@ namespace NumSharp.UnitTest.NewDtypes
 
         #endregion
 
+        #region B30 — frombuffer string dtype parser (Half/Complex/SByte codes + byte order)
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_f2_MapsToHalf()
+        {
+            // NumPy: np.frombuffer(bytes, dtype='f2') → float16 array
+            var half = new Half[] { (Half)1, (Half)2, (Half)3 };
+            var bytes = ToBytes(half);
+            var a = np.frombuffer(bytes, "f2");
+            a.typecode.Should().Be(NPTypeCode.Half);
+            for (int i = 0; i < 3; i++)
+                ((double)a.GetAtIndex<Half>(i)).Should().Be(i + 1.0);
+        }
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_e_MapsToHalf()
+        {
+            // NumPy short code 'e' == float16
+            var half = new Half[] { (Half)1, (Half)2, (Half)3 };
+            var a = np.frombuffer(ToBytes(half), "e");
+            a.typecode.Should().Be(NPTypeCode.Half);
+        }
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_c16_MapsToComplex()
+        {
+            // NumPy: 'c16' == complex128
+            var cplx = new Complex[] { C(1, 0), C(2, 1) };
+            var a = np.frombuffer(ToBytes(cplx), "c16");
+            a.typecode.Should().Be(NPTypeCode.Complex);
+            a.GetAtIndex<Complex>(0).Should().Be(C(1, 0));
+            a.GetAtIndex<Complex>(1).Should().Be(C(2, 1));
+        }
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_D_MapsToComplex()
+        {
+            var cplx = new Complex[] { C(3, 4) };
+            var a = np.frombuffer(ToBytes(cplx), "D");
+            a.typecode.Should().Be(NPTypeCode.Complex);
+            a.GetAtIndex<Complex>(0).Should().Be(C(3, 4));
+        }
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_i1_MapsToSByte_NotByte()
+        {
+            // Pre-fix 'i1' / 'b' incorrectly mapped to NPTypeCode.Byte (uint8)
+            // NumPy: 'i1' == int8 → must return sbyte values
+            var sb = new sbyte[] { -1, 0, 1 };
+            var a = np.frombuffer(ToBytes(sb), "i1");
+            a.typecode.Should().Be(NPTypeCode.SByte);
+            a.GetAtIndex<sbyte>(0).Should().Be((sbyte)(-1));
+            a.GetAtIndex<sbyte>(1).Should().Be((sbyte)0);
+            a.GetAtIndex<sbyte>(2).Should().Be((sbyte)1);
+        }
+
+        [TestMethod]
+        public void B30_Frombuffer_StringDtype_b_MapsToSByte()
+        {
+            var sb = new sbyte[] { -128, 127 };
+            var a = np.frombuffer(ToBytes(sb), "b");
+            a.typecode.Should().Be(NPTypeCode.SByte);
+            a.GetAtIndex<sbyte>(0).Should().Be((sbyte)(-128));
+            a.GetAtIndex<sbyte>(1).Should().Be((sbyte)127);
+        }
+
+        #endregion
+
+        #region B31 — ByteSwapInPlace covers Half and Complex
+
+        [TestMethod]
+        public void B31_Frombuffer_BigEndian_Half_SwapsCorrectly()
+        {
+            // Build little-endian representation, then byte-swap to simulate BE buffer.
+            var half = new Half[] { (Half)1, (Half)2, (Half)3 };
+            var bytes = ToBytes(half);
+            var be = (byte[])bytes.Clone();
+            for (int i = 0; i < be.Length; i += 2) (be[i], be[i + 1]) = (be[i + 1], be[i]);
+            var a = np.frombuffer(be, ">f2");
+            a.typecode.Should().Be(NPTypeCode.Half);
+            for (int i = 0; i < 3; i++)
+                ((double)a.GetAtIndex<Half>(i)).Should().Be(i + 1.0);
+        }
+
+        [TestMethod]
+        public void B31_Frombuffer_BigEndian_Complex_SwapsCorrectly()
+        {
+            var cplx = new Complex[] { C(1, 0), C(2, 1) };
+            var bytes = ToBytes(cplx);
+            // Swap each 8-byte double independently (Complex = 2 doubles)
+            var be = (byte[])bytes.Clone();
+            for (int i = 0; i < be.Length; i += 8) Array.Reverse(be, i, 8);
+            var a = np.frombuffer(be, ">c16");
+            a.typecode.Should().Be(NPTypeCode.Complex);
+            a.GetAtIndex<Complex>(0).Should().Be(C(1, 0));
+            a.GetAtIndex<Complex>(1).Should().Be(C(2, 1));
+        }
+
+        #endregion
+
+        #region B32 — np.eye rejects negative N and M
+
+        [TestMethod]
+        public void B32_Eye_NegativeN_ThrowsArgumentException()
+        {
+            Action act = () => np.eye(-1, dtype: typeof(Half));
+            act.Should().Throw<ArgumentException>();
+        }
+
+        [TestMethod]
+        public void B32_Eye_NegativeM_ThrowsArgumentException()
+        {
+            Action act = () => np.eye(3, -1, 0, typeof(Complex));
+            act.Should().Throw<ArgumentException>();
+        }
+
+        [TestMethod]
+        public void B32_Eye_ZeroNZeroM_ReturnsEmpty()
+        {
+            // 0×0 is valid — should return empty, not throw
+            var a = np.eye(0, 0, 0, typeof(sbyte));
+            a.size.Should().Be(0);
+        }
+
+        #endregion
+
+        #region Round 12 — additional smoke tests from extended sweep
+
+        [TestMethod]
+        public void FullInference_Half_FromScalar()
+        {
+            // np.full(shape, half(2.5)) infers dtype from fill_value
+            var a = np.full(new Shape(3), (Half)2.5);
+            a.typecode.Should().Be(NPTypeCode.Half);
+            ((double)a.GetAtIndex<Half>(0)).Should().BeApproximately(2.5, HalfTol);
+        }
+
+        [TestMethod]
+        public void FullInference_Complex_FromScalar()
+        {
+            var a = np.full(new Shape(3), new Complex(1, 2));
+            a.typecode.Should().Be(NPTypeCode.Complex);
+            a.GetAtIndex<Complex>(0).Should().Be(C(1, 2));
+        }
+
+        [TestMethod]
+        public void FullInference_SByte_FromScalar()
+        {
+            var a = np.full(new Shape(3), (sbyte)5);
+            a.typecode.Should().Be(NPTypeCode.SByte);
+            a.GetAtIndex<sbyte>(0).Should().Be((sbyte)5);
+        }
+
+        [TestMethod]
+        public void Arange_SByte_FloatStep_IntTruncation()
+        {
+            // NumPy arange(0,5,0.5,int8) computes delta_t = int8(0.5)=0 → all zeros
+            var a = np.arange(0.0, 5.0, 0.5, NPTypeCode.SByte);
+            a.size.Should().Be(10);
+            for (int i = 0; i < 10; i++)
+                a.GetAtIndex<sbyte>(i).Should().Be((sbyte)0);
+        }
+
+        [TestMethod]
+        public void Eye_3x3_KExtremeDiagonal_Half()
+        {
+            // k = M-1 = 2: single element at (0,2)
+            var a = np.eye(3, 3, 2, typeof(Half));
+            var expected = new double[] { 0, 0, 1, 0, 0, 0, 0, 0, 0 };
+            for (int i = 0; i < 9; i++)
+                ((double)a.GetAtIndex<Half>(i)).Should().Be(expected[i]);
+        }
+
+        [TestMethod]
+        public void Linspace_Half_N2_NoEndpoint()
+        {
+            // [start, start + (stop-start)/2] = [0, 2]
+            var a = np.linspace(0.0, 4.0, 2L, false, NPTypeCode.Half);
+            a.size.Should().Be(2);
+            ((double)a.GetAtIndex<Half>(0)).Should().Be(0.0);
+            ((double)a.GetAtIndex<Half>(1)).Should().Be(2.0);
+        }
+
+        [TestMethod]
+        public void Zeros_4D_Half()
+        {
+            var a = np.zeros(new Shape(2, 2, 2, 2), typeof(Half));
+            a.shape.Should().Equal(new long[] { 2, 2, 2, 2 });
+            a.size.Should().Be(16);
+            a.typecode.Should().Be(NPTypeCode.Half);
+        }
+
+        [TestMethod]
+        public void Ones_5D_Complex()
+        {
+            var a = np.ones(new Shape(1, 2, 1, 2, 1), typeof(Complex));
+            a.shape.Should().Equal(new long[] { 1, 2, 1, 2, 1 });
+            a.GetAtIndex<Complex>(0).Should().Be(C(1, 0));
+        }
+
+        [TestMethod]
+        public void Array3D_SByte()
+        {
+            var a = np.array(new sbyte[, ,] { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } });
+            a.typecode.Should().Be(NPTypeCode.SByte);
+            a.shape.Should().Equal(new long[] { 2, 2, 2 });
+            a.size.Should().Be(8);
+            for (int i = 0; i < 8; i++)
+                a.GetAtIndex<sbyte>(i).Should().Be((sbyte)(i + 1));
+        }
+
+        [TestMethod]
+        public void MeshgridSparse_Half()
+        {
+            var x = np.array(new Half[] { (Half)1, (Half)2, (Half)3 });
+            var y = np.array(new Half[] { (Half)10, (Half)20 });
+            var kw = new Kwargs { indexing = "xy", sparse = true, copy = true };
+            var tup = np.meshgrid(x, y, kw);
+            tup.Item1.shape.Should().Equal(new long[] { 1, 3 });
+            tup.Item2.shape.Should().Equal(new long[] { 2, 1 });
+        }
+
+        [TestMethod]
+        public void MeshgridIJ_Complex()
+        {
+            var x = np.array(new Complex[] { C(1, 0), C(2, 0), C(3, 0) });
+            var y = np.array(new Complex[] { C(0, 1), C(0, 2) });
+            var kw = new Kwargs { indexing = "ij", sparse = false, copy = true };
+            var tup = np.meshgrid(x, y, kw);
+            // ij indexing: item1 shape (len(x), len(y)) = (3,2), item2 shape (3,2) too.
+            tup.Item1.shape.Should().Equal(new long[] { 3, 2 });
+            tup.Item2.shape.Should().Equal(new long[] { 3, 2 });
+        }
+
+        [TestMethod]
+        public void ZerosLike_FromView_Half()
+        {
+            var baseArr = np.arange(0.0, 12.0, 1.0, NPTypeCode.Half).reshape(3, 4);
+            var view = baseArr["0:2, 1:3"];
+            var a = np.zeros_like(view);
+            a.typecode.Should().Be(NPTypeCode.Half);
+            a.shape.Should().Equal(new long[] { 2, 2 });
+            for (int i = 0; i < 4; i++)
+                ((double)a.GetAtIndex<Half>(i)).Should().Be(0.0);
+        }
+
+        [TestMethod]
+        public void OnesLike_FromStridedView_SByte()
+        {
+            var baseArr = np.arange(0.0, 12.0, 1.0, NPTypeCode.SByte).reshape(3, 4);
+            var view = baseArr["::2"];  // rows 0 and 2 -> shape (2,4)
+            var a = np.ones_like(view);
+            a.typecode.Should().Be(NPTypeCode.SByte);
+            a.shape.Should().Equal(new long[] { 2, 4 });
+            for (int i = 0; i < 8; i++)
+                a.GetAtIndex<sbyte>(i).Should().Be((sbyte)1);
+        }
+
+        [TestMethod]
+        public void ArangeLargeN_SByte_100Elements()
+        {
+            // NumPy wraps: arange(0,100,1,int8) → [0..99], no overflow since values fit in int8 up to 127
+            var a = np.arange(0.0, 100.0, 1.0, NPTypeCode.SByte);
+            a.size.Should().Be(100);
+            for (int i = 0; i < 100; i++)
+                a.GetAtIndex<sbyte>(i).Should().Be((sbyte)i);
+        }
+
+        [TestMethod]
+        public void Zeros_AllZeroDimensions_ReturnsEmpty_Half()
+        {
+            var a = np.zeros(new Shape(0, 0, 0), typeof(Half));
+            a.size.Should().Be(0);
+            a.shape.Should().Equal(new long[] { 0, 0, 0 });
+        }
+
+        [TestMethod]
+        public void Ones_ScalarShape_Complex()
+        {
+            var a = np.ones(Shape.NewScalar(), typeof(Complex));
+            a.size.Should().Be(1);
+            a.shape.Length.Should().Be(0);
+            a.GetAtIndex<Complex>(0).Should().Be(C(1, 0));
+        }
+
+        [TestMethod]
+        public void Frombuffer_Count0_Half_ReturnsEmpty()
+        {
+            var half = new Half[] { (Half)1, (Half)2 };
+            var a = np.frombuffer(ToBytes(half), typeof(Half), count: 0);
+            a.size.Should().Be(0);
+            a.typecode.Should().Be(NPTypeCode.Half);
+        }
+
+        #endregion
+
+        #region Helper
+
+        private static byte[] ToBytes<T>(T[] arr) where T : unmanaged
+        {
+            var bytes = new byte[arr.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<T>()];
+            unsafe
+            {
+                fixed (T* p = arr)
+                fixed (byte* b = bytes)
+                    Buffer.MemoryCopy(p, b, bytes.Length, bytes.Length);
+            }
+            return bytes;
+        }
+
+        #endregion
+
         #region np.array — typed arrays for the 3 dtypes
 
         [TestMethod]

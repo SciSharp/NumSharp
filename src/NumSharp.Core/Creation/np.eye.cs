@@ -30,6 +30,11 @@ namespace NumSharp
         public static NDArray eye(int N, int? M = null, int k = 0, Type dtype = null)
         {
             int cols = M ?? N;
+            if (N < 0)
+                throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
+            if (cols < 0)
+                throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
+
             var resolvedType = dtype ?? typeof(double);
             var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
             if (N == 0 || cols == 0)

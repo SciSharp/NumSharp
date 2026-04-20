@@ -698,21 +698,28 @@ namespace NumSharp
 
             string typeStr = dtype.Substring(startIndex);
 
-            // Parse type character and size
+            // Parse type character and size. NumPy reference:
+            //   https://numpy.org/doc/stable/reference/arrays.dtypes.html#arrays-dtypes-constructing
             NPTypeCode typeCode = typeStr switch
             {
-                "b1" or "?" => NPTypeCode.Boolean,
-                "u1" or "B" => NPTypeCode.Byte,
-                "i1" or "b" => NPTypeCode.Byte, // signed byte maps to byte
-                "i2" or "h" => NPTypeCode.Int16,
-                "u2" or "H" => NPTypeCode.UInt16,
+                "b1" or "?"        => NPTypeCode.Boolean,
+                "u1" or "B"        => NPTypeCode.Byte,
+                "i1" or "b"        => NPTypeCode.SByte,   // signed 8-bit integer (int8)
+                "i2" or "h"        => NPTypeCode.Int16,
+                "u2" or "H"        => NPTypeCode.UInt16,
                 "i4" or "i" or "l" => NPTypeCode.Int32,
                 "u4" or "I" or "L" => NPTypeCode.UInt32,
-                "i8" or "q" => NPTypeCode.Int64,
-                "u8" or "Q" => NPTypeCode.UInt64,
-                "f4" or "f" => NPTypeCode.Single,
-                "f8" or "d" => NPTypeCode.Double,
-                "c" or "S1" => NPTypeCode.Char,
+                "i8" or "q"        => NPTypeCode.Int64,
+                "u8" or "Q"        => NPTypeCode.UInt64,
+                "f2" or "e"        => NPTypeCode.Half,    // half-precision float (float16)
+                "f4" or "f"        => NPTypeCode.Single,
+                "f8" or "d"        => NPTypeCode.Double,
+                // NumSharp only ships complex128. 'c8'/'F' (single-precision complex) map to
+                // complex128 rather than throwing so the round-trip still works on the common
+                // path; the storage widens but values are exact.
+                "c8"  or "F"       => NPTypeCode.Complex,
+                "c16" or "D"       => NPTypeCode.Complex, // complex128
+                "c"   or "S1"      => NPTypeCode.Char,
                 _ => throw new NotSupportedException($"dtype string '{dtype}' is not supported")
             };
 
@@ -725,6 +732,7 @@ namespace NumSharp
             {
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
+                case NPTypeCode.Half: // float16 is 2 bytes, same swap as Int16/UInt16
                 {
                     var ptr = (ushort*)nd.Unsafe.Address;
                     for (long i = 0; i < count; i++)
@@ -749,6 +757,15 @@ namespace NumSharp
                         ptr[i] = BinaryPrimitives_ReverseEndianness(ptr[i]);
                     break;
                 }
+                case NPTypeCode.Complex: // complex128 = two 8-byte doubles; swap each half independently
+                {
+                    var ptr = (ulong*)nd.Unsafe.Address;
+                    long words = count * 2;
+                    for (long i = 0; i < words; i++)
+                        ptr[i] = BinaryPrimitives_ReverseEndianness(ptr[i]);
+                    break;
+                }
+                // SByte, Byte, Boolean, Char: single byte, no swap needed.
             }
         }
 
