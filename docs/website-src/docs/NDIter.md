@@ -18,6 +18,10 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 - [Buffering](#buffering)
 - [Buffered Reduction: The Double Loop](#buffered-reduction-the-double-loop)
 - [Kernel Integration Layer](#kernel-integration-layer)
+  - [Quick reference](#quick-reference)
+  - [Decision tree](#decision-tree)
+  - [Measured behavior](#measured-behavior)
+  - [Cache state — two lifetimes to know about](#cache-state--two-lifetimes-to-know-about)
   - [Layer 1 — Canonical Inner-Loop API](#layer-1--canonical-inner-loop-api)
   - [Layer 2 — Struct-Generic Dispatch](#layer-2--struct-generic-dispatch)
   - [Layer 3 — Typed ufunc Dispatch](#layer-3--typed-ufunc-dispatch)
@@ -425,32 +429,118 @@ if (iter.IsFirstVisit(reduceOp)) *(double*)ptrs[reduceOp] = 0.0;
 
 Everything up to this point describes `NpyIter`'s scheduling machinery. What `NpyIter.Execution.cs` adds is the connection between that schedule and the SIMD kernels `ILKernelGenerator` emits.
 
-The layer is a partial declaration of `NpyIterRef` that exposes three layers of progressively higher abstraction. Pick the one that matches your use case.
+The layer is a partial declaration of `NpyIterRef` that exposes **seven entry points** arranged along an ergonomics-vs-control axis. Pick the one that matches your use case; they all share the same compiled-kernel cache and all run through the same `ForEach` driver at the bottom.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Layer 3: ExecuteBinary / Unary / Reduction / Comparison / Scan      │ ← 90% case
-│           "I want to add two arrays, please pick the best kernel"     │
-└──────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  Layer 2: ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum> │ ← custom kernel,
-│           struct-generic, JIT-inlined zero-alloc                      │   perf-critical
-└──────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  Layer 1: ForEach(NpyInnerLoopFunc kernel, void* aux)                │ ← raw power users,
-│           delegate-based, closest to NumPy's C API                    │   experimentation
-└──────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
+           ergonomics                                                     control
+              ▲                                                              ▲
+              │                                                              │
+  Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
+              │  "one call, NumPy-style — one line per op"                   │
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier C      │  ExecuteExpression(NpyExpr)                                  │  compose
+              │  "build a tree with operators; no IL in caller"              │  with DSL
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier C+Call │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
+              │  "invoke arbitrary managed method per element"               │  BCL / user op
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier B      │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
+              │  "write per-element IL; factory wraps the unroll shell"      │  the vector body
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier A      │  ExecuteRawIL(emit, key, aux)                                │  emit
+              │  "emit the whole inner-loop body including ret"              │  everything
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
+              │  "zero-alloc; JIT specializes per struct; early-exit reduce" │  generic
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Layer 1     │  ForEach(NpyInnerLoopFunc kernel, void* aux)                 │  delegate,
+              │  "closest to NumPy's C API; closures welcome"                │  anything goes
+              │                                                              │
+              ▼                                                              ▼
            NpyIter state (Shape, Strides, DataPtrs, Buffers, ...)
                                   │
                                   ▼
               ILKernelGenerator (DynamicMethod + V128/V256/V512)
 ```
+
+### Quick reference
+
+| # | Entry point | When to reach for it | Per-call cost |
+|---|-------------|----------------------|---------------|
+| 1 | `ExecuteBinary` / `Unary` / `Reduction` / `Comparison` / `Scan` | The op is a standard NumPy ufunc. 90% of cases. | Cache hit after first call |
+| 2 | `ExecuteExpression(NpyExpr)` | Compose a fused ufunc from DSL nodes (`Add`, `Sqrt`, `Where`, `Exp`, comparisons, `Min`/`Max`/`Clamp`, …). SIMD when dtypes align. | Cache hit after first compile |
+| 3 | `ExecuteExpression(NpyExpr.Call(...))` | DSL doesn't expose the op you want (`Math.BitIncrement`, custom activation, reflected plugin method). | +5-10 ns / element for non-static delegates |
+| 4 | `ExecuteElementWiseBinary` / `Unary` / `Ternary` / `ExecuteElementWise` (array form) | You want SIMD + 4× unroll for a fused or non-standard op; the DSL doesn't compose to it, but the loop shape is still element-wise. Hand-write the scalar + vector body. | Cache hit after first compile |
+| 5 | `ExecuteRawIL(emit, key, aux)` | Non-rectangular loop: gather/scatter, cross-element deps, branch-on-auxdata. You emit every opcode. | Cache hit after first compile |
+| 6 | `ExecuteGeneric<TKernel>` / `ExecuteReducing<TKernel, TAccum>` | Custom kernel in struct form. Zero allocation; JIT specializes. **Only** path with early-exit reductions. | No delegate indirection |
+| 7 | `ForEach(NpyInnerLoopFunc)` | Exploratory; one-off fused kernels; anything a closure makes natural. | Delegate allocation per call |
+
+### Decision tree
+
+```
+Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
+  yes → Layer 3 (baked). Fastest, zero work. Done.
+  no ↓
+
+Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, …)?
+  yes → Tier C. Fused, SIMD-or-scalar automatic, no IL.
+  no ↓
+
+Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
+  yes → Tier C + Call. Scalar-only but fused. Done.
+  no ↓
+
+Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, Gather, …)?
+  yes → Tier B. Hand-write the vector body; factory wraps the shell.
+  no ↓
+
+Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
+  yes → Tier A. Emit the whole inner-loop IL yourself.
+  no ↓
+
+Do I need an early-exit reduction (Any / All / find-first)?
+  yes → Layer 2 ExecuteReducing. Returns false from the kernel to bail out.
+  no ↓
+
+Just exploring or writing a one-off?
+       → Layer 1 ForEach. Delegate per call; flexible.
+```
+
+### Measured behavior
+
+Benchmarked on 1M-element arrays, post-warmup, via the showcase script in this doc's `/demos/` sibling (not checked in — recreate with the snippet in each tier's section below):
+
+| Technique | Operation | Time / run | Notes |
+|-----------|-----------|-----------:|-------|
+| Layer 3 | `a + b` (f32) | 0.58 ms | baked, 4×-unrolled V256, cache hit |
+| Tier B | `2a + 3b` hand V256 (f32) | 0.61 ms | within ~7% of baked — same shell |
+| Layer 2 reduction | `AnyNonZero` early-exit (hit @ 500) | 0.001 ms | returns `false` from kernel, bridge bails |
+| Tier A | `abs(a - b)` raw IL (i32) | 1.27 ms | scalar loop, JIT autovectorizes post tier-1 |
+| Call | `GELU` via captured lambda (f64) | 8.08 ms | `Math.Tanh` dominates |
+| Tier C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
+
+Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT caveat: when run from a dynamic host (ephemeral script, `dotnet_run`, first-call cold start) they can look 30-50× slower than production code. Post-tier-1 promotion (~100 hot-loop iterations) brings them within 2-3 ms for hypot on 1M f32. See [JIT Warmup Caveat](#jit-warmup-caveat).
+
+### Cache state — two lifetimes to know about
+
+The full integration layer shares two process-lifetime caches. Inspect them via the internal hooks (need `[InternalsVisibleTo]` or the `AssemblyName=NumSharp.DotNetRunScript` script directive):
+
+```csharp
+int kernels = ILKernelGenerator.InnerLoopCachedCount;   // compiled DynamicMethods
+int slots   = DelegateSlots.RegisteredCount;            // registered delegates + targets
+
+ILKernelGenerator.ClearInnerLoopCache();                // test-only
+DelegateSlots.Clear();                                   // test-only — pair with above!
+```
+
+After running the full showcase (Layer 3 + Tiers A-C + Call across 130 warmup+timed iterations), typical counts are:
+
+```
+ILKernelGenerator.InnerLoopCachedCount = 4     ← one per unique cache key across all tiers
+DelegateSlots.RegisteredCount          = 131   ← one per Call(lambda) construction
+```
+
+The `131` is the documented gotcha from the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NpyExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. Users expecting steady-state slot growth should register delegates once at startup (`static readonly Func<…>`), see the [registration-once pattern](#memory-model-and-lifetime).
 
 ### Layer 1 — Canonical Inner-Loop API
 
