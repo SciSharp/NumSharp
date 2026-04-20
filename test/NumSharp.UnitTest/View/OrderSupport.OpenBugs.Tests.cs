@@ -2775,5 +2775,141 @@ namespace NumSharp.UnitTest.View
             r.Shape.IsFContiguous.Should().BeTrue(
                 "NumPy: sum(F3, axis=0, keepdims=True) preserves F-contig for Decimal too");
         }
+
+        // ============================================================================
+        // Section 50: Edge cases (empty, scalar, size-1 middle dim, high-dim, strided)
+        // NumPy behavior (O(1) flag computation per _UpdateContiguousFlags):
+        //   Any dim==0  -> both flags True
+        //   ndim==0     -> both flags True
+        //   Size-1 mid  -> F-contig if strides match F pattern; not automatically both
+        //   Strided slice (step>1 on any axis) -> neither flag
+        //   Pure column slice of F [:, lo:hi] -> F-contig preserved
+        //   Pure row slice of F [lo:hi, :]    -> neither (not F-pattern anymore)
+        // ============================================================================
+
+        [TestMethod]
+        public void Empty_ZeroFirstDim_FOrder_BothContigTrue()
+        {
+            // NumPy: any dim=0 makes both contiguity flags True by convention.
+            var e = np.empty(new Shape(0L, 3L), order: 'F', dtype: typeof(double));
+            e.Shape.IsContiguous.Should().BeTrue("empty arrays are both C- and F-contig");
+            e.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Empty_ZeroSecondDim_FOrder_BothContigTrue()
+        {
+            var e = np.empty(new Shape(3L, 0L), order: 'F', dtype: typeof(double));
+            e.Shape.IsContiguous.Should().BeTrue();
+            e.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Scalar_ZeroDim_BothContigTrue()
+        {
+            // NumPy: a 0-D array is both C- and F-contig trivially.
+            var s = np.array(5.0);
+            s.ndim.Should().Be(0);
+            s.Shape.IsContiguous.Should().BeTrue();
+            s.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void FContig_SizeOneMiddleDim_IsFOnly()
+        {
+            // NumPy: F(3,1,4) has strides (8, 24, 24) — F-contig but NOT C-contig.
+            var f = np.empty(new Shape(3L, 1L, 4L), order: 'F', dtype: typeof(double));
+            f.Shape.IsFContiguous.Should().BeTrue();
+            f.Shape.IsContiguous.Should().BeFalse(
+                "NumPy: size-1 middle dim in F-contig is NOT automatically C-contig");
+        }
+
+        [TestMethod]
+        public void FContig_SizeOneLeadingDim_IsFOnly()
+        {
+            // NumPy: F(1,3,4) stays strictly F-contig (not both-contig).
+            var f = np.empty(new Shape(1L, 3L, 4L), order: 'F', dtype: typeof(double));
+            f.Shape.IsFContiguous.Should().BeTrue();
+            f.Shape.IsContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void FContig_SizeOneTrailingDim_IsFOnly()
+        {
+            // NumPy: F(3,4,1) stays strictly F-contig.
+            var f = np.empty(new Shape(3L, 4L, 1L), order: 'F', dtype: typeof(double));
+            f.Shape.IsFContiguous.Should().BeTrue();
+            f.Shape.IsContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void FContigVsCContig_213Shape_Distinct()
+        {
+            // NumPy: C(2,1,3) and F(2,1,3) have different strides (24,24,8 vs 8,16,16)
+            // and different flags.
+            var c = np.empty(new Shape(2L, 1L, 3L), order: 'C', dtype: typeof(double));
+            var f = np.empty(new Shape(2L, 1L, 3L), order: 'F', dtype: typeof(double));
+            c.Shape.IsContiguous.Should().BeTrue();
+            c.Shape.IsFContiguous.Should().BeFalse();
+            f.Shape.IsFContiguous.Should().BeTrue();
+            f.Shape.IsContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void HighDim_6D_FContig_Detected()
+        {
+            // NumPy: F(2,3,2,3,2,3) is detected as F-contig.
+            var f = np.empty(new Shape(2L, 3L, 2L, 3L, 2L, 3L), order: 'F', dtype: typeof(double));
+            f.Shape.IsFContiguous.Should().BeTrue("6-D F-contig flag must be computed correctly");
+        }
+
+        [TestMethod]
+        [OpenBugs] // Same axis-reduction F-preservation gap as Section 41 — shows up
+                   // on 6-D too, meaning the limit isn't ndim-specific; any axis
+                   // reduction loses F-contig layout.
+        public void HighDim_6D_FContig_Sum_Axis0_KeepDims_PreservesFContig()
+        {
+            var f = np.empty(new Shape(2L, 3L, 2L, 3L, 2L, 3L), order: 'F', dtype: typeof(double));
+            var r = np.sum(f, axis: 0, keepdims: true);
+            r.shape.Should().Equal(new long[] { 1, 3, 2, 3, 2, 3 });
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: 6-D F-contig sum with keepdims preserves F-contig layout");
+        }
+
+        [TestMethod]
+        public void FSlice_ColumnSlice_PreservesFContig()
+        {
+            // NumPy: F(4,3)[:, 1:3] yields F-contig (4,2) — columns stay F-strided.
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var s = f[":, 1:3"];
+            s.shape.Should().Equal(new long[] { 4, 2 });
+            s.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: column-range slice of F-contig preserves F-contig");
+        }
+
+        [TestMethod]
+        public void FSlice_RowSlice_IsNeitherContig()
+        {
+            // NumPy: F(4,3)[1:3, :] yields (2,3) — rows aren't F-contig anymore
+            // because the row-stride is still the original small stride but leading dim
+            // shrank; overall strides no longer match F pattern.
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var s = f["1:3, :"];
+            s.shape.Should().Equal(new long[] { 2, 3 });
+            s.Shape.IsContiguous.Should().BeFalse();
+            s.Shape.IsFContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void FSlice_StridedRowSlice_IsNeitherContig()
+        {
+            // NumPy: F(4,3)[::2, :] yields (2,3) with step=2 on the F-leading dim —
+            // breaks the F-stride pattern.
+            var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var s = f["::2, :"];
+            s.shape.Should().Equal(new long[] { 2, 3 });
+            s.Shape.IsContiguous.Should().BeFalse();
+            s.Shape.IsFContiguous.Should().BeFalse();
+        }
     }
 }
