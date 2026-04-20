@@ -1202,8 +1202,9 @@ namespace NumSharp.UnitTest.Casting
         {
             var arr = np.array(new[] { (Half)3.5f });
             var r = np.mean(arr);
-            // NumSharp returns Double dtype; key check: no throw + correct value.
-            r.GetAtIndex<double>(0).Should().BeApproximately(3.5, 0.01);
+            // B2/B16 (Round 14): mean preserves Half dtype to match NumPy.
+            r.typecode.Should().Be(NPTypeCode.Half);
+            ((double)r.GetAtIndex<Half>(0)).Should().BeApproximately(3.5, 0.01);
         }
 
         #endregion
@@ -1262,22 +1263,27 @@ namespace NumSharp.UnitTest.Casting
         // remove [Misaligned] + flip the assertion if axis cumsum gains Half support.
         // NumPy: cumsum(half2D, axis=0) = [[1,2,3],[5,7,9]] (float16). NumSharp: throws.
 
+        // B6 (Round 14): Half cumsum axis now works via iterator fallback.
         [TestMethod]
-        [Misaligned]
         public void CumSum_HalfMatrix_Axis0_NotSupported()
         {
             var arr = np.array(new Half[,] { { (Half)1, (Half)2, (Half)3 }, { (Half)4, (Half)5, (Half)6 } });
-            var act = () => np.cumsum(arr, axis: 0);
-            act.Should().Throw<NotSupportedException>().WithMessage("*AxisCumSum*Half*");
+            var r = np.cumsum(arr, axis: 0);
+            r.typecode.Should().Be(NPTypeCode.Half);
+            r.shape.Should().Equal(new long[] { 2, 3 });
+            ((double)r.GetAtIndex<Half>(3)).Should().Be(5.0); // 1+4
+            ((double)r.GetAtIndex<Half>(5)).Should().Be(9.0); // 3+6
         }
 
         [TestMethod]
-        [Misaligned]
         public void CumSum_HalfMatrix_Axis1_NotSupported()
         {
             var arr = np.array(new Half[,] { { (Half)1, (Half)2, (Half)3 }, { (Half)4, (Half)5, (Half)6 } });
-            var act = () => np.cumsum(arr, axis: 1);
-            act.Should().Throw<NotSupportedException>().WithMessage("*AxisCumSum*Half*");
+            var r = np.cumsum(arr, axis: 1);
+            r.typecode.Should().Be(NPTypeCode.Half);
+            r.shape.Should().Equal(new long[] { 2, 3 });
+            ((double)r.GetAtIndex<Half>(2)).Should().Be(6.0);  // 1+2+3
+            ((double)r.GetAtIndex<Half>(5)).Should().Be(15.0); // 4+5+6
         }
 
         // Regression: classic CumSum/CumProd still works
@@ -1396,14 +1402,13 @@ namespace NumSharp.UnitTest.Casting
         // when np.mean preserves Half dtype.
 
         [TestMethod]
-        [Misaligned]
         public void Mean_ScalarHalfArray_DtypeMismatch()
         {
+            // B2/B16 (Round 14): mean preserves Half dtype to match NumPy.
             var arr = np.array(new[] { (Half)3.5f });
             var r = np.mean(arr);
-            // NumPy: float16. NumSharp: Double.
-            r.typecode.Should().Be(NPTypeCode.Double, "Misaligned: NumPy returns Half (float16)");
-            r.GetAtIndex<double>(0).Should().BeApproximately(3.5, 0.01);
+            r.typecode.Should().Be(NPTypeCode.Half);
+            ((double)r.GetAtIndex<Half>(0)).Should().BeApproximately(3.5, 0.01);
         }
 
         // np.left_shift(arr, NDArray.Scalar((Half)2)) was the original test form before the

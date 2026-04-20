@@ -137,7 +137,13 @@ namespace NumSharp.Backends
             // IL-generated axis reduction fast path - handles all numeric types
             if (ILKernelGenerator.Enabled)
             {
-                var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
+                // B16: var axis preserves float input dtype (half → half). Complex → Double (variance
+                // is a non-negative real number). Integer → Double.
+                var axisOutType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
+                var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, axisOutType, ddof ?? 0);
                 if (ilResult is not null)
                     return ilResult;
             }

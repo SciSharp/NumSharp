@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -12,6 +13,10 @@ namespace NumSharp.Backends
         {
             var arr = a;
             var shape = arr.Shape;
+
+            // B15: Complex nansum — treat any entry with NaN in real OR imag as zero.
+            if (arr.GetTypeCode == NPTypeCode.Complex)
+                return NanSumComplex(arr, axis, keepdims);
 
             // Non-float types: fall back to regular sum (no NaN possible)
             if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double && arr.GetTypeCode != NPTypeCode.Half)
@@ -658,6 +663,63 @@ namespace NumSharp.Backends
                 default:
                     return 0.0;
             }
+        }
+
+        /// <summary>
+        /// B15: NumPy-parity Complex nansum. Treats any element with NaN in real OR imag
+        /// as zero (skipped). Sum type is Complex.
+        /// </summary>
+        private NDArray NanSumComplex(NDArray arr, int? axis, bool keepdims)
+        {
+            var shape = arr.Shape;
+            if (shape.IsEmpty) return arr;
+
+            if (axis == null)
+            {
+                var sum = System.Numerics.Complex.Zero;
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                while (iter.HasNext())
+                {
+                    var v = iter.MoveNext();
+                    if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) continue;
+                    sum += v;
+                }
+                var r = NDArray.Scalar(sum);
+                if (keepdims)
+                {
+                    var ks = new long[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
+                    r.Storage.Reshape(new Shape(ks));
+                }
+                return r;
+            }
+
+            // Axis reduction via iterator: iterate per slice and sum with NaN-skip.
+            var ax = axis.Value;
+            while (ax < 0) ax = arr.ndim + ax;
+            Shape axisedShape = Shape.GetAxis(shape, ax);
+            var ret = new NDArray(NPTypeCode.Complex, axisedShape, false);
+            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, ax);
+            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
+            var iterIndex = iterRet.Index;
+            var slices = iterAxis.Slices;
+
+            do
+            {
+                var slice = arr[slices];
+                var sum = System.Numerics.Complex.Zero;
+                var it = slice.AsIterator<System.Numerics.Complex>();
+                while (it.HasNext())
+                {
+                    var v = it.MoveNext();
+                    if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) continue;
+                    sum += v;
+                }
+                ret.SetAtIndex(sum, iterIndex[0]);
+            } while (iterAxis.Next() != null && iterRet.Next() != null);
+
+            if (keepdims) ret.Storage.ExpandDimension(ax);
+            return ret;
         }
     }
 }

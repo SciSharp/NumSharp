@@ -1552,3 +1552,166 @@ Round 12's 6844). OpenBugs count unchanged.
 **B1, B2, B4, B5, B6, B7, B8, B9, B12, B13, B15, B16** — 12 open, 24 closed
 so far. B3/B38 now closed. Next target: Math — Reductions, which is expected
 to surface B1, B2, B4, B5, B6, B16.
+
+---
+
+## Round 14 — Reductions Sweep (2026-04-20)
+
+Systematic battletest of every reduction (sum/prod/cumsum/cumprod/min/max/
+amax/amin/argmax/argmin/mean/std/var/all/any/count_nonzero + nan-variants)
+for Half / Complex / SByte vs NumPy 2.4.2.
+
+**80-case probe matrix** surfaced ten of the twelve remaining open bugs.
+Pre-fix parity: **72.5% (58/80)**. Post-fix parity: **100% (80/80)**.
+
+### B1 — Half min/max elementwise returned ±∞ ✅ CLOSED (Round 14)
+
+**Root cause:** The IL-generated reduction kernel uses `OpCodes.Bgt` / `Blt`
+for pairwise min/max combine. These opcodes operate on primitive numeric
+values but `Half` is a struct that the CLR cannot directly compare via those
+IL instructions, leaving the accumulator at its identity value (±∞) instead
+of tracking the real min/max.
+
+**Fix (`Default.ReductionOp.cs`):** Replaced the `ExecuteElementReduction<Half>`
+path for `Min`/`Max` with C# fallbacks (`MinElementwiseHalfFallback`,
+`MaxElementwiseHalfFallback`) that iterate in `double` space with NaN
+propagation per NumPy rule (any NaN → NaN).
+
+### B2 — Complex mean axis returned Double ✅ CLOSED (Round 14)
+
+**Root cause:** `ReduceMean` used `typeCode ?? NPTypeCode.Double` unconditionally
+for axis reductions. For Complex input the axis-reduction IL kernel accumulates
+only the real component via the Double kernel path, silently dropping imag.
+
+**Fix (`Default.Reduction.Mean.cs`):** Added a dedicated Complex-axis path
+(`MeanAxisComplex`) that iterates slice-by-slice with a `Complex` accumulator
+and divides by slice length, preserving full complex mean. For Half the kernel
+computes in Double then casts back (preserves dtype without memory-corrupting
+the Single/Double SIMD output buffer).
+
+### B4 — np.prod(Half|Complex) threw NotSupportedException ✅ CLOSED (Round 14)
+
+**Root cause:** `prod_elementwise_il` switch had no branches for `NPTypeCode.Half`,
+`Complex`, or `SByte` and fell through to `throw new NotSupportedException`.
+
+**Fix (`Default.ReductionOp.cs`):** Added `SByte` to the IL path and
+`ProdElementwiseHalfFallback` / `ProdElementwiseComplexFallback` using
+iterator-based product (double accumulator for Half, Complex accumulator
+for Complex).
+
+### B5 — SByte axis reduction threw NotSupportedException ✅ CLOSED (Round 14)
+
+**Root cause:** `GetIdentityValue<T>` and `CombineScalars<T>` in
+`ILKernelGenerator.Reduction.Axis.Simd.cs` had branches for all integer types
+except SByte.
+
+**Fix:** Added `typeof(T) == typeof(sbyte)` blocks with identity values
+(Sum=0, Prod=1, Min=sbyte.MaxValue, Max=sbyte.MinValue) and scalar combiner
+(pair sum/prod/min/max with wrapping).
+
+### B6 — Half/Complex cumsum axis threw at kernel execution ✅ CLOSED (Round 14)
+
+**Root cause:** The axis cumsum kernel's internal helpers
+(`AxisCumSumGeneral`/`SameType`) have no Half/Complex branch and throw
+`NotSupportedException` mid-execution. The factory-level try-catch in
+`TryGetCumulativeAxisKernel` doesn't help because the exception is thrown
+when the kernel delegate is invoked, not when it's built.
+
+**Fix (`Default.Reduction.CumAdd.cs`):** Skip the IL fast path for Half /
+Complex inputs and route directly to `ExecuteAxisCumSumFallback`. Added a
+Complex-specific branch in the fallback that uses `System.Numerics.Complex`
+accumulator (the default fallback uses `AsIterator<double>` which drops imag).
+
+### B7 — argmax/argmin axis threw NotSupportedException ✅ CLOSED (Round 14)
+
+**Root cause:** `CreateAxisArgReductionKernel` has no Half/Complex/SByte
+branches — the factory throws `NotSupportedException` for these types. Plus
+the Half elementwise argmax also hit the Bgt/Blt bug (same as B1).
+
+**Fix:**
+- `Default.Reduction.ArgMax.cs`: Check for Half/Complex/SByte before calling
+  `TryGetAxisReductionKernel` and dispatch to `ArgReductionAxisFallback`,
+  which iterates per slice and calls `argmax_elementwise_il`.
+- `Default.ReductionOp.cs`: Replace Half/Complex elementwise argmax/argmin
+  with C# fallbacks (`ArgMaxHalfFallback`, `ArgMinHalfFallback`,
+  `ArgMaxComplexFallback`, `ArgMinComplexFallback`) that use lex compare
+  and proper NaN propagation.
+
+### B8 — Complex min/max elementwise threw NotSupportedException ✅ CLOSED (Round 14)
+
+**Root cause:** `min_elementwise_il` / `max_elementwise_il` had no Complex branch.
+
+**Fix (`Default.ReductionOp.cs`):** Added `MinElementwiseComplexFallback` /
+`MaxElementwiseComplexFallback` using NumPy-parity lexicographic comparison
+(real first, imag as tie-break). NaN in either component propagates a
+(NaN, NaN) result.
+
+### B12 — Complex argmax tiebreak wrong ✅ CLOSED (Round 14)
+
+**Root cause:** The IL kernel for complex argmax used a non-lex comparator
+(probably magnitude-based), returning wrong indices when multiple elements
+had close magnitudes.
+
+**Fix:** Replaced Complex path in `argmax_elementwise_il` /
+`argmin_elementwise_il` with C# helpers (`ArgMaxComplexFallback`,
+`ArgMinComplexFallback`) using proper lex compare.
+
+### B15 — Complex nansum propagated NaN instead of skipping ✅ CLOSED (Round 14)
+
+**Root cause:** `NanSum` dispatcher had an `if (arr.GetTypeCode != Single &&
+!= Double && != Half) return Sum(...)` short-circuit that fell through to
+regular Sum for Complex (which obviously doesn't skip NaN).
+
+**Fix (`Default.Reduction.Nan.cs`):** Added a `NanSumComplex` dedicated path
+(both elementwise and axis) that iterates with a Complex accumulator,
+skipping entries where Real or Imag is NaN.
+
+### B16 — Half std/var axis returned Double ✅ CLOSED (Round 14)
+
+**Root cause:** Same pattern as B2 — `ReduceVar`/`ReduceStd` always passed
+`typeCode ?? NPTypeCode.Double` to the axis kernel. NumPy preserves Half
+input dtype for `var`/`std` (Complex → Double since variance is non-negative
+real, but Half → Half).
+
+**Fix (`Default.Reduction.Var.cs`, `Default.Reduction.Std.cs`):** Computed
+`axisOutType = typeCode ?? (Complex ? Double : GetComputingType())` instead
+of hardcoded Double. The existing `ExecuteAxisVarReductionIL` already
+computes in Double internally and casts to the requested `outputType` at
+the end.
+
+### Round 14 test coverage
+
+New file: `NewDtypesCoverageSweep_Reductions_Tests.cs` — **34 tests**:
+
+| Bug | Tests | Scope |
+|-----|-------|-------|
+| B1  | 4 | Half min/max/amin/amax + NaN propagation |
+| B2  | 2 | Complex + Half mean axis dtype preservation |
+| B4  | 4 | Half/Complex prod + axis |
+| B5  | 2 | SByte min/max axis |
+| B6  | 2 | Half/Complex cumsum axis |
+| B7  | 3 | Half/Complex/SByte argmax axis |
+| B8  | 4 | Complex min/max lex compare + NaN + tiebreak |
+| B12 | 2 | Complex argmax/argmin lex |
+| B15 | 3 | Complex nansum skip/all-NaN/no-NaN |
+| B16 | 3 | Half std/var axis + Complex var axis returns Double |
+| Smoke | 5 | Sum Half/Complex, Any/All Complex, CountNonzero, Argmax SByte |
+
+Also updated four pre-existing `[Misaligned]` tests in `ConvertsBattleTests.cs`
+that previously documented the wrong behavior: `Mean_ScalarHalfArray_Works`,
+`Mean_ScalarHalfArray_DtypeMismatch`, `CumSum_HalfMatrix_Axis0_NotSupported`,
+`CumSum_HalfMatrix_Axis1_NotSupported` — now assert the NumPy-correct
+behavior and [Misaligned] attributes removed.
+
+Full suite after Round 14: **6911 / 0 / 11** per framework (up 34 from
+Round 13's 6877).
+
+### Remaining open bugs after Round 14
+
+**B9, B13** — 2 open, 34 closed so far.
+- B9: `np.unique(Complex)` throws.
+- B13: Complex argmax with NaN — may want to verify B12 fix handles NaN.
+
+Nearly all known bugs closed. Round 15 can focus on remaining categories
+(Comparison/Logic, Sort/Search, Unary math, Bitwise, Shape/Broadcast,
+LinAlg, Random, I/O, Indexing).

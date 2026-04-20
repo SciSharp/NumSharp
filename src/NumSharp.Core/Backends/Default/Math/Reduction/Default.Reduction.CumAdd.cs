@@ -62,8 +62,14 @@ namespace NumSharp.Backends
             var ret = new NDArray(retTypeCode, outputShape, false);
 
             // Fast path: use IL-generated axis kernel when available
-            // This avoids the overhead of iterator-based slicing and provides direct pointer access
-            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted)
+            // This avoids the overhead of iterator-based slicing and provides direct pointer access.
+            // B6: Half and Complex aren't handled by the internal AxisCumSumSameType/General helpers
+            // (they throw NotSupportedException at execution time, not creation time, so the kernel
+            // cache returns a non-null delegate that then throws on first call). Skip the fast path
+            // for these types and go straight to the iterator-based fallback.
+            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted
+                && inputArr.GetTypeCode != NPTypeCode.Half
+                && inputArr.GetTypeCode != NPTypeCode.Complex)
             {
                 bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
@@ -92,6 +98,25 @@ namespace NumSharp.Backends
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var slices = iterAxis.Slices;
             var retType = ret.GetTypeCode;
+
+            // B6: Complex cumsum must preserve imaginary part (AsIterator<double> would drop it).
+            if (retType == NPTypeCode.Complex)
+            {
+                do
+                {
+                    var inputSlice = inputArr[slices];
+                    var outputSlice = ret[slices];
+                    var inputIter = inputSlice.AsIterator<System.Numerics.Complex>();
+                    var sum = System.Numerics.Complex.Zero;
+                    long idx = 0;
+                    while (inputIter.HasNext())
+                    {
+                        sum += inputIter.MoveNext();
+                        outputSlice.SetAtIndex(sum, idx++);
+                    }
+                } while (iterAxis.Next() != null);
+                return ret;
+            }
 
             // Use type-specific iteration based on return type
             // This handles type promotion correctly (e.g., int32 input -> int64 output)
