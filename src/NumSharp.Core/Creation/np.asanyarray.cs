@@ -41,8 +41,6 @@ namespace NumSharp
                     ret = str; //implicit cast located in NDArray.Implicit.Array
                     break;
 
-                // Handle typed IEnumerable<T> for all 12 NumSharp-supported types
-                // Optimized: Use CopyTo for ICollection<T> (3-7x faster than ToArray for small collections)
                 case IEnumerable<bool> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<byte> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<short> e: ret = np.array(ToArrayFast(e)); break;
@@ -58,14 +56,13 @@ namespace NumSharp
 
                 default:
                     var type = a.GetType();
-                    // Check if it's a scalar (primitive or decimal)
                     if (type.IsPrimitive || type == typeof(decimal))
                     {
                         ret = NDArray.Scalar(a);
                         break;
                     }
 
-                    // Handle Memory<T> and ReadOnlyMemory<T> - they don't implement IEnumerable<T>
+                    // Memory<T>/ReadOnlyMemory<T> do not implement IEnumerable<T>.
                     if (type.IsGenericType)
                     {
                         var genericDef = type.GetGenericTypeDefinition();
@@ -77,7 +74,6 @@ namespace NumSharp
                         }
                     }
 
-                    // Handle Tuple<> and ValueTuple<> - they implement ITuple
                     if (a is ITuple tuple)
                     {
                         ret = ConvertTuple(tuple);
@@ -85,7 +81,6 @@ namespace NumSharp
                             break;
                     }
 
-                    // Fallback: non-generic IEnumerable (element type detected from first item)
                     if (a is IEnumerable enumerable)
                     {
                         ret = ConvertNonGenericEnumerable(enumerable);
@@ -93,7 +88,6 @@ namespace NumSharp
                             break;
                     }
 
-                    // Fallback: non-generic IEnumerator
                     if (a is IEnumerator enumerator)
                     {
                         ret = ConvertEnumerator(enumerator);
@@ -111,34 +105,28 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Optimized ToArray for IEnumerable&lt;T&gt;.
-        ///     Uses CopyTo for ICollection&lt;T&gt; (3-7x faster for small collections).
-        ///     For List&lt;T&gt;, uses CollectionsMarshal.AsSpan for direct memory access.
-        ///     Uses GC.AllocateUninitializedArray to skip zeroing (4x faster allocation).
+        ///     Copies an <see cref="IEnumerable{T}"/> into a freshly allocated <typeparamref name="T"/>[].
+        ///     Specialised for List&lt;T&gt; and ICollection&lt;T&gt; to skip the enumerator and to
+        ///     use <see cref="GC.AllocateUninitializedArray{T}(int, bool)"/> since we overwrite every slot.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T[] ToArrayFast<T>(IEnumerable<T> source)
         {
-            // Fast path for List<T> - use CollectionsMarshal for direct span access
             if (source is List<T> list)
             {
                 var span = CollectionsMarshal.AsSpan(list);
-                // Use uninitialized array - we're about to overwrite all elements
                 var arr = GC.AllocateUninitializedArray<T>(span.Length);
                 span.CopyTo(arr);
                 return arr;
             }
 
-            // Fast path for ICollection<T> - use CopyTo (avoids enumerator overhead)
             if (source is ICollection<T> collection)
             {
-                // Use uninitialized array - CopyTo will overwrite all elements
                 var arr = GC.AllocateUninitializedArray<T>(collection.Count);
                 collection.CopyTo(arr, 0);
                 return arr;
             }
 
-            // Fallback to LINQ ToArray for other IEnumerable<T>
             return source.ToArray();
         }
 
@@ -151,7 +139,6 @@ namespace NumSharp
             var elementType = type.GetGenericArguments()[0];
             var isReadOnly = type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>);
 
-            // Use Span.CopyTo + GC.AllocateUninitializedArray instead of ToArray()
             if (elementType == typeof(bool)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<bool>)a).Span : ((Memory<bool>)a).Span));
             if (elementType == typeof(byte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<byte>)a).Span : ((Memory<byte>)a).Span));
             if (elementType == typeof(short)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<short>)a).Span : ((Memory<short>)a).Span));
@@ -189,16 +176,13 @@ namespace NumSharp
         /// <summary>
         ///     Converts a non-generic IEnumerator to an NDArray.
         ///     Element type is detected from items with NumPy-like type promotion.
-        ///     Empty collections return empty double[] to match NumPy's behavior.
+        ///     Empty collections return empty double[] to match NumPy's float64 default.
         /// </summary>
         private static NDArray ConvertEnumerator(IEnumerator enumerator)
         {
-            // Pre-size list if count is known (optimization #4)
-            List<object> items;
-            if (enumerator is ICollection collection)
-                items = new List<object>(collection.Count);
-            else
-                items = new List<object>();
+            List<object> items = enumerator is ICollection collection
+                ? new List<object>(collection.Count)
+                : new List<object>();
 
             while (enumerator.MoveNext())
             {
@@ -207,7 +191,6 @@ namespace NumSharp
                     items.Add(item);
             }
 
-            // Empty collection: return empty double[] (NumPy defaults to float64)
             if (items.Count == 0)
                 return np.array(Array.Empty<double>());
 
@@ -218,34 +201,29 @@ namespace NumSharp
         /// <summary>
         ///     Finds the common numeric type for a list of objects (NumPy-like promotion).
         ///     Uses existing _FindCommonType_Scalar for consistent type promotion.
-        ///     Early exit when highest-priority types (decimal/double) are found.
         /// </summary>
         private static Type FindCommonNumericType(List<object> items)
         {
-            // Use CollectionsMarshal.AsSpan for faster iteration (no bounds checks)
             var span = CollectionsMarshal.AsSpan(items);
 
-            // Early exit optimization: track highest-priority types seen
-            bool hasDecimal = false;
             bool hasDouble = false;
             bool hasFloat = false;
             Type firstType = null;
 
-            // Collect unique type codes for _FindCommonType_Scalar
-            Span<NPTypeCode> typeCodes = stackalloc NPTypeCode[span.Length];
+            // At most 12 unique NPTypeCode values exist; bound the stackalloc accordingly
+            // (otherwise large user lists could blow the stack).
+            Span<NPTypeCode> typeCodes = stackalloc NPTypeCode[12];
             int uniqueCount = 0;
-            uint seenMask = 0; // Bitmask for deduplication (NPTypeCode values are small)
+            uint seenMask = 0;
 
             for (int i = 0; i < span.Length; i++)
             {
                 var t = span[i].GetType();
                 firstType ??= t;
 
-                // Early exit: decimal wins everything
                 if (t == typeof(decimal))
                     return typeof(decimal);
 
-                // Track floating point for early double detection
                 if (t == typeof(double)) hasDouble = true;
                 else if (t == typeof(float)) hasFloat = true;
 
@@ -258,11 +236,9 @@ namespace NumSharp
                 }
             }
 
-            // Early exit: any floating point promotes to double
             if (hasDouble || hasFloat)
                 return typeof(double);
 
-            // Use existing type promotion logic for remaining cases
             if (uniqueCount == 1)
                 return firstType ?? typeof(double);
 
@@ -271,16 +247,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Converts a Tuple or ValueTuple to an NDArray.
-        ///     Uses ITuple interface available in .NET Core 2.0+.
-        ///     Optimized: pre-sized List, early exit for decimal/double.
+        ///     Converts a Tuple or ValueTuple to an NDArray via the ITuple interface.
         /// </summary>
         private static NDArray ConvertTuple(ITuple tuple)
         {
             if (tuple.Length == 0)
                 return np.array(Array.Empty<double>());
 
-            // Pre-sized list (optimization: avoid resize for known count)
             var items = new List<object>(tuple.Length);
 
             for (int i = 0; i < tuple.Length; i++)
@@ -299,17 +272,13 @@ namespace NumSharp
 
         /// <summary>
         ///     Converts a list of objects to an NDArray of the specified element type.
-        ///     Uses CollectionsMarshal.AsSpan for bounds-check-free iteration.
-        ///     Uses pattern matching for fast direct cast when types match, with Convert fallback.
-        ///     This is ~4x faster than always using Convert for homogeneous collections.
+        ///     The pattern <c>is T v ? v : Convert.ToT(item)</c> takes the direct-cast fast path for
+        ///     homogeneous collections while still handling mixed-type promotion via Convert.
         /// </summary>
         private static NDArray ConvertObjectListToNDArray(List<object> items, Type elementType)
         {
-            // Use CollectionsMarshal.AsSpan for faster iteration (no bounds checks)
             var span = CollectionsMarshal.AsSpan(items);
 
-            // Pattern: `is T v ? v : Convert.ToT(item)` gives direct cast speed for homogeneous
-            // collections while still handling mixed types correctly
             if (elementType == typeof(bool))
             {
                 var arr = GC.AllocateUninitializedArray<bool>(span.Length);

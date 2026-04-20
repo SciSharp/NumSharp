@@ -209,6 +209,8 @@ namespace NumSharp
                 case NPTypeCode.Decimal:
                     ILKernelGenerator.WhereExecute(condPtr, (decimal*)x.Address, (decimal*)y.Address, (decimal*)result.Address, count);
                     break;
+                default:
+                    throw new NotSupportedException($"Type {outType} not supported for np.where");
             }
         }
     }
