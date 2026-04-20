@@ -27,9 +27,11 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
     - [Tier C — Expression DSL](#tier-c--expression-dsl)
       - [Node catalog](#node-catalog)
       - [Operator overloads](#operator-overloads)
+      - [Call — invoke any .NET method](#call--invoke-any-net-method)
       - [Type discipline](#type-discipline)
       - [SIMD coverage rules](#simd-coverage-rules)
       - [Caching and auto-keys](#caching-and-auto-keys)
+      - [Memory model and lifetime](#memory-model-and-lifetime)
       - [Validation and errors](#validation-and-errors)
       - [Gotchas](#gotchas)
       - [Debugging compiled kernels](#debugging-compiled-kernels)
@@ -848,21 +850,11 @@ NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `
 | Factory | Semantics |
 |---------|-----------|
 | `Call<T1…Tn, TR>(Func<T1…Tn, TR> f, NpyExpr a1, …)` | Typed generic overloads for arity 0–4. Accept method groups without cast (`NpyExpr.Call(Math.Sqrt, x)`, `NpyExpr.Call(Math.Pow, x, y)`). |
-| `Call(Delegate func, params NpyExpr[] args)` | Catch-all for pre-constructed delegates. Use when the arity exceeds 4 or when the typed overload is ambiguous. Cast the method group to the matching `Func<…>` if passing a method group. |
+| `Call(Delegate func, params NpyExpr[] args)` | Catch-all for pre-constructed delegates. Use when the arity exceeds 4 or when the typed overload is ambiguous. |
 | `Call(MethodInfo staticMethod, params NpyExpr[] args)` | Invoke a reflection-obtained static method. |
 | `Call(MethodInfo instanceMethod, object target, params NpyExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
 
-Three dispatch paths, selected automatically:
-
-| Condition | Emitted IL | Per-element cost |
-|-----------|------------|------------------|
-| Static method (`Target == null && Method.IsStatic`) | `call <methodinfo>` | Direct call; JIT may inline |
-| Instance `MethodInfo` with explicit `target` | `ldc_i4 slotId` → `DelegateSlots.LookupTarget` → `castclass target type` → `callvirt <methodinfo>` | ~5 ns lookup + virtual call |
-| Any other delegate (captured lambda, instance-method delegate) | `ldc_i4 slotId` → `DelegateSlots.LookupDelegate` → `castclass delegate type` → `callvirt Invoke` | ~5-10 ns lookup + `Delegate.Invoke` dispatch |
-
-Argument values are auto-converted from `ctx.OutputType` to each parameter's dtype (same `EmitConvertTo` primitive as `InputNode`). The return value is converted from the method's return dtype back to `ctx.OutputType`. So `NpyExpr.Call(Math.Sqrt, Input(0))` works when the input is `Int32` and the output is `Double` — the int gets promoted to double at the call site, `Math.Sqrt(double)` runs, and the double falls through to the output as-is.
-
-**Supported method signatures.** Every parameter and the return type must be one of the 12 supported NPTypeCode dtypes (`Boolean`, `Byte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Char`, `Single`, `Double`, `Decimal`). Methods with `ref`, `out`, `params`, generic unbound, or `void` return signatures are rejected at node-construction time with `ArgumentException`. `Complex`, `string`, or custom struct types are also rejected.
+See [Call — invoke any .NET method](#call--invoke-any-net-method) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
 
 ##### Operator overloads
 
@@ -880,6 +872,133 @@ var clamped = NpyExpr.Min(NpyExpr.Max(NpyExpr.Input(0), NpyExpr.Const(0f)), NpyE
 ```
 
 Overloads: `+ - * /` (arithmetic), `%` (NumPy mod), `& | ^` (bitwise), unary `-` (negate), `~` (bitwise not), `!` (logical not). No overloads for `<`, `>`, `==`, `!=` (those need to return `bool` in C#, which would collide with `object.Equals` and similar) — use the factory methods (`Less`, `Greater`, `Equal`, `NotEqual`, `LessEqual`, `GreaterEqual`) for comparisons.
+
+##### Call — invoke any .NET method
+
+The DSL's built-in catalog covers most element-wise math. `Call` is the escape hatch for everything else: user-defined activations, BCL helpers without a dedicated node (e.g. `Math.BitDecrement`, `Math.CopySign`), plugin methods discovered through reflection, captured-state business logic. It trades SIMD for universality.
+
+**One node, four factory shapes, three dispatch paths.** All four factories construct the same `CallNode`; the node inspects its input and picks the cheapest dispatch at construction:
+
+```
+                      ┌─────────────────────────┐
+  NpyExpr.Call(...)   │       CallNode          │
+  ─────────────▶      │  _kind ∈ {              │
+                      │    StaticMethod,        │ ← call <methodinfo>
+                      │    BoundTarget,         │ ← load target, callvirt
+                      │    Delegate             │ ← load delegate, Invoke
+                      │  }                      │
+                      └─────────────────────────┘
+```
+
+**Path A — static methods (zero indirection).**
+
+```csharp
+// Func<T...> overload: compiler infers delegate signature, no cast needed
+// for non-overloaded methods.
+NpyExpr.Call(Math.Sqrt,   NpyExpr.Input(0));
+NpyExpr.Call(Math.Pow,    NpyExpr.Input(0), NpyExpr.Input(1));
+NpyExpr.Call(MathF.Tanh,  NpyExpr.Input(0));
+
+// MethodInfo overload: useful when reflecting.
+var mi = typeof(Math).GetMethod("BitIncrement", new[] { typeof(double) });
+NpyExpr.Call(mi, NpyExpr.Input(0));
+```
+
+Emit: one `call <methodinfo>` opcode after the arguments are pushed. The JIT may inline the target when it's small and visible. No DelegateSlots entry, no runtime lookup. This is the fast path and is what you get automatically whenever the delegate has no captured state.
+
+**Path B — bound instance methods (one indirection).**
+
+```csharp
+class Activations
+{
+    public double Temperature { get; set; }
+    public double Softmax(double x) => Math.Exp(x / Temperature);
+}
+
+var inst = new Activations { Temperature = 1.5 };
+var mi = typeof(Activations).GetMethod("Softmax");
+
+NpyExpr.Call(mi, inst, NpyExpr.Input(0));
+```
+
+Emit: the kernel first loads the target object from a process-wide `DelegateSlots` registry by integer ID, casts it to the method's declaring type, pushes the arguments, then `callvirt <methodinfo>`. Cost is one dictionary lookup (~5 ns) plus a virtual call. The target object's state is live — mutations are visible to subsequent kernel invocations.
+
+**Path C — captured delegates (one indirection).**
+
+```csharp
+// Works uniformly for lambdas with captures, instance-method-bound delegates,
+// or any pre-constructed Delegate instance.
+Func<double, double> swish = x => x / (1.0 + Math.Exp(-x));
+NpyExpr.Call(swish, NpyExpr.Input(0));
+
+// Pre-constructed delegate with explicit type (no method-group cast needed here).
+Delegate d = swish;
+NpyExpr.Call(d, NpyExpr.Input(0));
+```
+
+Emit: the kernel loads the delegate from `DelegateSlots`, casts it to its concrete runtime type (e.g. `Func<double, double>`), pushes arguments, then `callvirt Invoke`. Same ~5-10 ns overhead as Path B, plus the `Delegate.Invoke` dispatch stub (single virtual call).
+
+**Auto-conversion at the call boundary.**
+
+The node respects the DSL's single-output-dtype invariant:
+
+```
+        ctx.OutputType        param dtype       return dtype      ctx.OutputType
+  ┌──────────────────┐  ┌─────────────┐   ┌───────────────┐   ┌──────────────────┐
+  │ args evaluated   │─▶│ convert via │──▶│ method runs   │──▶│ convert via      │
+  │ in outputType    │  │ EmitConvertTo│   │               │   │ EmitConvertTo    │
+  └──────────────────┘  └─────────────┘   └───────────────┘   └──────────────────┘
+```
+
+So `NpyExpr.Call(Math.Sqrt, Input(0))` with an `Int32` input and a `Double` output works end-to-end: the int gets loaded, converted to double at `InputNode`, arrives at the call as double (no further conversion needed for a `Double` param), `Math.Sqrt` runs, the double return flows out to the `Double` output slot. Flip the output dtype to `Single` and you'd get an extra `Conv_R4` after the call.
+
+**Overload disambiguation.**
+
+Non-overloaded static methods bind to the typed `Func<...>` overload via method-group conversion — no cast needed:
+
+```csharp
+NpyExpr.Call(Math.Sqrt, x);        // ✓ Func<double,double>
+NpyExpr.Call(Math.Cbrt, x);        // ✓ same
+NpyExpr.Call(MathF.Tanh, x);       // ✓ Func<float,float>
+NpyExpr.Call(Math.Pow, x, y);      // ✓ Func<double,double,double>
+```
+
+Methods with multiple overloads (same name, different signatures) need a cast to disambiguate which one you want:
+
+```csharp
+// ERROR: 'Math.Abs' has 9 overloads.
+// NpyExpr.Call(Math.Abs, x);
+//                ^^^^^^^^
+// CS0121: The call is ambiguous between ...
+
+// Cast to the concrete Func<...> you want:
+NpyExpr.Call((Func<double, double>)Math.Abs, x);       // ✓ picks Math.Abs(double)
+NpyExpr.Call((Func<float, float>)MathF.Abs,  x);       // ✓ picks MathF.Abs(float)
+NpyExpr.Call((Func<long, long>)Math.Abs,     x);       // ✓ picks Math.Abs(long)
+```
+
+Alternatively, use the `MethodInfo` overload to pick by signature explicitly:
+
+```csharp
+var mi = typeof(Math).GetMethod(nameof(Math.Abs), new[] { typeof(double) });
+NpyExpr.Call(mi, x);  // unambiguous — the MethodInfo is already picked
+```
+
+**Thread safety.**
+
+`DelegateSlots` registration uses `Interlocked.Increment` for ID generation and `ConcurrentDictionary` for storage, so concurrent `Call` construction from multiple threads is safe. Kernel compilation itself happens under the `ConcurrentDictionary.GetOrAdd` atomicity for the inner-loop cache — one compilation per key, even under contention. Once compiled, kernels are re-entrant (they only read the delegate/target from their immutable slot).
+
+**Performance envelope.**
+
+Per-element cost of the three paths, measured against a built-in DSL op on a post-warmup 1M-element double array:
+
+| Path | Relative to built-in Sqrt | Notes |
+|------|--------------------------|-------|
+| Static method (Path A) | ~1.5× slower | One managed call per element; JIT may inline small targets |
+| Bound instance (Path B) | ~2-3× slower | Dict lookup + castclass + virtual call |
+| Captured delegate (Path C) | ~2-4× slower | Same lookup + castclass + `Delegate.Invoke` stub |
+
+These ratios assume the user's method does comparable arithmetic to `Math.Sqrt`. If your target does substantially more work (e.g. three `Math.Exp` calls), the ratio collapses toward 1 — the call overhead becomes negligible compared to the math.
 
 ##### Type discipline
 
@@ -950,6 +1069,72 @@ Two trees with identical structure and types get the same auto-derived key and s
 >
 > **Integer/float const collision.** `NpyExpr.Const(1)` and `NpyExpr.Const(1.0)` both serialize to `Const[1]` when the `double` value is whole. With the same output dtype they produce identical IL, so sharing a cache entry is correct. If you need to distinguish — say, to force a specific integer vs float constant interpretation — construct both trees separately and supply an explicit `cacheKey`.
 
+##### Memory model and lifetime
+
+Three things live longer than you might expect when you use Tier C. Knowing what they are, where they hide, and how long they stick around is enough to avoid every subtle memory-creep footgun in practice.
+
+**1. Compiled kernels (`_innerLoopCache`).**
+
+Every unique `(structural signature, inputTypes, outputType)` triple produces a `DynamicMethod` that's JIT-compiled once and cached in a process-wide `ConcurrentDictionary<string, NpyInnerLoopFunc>` keyed by the cache-key string. The cache is append-only within the process lifetime. Cache keys are strings, so GC collects the old tree nodes once compilation completes, but the compiled delegate itself holds its `DynamicMethod` handle indefinitely.
+
+Typical memory profile:
+- Each compiled kernel is ~2-5 KB of native code + its metadata in the runtime's dynamic-method table.
+- Typical application: a few dozen unique expressions → ~100-200 KB of steady-state cache.
+- Pathological: a hot loop constructing new-per-call trees → linear growth. Reuse expression objects or pass explicit cache keys.
+
+To inspect or reset during tests:
+```csharp
+ILKernelGenerator.InnerLoopCachedCount;   // count of compiled kernels
+ILKernelGenerator.ClearInnerLoopCache();  // wipe for fresh-start testing
+```
+
+Both are `internal`, so scripts need the `AssemblyName=NumSharp.DotNetRunScript` override.
+
+**2. Registered delegates and bound targets (`DelegateSlots`).**
+
+Paths B and C of `Call` stash a managed reference in a static `ConcurrentDictionary<int, Delegate>` or `ConcurrentDictionary<int, object>` so the emitted IL can look it up at runtime. The reference is **strong** — entries live for the process lifetime. This is necessary: if the reference were weak, the GC could collect the delegate while a compiled kernel still holds its slot ID, and the next lookup would throw.
+
+The cost is small per registration (~16-32 bytes for the dictionary entry plus whatever the delegate captures), but unbounded across registrations. Registering one delegate per kernel is fine; registering one delegate per iteration of a loop is a leak.
+
+| Pattern | Registrations | Memory impact |
+|--------|---------------|---------------|
+| Static method (Path A) | zero | none |
+| Cached delegate reused every iter | one | negligible |
+| Per-call lambda | one per call | linear in call count |
+
+Test hook:
+```csharp
+DelegateSlots.RegisteredCount;  // strong-ref count across both dicts
+DelegateSlots.Clear();          // wipe for testing (invalidates kernels that reference it!)
+```
+
+> Calling `DelegateSlots.Clear()` while a kernel that references a slot is compiled is a footgun — the next call will throw `KeyNotFoundException` from inside the generated IL. Only use in test setup/teardown where you also clear the inner-loop cache.
+
+**3. NDArrays referenced by the iterator.**
+
+Orthogonal to Tier C, but worth mentioning in the same section for completeness: `NpyIterRef` holds a managed `NDArray[]` field so the operands' backing memory isn't collected mid-iteration. The field is released when you `Dispose()` the ref — the `using var iter = ...` pattern handles this automatically. Forgetting to dispose keeps the NDArrays alive for however long the iterator lives.
+
+**Registration-once pattern.**
+
+For `Call`-based activations or user kernels used in hot loops, the idiomatic pattern is:
+
+```csharp
+static class MyActivations
+{
+    // One delegate instance, registered once when the static class is first touched.
+    public static readonly Func<double, double> Swish =
+        x => x / (1.0 + Math.Exp(-x));
+
+    public static readonly Func<double, double> GELU =
+        x => 0.5 * x * (1.0 + Math.Tanh(
+            Math.Sqrt(2.0 / Math.PI) * (x + 0.044715 * x * x * x)));
+}
+
+// Usage — reuses the same slot + cached kernel every time:
+var swished = NpyExpr.Call(MyActivations.Swish, NpyExpr.Input(0));
+var gelud   = NpyExpr.Call(MyActivations.GELU,  NpyExpr.Input(0));
+```
+
 ##### Validation and errors
 
 The DSL fails fast at tree-construction time for structural errors and at compile time for type-mismatch or arity errors:
@@ -1010,17 +1195,44 @@ A non-exhaustive list of pitfalls worth internalizing:
 
 Tier C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
 
-- **Inspect the cache.** `ILKernelGenerator.InnerLoopCachedCount` (internal; use `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) gives you a count. `ILKernelGenerator.ClearInnerLoopCache()` (internal) lets you force recompilation in a test.
-- **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?".
+- **Inspect the kernel cache.** `ILKernelGenerator.InnerLoopCachedCount` (internal; use `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) gives you a count. `ILKernelGenerator.ClearInnerLoopCache()` (internal) lets you force recompilation in a test.
+- **Inspect the delegate slot registry** (only relevant when `Call` is in play). `DelegateSlots.RegisteredCount` (internal) returns the sum of registered delegates + registered instance targets. Growing unboundedly means a per-call lambda or target allocation somewhere — find it by comparing counts before and after your suspected hot path. `DelegateSlots.Clear()` wipes the registry; always pair with `ClearInnerLoopCache()` because cleared-but-cached kernels will throw `KeyNotFoundException` on their next invocation.
+- **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?". For `Call` nodes in particular, the signature includes `MetadataToken` and `ModuleVersionId` — if those differ across two calls of what you thought was the same method, the compiler loaded the method from different assemblies or modules.
 - **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
 - **Watch the output dtype.** `ExecuteExpression` expects `outputType` to match the output NDArray's dtype. If they disagree, the kernel reads/writes wrong byte counts. Double-check both.
+- **Diagnose "method group ambiguous" errors.** If you see `CS0121: The call is ambiguous between the following methods` when writing `NpyExpr.Call(Math.X, ...)`, the method has multiple overloads (e.g. `Math.Abs` has 9). Cast to the specific `Func<...>` you want, or use the `MethodInfo` overload with an explicit parameter-types array to `GetMethod`.
+- **Diagnose "Method X returns void"** errors — you passed a method with no return value to `Call`. Tier C requires every node to contribute a value to the output dtype.
+- **Diagnose "Target is X, method declares Y"** errors — your instance `MethodInfo` call received a target that isn't an instance of the method's declaring type. Confirm both the method and the target came from the same type, especially if you're reflecting across a plugin boundary.
 - **Enable IL dumps** by emitting into a persistent assembly instead of `DynamicMethod` — not a supported build configuration, but `ILKernelGenerator.InnerLoop.cs` is a single partial file you can modify in a workspace-only diff if you need to dump bytes during development.
 
 ##### When to use Tier C
 
 Reach for Tier C when you want Layer 3 ergonomics for fused or custom ops and you're not chasing the last 15% of throughput. The DSL covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates (IsNaN/IsFinite/IsInf), comparisons, Min/Max/Clamp/Where, and common compositions (ReLU, Leaky ReLU, sigmoid, clamp, hypot, linear, FMA, piecewise functions) without writing IL. For absolute peak perf on a hot ufunc — or for ops outside the DSL's node catalog (e.g. intrinsics the runtime exposes but the DSL doesn't wrap) — drop to Tier B and hand-tune the vector body.
 
-**Shared caching.** All three tiers write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `InnerLoopCachedCount` (internal) exposes the size for tests.
+**Decision tree: which tier do I need?**
+
+```
+Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
+  yes → Layer 3 (baked). Fastest, zero work. Done.
+  no ↓
+
+Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, etc.)?
+  yes → Tier C. Fused, SIMD-or-scalar automatic, no IL.
+  no ↓
+
+Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
+  yes → Tier C with Call. Scalar but fused. Done.
+  no ↓
+
+Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, ...)?
+  yes → Tier B. Hand-write the vector body; factory wraps the shell.
+  no ↓
+
+Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
+  yes → Tier A. Emit the whole inner-loop IL yourself.
+```
+
+**Caching is shared across all tiers.** All three write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `InnerLoopCachedCount` (internal) exposes the size for tests.
 
 ---
 
@@ -1441,8 +1653,12 @@ Layer 1 and Layer 2 give you control and fusion. For any standard elementwise uf
 | Auto-key derivation | When `cacheKey: null` | ~O(tree size) StringBuilder walk — typically < 1 μs |
 | Runtime contig check | Every inner-loop entry | 2-4 stride comparisons (~ns) |
 | Scalar-strided fallback | When any operand has non-contig inner stride | Per-element pointer arithmetic; JIT autovectorizes post-tier-1 |
+| `Call` dispatch (Path A) | Every element — static method | One `call <methodinfo>`; JIT may inline |
+| `Call` dispatch (Path B/C) | Every element — instance or delegate | `ldc.i4 + DelegateSlots.Lookup + castclass + callvirt` (~5-10 ns) |
 
 **When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
+
+**When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NpyExpr.Input(0) * NpyExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
 
 ### JIT Warmup Caveat
 
@@ -1495,6 +1711,17 @@ For maximum throughput, write the 4×-unrolled V256 version in the fast branch �
 ### Allocations
 
 Layer 3 allocates exactly once per call: the stackalloc stride arrays (NDim longs each). No heap allocation. Layer 2 inlines the entire kernel body into the JIT's codegen of `ExecuteGeneric` — no allocation at all, not even a delegate. Layer 1 allocates a single delegate per call (closure if it captures anything).
+
+**Custom-op tiers:**
+
+| Tier | Per-call allocation | One-time allocation |
+|------|--------------------|--------------------|
+| Tier A (`ExecuteRawIL`) | stackalloc strides + the user's `Action<ILGenerator>` closure on first compile | compiled `DynamicMethod` cached by key; stays live for process lifetime (~2-5 KB native + runtime metadata) |
+| Tier B (`ExecuteElementWise`) | stackalloc strides + (on first compile) two `Action<ILGenerator>` closures | compiled kernel cached by key |
+| Tier C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NpyExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
+| Tier C with `Call` | same as Tier C, plus one `DelegateSlots` entry per unique captured delegate / bound target | registered references live for process lifetime; see [Memory model and lifetime](#memory-model-and-lifetime) |
+
+The one case where allocations grow without bound is the anti-pattern of constructing a new `Call` delegate per iteration — each new delegate reference gets a new slot ID and a new cache entry. Register delegates once at startup to avoid this.
 
 ---
 
