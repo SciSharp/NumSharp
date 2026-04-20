@@ -1171,3 +1171,124 @@ which is far outside practical numerical-computing usage.
 
 Full suite after Round 10: **6733 / 0 / 11** per framework (up 15 from
 Round 9's 6718). OpenBugs count unchanged.
+
+---
+
+## Round 11 — Creation API Coverage Sweep (2026-04-20)
+
+First systematic coverage sweep: every supported np.* Creation function ×
+{Half, Complex, SByte} battletested against NumPy 2.4.2. 189-case pipe-delimited
+matrix (`/tmp/nsprobe/ref_creation.py` → `ns_creation.cs`) diffed with tolerance
+appropriate to each dtype (Half 1e-3, Complex 1e-12, SByte exact).
+
+Pre-fix parity: **177/189 = 93.7%**. Three bugs surfaced.
+Post-fix parity: **189/189 = 100%**.
+
+### B27 — `np.eye(N, M, k)` wrong diagonal stride for non-square / non-zero k ✅ CLOSED (Round 11)
+
+**Surfaced in:** half/complex/sbyte `eye(4,3)`, `eye(3,4,1)`, `eye(3,4,-1)`.
+**Scope:** All dtypes, not specific to the new ones. Pre-existing logic bug.
+
+**Root cause:** Previous implementation used `j += N+1` as the diagonal stride
+through the flat row-major buffer. For a (N, M) matrix in C-order, consecutive
+diagonal elements are `M+1` apart, not `N+1`. The bug also carried an unused
+`int i` variable and a broken `skips` adjustment for negative k.
+
+**Reproduction (pre-fix):**
+```csharp
+np.eye(4, 3, dtype: typeof(Half)).ToArray<Half>()
+// buggy:  [1,0,0, 0,0,1, 0,0,0, 0,1,0]  ← main diagonal scattered
+// NumPy:  [1,0,0, 0,1,0, 0,0,1, 0,0,0]  ← main diagonal on rows 0..2
+```
+
+**Fix (`src/NumSharp.Core/Creation/np.eye.cs`):** Rewritten with the explicit
+row-iteration formula:
+
+```csharp
+int cols = M ?? N;
+int rowStart = Math.Max(0, -k);
+int rowEnd   = Math.Min(N, cols - k);
+for (int i = rowStart; i < rowEnd; i++)
+    flat.SetAtIndex(one, (long)i * cols + (i + k));
+```
+
+Also inlined the Half/Complex/SByte-safe `one` construction (same pattern as
+`np.ones`) so the call never tries to `Convert.ChangeType` a double to Half/
+Complex, which would throw on certain BCL paths.
+
+### B28 — `np.asanyarray(NDArray, Type dtype)` ignores dtype override ✅ CLOSED (Round 11)
+
+**Surfaced in:** half/complex/sbyte `asanyarray(f64_ndarr, dtype=X)`.
+
+**Root cause:** `np.asanyarray` has a final `astype` conversion at the bottom,
+but the NDArray case returned early via `return nd;`, never reaching it. Also the
+post-switch check compared `a.GetType() != dtype` which is nonsensical — `a` is
+always `NDArray` (or array/string), never `Half`/`Complex`/etc. The comparison
+should have been against the NDArray's element dtype.
+
+**Reproduction (pre-fix):**
+```csharp
+var src = np.arange(0.0, 6.0, 1.0, NPTypeCode.Double).reshape(2,3);
+np.asanyarray(src, typeof(Half));   // returns the original double array unchanged
+```
+
+**Fix (`src/NumSharp.Core/Creation/np.asanyarray.cs`):** Route the NDArray case
+through the same bottom branch and compare against `ret.dtype` instead of the
+container object's type.
+
+### B29 — `np.asarray(NDArray, Type dtype)` overload missing ✅ CLOSED (Round 11)
+
+**Root cause:** `np.asarray` only had scalar/array overloads (`asarray<T>(T)`,
+`asarray<T>(T[])`). No NDArray overload — so `np.asarray(nd, typeof(Half))`
+either failed to compile or (worse) matched the wrong generic template. This
+is an API gap vs NumPy's `np.asarray(arr, dtype=...)`.
+
+**Fix (`src/NumSharp.Core/Creation/np.asarray.cs`):** Added explicit overload:
+
+```csharp
+public static NDArray asarray(NDArray a, Type dtype = null)
+{
+    if (ReferenceEquals(a, null)) throw new ArgumentNullException(nameof(a));
+    if (dtype == null || a.dtype == dtype) return a;
+    return a.astype(dtype, true);
+}
+```
+
+Note: `a == null` cannot be used because `NDArray` overrides `operator==` to
+return a broadcast `NDArray<bool>`. Must use `ReferenceEquals`.
+
+### Round 11 test coverage
+
+New file: `NewDtypesCoverageSweep_Creation_Tests.cs` — **83 tests**, all passing:
+
+| Group            | Half | Complex | SByte | Total |
+|------------------|------|---------|-------|-------|
+| zeros/ones       |   5  |   3     |   3   |  11   |
+| empty            |   1  |   1     |   1   |   3   |
+| full             |   4  |   2     |   2   |   8   |
+| arange           |   4  |   1     |   4   |   9   |
+| linspace         |   3  |   2     |   1   |   6   |
+| eye (B27)        |   6  |   2     |   3   |  11   |
+| identity         |   1  |   1     |   1   |   3   |
+| _like            |   4  |   3     |   4   |  11   |
+| meshgrid         |   1  |   1     |   1   |   3   |
+| frombuffer       |   2  |   1     |   1   |   4   |
+| copy             |   1  |   1     |   1   |   3   |
+| asarray (B29)    |   1  |   1     |   1   |   3** |
+| asanyarray (B28) |   2  |   1     |   1   |   4** |
+| np.array         |   2  |   2     |   2   |   6   |
+
+** plus "returns-as-is" regressions (same-dtype, null-dtype paths).
+
+Full suite after Round 11: **6816 / 0 / 11** per framework (up 83 from
+Round 10's 6733). OpenBugs count unchanged.
+
+### Open bugs baseline for next round
+
+Next sweep target: **Math — Arithmetic** (`add`/`sub`/`mul`/`div`/`power`/`mod`/
+`floor_divide`/`true_divide`/operator overloads). Expected to surface B3
+(Complex 1/0 → (NaN,NaN)) plus NEP50 promotion edge cases.
+
+Remaining open bugs after Round 11: **B1, B2, B3, B4, B5, B6, B7, B8, B9, B12,
+B13, B15, B16** (13 open, 15 closed so far). Many of these will surface in the
+upcoming sweep rounds.
