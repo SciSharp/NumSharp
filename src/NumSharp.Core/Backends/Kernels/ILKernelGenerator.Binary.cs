@@ -630,20 +630,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitFloorDivideOperation<T>(ILGenerator il) where T : unmanaged
         {
-            // For floating-point types, divide then floor
+            // For floating-point types, divide then floor.
+            // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
             if (typeof(T) == typeof(float))
             {
                 il.Emit(OpCodes.Div);
                 il.Emit(OpCodes.Conv_R8);
-                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                EmitFloorWithInfToNaN(il);
                 il.Emit(OpCodes.Conv_R4);
             }
             else if (typeof(T) == typeof(double))
             {
                 il.Emit(OpCodes.Div);
-                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                EmitFloorWithInfToNaN(il);
             }
             else if (typeof(T) == typeof(byte) || typeof(T) == typeof(ushort) ||
                      typeof(T) == typeof(uint) || typeof(T) == typeof(ulong))
@@ -686,6 +685,31 @@ namespace NumSharp.Backends.Kernels
                 // Convert back to T
                 EmitConvertFromDouble<T>(il);
             }
+        }
+
+        /// <summary>
+        /// Emit floor(div) with inf replaced by NaN, matching NumPy's floor_divide rule.
+        /// Stack on entry: [div as double]. Stack on exit: [floor(div), or NaN if div was ±inf].
+        /// floor(NaN) passes through; floor(finite) = floor(div).
+        /// </summary>
+        internal static void EmitFloorWithInfToNaN(ILGenerator il)
+        {
+            var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })!;
+            var isInfMethod = typeof(double).GetMethod(nameof(double.IsInfinity), new[] { typeof(double) })!;
+
+            il.EmitCall(OpCodes.Call, floorMethod, null);
+            var locR = il.DeclareLocal(typeof(double));
+            il.Emit(OpCodes.Stloc, locR);
+            il.Emit(OpCodes.Ldloc, locR);
+            il.EmitCall(OpCodes.Call, isInfMethod, null);
+            var lblFinite = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+            il.Emit(OpCodes.Brfalse, lblFinite);
+            il.Emit(OpCodes.Ldc_R8, double.NaN);
+            il.Emit(OpCodes.Br, lblDone);
+            il.MarkLabel(lblFinite);
+            il.Emit(OpCodes.Ldloc, locR);
+            il.MarkLabel(lblDone);
         }
 
         /// <summary>

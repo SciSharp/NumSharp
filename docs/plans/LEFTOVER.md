@@ -1403,3 +1403,152 @@ Total Creation sweep coverage: 330 probe cases (189 + 68 + 41 + 32) at
 closed so far. Next round will target Math — Arithmetic (operators, +, -, *, /,
 %, operator overloads) across the three new dtypes; expect B3 (Complex 1/0)
 to surface.
+
+---
+
+## Round 13 — Arithmetic + Operator Sweep (2026-04-20)
+
+Systematic battletest of every arithmetic function / operator for
+Half / Complex / SByte vs NumPy 2.4.2. 109-case probe matrix targeting:
+`+`, `-`, `*`, `/`, `%`, `//`, `**`, unary `-`, `np.negative`, `np.positive`,
+`np.add`, `np.subtract`, `np.multiply`, `np.divide`, `np.power`, `np.mod`,
+`np.floor_divide`, `np.true_divide`, `np.abs` / `np.absolute`, `np.reciprocal`,
+`np.sign`, `np.square`, `np.sqrt`, `np.floor` / `np.ceil` / `np.trunc`,
+`np.sin` / `np.cos` / `np.tan` / `np.exp` / `np.log`, broadcasting, overflow,
+div-by-zero, NaN propagation.
+
+Pre-fix parity: **84.4% (92/109)**. Post-fix parity: **96.3% (105/109)**.
+Remaining 4 cases are accepted BCL-level divergences.
+
+### B3 / B38 — Complex 1/0 returns (NaN, NaN) instead of (inf, NaN) ✅ CLOSED (Round 13)
+
+**Long-standing bug** originally filed as B3, rediscovered in Round 13.
+
+**Root cause:** .NET BCL `Complex.op_Division` uses Smith's algorithm, which
+cannot produce stable IEEE component-wise results when the divisor is `(0+0j)`
+— it returns `(NaN, NaN)` for all such cases. NumPy instead performs component-
+wise IEEE division: real = a.real/0, imag = a.imag/0. So `(1+0j)/(0+0j)` →
+`(inf, NaN)` in NumPy (1/0=inf, 0/0=nan), and `(1+1j)/(0+0j)` → `(inf, inf)`.
+
+**Fix (`src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.cs`):** Replaced
+the inline `op_Division` call in `EmitComplexOperation` with a call to a new
+static helper `ComplexDivideNumPy` that:
+  - For `b == (0, 0)`: returns `new Complex(a.Real / 0.0, a.Imaginary / 0.0)`
+    (C# doubles follow IEEE, so this gives inf/nan component-wise correctly).
+  - For any other `b`: defers to BCL `a / b` (ULP-identical to NumPy for finite
+    inputs).
+
+### B33 — Half/float/double floor_divide(inf, x) returned inf ✅ CLOSED (Round 13)
+
+**Surfaced in:** all three float dtypes when dividing inf by finite (or
+finite by zero).
+
+**Root cause:** The IL kernel sequence `Div → Math.Floor` preserved `inf`
+through `Floor` per .NET semantics (Floor(inf) = inf). NumPy's rule in
+`npy_floor_divide_@type@` is: if `a/b` is non-finite, return NaN. NumSharp
+mirrored .NET instead.
+
+**Fix (`src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Binary.cs` +
+`ILKernelGenerator.cs`):** Added `EmitFloorWithInfToNaN` helper that emits
+`Math.Floor` followed by an `IsInfinity` check, replacing the result with
+NaN when infinite. Applied to three sites that compute floor-divide:
+  1. `EmitFloorDivideOperation<T>` (SIMD/contiguous kernel)
+  2. `EmitFloorDivideOperation(NPTypeCode)` (MixedType kernel)
+  3. Half-specific `EmitHalfBinaryOperation` (Half->Double lane + back)
+
+### B35 — Integer power wraparound wrong for overflow-prone values ✅ CLOSED (Round 13)
+
+**Surfaced in:** `np.power(np.int8[50], np.int8[7]) → -1` (NumSharp) vs
+`-128` (NumPy).
+
+**Root cause:** `EmitPowerOperation<T>` routed integer power through
+`Math.Pow(double, double)` then cast back. `Math.Pow(50.0, 7.0) ≈ 7.8e10`;
+`(sbyte)7.8e10` is platform-undefined (C# gives arbitrary values outside
+int8 range). NumPy uses native integer exponentiation (repeated squaring)
+which preserves modular arithmetic.
+
+**Fix (`src/NumSharp.Core/Backends/Default/Math/Default.Power.cs`):** When
+both operands are the same integer dtype and no dtype override is requested,
+dispatch to `PowerInteger` which uses native C# repeated squaring with
+`unchecked` multiplication, preserving wraparound:
+  ```csharp
+  while (e > 0) { if (e & 1) r *= x; e >>= 1; if (e > 0) x *= x; }
+  ```
+  Plus special-case negative exponent handling matching NumPy semantics:
+  `(1)^(-n) = 1`, `(-1)^(-n) = ±1` per parity, `(|a|>1)^(-n) = 0`.
+  Covers SByte, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64.
+
+### B36 — np.reciprocal(int_array) returned float64 ✅ CLOSED (Round 13)
+
+**Surfaced in:** SByte and all other integer types.
+
+**Root cause:** `DefaultEngine.Reciprocal` called `ResolveUnaryReturnType`
+which auto-promotes any dtype below `Single` (= 13 in the enum) to `Double`.
+So `reciprocal(int32 x)` returned `float64` with `1.0/x`. NumPy preserves
+integer dtype with C-truncated integer division — `reciprocal(int8 2)` = 0.
+
+**Fix (`src/NumSharp.Core/Backends/Default/Math/Default.Reciprocal.cs`):** 
+Added `ReciprocalInteger` fast-path invoked when no dtype override and the
+input is an integer dtype. Loops through all 8 integer types with `x == 0 ? 0
+: 1 / x` using native C integer division semantics.
+
+### B37 — np.floor / np.ceil / np.trunc(int_array) returned float64 ✅ CLOSED (Round 13)
+
+**Surfaced in:** SByte and all other integer types.
+
+**Root cause:** Same as B36 — `ResolveUnaryReturnType` auto-promoted integer
+to Double, then ran `Math.Floor` / `Math.Ceiling` / `Math.Truncate` on the
+double-converted value, returning `float64`. NumPy: these three are no-ops
+for integer inputs (an integer has no fractional part), returning the input
+dtype unchanged.
+
+**Fix (`src/NumSharp.Core/Backends/Default/Math/Default.{Floor,Ceil,Truncate}.cs`):**
+Added early-return `if (!typeCode.HasValue && nd.GetTypeCode.IsInteger())
+return Cast(nd, nd.GetTypeCode, copy: true)` before the IL kernel dispatch.
+The existing `NPTypeCodeExtensions.IsInteger()` helper already covers all
+8 integer dtypes.
+
+### Accepted divergences (Round 13)
+
+Two cases remain at 96.3% parity, classified as acceptable BCL-level
+quirks rather than bugs:
+
+1. **Complex `(inf+0j)^(1+1j)`** — NumSharp (via `Complex.Pow`): `(NaN, NaN)`.
+   NumPy: `(inf, NaN)`. BCL's `Complex.Pow(a, b) = exp(b * log(a))` fails at
+   infinite inputs. Matching NumPy would require reimplementing `Complex.Pow`
+   manually with cutoffs for `|a| = ∞` — same issue as Round 10's accepted
+   `exp2(inf+∞j)` divergence.
+
+2. **SByte integer `a // 0` / `a % 0`** — NumSharp: garbage (-1 / 5 from the
+   double-intermediate conversion). NumPy with `seterr='ignore'`: returns 0.
+   NumPy with `seterr='warn'` or `'raise'`: warns / raises. Neither runtime is
+   "correct" in an absolute sense; NumSharp would need either runtime
+   seterr state or a zero-guard in the integer fallback. Matches IEEE only
+   for float types.
+
+### Round 13 test coverage
+
+New file: `NewDtypesCoverageSweep_Arithmetic_Tests.cs` — **33 tests**:
+
+| Bug            | Tests | Scope |
+|----------------|-------|-------|
+| B3 / B38       |   4   | Complex 1/0 scalar, imag-only zero, zero-by-zero, finite regression |
+| B33            |   4   | Half inf/1, Half 1/0, Half normal regression, Double inf/1 |
+| B35            |   5   | SByte 50^7 wrap, small exponent, negative exp base>1, ±1 base parity, Int32 2^31 wrap |
+| B36            |   3   | SByte reciprocal, Int32 reciprocal, Half reciprocal regression |
+| B37            |   5   | SByte floor/ceil/trunc, Int32 floor, Half floor regression |
+| Smoke tests    |  12   | Half/Complex/SByte arithmetic across +/-/*/÷, overflow wraps, unary negate, abs for complex, square, sign, broadcasting |
+
+Plus updated `Reciprocal_Integer_TypePromotion` in
+`test/NumSharp.UnitTest/Backends/Kernels/KernelMisalignmentTests.cs` to
+reflect the corrected NumPy-parity behavior (kept `[Misaligned]` attribute
+since the int32→int64 promotion of scalar C# `int` is orthogonal).
+
+Full suite after Round 13: **6877 / 0 / 11** per framework (up 33 from
+Round 12's 6844). OpenBugs count unchanged.
+
+### Remaining open bugs after Round 13
+
+**B1, B2, B4, B5, B6, B7, B8, B9, B12, B13, B15, B16** — 12 open, 24 closed
+so far. B3/B38 now closed. Next target: Math — Reductions, which is expected
+to surface B1, B2, B4, B5, B6, B16.

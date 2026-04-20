@@ -1127,7 +1127,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitFloorDivideOperation(ILGenerator il, NPTypeCode resultType)
         {
-            // For floating-point types, divide then floor
+            // For floating-point types, divide then floor.
+            // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
             if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
             {
                 il.Emit(OpCodes.Div);
@@ -1135,12 +1136,12 @@ namespace NumSharp.Backends.Kernels
                 if (resultType == NPTypeCode.Single)
                 {
                     il.Emit(OpCodes.Conv_R8);
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    EmitFloorWithInfToNaN(il);
                     il.Emit(OpCodes.Conv_R4);
                 }
                 else
                 {
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    EmitFloorWithInfToNaN(il);
                 }
             }
             else if (IsUnsigned(resultType))
@@ -1520,8 +1521,10 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Sub);
                     break;
                 case BinaryOp.FloorDivide:
+                    // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
+                    // This matches numpy/core/src/umath/loops_arithmetic's npy_floor_divide_@type@.
                     il.Emit(OpCodes.Div);
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    EmitFloorWithInfToNaN(il);
                     break;
                 case BinaryOp.ATan2:
                     il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })!, null);
@@ -1548,12 +1551,21 @@ namespace NumSharp.Backends.Kernels
             // Complex has operator overloads we can call
             var complexType = typeof(System.Numerics.Complex);
 
+            // Divide goes through a NumPy-compatible helper rather than the BCL's
+            // op_Division: BCL's Smith's algorithm returns (NaN, NaN) for a/(0+0j),
+            // whereas NumPy returns IEEE component-wise division (e.g. 1+0j -> inf+nanj).
+            if (op == BinaryOp.Divide)
+            {
+                il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexDivideNumPy),
+                    BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                return;
+            }
+
             var method = op switch
             {
                 BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
                 BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
                 BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
-                BinaryOp.Divide => complexType.GetMethod("op_Division", new[] { complexType, complexType }),
                 BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
                 _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
             };
@@ -1562,6 +1574,21 @@ namespace NumSharp.Backends.Kernels
                 throw new InvalidOperationException($"Could not find method for {op} on Complex");
 
             il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// NumPy-compatible complex division. The .NET BCL's Complex.op_Division uses
+        /// Smith's algorithm, which returns (NaN, NaN) when the divisor is (0+0j).
+        /// NumPy instead produces IEEE component-wise division: (a.real/0, a.imag/0),
+        /// giving (±inf, NaN) / (±inf, ±inf) / (NaN, NaN) depending on a's components.
+        /// For all other cases we defer to the BCL operator — it's ULP-identical to
+        /// NumPy for finite inputs.
+        /// </summary>
+        private static System.Numerics.Complex ComplexDivideNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (b.Real == 0.0 && b.Imaginary == 0.0)
+                return new System.Numerics.Complex(a.Real / 0.0, a.Imaginary / 0.0);
+            return a / b;
         }
 
         /// <summary>
