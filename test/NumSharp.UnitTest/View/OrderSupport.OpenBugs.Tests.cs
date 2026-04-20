@@ -812,5 +812,424 @@ namespace NumSharp.UnitTest.View
             // NumPy: np.ascontiguousarray(arr) always returns C-contig
             false.Should().BeTrue("np.ascontiguousarray is not implemented");
         }
+
+        // ============================================================================
+        // Section 22: Unary math ops preserve F-contig layout
+        // NumPy: np.abs/negative/sqrt/exp/sin/square on F-contig -> F-contig output
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // NumSharp unary ops don't preserve F-contig
+        public void Abs_FContig_PreservesFContig()
+        {
+            // NumPy: np.abs(f_arr) -> F=True
+            var fArr = np.arange(12).reshape(3, 4).T;  // F-contig
+            var r = np.abs(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: unary abs on F-contig preserves F output layout");
+        }
+
+        [TestMethod]
+        public void Abs_FContig_ValuesCorrect()
+        {
+            // Math result: same values regardless of layout
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.abs(fArr);
+            ((int)r[0, 0]).Should().Be(0);
+            ((int)r[3, 2]).Should().Be(11);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp negative doesn't preserve F-contig
+        public void Negative_FContig_PreservesFContig()
+        {
+            // NumPy: np.negative(f_arr) -> F=True
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.negative(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Negative_FContig_ValuesCorrect()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.negative(fArr);
+            ((int)r[0, 1]).Should().Be(-4);
+            ((int)r[3, 2]).Should().Be(-11);
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp sqrt doesn't preserve F-contig
+        public void Sqrt_FContig_PreservesFContig()
+        {
+            // NumPy: np.sqrt(f_arr) -> F=True
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.sqrt(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp exp doesn't preserve F-contig
+        public void Exp_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.exp(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp log1p doesn't preserve F-contig
+        public void Log1p_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.log1p(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp sin doesn't preserve F-contig
+        public void Sin_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            var r = np.sin(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp square doesn't preserve F-contig
+        public void Square_FContig_PreservesFContig()
+        {
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.square(fArr);
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 23: Comparison ops preserve F-contig layout
+        // NumPy: F == F -> F-contig bool array; F == C -> C-contig bool array
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // NumSharp equality on F-contig doesn't preserve F
+        public void Equal_FPlusF_PreservesFContig()
+        {
+            // NumPy: f_arr == f_arr -> F=True
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a == b;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: F == F produces F-contig bool output");
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp less-than on F-contig doesn't preserve F
+        public void LessThan_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a < b;
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp greater-equal on F-contig doesn't preserve F
+        public void GreaterEqual_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a >= b;
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Equal_FPlusF_ValuesCorrect()
+        {
+            // Math correctness regardless of layout
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a == b;
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    ((bool)r[i, j]).Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 24: Bitwise ops preserve F-contig layout
+        // NumPy: F & F -> F-contig output
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // NumSharp bitwise_and on F-contig doesn't preserve F
+        public void BitwiseAnd_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a & b;
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: F & F produces F-contig output");
+        }
+
+        [TestMethod]
+        [OpenBugs] // NumSharp bitwise_or on F-contig doesn't preserve F
+        public void BitwiseOr_FPlusF_PreservesFContig()
+        {
+            var a = np.arange(12).reshape(3, 4).T;
+            var b = np.arange(12).reshape(3, 4).T;
+            var r = a | b;
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 25: Statistical ops — math correctness and layout for axis ops
+        // ============================================================================
+
+        [TestMethod]
+        public void Std_FContig_MatchesNumPy()
+        {
+            // NumPy: f_arr.std() = sqrt(143/12) ≈ 3.4521
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            ((double)np.std(fArr)).Should().BeApproximately(3.4521, 0.01);
+        }
+
+        [TestMethod]
+        public void Var_FContig_MatchesNumPy()
+        {
+            // NumPy: f_arr.var() = 143/12 ≈ 11.9167
+            var fArr = np.arange(12).reshape(3, 4).T.astype(typeof(double));
+            ((double)np.var(fArr)).Should().BeApproximately(11.9167, 0.01);
+        }
+
+        [TestMethod]
+        public void ArgMin_FContig_MatchesNumPy()
+        {
+            // NumPy: f_arr.argmin() = 0 (position of value 0 in C-order flat)
+            var fArr = np.arange(12).reshape(3, 4).T;
+            ((long)np.argmin(fArr)).Should().Be(0);
+        }
+
+        [TestMethod]
+        public void ArgMax_FContig_MatchesNumPy()
+        {
+            // NumPy: f_arr.argmax() = 11 (position of value 11 in C-order flat)
+            var fArr = np.arange(12).reshape(3, 4).T;
+            ((long)np.argmax(fArr)).Should().Be(11);
+        }
+
+        [TestMethod]
+        public void CumSumAxis0_FContig_ValuesMatchNumPy()
+        {
+            // NumPy: np.cumsum(f_arr, axis=0) = [[0,4,8],[1,9,17],[3,15,27],[6,22,38]]
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.cumsum(fArr, axis: 0);
+            ((long)r[0, 0]).Should().Be(0);
+            ((long)r[0, 1]).Should().Be(4);
+            ((long)r[1, 0]).Should().Be(1);
+            ((long)r[1, 1]).Should().Be(9);
+            ((long)r[3, 2]).Should().Be(38);
+        }
+
+        [TestMethod]
+        [OpenBugs] // cumsum axis op doesn't preserve F-contig
+        public void CumSumAxis0_FContig_PreservesFContig()
+        {
+            // NumPy: cumsum axis=0 on F-contig -> F-contig output
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.cumsum(fArr, axis: 0);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: cumsum with axis preserves F-contig");
+        }
+
+        // ============================================================================
+        // Section 26: Concatenation / stacking layout preservation
+        // NumPy: concatenate/vstack/hstack of F-arrays produces F-contig output
+        // ============================================================================
+
+        [TestMethod]
+        public void Concatenate_CC_Axis0_MatchesNumPy()
+        {
+            // Values must match regardless of layout
+            var a = np.arange(6).reshape(2, 3);
+            var b = np.arange(6, 12).reshape(2, 3);
+            var r = np.concatenate(new[] { a, b }, axis: 0);
+            r.shape.Should().Equal(new long[] { 4, 3 });
+            ((int)r[3, 2]).Should().Be(11);
+        }
+
+        [TestMethod]
+        [OpenBugs] // concatenate of F-arrays doesn't preserve F
+        public void Concatenate_FF_Axis0_PreservesFContig()
+        {
+            // NumPy: concatenate([F,F], axis=0) -> F-contig output
+            var a = np.arange(6).reshape(2, 3).T;  // F-contig (3,2)
+            var b = np.arange(6, 12).reshape(2, 3).T;  // F-contig (3,2)
+            var r = np.concatenate(new[] { a, b }, axis: 0);
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy: concatenate of F-arrays produces F-contig output");
+        }
+
+        [TestMethod]
+        [OpenBugs] // vstack of F-arrays doesn't preserve F
+        public void VStack_FF_PreservesFContig()
+        {
+            var a = np.arange(6).reshape(2, 3).T;
+            var b = np.arange(6, 12).reshape(2, 3).T;
+            var r = np.vstack(new[] { a, b });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        [OpenBugs] // hstack of F-arrays doesn't preserve F
+        public void HStack_FF_PreservesFContig()
+        {
+            var a = np.arange(6).reshape(2, 3).T;
+            var b = np.arange(6, 12).reshape(2, 3).T;
+            var r = np.hstack(new[] { a, b });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        // ============================================================================
+        // Section 27: Manipulation layout
+        // NumPy:
+        //   repeat/tile/roll of F -> C-contig output (breaks F layout)
+        //   expand_dims preserves layout (F -> F)
+        //   squeeze preserves layout
+        // ============================================================================
+
+        [TestMethod]
+        public void Repeat_FContig_MatchesCContigOutput()
+        {
+            // NumPy: repeat(F, 2, axis=0) -> C-contig (repeat breaks F layout)
+            var fArr = np.arange(6).reshape(2, 3).T;  // F-contig (3,2)
+            var r = np.repeat(fArr, 2);
+            r.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: repeat produces C-contig output");
+        }
+
+        [TestMethod]
+        public void ExpandDims_FContig_PreservesFContig()
+        {
+            // NumPy: expand_dims(F, axis=0) adds leading 1-dim; result is still F-contig
+            // Passes: NumSharp's expand_dims is a view that preserves stride pattern,
+            // so the result retains F-contig flag.
+            var fArr = np.arange(6).reshape(2, 3).T;  // F-contig (3,2)
+            var r = np.expand_dims(fArr, 0);  // -> shape (1,3,2)
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Squeeze_ValuesPreserved()
+        {
+            // Math correctness
+            var arr = np.arange(6).reshape(1, 2, 3);
+            var r = np.squeeze(arr);
+            r.shape.Should().Equal(new long[] { 2, 3 });
+            ((int)r[0, 0]).Should().Be(0);
+            ((int)r[1, 2]).Should().Be(5);
+        }
+
+        [TestMethod]
+        public void Roll_Values_MatchNumPy()
+        {
+            // NumPy: np.roll([0,1,2,3,4], 1) = [4,0,1,2,3]
+            var arr = np.arange(5);
+            var r = np.roll(arr, 1);
+            ((int)r[0]).Should().Be(4);
+            ((int)r[1]).Should().Be(0);
+            ((int)r[4]).Should().Be(3);
+        }
+
+        // ============================================================================
+        // Section 28: MatMul / Dot output layout
+        // NumPy: always produces C-contig output regardless of input layout
+        // ============================================================================
+
+        [TestMethod]
+        public void MatMul_CC_ProducesCContig()
+        {
+            var a = np.arange(6).astype(typeof(double)).reshape(2, 3);
+            var b = np.arange(12).astype(typeof(double)).reshape(3, 4);
+            var r = np.matmul(a, b);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void MatMul_FF_ProducesCContig()
+        {
+            // NumPy: F @ F -> C-contig (matmul convention)
+            var a = np.arange(6).astype(typeof(double)).reshape(2, 3).T.T;  // C-contig
+            var b = np.arange(12).astype(typeof(double)).reshape(3, 4).T.T;
+            var r = np.matmul(a, b);
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Dot_CC_ValuesMatchNumPy()
+        {
+            // NumPy: np.dot([[1,2],[3,4]], [[5,6],[7,8]]) = [[19,22],[43,50]]
+            var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
+            var b = np.array(new double[,] { { 5, 6 }, { 7, 8 } });
+            var r = np.dot(a, b);
+            ((double)r[0, 0]).Should().Be(19);
+            ((double)r[0, 1]).Should().Be(22);
+            ((double)r[1, 0]).Should().Be(43);
+            ((double)r[1, 1]).Should().Be(50);
+        }
+
+        // ============================================================================
+        // Section 29: Boolean masking / fancy indexing
+        // NumPy:
+        //   f_arr[bool_mask] -> 1D result, both C and F contig (1-D always both)
+        //   f_arr[[0,2]] -> C-contig (fancy index resets to C)
+        // ============================================================================
+
+        [TestMethod]
+        public void BoolMask_FContig_Returns1DBothContig()
+        {
+            // NumPy: f_arr[mask] returns 1-D which is both C and F contig
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var mask = fArr > 5;
+            var r = fArr[mask];
+            r.ndim.Should().Be(1);
+            r.Shape.IsContiguous.Should().BeTrue(
+                "1-D bool-mask result is C-contig");
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "1-D bool-mask result is also F-contig");
+        }
+
+        [TestMethod]
+        public void BoolMask_FContig_ValuesMatchNumPy()
+        {
+            // NumPy: f_arr > 5 picks out [6,7,8,9,10,11]
+            var fArr = np.arange(12).reshape(3, 4).T;  // values [[0,4,8],[1,5,9],[2,6,10],[3,7,11]]
+            var mask = fArr > 5;
+            var r = fArr[mask];
+            r.size.Should().Be(6);
+            // Collected set should be {6,7,8,9,10,11}
+            var values = new System.Collections.Generic.HashSet<int>();
+            for (int i = 0; i < 6; i++)
+                values.Add((int)r[i]);
+            foreach (var v in new[] { 6, 7, 8, 9, 10, 11 })
+                values.Should().Contain(v);
+        }
+
+        // ============================================================================
+        // Section 30: Missing functions that would benefit from order support
+        // ============================================================================
+
+        [TestMethod]
+        [OpenBugs] // np.tile is missing from NumSharp (listed in docs/CLAUDE.md Missing Functions)
+        public void Tile_ApiGap()
+        {
+            // NumPy: np.tile(arr, 2) repeats array - not implemented in NumSharp
+            false.Should().BeTrue("np.tile is not implemented");
+        }
+
+        [TestMethod]
+        [OpenBugs] // np.flip is missing from NumSharp
+        public void Flip_ApiGap()
+        {
+            // NumPy: np.flip(arr, axis=0) reverses along axis - not implemented in NumSharp
+            false.Should().BeTrue("np.flip is not implemented");
+        }
     }
 }
