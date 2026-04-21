@@ -1,75 +1,89 @@
-﻿using NeuralNetwork.NumSharp.Activations;
-using NumSharp;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using NeuralNetwork.NumSharp.Activations;
+using NumSharp;
+using NumSharp.Backends;
 
 namespace NeuralNetwork.NumSharp.Layers
 {
     /// <summary>
-    /// Fully connected layer
+    /// Fully connected (dense) layer with a bias term and an optional
+    /// activation applied after the affine transform:
+    ///
+    ///   y = activation(x @ W + b)
+    ///
+    /// Weights are initialized with He-normal when the attached activation
+    /// is ReLU (preserves variance through the non-linearity) and Xavier/
+    /// Glorot otherwise. Both weights and bias are float32 to stay on the
+    /// SIMD-capable fast paths in NumSharp.
+    ///
+    /// The layer populates the standard <see cref="BaseLayer"/> slots —
+    /// Parameters["w"], Parameters["b"], Grads["w"], Grads["b"] — so the
+    /// stock Adam / SGD optimizers iterate it unchanged.
     /// </summary>
-    public class FullyConnected: BaseLayer
+    public class FullyConnected : BaseLayer
     {
-        /// <summary>
-        /// Number of incoming input features
-        /// </summary>
-        public int InputDim { get; set; }
-
-        /// <summary>
-        /// Number of neurons for this layers
-        /// </summary>
+        public int InputDim  { get; set; }
         public int OutNeurons { get; set; }
-
-        /// <summary>
-        /// Non Linear Activation function for this layer of neurons. All neurons will have the same function
-        /// </summary>
+        public bool UseBias { get; set; }
         public BaseActivation Activation { get; set; }
 
-        /// <summary>
-        /// Constructor with in and out parametes
-        /// </summary>
-        /// <param name="in">Number of incoming input features</param>
-        /// <param name="out">Number of neurons for this layers</param>
-        public FullyConnected(int input_dim, int output_neurons, string act = "") : base("fc")
+        public FullyConnected(int input_dim, int output_neurons, string act = "", bool useBias = true)
+            : base("fc")
         {
-            Parameters["w"] = np.random.normal(0.5, 1, (input_dim, output_neurons));
-            InputDim = input_dim;
+            InputDim   = input_dim;
             OutNeurons = output_neurons;
-
+            UseBias    = useBias;
             Activation = BaseActivation.Get(act);
+
+            // He init for ReLU; Xavier for everything else (linear, sigmoid, softmax, ...).
+            bool isReLU = string.Equals(act, "relu", StringComparison.OrdinalIgnoreCase);
+            double stddev = isReLU
+                ? Math.Sqrt(2.0 /  input_dim)
+                : Math.Sqrt(2.0 / (input_dim + output_neurons));
+
+            Parameters["w"] = np.random.normal(0.0, stddev, new Shape(input_dim, output_neurons))
+                                       .astype(NPTypeCode.Single);
+            if (UseBias)
+                Parameters["b"] = np.zeros(new Shape(output_neurons), NPTypeCode.Single);
         }
 
-        /// <summary>
-        /// Forward the input data by performing calculation across all the neurons, store it in the Output to be accessible by next layer.
-        /// </summary>
-        /// <param name="x"></param>
         public override void Forward(NDArray x)
         {
             base.Forward(x);
-            Output = np.dot(x, Parameters["w"]);
 
-            if(Activation!=null)
+            NDArray preact = np.dot(x, Parameters["w"]);
+            if (UseBias)
+                preact = preact + Parameters["b"];
+
+            if (Activation != null)
             {
-                Activation.Forward(Output);
+                Activation.Forward(preact);
                 Output = Activation.Output;
+            }
+            else
+            {
+                Output = preact;
             }
         }
 
-        /// <summary>
-        /// Calculate the gradient of the layer. Usually a prtial derivative implemenation of the forward algorithm
-        /// </summary>
-        /// <param name="grad"></param>
         public override void Backward(NDArray grad)
         {
-            if(Activation != null)
+            if (Activation != null)
             {
                 Activation.Backward(grad);
                 grad = Activation.InputGrad;
             }
 
-            InputGrad = np.dot(grad, Parameters["w"].transpose());
+            NDArray W = Parameters["w"];
+
+            // np.dot ships a stride-aware GEMM (BLIS-style packing), so the
+            // transposed views go through the SIMD fast path directly — no
+            // need to materialize contiguous copies.
             Grads["w"] = np.dot(Input.transpose(), grad);
+            if (UseBias)
+                Grads["b"] = np.sum(grad, axis: 0);
+
+            InputGrad = np.dot(grad, W.transpose());
         }
     }
 }
