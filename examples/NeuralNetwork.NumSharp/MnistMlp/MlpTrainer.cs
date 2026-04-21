@@ -38,6 +38,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             int Epochs,
             List<float> EpochLoss,
             List<float> EpochTrainAcc,
+            List<(int Epoch, float TestAcc)> TestEvals,
             float FinalTestAcc,
             long TotalMs);
 
@@ -57,10 +58,17 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             int numBatches = trainN / batchSize;
             int iteration = 0;
 
+            // Evaluate the test set every min(5, epochs) epochs. For short runs
+            // (epochs ≤ 5) this means every epoch; for longer runs it's every 5.
+            // The final epoch always gets a test eval regardless of cadence.
+            int evalEvery = Math.Min(5, epochs);
+
             var epochLosses = new List<float>();
             var epochTrainAccs = new List<float>();
+            var testEvals = new List<(int Epoch, float TestAcc)>();
 
             Console.WriteLine($"  Training: {numBatches} batches/epoch x {epochs} epochs, batch_size={batchSize}");
+            Console.WriteLine($"  Test evaluation every {evalEvery} epoch(s).");
 
             var totalSw = Stopwatch.StartNew();
             for (int epoch = 0; epoch < epochs; epoch++)
@@ -115,16 +123,26 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 epochTrainAccs.Add(trainAcc);
                 epochSw.Stop();
 
-                Console.WriteLine($"  Epoch {epoch + 1,2}/{epochs}  loss={avgLoss:F4}  train_acc={trainAcc * 100:F2}%  " +
+                // Periodic test evaluation. The final epoch is always evaluated
+                // regardless of cadence so the caller always gets a finalTestAcc.
+                bool doEval = ((epoch + 1) % evalEvery == 0) || (epoch == epochs - 1);
+                string evalCol = "                    ";  // same width as "  test_acc=99.99%"
+                if (doEval)
+                {
+                    float testAcc = Evaluate(layers, testX, testYLabels, batchSize);
+                    testEvals.Add((epoch + 1, testAcc));
+                    evalCol = $"  test_acc={testAcc * 100:F2}%  ";
+                }
+
+                Console.WriteLine($"  Epoch {epoch + 1,3}/{epochs}  loss={avgLoss:F4}  train_acc={trainAcc * 100:F2}%{evalCol}" +
                                   $"({epochSw.ElapsedMilliseconds} ms, total {totalSw.ElapsedMilliseconds / 1000.0:F1} s)");
             }
             totalSw.Stop();
 
-            // --- test-set evaluation ---
-            float testAcc = Evaluate(layers, testX, testYLabels, batchSize);
-            Console.WriteLine($"  Final test accuracy: {testAcc * 100:F2}%");
+            float finalTestAcc = testEvals.Count > 0 ? testEvals[^1].TestAcc : 0f;
+            Console.WriteLine($"  Final test accuracy: {finalTestAcc * 100:F2}%");
 
-            return new TrainResult(epochs, epochLosses, epochTrainAccs, testAcc, totalSw.ElapsedMilliseconds);
+            return new TrainResult(epochs, epochLosses, epochTrainAccs, testEvals, finalTestAcc, totalSw.ElapsedMilliseconds);
         }
 
         /// <summary>
