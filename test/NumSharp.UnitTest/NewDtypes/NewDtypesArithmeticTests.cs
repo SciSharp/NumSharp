@@ -132,7 +132,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Complex multiply not supported in IL kernel yet
         public void Complex_Multiply()
         {
             // NumPy: z * z2 where z=[1+2j, 3+4j, 0+0j, -1-1j], z2=[1+0j, 0+1j, 1+1j, 2+2j]
@@ -149,7 +148,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Complex multiply not supported in IL kernel yet
         public void Complex_Multiply_Scalar()
         {
             // NumPy: np.array([1+2j, 3+4j, 0+0j, -1-1j]) * 2

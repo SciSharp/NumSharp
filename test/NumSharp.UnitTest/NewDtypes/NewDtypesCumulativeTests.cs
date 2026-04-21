@@ -102,7 +102,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // CumProd not supported for Complex yet
         public void Complex_CumProd()
         {
             // NumPy: np.cumprod(np.array([1+1j, 2+2j, 3+3j]))

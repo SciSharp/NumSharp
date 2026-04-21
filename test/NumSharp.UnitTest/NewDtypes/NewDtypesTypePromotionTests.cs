@@ -74,7 +74,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Half + Other Types
 
         [TestMethod]
-        [OpenBugs] // Half + Complex type promotion not fully supported yet
         public void Half_Plus_Complex_PromotesToComplex()
         {
             // NumPy: float16 + complex128 = complex128

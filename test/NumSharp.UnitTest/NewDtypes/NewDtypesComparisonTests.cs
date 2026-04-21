@@ -254,7 +254,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Half to Complex conversion not supported yet
         public void Half_AsType_ToComplex()
         {
             // NumPy: np.array([1.5, 2.5, 3.5], dtype=np.float16).astype(np.complex128)

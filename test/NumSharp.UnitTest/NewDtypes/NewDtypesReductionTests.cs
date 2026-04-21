@@ -166,7 +166,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Mean division not supported for Half yet
         public void Half_Mean()
         {
             // NumPy: np.mean(np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float16)) = 3.0 (dtype: float16)
@@ -189,7 +188,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Std not supported for Half yet
         public void Half_Std()
         {
             // NumPy: np.std(np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float16)) = 1.4140625 (dtype: float16)
@@ -235,7 +233,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Mean division not supported for Complex yet
         public void Complex_Mean()
         {
             // NumPy: np.mean(np.array([1+2j, 3+4j, 0+0j, -1-1j])) = (0.75+1.25j) (dtype: complex128)
@@ -247,7 +244,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Std not supported for Complex yet
         public void Complex_Std()
         {
             // NumPy: np.std(np.array([1+0j, 2+0j, 3+0j, 4+0j, 5+0j])) = 1.4142135623730951 (dtype: float64)
@@ -259,7 +255,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Axis reductions not supported for Complex yet
         public void Complex_Sum_Axis()
         {
             // NumPy: np.sum(np.array([[1+2j, 3+4j], [5+6j, 7+8j]]), axis=0) = [6+8j, 10+12j]

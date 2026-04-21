@@ -282,7 +282,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Dot not supported for Complex (multiply not working)
         public void Complex_Dot()
         {
             // NumPy: np.dot([1+1j, 2+2j], [1-1j, 2-2j]) = (10+0j)
