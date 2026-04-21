@@ -15,7 +15,7 @@ NDArray              ← user-facing handle (the type you work with)
 └── TensorEngine     ← dispatches operations (DefaultEngine by default)
 ```
 
-- **Storage** holds the actual bytes in unmanaged memory (not GC-allocated). Benchmarked fastest; optimized for SIMD and interop.
+- **Storage** holds the actual bytes in unmanaged memory (not GC-allocated). This beat every managed alternative in benchmarking and is what makes SIMD and zero-copy interop practical.
 - **Shape** is a `readonly struct` describing how the 1-D byte block is viewed as N-D. It knows dimensions, strides, offset, and precomputed `ArrayFlags` (contiguous, broadcasted, writeable, owns-data).
 - **TensorEngine** is where `+`, `-`, `sum`, `matmul`, etc. actually run. Different engines can plug in (GPU/SIMD/BLAS); the default is pure C# with IL-generated kernels.
 
@@ -33,9 +33,9 @@ np.array(new int[,] {{1, 2}, {3, 4}});     // np.array([[1, 2], [3, 4]])
 
 np.zeros((3, 4));                          // np.zeros((3, 4))
 np.ones(5);                                // np.ones(5)
-np.full(new Shape(2, 2), 7);               // np.full((2, 2), 7)
 np.full((2, 2), 7);                        // np.full((2, 2), 7)
-np.empty(new Shape(3, 3));                 // np.empty((3, 3))
+np.full(new Shape(2, 2), 7);               // same thing, explicit Shape form
+np.empty((3, 3));                          // np.empty((3, 3))
 np.eye(4);                                 // np.eye(4)
 np.identity(4);                            // np.identity(4)
 
@@ -47,7 +47,16 @@ np.random.rand(3, 4);                      // np.random.rand(3, 4)
 np.random.randn(100);                      // np.random.randn(100)
 ```
 
-> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct defines implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions: `(int, int)`, `(int, int, int)`, … So `np.zeros((3, 4))`, `np.zeros(new[] {3, 4})`, `np.zeros(new Shape(3, 4))`, and `np.zeros(new Shape(3L, 4L))` all produce the same array. A bare `np.zeros(5)` creates a 1-D length-5 array (the `int shape` overload).
+> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct has implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions. So these four calls all produce the same (3, 4) array:
+>
+> ```csharp
+> np.zeros((3, 4));              // tuple → Shape
+> np.zeros(new[] {3, 4});        // int[] → Shape
+> np.zeros(new Shape(3, 4));     // explicit Shape
+> np.zeros(new Shape(new[] {3L, 4L}));
+> ```
+>
+> A bare `np.zeros(5)` creates a 1-D length-5 array — it hits the `int shape` overload, not a tuple.
 
 Scalars (0-d arrays) flow in implicitly:
 
@@ -59,9 +68,74 @@ NDArray d = NDArray.Scalar(100.123m);    // 0-d decimal
 NDArray e = NDArray.Scalar<long>(1);     // 0-d with explicit dtype
 ```
 
-Implicit scalar → NDArray exists for all 15 dtypes (`bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex`). Use `NDArray.Scalar<T>(value)` when you want to force a specific dtype that the C# literal wouldn't pick (e.g. `short` vs `int`).
+Implicit scalar → NDArray exists for all 15 dtypes (`bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex`). Use `NDArray.Scalar<T>(value)` to force a specific dtype the C# literal wouldn't pick — e.g. `NDArray.Scalar<short>(1)` instead of `NDArray x = 1;` (which would be int32).
 
 See also: [Dtypes](dtypes.md) for how to pick element types, [Broadcasting](broadcasting.md) for shape rules.
+
+---
+
+## Wrapping Existing Buffers — `np.frombuffer`
+
+When you already have memory — a `byte[]` read from a file, a network packet, a pointer from a native library, or even a typed `T[]` you want to reinterpret — `np.frombuffer` wraps it as an NDArray **without copying** whenever possible. Same contract as NumPy's `numpy.frombuffer`.
+
+```csharp
+// From a byte[] — creates a view (pins the array)
+byte[] buffer = File.ReadAllBytes("sensor_data.bin");
+var readings = np.frombuffer(buffer, typeof(float));
+
+// Skip a header
+var data = np.frombuffer(buffer, typeof(float), offset: 16);
+
+// Read only part of the buffer
+var subset = np.frombuffer(buffer, typeof(float), count: 1000, offset: 16);
+
+// Reinterpret a typed array as a different dtype (view)
+int[] ints = { 1, 2, 3, 4 };
+var bytes = np.frombuffer<int>(ints, typeof(byte));   // 16 bytes: [1,0,0,0, 2,0,0,0, ...]
+
+// From .NET buffer types
+var fromSegment = np.frombuffer(new ArraySegment<byte>(buffer, 0, 128), typeof(int));
+var fromMemory  = np.frombuffer((Memory<byte>)buffer, typeof(float));
+// ReadOnlySpan<byte> always copies (spans can't be pinned)
+ReadOnlySpan<byte> span = stackalloc byte[16];
+var fromSpan = np.frombuffer(span, typeof(int));
+
+// From native memory — NumSharp takes ownership and frees on GC
+IntPtr owned = Marshal.AllocHGlobal(1024);
+var arr1 = np.frombuffer(owned, 1024, typeof(float),
+    dispose: () => Marshal.FreeHGlobal(owned));
+
+// Or just borrow — caller must keep it alive and free it later
+IntPtr borrowed = NativeLib.GetData(out int size);
+var arr2 = np.frombuffer(borrowed, size, typeof(float));
+// ... use arr2 ...
+NativeLib.FreeData(borrowed);                       // after arr2 is done
+
+// Endianness via dtype strings (big-endian triggers a copy)
+byte[] networkData = ReceivePacket();
+var be = np.frombuffer(networkData, ">i4");         // big-endian int32 (copy)
+var le = np.frombuffer(networkData, "<i4");         // little-endian int32 (view on x86/x64)
+```
+
+### View or copy?
+
+| Source | Behavior |
+|--------|----------|
+| `byte[]`, `ArraySegment<byte>`, array-backed `Memory<byte>` | view (array is pinned) |
+| `T[]` via `frombuffer<T>(T[], …)` | view (reinterpret bytes) |
+| `IntPtr` | view (optionally with `dispose` callback for ownership transfer) |
+| `ReadOnlySpan<byte>` | copy (spans can't be pinned) |
+| `Memory<byte>` not backed by an array | copy |
+| Big-endian dtype string on a little-endian CPU | copy (must swap bytes) |
+
+### Key rules (same as NumPy)
+
+- **`offset` is in bytes, `count` is in elements.** A `float` buffer with `offset: 4, count: 10` reads 40 bytes starting at byte 4.
+- **Buffer length (minus offset) must be a multiple of the element size**, or NumSharp throws.
+- **Views couple lifetimes.** If you return an NDArray wrapping a local `byte[]`, the array can be GC'd out from under the view. Either `.copy()` before returning, or allocate through NumSharp (`np.zeros`, `np.empty`).
+- **Native memory without `dispose` is borrowed** — the caller must keep the memory alive and free it after all viewing NDArrays are gone.
+
+See the [Buffering & Memory](buffering.md) page for the full story: memory architecture, ownership patterns (ArrayPool, COM, P/Invoke), endianness, and troubleshooting.
 
 ---
 
@@ -88,7 +162,7 @@ a.size;        // 12
 a.dtype;       // typeof(int)
 a.typecode;    // NPTypeCode.Int32
 a.T.shape;     // [4, 3]
-a.@base;       // null means arange owns its data
+a.@base;       // null (arange owns its data)
 var b = a["1:, :2"];
 b.@base;       // wraps a's Storage (b is a view)
 ```
@@ -128,11 +202,14 @@ Assignment follows the same rules:
 
 ```csharp
 a[1, 2] = 99;               // scalar write
-a["0"] = np.zeros(5);       // row write
+a[0] = np.zeros(5);         // row write (assign a full row)
 a[a > 10] = -1;             // masked write
 ```
 
-> **Note:** Boolean-mask results are read-only copies in NumSharp; fancy-indexed slices and plain slices are writeable views.
+> **View / copy summary for indexing:**
+> - Plain slices (`a["1:3"]`, `a[0]`, `a[..., -1]`): **writeable view** — shares memory with the parent.
+> - Fancy indexing (`a[indexArray]`): **writeable copy** — independent memory (matches NumPy).
+> - Boolean masking (`a[mask]`): **read-only copy** — independent memory; mutation via `a[mask] = value` still works as an *assignment* because it goes through the setter, not by writing into the returned array.
 
 ---
 
@@ -151,7 +228,7 @@ c[0] = 0;
 a[2];                        // still 999
 ```
 
-Detect views with `arr.@base != null` or `arr.Storage.IsView`. Force a copy with `.copy()` or `np.copy(arr)`.
+Detect views with `arr.@base != null`. Force a copy with `.copy()` or `np.copy(arr)`.
 
 Broadcasted arrays are a special case: they're views with stride=0 dimensions, and they're **read-only** (`Shape.IsWriteable == false`) to prevent cross-row corruption. See [Broadcasting](broadcasting.md#memory-behavior).
 
@@ -222,10 +299,11 @@ C# has no `**`, `//`, `@` operators, and no `__abs__`/`__divmod__` protocol. Use
 C# requires the declaring type on the left of `<<` / `>>`, so `object << NDArray` is a compile error. Use the named form:
 
 ```csharp
-arr << 2;                     // OK
-arr << someObject;            // OK (object RHS supported)
+object rhs = 2;
+arr << 2;                     // OK — int RHS
+arr << rhs;                   // OK — object RHS supported
 2 << arr;                     // compile error
-np.left_shift(2, arr);        // use the function
+np.left_shift(2, arr);        // use the function instead
 ```
 
 ### Compound assignment
@@ -234,14 +312,12 @@ np.left_shift(2, arr);        // use the function
 
 ```csharp
 var x = np.array(new[] {1, 2, 3});
-var ref_ = x;
-x += 10;                 // x -> new array [11, 12, 13]
-ref_;                    // still [1, 2, 3] — different from NumPy!
-
-y = x + 10;           // this way x stays the same and so does _ref and out is y.
+var alias = x;
+x += 10;                 // x  →  new array [11, 12, 13]
+// alias                 // still [1, 2, 3] — different from NumPy!
 ```
 
-This is a C# language constraint (compound operators on reference types cannot mutate independently of `op`) — not a NumSharp choice.
+This is a C# language constraint — compound operators on reference types cannot be defined independently of the binary operator — not a NumSharp choice.
 
 ---
 
@@ -257,11 +333,11 @@ var b = a.astype(np.float64);
 var c = a.astype(NPTypeCode.Int64);
 
 // explicit cast on 0-d arrays — matches NumPy's int(arr), float(arr), complex(arr)
-var scalar = np.array(new[] {42}).reshape();  // 0-d
-int i = (int)scalar;
-double d = (double)scalar;
-Half h = (Half)scalar;
-Complex cx = (Complex)scalar;
+NDArray scalar = NDArray.Scalar(42);        // 0-d
+int i = (int)scalar;                        // 42
+double d = (double)scalar;                  // 42.0
+Half h = (Half)scalar;                      // (Half)42
+Complex cx = (Complex)scalar;               // 42 + 0i
 ```
 
 Rules (match NumPy 2.x):
@@ -287,29 +363,35 @@ s1.size;                           // 1
 (int)s1;                           // 42 — explicit cast out
 ```
 
-Indexing a 1-d array with a single integer returns a 0-d array (NumPy 2.x behavior). Further `(int)` casts recover the scalar.
+Integer indexing always reduces one dimension:
+
+- 1-D `a[i]` → 0-d NDArray (single element, still wrapped as an array — matches NumPy 2.x)
+- 2-D `a[i]` → 1-D NDArray (a row view)
+- 3-D `a[i]` → 2-D NDArray (a slab view)
+
+To unwrap a 0-d result to a raw C# scalar, cast: `(int)a[i]` or `a.item<int>(i)`.
 
 ---
 
 ## Reading & Writing Elements
 
-Five ways to touch individual elements, picked based on how many indices you have and whether you already know the dtype:
+Four ways to touch individual elements, picked based on how many indices you have and whether you already know the dtype:
 
 ```csharp
 var a = np.arange(12).reshape(3, 4);
 
 // 1. Indexer — returns NDArray (0-d for a single element)
 NDArray elem = a[1, 2];
-int v = (int)elem;             // explicit cast to scalar
+int v = (int)elem;                      // explicit cast to scalar
 
-// 2. .item() — direct scalar extraction (NumPy parity)
-int v2 = a.item<int>(6);       // flat index 6 → row 1, col 2
-object box = a.item(6);        // untyped form (returns object)
+// 2. .item<T>() — direct scalar extraction (NumPy parity)
+int v2 = a.item<int>(6);                // flat index 6 → row 1, col 2
+object box = a.item(6);                 // untyped form returns object
 
 // 3. GetValue<T> — N-D coordinates, typed
 int v3 = a.GetValue<int>(1, 2);
 
-// 4. GetAtIndex<T> — flat index, typed (bypasses Shape calculation — fastest)
+// 4. GetAtIndex<T> — flat index, typed, no Shape math (fastest)
 int v4 = a.GetAtIndex<int>(6);
 
 // Writes mirror the reads:
@@ -318,7 +400,7 @@ a.SetValue(99, 1, 2);                   // N-D coordinates
 a.SetAtIndex(99, 6);                    // flat index
 ```
 
-**Rule of thumb:** use `.item<T>()` when porting NumPy code, `GetAtIndex<T>` on a hot loop, and the indexer (`a[i, j]`) when you want NumPy-like ergonomics and don't mind the 0-d NDArray detour.
+**Rule of thumb:** use `.item<T>()` when porting NumPy code, `GetAtIndex<T>` in a hot loop, and the indexer (`a[i, j]`) when you want NumPy-like ergonomics and don't mind the 0-d NDArray detour.
 
 > `.item()` without arguments works on any size-1 array (0-d, 1-element 1-d, 1×1 2-d) and throws `IncorrectSizeException` otherwise — the NumPy 2.x replacement for the removed `np.asscalar()`.
 
@@ -359,9 +441,11 @@ a.flatten();      // always a copy
 
 ```csharp
 a.reshape(3, 4);               // explicit dims
-a.reshape(-1);                 // auto-size one dim (here: 1-D flatten as view)
-a.reshape(-1, 4);              // infer first dim
+a.reshape(-1);                 // auto-size one dim → 1-D flatten
+a.reshape(-1, 4);              // infer first dim, second is 4
 ```
+
+All three return a view when the source is contiguous and a copy otherwise.
 
 ### Transpose / axis shuffle
 
@@ -410,9 +494,43 @@ Three ways to get a typed wrapper:
 
 ---
 
+## Saving, Loading, and Interop
+
+NumSharp reads and writes NumPy's `.npy` / `.npz` formats and raw binary — files saved in Python open in NumSharp, and vice versa. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers--npfrombuffer) above.
+
+```csharp
+// .npy round-trip
+np.save("arr.npy", arr);
+var loaded = np.load("arr.npy");           // also handles .npz archives
+
+// Raw binary
+arr.tofile("data.bin");
+var raw = np.fromfile("data.bin", np.float64);
+```
+
+Interop with standard .NET arrays:
+
+```csharp
+var arr = np.array(new[,] {{1, 2}, {3, 4}});
+
+// To multi-dim array (preserves shape). Note the method name is "Muli", not "Multi" —
+// a longstanding API typo preserved for backwards compatibility.
+int[,] md = (int[,])arr.ToMuliDimArray<int>();
+
+// To jagged array
+int[][] jag = (int[][])arr.ToJaggedArray<int>();
+
+// From .NET array back (np.array accepts any rank)
+NDArray fromMd = np.array(md);
+```
+
+For unsafe interop with native code, use `arr.Data<T>()` (gets the `ArraySlice<T>` handle) or the underlying `arr.Storage.Address` pointer. Contiguous-only; check `arr.Shape.IsContiguous` first or copy with `arr.copy()`.
+
+---
+
 ## Memory Layout
 
-NumSharp is **C-contiguous** — row-major storage, like NumPy's default. The `order` parameter on `reshape`, `ravel`, `flatten`, and `copy` is accepted for API compatibility but ignored (there is no F-order path).
+NumSharp is **C-contiguous only** — row-major storage, like NumPy's default. The `order` parameter on `reshape`, `ravel`, `flatten`, and `copy` is accepted for API compatibility but ignored (there is no F-order path).
 
 This means:
 
@@ -431,8 +549,10 @@ Views can be non-contiguous (sliced, transposed, broadcasted). Use `arr.Shape.Is
 | `a == b` | `NDArray<bool>` | element-wise equality (broadcasts) |
 | `np.array_equal(a, b)` | `bool` | same shape AND all elements equal |
 | `np.allclose(a, b)` | `bool` | same shape AND all elements within tolerance (good for floats) |
-| `ReferenceEquals(a, b)` | `bool` | same C# object (rare to want this) |
-| `a.Storage == b.Storage` | `bool` | share underlying memory (i.e. views of the same data) |
+| `ReferenceEquals(a, b)` | `bool` | same C# object (rarely what you want) |
+| `a.@base != null` | `bool` | `a` is a view (shares memory with some owner) |
+
+> Caveat: NumSharp does not expose a direct "do these two arrays share memory?" check from user code. `a.@base` returns a fresh wrapper on every call and the underlying `Storage` is `protected internal`, so strict memory-identity testing is only available inside the assembly.
 
 ---
 
@@ -523,14 +643,20 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | scalar → `NDArray` | implicit | `bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex` |
 | `NDArray` → scalar | explicit | same 15 types + `string` — 0-d required; complex → non-complex throws `TypeError` |
 
-### Persistence
+### Persistence & Buffers
 
-| Call | Format | Notes |
-|------|--------|-------|
-| `np.save(path, arr)` | `.npy` | NumPy-compatible; writes header + data |
-| `np.load(path)` | `.npy` / `.npz` | Also accepts a `Stream` |
-| `arr.tofile(path)` | raw | Element bytes only, no header |
-| `np.fromfile(path, dtype)` | raw | Pair with `tofile` |
+| Call | Format | View / copy | Notes |
+|------|--------|-------------|-------|
+| `np.save(path, arr)` | `.npy` | — | NumPy-compatible; writes header + data |
+| `np.load(path)` | `.npy` / `.npz` | — | Also accepts a `Stream` |
+| `arr.tofile(path)` | raw | — | Element bytes only, no header |
+| `np.fromfile(path, dtype)` | raw | copy | Pair with `tofile` |
+| `np.frombuffer(byte[], …)` | in-memory | view (pins array) | Endian-prefix dtype strings trigger a copy |
+| `np.frombuffer(ArraySegment<byte>, …)` | in-memory | view | Uses segment's offset |
+| `np.frombuffer(Memory<byte>, …)` | in-memory | view if array-backed, else copy | |
+| `np.frombuffer(ReadOnlySpan<byte>, …)` | in-memory | copy | Spans can't be pinned |
+| `np.frombuffer(IntPtr, byteLength, …, dispose)` | native | view (optional ownership) | Pass `dispose` to transfer ownership |
+| `np.frombuffer<T>(T[], …)` | in-memory | view | Reinterpret typed array as different dtype |
 
 ---
 
