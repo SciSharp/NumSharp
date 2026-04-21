@@ -170,7 +170,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             int count, float[,] templates, int sampleSeed)
         {
             const int classes = 10;
-            const double noiseSigma = 1.5;
+            const double noiseSigma = 2.5;
             var rng = new Random(sampleSeed);
 
             var images = new NDArray(NPTypeCode.Single, new Shape(count, ImageSize), fillZeros: false);

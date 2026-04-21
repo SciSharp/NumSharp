@@ -34,7 +34,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         private const int OutputDim = 10;
 
         private const int BatchSize = 128;
-        private const int Epochs    = 5;
+        private const int Epochs    = 100;
 
         public static int Main(string[] args)
         {
