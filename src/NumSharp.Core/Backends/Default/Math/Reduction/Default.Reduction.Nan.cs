@@ -545,6 +545,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Double:
                         reduced = ReduceNanAxisScalarDouble(arr, inputBaseOffset, axisSize, shape.strides[axis], op);
                         break;
+                    case NPTypeCode.Half:
+                        reduced = ReduceNanAxisScalarHalf(arr, inputBaseOffset, axisSize, shape.strides[axis], op);
+                        break;
                     default:
                         reduced = 0;
                         break;
@@ -662,6 +665,61 @@ namespace NumSharp.Backends
                 }
                 default:
                     return 0.0;
+            }
+        }
+
+        /// <summary>
+        /// Half-typed scalar NaN axis reduction. Uses double accumulator for precision,
+        /// casts final result back to Half to preserve dtype.
+        /// </summary>
+        private static Half ReduceNanAxisScalarHalf(NDArray arr, long baseOffset, long axisSize, long axisStride, ReductionOp op)
+        {
+            switch (op)
+            {
+                case ReductionOp.NanSum:
+                {
+                    double sum = 0.0;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        if (!double.IsNaN(val)) sum += val;
+                    }
+                    return (Half)sum;
+                }
+                case ReductionOp.NanProd:
+                {
+                    double prod = 1.0;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        if (!double.IsNaN(val)) prod *= val;
+                    }
+                    return (Half)prod;
+                }
+                case ReductionOp.NanMin:
+                {
+                    double minVal = double.PositiveInfinity;
+                    bool foundNonNaN = false;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        if (!double.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
+                    }
+                    return foundNonNaN ? (Half)minVal : Half.NaN;
+                }
+                case ReductionOp.NanMax:
+                {
+                    double maxVal = double.NegativeInfinity;
+                    bool foundNonNaN = false;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        double val = (double)(Half)arr.GetAtIndex(baseOffset + i * axisStride);
+                        if (!double.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }
+                    }
+                    return foundNonNaN ? (Half)maxVal : Half.NaN;
+                }
+                default:
+                    return Half.Zero;
             }
         }
 

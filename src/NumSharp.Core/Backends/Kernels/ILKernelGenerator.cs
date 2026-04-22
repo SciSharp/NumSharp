@@ -305,6 +305,8 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(int)");
             public static readonly MethodInfo DecimalImplicitFromByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(byte)");
+            public static readonly MethodInfo DecimalImplicitFromSByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(sbyte) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(sbyte)");
             public static readonly MethodInfo DecimalImplicitFromShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(short)");
             public static readonly MethodInfo DecimalImplicitFromUShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) })
@@ -323,6 +325,8 @@ namespace NumSharp.Backends.Kernels
             // Decimal conversion methods (from decimal)
             public static readonly MethodInfo DecimalToByte = typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "ToByte");
+            public static readonly MethodInfo DecimalToSByte = typeof(decimal).GetMethod("ToSByte", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToSByte");
             public static readonly MethodInfo DecimalToInt16 = typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "ToInt16");
             public static readonly MethodInfo DecimalToUInt16 = typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) })
@@ -868,6 +872,7 @@ namespace NumSharp.Backends.Kernels
                 var method = from switch
                 {
                     NPTypeCode.Byte => CachedMethods.DecimalImplicitFromByte,
+                    NPTypeCode.SByte => CachedMethods.DecimalImplicitFromSByte,
                     NPTypeCode.Int16 => CachedMethods.DecimalImplicitFromShort,
                     NPTypeCode.UInt16 => CachedMethods.DecimalImplicitFromUShort,
                     NPTypeCode.Int32 => CachedMethods.DecimalImplicitFromInt,
@@ -902,6 +907,7 @@ namespace NumSharp.Backends.Kernels
                 var method = to switch
                 {
                     NPTypeCode.Byte => CachedMethods.DecimalToByte,
+                    NPTypeCode.SByte => CachedMethods.DecimalToSByte,
                     NPTypeCode.Int16 => CachedMethods.DecimalToInt16,
                     NPTypeCode.UInt16 => CachedMethods.DecimalToUInt16,
                     NPTypeCode.Int32 => CachedMethods.DecimalToInt32,

@@ -81,6 +81,7 @@ namespace NumSharp
             {
                 NPTypeCode.Boolean => ComputeAllPerAxis(nd.MakeGeneric<bool>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Byte => ComputeAllPerAxis(nd.MakeGeneric<byte>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.SByte => ComputeAllPerAxis(nd.MakeGeneric<sbyte>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Int16 => ComputeAllPerAxis(nd.MakeGeneric<short>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.UInt16 => ComputeAllPerAxis(nd.MakeGeneric<ushort>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Int32 => ComputeAllPerAxis(nd.MakeGeneric<int>(), axisSize, postAxisStride, resultArray),
@@ -88,9 +89,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => ComputeAllPerAxis(nd.MakeGeneric<long>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.UInt64 => ComputeAllPerAxis(nd.MakeGeneric<ulong>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Char => ComputeAllPerAxis(nd.MakeGeneric<char>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Half => ComputeAllPerAxis(nd.MakeGeneric<Half>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Double => ComputeAllPerAxis(nd.MakeGeneric<double>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Single => ComputeAllPerAxis(nd.MakeGeneric<float>(), axisSize, postAxisStride, resultArray),
                 NPTypeCode.Decimal => ComputeAllPerAxis(nd.MakeGeneric<decimal>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Complex => ComputeAllPerAxis(nd.MakeGeneric<System.Numerics.Complex>(), axisSize, postAxisStride, resultArray),
                 _ => throw new NotSupportedException($"Type {nd.typecode} is not supported")
             };
 

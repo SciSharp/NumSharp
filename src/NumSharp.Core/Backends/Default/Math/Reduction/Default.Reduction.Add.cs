@@ -12,7 +12,9 @@ namespace NumSharp.Backends
 
             if (shape.IsEmpty)
             {
-                var defaultVal = (typeCode ?? arr.typecode).GetDefaultValue();
+                // NumPy parity: sum of empty array uses accumulating type (int/bool -> int64/uint64, floats preserved).
+                var defaultType = typeCode ?? arr.typecode.GetAccumulatingType();
+                var defaultVal = defaultType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 return NDArray.Scalar(defaultVal);
             }
@@ -125,7 +127,9 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             if (axis_ == null)
             {
-                var defaultVal = (typeCode ?? arr.typecode).GetDefaultValue();
+                // NumPy parity: empty reduction uses accumulating type (int/bool -> int64/uint64, floats preserved).
+                var defaultType = typeCode ?? arr.typecode.GetAccumulatingType();
+                var defaultVal = defaultType.GetDefaultValue();
                 if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NDArray.Scalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }

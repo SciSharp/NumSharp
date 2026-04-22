@@ -122,13 +122,28 @@ public class NpTypeChecksBattleTests
     [TestMethod]
     public void Sctype2Char_Boolean()
     {
-        np.sctype2char(NPTypeCode.Boolean).Should().Be('b');
+        // NumPy 2.x: np.dtype(bool).char == '?'. 'b' is int8 (SByte).
+        np.sctype2char(NPTypeCode.Boolean).Should().Be('?');
+    }
+
+    [TestMethod]
+    public void Sctype2Char_SByte()
+    {
+        // NumPy: np.dtype(np.int8).char == 'b'.
+        np.sctype2char(NPTypeCode.SByte).Should().Be('b');
     }
 
     [TestMethod]
     public void Sctype2Char_Byte()
     {
         np.sctype2char(NPTypeCode.Byte).Should().Be('B');
+    }
+
+    [TestMethod]
+    public void Sctype2Char_Half()
+    {
+        // NumPy: np.dtype(np.float16).char == 'e'.
+        np.sctype2char(NPTypeCode.Half).Should().Be('e');
     }
 
     [TestMethod]

@@ -38,6 +38,7 @@ namespace NumSharp
             {
                 NPTypeCode.Boolean => RepeatScalarTyped<bool>(a, repeats, totalSize),
                 NPTypeCode.Byte => RepeatScalarTyped<byte>(a, repeats, totalSize),
+                NPTypeCode.SByte => RepeatScalarTyped<sbyte>(a, repeats, totalSize),
                 NPTypeCode.Int16 => RepeatScalarTyped<short>(a, repeats, totalSize),
                 NPTypeCode.UInt16 => RepeatScalarTyped<ushort>(a, repeats, totalSize),
                 NPTypeCode.Int32 => RepeatScalarTyped<int>(a, repeats, totalSize),
@@ -45,9 +46,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => RepeatScalarTyped<long>(a, repeats, totalSize),
                 NPTypeCode.UInt64 => RepeatScalarTyped<ulong>(a, repeats, totalSize),
                 NPTypeCode.Char => RepeatScalarTyped<char>(a, repeats, totalSize),
+                NPTypeCode.Half => RepeatScalarTyped<Half>(a, repeats, totalSize),
                 NPTypeCode.Single => RepeatScalarTyped<float>(a, repeats, totalSize),
                 NPTypeCode.Double => RepeatScalarTyped<double>(a, repeats, totalSize),
                 NPTypeCode.Decimal => RepeatScalarTyped<decimal>(a, repeats, totalSize),
+                NPTypeCode.Complex => RepeatScalarTyped<System.Numerics.Complex>(a, repeats, totalSize),
                 _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
             };
         }
@@ -90,6 +93,7 @@ namespace NumSharp
             {
                 NPTypeCode.Boolean => RepeatArrayTyped<bool>(a, repeatsFlat, totalSize),
                 NPTypeCode.Byte => RepeatArrayTyped<byte>(a, repeatsFlat, totalSize),
+                NPTypeCode.SByte => RepeatArrayTyped<sbyte>(a, repeatsFlat, totalSize),
                 NPTypeCode.Int16 => RepeatArrayTyped<short>(a, repeatsFlat, totalSize),
                 NPTypeCode.UInt16 => RepeatArrayTyped<ushort>(a, repeatsFlat, totalSize),
                 NPTypeCode.Int32 => RepeatArrayTyped<int>(a, repeatsFlat, totalSize),
@@ -97,9 +101,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => RepeatArrayTyped<long>(a, repeatsFlat, totalSize),
                 NPTypeCode.UInt64 => RepeatArrayTyped<ulong>(a, repeatsFlat, totalSize),
                 NPTypeCode.Char => RepeatArrayTyped<char>(a, repeatsFlat, totalSize),
+                NPTypeCode.Half => RepeatArrayTyped<Half>(a, repeatsFlat, totalSize),
                 NPTypeCode.Single => RepeatArrayTyped<float>(a, repeatsFlat, totalSize),
                 NPTypeCode.Double => RepeatArrayTyped<double>(a, repeatsFlat, totalSize),
                 NPTypeCode.Decimal => RepeatArrayTyped<decimal>(a, repeatsFlat, totalSize),
+                NPTypeCode.Complex => RepeatArrayTyped<System.Numerics.Complex>(a, repeatsFlat, totalSize),
                 _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
             };
         }
