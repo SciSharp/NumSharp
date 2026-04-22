@@ -1,6 +1,7 @@
 using System;
 using NumSharp.Generic;
 using System.Collections.Generic;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 
@@ -180,34 +181,24 @@ namespace NumSharp.Backends
         {
             var shape = x.Shape;
             var size = x.size;
-            long count = 0;
 
             if (shape.IsContiguous)
             {
                 // Fast path for contiguous arrays
                 T* ptr = (T*)x.Address;
                 T zero = default;
+                long count = 0;
                 for (long i = 0; i < size; i++)
                 {
                     if (!EqualityComparer<T>.Default.Equals(ptr[i], zero))
                         count++;
                 }
-            }
-            else
-            {
-                // Strided path
-                var iter = x.AsIterator<T>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                T zero = default;
-                while (hasNext())
-                {
-                    if (!EqualityComparer<T>.Default.Equals(moveNext(), zero))
-                        count++;
-                }
+                return count;
             }
 
-            return count;
+            // Strided path: use NpyIter for layout-aware traversal.
+            using var iter = NpyIterRef.New(x, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            return iter.ExecuteReducing<CountNonZeroKernel<T>, long>(default, 0L);
         }
 
         /// <summary>

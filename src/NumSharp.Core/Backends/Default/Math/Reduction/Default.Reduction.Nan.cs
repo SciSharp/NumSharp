@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -260,60 +261,29 @@ namespace NumSharp.Backends
 
         private static float NanReduceScalarFloat(NDArray arr, ReductionOp op)
         {
-            var iter = arr.AsIterator<float>();
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
-                    float sum = 0f;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                            sum += val;
-                    }
-                    return sum;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return iter.ExecuteReducing<NanSumFloatKernel, float>(default, 0f);
                 }
                 case ReductionOp.NanProd:
                 {
-                    float prod = 1f;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                            prod *= val;
-                    }
-                    return prod;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return iter.ExecuteReducing<NanProdFloatKernel, float>(default, 1f);
                 }
                 case ReductionOp.NanMin:
                 {
-                    float minVal = float.PositiveInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                        {
-                            if (val < minVal) minVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? minVal : float.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMinFloatKernel, NanMinMaxFloatAccumulator>(default, default);
+                    return accum.Found ? accum.Value : float.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    float maxVal = float.NegativeInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                        {
-                            if (val > maxVal) maxVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? maxVal : float.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMaxFloatKernel, NanMinMaxFloatAccumulator>(default, default);
+                    return accum.Found ? accum.Value : float.NaN;
                 }
                 default:
                     throw new NotSupportedException($"Unsupported NaN reduction: {op}");
@@ -322,60 +292,29 @@ namespace NumSharp.Backends
 
         private static double NanReduceScalarDouble(NDArray arr, ReductionOp op)
         {
-            var iter = arr.AsIterator<double>();
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
-                    double sum = 0.0;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                            sum += val;
-                    }
-                    return sum;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return iter.ExecuteReducing<NanSumDoubleKernel, double>(default, 0.0);
                 }
                 case ReductionOp.NanProd:
                 {
-                    double prod = 1.0;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                            prod *= val;
-                    }
-                    return prod;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return iter.ExecuteReducing<NanProdDoubleKernel, double>(default, 1.0);
                 }
                 case ReductionOp.NanMin:
                 {
-                    double minVal = double.PositiveInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                        {
-                            if (val < minVal) minVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? minVal : double.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMinDoubleKernel, NanMinMaxDoubleAccumulator>(default, default);
+                    return accum.Found ? accum.Value : double.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    double maxVal = double.NegativeInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                        {
-                            if (val > maxVal) maxVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? maxVal : double.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMaxDoubleKernel, NanMinMaxDoubleAccumulator>(default, default);
+                    return accum.Found ? accum.Value : double.NaN;
                 }
                 default:
                     throw new NotSupportedException($"Unsupported NaN reduction: {op}");

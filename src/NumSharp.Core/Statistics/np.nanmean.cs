@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -51,36 +52,16 @@ namespace NumSharp
             {
                 case NPTypeCode.Single:
                 {
-                    var iter = arr.AsIterator<float>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                        {
-                            sum += val;
-                            count++;
-                        }
-                    }
-                    result = count > 0 ? (float)(sum / count) : float.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMeanFloatKernel, NanMeanAccumulator>(default, default);
+                    result = accum.Count > 0 ? (float)(accum.Sum / accum.Count) : float.NaN;
                     break;
                 }
                 case NPTypeCode.Double:
                 {
-                    var iter = arr.AsIterator<double>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                        {
-                            sum += val;
-                            count++;
-                        }
-                    }
-                    result = count > 0 ? sum / count : double.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMeanDoubleKernel, NanMeanAccumulator>(default, default);
+                    result = accum.Count > 0 ? accum.Sum / accum.Count : double.NaN;
                     break;
                 }
                 case NPTypeCode.Half:

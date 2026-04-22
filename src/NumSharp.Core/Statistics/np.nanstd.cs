@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -76,75 +77,39 @@ namespace NumSharp
                 case NPTypeCode.Single:
                 {
                     // Two-pass algorithm: first compute mean, then variance
-                    var iter = arr.AsIterator<float>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        float val = iter.MoveNext();
-                        if (!float.IsNaN(val))
-                        {
-                            sum += val;
-                            count++;
-                        }
-                    }
+                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter1.ExecuteReducing<NanMeanFloatKernel, NanMeanAccumulator>(default, default);
 
-                    if (count <= ddof)
+                    if (accum.Count <= ddof)
                     {
                         result = float.NaN;
                     }
                     else
                     {
-                        double mean = sum / count;
-                        iter.Reset();
-                        double sumSq = 0.0;
-                        while (iter.HasNext())
-                        {
-                            float val = iter.MoveNext();
-                            if (!float.IsNaN(val))
-                            {
-                                double diff = val - mean;
-                                sumSq += diff * diff;
-                            }
-                        }
-                        result = (float)Math.Sqrt(sumSq / (count - ddof));
+                        double mean = accum.Sum / accum.Count;
+                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        double sumSq = iter2.ExecuteReducing<NanSquaredDeviationFloatKernel, double>(
+                            new NanSquaredDeviationFloatKernel(mean), 0.0);
+                        result = (float)Math.Sqrt(sumSq / (accum.Count - ddof));
                     }
                     break;
                 }
                 case NPTypeCode.Double:
                 {
-                    var iter = arr.AsIterator<double>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        double val = iter.MoveNext();
-                        if (!double.IsNaN(val))
-                        {
-                            sum += val;
-                            count++;
-                        }
-                    }
+                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter1.ExecuteReducing<NanMeanDoubleKernel, NanMeanAccumulator>(default, default);
 
-                    if (count <= ddof)
+                    if (accum.Count <= ddof)
                     {
                         result = double.NaN;
                     }
                     else
                     {
-                        double mean = sum / count;
-                        iter.Reset();
-                        double sumSq = 0.0;
-                        while (iter.HasNext())
-                        {
-                            double val = iter.MoveNext();
-                            if (!double.IsNaN(val))
-                            {
-                                double diff = val - mean;
-                                sumSq += diff * diff;
-                            }
-                        }
-                        result = Math.Sqrt(sumSq / (count - ddof));
+                        double mean = accum.Sum / accum.Count;
+                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        double sumSq = iter2.ExecuteReducing<NanSquaredDeviationDoubleKernel, double>(
+                            new NanSquaredDeviationDoubleKernel(mean), 0.0);
+                        result = Math.Sqrt(sumSq / (accum.Count - ddof));
                     }
                     break;
                 }
