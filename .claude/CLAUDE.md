@@ -182,7 +182,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ---
 
-## Missing Functions (20)
+## Missing Functions (19)
 
 These NumPy functions are **not implemented**:
 
@@ -190,7 +190,7 @@ These NumPy functions are **not implemented**:
 |----------|-----------|
 | Sorting | `np.sort` |
 | Selection | `np.where` |
-| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.tile`, `np.pad` |
+| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.pad` |
 | Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
 | Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
 | Cumulative | `np.diff`, `np.gradient`, `np.ediff1d` |
@@ -206,7 +206,7 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `dstack`, `expand_dims`, `flatten`, `hstack`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `transpose`, `unique`, `vstack`
+`atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `dstack`, `expand_dims`, `flatten`, `hstack`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
 
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
