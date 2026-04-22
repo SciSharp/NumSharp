@@ -129,19 +129,63 @@ namespace NumSharp.Backends.Iteration
 
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
-            long* innerSize = GetInnerLoopSizePtr();
+            long innerSize = ResolveInnerLoopCount();
 
             if (IsSingleInnerLoop())
             {
-                kernel(dataptrs, byteStrides, *innerSize, auxdata);
+                kernel(dataptrs, byteStrides, innerSize, auxdata);
                 return;
             }
 
             var iternext = GetIterNext();
+
+            // Buffered fills can change size at the tail, so re-read per call.
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                long* bufSize = GetInnerLoopSizePtr();
+                do
+                {
+                    kernel(dataptrs, byteStrides, *bufSize, auxdata);
+                } while (iternext(ref *_state));
+                return;
+            }
+
+            // EXLOOP and non-EXLOOP both have a stable innerSize across iterations.
             do
             {
-                kernel(dataptrs, byteStrides, *innerSize, auxdata);
+                kernel(dataptrs, byteStrides, innerSize, auxdata);
             } while (iternext(ref *_state));
+        }
+
+        /// <summary>
+        /// Returns the number of elements the kernel processes per inner-loop
+        /// invocation, in a way that is correct regardless of which iterator
+        /// flags are set:
+        ///
+        /// <list type="bullet">
+        ///   <item>BUFFER: size of the current buffer fill (callers that can
+        ///     observe per-iteration changes should re-read it from
+        ///     <see cref="GetInnerLoopSizePtr"/>).</item>
+        ///   <item>EXTERNAL_LOOP (EXLOOP): innermost coalesced shape dimension —
+        ///     the iterator advances in strides of that size.</item>
+        ///   <item>Otherwise: 1 — the iterator's <c>iternext</c> increments
+        ///     <see cref="NpyIterState.IterIndex"/> by one per call, so the
+        ///     kernel processes one element per invocation.</item>
+        /// </list>
+        ///
+        /// Fixes the pre-existing inconsistency where
+        /// <see cref="GetInnerLoopSizePtr"/> on a non-BUFFER, non-EXLOOP
+        /// iterator reported <c>Shape[NDim - 1]</c> (the innermost dimension)
+        /// while <c>Iternext</c> only advanced by one element — causing the
+        /// kernel to over-read past the end of the array.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private long ResolveInnerLoopCount()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0) return _state->BufIterEnd;
+            if ((f & (uint)NpyIterFlags.EXLOOP) != 0) return _state->Shape[_state->NDim - 1];
+            return 1;
         }
 
         /// <summary>
@@ -170,7 +214,7 @@ namespace NumSharp.Backends.Iteration
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void ExecuteGenericSingle<TKernel>(TKernel kernel) where TKernel : struct, INpyInnerLoop
         {
-            kernel.Execute(GetDataPtrArray(), GetInnerLoopByteStrides(), *GetInnerLoopSizePtr());
+            kernel.Execute(GetDataPtrArray(), GetInnerLoopByteStrides(), ResolveInnerLoopCount());
         }
 
         /// <summary>Multi-loop path with do/while driver.</summary>
@@ -179,12 +223,22 @@ namespace NumSharp.Backends.Iteration
         {
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
-            long* innerSize = GetInnerLoopSizePtr();
             var iternext = GetIterNext();
 
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                long* bufSize = GetInnerLoopSizePtr();
+                do
+                {
+                    kernel.Execute(dataptrs, byteStrides, *bufSize);
+                } while (iternext(ref *_state));
+                return;
+            }
+
+            long innerSize = ResolveInnerLoopCount();
             do
             {
-                kernel.Execute(dataptrs, byteStrides, *innerSize);
+                kernel.Execute(dataptrs, byteStrides, innerSize);
             } while (iternext(ref *_state));
         }
 
@@ -216,19 +270,31 @@ namespace NumSharp.Backends.Iteration
         {
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
-            long* innerSize = GetInnerLoopSizePtr();
             TAccum accum = init;
 
             if (IsSingleInnerLoop())
             {
-                kernel.Execute(dataptrs, byteStrides, *innerSize, ref accum);
+                kernel.Execute(dataptrs, byteStrides, ResolveInnerLoopCount(), ref accum);
                 return accum;
             }
 
             var iternext = GetIterNext();
+
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+            {
+                long* bufSize = GetInnerLoopSizePtr();
+                do
+                {
+                    if (!kernel.Execute(dataptrs, byteStrides, *bufSize, ref accum))
+                        break;
+                } while (iternext(ref *_state));
+                return accum;
+            }
+
+            long innerSize = ResolveInnerLoopCount();
             do
             {
-                if (!kernel.Execute(dataptrs, byteStrides, *innerSize, ref accum))
+                if (!kernel.Execute(dataptrs, byteStrides, innerSize, ref accum))
                     break;
             } while (iternext(ref *_state));
             return accum;
