@@ -94,7 +94,7 @@ namespace NumSharp
                     case Slice _:
                         continue;
                     case null: throw new ArgumentNullException($"The {i}th dimension in given indices is null.");
-                    default: throw new ArgumentException($"Unsupported indexing type: '{(indicesObjects[i]?.GetType()?.Name ?? "null")}'");
+                    default: throw new IndexError($"only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer or boolean arrays are valid indices (got '{(indicesObjects[i]?.GetType()?.Name ?? "null")}')");
                 }
             }
 

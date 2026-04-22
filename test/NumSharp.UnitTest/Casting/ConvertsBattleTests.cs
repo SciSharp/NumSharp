@@ -1299,102 +1299,85 @@ namespace NumSharp.UnitTest.Casting
 
         #region Round 5D: edge cases (Half/Complex as repeats / shift / index)
 
-        // M1: np.repeat used Convert.ToInt64 on repeats. Half/Complex threw IConvertible error.
-        // NumPy 2.4.2 throws TypeError("safe casting"); NumSharp now permissively truncates.
-        // Documents divergence — NumSharp accepts what NumPy rejects. Both don't crash with
-        // raw IConvertible exception.
+        // NumPy parity: np.repeat rejects non-integer repeats dtype with TypeError:
+        //   "Cannot cast array data from dtype('float16') to dtype('int64') according to the rule 'safe'"
+        // np.repeat now validates the repeats dtype via IsSafeToInt64 and throws TypeError.
 
         [TestMethod]
-        [Misaligned]
         public void Repeat_HalfRepeats_PermissiveTruncate()
         {
-            // NumSharp: permissively truncates Half repeats to int64. NumPy: TypeError.
             var arr = np.array(new[] { 1, 2, 3 });
             var rep = np.array(new[] { (Half)2, (Half)3, (Half)1 });
-            var r = np.repeat(arr, rep);
-            r.size.Should().Be(6);
-            r.GetAtIndex<int>(0).Should().Be(1);
-            r.GetAtIndex<int>(1).Should().Be(1);
-            r.GetAtIndex<int>(2).Should().Be(2);
-            r.GetAtIndex<int>(5).Should().Be(3);
+            var act = () => np.repeat(arr, rep);
+            act.Should().Throw<TypeError>().WithMessage("*float16*int64*safe*");
         }
 
-        // M2: Default.Shift fix replaces Convert.ToInt32(rhs) at ExecuteShiftOpScalar:136.
-        // Two upstream paths reject Half before reaching the fix. Lock in both rejections —
-        // remove [Misaligned] + flip the assertion if either path gains Half support.
+        // NumPy parity: np.left_shift rejects Half with TypeError:
+        //   "ufunc 'left_shift' not supported for the input types, ... safe casting"
+        // Default.Shift::ValidateIntegerType raises TypeError (Python/NumPy semantic).
+        // np.asanyarray(Half) now creates a Half NDArray, so both entry paths reach
+        // the same validator and produce the same TypeError.
 
-        // np.left_shift(arr, object) → np.asanyarray(Half) which rejects Half upstream.
         [TestMethod]
-        [Misaligned]
         public void LeftShift_HalfShiftAmount_AsObject_NotSupported()
         {
             var arr = np.array(new[] { 1, 2, 4, 8 });
             var act = () => np.left_shift(arr, (object)(Half)2);
-            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*left_shift*not supported*");
         }
 
-        // np.left_shift(arr, NDArray) → LeftShift dtype validation rejects Half.
         [TestMethod]
-        [Misaligned]
         public void LeftShift_HalfShiftAmount_AsNDArray_NotSupported()
         {
             var arr = np.array(new[] { 1, 2, 4, 8 });
             var rhs = NDArray.Scalar((Half)2);
             var act = () => np.left_shift(arr, rhs);
-            act.Should().Throw<NotSupportedException>().WithMessage("*left_shift*integer*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*left_shift*not supported*");
         }
 
         // Round 6 adds `<<` / `>>` operators to NDArray. Operator-form equivalents of the
         // two tests above are added in the Round 6 region below — they exercise the same
         // dispatch paths and lock in the same rejection.
 
-        // M3+M4: Indexing.Selection.{Setter,Getter} fix adds Half/Complex cases to the
-        // slice-conversion switch. However the deeper validation switch (Getter:70-87,
-        // Setter:75-97) rejects Half/Complex with "Unsupported indexing type" BEFORE
-        // reaching the fixed switch. Lock in current rejection — remove [Misaligned] +
-        // flip the assertion if validation is expanded to accept Half/Complex.
-        // NumPy: also rejects with IndexError, so this rejection is closer to NumPy than
-        // the silent-truncate alternative.
+        // NumPy parity: non-integer indices raise IndexError. NumSharp now throws IndexError
+        // ("only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer
+        // or boolean arrays are valid indices") from the Getter/Setter validation switch.
 
         [TestMethod]
-        [Misaligned]
         public void Indexing_HalfIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[(Half)2];
-            act.Should().Throw<ArgumentException>().WithMessage("*Unsupported indexing type*Half*");
+            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Half*");
         }
 
         [TestMethod]
-        [Misaligned]
         public void Indexing_ComplexIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[new Complex(2, 0)];
-            act.Should().Throw<ArgumentException>().WithMessage("*Unsupported indexing type*Complex*");
+            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Complex*");
         }
 
         #endregion
 
         #region Round 5E: duplicate test forms (preserve original test cores)
 
-        // The earlier MatMul Complex test was changed from full-NumPy-parity to real-only
-        // because the scalar fallback uses double accumulator. Lock in the FULL NumPy-parity
-        // expectation here — remove [Misaligned] + flip if Complex matmul accumulator path
-        // is implemented. NumPy: matmul([[1+2j,3],[4,5]], [[1,2],[3,4]]) = [[10+2j,14+4j],[19,28]]
+        // MatMul on Complex now preserves imaginary (NumPy parity):
+        // Default.MatMul.2D2D.cs::MatMulMixedType routes Complex results to a dedicated
+        // Complex accumulator (MatMulComplexAccumulator) instead of the double one.
+        // NumPy: matmul([[1+2j,3],[4,5]], [[1,2],[3,4]]) = [[10+2j,14+4j],[19,28]]
 
         [TestMethod]
-        [Misaligned]
         public void MatMul_ComplexMatrix_NumPyParity_DropsImaginary()
         {
-            // Lock in current divergence: imaginary is silently dropped in matmul scalar fallback.
             var a = np.array(new Complex[,] { { new Complex(1, 2), new Complex(3, 0) }, { new Complex(4, 0), new Complex(5, 0) } });
             var b = np.array(new Complex[,] { { new Complex(1, 0), new Complex(2, 0) }, { new Complex(3, 0), new Complex(4, 0) } });
             var r = np.matmul(a, b);
-            // NumPy: [0,0] = 10+2j. NumSharp: 10+0j (imaginary dropped).
-            r.GetValue<Complex>(0, 0).Imaginary.Should().Be(0, "Misaligned: NumPy returns 2 (imaginary preserved)");
-            // NumPy: [0,1] = 14+4j. NumSharp: 14+0j.
-            r.GetValue<Complex>(0, 1).Imaginary.Should().Be(0, "Misaligned: NumPy returns 4 (imaginary preserved)");
+            r.GetValue<Complex>(0, 0).Should().Be(new Complex(10, 2));
+            r.GetValue<Complex>(0, 1).Should().Be(new Complex(14, 4));
+            r.GetValue<Complex>(1, 0).Should().Be(new Complex(19, 0));
+            r.GetValue<Complex>(1, 1).Should().Be(new Complex(28, 0));
         }
 
         // The Mean_ScalarHalfArray_Works test asserts value 3.5 against Double dtype, but
@@ -1537,48 +1520,42 @@ namespace NumSharp.UnitTest.Casting
             r.GetAtIndex<int>(1).Should().Be(16);
         }
 
-        // ----- Half-rhs Misaligned duplicates: operator form reaches the same rejection -----
+        // ----- Operator-form Half-rhs rejection: NumPy parity (TypeError) -----
+        // Both operator paths reach Default.Shift::ValidateIntegerType which now raises
+        // TypeError: "ufunc '{left,right}_shift' not supported for the input types, ..."
 
-        // operator<<(NDArray, object) → np.asanyarray((Half)2) → rejects Half upstream.
         [TestMethod]
-        [Misaligned]
         public void LeftShift_Operator_HalfObjectRhs_NotSupported()
         {
             var arr = np.array(new[] { 1, 2, 4, 8 });
             var act = () => arr << (object)(Half)2;
-            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*left_shift*not supported*");
         }
 
-        // operator<<(NDArray, NDArray) → TensorEngine.LeftShift validates dtype, rejects Half.
         [TestMethod]
-        [Misaligned]
         public void LeftShift_Operator_HalfNDArrayRhs_NotSupported()
         {
             var arr = np.array(new[] { 1, 2, 4, 8 });
             var rhs = NDArray.Scalar((Half)2);
             var act = () => arr << rhs;
-            act.Should().Throw<NotSupportedException>().WithMessage("*left_shift*integer*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*left_shift*not supported*");
         }
 
-        // operator>>(NDArray, object) → np.asanyarray((Half)2) → rejects Half upstream.
         [TestMethod]
-        [Misaligned]
         public void RightShift_Operator_HalfObjectRhs_NotSupported()
         {
             var arr = np.array(new[] { 16, 8, 4, 2 });
             var act = () => arr >> (object)(Half)2;
-            act.Should().Throw<NotSupportedException>().WithMessage("*asanyarray*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*right_shift*not supported*");
         }
 
-        // operator>>(NDArray, NDArray) → TensorEngine.RightShift validates dtype, rejects Half.
         [TestMethod]
-        [Misaligned]
         public void RightShift_Operator_HalfNDArrayRhs_NotSupported()
         {
             var arr = np.array(new[] { 16, 8, 4, 2 });
             var rhs = NDArray.Scalar((Half)2);
             var act = () => arr >> rhs;
-            act.Should().Throw<NotSupportedException>().WithMessage("*right_shift*integer*Half*");
+            act.Should().Throw<TypeError>().WithMessage("*right_shift*not supported*");
         }
 
         #endregion

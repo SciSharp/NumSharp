@@ -109,38 +109,42 @@ namespace NumSharp.Backends.Unmanaged
 
         public static IMemoryBlock Allocate(Type elementType, long count, object fill)
         {
+            // Route through Converts.ToXxx(object) dispatchers — handles all 15 dtypes
+            // and cross-type fills (e.g. int -> Half, double -> Complex) with NumPy-parity
+            // wrapping semantics. Direct boxing casts like (Half)fill throw InvalidCastException
+            // unless `fill` is already the exact target type, which breaks fill=int on Half etc.
             switch (elementType.GetTypeCode())
             {
                 case NPTypeCode.Boolean:
-                    return new UnmanagedMemoryBlock<bool>(count, (bool)fill);
+                    return new UnmanagedMemoryBlock<bool>(count, Utilities.Converts.ToBoolean(fill));
                 case NPTypeCode.SByte:
-                    return new UnmanagedMemoryBlock<sbyte>(count, (sbyte)fill);
+                    return new UnmanagedMemoryBlock<sbyte>(count, Utilities.Converts.ToSByte(fill));
                 case NPTypeCode.Byte:
-                    return new UnmanagedMemoryBlock<byte>(count, (byte)fill);
+                    return new UnmanagedMemoryBlock<byte>(count, Utilities.Converts.ToByte(fill));
                 case NPTypeCode.Int16:
-                    return new UnmanagedMemoryBlock<short>(count, (short)fill);
+                    return new UnmanagedMemoryBlock<short>(count, Utilities.Converts.ToInt16(fill));
                 case NPTypeCode.UInt16:
-                    return new UnmanagedMemoryBlock<ushort>(count, (ushort)fill);
+                    return new UnmanagedMemoryBlock<ushort>(count, Utilities.Converts.ToUInt16(fill));
                 case NPTypeCode.Int32:
-                    return new UnmanagedMemoryBlock<int>(count, (int)fill);
+                    return new UnmanagedMemoryBlock<int>(count, Utilities.Converts.ToInt32(fill));
                 case NPTypeCode.UInt32:
-                    return new UnmanagedMemoryBlock<uint>(count, (uint)fill);
+                    return new UnmanagedMemoryBlock<uint>(count, Utilities.Converts.ToUInt32(fill));
                 case NPTypeCode.Int64:
-                    return new UnmanagedMemoryBlock<long>(count, (long)fill);
+                    return new UnmanagedMemoryBlock<long>(count, Utilities.Converts.ToInt64(fill));
                 case NPTypeCode.UInt64:
-                    return new UnmanagedMemoryBlock<ulong>(count, (ulong)fill);
+                    return new UnmanagedMemoryBlock<ulong>(count, Utilities.Converts.ToUInt64(fill));
                 case NPTypeCode.Char:
-                    return new UnmanagedMemoryBlock<char>(count, (char)fill);
+                    return new UnmanagedMemoryBlock<char>(count, Utilities.Converts.ToChar(fill));
                 case NPTypeCode.Half:
-                    return new UnmanagedMemoryBlock<Half>(count, (Half)fill);
+                    return new UnmanagedMemoryBlock<Half>(count, Utilities.Converts.ToHalf(fill));
                 case NPTypeCode.Double:
-                    return new UnmanagedMemoryBlock<double>(count, (double)fill);
+                    return new UnmanagedMemoryBlock<double>(count, Utilities.Converts.ToDouble(fill));
                 case NPTypeCode.Single:
-                    return new UnmanagedMemoryBlock<float>(count, (float)fill);
+                    return new UnmanagedMemoryBlock<float>(count, Utilities.Converts.ToSingle(fill));
                 case NPTypeCode.Decimal:
-                    return new UnmanagedMemoryBlock<decimal>(count, (decimal)fill);
+                    return new UnmanagedMemoryBlock<decimal>(count, Utilities.Converts.ToDecimal(fill));
                 case NPTypeCode.Complex:
-                    return new UnmanagedMemoryBlock<Complex>(count, (Complex)fill);
+                    return new UnmanagedMemoryBlock<Complex>(count, Utilities.Converts.ToComplex(fill));
                 default:
                     throw new NotSupportedException();
             }

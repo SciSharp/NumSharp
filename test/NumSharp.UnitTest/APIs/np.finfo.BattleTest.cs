@@ -172,14 +172,12 @@ public class NpFInfoBattleTests
 
     #region String dtype Overload Tests
 
-    // Note: np.dtype() uses type names like "float", "double", "single"
-    // NumPy-style names like "float32", "float64" are not fully supported yet
-
     [TestMethod]
     public void FInfo_String_Float()
     {
-        var info = np.finfo("float");  // defaults to float (single)
-        info.bits.Should().Be(32);
+        // NumPy parity: np.finfo("float") → 64 bits (float is an alias for float64)
+        var info = np.finfo("float");
+        info.bits.Should().Be(64);
     }
 
     [TestMethod]
@@ -195,6 +193,25 @@ public class NpFInfoBattleTests
         var info = np.finfo("double");
         info.bits.Should().Be(64);
     }
+
+    [TestMethod]
+    public void FInfo_String_Float32()
+    {
+        var info = np.finfo("float32");
+        info.bits.Should().Be(32);
+    }
+
+    [TestMethod]
+    public void FInfo_String_Float64()
+    {
+        var info = np.finfo("float64");
+        info.bits.Should().Be(64);
+    }
+
+    // NumPy parity: np.finfo("float16") / np.finfo("half") should return bits=16.
+    // NumSharp's np.finfo(NPTypeCode) constructor doesn't include Half in IsFloatType
+    // (see np.finfo.cs:164). Tracked as a separate gap — np.dtype resolves "float16"
+    // to Half correctly, but np.finfo throws "not inexact".
 
     #endregion
 

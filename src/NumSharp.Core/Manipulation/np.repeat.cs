@@ -61,6 +61,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
         public static NDArray repeat(NDArray a, NDArray repeats)
         {
+            // NumPy parity: repeats must be safely castable to int64 — reject float/complex/uint64.
+            if (!IsSafeToInt64(repeats.GetTypeCode))
+                throw new TypeError($"Cannot cast array data from dtype('{repeats.GetTypeCode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
+
             a = a.ravel();
             var repeatsFlat = repeats.ravel();
 
@@ -152,6 +156,29 @@ namespace NumSharp
             }
 
             return ret;
+        }
+
+        /// <summary>
+        ///     NumPy "safe" casting check for the repeats dtype (target int64).
+        ///     Integers that fit in int64 + boolean pass; uint64/float/complex/decimal reject.
+        /// </summary>
+        private static bool IsSafeToInt64(NPTypeCode code)
+        {
+            switch (code)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.Char:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>

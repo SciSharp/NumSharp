@@ -296,11 +296,19 @@ namespace NumSharp.Backends
         /// <summary>
         /// General path for mixed types or strided arrays.
         /// Converts to double for computation, then back to result type.
+        /// For Complex result type, routes to a dedicated Complex accumulator that preserves imaginary.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void MatMulMixedType<TResult>(NDArray left, NDArray right, TResult* result, long M, long K, long N)
             where TResult : unmanaged
         {
+            // NumPy parity: Complex matmul must preserve imaginary components (double accumulator would drop them).
+            if (typeof(TResult) == typeof(System.Numerics.Complex))
+            {
+                MatMulComplexAccumulator(left, right, (System.Numerics.Complex*)result, M, K, N);
+                return;
+            }
+
             // Use double accumulator for precision
             var accumulator = new double[N];
 
@@ -337,6 +345,40 @@ namespace NumSharp.Backends
                 for (long j = 0; j < N; j++)
                 {
                     resultRow[j] = Converts.ChangeType<TResult>(accumulator[j]);
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void MatMulComplexAccumulator(NDArray left, NDArray right, System.Numerics.Complex* result, long M, long K, long N)
+        {
+            var accumulator = new System.Numerics.Complex[N];
+            var leftCoords = new long[2];
+            var rightCoords = new long[2];
+
+            for (long i = 0; i < M; i++)
+            {
+                Array.Clear(accumulator);
+
+                leftCoords[0] = i;
+                for (long k = 0; k < K; k++)
+                {
+                    leftCoords[1] = k;
+                    System.Numerics.Complex aik = Converts.ToComplex(left.GetValue(leftCoords));
+
+                    rightCoords[0] = k;
+                    for (long j = 0; j < N; j++)
+                    {
+                        rightCoords[1] = j;
+                        System.Numerics.Complex bkj = Converts.ToComplex(right.GetValue(rightCoords));
+                        accumulator[j] += aik * bkj;
+                    }
+                }
+
+                System.Numerics.Complex* resultRow = result + i * N;
+                for (long j = 0; j < N; j++)
+                {
+                    resultRow[j] = accumulator[j];
                 }
             }
         }

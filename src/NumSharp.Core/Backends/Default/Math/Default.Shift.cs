@@ -35,6 +35,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Validate that the array is an integer type.
+        /// Raises TypeError to match NumPy's ufunc dtype rejection.
         /// </summary>
         private static void ValidateIntegerType(NDArray arr, string opName)
         {
@@ -44,7 +45,7 @@ namespace NumSharp.Backends
                 typeCode != NPTypeCode.Int32 && typeCode != NPTypeCode.UInt32 &&
                 typeCode != NPTypeCode.Int64 && typeCode != NPTypeCode.UInt64)
             {
-                throw new NotSupportedException($"{opName} only supports integer types, got {typeCode}");
+                throw new TypeError($"ufunc '{opName}' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
             }
         }
 

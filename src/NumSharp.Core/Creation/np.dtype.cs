@@ -3,7 +3,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 using NumSharp.Backends;
 
 namespace NumSharp
@@ -166,233 +166,216 @@ namespace NumSharp
             return intersect.OrderBy(c => _typecodes_by_elsize.IndexOf(c)).First();
         }
 
+        // ---- Platform-detected types (MUST be declared BEFORE _dtype_string_map since
+        //      BuildDtypeStringMap() reads them, and static initializers run top-down) ----
+
         /// <summary>
-        ///     Parse a string into a <see cref="DType"/>.
+        ///     Platform-detected C <c>long</c> type. MSVC (Windows) = 32-bit,
+        ///     gcc/clang (Linux/Mac) on 64-bit = 64-bit. NumPy follows the native C convention.
         /// </summary>
-        /// <param name="dtype"></param>
-        /// <returns>A <see cref="DType"/> based on <paramref name="dtype"/>, return can be null.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/arrays.dtypes.html <br></br>
-        ///     This was created to ease the porting of C++ numpy to C#.
-        /// </remarks>
+        private static readonly Type _cLongType =
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? typeof(int)
+                : (IntPtr.Size == 8 ? typeof(long) : typeof(int));
+
+        private static readonly Type _cULongType =
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? typeof(uint)
+                : (IntPtr.Size == 8 ? typeof(ulong) : typeof(uint));
+
+        /// <summary>
+        ///     Platform-detected pointer-sized integer (<c>intp</c>). Always matches
+        ///     <see cref="IntPtr.Size"/> (8 bytes on 64-bit, 4 bytes on 32-bit).
+        /// </summary>
+        private static readonly Type _intpType  = IntPtr.Size == 8 ? typeof(long)  : typeof(int);
+        private static readonly Type _uintpType = IntPtr.Size == 8 ? typeof(ulong) : typeof(uint);
+
+        /// <summary>
+        ///     Full NumPy 2.x dtype string → Type lookup. Built to match
+        ///     <c>numpy.dtype(str)</c> exactly, with NumSharp-specific adaptations:
+        ///     <list type="bullet">
+        ///       <item>NumPy types NumSharp doesn't implement (S/U/M/m/O/V/a) throw NotSupportedException.</item>
+        ///       <item>complex64 ('F'/'c8'/'complex64') throws NotSupportedException — NumSharp only has complex128.</item>
+        ///       <item>'l'/'L'/'long'/'ulong' are platform-detected to match NumPy's C-long convention:
+        ///             32-bit on Windows (MSVC), 64-bit on 64-bit Linux/Mac (gcc LP64).</item>
+        ///       <item>'int'/'int_'/'intp' → int64 on 64-bit (matches NumPy 2.x where int_ == intp).</item>
+        ///       <item>Aliases unique to .NET (SByte/Decimal/Char) are accepted.</item>
+        ///     </list>
+        /// </summary>
+        private static readonly FrozenDictionary<string, Type> _dtype_string_map = BuildDtypeStringMap();
+
+        private static FrozenDictionary<string, Type> BuildDtypeStringMap()
+        {
+            var map = new Dictionary<string, Type>(StringComparer.Ordinal);
+
+            void Add(string key, Type t) => map[key] = t;
+
+            // ---- single-char NumPy type codes (sized OR unsized forms) ----
+            // bool
+            Add("?",  typeof(bool));     Add("b1", typeof(bool));
+            // signed int
+            Add("b",  typeof(sbyte));    Add("i1", typeof(sbyte));
+            Add("h",  typeof(short));    Add("i2", typeof(short));
+            Add("i",  typeof(int));      Add("i4", typeof(int));
+            Add("l",  _cLongType);       // C long: 32-bit on Windows (MSVC), 64-bit on *nix (gcc LP64)
+            Add("q",  typeof(long));     Add("i8", typeof(long));
+            Add("p",  _intpType);        // intptr
+            // unsigned int
+            Add("B",  typeof(byte));     Add("u1", typeof(byte));
+            Add("H",  typeof(ushort));   Add("u2", typeof(ushort));
+            Add("I",  typeof(uint));     Add("u4", typeof(uint));
+            Add("L",  _cULongType);      // C unsigned long: same platform rule as 'l'
+            Add("Q",  typeof(ulong));    Add("u8", typeof(ulong));
+            Add("P",  _uintpType);       // uintptr
+            // float
+            Add("e",  typeof(Half));     Add("f2", typeof(Half));
+            Add("f",  typeof(float));    Add("f4", typeof(float));
+            Add("d",  typeof(double));   Add("f8", typeof(double));
+            Add("g",  typeof(double));   // long double collapses to double
+            // complex — NumSharp only has complex128 (System.Numerics.Complex = 2 × float64).
+            // complex64 ('F', 'c8', 'complex64') is NOT supported and throws NotSupportedException
+            // via _unsupported_numpy_codes below — users must explicitly opt into complex128.
+            Add("D",  typeof(Complex));  Add("c16", typeof(Complex));
+            Add("G",  typeof(Complex));  // long-double complex collapses to complex128
+
+            // ---- NumPy lowercase names ----
+            Add("bool",       typeof(bool));
+            Add("int8",       typeof(sbyte));
+            Add("uint8",      typeof(byte));
+            Add("int16",      typeof(short));
+            Add("uint16",     typeof(ushort));
+            Add("int32",      typeof(int));
+            Add("uint32",     typeof(uint));
+            Add("int64",      typeof(long));
+            Add("uint64",     typeof(ulong));
+            Add("float16",    typeof(Half));
+            Add("half",       typeof(Half));
+            Add("float32",    typeof(float));
+            Add("single",     typeof(float));
+            Add("float64",    typeof(double));
+            Add("double",     typeof(double));
+            Add("float",      typeof(double)); // NumPy: np.dtype('float') → float64
+            // Note: "complex64" is NOT in the map — it's in _unsupported_numpy_codes so
+            // accessing it throws NotSupportedException. NumSharp only has complex128.
+            Add("complex128", typeof(Complex));
+            Add("complex",    typeof(Complex));
+            Add("byte",       typeof(sbyte));   // NumPy: np.dtype('byte') → int8
+            Add("ubyte",      typeof(byte));    // NumPy: np.dtype('ubyte') → uint8
+            Add("short",      typeof(short));
+            Add("ushort",     typeof(ushort));
+            Add("intc",       typeof(int));
+            Add("uintc",      typeof(uint));
+            // NumPy 2.x: int_ and intp are both pointer-sized (no longer C-long).
+            Add("int_",       _intpType);       // int64 on 64-bit, int32 on 32-bit
+            Add("intp",       _intpType);
+            Add("uintp",      _uintpType);
+            Add("bool_",      typeof(bool));    // NumPy alias for bool
+            // NumPy 2.x: 'int' resolves to intp (pointer-sized), not C-long.
+            Add("int",        _intpType);
+            Add("uint",       _uintpType);
+            // NumPy 'long'/'ulong' follow the C-long platform rule (Windows=32, *nix LP64=64).
+            Add("long",       _cLongType);
+            Add("ulong",      _cULongType);
+            // long long is always 64-bit.
+            Add("longlong",   typeof(long));
+            Add("ulonglong",  typeof(ulong));
+            Add("longdouble",  typeof(double));  // collapses to float64
+            Add("clongdouble", typeof(Complex)); // collapses to complex128
+
+            // ---- NumSharp-only friendly aliases (unique to .NET) ----
+            Add("sbyte",   typeof(sbyte));
+            Add("SByte",   typeof(sbyte));
+            Add("Byte",    typeof(byte));
+            Add("UByte",   typeof(byte));
+            Add("Int16",   typeof(short));
+            Add("UInt16",  typeof(ushort));
+            Add("Int32",   typeof(int));
+            Add("UInt32",  typeof(uint));
+            Add("Int64",   typeof(long));
+            Add("UInt64",  typeof(ulong));
+            Add("Half",    typeof(Half));
+            Add("Single",  typeof(float));
+            Add("Float",   typeof(float));
+            Add("Double",  typeof(double));
+            Add("Complex", typeof(Complex));
+            Add("Bool",    typeof(bool));
+            Add("Boolean", typeof(bool));
+            Add("boolean", typeof(bool));
+            Add("Char",    typeof(char));
+            Add("char",    typeof(char));
+            Add("decimal", typeof(decimal));
+            Add("Decimal", typeof(decimal));
+            Add("string",  typeof(string));
+            Add("String",  typeof(string));
+
+            return map.ToFrozenDictionary();
+        }
+
+        // NumPy dtype codes that are valid in NumPy but NumSharp does not implement.
+        // Route to clear NotSupportedException instead of silent misbehavior.
+        // Note: 'F', 'c8', 'complex64' — NumSharp refuses these since it only has complex128.
+        // Users should explicitly use 'complex128' / 'D' / 'c16' / 'complex'.
+        private static readonly FrozenSet<string> _unsupported_numpy_codes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "S", "U", "V", "O", "M", "m", "a", "c", // c = S1 (1-byte string), NOT complex
+            "F", "c8", "complex64",                 // complex64 — NumSharp has no 32-bit complex
+            "datetime64", "timedelta64", "object", "object_", "bytes_", "str_", "str", "void", "unicode",
+        }.ToFrozenSet();
+
+        /// <summary>
+        ///     Parse a string into a <see cref="DType"/>. 1:1 NumPy 2.x parity (with adaptations
+        ///     documented in <see cref="_dtype_string_map"/>).
+        /// </summary>
+        /// <param name="dtype">Any NumPy-style dtype string (e.g. "int8", "f4", "&lt;i2", "complex128").</param>
+        /// <returns>Matching <see cref="DType"/>.</returns>
+        /// <exception cref="NotSupportedException">
+        ///     Thrown for valid-NumPy types NumSharp doesn't implement (S, U, M, m, O, V, a, c=S1),
+        ///     or for syntactically invalid strings (e.g. "f16", "b4", "xyz").
+        /// </exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/arrays.dtypes.html</remarks>
         public static DType dtype(string dtype)
         {
-            //TODO! we parse here the string according to docs and return the relevant dtype.
-            const string regex = @"^([\>\<\|S\=]?)([a-zA-Z\?]+)(\d+)?";
+            if (dtype == null)
+                throw new ArgumentNullException(nameof(dtype));
 
             if (dtype.Contains("("))
                 throw new NotSupportedException("NumSharp does not support custom nested array dtypes");
 
-            if (Enum.TryParse<NPTypeCode>(dtype, out var code))
+            // NumPy accepts byte-order prefixes (<, >, =, |). Strip before lookup — NumSharp is
+            // host-endian only.
+            string key = dtype;
+            if (key.Length > 1 && (key[0] == '<' || key[0] == '>' || key[0] == '=' || key[0] == '|'))
+                key = key.Substring(1);
+
+            // Prefer the lookup first so c8/c16 resolve to Complex before any "unsupported" check
+            // intercepts 'c' as S1.
+            if (_dtype_string_map.TryGetValue(key, out Type t))
+                return new DType(t);
+
+            // Reject valid-NumPy codes NumSharp doesn't implement.
+            if (_unsupported_numpy_codes.Contains(key))
+                throw new NotSupportedException($"NumPy dtype '{key}' is not supported by NumSharp");
+
+            // Bytestring/unicode/void/datetime with size suffix: "S10", "U32", "V16", "a5", "M8", "m8".
+            // (c is excluded because c8/c16 are complex sizes — already caught by the map above.)
+            if (key.Length > 1 && char.IsDigit(key[1]))
             {
-                switch (code)
-                {
-#if _REGEN
-	                %foreach all_dtypes%
-	                case NPTypeCode.#1: return new DType(typeof(#1));
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
-                    case NPTypeCode.Complex: return new DType(typeof(Complex));
-	                case NPTypeCode.Boolean: return new DType(typeof(Boolean));
-	                case NPTypeCode.SByte: return new DType(typeof(SByte));
-	                case NPTypeCode.Byte: return new DType(typeof(Byte));
-	                case NPTypeCode.Int16: return new DType(typeof(Int16));
-	                case NPTypeCode.UInt16: return new DType(typeof(UInt16));
-	                case NPTypeCode.Int32: return new DType(typeof(Int32));
-	                case NPTypeCode.UInt32: return new DType(typeof(UInt32));
-	                case NPTypeCode.Int64: return new DType(typeof(Int64));
-	                case NPTypeCode.UInt64: return new DType(typeof(UInt64));
-	                case NPTypeCode.Char: return new DType(typeof(Char));
-	                case NPTypeCode.Half: return new DType(typeof(Half));
-	                case NPTypeCode.Double: return new DType(typeof(Double));
-	                case NPTypeCode.Single: return new DType(typeof(Single));
-	                case NPTypeCode.Decimal: return new DType(typeof(Decimal));
-	                case NPTypeCode.String: return new DType(typeof(String));
-	                default:
-		                throw new NotSupportedException();
-#endif
-                }
-
-
+                char first = key[0];
+                if (first == 'S' || first == 'U' || first == 'V' || first == 'a' ||
+                    first == 'M' || first == 'm')
+                    throw new NotSupportedException($"NumPy dtype '{key}' is not supported by NumSharp");
             }
 
-            // Handle common NumPy dtype strings that might be parsed incorrectly by the regex
-            // (e.g., "int8" gets split into type="int", size=8, but we want sbyte)
-            switch (dtype)
+            // Fall back to C# Enum name (handles "Int32", "Complex", etc. — redundant with aliases
+            // above but belt-and-suspenders for case-insensitive eng names).
+            if (Enum.TryParse<NPTypeCode>(key, out var code) && code != NPTypeCode.Empty)
             {
-                case "int8":
-                case "sbyte":
-                    return new DType(typeof(sbyte));
-                case "float16":
-                case "half":
-                    return new DType(typeof(Half));
-                case "complex128":
-                case "complex":
-                    return new DType(typeof(Complex));
+                var resolved = code.AsType();
+                if (resolved != null)
+                    return new DType(resolved);
             }
 
-            var match = Regex.Match(dtype, regex);
-            if (!match.Success)
-                return null;
-
-            var byteorder = match.Groups[1].Value;
-            var type = match.Groups[2].Value;
-            var size_str = match.Groups[3].Value?.Trim();
-
-            if (string.IsNullOrEmpty(size_str))
-                size_str = "-1";
-            int size = int.Parse(size_str);
-
-            //sizeless types
-            switch (type)
-            {
-                case "c":
-                case "complex":
-                case "Complex":
-                case "complex128":
-                    return new DType(typeof(Complex));
-                case "string":
-                case "chars":
-                case "char":
-                case "S":
-                case "U":
-                    return new DType(typeof(char));
-                case "b":
-                case "byte":
-                case "Byte":
-                case "uint8":
-                    return new DType(typeof(byte));
-                case "int8":
-                case "sbyte":
-                case "SByte":
-                    return new DType(typeof(sbyte));
-                case "bool":
-                case "Bool":
-                case "Boolean":
-                case "boolean":
-                case "?":
-                    return new DType(typeof(bool));
-                case "e":
-                case "half":
-                case "Half":
-                case "float16":
-                    return new DType(typeof(Half));
-            }
-
-            //size-specific
-            switch (size)
-            {
-                case -1:
-                    switch (type)
-                    {
-                        case "i":
-                        case "int":
-                            return new DType(typeof(Int32));
-                        case "u":
-                        case "uint":
-                            return new DType(typeof(UInt32));
-                        case "f":
-                        case "float":
-                        case "single":
-                        case "Float":
-                        case "Single":
-                            return new DType(typeof(float));
-                        case "d":
-                        case "double":
-                        case "Double":
-                            return new DType(typeof(double));
-                    }
-
-                    break;
-                case 1:
-                    switch (type)
-                    {
-                        case "?":
-                            return new DType(typeof(bool));
-                        case "b":
-                        case "i":
-                        case "int":
-                        case "Int":
-                            return new DType(typeof(byte));
-                        case "u":
-                        case "uint":
-                        case "Uint":
-                            return new DType(typeof(UInt16));
-                    }
-
-                    break;
-                case 2:
-                    switch (type)
-                    {
-                        case "i":
-                        case "int":
-                        case "Int":
-                            return new DType(typeof(Int16));
-                        case "u":
-                        case "uint":
-                        case "Uint":
-                            return new DType(typeof(UInt16));
-                        case "f":
-                        case "float":
-                        case "Float":
-                        case "e":
-                        case "half":
-                        case "Half":
-                            return new DType(typeof(Half));
-                    }
-
-                    break;
-                case 4:
-                    switch (type)
-                    {
-                        case "i":
-                        case "int":
-                            return new DType(typeof(Int32));
-                        case "u":
-                        case "uint":
-                            return new DType(typeof(UInt32));
-                        case "f":
-                        case "float":
-                        case "single":
-                        case "Float":
-                        case "Single":
-                            return new DType(typeof(float));
-                        case "d":
-                        case "double":
-                        case "Double":
-                            return new DType(typeof(double));
-                    }
-
-                    break;
-                case 8:
-                case 16:
-                    switch (type)
-                    {
-                        case "i":
-                        case "int":
-                        case "Int":
-                            return new DType(typeof(Int64));
-                        case "u":
-                        case "uint":
-                        case "Uint":
-                            return new DType(typeof(UInt64));
-                        case "d":
-                        case "f":
-                        case "float":
-                        case "Float":
-                        case "single":
-                        case "Single":
-                        case "double":
-                        case "Double":
-                            return new DType(typeof(double));
-                    }
-
-                    break;
-            }
-
-            throw new NotSupportedException($"NumSharp does not support this specific {type}");
+            throw new NotSupportedException($"NumSharp cannot parse dtype '{dtype}' — not a recognized NumPy type string");
         }
     }
 

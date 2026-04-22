@@ -19,29 +19,39 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case2()
         {
-            var r = np.find_common_type(new[] {np.float32}, new[] {np.complex64});
+            var r = np.find_common_type(new[] {np.float32}, new[] {np.complex128});
             r.Should().Be(NPTypeCode.Complex);
         }
 
         [TestMethod]
         public void Case3()
         {
-            var r = np.find_common_type(new[] {np.float32}, new[] {np.complex64});
+            var r = np.find_common_type(new[] {np.float32}, new[] {np.complex128});
             r.Should().Be(NPTypeCode.Complex);
         }
 
         [TestMethod]
         public void Case4()
         {
-            var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"c8"});
+            // c8 (complex64) is NOT supported — NumSharp only has complex128.
+            // Use c16 / complex128 / D instead.
+            var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"c16"});
             r.Should().Be(NPTypeCode.Complex);
         }
 
         [TestMethod]
         public void Case5()
         {
-            var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"c8"});
+            var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"complex128"});
             r.Should().Be(NPTypeCode.Complex);
+        }
+
+        [TestMethod]
+        public void Case4b_c8_ThrowsNotSupported()
+        {
+            // Explicit: NumSharp rejects complex64.
+            Action act = () => np.find_common_type(new[] {"f4"}, new[] {"c8"});
+            act.Should().Throw<NotSupportedException>();
         }
 
         [TestMethod]
@@ -75,7 +85,7 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case10()
         {
-            var r = np.find_common_type(new[] {np.int32, np.float64}, new[] {np.complex64});
+            var r = np.find_common_type(new[] {np.int32, np.float64}, new[] {np.complex128});
             r.Should().Be(NPTypeCode.Complex);
         }
 
@@ -89,7 +99,8 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case12()
         {
-            var r = np.find_common_type(new[] {np.@byte, np.float32}, new Type[0]);
+            // np.@byte changed to int8/sbyte per NumPy convention — use np.ubyte/np.uint8 for uint8.
+            var r = np.find_common_type(new[] {np.ubyte, np.float32}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
@@ -103,7 +114,7 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case14()
         {
-            var r = np.find_common_type(new[] {np.float32, np.@byte}, new Type[0]);
+            var r = np.find_common_type(new[] {np.float32, np.ubyte}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
@@ -117,8 +128,16 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case17()
         {
-            var r = np.find_common_type(new[] {np.@byte, np.@byte}, new Type[0]);
+            var r = np.find_common_type(new[] {np.ubyte, np.ubyte}, new Type[0]);
             r.Should().Be(NPTypeCode.Byte);
+        }
+
+        [TestMethod]
+        public void Case17b_NpByteIsInt8()
+        {
+            // Post-fix: np.@byte = sbyte (int8) per NumPy convention.
+            var r = np.find_common_type(new[] {np.@byte, np.@byte}, new Type[0]);
+            r.Should().Be(NPTypeCode.SByte);
         }
 
         [TestMethod]
@@ -208,7 +227,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.@bool, np.uint64), np.uint64);
             dict.Add((np.@bool, np.float32), np.float32);
             dict.Add((np.@bool, np.float64), np.float64);
-            dict.Add((np.@bool, np.complex64), np.complex64);
+            dict.Add((np.@bool, np.complex128), np.complex128);
 
             dict.Add((np.uint8, np.@bool), np.uint8);
             dict.Add((np.uint8, np.uint8), np.uint8);
@@ -220,7 +239,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.uint8, np.uint64), np.uint8);
             dict.Add((np.uint8, np.float32), np.float32);
             dict.Add((np.uint8, np.float64), np.float64);
-            dict.Add((np.uint8, np.complex64), np.complex64);
+            dict.Add((np.uint8, np.complex128), np.complex128);
 
             dict.Add((np.int16, np.@bool), np.int16);
             dict.Add((np.int16, np.uint8), np.int16);
@@ -232,7 +251,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.int16, np.uint64), np.int16);
             dict.Add((np.int16, np.float32), np.float32);
             dict.Add((np.int16, np.float64), np.float64);
-            dict.Add((np.int16, np.complex64), np.complex64);
+            dict.Add((np.int16, np.complex128), np.complex128);
 
             dict.Add((np.uint16, np.@bool), np.uint16);
             dict.Add((np.uint16, np.uint8), np.uint16);
@@ -244,7 +263,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.uint16, np.uint64), np.uint16);
             dict.Add((np.uint16, np.float32), np.float32);
             dict.Add((np.uint16, np.float64), np.float64);
-            dict.Add((np.uint16, np.complex64), np.complex64);
+            dict.Add((np.uint16, np.complex128), np.complex128);
 
             dict.Add((np.int32, np.@bool), np.int32);
             dict.Add((np.int32, np.uint8), np.int32);
@@ -256,7 +275,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.int32, np.uint64), np.int32);
             dict.Add((np.int32, np.float32), np.float64);
             dict.Add((np.int32, np.float64), np.float64);
-            dict.Add((np.int32, np.complex64), np.complex128);
+            dict.Add((np.int32, np.complex128), np.complex128);
 
             dict.Add((np.uint32, np.@bool), np.uint32);
             dict.Add((np.uint32, np.uint8), np.uint32);
@@ -268,7 +287,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.uint32, np.uint64), np.uint32);
             dict.Add((np.uint32, np.float32), np.float64);
             dict.Add((np.uint32, np.float64), np.float64);
-            dict.Add((np.uint32, np.complex64), np.complex128);
+            dict.Add((np.uint32, np.complex128), np.complex128);
 
             dict.Add((np.int64, np.@bool), np.int64);
             dict.Add((np.int64, np.uint8), np.int64);
@@ -280,7 +299,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.int64, np.uint64), np.int64);
             dict.Add((np.int64, np.float32), np.float64);
             dict.Add((np.int64, np.float64), np.float64);
-            dict.Add((np.int64, np.complex64), np.complex128);
+            dict.Add((np.int64, np.complex128), np.complex128);
 
             dict.Add((np.uint64, np.@bool), np.uint64);
             dict.Add((np.uint64, np.uint8), np.uint64);
@@ -292,7 +311,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.uint64, np.uint64), np.uint64);
             dict.Add((np.uint64, np.float32), np.float64);
             dict.Add((np.uint64, np.float64), np.float64);
-            dict.Add((np.uint64, np.complex64), np.complex128);
+            dict.Add((np.uint64, np.complex128), np.complex128);
 
             dict.Add((np.float32, np.@bool), np.float32);
             dict.Add((np.float32, np.uint8), np.float32);
@@ -304,7 +323,7 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.float32, np.uint64), np.float32);
             dict.Add((np.float32, np.float32), np.float32);
             dict.Add((np.float32, np.float64), np.float32);
-            dict.Add((np.float32, np.complex64), np.complex64);
+            dict.Add((np.float32, np.complex128), np.complex128);
 
             dict.Add((np.float64, np.@bool), np.float64);
             dict.Add((np.float64, np.uint8), np.float64);
@@ -316,19 +335,19 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.float64, np.uint64), np.float64);
             dict.Add((np.float64, np.float32), np.float64);
             dict.Add((np.float64, np.float64), np.float64);
-            dict.Add((np.float64, np.complex64), np.complex128);
+            dict.Add((np.float64, np.complex128), np.complex128);
 
-            dict.Add((np.complex64, np.@bool), np.complex64);
-            dict.Add((np.complex64, np.uint8), np.complex64);
-            dict.Add((np.complex64, np.int16), np.complex64);
-            dict.Add((np.complex64, np.uint16), np.complex64);
-            dict.Add((np.complex64, np.int32), np.complex64);
-            dict.Add((np.complex64, np.uint32), np.complex64);
-            dict.Add((np.complex64, np.int64), np.complex64);
-            dict.Add((np.complex64, np.uint64), np.complex64);
-            dict.Add((np.complex64, np.float32), np.complex64);
-            dict.Add((np.complex64, np.float64), np.complex64);
-            dict.Add((np.complex64, np.complex64), np.complex64);
+            dict.Add((np.complex128, np.@bool), np.complex128);
+            dict.Add((np.complex128, np.uint8), np.complex128);
+            dict.Add((np.complex128, np.int16), np.complex128);
+            dict.Add((np.complex128, np.uint16), np.complex128);
+            dict.Add((np.complex128, np.int32), np.complex128);
+            dict.Add((np.complex128, np.uint32), np.complex128);
+            dict.Add((np.complex128, np.int64), np.complex128);
+            dict.Add((np.complex128, np.uint64), np.complex128);
+            dict.Add((np.complex128, np.float32), np.complex128);
+            dict.Add((np.complex128, np.float64), np.complex128);
+            dict.Add((np.complex128, np.complex128), np.complex128);
 
 
 #if _REGEN
