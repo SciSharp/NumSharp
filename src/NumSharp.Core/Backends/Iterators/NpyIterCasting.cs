@@ -8,7 +8,7 @@ namespace NumSharp.Backends.Iteration
     /// Type casting utilities for NpyIter.
     /// Validates casting rules and performs type conversions.
     /// </summary>
-    internal static unsafe class NpyIterCasting
+    public static unsafe class NpyIterCasting
     {
         /// <summary>
         /// Check if casting from srcType to dstType is allowed under the given casting rule.

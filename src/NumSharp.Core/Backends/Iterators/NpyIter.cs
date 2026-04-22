@@ -10,17 +10,17 @@ namespace NumSharp.Backends.Iteration
     /// Function to advance iterator to next position.
     /// Returns true if more iterations remain.
     /// </summary>
-    internal unsafe delegate bool NpyIterNextFunc(ref NpyIterState state);
+    public unsafe delegate bool NpyIterNextFunc(ref NpyIterState state);
 
     /// <summary>
     /// Function to get multi-index at current position.
     /// </summary>
-    internal unsafe delegate void NpyIterGetMultiIndexFunc(ref NpyIterState state, long* outCoords);
+    public unsafe delegate void NpyIterGetMultiIndexFunc(ref NpyIterState state, long* outCoords);
 
     /// <summary>
     /// Inner loop kernel called by iterator.
     /// </summary>
-    internal unsafe delegate void NpyIterInnerLoopFunc(
+    public unsafe delegate void NpyIterInnerLoopFunc(
         void** dataptrs,
         long* strides,
         long count,
@@ -29,7 +29,7 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// High-performance multi-operand iterator matching NumPy's nditer API.
     /// </summary>
-    internal unsafe ref partial struct NpyIterRef
+    public unsafe ref partial struct NpyIterRef
     {
         private NpyIterState* _state;
         private bool _ownsState;
@@ -3054,9 +3054,15 @@ namespace NumSharp.Backends.Iteration
     /// NUMSHARP DIVERGENCE: These methods support unlimited dimensions via dynamic allocation.
     /// Dimension arrays are allocated on demand and freed after use.
     /// </summary>
-    internal static unsafe class NpyIter
+    public static unsafe class NpyIter
     {
-        internal static bool ReduceBool<T, TKernel>(UnmanagedStorage src)
+        /// <inheritdoc cref="ReduceBool{T, TKernel}(UnmanagedStorage)"/>
+        public static bool ReduceBool<T, TKernel>(NDArray src)
+            where T : unmanaged
+            where TKernel : struct, INpyBooleanReductionKernel<T>
+            => ReduceBool<T, TKernel>(src.Storage);
+
+        public static bool ReduceBool<T, TKernel>(UnmanagedStorage src)
             where T : unmanaged
             where TKernel : struct, INpyBooleanReductionKernel<T>
         {
@@ -3083,7 +3089,11 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal static bool TryCopySameType(UnmanagedStorage dst, UnmanagedStorage src)
+        /// <inheritdoc cref="TryCopySameType(UnmanagedStorage, UnmanagedStorage)"/>
+        public static bool TryCopySameType(NDArray dst, NDArray src)
+            => TryCopySameType(dst.Storage, src.Storage);
+
+        public static bool TryCopySameType(UnmanagedStorage dst, UnmanagedStorage src)
         {
             if (dst.TypeCode != src.TypeCode)
                 return false;
@@ -3142,7 +3152,15 @@ namespace NumSharp.Backends.Iteration
         /// behavior (read src as src.TypeCode, convert, write dst.TypeCode).
         /// </summary>
         /// <exception cref="NumSharpException">If <paramref name="dst"/> is not writeable (e.g., broadcast view).</exception>
-        internal static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
+        public static void Copy(NDArray dst, NDArray src)
+        {
+            if (dst is null) throw new ArgumentNullException(nameof(dst));
+            if (src is null) throw new ArgumentNullException(nameof(src));
+            Copy(dst.Storage, src.Storage);
+        }
+
+        /// <inheritdoc cref="Copy(NDArray, NDArray)"/>
+        public static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));
             if (src is null) throw new ArgumentNullException(nameof(src));
@@ -3206,7 +3224,7 @@ namespace NumSharp.Backends.Iteration
         /// Create state for copy operation.
         /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
         /// </summary>
-        internal static NpyIterState CreateCopyState(UnmanagedStorage src, UnmanagedStorage dst)
+        public static NpyIterState CreateCopyState(UnmanagedStorage src, UnmanagedStorage dst)
         {
             var broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
             int ndim = checked((int)dst.Shape.NDim);
@@ -3252,7 +3270,7 @@ namespace NumSharp.Backends.Iteration
         /// Create state for reduction operation.
         /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
         /// </summary>
-        internal static NpyIterState CreateReductionState(UnmanagedStorage src)
+        public static NpyIterState CreateReductionState(UnmanagedStorage src)
         {
             int ndim = checked((int)src.Shape.NDim);
 
@@ -3282,7 +3300,7 @@ namespace NumSharp.Backends.Iteration
             return state;
         }
 
-        internal static void CoalesceAxes(ref NpyIterState state, long* shape, long* srcStrides, long* dstStrides)
+        public static void CoalesceAxes(ref NpyIterState state, long* shape, long* srcStrides, long* dstStrides)
         {
             if (state.NDim <= 1)
                 return;
@@ -3330,7 +3348,7 @@ namespace NumSharp.Backends.Iteration
             state.NDim = newNDim;
         }
 
-        internal static void UpdateLayoutFlags(ref NpyIterState state, long* shape, long* srcStrides, long* dstStrides)
+        public static void UpdateLayoutFlags(ref NpyIterState state, long* shape, long* srcStrides, long* dstStrides)
         {
             if (state.Size <= 1)
             {
@@ -3344,7 +3362,7 @@ namespace NumSharp.Backends.Iteration
                 state.Flags |= NpyIterFlags.DestinationContiguous;
         }
 
-        internal static bool IsContiguous(long* shape, long* strides, int ndim)
+        public static bool IsContiguous(long* shape, long* strides, int ndim)
         {
             if (ndim == 0)
                 return true;
@@ -3366,7 +3384,7 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
-        internal static void Advance(long* shape, long* strides, long* coords, int ndim, ref long offset)
+        public static void Advance(long* shape, long* strides, long* coords, int ndim, ref long offset)
         {
             for (int axis = ndim - 1; axis >= 0; axis--)
             {

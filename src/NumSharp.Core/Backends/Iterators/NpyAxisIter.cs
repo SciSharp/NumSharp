@@ -3,13 +3,13 @@ using System.Numerics;
 
 namespace NumSharp.Backends.Iteration
 {
-    internal unsafe interface INpyAxisSameTypeKernel<T>
+    public unsafe interface INpyAxisSameTypeKernel<T>
         where T : unmanaged
     {
         static abstract unsafe void Execute(T* src, T* dst, long srcStride, long dstStride, long length);
     }
 
-    internal readonly struct CumSumAxisKernel<T> : INpyAxisSameTypeKernel<T>
+    public readonly struct CumSumAxisKernel<T> : INpyAxisSameTypeKernel<T>
         where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
     {
         public static unsafe void Execute(T* src, T* dst, long srcStride, long dstStride, long length)
@@ -23,7 +23,7 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
-    internal readonly struct CumProdAxisKernel<T> : INpyAxisSameTypeKernel<T>
+    public readonly struct CumProdAxisKernel<T> : INpyAxisSameTypeKernel<T>
         where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
     {
         public static unsafe void Execute(T* src, T* dst, long srcStride, long dstStride, long length)
@@ -37,12 +37,12 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
-    internal interface INpyAxisDoubleReductionKernel
+    public interface INpyAxisDoubleReductionKernel
     {
         static abstract unsafe double Execute(double* src, long srcStride, long length, int ddof);
     }
 
-    internal readonly struct VarAxisDoubleKernel : INpyAxisDoubleReductionKernel
+    public readonly struct VarAxisDoubleKernel : INpyAxisDoubleReductionKernel
     {
         public static unsafe double Execute(double* src, long srcStride, long length, int ddof)
         {
@@ -62,15 +62,15 @@ namespace NumSharp.Backends.Iteration
         }
     }
 
-    internal readonly struct StdAxisDoubleKernel : INpyAxisDoubleReductionKernel
+    public readonly struct StdAxisDoubleKernel : INpyAxisDoubleReductionKernel
     {
         public static unsafe double Execute(double* src, long srcStride, long length, int ddof)
             => Math.Sqrt(VarAxisDoubleKernel.Execute(src, srcStride, length, ddof));
     }
 
-    internal static unsafe class NpyAxisIter
+    public static unsafe class NpyAxisIter
     {
-        internal static void ExecuteSameType<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
+        public static void ExecuteSameType<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
             where T : unmanaged
             where TKernel : struct, INpyAxisSameTypeKernel<T>
         {
@@ -116,7 +116,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal static void ReduceDouble<TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis, int ddof)
+        public static void ReduceDouble<TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis, int ddof)
             where TKernel : struct, INpyAxisDoubleReductionKernel
         {
             var state = CreateReductionState(src, dst, axis);
@@ -150,7 +150,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal static void ReduceBool<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
+        public static void ReduceBool<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
             where T : unmanaged
             where TKernel : struct, INpyBooleanReductionKernel<T>
         {
@@ -441,7 +441,7 @@ namespace NumSharp.Backends.Iteration
         /// Execute a numeric reduction along an axis using the provided kernel.
         /// Used as fallback for non-contiguous, sliced, or broadcast arrays.
         /// </summary>
-        internal static void ReduceNumeric<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
+        public static void ReduceNumeric<T, TKernel>(UnmanagedStorage src, UnmanagedStorage dst, int axis)
             where T : unmanaged
             where TKernel : struct, INpyAxisNumericReductionKernel<T>
         {

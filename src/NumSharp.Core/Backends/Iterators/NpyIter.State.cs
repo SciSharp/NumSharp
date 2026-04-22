@@ -39,7 +39,7 @@ namespace NumSharp.Backends.Iteration
     /// allocated dynamically based on actual NDim and NOp values.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct NpyIterState
+    public unsafe struct NpyIterState
     {
         // =========================================================================
         // Constants
@@ -49,7 +49,7 @@ namespace NumSharp.Backends.Iteration
         /// Threshold for using stackalloc vs heap allocation for temporary buffers.
         /// Arrays with more dimensions than this will use heap allocation.
         /// </summary>
-        internal const int StackAllocThreshold = 64;
+        public const int StackAllocThreshold = 64;
 
         // =========================================================================
         // Core Scalar Fields

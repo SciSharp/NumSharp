@@ -9,7 +9,7 @@ namespace NumSharp.Backends.Iteration
     /// Buffer management for NpyIter.
     /// Handles allocation, copy-in, and copy-out of iteration buffers.
     /// </summary>
-    internal static unsafe class NpyIterBufferManager
+    public static unsafe class NpyIterBufferManager
     {
         /// <summary>
         /// Default buffer size (number of elements).

@@ -105,7 +105,7 @@ namespace NumSharp
                 {
                     var writeTo = dst[accessorDst];
                     var writeFrom = src[accessorSrc];
-                    NpyIter.Copy(writeTo.Storage, writeFrom.Storage);
+                    NpyIter.Copy(writeTo, writeFrom);
                     accessorSrc[axis]++;
                     accessorDst[axis]++; //increment every step
                 }

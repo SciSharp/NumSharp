@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 namespace NumSharp.Backends.Iteration
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct NpyAxisState
+    public unsafe struct NpyAxisState
     {
-        internal const int MaxDims = 64;
+        public const int MaxDims = 64;
 
         public int OuterNDim;
         public int Axis;

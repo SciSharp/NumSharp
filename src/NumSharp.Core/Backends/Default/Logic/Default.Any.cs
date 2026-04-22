@@ -41,9 +41,9 @@ namespace NumSharp.Backends
         /// Uses the new iterator core for both contiguous and strided layouts.
         /// </summary>
         private static bool AnyImpl<T>(NDArray nd) where T : unmanaged
-            => NpyIter.ReduceBool<T, NpyAnyKernel<T>>(nd.Storage);
+            => NpyIter.ReduceBool<T, NpyAnyKernel<T>>(nd);
 
-        private static bool AnyImplDecimal(NDArray nd) => NpyIter.ReduceBool<decimal, NpyAnyKernel<decimal>>(nd.Storage);
+        private static bool AnyImplDecimal(NDArray nd) => NpyIter.ReduceBool<decimal, NpyAnyKernel<decimal>>(nd);
 
         /// <summary>
         /// Special implementation for Half (float16).

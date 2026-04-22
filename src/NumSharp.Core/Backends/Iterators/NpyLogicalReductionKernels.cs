@@ -5,10 +5,38 @@ using System.Numerics;
 namespace NumSharp.Backends.Iteration
 {
     // =========================================================================
+    // Count-NonZero Reduction Kernel (count_nonzero)
+    //
+    // Drives NpyIterRef.ExecuteReducing to accumulate a long count of elements
+    // that are not equal to default(T). EqualityComparer<T>.Default is
+    // devirtualized by the JIT when T is a struct, so this is monomorphic-fast
+    // for all 12 NumSharp dtypes.
+    // =========================================================================
+
+    public readonly struct CountNonZeroKernel<T> : INpyReducingInnerLoop<long>
+        where T : unmanaged
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref long total)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            long n = total;
+            for (long i = 0; i < count; i++)
+            {
+                T val = *(T*)(p + i * stride);
+                if (!EqualityComparer<T>.Default.Equals(val, default))
+                    n++;
+            }
+            total = n;
+            return true;
+        }
+    }
+
+    // =========================================================================
     // Boolean Reduction Kernels (all/any)
     // =========================================================================
 
-    internal interface INpyBooleanReductionKernel<T>
+    public interface INpyBooleanReductionKernel<T>
         where T : unmanaged
     {
         static abstract bool Identity { get; }
@@ -16,7 +44,7 @@ namespace NumSharp.Backends.Iteration
         static abstract bool ShouldExit(bool accumulator);
     }
 
-    internal readonly struct NpyAllKernel<T> : INpyBooleanReductionKernel<T>
+    public readonly struct NpyAllKernel<T> : INpyBooleanReductionKernel<T>
         where T : unmanaged
     {
         public static bool Identity => true;
@@ -27,7 +55,7 @@ namespace NumSharp.Backends.Iteration
         public static bool ShouldExit(bool accumulator) => !accumulator;
     }
 
-    internal readonly struct NpyAnyKernel<T> : INpyBooleanReductionKernel<T>
+    public readonly struct NpyAnyKernel<T> : INpyBooleanReductionKernel<T>
         where T : unmanaged
     {
         public static bool Identity => false;
@@ -46,7 +74,7 @@ namespace NumSharp.Backends.Iteration
     /// Generic numeric axis reduction kernel interface.
     /// Used by NpyAxisIter for sum, prod, min, max along an axis.
     /// </summary>
-    internal unsafe interface INpyAxisNumericReductionKernel<T>
+    public unsafe interface INpyAxisNumericReductionKernel<T>
         where T : unmanaged
     {
         /// <summary>
@@ -60,7 +88,7 @@ namespace NumSharp.Backends.Iteration
     }
 
     /// <summary>Sum reduction kernel for axis operations.</summary>
-    internal readonly struct NpySumAxisKernel<T> : INpyAxisNumericReductionKernel<T>
+    public readonly struct NpySumAxisKernel<T> : INpyAxisNumericReductionKernel<T>
         where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
     {
         public static unsafe T Execute(T* src, long srcStride, long length)
@@ -73,7 +101,7 @@ namespace NumSharp.Backends.Iteration
     }
 
     /// <summary>Product reduction kernel for axis operations.</summary>
-    internal readonly struct NpyProdAxisKernel<T> : INpyAxisNumericReductionKernel<T>
+    public readonly struct NpyProdAxisKernel<T> : INpyAxisNumericReductionKernel<T>
         where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
     {
         public static unsafe T Execute(T* src, long srcStride, long length)
@@ -86,7 +114,7 @@ namespace NumSharp.Backends.Iteration
     }
 
     /// <summary>Max reduction kernel for axis operations.</summary>
-    internal readonly struct NpyMaxAxisKernel<T> : INpyAxisNumericReductionKernel<T>
+    public readonly struct NpyMaxAxisKernel<T> : INpyAxisNumericReductionKernel<T>
         where T : unmanaged, IComparisonOperators<T, T, bool>, IMinMaxValue<T>
     {
         public static unsafe T Execute(T* src, long srcStride, long length)
@@ -106,7 +134,7 @@ namespace NumSharp.Backends.Iteration
     }
 
     /// <summary>Min reduction kernel for axis operations.</summary>
-    internal readonly struct NpyMinAxisKernel<T> : INpyAxisNumericReductionKernel<T>
+    public readonly struct NpyMinAxisKernel<T> : INpyAxisNumericReductionKernel<T>
         where T : unmanaged, IComparisonOperators<T, T, bool>, IMinMaxValue<T>
     {
         public static unsafe T Execute(T* src, long srcStride, long length)
