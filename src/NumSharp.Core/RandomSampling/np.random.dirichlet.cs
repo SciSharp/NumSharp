@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
@@ -85,14 +87,12 @@ namespace NumSharp
         {
             long k = alpha.size;
 
-            // Copy alpha to unmanaged storage
+            // Copy alpha (any layout, any numeric dtype) into a flat double buffer
+            // via NpyIter.Copy — handles strided/broadcast alpha + any->double cast.
             var alphaBlock = new UnmanagedMemoryBlock<double>(k);
             var alphaSlice = new ArraySlice<double>(alphaBlock);
-            long idx = 0;
-            foreach (var val in alpha.AsIterator<double>())
-            {
-                alphaSlice[idx++] = val;
-            }
+            var alphaStorage = new UnmanagedStorage(alphaSlice, new Shape(k));
+            NpyIter.Copy(alphaStorage, alpha.Storage);
 
             // Validate
             for (long i = 0; i < k; i++)
