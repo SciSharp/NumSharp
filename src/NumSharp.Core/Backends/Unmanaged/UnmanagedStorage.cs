@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -1487,7 +1488,7 @@ namespace NumSharp.Backends
             if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
-                MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
+                NpyIter.Copy(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 

@@ -31,8 +31,7 @@ namespace NumSharp
             // and Shape exposes an indexer setter that could otherwise mutate both shapes.
             var destShape = new Shape((long[])this.Shape.dimensions.Clone(), 'F');
             var dest = new NDArray(this.typecode, destShape, false);
-            if (!NpyIter.TryCopySameType(dest.Storage, this.Storage))
-                MultiIterator.Assign(dest.Storage, this.Storage);
+            NpyIter.Copy(dest.Storage, this.Storage);
             return dest;
         }
     }

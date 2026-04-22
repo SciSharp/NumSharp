@@ -3123,6 +3123,61 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        /// <summary>
+        /// Copy <paramref name="src"/> into <paramref name="dst"/> with full
+        /// support for broadcast, stride, and cross-dtype conversion.
+        ///
+        /// <list type="bullet">
+        ///   <item>Same dtype (the common case) routes through the SIMD-accelerated
+        ///   <see cref="TryCopySameType(UnmanagedStorage, UnmanagedStorage)"/>
+        ///   IL copy kernel — broadcast and arbitrary strides are absorbed by the
+        ///   coalesced iteration state.</item>
+        ///   <item>Cross dtype falls through to a per-element cast loop
+        ///   (<see cref="NpyIterCasting.CopyStridedToStridedWithCast"/>) reusing
+        ///   the same broadcast/coalescing state.</item>
+        /// </list>
+        ///
+        /// Drop-in replacement for the legacy <c>MultiIterator.Assign(dst, src)</c>:
+        /// matches its broadcast-src-to-dst-shape semantics and its cast-on-write
+        /// behavior (read src as src.TypeCode, convert, write dst.TypeCode).
+        /// </summary>
+        /// <exception cref="NumSharpException">If <paramref name="dst"/> is not writeable (e.g., broadcast view).</exception>
+        internal static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            if (dst is null) throw new ArgumentNullException(nameof(dst));
+            if (src is null) throw new ArgumentNullException(nameof(src));
+
+            // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
+            if (TryCopySameType(dst, src))
+                return;
+
+            // Cross-dtype: per-element cast via NpyIterCasting.ConvertValue,
+            // driven by the same coalesced broadcast state used by TryCopySameType.
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            var state = CreateCopyState(src, dst);
+            try
+            {
+                if (state.Size == 0)
+                    return;
+
+                NpyIterCasting.CopyStridedToStridedWithCast(
+                    (void*)state.GetDataPointer(0),
+                    state.GetStridesPointer(0),
+                    src.TypeCode,
+                    (void*)state.GetDataPointer(1),
+                    state.GetStridesPointer(1),
+                    dst.TypeCode,
+                    state.GetShapePointer(),
+                    state.NDim,
+                    state.Size);
+            }
+            finally
+            {
+                state.FreeDimArrays();
+            }
+        }
+
         private static bool ReduceBoolGeneral<T, TKernel>(ref NpyIterState state)
             where T : unmanaged
             where TKernel : struct, INpyBooleanReductionKernel<T>
