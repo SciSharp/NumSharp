@@ -1197,11 +1197,13 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.tile is missing from NumSharp (listed in docs/CLAUDE.md Missing Functions)
         public void Tile_ApiGap()
         {
-            // NumPy: np.tile(arr, 2) repeats array - not implemented in NumSharp
-            false.Should().BeTrue("np.tile is not implemented");
+            // np.tile(arr, 2) repeats array along the last axis. Implemented in np.tile.cs.
+            var got = np.tile(np.array(new[] { 1, 2, 3 }), 2);
+            got.shape.Should().Equal(6L);
+            for (int i = 0; i < 6; i++)
+                ((int)got[i]).Should().Be(new[] { 1, 2, 3, 1, 2, 3 }[i]);
         }
 
         [TestMethod]
