@@ -129,12 +129,10 @@ public class KernelMisalignmentTests
     }
 
     /// <summary>
-    /// NumPy: np.reciprocal(2) -> 0 (integer floor division: 1/2 = 0)
-    /// NumSharp: np.reciprocal(2) -> 0.5 (promotes to double, does floating point division)
-    ///
-    /// This is a type promotion misalignment - NumSharp promotes integer inputs
-    /// to floating point for reciprocal, while NumPy preserves integer dtype
-    /// and uses floor division.
+    /// Round 13 (B36): NumSharp.reciprocal now preserves integer dtype with
+    /// C-truncated 1/x, matching NumPy. Previously promoted to double and
+    /// returned 0.5. `[Misaligned]` retained since int→long promotion of the
+    /// scalar input is orthogonal to reciprocal semantics.
     /// </summary>
     [TestMethod]
     [Misaligned]
@@ -143,20 +141,15 @@ public class KernelMisalignmentTests
         // NumPy behavior:
         // >>> np.reciprocal(2)
         // 0
-        // >>> np.reciprocal(np.int32(2)).dtype
-        // dtype('int32')
         // >>> np.reciprocal(np.array([2, 3, 4]))
         // array([0, 0, 0])
 
         var result = np.reciprocal(2);
 
-        // NumSharp promotes to double and returns 0.5
-        Assert.AreEqual(typeof(double), result.dtype);
-        Assert.AreEqual(0.5, (double)result);
-
-        // Expected NumPy behavior (not implemented):
-        // Assert.AreEqual(typeof(int), result.dtype);
-        // Assert.AreEqual(0, (int)result);
+        // reciprocal now preserves the input integer dtype (int32 from C# int)
+        // and returns C-truncated 1/x = 0.
+        Assert.AreEqual(typeof(int), result.dtype);
+        Assert.AreEqual(0, (int)result);
     }
 
     /// <summary>

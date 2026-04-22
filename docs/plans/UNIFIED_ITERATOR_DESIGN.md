@@ -1,1079 +1,352 @@
-# NDIterator Design (v4)
+# Unified Iterator Design (v5 — current state)
 
-## Design Principles
-
-1. **No backwards compatibility** - All existing iterators/incrementors will be deleted
-2. **Direct IL control** - Users can inject their own IL generation
-3. **Zero allocation** - Struct-based state, no closures
-4. **Three tiers** - Interface kernels (fast), IL injection (full control), Func delegates (simple)
-
----
-
-## Architecture Overview
-
-```
-+---------------------------------------------------------------------+
-|                         NDIterator                                  |
-|  +----------------+  +----------------+  +------------------------+ |
-|  | IteratorState  |  | LayoutDetector |  | KernelInjectionSystem  | |
-|  |   (struct)     |  |    (static)    |  |                        | |
-|  +----------------+  +----------------+  |  +--------------------+ | |
-|                                          |  | Tier 1: IKernel    | | |
-|  Iteration Modes:                        |  | (static abstract)  | | |
-|  +- Contiguous (SIMD)                    |  +--------------------+ | |
-|  +- Strided (1D)                         |  | Tier 2: ILEmit     | | |
-|  +- General (N-D)                        |  | (raw IL inject)    | | |
-|  +- Axis (reduction/cumulative)          |  +--------------------+ | |
-|  +- Broadcast (paired)                   |  | Tier 3: Func<>     | | |
-|                                          |  | (delegate)         | | |
-|                                          |  +--------------------+ | |
-+---------------------------------------------------------------------+
-```
+> **Status:** implemented. The plan in v1-v4 (build a new `NDIterator` class with
+> three tiers of kernels) was superseded by porting NumPy's `nditer` directly —
+> now `NpyIterRef`. The three "tiers" morphed into seven layered integration
+> points, all sharing one IL-emitted-kernel cache. This document captures the
+> final shape and how we got here.
+>
+> **Production docs:** `docs/website-src/docs/NDIter.md` has the full user-facing
+> reference (~1900 lines). This file is the design rationale and migration
+> crib-sheet for contributors porting old patterns.
 
 ---
 
-## Kernel Interfaces (Complete)
+## Design principles (unchanged from v4)
 
-### Tier 1: Static Abstract Interfaces (JIT-Inlinable)
+1. **No backwards compatibility** — old iterators/incrementors deleted (done; see Migration below)
+2. **Direct IL control** — users can inject their own IL at every layer
+3. **Zero allocation** — struct-based state, unmanaged memory, no closures on hot paths
+4. **Layered, not flat** — seven entry points on an ergonomics-vs-control axis
+
+## What changed since v4
+
+| v4 plan | v5 reality | Why |
+|---------|-----------|-----|
+| Build new `NDIterator` class from scratch | Port NumPy's `nditer` as `NpyIterRef` | Every ufunc, reduction, and broadcast in NumPy already goes through it; reinventing the scheduler would re-discover the same design choices (coalescing, buffered reduction, op_axes). Porting preserves 1-to-1 behavioral parity. |
+| 3 tiers (interface / IL / Func) | 7 entry points (Layer 1/2/3 + Tier 3A/3B/3C + Call) | Three layers conflated "how does the kernel dispatch?" with "what kernel shape am I authoring?". Splitting gives us baked ufuncs *and* custom-op escape hatches without mode-switching. |
+| `IUnaryKernel<TIn,TOut>` static abstracts | `NpyInnerLoopFunc` delegate + struct-generic `INpyInnerLoop` | Static-abstract generics don't inline reliably across assemblies on net8; struct-generic dispatch is cleaner and the `NpyInnerLoopFunc` delegate matches NumPy's C-API loop signature 1-to-1. |
+| `IKernelEmitter` interface for IL injection | `Action<ILGenerator>` per-element + factory-wrapped shell | A full `IKernelEmitter` interface was overkill for the common "I just want SIMD with a custom op" case. The factory handles the unroll shell; users write only the per-element body. Raw-IL power-users use `ExecuteRawIL(Action<ILGenerator>)`. |
+| `Func<T,TOut>` delegates as Tier 3 | `ForEach(NpyInnerLoopFunc)` + `NpyExpr.Call(Delegate)` | The `Func<>` path morphed into two: Layer 1 `ForEach` for whole-loop delegates, and `NpyExpr.Call` for per-element managed methods embedded inside a DSL tree. |
+
+## The seven techniques
+
+```
+           ergonomics                                                     control
+              ▲                                                              ▲
+              │                                                              │
+  Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
+              │  "one call, NumPy-style — one line per op"                   │
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier 3C     │  ExecuteExpression(NpyExpr)                                  │  compose
+              │  "build a tree with operators; no IL in caller"              │  with DSL
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier 3C     │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
+    + Call    │  "invoke arbitrary managed method per element"               │  BCL / user op
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier 3B     │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
+              │  "write per-element IL; factory wraps the unroll shell"      │  the vector body
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Tier 3A     │  ExecuteRawIL(emit, key, aux)                                │  emit
+              │  "emit the whole inner-loop body including ret"              │  everything
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
+              │  "zero-alloc; JIT specializes per struct; early-exit reduce" │  generic
+  ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
+  Layer 1     │  ForEach(NpyInnerLoopFunc kernel, void* aux)                 │  delegate,
+              │  "closest to NumPy's C API; closures welcome"                │  anything goes
+              │                                                              │
+              ▼                                                              ▼
+           NpyIter state (Shape, Strides, DataPtrs, Buffers, ...)
+                                  │
+                                  ▼
+              ILKernelGenerator (DynamicMethod + V128/V256/V512)
+```
+
+All seven share:
+- one `ConcurrentDictionary<string, NpyInnerLoopFunc>` inner-loop cache
+- one `ForEach` driver at the bottom (`do { kernel(dataptrs, strides, count, aux); } while (iternext);`)
+- the same SIMD machinery in `ILKernelGenerator` (V128 / V256 / V512 selection at startup)
+
+---
+
+## Layer 3 — Baked ufuncs (the 90% case)
 
 ```csharp
-// =============================================================================
-// UNARY: TIn -> TOut
-// =============================================================================
-
-/// <summary>
-/// Unary kernel with static abstract for JIT inlining.
-/// The Apply method should be simple enough for the JIT to inline.
-/// </summary>
-public interface IUnaryKernel<TIn, TOut>
-    where TIn : unmanaged
-    where TOut : unmanaged
-{
-    /// <summary>Transform a single element.</summary>
-    static abstract TOut Apply(TIn value);
-
-    /// <summary>
-    /// Optional: Provide SIMD implementation.
-    /// Return number of elements processed, or 0 to use scalar fallback.
-    /// </summary>
-    static virtual int ApplyVector(ReadOnlySpan<TIn> input, Span<TOut> output) => 0;
-}
-
-// =============================================================================
-// BINARY: (TLeft, TRight) -> TOut
-// =============================================================================
-
-/// <summary>Binary kernel for element-wise operations.</summary>
-public interface IBinaryKernel<TLeft, TRight, TOut>
-    where TLeft : unmanaged
-    where TRight : unmanaged
-    where TOut : unmanaged
-{
-    static abstract TOut Apply(TLeft left, TRight right);
-
-    static virtual int ApplyVector(
-        ReadOnlySpan<TLeft> left,
-        ReadOnlySpan<TRight> right,
-        Span<TOut> output) => 0;
-}
-
-// =============================================================================
-// REDUCTION: (TAccum, TIn) -> TAccum
-// =============================================================================
-
-/// <summary>Reduction kernel with early-exit support.</summary>
-public interface IReductionKernel<TIn, TAccum>
-    where TIn : unmanaged
-    where TAccum : unmanaged
-{
-    /// <summary>Identity value (0 for sum, 1 for prod, etc.).</summary>
-    static abstract TAccum Identity { get; }
-
-    /// <summary>Combine accumulator with next value.</summary>
-    static abstract TAccum Combine(TAccum accumulator, TIn value);
-
-    /// <summary>
-    /// Return false to exit reduction early.
-    /// Default: always continue (no early exit).
-    /// Used by All (exit on false) and Any (exit on true).
-    /// </summary>
-    static virtual bool ShouldContinue(TAccum accumulator) => true;
-
-    /// <summary>
-    /// Optional: SIMD reduction over span.
-    /// Default implementation uses scalar Combine with early-exit check.
-    /// </summary>
-    static virtual TAccum CombineVector(TAccum accumulator, ReadOnlySpan<TIn> values)
-    {
-        foreach (var v in values)
-        {
-            accumulator = Combine(accumulator, v);
-            if (!ShouldContinue(accumulator))
-                break;
-        }
-        return accumulator;
-    }
-}
-
-// =============================================================================
-// INDEXED REDUCTION: (TAccum, TIn, index) -> TAccum
-// =============================================================================
-
-/// <summary>
-/// Indexed reduction for ArgMax/ArgMin where index tracking is required.
-/// </summary>
-public interface IIndexedReductionKernel<TIn, TAccum>
-    where TIn : unmanaged
-    where TAccum : unmanaged
-{
-    static abstract TAccum Identity { get; }
-    static abstract TAccum Combine(TAccum accumulator, TIn value, int index);
-    static virtual bool ShouldContinue(TAccum accumulator) => true;
-}
-
-// =============================================================================
-// AXIS: Process entire axis slice (cumsum, cumprod, etc.)
-// =============================================================================
-
-/// <summary>
-/// Kernel for axis-wise operations with stride support.
-/// Handles non-contiguous axis slices via pointer+stride.
-/// </summary>
-public interface IAxisKernel<TIn, TOut>
-    where TIn : unmanaged
-    where TOut : unmanaged
-{
-    /// <summary>
-    /// Process an axis slice. Input/output may be non-contiguous.
-    /// </summary>
-    /// <param name="input">Pointer to first element of input axis</param>
-    /// <param name="output">Pointer to first element of output axis</param>
-    /// <param name="inputStride">Stride between input elements (in elements, not bytes)</param>
-    /// <param name="outputStride">Stride between output elements</param>
-    /// <param name="length">Number of elements along axis</param>
-    static abstract unsafe void ProcessAxis(
-        TIn* input,
-        TOut* output,
-        int inputStride,
-        int outputStride,
-        int length);
-}
-
-// =============================================================================
-// TERNARY: (bool, T, T) -> T (np.where)
-// =============================================================================
-
-/// <summary>Ternary select kernel for np.where-style operations.</summary>
-public interface ITernaryKernel<T>
-    where T : unmanaged
-{
-    static abstract T Apply(bool condition, T ifTrue, T ifFalse);
-
-    static virtual int ApplyVector(
-        ReadOnlySpan<bool> condition,
-        ReadOnlySpan<T> ifTrue,
-        ReadOnlySpan<T> ifFalse,
-        Span<T> output) => 0;
-}
-
-// =============================================================================
-// PREDICATE: T -> bool (masking)
-// =============================================================================
-
-/// <summary>Predicate kernel for creating boolean masks.</summary>
-public interface IPredicateKernel<T>
-    where T : unmanaged
-{
-    static abstract bool Apply(T value);
-    static virtual int ApplyVector(ReadOnlySpan<T> input, Span<bool> output) => 0;
-}
+using var iter = NpyIterRef.MultiNew(3, new[] { a, b, c },
+    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_NO_CASTING,
+    new[] { NpyIterPerOpFlags.READONLY,
+            NpyIterPerOpFlags.READONLY,
+            NpyIterPerOpFlags.WRITEONLY });
+iter.ExecuteBinary(BinaryOp.Add);
 ```
+
+`ExecuteBinary / Unary / Reduction / Comparison / Scan / Copy` resolve to a cached `MixedTypeKernelKey` lookup in `ILKernelGenerator`. First call JIT-compiles; every subsequent call with matching types/path returns the cached delegate.
+
+Benchmark: 1M float32 `a + b` = **0.58 ms/run** (4×-unrolled V256, post-warmup).
 
 ---
 
-### Tier 1: Example Implementations
+## Tier 3C — Expression DSL (`NpyExpr`)
+
+45+ node types compose with operators:
 
 ```csharp
-// ============ UNARY ============
+var x = NpyExpr.Input(0);
+var pos = NpyExpr.Const(1.0) / (NpyExpr.Const(1.0) + NpyExpr.Exp(-x));
+var neg = NpyExpr.Exp(x) / (NpyExpr.Const(1.0) + NpyExpr.Exp(x));
+var stable = NpyExpr.Where(
+    NpyExpr.GreaterEqual(x, NpyExpr.Const(0.0)), pos, neg);
 
-public readonly struct SquareKernel : IUnaryKernel<double, double>
-{
-    public static double Apply(double value) => value * value;
-
-    public static int ApplyVector(ReadOnlySpan<double> input, Span<double> output)
-    {
-        int i = 0;
-        if (Vector256.IsHardwareAccelerated)
-        {
-            for (; i <= input.Length - Vector256<double>.Count; i += Vector256<double>.Count)
-            {
-                var v = Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(input), (nuint)i);
-                (v * v).StoreUnsafe(ref MemoryMarshal.GetReference(output), (nuint)i);
-            }
-        }
-        return i; // Return how many we processed; iterator handles remainder
-    }
-}
-
-public readonly struct NegateKernel<T> : IUnaryKernel<T, T>
-    where T : unmanaged, IUnaryNegationOperators<T, T>
-{
-    public static T Apply(T value) => -value;
-}
-
-public readonly struct AbsKernel : IUnaryKernel<double, double>
-{
-    public static double Apply(double value) => Math.Abs(value);
-}
-
-// ============ BINARY ============
-
-public readonly struct AddKernel<T> : IBinaryKernel<T, T, T>
-    where T : unmanaged, IAdditionOperators<T, T, T>
-{
-    public static T Apply(T left, T right) => left + right;
-}
-
-public readonly struct SubtractKernel<T> : IBinaryKernel<T, T, T>
-    where T : unmanaged, ISubtractionOperators<T, T, T>
-{
-    public static T Apply(T left, T right) => left - right;
-}
-
-public readonly struct MultiplyKernel<T> : IBinaryKernel<T, T, T>
-    where T : unmanaged, IMultiplyOperators<T, T, T>
-{
-    public static T Apply(T left, T right) => left * right;
-}
-
-public readonly struct MaxKernel<T> : IBinaryKernel<T, T, T>
-    where T : unmanaged, IComparisonOperators<T, T, bool>
-{
-    public static T Apply(T left, T right) => left > right ? left : right;
-}
-
-// ============ REDUCTION ============
-
-public readonly struct SumKernel<T> : IReductionKernel<T, T>
-    where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
-{
-    public static T Identity => T.AdditiveIdentity;
-    public static T Combine(T acc, T val) => acc + val;
-}
-
-public readonly struct ProdKernel<T> : IReductionKernel<T, T>
-    where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
-{
-    public static T Identity => T.MultiplicativeIdentity;
-    public static T Combine(T acc, T val) => acc * val;
-}
-
-public readonly struct AllKernel : IReductionKernel<bool, bool>
-{
-    public static bool Identity => true;
-    public static bool Combine(bool acc, bool val) => acc && val;
-    public static bool ShouldContinue(bool acc) => acc; // Exit when false
-}
-
-public readonly struct AnyKernel : IReductionKernel<bool, bool>
-{
-    public static bool Identity => false;
-    public static bool Combine(bool acc, bool val) => acc || val;
-    public static bool ShouldContinue(bool acc) => !acc; // Exit when true
-}
-
-// ============ INDEXED REDUCTION ============
-
-public readonly struct ArgMaxKernel : IIndexedReductionKernel<double, (double Value, int Index)>
-{
-    public static (double, int) Identity => (double.NegativeInfinity, -1);
-
-    public static (double, int) Combine((double Value, int Index) acc, double value, int index)
-        => value > acc.Value ? (value, index) : acc;
-}
-
-public readonly struct ArgMinKernel : IIndexedReductionKernel<double, (double Value, int Index)>
-{
-    public static (double, int) Identity => (double.PositiveInfinity, -1);
-
-    public static (double, int) Combine((double Value, int Index) acc, double value, int index)
-        => value < acc.Value ? (value, index) : acc;
-}
-
-// ============ AXIS ============
-
-public readonly struct CumSumAxisKernel<T> : IAxisKernel<T, T>
-    where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
-{
-    public static unsafe void ProcessAxis(
-        T* input, T* output,
-        int inputStride, int outputStride, int length)
-    {
-        T sum = T.AdditiveIdentity;
-        for (int i = 0; i < length; i++)
-        {
-            sum += input[i * inputStride];
-            output[i * outputStride] = sum;
-        }
-    }
-}
-
-public readonly struct CumProdAxisKernel<T> : IAxisKernel<T, T>
-    where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
-{
-    public static unsafe void ProcessAxis(
-        T* input, T* output,
-        int inputStride, int outputStride, int length)
-    {
-        T prod = T.MultiplicativeIdentity;
-        for (int i = 0; i < length; i++)
-        {
-            prod *= input[i * inputStride];
-            output[i * outputStride] = prod;
-        }
-    }
-}
-
-// ============ TERNARY ============
-
-public readonly struct SelectKernel<T> : ITernaryKernel<T>
-    where T : unmanaged
-{
-    public static T Apply(bool condition, T ifTrue, T ifFalse)
-        => condition ? ifTrue : ifFalse;
-}
-
-// ============ PREDICATE ============
-
-public readonly struct IsPositiveKernel<T> : IPredicateKernel<T>
-    where T : unmanaged, IComparisonOperators<T, T, bool>, IAdditiveIdentity<T, T>
-{
-    public static bool Apply(T value) => value > T.AdditiveIdentity;
-}
-
-public readonly struct IsNaNKernel : IPredicateKernel<double>
-{
-    public static bool Apply(double value) => double.IsNaN(value);
-}
-
-public readonly struct IsFiniteKernel : IPredicateKernel<double>
-{
-    public static bool Apply(double value) => double.IsFinite(value);
-}
+iter.ExecuteExpression(stable,
+    new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
+
+Covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates, comparisons, Min/Max/Clamp/Where. Auto-derives a cache key from the tree's structural signature (e.g. `NpyExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single`).
+
+Benchmark: stable sigmoid on 1M f64 = **13.6 ms/run** (3 × `Math.Exp` per element dominates).
+
+## Tier 3C + Call — Inject any .NET method
+
+```csharp
+// Typed Func overloads — method groups bind without cast
+NpyExpr.Call(Math.Sqrt,   NpyExpr.Input(0));
+NpyExpr.Call(Math.Pow,    NpyExpr.Input(0), NpyExpr.Input(1));
+
+// Cast to disambiguate overloaded methods
+NpyExpr.Call((Func<double, double>)Math.Abs, NpyExpr.Input(0));
+
+// Pre-constructed delegate with captures
+static readonly Func<double, double> GELU = x =>
+    0.5 * x * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) *
+                               (x + 0.044715 * x * x * x)));
+NpyExpr.Call(GELU, NpyExpr.Input(0));
+
+// MethodInfo — static
+var mi = typeof(Math).GetMethod("BitIncrement", new[] { typeof(double) });
+NpyExpr.Call(mi, NpyExpr.Input(0));
+
+// MethodInfo + instance target
+NpyExpr.Call(instanceMethod, targetObject, NpyExpr.Input(0));
+```
+
+Three dispatch paths, selected automatically at node construction:
+
+| Condition | Emitted IL | Per-element cost |
+|-----------|------------|------------------|
+| Static method, no captures | `call <methodinfo>` | Direct call; JIT may inline |
+| Instance `MethodInfo` with explicit `target` | `ldc.i4 slotId` → `DelegateSlots.LookupTarget` → `castclass T` → `callvirt <methodinfo>` | ~5 ns + virtual call |
+| Any other Delegate | `ldc.i4 slotId` → `DelegateSlots.LookupDelegate` → `castclass Func<...>` → `callvirt Invoke` | ~5-10 ns + `Delegate.Invoke` |
+
+Strong-ref `DelegateSlots` registry keeps captured delegates alive for the process lifetime — user must register once at startup (static field) to avoid unbounded growth.
+
+Benchmark: GELU via captured lambda on 1M f64 = **8.08 ms/run**.
 
 ---
 
-### Tier 2: Direct IL Injection (Full Control)
+## Tier 3B — Templated element-wise, hand-written vector body
 
-For users who need complete control over the generated IL.
+Factory emits the 4×-unrolled SIMD + 1-vec remainder + scalar-tail + scalar-strided fallback shell. User provides only the per-element scalar and (optional) vector body:
 
 ```csharp
-/// <summary>
-/// IL emitter interface for direct kernel code generation.
-/// Implementers have full control over the generated IL.
-/// </summary>
-public interface IKernelEmitter
-{
-    /// <summary>
-    /// Emit IL for the kernel operation.
-    /// Stack state on entry depends on kernel kind (see Stack Contract).
-    /// Must leave result on stack.
-    /// </summary>
-    void Emit(ILGenerator il, KernelEmitContext context);
-}
-
-/// <summary>Context provided to IL emitters.</summary>
-public readonly struct KernelEmitContext
-{
-    public NPTypeCode InputType { get; init; }
-    public NPTypeCode OutputType { get; init; }
-    public KernelKind Kind { get; init; }
-
-    // Locals that the iterator has already declared (for reuse)
-    public LocalBuilder? LocalTemp1 { get; init; }
-    public LocalBuilder? LocalTemp2 { get; init; }
-
-    // Labels for control flow (e.g., early exit in reductions)
-    public Label? EarlyExitLabel { get; init; }
-}
-
-public enum KernelKind
-{
-    Unary,           // T -> TOut
-    Binary,          // (TLeft, TRight) -> TOut
-    Comparison,      // (TLeft, TRight) -> bool
-    Reduction,       // (TAccum, TIn) -> TAccum
-    IndexedReduction,// (TAccum, TIn, int) -> TAccum
-    Axis,            // Process entire axis slice
-    Ternary,         // (bool, T, T) -> T
-    Predicate,       // T -> bool
-}
-
-/// <summary>
-/// Delegate-based IL emitter for inline definition.
-/// </summary>
-public delegate void KernelEmitDelegate(ILGenerator il, KernelEmitContext context);
+iter.ExecuteElementWiseBinary(
+    NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
+    scalarBody: il =>
+    {
+        // Stack: [a, b] → [2a + 3b]
+        il.Emit(OpCodes.Ldc_R4, 2f); il.Emit(OpCodes.Mul);
+        var tmp = il.DeclareLocal(typeof(float)); il.Emit(OpCodes.Stloc, tmp);
+        il.Emit(OpCodes.Ldc_R4, 3f); il.Emit(OpCodes.Mul);
+        il.Emit(OpCodes.Ldloc, tmp); il.Emit(OpCodes.Add);
+    },
+    vectorBody: il =>
+    {
+        // Vector256<float> ops — all via ILKernelGenerator primitives
+        il.Emit(OpCodes.Ldc_R4, 2f);
+        ILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
+        ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Single);
+        // … symmetric for 3b, then add …
+    },
+    cacheKey: "linear_2a_3b_f32");
 ```
 
-**Stack Contract for IL Emitters:**
+**When SIMD is skipped.** Vector body is emitted only when `CanSimdAllOperands(operandTypes)` is true (all operand dtypes identical *and* SIMD-capable). Mixed-type ufuncs (int32 + float32 → float32) run the scalar body with `EmitConvertTo` inside.
 
-| Kernel Kind | Stack on Entry | Stack on Exit |
-|-------------|----------------|---------------|
-| Unary | `[value]` | `[result]` |
-| Binary | `[left, right]` | `[result]` |
-| Comparison | `[left, right]` | `[bool]` |
-| Reduction | `[accumulator, value]` | `[new_accumulator]` |
-| IndexedReduction | `[accumulator, value, index]` | `[new_accumulator]` |
-| Ternary | `[condition, ifTrue, ifFalse]` | `[result]` |
-| Predicate | `[value]` | `[bool]` |
+**Runtime contig check.** Factory emits a stride-vs-elemSize comparison at kernel entry. Any stride mismatch falls into the scalar-strided loop — one kernel handles both contiguous and sliced inputs without recompile.
+
+Benchmark: `2a + 3b` on 1M f32 = **0.61 ms/run** — within ~7% of baked Layer 3 Add.
 
 ---
 
-### Tier 2: IKernelEmitter Examples
+## Tier 3A — Raw IL escape hatch
+
+User emits the entire inner-loop body against the NumPy ufunc signature
+`void(void** dataptrs, long* byteStrides, long count, void* aux)`:
 
 ```csharp
-// =============================================================================
-// EXAMPLE 1: Power operation (Math.Pow)
-// =============================================================================
-
-public class PowerEmitter : IKernelEmitter
+iter.ExecuteRawIL(il =>
 {
-    public void Emit(ILGenerator il, KernelEmitContext context)
+    // c[i] = |a[i] - b[i]| for int32 operands, fused in one kernel.
+    var p0 = il.DeclareLocal(typeof(byte*));
+    var p1 = il.DeclareLocal(typeof(byte*));
+    var p2 = il.DeclareLocal(typeof(byte*));
+    var s0 = il.DeclareLocal(typeof(long));
+    // ... 60 lines of il.Emit(OpCodes.*) ...
+    il.Emit(OpCodes.Ret);
+}, cacheKey: "abs_diff_i32");
+```
+
+Use when the loop shape is non-rectangular (gather/scatter, cross-element dependencies, branch-on-auxdata). Otherwise prefer Tier 3B which gets you the SIMD shell for free.
+
+Benchmark: `abs(a - b)` on 1M i32 = **1.27 ms/run** (scalar loop, JIT autovectorizes post tier-1).
+
+---
+
+## Layer 2 — Struct-generic dispatch (zero-alloc)
+
+The JIT specializes `ExecuteGeneric<TKernel>` per struct type at codegen time. No delegate indirection, no boxing. **Only path with early-exit reductions.**
+
+```csharp
+readonly unsafe struct HypotKernel : INpyInnerLoop
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Execute(void** p, long* s, long n)
     {
-        // Stack on entry: [base, exponent] (both as input type)
-        // Need to call Math.Pow(double, double) -> double
-
-        // Store exponent to local
-        var locExp = il.DeclareLocal(typeof(double));
-        EmitConvertToDouble(il, context.InputType);
-        il.Emit(OpCodes.Stloc, locExp);
-
-        // Convert base to double (it's now on top)
-        EmitConvertToDouble(il, context.InputType);
-
-        // Load exponent
-        il.Emit(OpCodes.Ldloc, locExp);
-
-        // Call Math.Pow
-        var powMethod = typeof(Math).GetMethod(nameof(Math.Pow),
-            new[] { typeof(double), typeof(double) });
-        il.EmitCall(OpCodes.Call, powMethod!, null);
-
-        // Convert result back to output type
-        EmitConvertFromDouble(il, context.OutputType);
-        // Stack on exit: [result]
-    }
-
-    private static void EmitConvertToDouble(ILGenerator il, NPTypeCode type)
-    {
-        if (type == NPTypeCode.Double) return;
-        if (type == NPTypeCode.Single) { il.Emit(OpCodes.Conv_R8); return; }
-        if (type == NPTypeCode.Byte || type == NPTypeCode.UInt16 ||
-            type == NPTypeCode.UInt32 || type == NPTypeCode.UInt64)
-            il.Emit(OpCodes.Conv_R_Un);
-        il.Emit(OpCodes.Conv_R8);
-    }
-
-    private static void EmitConvertFromDouble(ILGenerator il, NPTypeCode type)
-    {
-        switch (type)
+        if (s[0] == 4 && s[1] == 4 && s[2] == 4)
         {
-            case NPTypeCode.Double: break;
-            case NPTypeCode.Single: il.Emit(OpCodes.Conv_R4); break;
-            case NPTypeCode.Byte: il.Emit(OpCodes.Conv_U1); break;
-            case NPTypeCode.Int16: il.Emit(OpCodes.Conv_I2); break;
-            case NPTypeCode.Int32: il.Emit(OpCodes.Conv_I4); break;
-            case NPTypeCode.Int64: il.Emit(OpCodes.Conv_I8); break;
-            // ... etc
+            float* pa = (float*)p[0], pb = (float*)p[1], pc = (float*)p[2];
+            for (long i = 0; i < n; i++)
+                pc[i] = MathF.Sqrt(pa[i] * pa[i] + pb[i] * pb[i]);
         }
+        // … strided fallback …
     }
 }
 
-// Usage:
-NDIterator.TransformBinary<double, double, double>(
-    bases, exponents, result, new PowerEmitter());
-
-// =============================================================================
-// EXAMPLE 2: Fused Multiply-Add (a * b + c) as Binary on pre-added arrays
-// =============================================================================
-
-public class FusedMultiplyAddEmitter : IKernelEmitter
+readonly unsafe struct AnyNonZero : INpyReducingInnerLoop<bool>
 {
-    private readonly double _addend;
-
-    public FusedMultiplyAddEmitter(double addend) => _addend = addend;
-
-    public void Emit(ILGenerator il, KernelEmitContext context)
+    public bool Execute(void** p, long* s, long n, ref bool acc)
     {
-        // Stack: [left, right]
-        il.Emit(OpCodes.Mul);           // [left * right]
-        il.Emit(OpCodes.Ldc_R8, _addend); // [left * right, addend]
-        il.Emit(OpCodes.Add);           // [left * right + addend]
+        byte* pt = (byte*)p[0]; long st = s[0];
+        for (long i = 0; i < n; i++)
+            if (*(int*)(pt + i * st) != 0) { acc = true; return false; } // STOP
+        return true;
     }
 }
 
-// =============================================================================
-// EXAMPLE 3: Clip (clamp to range)
-// =============================================================================
+iter.ExecuteGeneric(default(HypotKernel));
+bool found = iter.ExecuteReducing<AnyNonZero, bool>(default, false);
+```
 
-public class ClipEmitter : IKernelEmitter
-{
-    private readonly double _min;
-    private readonly double _max;
+Benchmark: `AnyNonZero` early-exit over 1M int32 with hit at idx 500 = **0.001 ms/run** — the kernel returns `false`, the bridge bails out of the do/while after one call.
 
-    public ClipEmitter(double min, double max)
-    {
-        _min = min;
-        _max = max;
+---
+
+## Layer 1 — ForEach delegate (NumPy-C-API parity)
+
+```csharp
+iter.ForEach((ptrs, strides, count, aux) => {
+    if (strides[0] == 4 && strides[1] == 4 && strides[2] == 4) {
+        float* pa = (float*)ptrs[0], pb = (float*)ptrs[1], pc = (float*)ptrs[2];
+        for (long i = 0; i < count; i++)
+            pc[i] = MathF.Sqrt(pa[i] * pa[i] + pb[i] * pb[i]);
+    } else {
+        // … strided scalar fallback …
     }
-
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [value]
-        var lblCheckMax = il.DefineLabel();
-        var lblEnd = il.DefineLabel();
-
-        // if (value < min) return min
-        il.Emit(OpCodes.Dup);                    // [value, value]
-        il.Emit(OpCodes.Ldc_R8, _min);           // [value, value, min]
-        il.Emit(OpCodes.Bge_Un, lblCheckMax);    // [value] (branch if value >= min)
-        il.Emit(OpCodes.Pop);                    // []
-        il.Emit(OpCodes.Ldc_R8, _min);           // [min]
-        il.Emit(OpCodes.Br, lblEnd);
-
-        // if (value > max) return max
-        il.MarkLabel(lblCheckMax);
-        il.Emit(OpCodes.Dup);                    // [value, value]
-        il.Emit(OpCodes.Ldc_R8, _max);           // [value, value, max]
-        il.Emit(OpCodes.Ble_Un, lblEnd);         // [value] (branch if value <= max)
-        il.Emit(OpCodes.Pop);                    // []
-        il.Emit(OpCodes.Ldc_R8, _max);           // [max]
-
-        il.MarkLabel(lblEnd);
-        // Stack: [clipped_value]
-    }
-}
-
-// Usage:
-NDIterator.Transform<double, double>(arr, result, new ClipEmitter(0.0, 1.0));
-
-// =============================================================================
-// EXAMPLE 4: Sigmoid activation function: 1 / (1 + exp(-x))
-// =============================================================================
-
-public class SigmoidEmitter : IKernelEmitter
-{
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [x]
-        il.Emit(OpCodes.Neg);                    // [-x]
-
-        var expMethod = typeof(Math).GetMethod(nameof(Math.Exp), new[] { typeof(double) });
-        il.EmitCall(OpCodes.Call, expMethod!, null);  // [exp(-x)]
-
-        il.Emit(OpCodes.Ldc_R8, 1.0);            // [exp(-x), 1.0]
-        il.Emit(OpCodes.Add);                    // [1 + exp(-x)]
-
-        il.Emit(OpCodes.Ldc_R8, 1.0);            // [1 + exp(-x), 1.0]
-        il.Emit(OpCodes.Div);                    // [1 / (1 + exp(-x))]
-        // Stack: [sigmoid(x)]
-    }
-}
-
-// =============================================================================
-// EXAMPLE 5: ReLU with inline delegate
-// =============================================================================
-
-var reluEmitter = new KernelEmitDelegate((il, ctx) =>
-{
-    // Stack: [x]
-    il.Emit(OpCodes.Dup);                    // [x, x]
-    il.Emit(OpCodes.Ldc_R8, 0.0);            // [x, x, 0]
-    var lblPositive = il.DefineLabel();
-    il.Emit(OpCodes.Bge, lblPositive);       // [x] (branch if x >= 0)
-    il.Emit(OpCodes.Pop);                    // []
-    il.Emit(OpCodes.Ldc_R8, 0.0);            // [0]
-    il.MarkLabel(lblPositive);
-    // Stack: [max(0, x)]
 });
+```
 
-NDIterator.Transform<double, double>(arr, result, reluEmitter);
+Classic NumPy-C-API shape. One delegate closure per call. Most flexible for one-offs, fused kernels with captures, or mid-execution experimentation.
 
-// =============================================================================
-// EXAMPLE 6: Leaky ReLU with configurable alpha
-// =============================================================================
+---
 
-public class LeakyReLUEmitter : IKernelEmitter
-{
-    private readonly double _alpha;
+## Decision tree
 
-    public LeakyReLUEmitter(double alpha = 0.01) => _alpha = alpha;
+```
+Is the op a standard NumPy ufunc already in ExecuteBinary/Unary/Reduction?
+  yes → Layer 3. Fastest, zero work. Done.
+  no ↓
 
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [x]
-        // return x >= 0 ? x : alpha * x
+Can I express it as a tree of DSL nodes (Add, Sqrt, Where, Exp, …)?
+  yes → Tier 3C. Fused, SIMD-or-scalar automatic, no IL.
+  no ↓
 
-        var lblNegative = il.DefineLabel();
-        var lblEnd = il.DefineLabel();
+Is the missing piece a BCL method (Math.X, user activation, reflected plugin)?
+  yes → Tier 3C + Call. Scalar-only but fused. Done.
+  no ↓
 
-        il.Emit(OpCodes.Dup);                    // [x, x]
-        il.Emit(OpCodes.Ldc_R8, 0.0);            // [x, x, 0]
-        il.Emit(OpCodes.Blt, lblNegative);       // [x] (branch if x < 0)
-        il.Emit(OpCodes.Br, lblEnd);             // x >= 0, keep x
+Do I need V256/V512 intrinsics the DSL doesn't wrap (Fma, Shuffle, Gather, …)?
+  yes → Tier 3B. Hand-write the vector body; factory wraps the shell.
+  no ↓
 
-        il.MarkLabel(lblNegative);
-        il.Emit(OpCodes.Ldc_R8, _alpha);         // [x, alpha]
-        il.Emit(OpCodes.Mul);                    // [alpha * x]
+Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
+  yes → Tier 3A. Emit the whole inner-loop IL yourself.
+  no ↓
 
-        il.MarkLabel(lblEnd);
-        // Stack: [result]
-    }
-}
+Do I need an early-exit reduction (Any / All / find-first)?
+  yes → Layer 2 ExecuteReducing. Returns false from the kernel to bail out.
+  no ↓
 
-// =============================================================================
-// EXAMPLE 7: Softplus: log(1 + exp(x))
-// =============================================================================
-
-public class SoftplusEmitter : IKernelEmitter
-{
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [x]
-        var expMethod = typeof(Math).GetMethod(nameof(Math.Exp), new[] { typeof(double) });
-        var logMethod = typeof(Math).GetMethod(nameof(Math.Log), new[] { typeof(double) });
-
-        il.EmitCall(OpCodes.Call, expMethod!, null);  // [exp(x)]
-        il.Emit(OpCodes.Ldc_R8, 1.0);                 // [exp(x), 1]
-        il.Emit(OpCodes.Add);                         // [1 + exp(x)]
-        il.EmitCall(OpCodes.Call, logMethod!, null);  // [log(1 + exp(x))]
-    }
-}
-
-// =============================================================================
-// EXAMPLE 8: Custom reduction - LogSumExp (numerically stable)
-// =============================================================================
-
-public class LogSumExpReductionEmitter : IKernelEmitter
-{
-    private readonly double _maxValue; // Pre-computed max for stability
-
-    public LogSumExpReductionEmitter(double maxValue) => _maxValue = maxValue;
-
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [accumulator, value]
-        // Compute: acc + exp(value - max)
-
-        var expMethod = typeof(Math).GetMethod(nameof(Math.Exp), new[] { typeof(double) });
-
-        // Store accumulator
-        var locAcc = il.DeclareLocal(typeof(double));
-        il.Emit(OpCodes.Stloc, locAcc);      // Stack: [value]
-
-        // Compute exp(value - max)
-        il.Emit(OpCodes.Ldc_R8, _maxValue);  // [value, max]
-        il.Emit(OpCodes.Sub);                // [value - max]
-        il.EmitCall(OpCodes.Call, expMethod!, null); // [exp(value - max)]
-
-        // Add to accumulator
-        il.Emit(OpCodes.Ldloc, locAcc);      // [exp(value - max), acc]
-        il.Emit(OpCodes.Add);                // [acc + exp(value - max)]
-    }
-}
-
-// =============================================================================
-// EXAMPLE 9: Euclidean distance accumulation (for norm)
-// =============================================================================
-
-public class SumSquaresEmitter : IKernelEmitter
-{
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [accumulator, value]
-        var locAcc = il.DeclareLocal(typeof(double));
-        il.Emit(OpCodes.Stloc, locAcc);      // [value]
-
-        il.Emit(OpCodes.Dup);                // [value, value]
-        il.Emit(OpCodes.Mul);                // [value^2]
-        il.Emit(OpCodes.Ldloc, locAcc);      // [value^2, acc]
-        il.Emit(OpCodes.Add);                // [acc + value^2]
-    }
-}
-
-// Usage: Compute L2 norm
-double sumSq = NDIterator.Reduce<double, double>(arr, new SumSquaresEmitter(), 0.0);
-double norm = Math.Sqrt(sumSq);
-
-// =============================================================================
-// EXAMPLE 10: Polynomial evaluation (Horner's method for ax^2 + bx + c)
-// =============================================================================
-
-public class QuadraticEmitter : IKernelEmitter
-{
-    private readonly double _a, _b, _c;
-
-    public QuadraticEmitter(double a, double b, double c)
-    {
-        _a = a; _b = b; _c = c;
-    }
-
-    public void Emit(ILGenerator il, KernelEmitContext context)
-    {
-        // Stack: [x]
-        // Horner: ((a * x) + b) * x + c
-
-        il.Emit(OpCodes.Dup);                // [x, x]
-        il.Emit(OpCodes.Ldc_R8, _a);         // [x, x, a]
-        il.Emit(OpCodes.Mul);                // [x, a*x]
-        il.Emit(OpCodes.Ldc_R8, _b);         // [x, a*x, b]
-        il.Emit(OpCodes.Add);                // [x, a*x + b]
-        il.Emit(OpCodes.Mul);                // [(a*x + b) * x]
-        il.Emit(OpCodes.Ldc_R8, _c);         // [(a*x + b) * x, c]
-        il.Emit(OpCodes.Add);                // [a*x^2 + b*x + c]
-    }
-}
+Just exploring or writing a one-off?
+       → Layer 1 ForEach. Delegate per call; flexible.
 ```
 
 ---
 
-### Tier 3: Func/Action Delegates (Simple)
+## Performance summary (1M elements, post-warmup)
 
-For quick prototyping and cold paths. Has delegate invocation overhead (~10-15 cycles per element).
+| Technique | Operation | Time / run | Notes |
+|-----------|-----------|-----------:|-------|
+| Layer 3 | `a + b` (f32) | 0.58 ms | baked, 4×-unrolled V256, cache hit |
+| Tier 3B | `2a + 3b` hand V256 (f32) | 0.61 ms | within ~7% of baked |
+| Layer 2 reduction | `AnyNonZero` early-exit (hit @ 500) | 0.001 ms | returns `false` from kernel |
+| Tier 3A | `abs(a - b)` raw IL (i32) | 1.27 ms | scalar, JIT autovectorizes |
+| Tier 3C + Call | `GELU` via captured lambda (f64) | 8.08 ms | `Math.Tanh` dominates |
+| Tier 3C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
+
+Tier-0 JIT caveat applies to Layer 1/2 element-wise kernels in ephemeral hosts (dotnet_run, cold-start scripts) — they can look 30-50× slower than production until tier-1 promotion kicks in (~100 hot-loop iterations).
+
+---
+
+## NpyIter state (unified, post-port)
+
+Replaces the v4 `IteratorState` struct. Heap-allocated via `NativeMemory.AllocZeroed` (not stack-allocated with `fixed int[16]`) because NumSharp drops NumPy's `NPY_MAXDIMS=64` ceiling — state is sized to the actual `(ndim, nop)`.
 
 ```csharp
-// Usage examples with Func<> delegates
-
-// Unary transform
-NDIterator.Transform<double, double>(arr, result, x => x * x);
-NDIterator.Transform<double, double>(arr, result, Math.Sin);
-NDIterator.Transform<int, double>(arr, result, x => Math.Sqrt(x));
-
-// Binary transform
-NDIterator.TransformBinary<double, double, double>(a, b, result, (x, y) => x + y);
-NDIterator.TransformBinary<double, double, double>(a, b, result, Math.Max);
-
-// Reduction
-double sum = NDIterator.Reduce<double, double>(arr, (acc, x) => acc + x, 0.0);
-double prod = NDIterator.Reduce<double, double>(arr, (acc, x) => acc * x, 1.0);
-double sumSq = NDIterator.Reduce<double, double>(arr, (acc, x) => acc + x * x, 0.0);
-
-// Indexed reduction
-var (maxVal, maxIdx) = NDIterator.ReduceIndexed<double, (double, int)>(
-    arr,
-    (acc, val, idx) => val > acc.Item1 ? (val, idx) : acc,
-    (double.NegativeInfinity, -1));
-
-// Axis reduction
-NDArray rowSums = NDIterator.ReduceAxis<double, double>(
-    arr, axis: 1, (acc, x) => acc + x, 0.0);
-
-// Masking
-NDArray mask = NDIterator.Mask<double>(arr, x => x > 0.5);
-NDArray nanMask = NDIterator.Mask<double>(arr, double.IsNaN);
-
-// np.where
-NDIterator.Where<double>(condition, ifTrue, ifFalse, dest,
-    (c, t, f) => c ? t : f);
-```
-
----
-
-## Iterator State (Unified)
-
-```csharp
-/// <summary>
-/// Unified iterator state. Stack-allocated, no managed references.
-/// Replaces all existing incrementors and iterator closures.
-/// </summary>
-[StructLayout(LayoutKind.Sequential)]
-public unsafe struct IteratorState
+public unsafe struct NpyIterState
 {
-    // Core pointers
-    public void* InputAddress;
-    public void* OutputAddress;
+    // Scalars
+    public int NDim, NOp;
+    public long IterSize, IterIndex;
+    public NpyIterFlags ItFlags;
 
-    // Position tracking
-    public int LinearIndex;      // Current flat index (0..Size-1)
-    public int Size;             // Total elements
+    // Dim arrays (size = NDim)
+    public long* Shape;
+    public long* Coords;
+    public long* Strides;           // element strides per (op, axis)
+    public sbyte* Perm;             // negative = axis was flipped
 
-    // Shape info (inline for common case <= 16 dims)
-    public fixed int Shape[16];
-    public fixed int InputStrides[16];
-    public fixed int OutputStrides[16];
-    public fixed int Coords[16];  // Current N-D coordinates
-    public int NDim;
+    // Op arrays (size = NOp)
+    public long* DataPtrs, ResetDataPtrs, BufStrides, InnerStrides, BaseOffsets;
+    public NPTypeCode* OpDTypes;
 
-    // Overflow pointers for >16 dims (rare, managed by NDArray)
-    public int* ShapeOverflow;
-    public int* InputStridesOverflow;
-    public int* OutputStridesOverflow;
-    public int* CoordsOverflow;
+    // Reduction arrays
+    public long* ReduceOuterStrides, ReduceOuterPtrs, ArrayWritebackPtrs;
+    public long CoreSize, CorePos, ReduceOuterSize, ReducePos;
 
-    // Axis iteration
-    public int Axis;
-    public int AxisSize;
-    public int AxisStride;
-
-    // Behavior flags
-    public IteratorFlags Flags;
-
-    // Type info for IL generation
-    public NPTypeCode InputType;
-    public NPTypeCode OutputType;
-
-    // Accessors
-    public readonly Span<int> GetShape() => NDim <= 16
-        ? new Span<int>(Unsafe.AsPointer(ref Unsafe.AsRef(in Shape[0])), NDim)
-        : new Span<int>(ShapeOverflow, NDim);
-
-    public readonly Span<int> GetInputStrides() => NDim <= 16
-        ? new Span<int>(Unsafe.AsPointer(ref Unsafe.AsRef(in InputStrides[0])), NDim)
-        : new Span<int>(InputStridesOverflow, NDim);
-
-    public readonly Span<int> GetOutputStrides() => NDim <= 16
-        ? new Span<int>(Unsafe.AsPointer(ref Unsafe.AsRef(in OutputStrides[0])), NDim)
-        : new Span<int>(OutputStridesOverflow, NDim);
-
-    public readonly Span<int> GetCoords() => NDim <= 16
-        ? new Span<int>(Unsafe.AsPointer(ref Unsafe.AsRef(in Coords[0])), NDim)
-        : new Span<int>(CoordsOverflow, NDim);
-}
-
-[Flags]
-public enum IteratorFlags : ushort
-{
-    None = 0,
-
-    // Layout flags
-    InputContiguous = 1 << 0,
-    OutputContiguous = 1 << 1,
-    BothContiguous = InputContiguous | OutputContiguous,
-
-    // Behavior flags
-    AutoReset = 1 << 2,         // Cycle back to start (for broadcasting)
-    Broadcast = 1 << 3,         // Handle stride=0 dimensions
-
-    // Iteration mode
-    AxisMode = 1 << 4,          // Iterating along axis
-    PairedMode = 1 << 5,        // Two-input iteration (binary ops)
-
-    // SIMD hints
-    SimdEligible = 1 << 6,      // Inner dim is SIMD-friendly
+    // Buffer
+    public long BufferSize, BufIterEnd;
+    public long* Buffers;
 }
 ```
 
----
-
-## NDIterator API (Complete)
-
-```csharp
-public static class NDIterator
-{
-    // =========================================================================
-    // TIER 1: Static Interface Kernels (Zero overhead, SIMD support)
-    // =========================================================================
-
-    /// <summary>Apply unary kernel to all elements.</summary>
-    public static void Transform<TIn, TOut, TKernel>(NDArray source, NDArray dest)
-        where TIn : unmanaged
-        where TOut : unmanaged
-        where TKernel : struct, IUnaryKernel<TIn, TOut>;
-
-    /// <summary>Apply binary kernel element-wise.</summary>
-    public static void TransformBinary<TL, TR, TOut, TKernel>(
-        NDArray left, NDArray right, NDArray dest)
-        where TL : unmanaged
-        where TR : unmanaged
-        where TOut : unmanaged
-        where TKernel : struct, IBinaryKernel<TL, TR, TOut>;
-
-    /// <summary>Reduce all elements.</summary>
-    public static TAccum Reduce<TIn, TAccum, TKernel>(NDArray source)
-        where TIn : unmanaged
-        where TAccum : unmanaged
-        where TKernel : struct, IReductionKernel<TIn, TAccum>;
-
-    /// <summary>Indexed reduction (ArgMax, ArgMin).</summary>
-    public static TAccum ReduceIndexed<TIn, TAccum, TKernel>(NDArray source)
-        where TIn : unmanaged
-        where TAccum : unmanaged
-        where TKernel : struct, IIndexedReductionKernel<TIn, TAccum>;
-
-    /// <summary>Reduce along axis.</summary>
-    public static NDArray ReduceAxis<TIn, TAccum, TKernel>(NDArray source, int axis)
-        where TIn : unmanaged
-        where TAccum : unmanaged
-        where TKernel : struct, IReductionKernel<TIn, TAccum>;
-
-    /// <summary>Cumulative axis operation (cumsum, cumprod).</summary>
-    public static void IterateAxisTransform<TIn, TOut, TKernel>(
-        NDArray source, NDArray dest, int axis)
-        where TIn : unmanaged
-        where TOut : unmanaged
-        where TKernel : struct, IAxisKernel<TIn, TOut>;
-
-    /// <summary>np.where-style ternary select.</summary>
-    public static void Where<T, TKernel>(
-        NDArray condition, NDArray ifTrue, NDArray ifFalse, NDArray dest)
-        where T : unmanaged
-        where TKernel : struct, ITernaryKernel<T>;
-
-    /// <summary>Create boolean mask.</summary>
-    public static NDArray Mask<T, TKernel>(NDArray source)
-        where T : unmanaged
-        where TKernel : struct, IPredicateKernel<T>;
-
-    // =========================================================================
-    // TIER 2: Direct IL Injection (Full control)
-    // =========================================================================
-
-    /// <summary>Unary transform with custom IL emitter.</summary>
-    public static void Transform<TIn, TOut>(
-        NDArray source, NDArray dest, IKernelEmitter emitter)
-        where TIn : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Unary transform with inline IL delegate.</summary>
-    public static void Transform<TIn, TOut>(
-        NDArray source, NDArray dest, KernelEmitDelegate emitKernel)
-        where TIn : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Binary transform with custom IL emitter.</summary>
-    public static void TransformBinary<TL, TR, TOut>(
-        NDArray left, NDArray right, NDArray dest, IKernelEmitter emitter)
-        where TL : unmanaged
-        where TR : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Binary transform with inline IL delegate.</summary>
-    public static void TransformBinary<TL, TR, TOut>(
-        NDArray left, NDArray right, NDArray dest, KernelEmitDelegate emitKernel)
-        where TL : unmanaged
-        where TR : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Reduction with custom IL emitter.</summary>
-    public static TAccum Reduce<TIn, TAccum>(
-        NDArray source, IKernelEmitter emitter, TAccum identity)
-        where TIn : unmanaged
-        where TAccum : unmanaged;
-
-    /// <summary>Axis reduction with custom IL emitter.</summary>
-    public static NDArray ReduceAxis<TIn, TAccum>(
-        NDArray source, int axis, IKernelEmitter emitter, TAccum identity)
-        where TIn : unmanaged
-        where TAccum : unmanaged;
-
-    // =========================================================================
-    // TIER 3: Func/Action Delegates (Simple, ~10-15 cycle overhead)
-    // =========================================================================
-
-    /// <summary>Unary transform with delegate.</summary>
-    public static void Transform<TIn, TOut>(
-        NDArray source, NDArray dest, Func<TIn, TOut> transform)
-        where TIn : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Binary transform with delegate.</summary>
-    public static void TransformBinary<TL, TR, TOut>(
-        NDArray left, NDArray right, NDArray dest, Func<TL, TR, TOut> transform)
-        where TL : unmanaged
-        where TR : unmanaged
-        where TOut : unmanaged;
-
-    /// <summary>Reduction with delegate.</summary>
-    public static TAccum Reduce<TIn, TAccum>(
-        NDArray source, Func<TAccum, TIn, TAccum> combine, TAccum identity)
-        where TIn : unmanaged
-        where TAccum : unmanaged;
-
-    /// <summary>Indexed reduction with delegate.</summary>
-    public static TAccum ReduceIndexed<TIn, TAccum>(
-        NDArray source, Func<TAccum, TIn, int, TAccum> combine, TAccum identity)
-        where TIn : unmanaged
-        where TAccum : unmanaged;
-
-    /// <summary>Axis reduction with delegate.</summary>
-    public static NDArray ReduceAxis<TIn, TAccum>(
-        NDArray source, int axis, Func<TAccum, TIn, TAccum> combine, TAccum identity)
-        where TIn : unmanaged
-        where TAccum : unmanaged;
-
-    /// <summary>Create mask with predicate delegate.</summary>
-    public static NDArray Mask<T>(NDArray source, Func<T, bool> predicate)
-        where T : unmanaged;
-
-    /// <summary>np.where with delegate.</summary>
-    public static void Where<T>(
-        NDArray condition, NDArray ifTrue, NDArray ifFalse, NDArray dest,
-        Func<bool, T, T, T> select)
-        where T : unmanaged;
-
-    // =========================================================================
-    // AXIS ITERATION (Direct pointer access)
-    // =========================================================================
-
-    /// <summary>
-    /// Iterate along an axis, providing pointer + stride for each slice.
-    /// Replaces the old Slice[]-based pattern entirely.
-    /// </summary>
-    public static unsafe void IterateAxis<T>(
-        NDArray source,
-        int axis,
-        AxisIterationDelegate<T> callback)
-        where T : unmanaged;
-
-    // =========================================================================
-    // LOW-LEVEL ACCESS
-    // =========================================================================
-
-    /// <summary>
-    /// Create an iterator state for manual iteration.
-    /// For advanced use cases requiring custom control flow.
-    /// </summary>
-    public static IteratorState CreateState(NDArray source, NDArray? dest = null);
-
-    /// <summary>Advance to next element, returning offsets.</summary>
-    public static bool MoveNext(ref IteratorState state,
-        out int inputOffset, out int outputOffset);
-
-    /// <summary>Advance to next axis slice.</summary>
-    public static bool MoveNextAxis(ref IteratorState state,
-        out ReadOnlySpan<int> axisOffsets);
-}
-
-/// <summary>Callback for axis iteration.</summary>
-public unsafe delegate void AxisIterationDelegate<T>(
-    T* axisData,           // Pointer to start of axis slice
-    int axisStride,        // Stride between elements along axis
-    int axisLength,        // Number of elements along axis
-    int sliceIndex)        // Which slice (0..numSlices-1)
-    where T : unmanaged;
-```
+See `src/NumSharp.Core/Backends/Iterators/NpyIter.State.cs` for the full definition and `NDIter.md` for the field-by-field walkthrough.
 
 ---
 
-## SIMD Strategy
+## Migration: old patterns → NpyIter
 
-| Tier | Loop Generation | Kernel Responsibility |
-|------|-----------------|----------------------|
-| Tier 1 (Interface) | NDIterator generates SIMD loop | Kernel provides `ApplyVector` for SIMD, `Apply` for scalar tail |
-| Tier 2 (IL Inject) | NDIterator generates scalar loop | User handles SIMD manually if desired |
-| Tier 3 (Func<>) | NDIterator generates scalar loop | No SIMD (delegate overhead dominates anyway) |
-
-**Rationale**:
-- Tier 1 kernels can opt-in to SIMD via `ApplyVector`. If it returns 0, scalar `Apply` is used.
-- Tier 2 gives full IL control; user can emit their own SIMD if needed.
-- Tier 3 is for simplicity; the delegate call overhead makes SIMD gains negligible.
-
----
-
-## Migration: Old Patterns to New
-
-### Pattern 1: NDIterator Element Iteration
+### Pattern 1: element-wise loop via `NDIterator`
 
 **Old:**
 ```csharp
@@ -1085,23 +358,36 @@ while (iter.HasNext())
 }
 ```
 
-**New (Tier 1):**
+**New (Layer 2 struct-generic):**
 ```csharp
-sum = NDIterator.Reduce<double, double, SumOfSquaresKernel>(source);
-
-public readonly struct SumOfSquaresKernel : IReductionKernel<double, double>
+readonly unsafe struct SumOfSquares : INpyReducingInnerLoop<double>
 {
-    public static double Identity => 0.0;
-    public static double Combine(double acc, double val) => acc + val * val;
+    public bool Execute(void** p, long* s, long n, ref double acc)
+    {
+        byte* pt = (byte*)p[0]; long st = s[0];
+        for (long i = 0; i < n; i++)
+        {
+            double v = *(double*)(pt + i * st);
+            acc += v * v;
+        }
+        return true;
+    }
 }
+
+using var iter = NpyIterRef.MultiNew(1, new[] { source },
+    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_NO_CASTING, new[] { NpyIterPerOpFlags.READONLY });
+double sum = iter.ExecuteReducing<SumOfSquares, double>(default, 0.0);
 ```
 
-**New (Tier 3):**
+**New (Tier 3C DSL):**
 ```csharp
-sum = NDIterator.Reduce<double, double>(source, (acc, val) => acc + val * val, 0.0);
+// If you also want the *array* of x² (not just the reduction):
+var expr = NpyExpr.Square(NpyExpr.Input(0));
+iter.ExecuteExpression(expr, new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
 
-### Pattern 2: NDCoordinatesAxisIncrementor with Slices
+### Pattern 2: axis-wise iteration via `NDCoordinatesAxisIncrementor`
 
 **Old:**
 ```csharp
@@ -1109,34 +395,26 @@ var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
 var slices = iterAxis.Slices;
 do
 {
-    var slice = arr[slices];  // Creates view
-    var result = ProcessSlice(slice);
-    ret[slices] = result;
+    var slice = arr[slices];
+    ret[slices] = ProcessSlice(slice);
 } while (iterAxis.Next() != null);
 ```
 
-**New:**
+**New (axis-reducing iterator with op_axes):**
 ```csharp
-// Direct pointer-based axis iteration
-NDIterator.IterateAxis<double>(arr, axis,
-    (double* axisData, int stride, int length, int sliceIdx) =>
-    {
-        // Process axis data directly via pointer
-        double sum = 0;
-        for (int i = 0; i < length; i++)
-            sum += axisData[i * stride];
-        output[sliceIdx] = sum;
-    });
+// Use the axis-reduction construction path; NpyIter handles the double-loop
+// buffered reduction internally via REDUCE_OK + ExecuteReduction.
+using var iter = NpyIterRef.AdvancedNew(2, new[] { input, output },
+    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.REDUCE_OK
+        | NpyIterGlobalFlags.BUFFERED,
+    NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
+    new[] { NpyIterPerOpFlags.READONLY,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.ALLOCATE },
+    opAxes: new[][] { null, outputAxes });
+iter.ExecuteReduction<double>(ReductionOp.Sum);
 ```
 
-**New (with kernel):**
-```csharp
-// For cumsum along axis
-NDIterator.IterateAxisTransform<double, double, CumSumAxisKernel<double>>(
-    source, dest, axis);
-```
-
-### Pattern 3: MultiIterator Broadcast Assignment
+### Pattern 3: broadcast paired iteration via `MultiIterator`
 
 **Old:**
 ```csharp
@@ -1145,14 +423,16 @@ while (lIter.HasNext())
     lIter.MoveNextReference() = rIter.MoveNext();
 ```
 
-**New:**
+**New (Layer 3 Copy):**
 ```csharp
-NDIterator.TransformBinary<T, T, T, AssignKernel<T>>(rhs, lhs, lhs);
-// Or more directly:
-NDIterator.Copy(rhs, lhs);  // Handles broadcasting internally
+using var iter = NpyIterRef.MultiNew(2, new[] { rhs, lhs },
+    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_SAFE_CASTING,
+    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY });
+iter.ExecuteCopy();
 ```
 
-### Pattern 4: ValueCoordinatesIncrementor for Coordinate Access
+### Pattern 4: coordinate access via `ValueCoordinatesIncrementor`
 
 **Old:**
 ```csharp
@@ -1165,81 +445,92 @@ do
 } while (incr.Next() != null);
 ```
 
-**New:**
+**New (Layer 1):**
 ```csharp
-var state = NDIterator.CreateState(arr);
-while (NDIterator.MoveNext(ref state, out int offset, out _))
-{
-    Process(data + offset);
-}
+using var iter = NpyIterRef.MultiNew(1, new[] { arr },
+    NpyIterGlobalFlags.None, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_NO_CASTING, new[] { NpyIterPerOpFlags.READONLY });
+iter.ForEach((ptrs, strides, count, aux) => {
+    byte* p = (byte*)ptrs[0]; long s = strides[0];
+    for (long i = 0; i < count; i++)
+        Process((double*)(p + i * s));
+});
 ```
 
 ---
 
-## Files to Delete (Post-Migration)
+## Files — current state
+
+**Core (production):**
 
 ```
 src/NumSharp.Core/Backends/Iterators/
-|-- INDIterator.cs                    [DELETE]
-|-- IteratorType.cs                   [DELETE]
-|-- MultiIterator.cs                  [DELETE]
-|-- NDIterator.cs                     [DELETE]
-|-- NDIterator.template.cs            [DELETE]
-|-- NDIteratorExtensions.cs           [DELETE]
-+-- NDIteratorCasts/
-    +-- NDIterator.Cast.*.cs (x12)    [DELETE]
+├── NpyIter.cs                    construction wrappers, MultiNew/AdvancedNew
+├── NpyIter.State.cs              NpyIterState struct, Advance/Reset/GotoIterIndex
+├── NpyIter.Execution.cs          Layer 1/2/3 — ForEach, ExecuteGeneric, Execute*
+├── NpyIter.Execution.Custom.cs   Tier 3A/3B/3C — ExecuteRawIL, ExecuteElementWise, ExecuteExpression
+├── NpyExpr.cs                    Tier 3C DSL — 45+ nodes + Call factory + DelegateSlots
+├── NpyIterFlags.cs               flag enums (Global / PerOp / internal)
+├── NpyIterCoalescing.cs          CoalesceAxes, ReorderAxesForCoalescing, FlipNegativeStrides
+├── NpyIterCasting.cs             safe/same-kind/unsafe cast rules
+├── NpyIterBufferManager.cs       aligned buffer alloc, copy-in/copy-out
+├── NpyIterKernels.cs             INpyInnerLoop, INpyReducingInnerLoop interfaces
+├── NpyAxisIter.cs, NpyAxisIter.State.cs   axis-reduction iterator
+└── NpyLogicalReductionKernels.cs generic boolean/numeric axis reduction structs
+
+src/NumSharp.Core/Backends/Kernels/
+└── ILKernelGenerator.InnerLoop.cs  CompileRawInnerLoop, CompileInnerLoop, factory shell
+```
+
+**Deleted (v4 → v5 migration, completed):**
+
+```
+src/NumSharp.Core/Backends/Iterators/
+├── INDIterator.cs                    [deleted]
+├── IteratorType.cs                   [deleted]
+├── MultiIterator.cs                  [deleted]
+├── NDIterator.cs                     [deleted]
+├── NDIterator.template.cs            [deleted]
+├── NDIteratorExtensions.cs           [deleted]
+└── NDIteratorCasts/NDIterator.Cast.*.cs (×12)  [deleted]
 
 src/NumSharp.Core/Utilities/Incrementors/
-|-- NDCoordinatesAxisIncrementor.cs   [DELETE]
-|-- NDCoordinatesIncrementor.cs       [DELETE]
-|-- NDCoordinatesLeftToAxisIncrementor.cs  [DELETE - already dead code]
-|-- NDExtendedCoordinatesIncrementor.cs    [DELETE - already dead code]
-|-- NDOffsetIncrementor.cs            [DELETE - already dead code]
-|-- ValueCoordinatesIncrementor.cs    [DELETE]
-+-- ValueOffsetIncrementor.cs         [DELETE]
+├── NDCoordinatesAxisIncrementor.cs   [deleted]
+├── NDCoordinatesIncrementor.cs       [deleted]
+├── ValueCoordinatesIncrementor.cs    [deleted]
+└── ValueOffsetIncrementor.cs         [deleted]
 ```
-
-**Total: 23 files to delete**
 
 ---
 
-## New Files to Create
+## Scope limitations (unchanged)
 
-```
-src/NumSharp.Core/Backends/Iterators/
-|-- NDIterator.cs                   # Main static API class
-|-- NDIterator.State.cs             # IteratorState struct, IteratorFlags
-|-- NDIterator.Kernels.cs           # All kernel interfaces
-|-- NDIterator.Kernels.Builtin.cs   # Built-in kernel implementations
-|-- NDIterator.IL.cs                # IL generation for iteration loops
-|-- NDIterator.Axis.cs              # Axis-specific iteration
-+-- NDIterator.Emitters.cs          # IKernelEmitter, KernelEmitContext, helpers
-```
+1. **Multi-output operations** (e.g., `modf` returning two arrays) — use `ILKernelGenerator.Modf` directly, not via the seven-tier bridge
+2. **Type promotion** — caller's responsibility via `np._FindCommonType` / NPTypeCode utilities
+3. **Memory allocation** — caller provides output NDArray (or uses `NpyIterPerOpFlags.ALLOCATE`)
 
-**Total: 7 new files (~3,000 lines estimated)**
+Broadcasting is **not** a scope limitation anymore — NpyIter handles it inherently via stride=0 dimensions.
 
 ---
 
-## Performance Expectations
+## Known bugs (post-port)
 
-| Tier | Kernel Overhead | JIT Inlining | SIMD | Use Case |
-|------|-----------------|--------------|------|----------|
-| 1 (Interface) | ~0 cycles | Yes (small methods) | Via ApplyVector | Built-in ops, hot paths |
-| 2 (IL Inject) | ~0 cycles | Full control | Manual | Custom complex ops |
-| 3 (Func<>) | ~10-15 cycles | No | No | Prototyping, cold paths |
-| Old (NDIterator) | ~10-15 cycles | No | No | **Eliminated** |
+The bridge works around two bugs in the ported `NpyIter` that should be fixed in-place eventually:
 
-**Key insight**: Tier 1 and Tier 2 emit direct IL with no delegate indirection. Tier 3 has delegate overhead but is much simpler to use. Choose based on performance requirements.
+- **Bug A:** `NpyIterRef.Iternext()` unconditionally calls `state.Advance()`, ignoring `EXLOOP`. Bridge sidesteps by calling `GetIterNext()` directly.
+- **Bug B:** Buffered + Cast path computes wrong byte deltas because `state.Strides[op]` holds element strides but `ElementSizes[op]` is buffer-dtype size. Bridge routes buffered paths through `RunBuffered*` methods using `BufStrides` instead.
+
+Eight additional bugs surfaced during development (C through H, covering Where, Decimal size, predicate I4 leak, LogicalNot type mismatch, Vector256.Round availability, MinMax NaN propagation) were **fixed**. See `NDIter.md § Known Bugs and Workarounds` for full writeups.
 
 ---
 
-## Scope Limitations
+## References
 
-The following are **out of scope** for NDIterator:
-
-1. **Multi-output operations** (e.g., `modf` returning two arrays) - Use ILKernelGenerator directly
-2. **Type promotion** - Caller's responsibility using existing NumSharp utilities
-3. **Broadcasting** - Caller provides already-broadcast NDArrays
-4. **Memory allocation** - Caller provides output NDArray
-
-NDIterator focuses on the common mathematical iteration patterns. Specialized operations should use ILKernelGenerator or custom implementations.
+- **Production reference docs:** `docs/website-src/docs/NDIter.md` — complete user-facing documentation (~1900 lines)
+- **NumPy port source:** NumPy's `numpy/_core/src/multiarray/nditer_*.c`
+- **Test coverage:** 264 tests across
+  `NpyIterCustomOpTests.cs` (14 basic),
+  `NpyIterCustomOpEdgeCaseTests.cs` (76 edge cases),
+  `NpyExprExtensiveTests.cs` (136 DSL ops),
+  `NpyExprCallTests.cs` (38 Call variants) —
+  all passing on net8.0 and net10.0.

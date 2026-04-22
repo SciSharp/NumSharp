@@ -38,6 +38,12 @@ namespace NumSharp.Backends
                     break;
 	            }
 
+	            case NPTypeCode.SByte:
+	            {
+                    slice = new ArraySlice<sbyte>(buffer == null ? new UnmanagedMemoryBlock<sbyte>(shape.size, 0) : UnmanagedMemoryBlock<sbyte>.FromArray((sbyte[])buffer));
+                    break;
+	            }
+
 	            case NPTypeCode.Int16:
 	            {
                     slice = new ArraySlice<short>(buffer == null ? new UnmanagedMemoryBlock<short>(shape.size, 0) : UnmanagedMemoryBlock<short>.FromArray((short[])buffer));
@@ -80,6 +86,12 @@ namespace NumSharp.Backends
                     break;
 	            }
 
+	            case NPTypeCode.Half:
+	            {
+                    slice = new ArraySlice<Half>(buffer == null ? new UnmanagedMemoryBlock<Half>(shape.size, default) : UnmanagedMemoryBlock<Half>.FromArray((Half[])buffer));
+                    break;
+	            }
+
 	            case NPTypeCode.Double:
 	            {
                     slice = new ArraySlice<double>(buffer == null ? new UnmanagedMemoryBlock<double>(shape.size, 0d) : UnmanagedMemoryBlock<double>.FromArray((double[])buffer));
@@ -95,6 +107,12 @@ namespace NumSharp.Backends
 	            case NPTypeCode.Decimal:
 	            {
                     slice = new ArraySlice<decimal>(buffer == null ? new UnmanagedMemoryBlock<decimal>(shape.size, 0m) : UnmanagedMemoryBlock<decimal>.FromArray((decimal[])buffer));
+                    break;
+	            }
+
+	            case NPTypeCode.Complex:
+	            {
+                    slice = new ArraySlice<System.Numerics.Complex>(buffer == null ? new UnmanagedMemoryBlock<System.Numerics.Complex>(shape.size, default) : UnmanagedMemoryBlock<System.Numerics.Complex>.FromArray((System.Numerics.Complex[])buffer));
                     break;
 	            }
 
@@ -135,6 +153,12 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Byte:
 	                {
                         buffer = new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(shape.size, 0));
+                        break;
+	                }
+
+	                case NPTypeCode.SByte:
+	                {
+                        buffer = new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(shape.size, 0));
                         break;
 	                }
 
@@ -180,6 +204,12 @@ namespace NumSharp.Backends
                         break;
 	                }
 
+	                case NPTypeCode.Half:
+	                {
+                        buffer = new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(shape.size, default));
+                        break;
+	                }
+
 	                case NPTypeCode.Double:
 	                {
                         buffer = new ArraySlice<double>(new UnmanagedMemoryBlock<double>(shape.size, 0d));
@@ -195,6 +225,12 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Decimal:
 	                {
                         buffer = new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(shape.size, 0m));
+                        break;
+	                }
+
+	                case NPTypeCode.Complex:
+	                {
+                        buffer = new ArraySlice<System.Numerics.Complex>(new UnmanagedMemoryBlock<System.Numerics.Complex>(shape.size, default));
                         break;
 	                }
 

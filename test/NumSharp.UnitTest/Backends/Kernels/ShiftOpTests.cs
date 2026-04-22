@@ -156,14 +156,14 @@ public class ShiftOpTests
     public void LeftShift_Float_ThrowsNotSupported()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        Assert.ThrowsException<NotSupportedException>(() => np.left_shift(arr, 1));
+        Assert.ThrowsException<TypeError>(() => np.left_shift(arr, 1));
     }
 
     [TestMethod]
     public void RightShift_Double_ThrowsNotSupported()
     {
         var arr = np.array(new double[] { 1.0, 2.0 });
-        Assert.ThrowsException<NotSupportedException>(() => np.right_shift(arr, 1));
+        Assert.ThrowsException<TypeError>(() => np.right_shift(arr, 1));
     }
 
     #endregion

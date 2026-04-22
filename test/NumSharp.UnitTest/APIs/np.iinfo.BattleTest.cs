@@ -230,14 +230,13 @@ public class NpIInfoBattleTests
 
     #region String dtype Overload Tests
 
-    // Note: np.dtype() uses size+type format (e.g., "i4" for int32)
-    // NumPy-style names like "int32" are not fully supported yet
-
     [TestMethod]
     public void IInfo_String_Int()
     {
-        var info = np.iinfo("int");  // defaults to int32
-        info.bits.Should().Be(32);
+        // NumPy 2.x parity: 'int' aliases to intp (pointer-sized) = int64 on 64-bit platforms.
+        var info = np.iinfo("int");
+        var expected = IntPtr.Size == 8 ? 64 : 32;
+        info.bits.Should().Be(expected);
     }
 
     [TestMethod]

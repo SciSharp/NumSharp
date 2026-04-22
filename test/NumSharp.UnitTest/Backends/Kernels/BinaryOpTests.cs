@@ -745,5 +745,89 @@ public class BinaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(2, 1) - (-3 * Math.PI / 4)) < 1e-10);
     }
 
+    [TestMethod]
+    public void ATan2_Float16_ReturnsHalf()
+    {
+        // NumPy 2.x: np.arctan2(float16, float16) -> float16
+        var y = np.array(new Half[] { (Half)1, (Half)1, (Half)(-1) });
+        var x = np.array(new Half[] { (Half)1, (Half)0, (Half)1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(Half), result.dtype);
+        // Half precision: atan2(1,1) ≈ 0.785
+        Assert.IsTrue(Math.Abs((double)result.GetHalf(0) - Math.PI / 4) < 2e-3);
+        Assert.IsTrue(Math.Abs((double)result.GetHalf(1) - Math.PI / 2) < 2e-3);
+        Assert.IsTrue(Math.Abs((double)result.GetHalf(2) - (-Math.PI / 4)) < 2e-3);
+    }
+
+    [TestMethod]
+    public void ATan2_Int8_ReturnsFloat16()
+    {
+        // NumPy 2.x: np.arctan2(int8, int8) -> float16 (smallest float that fits int8 range).
+        var y = np.array(new sbyte[] { 1, 1, -1 });
+        var x = np.array(new sbyte[] { 1, 0, 1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(Half), result.dtype);
+        Assert.IsTrue(Math.Abs((double)result.GetHalf(0) - Math.PI / 4) < 2e-3);
+    }
+
+    [TestMethod]
+    public void ATan2_UInt8_ReturnsFloat16()
+    {
+        // NumPy 2.x: np.arctan2(uint8, uint8) -> float16.
+        var y = np.array(new byte[] { 1, 1 });
+        var x = np.array(new byte[] { 1, 0 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(Half), result.dtype);
+        Assert.IsTrue(Math.Abs((double)result.GetHalf(0) - Math.PI / 4) < 2e-3);
+    }
+
+    [TestMethod]
+    public void ATan2_Int16_ReturnsFloat32()
+    {
+        // NumPy 2.x: np.arctan2(int16, int16) -> float32.
+        var y = np.array(new short[] { 1, 1, -1 });
+        var x = np.array(new short[] { 1, 0, 1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(float), result.dtype);
+        Assert.IsTrue(Math.Abs(result.GetSingle(0) - (float)(Math.PI / 4)) < 1e-6f);
+    }
+
+    [TestMethod]
+    public void ATan2_Float16_Int8_ReturnsFloat16()
+    {
+        // NumPy 2.x: max of (f16, f16) = f16.
+        var y = np.array(new Half[] { (Half)1 });
+        var x = np.array(new sbyte[] { 1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(Half), result.dtype);
+    }
+
+    [TestMethod]
+    public void ATan2_Float16_Int32_ReturnsFloat64()
+    {
+        // NumPy 2.x: max of (f16, f64) = f64.
+        var y = np.array(new Half[] { (Half)1 });
+        var x = np.array(new int[] { 1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(double), result.dtype);
+    }
+
+    [TestMethod]
+    public void ATan2_Int16_Float16_ReturnsFloat32()
+    {
+        // NumPy 2.x: max of (f32, f16) = f32.
+        var y = np.array(new short[] { 1 });
+        var x = np.array(new Half[] { (Half)1 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(typeof(float), result.dtype);
+    }
+
     #endregion
 }

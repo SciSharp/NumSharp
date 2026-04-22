@@ -9,9 +9,12 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Element-wise truncation (toward zero) using IL-generated kernels.
+        /// NumPy: for integer dtypes, trunc is a no-op that preserves the input dtype.
         /// </summary>
         public override NDArray Truncate(NDArray nd, NPTypeCode? typeCode = null)
         {
+            if (!typeCode.HasValue && nd.GetTypeCode.IsInteger())
+                return Cast(nd, nd.GetTypeCode, copy: true);
             return ExecuteUnaryOp(nd, UnaryOp.Truncate, ResolveUnaryReturnType(nd, typeCode));
         }
     }

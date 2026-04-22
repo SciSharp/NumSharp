@@ -30,6 +30,7 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => CreateAxisArgReductionKernelTyped<bool>(key),
                 NPTypeCode.Byte => CreateAxisArgReductionKernelTyped<byte>(key),
+                NPTypeCode.SByte => CreateAxisArgReductionKernelTyped<sbyte>(key),
                 NPTypeCode.Int16 => CreateAxisArgReductionKernelTyped<short>(key),
                 NPTypeCode.UInt16 => CreateAxisArgReductionKernelTyped<ushort>(key),
                 NPTypeCode.Int32 => CreateAxisArgReductionKernelTyped<int>(key),
@@ -37,9 +38,11 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Int64 => CreateAxisArgReductionKernelTyped<long>(key),
                 NPTypeCode.UInt64 => CreateAxisArgReductionKernelTyped<ulong>(key),
                 NPTypeCode.Char => CreateAxisArgReductionKernelTyped<char>(key),
+                NPTypeCode.Half => CreateAxisArgReductionKernelTyped<Half>(key),
                 NPTypeCode.Single => CreateAxisArgReductionKernelTyped<float>(key),
                 NPTypeCode.Double => CreateAxisArgReductionKernelTyped<double>(key),
                 NPTypeCode.Decimal => CreateAxisArgReductionKernelTyped<decimal>(key),
+                NPTypeCode.Complex => CreateAxisArgReductionKernelTyped<System.Numerics.Complex>(key),
                 _ => throw new NotSupportedException($"ArgMax/ArgMin not supported for type {key.InputType}")
             };
         }
@@ -132,6 +135,14 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(double))
             {
                 return ArgReduceAxisDoubleNaN((double*)data, size, stride, op);
+            }
+            if (typeof(T) == typeof(Half))
+            {
+                return ArgReduceAxisHalfNaN((Half*)data, size, stride, op);
+            }
+            if (typeof(T) == typeof(System.Numerics.Complex))
+            {
+                return ArgReduceAxisComplex((System.Numerics.Complex*)data, size, stride, op);
             }
             // Handle boolean specially
             if (typeof(T) == typeof(bool))
@@ -307,6 +318,7 @@ namespace NumSharp.Backends.Kernels
         private static bool CompareGreater<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)a > (byte)(object)b;
+            if (typeof(T) == typeof(sbyte)) return (sbyte)(object)a > (sbyte)(object)b;
             if (typeof(T) == typeof(short)) return (short)(object)a > (short)(object)b;
             if (typeof(T) == typeof(ushort)) return (ushort)(object)a > (ushort)(object)b;
             if (typeof(T) == typeof(int)) return (int)(object)a > (int)(object)b;
@@ -315,7 +327,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (ulong)(object)a > (ulong)(object)b;
             if (typeof(T) == typeof(char)) return (char)(object)a > (char)(object)b;
             if (typeof(T) == typeof(decimal)) return (decimal)(object)a > (decimal)(object)b;
-            // Float/double handled separately with NaN awareness
+            // Float/double/Half/Complex handled separately
             throw new NotSupportedException($"CompareGreater not supported for type {typeof(T)}");
         }
 
@@ -325,6 +337,7 @@ namespace NumSharp.Backends.Kernels
         private static bool CompareLess<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)a < (byte)(object)b;
+            if (typeof(T) == typeof(sbyte)) return (sbyte)(object)a < (sbyte)(object)b;
             if (typeof(T) == typeof(short)) return (short)(object)a < (short)(object)b;
             if (typeof(T) == typeof(ushort)) return (ushort)(object)a < (ushort)(object)b;
             if (typeof(T) == typeof(int)) return (int)(object)a < (int)(object)b;
@@ -333,8 +346,81 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (ulong)(object)a < (ulong)(object)b;
             if (typeof(T) == typeof(char)) return (char)(object)a < (char)(object)b;
             if (typeof(T) == typeof(decimal)) return (decimal)(object)a < (decimal)(object)b;
-            // Float/double handled separately with NaN awareness
+            // Float/double/Half/Complex handled separately
             throw new NotSupportedException($"CompareLess not supported for type {typeof(T)}");
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for Half with NaN awareness.
+        /// NumPy behavior: first NaN always wins. IL OpCodes.Bgt/Blt don't work on Half;
+        /// compare via (double) cast.
+        /// </summary>
+        private static unsafe long ArgReduceAxisHalfNaN(Half* data, long size, long stride, ReductionOp op)
+        {
+            double extreme = (double)data[0];
+            long extremeIdx = 0;
+
+            for (long i = 1; i < size; i++)
+            {
+                double val = (double)data[i * stride];
+
+                if (double.IsNaN(val) && !double.IsNaN(extreme))
+                {
+                    extreme = val;
+                    extremeIdx = i;
+                }
+                else if (!double.IsNaN(extreme))
+                {
+                    if (op == ReductionOp.ArgMax)
+                    {
+                        if (val > extreme) { extreme = val; extremeIdx = i; }
+                    }
+                    else
+                    {
+                        if (val < extreme) { extreme = val; extremeIdx = i; }
+                    }
+                }
+            }
+
+            return extremeIdx;
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for Complex using lexicographic compare (real, then imag).
+        /// NumPy propagates NaN: a Complex value with NaN in either component wins at its first occurrence.
+        /// </summary>
+        private static unsafe long ArgReduceAxisComplex(System.Numerics.Complex* data, long size, long stride, ReductionOp op)
+        {
+            var extreme = data[0];
+            long extremeIdx = 0;
+            if (double.IsNaN(extreme.Real) || double.IsNaN(extreme.Imaginary))
+                return 0;
+
+            for (long i = 1; i < size; i++)
+            {
+                var val = data[i * stride];
+                if (double.IsNaN(val.Real) || double.IsNaN(val.Imaginary))
+                    return i;
+
+                if (op == ReductionOp.ArgMax)
+                {
+                    if (val.Real > extreme.Real || (val.Real == extreme.Real && val.Imaginary > extreme.Imaginary))
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+                else
+                {
+                    if (val.Real < extreme.Real || (val.Real == extreme.Real && val.Imaginary < extreme.Imaginary))
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+            }
+
+            return extremeIdx;
         }
 
         #endregion

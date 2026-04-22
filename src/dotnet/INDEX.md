@@ -1,10 +1,12 @@
-# .NET Runtime Span Source Files
+# .NET Runtime Source Files
 
 Downloaded from [dotnet/runtime](https://github.com/dotnet/runtime) `main` branch (.NET 10).
 
-**Purpose:** Source of truth for converting `Span<T>` to `UnmanagedSpan<T>` with `long` indexing support.
+**Purpose:**
+1. Source of truth for converting `Span<T>` to `UnmanagedSpan<T>` with `long` indexing support.
+2. Reference/template for `DateTime64` struct (NumPy-parity datetime64 with full `long` range) in `src/NumSharp.Core/DateTime64.cs` — forked from `DateTime.cs` with `ulong _dateData` replaced by `long _ticks`, `DateTimeKind` bits removed, range expanded to the full `long` space, and `NaT == long.MinValue` sentinel added.
 
-**Total:** 53 files | ~60,000 lines of code
+**Total:** 55 files | ~63,000 lines of code
 
 ---
 
@@ -33,6 +35,8 @@ src/dotnet/
 │       ├── System.Private.CoreLib/src/System/
 │       │   ├── Buffer.cs
 │       │   ├── ByReference.cs
+│       │   ├── DateTime.cs
+│       │   ├── DateTimeOffset.cs
 │       │   ├── Index.cs
 │       │   ├── Marvin.cs
 │       │   ├── Memory.cs
@@ -89,6 +93,12 @@ src/dotnet/
 ---
 
 ## File Inventory
+
+### DateTime Types (source for DateTime64)
+| File | Lines | Description |
+|------|-------|-------------|
+| `System/DateTime.cs` | 2061 | `DateTime` struct - 100-ns ticks in `ulong _dateData` (top 2 bits = `DateTimeKind`, low 62 = `Ticks`). Range `[0, 3,155,378,975,999,999,999]`. Template for `DateTime64`. |
+| `System/DateTimeOffset.cs` | 1046 | `DateTimeOffset` struct - `DateTime` + offset in minutes. Used for `DateTime64` ↔ `DateTimeOffset` interop. |
 
 ### Core Span Types
 | File | Lines | Description |

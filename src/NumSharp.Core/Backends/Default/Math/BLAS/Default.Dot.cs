@@ -47,7 +47,9 @@ namespace NumSharp.Backends
             if (leftshape.NDim == 1 && rightshape.NDim == 1)
             {
                 Debug.Assert(leftshape[0] == rightshape[0]);
-                return ReduceAdd(left * right, null, false);
+                // Preserve dtype - dot product should return same type as inputs
+                var product = left * right;
+                return ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
             }
 
             //If a is an N-D array and b is a 1-D array, it is a sum product over the last axis of a and b.

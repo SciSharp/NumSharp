@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -47,8 +48,8 @@ namespace NumSharp
                 if (v.size == 0)
                     return new NDArray(typeof(long), Shape.Vector(0), false);
 
-                // Use Convert.ToDouble for type-agnostic value extraction
-                double target = Convert.ToDouble(v.Storage.GetValue(new long[0]));
+                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                double target = Converts.ToDouble(v.Storage.GetValue(new long[0]));
                 long idx = binarySearchRightmost(a, target);
                 return NDArray.Scalar(idx);
             }
@@ -57,8 +58,8 @@ namespace NumSharp
             NDArray output = new NDArray(NPTypeCode.Int64, Shape.Vector(v.size));
             for (long i = 0; i < v.size; i++)
             {
-                // Use Convert.ToDouble for type-agnostic value extraction
-                double target = Convert.ToDouble(v.Storage.GetValue(i));
+                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                double target = Converts.ToDouble(v.Storage.GetValue(i));
                 long idx = binarySearchRightmost(a, target);
                 output.SetInt64(idx, new long[] { i });
             }
@@ -81,8 +82,8 @@ namespace NumSharp
             while (L < R)
             {
                 long m = (L + R) / 2;
-                // Use Convert.ToDouble for type-agnostic value extraction
-                double val = Convert.ToDouble(arr.Storage.GetValue(m));
+                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                double val = Converts.ToDouble(arr.Storage.GetValue(m));
                 if (val < target)
                 {
                     L = m + 1;

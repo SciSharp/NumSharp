@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
@@ -48,6 +49,34 @@ namespace NumSharp
         }
     }
 
+    /// <summary>
+    /// Comparer for Complex that matches NumPy's sorting behavior:
+    /// Lexicographic compare (real, then imaginary). NaN in either component is treated
+    /// as greater than all non-NaN values (placed at end).
+    /// </summary>
+    internal sealed class NaNAwareComplexComparer : IComparer<Complex>
+    {
+        public static readonly NaNAwareComplexComparer Instance = new NaNAwareComplexComparer();
+
+        public int Compare(Complex x, Complex y)
+        {
+            bool xrNan = double.IsNaN(x.Real);
+            bool yrNan = double.IsNaN(y.Real);
+            bool xiNan = double.IsNaN(x.Imaginary);
+            bool yiNan = double.IsNaN(y.Imaginary);
+            bool xAnyNan = xrNan || xiNan;
+            bool yAnyNan = yrNan || yiNan;
+            // Any-NaN Complex values sort to end; among them, order is stable (return 0)
+            if (xAnyNan && yAnyNan) return 0;
+            if (xAnyNan) return 1;
+            if (yAnyNan) return -1;
+            // Neither has NaN — lex compare (real, imag)
+            int c = x.Real.CompareTo(y.Real);
+            if (c != 0) return c;
+            return x.Imaginary.CompareTo(y.Imaginary);
+        }
+    }
+
     public partial class NDArray
     {
         /// <summary>
@@ -72,6 +101,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Boolean: return unique<bool>();
                 case NPTypeCode.Byte: return unique<byte>();
+                case NPTypeCode.SByte: return unique<sbyte>();
                 case NPTypeCode.Int16: return unique<short>();
                 case NPTypeCode.UInt16: return unique<ushort>();
                 case NPTypeCode.Int32: return unique<int>();
@@ -79,9 +109,11 @@ namespace NumSharp
                 case NPTypeCode.Int64: return unique<long>();
                 case NPTypeCode.UInt64: return unique<ulong>();
                 case NPTypeCode.Char: return unique<char>();
+                case NPTypeCode.Half: return unique<Half>();
                 case NPTypeCode.Double: return unique<double>();
                 case NPTypeCode.Single: return unique<float>();
                 case NPTypeCode.Decimal: return unique<decimal>();
+                case NPTypeCode.Complex: return uniqueComplex();
                 default: throw new NotSupportedException();
 #endif
             }
@@ -152,6 +184,42 @@ namespace NumSharp
             {
                 Utilities.LongIntroSort.Sort(ptr, count);
             }
+        }
+
+        /// <summary>
+        /// B9: Dedicated unique path for Complex, since System.Numerics.Complex does not implement
+        /// IComparable&lt;Complex&gt; (prevents reuse of the generic unique&lt;T&gt;).
+        /// Dedup uses EqualityComparer&lt;Complex&gt;.Default (component-wise value equality, NaN==NaN)
+        /// then sorts using NumPy lex semantics with NaN at end.
+        /// </summary>
+        protected unsafe NDArray uniqueComplex()
+        {
+            var hashset = new Hashset<Complex>();
+            if (Shape.IsContiguous)
+            {
+                var src = (Complex*)this.Address;
+                long len = this.size;
+                for (long i = 0; i < len; i++)
+                    hashset.Add(src[i]);
+            }
+            else
+            {
+                long len = this.size;
+                var flat = this.flat;
+                var src = (Complex*)flat.Address;
+                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                for (long i = 0; i < len; i++)
+                    hashset.Add(src[getOffset(i)]);
+            }
+
+            var count = hashset.LongCount;
+            var memoryBlock = new UnmanagedMemoryBlock<Complex>(count);
+            var arraySlice = new ArraySlice<Complex>(memoryBlock);
+            Hashset<Complex>.CopyTo(hashset, arraySlice);
+
+            Utilities.LongIntroSort.Sort(memoryBlock.Address, count, NaNAwareComplexComparer.Instance.Compare);
+
+            return new NDArray(arraySlice, Shape.Vector(count));
         }
     }
 }

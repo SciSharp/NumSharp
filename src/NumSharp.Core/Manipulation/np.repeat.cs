@@ -38,6 +38,7 @@ namespace NumSharp
             {
                 NPTypeCode.Boolean => RepeatScalarTyped<bool>(a, repeats, totalSize),
                 NPTypeCode.Byte => RepeatScalarTyped<byte>(a, repeats, totalSize),
+                NPTypeCode.SByte => RepeatScalarTyped<sbyte>(a, repeats, totalSize),
                 NPTypeCode.Int16 => RepeatScalarTyped<short>(a, repeats, totalSize),
                 NPTypeCode.UInt16 => RepeatScalarTyped<ushort>(a, repeats, totalSize),
                 NPTypeCode.Int32 => RepeatScalarTyped<int>(a, repeats, totalSize),
@@ -45,9 +46,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => RepeatScalarTyped<long>(a, repeats, totalSize),
                 NPTypeCode.UInt64 => RepeatScalarTyped<ulong>(a, repeats, totalSize),
                 NPTypeCode.Char => RepeatScalarTyped<char>(a, repeats, totalSize),
+                NPTypeCode.Half => RepeatScalarTyped<Half>(a, repeats, totalSize),
                 NPTypeCode.Single => RepeatScalarTyped<float>(a, repeats, totalSize),
                 NPTypeCode.Double => RepeatScalarTyped<double>(a, repeats, totalSize),
                 NPTypeCode.Decimal => RepeatScalarTyped<decimal>(a, repeats, totalSize),
+                NPTypeCode.Complex => RepeatScalarTyped<System.Numerics.Complex>(a, repeats, totalSize),
                 _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
             };
         }
@@ -61,6 +64,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
         public static NDArray repeat(NDArray a, NDArray repeats)
         {
+            // NumPy parity: repeats must be safely castable to int64 — reject float/complex/uint64.
+            if (!IsSafeToInt64(repeats.GetTypeCode))
+                throw new TypeError($"Cannot cast array data from dtype('{repeats.GetTypeCode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
+
             a = a.ravel();
             var repeatsFlat = repeats.ravel();
 
@@ -71,8 +78,8 @@ namespace NumSharp
             long totalSize = 0;
             for (long i = 0; i < repeatsFlat.size; i++)
             {
-                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
-                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
+                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
                 if (count < 0)
                     throw new ArgumentException("repeats may not contain negative values");
                 totalSize += count;
@@ -86,6 +93,7 @@ namespace NumSharp
             {
                 NPTypeCode.Boolean => RepeatArrayTyped<bool>(a, repeatsFlat, totalSize),
                 NPTypeCode.Byte => RepeatArrayTyped<byte>(a, repeatsFlat, totalSize),
+                NPTypeCode.SByte => RepeatArrayTyped<sbyte>(a, repeatsFlat, totalSize),
                 NPTypeCode.Int16 => RepeatArrayTyped<short>(a, repeatsFlat, totalSize),
                 NPTypeCode.UInt16 => RepeatArrayTyped<ushort>(a, repeatsFlat, totalSize),
                 NPTypeCode.Int32 => RepeatArrayTyped<int>(a, repeatsFlat, totalSize),
@@ -93,9 +101,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => RepeatArrayTyped<long>(a, repeatsFlat, totalSize),
                 NPTypeCode.UInt64 => RepeatArrayTyped<ulong>(a, repeatsFlat, totalSize),
                 NPTypeCode.Char => RepeatArrayTyped<char>(a, repeatsFlat, totalSize),
+                NPTypeCode.Half => RepeatArrayTyped<Half>(a, repeatsFlat, totalSize),
                 NPTypeCode.Single => RepeatArrayTyped<float>(a, repeatsFlat, totalSize),
                 NPTypeCode.Double => RepeatArrayTyped<double>(a, repeatsFlat, totalSize),
                 NPTypeCode.Decimal => RepeatArrayTyped<decimal>(a, repeatsFlat, totalSize),
+                NPTypeCode.Complex => RepeatArrayTyped<System.Numerics.Complex>(a, repeatsFlat, totalSize),
                 _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
             };
         }
@@ -155,6 +165,29 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy "safe" casting check for the repeats dtype (target int64).
+        ///     Integers that fit in int64 + boolean pass; uint64/float/complex/decimal reject.
+        /// </summary>
+        private static bool IsSafeToInt64(NPTypeCode code)
+        {
+            switch (code)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.Char:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         ///     Generic implementation for repeating with per-element repeat counts.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
@@ -168,8 +201,8 @@ namespace NumSharp
             long outIdx = 0;
             for (long i = 0; i < srcSize; i++)
             {
-                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
-                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
+                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
                 T val = src[i];
                 for (long j = 0; j < count; j++)
                     dst[outIdx++] = val;

@@ -48,10 +48,25 @@ namespace NumSharp.Backends.Kernels
                     BindingFlags.NonPublic | BindingFlags.Static)!;
                 isGeneric = false;
             }
+            else if (key.InputType == NPTypeCode.Half)
+            {
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxHalfNaNHelper) : nameof(ArgMinHalfNaNHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
             else if (key.InputType == NPTypeCode.Boolean)
             {
                 helperMethod = typeof(ILKernelGenerator).GetMethod(
                     key.Op == ReductionOp.ArgMax ? nameof(ArgMaxBoolHelper) : nameof(ArgMinBoolHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
+            else if (key.InputType == NPTypeCode.Complex)
+            {
+                // Complex uses magnitude comparison
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxComplexHelper) : nameof(ArgMinComplexHelper),
                     BindingFlags.NonPublic | BindingFlags.Static)!;
                 isGeneric = false;
             }
@@ -443,6 +458,58 @@ namespace NumSharp.Backends.Kernels
             return bestIndex;
         }
 
+        /// <summary>
+        /// ArgMax helper for Half with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "maximum").
+        /// </summary>
+        internal static unsafe long ArgMaxHalfNaNHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Half* src = (Half*)input;
+            Half bestValue = src[0];
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                Half val = src[i];
+                // NumPy: first NaN always wins
+                if (val > bestValue || (Half.IsNaN(val) && !Half.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMin helper for Half with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "minimum").
+        /// </summary>
+        internal static unsafe long ArgMinHalfNaNHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Half* src = (Half*)input;
+            Half bestValue = src[0];
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                Half val = src[i];
+                // NumPy: first NaN always wins
+                if (val < bestValue || (Half.IsNaN(val) && !Half.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
         #endregion
 
         #region Boolean ArgMax/ArgMin Helpers
@@ -497,6 +564,62 @@ namespace NumSharp.Backends.Kernels
                 }
             }
             return bestIndex; // All True, return 0
+        }
+
+        #endregion
+
+        #region Complex ArgMax/ArgMin Helpers
+
+        /// <summary>
+        /// ArgMax helper for Complex arrays.
+        /// NumPy: argmax uses magnitude |z| = sqrt(real² + imag²) for comparison.
+        /// On tie (equal magnitudes), returns first occurrence.
+        /// </summary>
+        internal static unsafe long ArgMaxComplexHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Complex* src = (Complex*)input;
+            double bestMagnitude = Complex.Abs(src[0]);
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                double mag = Complex.Abs(src[i]);
+                if (mag > bestMagnitude)
+                {
+                    bestMagnitude = mag;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMin helper for Complex arrays.
+        /// NumPy: argmin uses magnitude |z| = sqrt(real² + imag²) for comparison.
+        /// On tie (equal magnitudes), returns first occurrence.
+        /// </summary>
+        internal static unsafe long ArgMinComplexHelper(void* input, long totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            Complex* src = (Complex*)input;
+            double bestMagnitude = Complex.Abs(src[0]);
+            long bestIndex = 0;
+
+            for (long i = 1; i < totalSize; i++)
+            {
+                double mag = Complex.Abs(src[i]);
+                if (mag < bestMagnitude)
+                {
+                    bestMagnitude = mag;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
         }
 
         #endregion

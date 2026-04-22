@@ -122,6 +122,7 @@ namespace NumSharp.Backends
             return retType switch
             {
                 NPTypeCode.Byte => ExecuteElementReduction<byte>(arr, ReductionOp.Sum, retType),
+                NPTypeCode.SByte => ExecuteElementReduction<sbyte>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Int16 => ExecuteElementReduction<short>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.UInt16 => ExecuteElementReduction<ushort>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Sum, retType),
@@ -131,6 +132,8 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Sum, retType),
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Sum, retType),
+                NPTypeCode.Half => SumElementwiseHalfFallback(arr),
+                NPTypeCode.Complex => SumElementwiseComplexFallback(arr),
                 _ => throw new NotSupportedException($"Sum not supported for type {retType}")
             };
         }
@@ -149,6 +152,7 @@ namespace NumSharp.Backends
             return retType switch
             {
                 NPTypeCode.Byte => ExecuteElementReduction<byte>(arr, ReductionOp.Prod, retType),
+                NPTypeCode.SByte => ExecuteElementReduction<sbyte>(arr, ReductionOp.Prod, retType),
                 NPTypeCode.Int16 => ExecuteElementReduction<short>(arr, ReductionOp.Prod, retType),
                 NPTypeCode.UInt16 => ExecuteElementReduction<ushort>(arr, ReductionOp.Prod, retType),
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Prod, retType),
@@ -158,8 +162,36 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Prod, retType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Prod, retType),
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Prod, retType),
+                // B4: Half and Complex fallbacks (IL kernel doesn't cover them).
+                NPTypeCode.Half => ProdElementwiseHalfFallback(arr),
+                NPTypeCode.Complex => ProdElementwiseComplexFallback(arr),
                 _ => throw new NotSupportedException($"Prod not supported for type {retType}")
             };
+        }
+
+        /// <summary>
+        /// Fallback product for Half using iterator (double accumulator for precision).
+        /// Matches NumPy: product of empty array is 1.0.
+        /// </summary>
+        private object ProdElementwiseHalfFallback(NDArray arr)
+        {
+            double prod = 1.0;
+            var iter = arr.AsIterator<Half>();
+            while (iter.HasNext())
+                prod *= (double)iter.MoveNext();
+            return (Half)prod;
+        }
+
+        /// <summary>
+        /// Fallback product for Complex using iterator.
+        /// </summary>
+        private object ProdElementwiseComplexFallback(NDArray arr)
+        {
+            var prod = System.Numerics.Complex.One;
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            while (iter.HasNext())
+                prod *= iter.MoveNext();
+            return prod;
         }
 
         /// <summary>
@@ -176,15 +208,20 @@ namespace NumSharp.Backends
             return retType switch
             {
                 NPTypeCode.Byte => ExecuteElementReduction<byte>(arr, ReductionOp.Max, retType),
+                NPTypeCode.SByte => ExecuteElementReduction<sbyte>(arr, ReductionOp.Max, retType),
                 NPTypeCode.Int16 => ExecuteElementReduction<short>(arr, ReductionOp.Max, retType),
                 NPTypeCode.UInt16 => ExecuteElementReduction<ushort>(arr, ReductionOp.Max, retType),
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Max, retType),
                 NPTypeCode.UInt32 => ExecuteElementReduction<uint>(arr, ReductionOp.Max, retType),
                 NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.Max, retType),
                 NPTypeCode.UInt64 => ExecuteElementReduction<ulong>(arr, ReductionOp.Max, retType),
+                // B1: Half IL kernel uses OpCodes.Bgt/Blt which don't work on Half struct; use fallback.
+                NPTypeCode.Half => MaxElementwiseHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Max, retType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Max, retType),
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Max, retType),
+                // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
+                NPTypeCode.Complex => MaxElementwiseComplexFallback(arr),
                 _ => throw new NotSupportedException($"Max not supported for type {retType}")
             };
         }
@@ -203,17 +240,101 @@ namespace NumSharp.Backends
             return retType switch
             {
                 NPTypeCode.Byte => ExecuteElementReduction<byte>(arr, ReductionOp.Min, retType),
+                NPTypeCode.SByte => ExecuteElementReduction<sbyte>(arr, ReductionOp.Min, retType),
                 NPTypeCode.Int16 => ExecuteElementReduction<short>(arr, ReductionOp.Min, retType),
                 NPTypeCode.UInt16 => ExecuteElementReduction<ushort>(arr, ReductionOp.Min, retType),
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Min, retType),
                 NPTypeCode.UInt32 => ExecuteElementReduction<uint>(arr, ReductionOp.Min, retType),
                 NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.Min, retType),
                 NPTypeCode.UInt64 => ExecuteElementReduction<ulong>(arr, ReductionOp.Min, retType),
+                // B1: Half IL kernel uses OpCodes.Bgt/Blt which don't work on Half struct; use fallback.
+                NPTypeCode.Half => MinElementwiseHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Min, retType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Min, retType),
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Min, retType),
+                // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
+                NPTypeCode.Complex => MinElementwiseComplexFallback(arr),
                 _ => throw new NotSupportedException($"Min not supported for type {retType}")
             };
+        }
+
+        /// <summary>
+        /// Fallback max for Half: IL OpCodes.Bgt/Blt don't work on Half struct.
+        /// Half.MaxMagnitude and direct Half comparison via (double) works correctly.
+        /// Propagates NaN per NumPy rule: max with NaN returns NaN.
+        /// </summary>
+        private object MaxElementwiseHalfFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<Half>();
+            double best = double.NegativeInfinity;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                double v = (double)iter.MoveNext();
+                if (double.IsNaN(v)) return Half.NaN;
+                if (!seenAny || v > best) { best = v; seenAny = true; }
+            }
+            return (Half)best;
+        }
+
+        private object MinElementwiseHalfFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<Half>();
+            double best = double.PositiveInfinity;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                double v = (double)iter.MoveNext();
+                if (double.IsNaN(v)) return Half.NaN;
+                if (!seenAny || v < best) { best = v; seenAny = true; }
+            }
+            return (Half)best;
+        }
+
+        /// <summary>
+        /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as tie-break).
+        /// NaN in either component returns a NaN Complex.
+        /// </summary>
+        private object MaxElementwiseComplexFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            var best = System.Numerics.Complex.Zero;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
+                    return new System.Numerics.Complex(double.NaN, double.NaN);
+                if (!seenAny
+                    || v.Real > best.Real
+                    || (v.Real == best.Real && v.Imaginary > best.Imaginary))
+                {
+                    best = v;
+                    seenAny = true;
+                }
+            }
+            return best;
+        }
+
+        private object MinElementwiseComplexFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            var best = System.Numerics.Complex.Zero;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
+                    return new System.Numerics.Complex(double.NaN, double.NaN);
+                if (!seenAny
+                    || v.Real < best.Real
+                    || (v.Real == best.Real && v.Imaginary < best.Imaginary))
+                {
+                    best = v;
+                    seenAny = true;
+                }
+            }
+            return best;
         }
 
         /// <summary>
@@ -236,17 +357,115 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
                 NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
+                NPTypeCode.SByte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.SByte),
                 NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
                 NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
                 NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int32),
                 NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
                 NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
                 NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
+                // B1/B7: IL OpCodes.Bgt don't work on Half struct; use C# fallback.
+                NPTypeCode.Half => ArgMaxHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
+                NPTypeCode.Complex => ArgMaxComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
+        }
+
+        /// <summary>
+        /// Fallback argmax for Half (IL kernel uses Bgt which doesn't work on Half struct).
+        /// NumPy: first occurrence of max; NaN propagates (argmax of array with NaN returns index of first NaN).
+        /// </summary>
+        private long ArgMaxHalfFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<Half>();
+            long bestIdx = 0;
+            long idx = 0;
+            double best = (double)iter.MoveNext();
+            if (double.IsNaN(best)) return 0;
+            idx = 1;
+            while (iter.HasNext())
+            {
+                double v = (double)iter.MoveNext();
+                if (double.IsNaN(v)) return idx;
+                if (v > best) { best = v; bestIdx = idx; }
+                idx++;
+            }
+            return bestIdx;
+        }
+
+        private long ArgMinHalfFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<Half>();
+            long bestIdx = 0;
+            long idx = 0;
+            double best = (double)iter.MoveNext();
+            if (double.IsNaN(best)) return 0;
+            idx = 1;
+            while (iter.HasNext())
+            {
+                double v = (double)iter.MoveNext();
+                if (double.IsNaN(v)) return idx;
+                if (v < best) { best = v; bestIdx = idx; }
+                idx++;
+            }
+            return bestIdx;
+        }
+
+        /// <summary>
+        /// Fallback argmax for Complex using lexicographic comparison (real, then imag).
+        /// Returns index of first occurrence of the maximum (NumPy tiebreak semantics).
+        /// NaN propagates: a Complex value with NaN in either component "wins" argmax at its first occurrence.
+        /// </summary>
+        private long ArgMaxComplexFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            long bestIdx = 0;
+            long idx = 0;
+            var best = iter.MoveNext();
+            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
+            idx = 1;
+            while (iter.HasNext())
+            {
+                var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
+                if (v.Real > best.Real || (v.Real == best.Real && v.Imaginary > best.Imaginary))
+                {
+                    best = v;
+                    bestIdx = idx;
+                }
+                idx++;
+            }
+            return bestIdx;
+        }
+
+        /// <summary>
+        /// Fallback argmin for Complex using lexicographic comparison (real, then imag).
+        /// NaN propagates: a Complex value with NaN in either component "wins" argmin at its first occurrence.
+        /// </summary>
+        private long ArgMinComplexFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            long bestIdx = 0;
+            long idx = 0;
+            var best = iter.MoveNext();
+            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
+            idx = 1;
+            while (iter.HasNext())
+            {
+                var v = iter.MoveNext();
+                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
+                if (v.Real < best.Real || (v.Real == best.Real && v.Imaginary < best.Imaginary))
+                {
+                    best = v;
+                    bestIdx = idx;
+                }
+                idx++;
+            }
+            return bestIdx;
         }
 
         /// <summary>
@@ -269,15 +488,20 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
                 NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
+                NPTypeCode.SByte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.SByte),
                 NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
                 NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
                 NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int32),
                 NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
                 NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
                 NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
+                // B1/B7: IL OpCodes.Blt don't work on Half struct; use C# fallback.
+                NPTypeCode.Half => ArgMinHalfFallback(arr),
                 NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
                 NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                // B12: Complex IL kernel tiebreak is wrong; fallback uses lexicographic compare.
+                NPTypeCode.Complex => ArgMinComplexFallback(arr),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
             };
         }
@@ -292,17 +516,39 @@ namespace NumSharp.Backends
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
             {
                 var val = arr.GetAtIndex(0);
-                return typeCode.HasValue ? Converts.ChangeType(val, typeCode.Value) : Convert.ToDouble(val);
+                if (arr.GetTypeCode == NPTypeCode.Complex)
+                    return val; // Complex mean of single element is the element itself
+                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+                return typeCode.HasValue ? Converts.ChangeType(val, typeCode.Value) : Converts.ToDouble(val);
             }
 
-            // Mean always computes in double for precision
-            var retType = typeCode ?? NPTypeCode.Double;
             long count = arr.size;
-
-            // Sum in accumulating type, then divide
             var sumType = arr.GetTypeCode.GetAccumulatingType();
 
-            double sum = sumType switch
+            // Handle Complex separately - mean is Complex, not double
+            if (sumType == NPTypeCode.Complex)
+            {
+                var sum = ExecuteElementReduction<System.Numerics.Complex>(arr, ReductionOp.Sum, sumType);
+                return sum / count;
+            }
+
+            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean
+            if (sumType == NPTypeCode.Half)
+            {
+                var sum = ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType);
+                return (Half)((double)sum / count);
+            }
+
+            // NumPy 2.x: mean preserves float types, promotes int to float64
+            var retType = typeCode ?? (arr.GetTypeCode switch
+            {
+                NPTypeCode.Single => NPTypeCode.Single,
+                NPTypeCode.Double => NPTypeCode.Double,
+                _ => NPTypeCode.Double
+            });
+
+            // Sum in accumulating type, then divide
+            double sum2 = sumType switch
             {
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.UInt32 => ExecuteElementReduction<uint>(arr, ReductionOp.Sum, sumType),
@@ -311,10 +557,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.Decimal => (double)ExecuteElementReduction<decimal>(arr, ReductionOp.Sum, sumType),
+                NPTypeCode.Half => (double)ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType),
                 _ => throw new NotSupportedException($"Mean not supported for accumulator type {sumType}")
             };
 
-            double mean = sum / count;
+            double mean = sum2 / count;
             return Converts.ChangeType(mean, retType);
         }
 
@@ -443,6 +690,34 @@ namespace NumSharp.Backends
         protected NDArray min_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Min, outputTypeCode);
+        }
+
+        #endregion
+
+        #region Half/Complex Fallback Methods
+
+        /// <summary>
+        /// Fallback sum for Half type using iterator.
+        /// </summary>
+        private object SumElementwiseHalfFallback(NDArray arr)
+        {
+            double sum = 0.0;
+            var iter = arr.AsIterator<Half>();
+            while (iter.HasNext())
+                sum += (double)iter.MoveNext();
+            return (Half)sum;
+        }
+
+        /// <summary>
+        /// Fallback sum for Complex type using iterator.
+        /// </summary>
+        private object SumElementwiseComplexFallback(NDArray arr)
+        {
+            var sum = System.Numerics.Complex.Zero;
+            var iter = arr.AsIterator<System.Numerics.Complex>();
+            while (iter.HasNext())
+                sum += iter.MoveNext();
+            return sum;
         }
 
         #endregion

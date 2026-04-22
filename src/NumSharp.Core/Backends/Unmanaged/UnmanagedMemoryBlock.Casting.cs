@@ -31,6 +31,8 @@ namespace NumSharp.Backends.Unmanaged
                     return CastTo<bool>(source);
                 case NPTypeCode.Byte:
                     return CastTo<byte>(source);
+                case NPTypeCode.SByte:
+                    return CastTo<sbyte>(source);
                 case NPTypeCode.Int16:
                     return CastTo<short>(source);
                 case NPTypeCode.UInt16:
@@ -45,12 +47,16 @@ namespace NumSharp.Backends.Unmanaged
                     return CastTo<ulong>(source);
                 case NPTypeCode.Char:
                     return CastTo<char>(source);
+                case NPTypeCode.Half:
+                    return CastTo<Half>(source);
                 case NPTypeCode.Double:
                     return CastTo<double>(source);
                 case NPTypeCode.Single:
                     return CastTo<float>(source);
                 case NPTypeCode.Decimal:
                     return CastTo<decimal>(source);
+                case NPTypeCode.Complex:
+                    return CastTo<System.Numerics.Complex>(source);
                 default:
                     throw new NotSupportedException();
 #endif
@@ -75,18 +81,22 @@ namespace NumSharp.Backends.Unmanaged
 	                default:
 		                throw new NotSupportedException();
 #else
-                case NPTypeCode.Boolean: return CastTo<bool, TOut>(source);
-                case NPTypeCode.Byte: return CastTo<byte, TOut>(source);
-                case NPTypeCode.Int16: return CastTo<short, TOut>(source);
-                case NPTypeCode.UInt16: return CastTo<ushort, TOut>(source);
-                case NPTypeCode.Int32: return CastTo<int, TOut>(source);
-                case NPTypeCode.UInt32: return CastTo<uint, TOut>(source);
-                case NPTypeCode.Int64: return CastTo<long, TOut>(source);
-                case NPTypeCode.UInt64: return CastTo<ulong, TOut>(source);
-                case NPTypeCode.Char: return CastTo<char, TOut>(source);
-                case NPTypeCode.Double: return CastTo<double, TOut>(source);
-                case NPTypeCode.Single: return CastTo<float, TOut>(source);
-                case NPTypeCode.Decimal: return CastTo<decimal, TOut>(source);
+                // Cast source to typed IMemoryBlock<T> to use the generic converter path
+                case NPTypeCode.Boolean: return ((IMemoryBlock<bool>)source).CastTo<bool, TOut>();
+                case NPTypeCode.Byte: return ((IMemoryBlock<byte>)source).CastTo<byte, TOut>();
+                case NPTypeCode.SByte: return ((IMemoryBlock<sbyte>)source).CastTo<sbyte, TOut>();
+                case NPTypeCode.Int16: return ((IMemoryBlock<short>)source).CastTo<short, TOut>();
+                case NPTypeCode.UInt16: return ((IMemoryBlock<ushort>)source).CastTo<ushort, TOut>();
+                case NPTypeCode.Int32: return ((IMemoryBlock<int>)source).CastTo<int, TOut>();
+                case NPTypeCode.UInt32: return ((IMemoryBlock<uint>)source).CastTo<uint, TOut>();
+                case NPTypeCode.Int64: return ((IMemoryBlock<long>)source).CastTo<long, TOut>();
+                case NPTypeCode.UInt64: return ((IMemoryBlock<ulong>)source).CastTo<ulong, TOut>();
+                case NPTypeCode.Char: return ((IMemoryBlock<char>)source).CastTo<char, TOut>();
+                case NPTypeCode.Half: return ((IMemoryBlock<Half>)source).CastTo<Half, TOut>();
+                case NPTypeCode.Double: return ((IMemoryBlock<double>)source).CastTo<double, TOut>();
+                case NPTypeCode.Single: return ((IMemoryBlock<float>)source).CastTo<float, TOut>();
+                case NPTypeCode.Decimal: return ((IMemoryBlock<decimal>)source).CastTo<decimal, TOut>();
+                case NPTypeCode.Complex: return ((IMemoryBlock<System.Numerics.Complex>)source).CastTo<System.Numerics.Complex, TOut>();
                 default:
                     throw new NotSupportedException();
 #endif

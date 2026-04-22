@@ -38,7 +38,9 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Try to get a NaN-aware axis reduction kernel.
-        /// Only supports float and double types (NaN is only defined for floating-point).
+        /// SIMD kernels exist only for float/double; Half and Complex route to scalar
+        /// fallback paths (Default.Reduction.Nan.cs ExecuteNanAxisReductionScalar /
+        /// np.nanmean.cs / np.nanvar.cs / np.nanstd.cs) which handle them directly.
         /// </summary>
         public static AxisReductionKernel? TryGetNanAxisReductionKernel(AxisReductionKernelKey key)
         {
@@ -54,7 +56,7 @@ namespace NumSharp.Backends.Kernels
                 return null;
             }
 
-            // NaN is only defined for float and double
+            // SIMD kernels only for float/double. Half/Complex fall through to scalar path.
             if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
             {
                 return null;

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Numerics;
 using System.Threading.Tasks;
 using NumSharp.Generic;
 using NumSharp.Utilities;
@@ -93,7 +94,7 @@ namespace NumSharp
                     case Slice _:
                         continue;
                     case null: throw new ArgumentNullException($"The {i}th dimension in given indices is null.");
-                    default: throw new ArgumentException($"Unsupported indexing type: '{(indicesObjects[i]?.GetType()?.Name ?? "null")}'");
+                    default: throw new IndexError($"only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer or boolean arrays are valid indices (got '{(indicesObjects[i]?.GetType()?.Name ?? "null")}')");
                 }
             }
 
@@ -123,6 +124,8 @@ namespace NumSharp
                         case int o: return Slice.Index(o);
                         case string o: return new Slice(o);
                         case bool o: return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
+                        case Half h: return Slice.Index(Converts.ToInt64(h));
+                        case Complex c: return Slice.Index(Converts.ToInt64(c));
                         case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
                         default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
                     }
@@ -185,6 +188,12 @@ namespace NumSharp
                         }
                         else
                             return; //false bool causes nullification of return.
+                    case Half h:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(h)));
+                        continue;
+                    case Complex c:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(c)));
+                        continue;
                     case IConvertible o:
                         indices.Add(NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture)));
                         continue;
@@ -291,6 +300,9 @@ namespace NumSharp
                 case NPTypeCode.Byte:
                     SetIndices<byte>(src.MakeGeneric<byte>(), indices, values);
                     break;
+                case NPTypeCode.SByte:
+                    SetIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, values);
+                    break;
                 case NPTypeCode.Int16:
                     SetIndices<short>(src.MakeGeneric<short>(), indices, values);
                     break;
@@ -312,6 +324,9 @@ namespace NumSharp
                 case NPTypeCode.Char:
                     SetIndices<char>(src.MakeGeneric<char>(), indices, values);
                     break;
+                case NPTypeCode.Half:
+                    SetIndices<Half>(src.MakeGeneric<Half>(), indices, values);
+                    break;
                 case NPTypeCode.Double:
                     SetIndices<double>(src.MakeGeneric<double>(), indices, values);
                     break;
@@ -320,6 +335,9 @@ namespace NumSharp
                     break;
                 case NPTypeCode.Decimal:
                     SetIndices<decimal>(src.MakeGeneric<decimal>(), indices, values);
+                    break;
+                case NPTypeCode.Complex:
+                    SetIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, values);
                     break;
                 default:
                     throw new NotSupportedException();

@@ -63,6 +63,17 @@ namespace NumSharp
 
                     return result.MakeGeneric<bool>();
                 }
+	            case NPTypeCode.SByte:
+                {
+                    var from = (sbyte*)self.Address;
+                    var to = (bool*)result.Address;
+
+                    var len = result.size;
+                    for (long i = 0; i < len; i++)
+                        *(to + i) = *(from + i) == 0; //if val is 0 then write true
+
+                    return result.MakeGeneric<bool>();
+                }
 	            case NPTypeCode.Int16:
                 {
                     var from = (short*)self.Address;
@@ -162,6 +173,17 @@ namespace NumSharp
 
                     return result.MakeGeneric<bool>();
                 }
+	            case NPTypeCode.Half:
+                {
+                    var from = (Half*)self.Address;
+                    var to = (bool*)result.Address;
+
+                    var len = result.size;
+                    for (long i = 0; i < len; i++)
+                        *(to + i) = *(from + i) == (Half)0; //if val is 0 then write true
+
+                    return result.MakeGeneric<bool>();
+                }
 	            case NPTypeCode.Decimal:
                 {
                     var from = (decimal*)self.Address;
@@ -170,6 +192,17 @@ namespace NumSharp
                     var len = result.size;
                     for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
+
+                    return result.MakeGeneric<bool>();
+                }
+	            case NPTypeCode.Complex:
+                {
+                    var from = (System.Numerics.Complex*)self.Address;
+                    var to = (bool*)result.Address;
+
+                    var len = result.size;
+                    for (long i = 0; i < len; i++)
+                        *(to + i) = *(from + i) == System.Numerics.Complex.Zero; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }

@@ -46,6 +46,13 @@ namespace NumSharp
 	                default:
 		                throw new NotSupportedException();
 #else
+	                case NPTypeCode.SByte:
+	                {
+                        var out_addr = (sbyte*)@out.Address;
+                        for (long i = 0; i < len; i++)
+                            out_addr[i] = (sbyte)(-out_addr[i]);
+                        return @out;
+	                }
 	                case NPTypeCode.Int16:
 	                {
                         var out_addr = (short*)@out.Address;
@@ -81,9 +88,23 @@ namespace NumSharp
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }
+	                case NPTypeCode.Half:
+	                {
+                        var out_addr = (Half*)@out.Address;
+                        for (long i = 0; i < len; i++)
+                            out_addr[i] = -out_addr[i];
+                        return @out;
+	                }
 	                case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
+                        for (long i = 0; i < len; i++)
+                            out_addr[i] = -out_addr[i];
+                        return @out;
+	                }
+	                case NPTypeCode.Complex:
+	                {
+                        var out_addr = (System.Numerics.Complex*)@out.Address;
                         for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;

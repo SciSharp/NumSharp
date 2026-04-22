@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Numerics;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -93,6 +94,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayBounds((byte*)@out.Address, (byte*)min.Address, (byte*)max.Address, len);
                         return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayBounds((sbyte*)@out.Address, (sbyte*)min.Address, (sbyte*)max.Address, len);
+                        return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayBounds((short*)@out.Address, (short*)min.Address, (short*)max.Address, len);
                         return @out;
@@ -123,6 +127,12 @@ namespace NumSharp.Backends
                     case NPTypeCode.Char:
                         ClipArrayBoundsChar((char*)@out.Address, (char*)min.Address, (char*)max.Address, len);
                         return @out;
+                    case NPTypeCode.Half:
+                        ClipArrayBoundsHalf((Half*)@out.Address, (Half*)min.Address, (Half*)max.Address, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipArrayBoundsComplex((Complex*)@out.Address, (Complex*)min.Address, (Complex*)max.Address, len);
+                        return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
                 }
@@ -134,6 +144,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayMin((byte*)@out.Address, (byte*)min.Address, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayMin((sbyte*)@out.Address, (sbyte*)min.Address, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayMin((short*)@out.Address, (short*)min.Address, len);
@@ -165,6 +178,12 @@ namespace NumSharp.Backends
                     case NPTypeCode.Char:
                         ClipArrayMinChar((char*)@out.Address, (char*)min.Address, len);
                         return @out;
+                    case NPTypeCode.Half:
+                        ClipArrayMinHalf((Half*)@out.Address, (Half*)min.Address, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipArrayMinComplex((Complex*)@out.Address, (Complex*)min.Address, len);
+                        return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
                 }
@@ -176,6 +195,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayMax((byte*)@out.Address, (byte*)max.Address, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayMax((sbyte*)@out.Address, (sbyte*)max.Address, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayMax((short*)@out.Address, (short*)max.Address, len);
@@ -207,6 +229,12 @@ namespace NumSharp.Backends
                     case NPTypeCode.Char:
                         ClipArrayMaxChar((char*)@out.Address, (char*)max.Address, len);
                         return @out;
+                    case NPTypeCode.Half:
+                        ClipArrayMaxHalf((Half*)@out.Address, (Half*)max.Address, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipArrayMaxComplex((Complex*)@out.Address, (Complex*)max.Address, len);
+                        return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
                 }
@@ -224,6 +252,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ClipNDArrayGeneralCore<byte>(@out, min, max, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayGeneralCore<sbyte>(@out, min, max, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayGeneralCore<short>(@out, min, max, len);
@@ -255,6 +286,12 @@ namespace NumSharp.Backends
                     case NPTypeCode.Char:
                         ClipNDArrayGeneralCore<char>(@out, min, max, len);
                         return @out;
+                    case NPTypeCode.Half:
+                        ClipNDArrayGeneralCoreHalf(@out, min, max, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipNDArrayGeneralCoreComplex(@out, min, max, len);
+                        return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
                 }
@@ -265,6 +302,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ClipNDArrayMinGeneralCore<byte>(@out, min, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayMinGeneralCore<sbyte>(@out, min, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayMinGeneralCore<short>(@out, min, len);
@@ -296,6 +336,12 @@ namespace NumSharp.Backends
                     case NPTypeCode.Char:
                         ClipNDArrayMinGeneralCore<char>(@out, min, len);
                         return @out;
+                    case NPTypeCode.Half:
+                        ClipNDArrayMinGeneralCoreHalf(@out, min, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipNDArrayMinGeneralCoreComplex(@out, min, len);
+                        return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
                 }
@@ -306,6 +352,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ClipNDArrayMaxGeneralCore<byte>(@out, max, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayMaxGeneralCore<sbyte>(@out, max, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayMaxGeneralCore<short>(@out, max, len);
@@ -336,6 +385,12 @@ namespace NumSharp.Backends
                         return @out;
                     case NPTypeCode.Char:
                         ClipNDArrayMaxGeneralCore<char>(@out, max, len);
+                        return @out;
+                    case NPTypeCode.Half:
+                        ClipNDArrayMaxGeneralCoreHalf(@out, max, len);
+                        return @out;
+                    case NPTypeCode.Complex:
+                        ClipNDArrayMaxGeneralCoreComplex(@out, max, len);
                         return @out;
                     default:
                         throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
@@ -559,6 +614,172 @@ namespace NumSharp.Backends
         {
             for (long i = 0; i < size; i++)
                 if (output[i] > maxArr[i]) output[i] = maxArr[i];
+        }
+
+        #endregion
+
+        #region Half Clip (NaN-aware, matches NumPy float16 semantics)
+
+        // NumPy parity for floating point: NaN propagates. If either operand is NaN, result is NaN.
+        // Half doesn't have Math.Max/Min — we route through NaN-aware helpers.
+
+        private static Half HalfMaxNaN(Half a, Half b)
+        {
+            // Matches NumPy np.maximum / clip-min: if either is NaN, result is NaN.
+            if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
+            return a > b ? a : b;
+        }
+
+        private static Half HalfMinNaN(Half a, Half b)
+        {
+            if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
+            return a < b ? a : b;
+        }
+
+        private static unsafe void ClipArrayBoundsHalf(Half* output, Half* minArr, Half* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = HalfMinNaN(HalfMaxNaN(output[i], minArr[i]), maxArr[i]);
+        }
+
+        private static unsafe void ClipArrayMinHalf(Half* output, Half* minArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = HalfMaxNaN(output[i], minArr[i]);
+        }
+
+        private static unsafe void ClipArrayMaxHalf(Half* output, Half* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = HalfMinNaN(output[i], maxArr[i]);
+        }
+
+        private static unsafe void ClipNDArrayGeneralCoreHalf(NDArray @out, NDArray min, NDArray max, long len)
+        {
+            var outAddr = (Half*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var minVal = Converts.ToHalf(min.GetAtIndex(i));
+                var maxVal = Converts.ToHalf(max.GetAtIndex(i));
+                outAddr[outOffset] = HalfMinNaN(HalfMaxNaN(val, minVal), maxVal);
+            }
+        }
+
+        private static unsafe void ClipNDArrayMinGeneralCoreHalf(NDArray @out, NDArray min, long len)
+        {
+            var outAddr = (Half*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var minVal = Converts.ToHalf(min.GetAtIndex(i));
+                outAddr[outOffset] = HalfMaxNaN(val, minVal);
+            }
+        }
+
+        private static unsafe void ClipNDArrayMaxGeneralCoreHalf(NDArray @out, NDArray max, long len)
+        {
+            var outAddr = (Half*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var maxVal = Converts.ToHalf(max.GetAtIndex(i));
+                outAddr[outOffset] = HalfMinNaN(val, maxVal);
+            }
+        }
+
+        #endregion
+
+        #region Complex Clip (lex ordering, NaN propagation)
+
+        // NumPy parity for complex: np.maximum/minimum use lex ordering on (real, imag).
+        // "NaN-containing" = double.IsNaN(Real) || double.IsNaN(Imaginary).
+        // NaN propagation: if either operand is NaN-containing, return it (first wins when both NaN).
+        // For clip-min (≡ max(val, minBound)): passes the larger; if either is NaN, returns "val"
+        // then "minBound" rule — doesn't matter which since both paths return the NaN-carrier.
+
+        private static bool ComplexIsNaN(Complex z)
+            => double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
+
+        private static bool ComplexLexGreater(Complex a, Complex b)
+        {
+            // a > b lex: a.real > b.real OR (a.real == b.real AND a.imag > b.imag)
+            if (a.Real > b.Real) return true;
+            if (a.Real < b.Real) return false;
+            return a.Imaginary > b.Imaginary;
+        }
+
+        private static Complex ComplexMaxNaN(Complex a, Complex b)
+        {
+            // NumPy: first NaN wins. If a is NaN-containing, return a regardless of b.
+            if (ComplexIsNaN(a)) return a;
+            if (ComplexIsNaN(b)) return b;
+            return ComplexLexGreater(a, b) ? a : b;
+        }
+
+        private static Complex ComplexMinNaN(Complex a, Complex b)
+        {
+            if (ComplexIsNaN(a)) return a;
+            if (ComplexIsNaN(b)) return b;
+            return ComplexLexGreater(a, b) ? b : a;
+        }
+
+        private static unsafe void ClipArrayBoundsComplex(Complex* output, Complex* minArr, Complex* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = ComplexMinNaN(ComplexMaxNaN(output[i], minArr[i]), maxArr[i]);
+        }
+
+        private static unsafe void ClipArrayMinComplex(Complex* output, Complex* minArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = ComplexMaxNaN(output[i], minArr[i]);
+        }
+
+        private static unsafe void ClipArrayMaxComplex(Complex* output, Complex* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = ComplexMinNaN(output[i], maxArr[i]);
+        }
+
+        private static unsafe void ClipNDArrayGeneralCoreComplex(NDArray @out, NDArray min, NDArray max, long len)
+        {
+            var outAddr = (Complex*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var minVal = Converts.ToComplex(min.GetAtIndex(i));
+                var maxVal = Converts.ToComplex(max.GetAtIndex(i));
+                outAddr[outOffset] = ComplexMinNaN(ComplexMaxNaN(val, minVal), maxVal);
+            }
+        }
+
+        private static unsafe void ClipNDArrayMinGeneralCoreComplex(NDArray @out, NDArray min, long len)
+        {
+            var outAddr = (Complex*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var minVal = Converts.ToComplex(min.GetAtIndex(i));
+                outAddr[outOffset] = ComplexMaxNaN(val, minVal);
+            }
+        }
+
+        private static unsafe void ClipNDArrayMaxGeneralCoreComplex(NDArray @out, NDArray max, long len)
+        {
+            var outAddr = (Complex*)@out.Address;
+            for (long i = 0; i < len; i++)
+            {
+                long outOffset = @out.Shape.TransformOffset(i);
+                var val = outAddr[outOffset];
+                var maxVal = Converts.ToComplex(max.GetAtIndex(i));
+                outAddr[outOffset] = ComplexMinNaN(val, maxVal);
+            }
         }
 
         #endregion

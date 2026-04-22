@@ -435,6 +435,14 @@ namespace NumSharp.Backends.Kernels
         {
             // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
 
+            // For Half/Complex ArgMax/ArgMin, use helper method (comparison via IL doesn't work correctly)
+            if ((key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin) &&
+                (key.InputType == NPTypeCode.Half || key.InputType == NPTypeCode.Complex))
+            {
+                EmitArgMaxMinSimdLoop(il, key, inputSize);
+                return;
+            }
+
             var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
             var locIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
@@ -722,6 +730,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
@@ -742,6 +751,14 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalZero);
                     break;
+                case NPTypeCode.Half:
+                    // Load Half.Zero via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfZero, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.Zero via static field
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexZero);
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -756,6 +773,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
@@ -776,6 +794,15 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalOne);
                     break;
+                case NPTypeCode.Half:
+                    // Load Half.One via double conversion
+                    il.Emit(OpCodes.Ldc_R8, 1.0);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.One via static field
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -794,6 +821,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MinValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MinValue);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldc_I4, (int)short.MinValue);
@@ -820,9 +850,16 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Ldc_R8, double.NegativeInfinity);
                     break;
+                case NPTypeCode.Half:
+                    // Half.NegativeInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfNegativeInfinity, null);
+                    break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMinValue);
                     break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -841,6 +878,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MaxValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MaxValue);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldc_I4, (int)short.MaxValue);
@@ -867,9 +907,16 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
                     break;
+                case NPTypeCode.Half:
+                    // Half.PositiveInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfPositiveInfinity, null);
+                    break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMaxValue);
                     break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -1115,6 +1162,29 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Half binary operation: convert both operands to double, perform op, convert back.
+        /// Stack has [half1, half2], result is half.
+        /// </summary>
+        private static void EmitHalfBinaryOp(ILGenerator il, OpCode scalarOp)
+        {
+            var locRight = il.DeclareLocal(typeof(Half));
+            il.Emit(OpCodes.Stloc, locRight);
+
+            // Convert left to double
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Convert right to double
+            il.Emit(OpCodes.Ldloc, locRight);
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Perform operation in double
+            il.Emit(scalarOp);
+
+            // Convert result back to Half
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+        }
+
+        /// <summary>
         /// Emit scalar min/max comparison.
         /// Stack has [value1, value2], result is min or max.
         /// </summary>
@@ -1182,6 +1252,15 @@ namespace NumSharp.Backends.Kernels
                     {
                         il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpAddition, null);
                     }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpAddition, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, add, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Add);
+                    }
                     else
                     {
                         il.Emit(OpCodes.Add);
@@ -1193,6 +1272,15 @@ namespace NumSharp.Backends.Kernels
                     if (type == NPTypeCode.Decimal)
                     {
                         il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, multiply, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Mul);
                     }
                     else
                     {

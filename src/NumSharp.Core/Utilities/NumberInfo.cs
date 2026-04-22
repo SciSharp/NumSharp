@@ -7,7 +7,7 @@ namespace NumSharp.Utilities
     public static class NumberInfo
     {
         /// <summary>
-        ///     Get the min value of given <see cref="NPTypeCode"/>.
+        ///     Get the max value of given <see cref="NPTypeCode"/>.
         /// </summary>
         public static object MaxValue(this NPTypeCode typeCode)
         {
@@ -23,6 +23,8 @@ namespace NumSharp.Utilities
                     return #1.MaxValue;
                 %
 #else
+                case NPTypeCode.SByte:
+                    return SByte.MaxValue;
                 case NPTypeCode.Byte:
                     return Byte.MaxValue;
                 case NPTypeCode.Int16:
@@ -39,6 +41,8 @@ namespace NumSharp.Utilities
                     return UInt64.MaxValue;
                 case NPTypeCode.Char:
                     return Char.MaxValue;
+                case NPTypeCode.Half:
+                    return Half.MaxValue;
                 case NPTypeCode.Double:
                     return Double.MaxValue;
                 case NPTypeCode.Single:
@@ -68,6 +72,8 @@ namespace NumSharp.Utilities
                     return #1.MinValue;
                 %
 #else
+                case NPTypeCode.SByte:
+                    return SByte.MinValue;
                 case NPTypeCode.Byte:
                     return Byte.MinValue;
                 case NPTypeCode.Int16:
@@ -84,6 +90,8 @@ namespace NumSharp.Utilities
                     return UInt64.MinValue;
                 case NPTypeCode.Char:
                     return Char.MinValue;
+                case NPTypeCode.Half:
+                    return Half.MinValue;
                 case NPTypeCode.Double:
                     return Double.MinValue;
                 case NPTypeCode.Single:

@@ -68,6 +68,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipHelper((byte*)arr.Address, len, Converts.ToByte(min), Converts.ToByte(max));
                         return arr;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipHelper((sbyte*)arr.Address, len, Converts.ToSByte(min), Converts.ToSByte(max));
+                        return arr;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipHelper((short*)arr.Address, len, Converts.ToInt16(min), Converts.ToInt16(max));
                         return arr;
@@ -109,6 +112,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipMinHelper((byte*)arr.Address, len, Converts.ToByte(min));
                         return arr;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipMinHelper((sbyte*)arr.Address, len, Converts.ToSByte(min));
+                        return arr;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipMinHelper((short*)arr.Address, len, Converts.ToInt16(min));
                         return arr;
@@ -149,6 +155,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipMaxHelper((byte*)arr.Address, len, Converts.ToByte(max));
+                        return arr;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipMaxHelper((sbyte*)arr.Address, len, Converts.ToSByte(max));
                         return arr;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipMaxHelper((short*)arr.Address, len, Converts.ToInt16(max));

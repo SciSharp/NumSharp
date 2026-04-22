@@ -126,6 +126,7 @@ namespace NumSharp
 		    {
 			    case NPTypeCode.Boolean: setDefaults_Boolean(); break;
 			    case NPTypeCode.Byte: setDefaults_Byte(); break;
+			    case NPTypeCode.SByte: setDefaults_SByte(); break;
 			    case NPTypeCode.Int16: setDefaults_Int16(); break;
 			    case NPTypeCode.UInt16: setDefaults_UInt16(); break;
 			    case NPTypeCode.Int32: setDefaults_Int32(); break;
@@ -133,9 +134,11 @@ namespace NumSharp
 			    case NPTypeCode.Int64: setDefaults_Int64(); break;
 			    case NPTypeCode.UInt64: setDefaults_UInt64(); break;
 			    case NPTypeCode.Char: setDefaults_Char(); break;
+			    case NPTypeCode.Half: setDefaults_Half(); break;
 			    case NPTypeCode.Double: setDefaults_Double(); break;
 			    case NPTypeCode.Single: setDefaults_Single(); break;
 			    case NPTypeCode.Decimal: setDefaults_Decimal(); break;
+			    case NPTypeCode.Complex: setDefaults_Complex(); break;
 			    default:
 				    throw new NotSupportedException();
 		    }

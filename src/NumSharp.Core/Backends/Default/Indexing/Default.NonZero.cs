@@ -27,6 +27,7 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Boolean: return nonzeros<bool>(nd.MakeGeneric<bool>());
                 case NPTypeCode.Byte: return nonzeros<byte>(nd.MakeGeneric<byte>());
+                case NPTypeCode.SByte: return nonzeros<sbyte>(nd.MakeGeneric<sbyte>());
                 case NPTypeCode.Int16: return nonzeros<short>(nd.MakeGeneric<short>());
                 case NPTypeCode.UInt16: return nonzeros<ushort>(nd.MakeGeneric<ushort>());
                 case NPTypeCode.Int32: return nonzeros<int>(nd.MakeGeneric<int>());
@@ -34,9 +35,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return nonzeros<long>(nd.MakeGeneric<long>());
                 case NPTypeCode.UInt64: return nonzeros<ulong>(nd.MakeGeneric<ulong>());
                 case NPTypeCode.Char: return nonzeros<char>(nd.MakeGeneric<char>());
+                case NPTypeCode.Half: return nonzeros<Half>(nd.MakeGeneric<Half>());
                 case NPTypeCode.Double: return nonzeros<double>(nd.MakeGeneric<double>());
                 case NPTypeCode.Single: return nonzeros<float>(nd.MakeGeneric<float>());
                 case NPTypeCode.Decimal: return nonzeros<decimal>(nd.MakeGeneric<decimal>());
+                case NPTypeCode.Complex: return nonzeros<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>());
                 default:
                     throw new NotSupportedException($"NonZero not supported for type {nd.typecode}");
             }
@@ -85,6 +88,7 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Boolean: return count_nonzero<bool>(nd.MakeGeneric<bool>());
                 case NPTypeCode.Byte: return count_nonzero<byte>(nd.MakeGeneric<byte>());
+                case NPTypeCode.SByte: return count_nonzero<sbyte>(nd.MakeGeneric<sbyte>());
                 case NPTypeCode.Int16: return count_nonzero<short>(nd.MakeGeneric<short>());
                 case NPTypeCode.UInt16: return count_nonzero<ushort>(nd.MakeGeneric<ushort>());
                 case NPTypeCode.Int32: return count_nonzero<int>(nd.MakeGeneric<int>());
@@ -92,9 +96,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return count_nonzero<long>(nd.MakeGeneric<long>());
                 case NPTypeCode.UInt64: return count_nonzero<ulong>(nd.MakeGeneric<ulong>());
                 case NPTypeCode.Char: return count_nonzero<char>(nd.MakeGeneric<char>());
+                case NPTypeCode.Half: return count_nonzero<Half>(nd.MakeGeneric<Half>());
                 case NPTypeCode.Double: return count_nonzero<double>(nd.MakeGeneric<double>());
                 case NPTypeCode.Single: return count_nonzero<float>(nd.MakeGeneric<float>());
                 case NPTypeCode.Decimal: return count_nonzero<decimal>(nd.MakeGeneric<decimal>());
+                case NPTypeCode.Complex: return count_nonzero<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>());
                 default:
                     throw new NotSupportedException($"CountNonZero not supported for type {nd.typecode}");
             }
@@ -139,6 +145,7 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Boolean: count_nonzero_axis<bool>(nd.MakeGeneric<bool>(), result, axis); break;
                 case NPTypeCode.Byte: count_nonzero_axis<byte>(nd.MakeGeneric<byte>(), result, axis); break;
+                case NPTypeCode.SByte: count_nonzero_axis<sbyte>(nd.MakeGeneric<sbyte>(), result, axis); break;
                 case NPTypeCode.Int16: count_nonzero_axis<short>(nd.MakeGeneric<short>(), result, axis); break;
                 case NPTypeCode.UInt16: count_nonzero_axis<ushort>(nd.MakeGeneric<ushort>(), result, axis); break;
                 case NPTypeCode.Int32: count_nonzero_axis<int>(nd.MakeGeneric<int>(), result, axis); break;
@@ -146,9 +153,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: count_nonzero_axis<long>(nd.MakeGeneric<long>(), result, axis); break;
                 case NPTypeCode.UInt64: count_nonzero_axis<ulong>(nd.MakeGeneric<ulong>(), result, axis); break;
                 case NPTypeCode.Char: count_nonzero_axis<char>(nd.MakeGeneric<char>(), result, axis); break;
+                case NPTypeCode.Half: count_nonzero_axis<Half>(nd.MakeGeneric<Half>(), result, axis); break;
                 case NPTypeCode.Double: count_nonzero_axis<double>(nd.MakeGeneric<double>(), result, axis); break;
                 case NPTypeCode.Single: count_nonzero_axis<float>(nd.MakeGeneric<float>(), result, axis); break;
                 case NPTypeCode.Decimal: count_nonzero_axis<decimal>(nd.MakeGeneric<decimal>(), result, axis); break;
+                case NPTypeCode.Complex: count_nonzero_axis<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>(), result, axis); break;
                 default:
                     throw new NotSupportedException($"CountNonZero not supported for type {nd.typecode}");
             }

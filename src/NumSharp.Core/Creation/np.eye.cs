@@ -27,30 +27,41 @@ namespace NumSharp
         /// <param name="dtype">Data-type of the returned array.</param>
         /// <returns>An array where all elements are equal to zero, except for the k-th diagonal, whose values are equal to one.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.eye.html</remarks>
-        public static NDArray eye(int N, int? M=null, int k = 0, Type dtype = null)
+        public static NDArray eye(int N, int? M = null, int k = 0, Type dtype = null)
         {
-            if (!M.HasValue)
-                M = N;
-            var m = np.zeros(Shape.Matrix(N, M.Value), dtype ?? typeof(double));
-            if (k >= M)
-                return m;
-            int i;
-            if (k >= 0)
-            {
-                i = k;
-            }
-            else
-                i = (-k) * M.Value;
+            int cols = M ?? N;
+            if (N < 0)
+                throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
+            if (cols < 0)
+                throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
 
-            var flat = m.flat;
-            var one = dtype != null ? Converts.ChangeType(1d, dtype.GetTypeCode()) : 1d;
-            int skips = k < 0 ? Math.Abs(k)-1 : 0;
-            for (long j = k; j < flat.size; j+=N+1)
+            var resolvedType = dtype ?? typeof(double);
+            var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
+            if (N == 0 || cols == 0)
+                return m;
+
+            // Diagonal element count: rows where 0 <= i < N and 0 <= i+k < cols
+            int rowStart = Math.Max(0, -k);
+            int rowEnd = Math.Min(N, cols - k);
+            if (rowEnd <= rowStart)
+                return m;
+
+            var typeCode = resolvedType.GetTypeCode();
+            object one;
+            switch (typeCode)
             {
-                if (j < 0 || skips-- > 0)
-                    continue;
-                flat.SetAtIndex(one, j);
+                case NPTypeCode.Complex: one = new System.Numerics.Complex(1d, 0d); break;
+                case NPTypeCode.Half:    one = (Half)1; break;
+                case NPTypeCode.SByte:   one = (sbyte)1; break;
+                case NPTypeCode.String:  one = "1"; break;
+                case NPTypeCode.Char:    one = '1'; break;
+                default:                 one = Converts.ChangeType((byte)1, typeCode); break;
             }
+
+            // Flat index of element (i, i+k) in row-major (N, cols) layout = i*cols + (i+k).
+            var flat = m.flat;
+            for (int i = rowStart; i < rowEnd; i++)
+                flat.SetAtIndex(one, (long)i * cols + (i + k));
 
             return m;
         }

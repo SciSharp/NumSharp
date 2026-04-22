@@ -480,6 +480,11 @@ namespace NumSharp.Utilities
                     return new byte[length];
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    return new sbyte[length];
+                }
+
                 case NPTypeCode.Int16:
                 {
                     return new short[length];
@@ -513,6 +518,11 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Char:
                 {
                     return new char[length];
+                }
+
+                case NPTypeCode.Half:
+                {
+                    return new Half[length];
                 }
 
                 case NPTypeCode.Double:

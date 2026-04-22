@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -34,16 +35,17 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Validate that the array is an integer type.
+        /// Raises TypeError to match NumPy's ufunc dtype rejection.
         /// </summary>
         private static void ValidateIntegerType(NDArray arr, string opName)
         {
             var typeCode = arr.GetTypeCode;
-            if (typeCode != NPTypeCode.Byte &&
+            if (typeCode != NPTypeCode.Byte && typeCode != NPTypeCode.SByte &&
                 typeCode != NPTypeCode.Int16 && typeCode != NPTypeCode.UInt16 &&
                 typeCode != NPTypeCode.Int32 && typeCode != NPTypeCode.UInt32 &&
                 typeCode != NPTypeCode.Int64 && typeCode != NPTypeCode.UInt64)
             {
-                throw new NotSupportedException($"{opName} only supports integer types, got {typeCode}");
+                throw new TypeError($"ufunc '{opName}' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
             }
         }
 
@@ -76,6 +78,9 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Byte:
                     ExecuteShiftArray<byte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
+                    break;
+                case NPTypeCode.SByte:
+                    ExecuteShiftArray<sbyte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
                 case NPTypeCode.Int16:
                     ExecuteShiftArray<short>(contiguousLhs, shiftPtr, result, len, isLeftShift);
@@ -130,7 +135,8 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
         {
-            int shiftAmount = Convert.ToInt32(rhs);
+            // Converts.ToInt32 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
+            int shiftAmount = Converts.ToInt32(rhs);
 
             // For contiguous arrays, allocate result and use SIMD kernel
             // For sliced arrays, clone first then apply shift in-place
@@ -154,6 +160,9 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Byte:
                     ExecuteShiftScalar<byte>(input, result, shiftAmount, len, isLeftShift);
+                    break;
+                case NPTypeCode.SByte:
+                    ExecuteShiftScalar<sbyte>(input, result, shiftAmount, len, isLeftShift);
                     break;
                 case NPTypeCode.Int16:
                     ExecuteShiftScalar<short>(input, result, shiftAmount, len, isLeftShift);
@@ -213,6 +222,11 @@ namespace NumSharp.Backends
             {
                 var v = (byte)(object)value;
                 return (T)(object)(byte)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(sbyte))
+            {
+                var v = (sbyte)(object)value;
+                return (T)(object)(sbyte)(isLeftShift ? (v << shift) : (v >> shift));
             }
             if (typeof(T) == typeof(short))
             {

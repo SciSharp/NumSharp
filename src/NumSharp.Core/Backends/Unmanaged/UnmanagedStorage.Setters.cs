@@ -68,6 +68,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                     *((bool*)Address + _shape.TransformOffset(index)) = (bool)value;
                     return;
+                case NPTypeCode.SByte:
+                    *((sbyte*)Address + _shape.TransformOffset(index)) = (sbyte)value;
+                    return;
                 case NPTypeCode.Byte:
                     *((byte*)Address + _shape.TransformOffset(index)) = (byte)value;
                     return;
@@ -92,6 +95,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     *((char*)Address + _shape.TransformOffset(index)) = (char)value;
                     return;
+                case NPTypeCode.Half:
+                    *((Half*)Address + _shape.TransformOffset(index)) = (Half)value;
+                    return;
                 case NPTypeCode.Double:
                     *((double*)Address + _shape.TransformOffset(index)) = (double)value;
                     return;
@@ -100,6 +106,9 @@ namespace NumSharp.Backends
                     return;
                 case NPTypeCode.Decimal:
                     *((decimal*)Address + _shape.TransformOffset(index)) = (decimal)value;
+                    return;
+                case NPTypeCode.Complex:
+                    *((System.Numerics.Complex*)Address + _shape.TransformOffset(index)) = (System.Numerics.Complex)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -704,6 +713,51 @@ namespace NumSharp.Backends
                 *((decimal*)Address + _shape.GetOffset(indices)) = value;
             }
         }
+
+        /// <summary>
+        ///     Sets a sbyte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetSByte(sbyte value, int[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((sbyte*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a Half at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetHalf(Half value, int[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((Half*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a Complex at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetComplex(System.Numerics.Complex value, int[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
 #endif
 
         #region Typed Setters (long[] overloads)
@@ -870,6 +924,51 @@ namespace NumSharp.Backends
             unsafe
             {
                 *((decimal*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a sbyte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetSByte(sbyte value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((sbyte*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a Half at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetHalf(Half value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((Half*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a Complex at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetComplex(System.Numerics.Complex value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
             }
         }
 

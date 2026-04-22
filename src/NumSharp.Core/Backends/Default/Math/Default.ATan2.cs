@@ -49,32 +49,15 @@ namespace NumSharp.Backends
             var yType = y.GetTypeCode;
             var xType = x.GetTypeCode;
 
-            // Determine result type using NumPy arctan2 rules:
-            // - float32 inputs -> float32 output
-            // - float64 or integer inputs -> float64 output
-            NPTypeCode resultType;
-            if (typeCode.HasValue)
-            {
-                resultType = typeCode.Value;
-            }
-            else
-            {
-                // NumPy arctan2 type promotion:
-                // float32 + float32 -> float32
-                // anything else -> float64
-                if (yType == NPTypeCode.Single && xType == NPTypeCode.Single)
-                {
-                    resultType = NPTypeCode.Single;
-                }
-                else if (yType == NPTypeCode.Decimal || xType == NPTypeCode.Decimal)
-                {
-                    resultType = NPTypeCode.Decimal;
-                }
-                else
-                {
-                    resultType = NPTypeCode.Double;
-                }
-            }
+            // Determine result type using NumPy 2.x arctan2 rules.
+            // Each input maps to its smallest supporting float target:
+            //   bool / int8 / uint8        -> float16
+            //   int16 / uint16             -> float32
+            //   int32+ / int64+ / char     -> float64
+            //   float16 / float32 / float64-> same
+            //   decimal (NumSharp ext.)    -> decimal
+            // The result is the larger of the two promotion targets.
+            NPTypeCode resultType = typeCode ?? PromoteATan2Binary(yType, xType);
 
             // Handle scalar x scalar case
             if (y.Shape.IsScalar && x.Shape.IsScalar)
@@ -120,6 +103,47 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// Maps a single input dtype to its NumPy arctan2 output target.
+        /// NumPy 2.x rules: bool/i8/u8 → f16, i16/u16 → f32, i32+/i64+/char → f64,
+        /// float types preserved, decimal preserved (NumSharp extension).
+        /// </summary>
+        private static NPTypeCode PromoteATan2Single(NPTypeCode t) => t switch
+        {
+            NPTypeCode.Boolean or NPTypeCode.SByte or NPTypeCode.Byte => NPTypeCode.Half,
+            NPTypeCode.Int16 or NPTypeCode.UInt16 => NPTypeCode.Single,
+            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Char => NPTypeCode.Double,
+            NPTypeCode.Half => NPTypeCode.Half,
+            NPTypeCode.Single => NPTypeCode.Single,
+            NPTypeCode.Double => NPTypeCode.Double,
+            NPTypeCode.Decimal => NPTypeCode.Decimal,
+            _ => NPTypeCode.Double,
+        };
+
+        /// <summary>
+        /// Binary promotion for arctan2: take the "larger" of the two single-input targets.
+        /// Order: Decimal > Double > Single > Half.
+        /// </summary>
+        private static NPTypeCode PromoteATan2Binary(NPTypeCode y, NPTypeCode x)
+        {
+            var py = PromoteATan2Single(y);
+            var px = PromoteATan2Single(x);
+            if (py == px) return py;
+
+            // Decimal dominates (NumSharp extension).
+            if (py == NPTypeCode.Decimal || px == NPTypeCode.Decimal) return NPTypeCode.Decimal;
+
+            // Otherwise: larger float wins (Double > Single > Half).
+            static int Rank(NPTypeCode t) => t switch
+            {
+                NPTypeCode.Half => 1,
+                NPTypeCode.Single => 2,
+                NPTypeCode.Double => 3,
+                _ => 3,
+            };
+            return Rank(py) >= Rank(px) ? py : px;
+        }
+
+        /// <summary>
         /// Execute scalar x scalar ATan2 operation.
         /// </summary>
         private static NDArray ExecuteATan2ScalarScalar(
@@ -135,6 +159,7 @@ namespace NumSharp.Backends
             // Convert to result type
             return resultType switch
             {
+                NPTypeCode.Half => NDArray.Scalar((Half)result),
                 NPTypeCode.Single => NDArray.Scalar((float)result),
                 NPTypeCode.Double => NDArray.Scalar(result),
                 NPTypeCode.Decimal => NDArray.Scalar(Utilities.DecimalMath.ATan2(
@@ -152,6 +177,7 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => arr.GetBoolean(Array.Empty<long>()) ? 1.0 : 0.0,
                 NPTypeCode.Byte => arr.GetByte(Array.Empty<long>()),
+                NPTypeCode.SByte => arr.GetSByte(Array.Empty<long>()),
                 NPTypeCode.Int16 => arr.GetInt16(Array.Empty<long>()),
                 NPTypeCode.UInt16 => arr.GetUInt16(Array.Empty<long>()),
                 NPTypeCode.Int32 => arr.GetInt32(Array.Empty<long>()),
@@ -159,9 +185,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Int64 => arr.GetInt64(Array.Empty<long>()),
                 NPTypeCode.UInt64 => arr.GetUInt64(Array.Empty<long>()),
                 NPTypeCode.Char => arr.GetChar(Array.Empty<long>()),
+                NPTypeCode.Half => (double)arr.GetHalf(Array.Empty<long>()),
                 NPTypeCode.Single => arr.GetSingle(Array.Empty<long>()),
                 NPTypeCode.Double => arr.GetDouble(Array.Empty<long>()),
                 NPTypeCode.Decimal => (double)arr.GetDecimal(Array.Empty<long>()),
+                // NumPy's arctan2 is real-valued; complex inputs are not supported.
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -175,6 +203,7 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => arr.GetBoolean(Array.Empty<long>()) ? 1m : 0m,
                 NPTypeCode.Byte => arr.GetByte(Array.Empty<long>()),
+                NPTypeCode.SByte => arr.GetSByte(Array.Empty<long>()),
                 NPTypeCode.Int16 => arr.GetInt16(Array.Empty<long>()),
                 NPTypeCode.UInt16 => arr.GetUInt16(Array.Empty<long>()),
                 NPTypeCode.Int32 => arr.GetInt32(Array.Empty<long>()),
@@ -182,6 +211,7 @@ namespace NumSharp.Backends
                 NPTypeCode.Int64 => arr.GetInt64(Array.Empty<long>()),
                 NPTypeCode.UInt64 => arr.GetUInt64(Array.Empty<long>()),
                 NPTypeCode.Char => arr.GetChar(Array.Empty<long>()),
+                NPTypeCode.Half => (decimal)(double)arr.GetHalf(Array.Empty<long>()),
                 NPTypeCode.Single => (decimal)arr.GetSingle(Array.Empty<long>()),
                 NPTypeCode.Double => (decimal)arr.GetDouble(Array.Empty<long>()),
                 NPTypeCode.Decimal => arr.GetDecimal(Array.Empty<long>()),

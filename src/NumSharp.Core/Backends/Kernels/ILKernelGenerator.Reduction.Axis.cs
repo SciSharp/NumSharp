@@ -92,6 +92,7 @@ namespace NumSharp.Backends.Kernels
             return key.InputType switch
             {
                 NPTypeCode.Byte => CreateAxisReductionKernelTyped<byte>(key),
+                NPTypeCode.SByte => CreateAxisReductionKernelTyped<sbyte>(key),
                 NPTypeCode.Int16 => CreateAxisReductionKernelTyped<short>(key),
                 NPTypeCode.UInt16 => CreateAxisReductionKernelTyped<ushort>(key),
                 NPTypeCode.Int32 => CreateAxisReductionKernelTyped<int>(key),
@@ -100,7 +101,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.UInt64 => CreateAxisReductionKernelTyped<ulong>(key),
                 NPTypeCode.Single => CreateAxisReductionKernelTyped<float>(key),
                 NPTypeCode.Double => CreateAxisReductionKernelTyped<double>(key),
-                _ => CreateAxisReductionKernelGeneral(key) // Fallback for Boolean, Char, Decimal
+                _ => CreateAxisReductionKernelGeneral(key) // Fallback for Boolean, Char, Decimal, Half, Complex
             };
         }
 
@@ -114,10 +115,12 @@ namespace NumSharp.Backends.Kernels
             // Dispatch based on input and accumulator type combination
             return (key.InputType, key.AccumulatorType) switch
             {
-                // Same-type scalar paths (for non-SIMD types like Decimal)
+                // Same-type scalar paths (for non-SIMD types like Decimal, Half, Complex)
                 (NPTypeCode.Decimal, NPTypeCode.Decimal) => CreateAxisReductionKernelScalar<decimal, decimal>(key),
                 (NPTypeCode.Boolean, NPTypeCode.Boolean) => CreateAxisReductionKernelScalar<bool, bool>(key),
                 (NPTypeCode.Char, NPTypeCode.Char) => CreateAxisReductionKernelScalar<char, char>(key),
+                (NPTypeCode.Half, NPTypeCode.Half) => CreateAxisReductionKernelScalar<Half, Half>(key),
+                (NPTypeCode.Complex, NPTypeCode.Complex) => CreateAxisReductionKernelScalar<System.Numerics.Complex, System.Numerics.Complex>(key),
 
                 // Common type promotion paths (input -> wider accumulator)
                 // byte -> int32/int64/double
@@ -276,6 +279,7 @@ namespace NumSharp.Backends.Kernels
             return type switch
             {
                 NPTypeCode.Byte => *(byte*)ptr,
+                NPTypeCode.SByte => *(sbyte*)ptr,
                 NPTypeCode.Int16 => *(short*)ptr,
                 NPTypeCode.UInt16 => *(ushort*)ptr,
                 NPTypeCode.Int32 => *(int*)ptr,
@@ -284,9 +288,11 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.UInt64 => *(ulong*)ptr,
                 NPTypeCode.Single => *(float*)ptr,
                 NPTypeCode.Double => *(double*)ptr,
+                NPTypeCode.Half => (double)*(Half*)ptr,
                 NPTypeCode.Decimal => (double)*(decimal*)ptr,
                 NPTypeCode.Char => *(char*)ptr,
                 NPTypeCode.Boolean => *(bool*)ptr ? 1.0 : 0.0,
+                NPTypeCode.Complex => (*(System.Numerics.Complex*)ptr).Real, // Use real part for reductions
                 _ => 0.0
             };
         }
@@ -299,6 +305,7 @@ namespace NumSharp.Backends.Kernels
             switch (type)
             {
                 case NPTypeCode.Byte: *(byte*)ptr = (byte)value; break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = (sbyte)value; break;
                 case NPTypeCode.Int16: *(short*)ptr = (short)value; break;
                 case NPTypeCode.UInt16: *(ushort*)ptr = (ushort)value; break;
                 case NPTypeCode.Int32: *(int*)ptr = (int)value; break;
@@ -307,9 +314,11 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.UInt64: *(ulong*)ptr = (ulong)value; break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = (decimal)value; break;
                 case NPTypeCode.Char: *(char*)ptr = (char)(int)value; break;
                 case NPTypeCode.Boolean: *(bool*)ptr = value != 0; break;
+                case NPTypeCode.Complex: *(System.Numerics.Complex*)ptr = new System.Numerics.Complex(value, 0); break;
             }
         }
 
@@ -400,6 +409,48 @@ namespace NumSharp.Backends.Kernels
             where TInput : unmanaged
             where TAccum : unmanaged
         {
+            // Special handling for Complex - cannot use double intermediate
+            if (typeof(TAccum) == typeof(System.Numerics.Complex))
+            {
+                var cAccum = (System.Numerics.Complex)(object)accum;
+                var cVal = typeof(TInput) == typeof(System.Numerics.Complex)
+                    ? (System.Numerics.Complex)(object)val
+                    : new System.Numerics.Complex(ConvertToDouble(val), 0);
+
+                var cResult = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => cAccum + cVal,
+                    ReductionOp.Prod => cAccum * cVal,
+                    // NumPy parity: lex ordering on (Real, Imaginary); NaN-first-wins
+                    // propagation (NaN-containing = Re or Im is NaN). Identity picked in
+                    // GetIdentityValueTyped as (+inf,+inf)/(-inf,-inf) so first finite
+                    // value beats it under lex comparison.
+                    ReductionOp.Min => ComplexLexPick(cAccum, cVal, pickGreater: false),
+                    ReductionOp.Max => ComplexLexPick(cAccum, cVal, pickGreater: true),
+                    _ => cAccum
+                };
+                return (TAccum)(object)cResult;
+            }
+
+            // Special handling for Half - use double intermediate for precision
+            if (typeof(TAccum) == typeof(Half))
+            {
+                double hAccum = (double)(Half)(object)accum;
+                double hVal = typeof(TInput) == typeof(Half)
+                    ? (double)(Half)(object)val
+                    : ConvertToDouble(val);
+
+                double hResult = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => hAccum + hVal,
+                    ReductionOp.Prod => hAccum * hVal,
+                    ReductionOp.Min => Math.Min(hAccum, hVal),
+                    ReductionOp.Max => Math.Max(hAccum, hVal),
+                    _ => hAccum
+                };
+                return (TAccum)(object)(Half)hResult;
+            }
+
             // Convert input to double for arithmetic, then to accumulator type
             double dAccum = ConvertToDouble(accum);
             double dVal = ConvertToDouble(val);
@@ -417,10 +468,41 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// NumPy-parity pick for Complex Min/Max: NaN-containing operand (first wins) or
+        /// lex-compared (Real, Imaginary). Shared with CombineScalarsPromoted's Complex path.
+        /// </summary>
+        private static System.Numerics.Complex ComplexLexPick(System.Numerics.Complex a, System.Numerics.Complex b, bool pickGreater)
+        {
+            bool aNaN = double.IsNaN(a.Real) || double.IsNaN(a.Imaginary);
+            if (aNaN) return a;
+            bool bNaN = double.IsNaN(b.Real) || double.IsNaN(b.Imaginary);
+            if (bNaN) return b;
+
+            bool aGreater = a.Real > b.Real || (a.Real == b.Real && a.Imaginary > b.Imaginary);
+            if (pickGreater)
+                return aGreater ? a : b;
+            return aGreater ? b : a;
+        }
+
+        /// <summary>
         /// Divide accumulator by count (for Mean).
         /// </summary>
         private static TAccum DivideByCount<TAccum>(TAccum accum, long count) where TAccum : unmanaged
         {
+            // Special handling for Complex
+            if (typeof(TAccum) == typeof(System.Numerics.Complex))
+            {
+                var cAccum = (System.Numerics.Complex)(object)accum;
+                return (TAccum)(object)(cAccum / count);
+            }
+
+            // Special handling for Half
+            if (typeof(TAccum) == typeof(Half))
+            {
+                double hAccum = (double)(Half)(object)accum;
+                return (TAccum)(object)(Half)(hAccum / count);
+            }
+
             double result = ConvertToDouble(accum) / count;
             return ConvertFromDouble<TAccum>(result);
         }
@@ -431,6 +513,7 @@ namespace NumSharp.Backends.Kernels
         private static double ConvertToDouble<T>(T value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)value;
+            if (typeof(T) == typeof(sbyte)) return (sbyte)(object)value;
             if (typeof(T) == typeof(short)) return (short)(object)value;
             if (typeof(T) == typeof(ushort)) return (ushort)(object)value;
             if (typeof(T) == typeof(int)) return (int)(object)value;
@@ -439,9 +522,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (ulong)(object)value;
             if (typeof(T) == typeof(float)) return (float)(object)value;
             if (typeof(T) == typeof(double)) return (double)(object)value;
+            if (typeof(T) == typeof(Half)) return (double)(Half)(object)value;
             if (typeof(T) == typeof(decimal)) return (double)(decimal)(object)value;
             if (typeof(T) == typeof(char)) return (char)(object)value;
             if (typeof(T) == typeof(bool)) return (bool)(object)value ? 1.0 : 0.0;
+            if (typeof(T) == typeof(System.Numerics.Complex)) return ((System.Numerics.Complex)(object)value).Real;
             return 0.0;
         }
 
@@ -451,6 +536,7 @@ namespace NumSharp.Backends.Kernels
         private static T ConvertFromDouble<T>(double value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (T)(object)(byte)value;
+            if (typeof(T) == typeof(sbyte)) return (T)(object)(sbyte)value;
             if (typeof(T) == typeof(short)) return (T)(object)(short)value;
             if (typeof(T) == typeof(ushort)) return (T)(object)(ushort)value;
             if (typeof(T) == typeof(int)) return (T)(object)(int)value;
@@ -459,9 +545,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (T)(object)(ulong)value;
             if (typeof(T) == typeof(float)) return (T)(object)(float)value;
             if (typeof(T) == typeof(double)) return (T)(object)value;
+            if (typeof(T) == typeof(Half)) return (T)(object)(Half)value;
             if (typeof(T) == typeof(decimal)) return (T)(object)(decimal)value;
             if (typeof(T) == typeof(char)) return (T)(object)(char)(int)value;
             if (typeof(T) == typeof(bool)) return (T)(object)(value != 0);
+            if (typeof(T) == typeof(System.Numerics.Complex)) return (T)(object)new System.Numerics.Complex(value, 0);
             return default;
         }
 
@@ -470,7 +558,38 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static T GetIdentityValueTyped<T>(ReductionOp op) where T : unmanaged
         {
-            double identity = op switch
+            // Special handling for Complex
+            if (typeof(T) == typeof(System.Numerics.Complex))
+            {
+                // Min/Max: use (±inf, ±inf) so any finite lex-compared element displaces
+                // the identity on first combine (matches how double.PositiveInfinity works
+                // for scalar Min above).
+                var identity = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => System.Numerics.Complex.Zero,
+                    ReductionOp.Prod => System.Numerics.Complex.One,
+                    ReductionOp.Min => new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity),
+                    ReductionOp.Max => new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity),
+                    _ => System.Numerics.Complex.Zero
+                };
+                return (T)(object)identity;
+            }
+
+            // Special handling for Half
+            if (typeof(T) == typeof(Half))
+            {
+                var identity = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => Half.Zero,
+                    ReductionOp.Prod => (Half)1.0,
+                    ReductionOp.Min => Half.PositiveInfinity,
+                    ReductionOp.Max => Half.NegativeInfinity,
+                    _ => Half.Zero
+                };
+                return (T)(object)identity;
+            }
+
+            double dIdentity = op switch
             {
                 ReductionOp.Sum or ReductionOp.Mean => 0.0,
                 ReductionOp.Prod => 1.0,
@@ -478,7 +597,7 @@ namespace NumSharp.Backends.Kernels
                 ReductionOp.Max => double.NegativeInfinity,
                 _ => 0.0
             };
-            return ConvertFromDouble<T>(identity);
+            return ConvertFromDouble<T>(dIdentity);
         }
 
         #endregion

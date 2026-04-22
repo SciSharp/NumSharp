@@ -97,6 +97,15 @@ namespace NumSharp
                             addr[i] = (byte)(start_t + i * delta_t);
                         break;
                     }
+                    case NPTypeCode.SByte:
+                    {
+                        var addr = (sbyte*)nd.Unsafe.Address;
+                        sbyte start_t = (sbyte)start;
+                        sbyte delta_t = (sbyte)((sbyte)(start + step) - start_t);
+                        for (long i = 0; i < length; i++)
+                            addr[i] = (sbyte)(start_t + i * delta_t);
+                        break;
+                    }
                     case NPTypeCode.Int16:
                     {
                         var addr = (short*)nd.Unsafe.Address;
@@ -161,6 +170,13 @@ namespace NumSharp
                         break;
                     }
                     // Float types use direct calculation (no integer truncation)
+                    case NPTypeCode.Half:
+                    {
+                        var addr = (Half*)nd.Unsafe.Address;
+                        for (long i = 0; i < length; i++)
+                            addr[i] = (Half)(start + i * step);
+                        break;
+                    }
                     case NPTypeCode.Single:
                     {
                         var addr = (float*)nd.Unsafe.Address;
@@ -180,6 +196,13 @@ namespace NumSharp
                         var addr = (decimal*)nd.Unsafe.Address;
                         for (long i = 0; i < length; i++)
                             addr[i] = (decimal)(start + i * step);
+                        break;
+                    }
+                    case NPTypeCode.Complex:
+                    {
+                        var addr = (System.Numerics.Complex*)nd.Unsafe.Address;
+                        for (long i = 0; i < length; i++)
+                            addr[i] = new System.Numerics.Complex(start + i * step, 0);
                         break;
                     }
                     default:

@@ -969,6 +969,20 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Half comparisons (uses operator methods)
+            if (comparisonType == NPTypeCode.Half)
+            {
+                EmitHalfComparison(il, op);
+                return;
+            }
+
+            // Special handling for Complex comparisons (only == and != supported)
+            if (comparisonType == NPTypeCode.Complex)
+            {
+                EmitComplexComparison(il, op);
+                return;
+            }
+
             bool isUnsigned = IsUnsigned(comparisonType);
             bool isFloat = comparisonType == NPTypeCode.Single || comparisonType == NPTypeCode.Double;
 
@@ -1052,6 +1066,173 @@ namespace NumSharp.Backends.Kernels
             );
 
             il.EmitCall(OpCodes.Call, method!, null);
+        }
+
+        /// <summary>
+        /// Emit Half comparison using operator methods.
+        /// </summary>
+        private static void EmitHalfComparison(ILGenerator il, ComparisonOp op)
+        {
+            // Half has comparison operators that return bool
+            string methodName = op switch
+            {
+                ComparisonOp.Equal => "op_Equality",
+                ComparisonOp.NotEqual => "op_Inequality",
+                ComparisonOp.Less => "op_LessThan",
+                ComparisonOp.LessEqual => "op_LessThanOrEqual",
+                ComparisonOp.Greater => "op_GreaterThan",
+                ComparisonOp.GreaterEqual => "op_GreaterThanOrEqual",
+                _ => throw new NotSupportedException($"Comparison {op} not supported for Half")
+            };
+
+            var method = typeof(Half).GetMethod(
+                methodName,
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(Half), typeof(Half) },
+                null
+            );
+
+            if (method == null)
+                throw new InvalidOperationException($"Half.{methodName} not found");
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit Complex comparison using operator methods or lexicographic ordering.
+        /// NumPy 2.x supports ordered comparisons (&lt;, &gt;, &lt;=, &gt;=) using lexicographic ordering:
+        /// first by real part, then by imaginary part.
+        /// </summary>
+        private static void EmitComplexComparison(ILGenerator il, ComparisonOp op)
+        {
+            // For == and !=, use the built-in operators
+            if (op == ComparisonOp.Equal || op == ComparisonOp.NotEqual)
+            {
+                string methodName = op == ComparisonOp.Equal ? "op_Equality" : "op_Inequality";
+                var method = typeof(System.Numerics.Complex).GetMethod(
+                    methodName,
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) },
+                    null
+                );
+
+                if (method == null)
+                    throw new InvalidOperationException($"Complex.{methodName} not found");
+
+                il.EmitCall(OpCodes.Call, method, null);
+                return;
+            }
+
+            // For ordered comparisons, use lexicographic ordering (NumPy 2.x behavior):
+            //   a vs b  =  first by Real, then by Imaginary.
+            // Stack: [lhs: Complex a, rhs: Complex b]
+            EmitComplexLexCompare(il, op);
+        }
+
+        /// <summary>
+        /// Emit IL for Complex lexicographic ordered comparison. Pseudo-C#:
+        /// <code>
+        ///   if (strict(a.Real, b.Real)) return true;    // Real strictly on the "true" side
+        ///   if (strict(b.Real, a.Real)) return false;   // Real strictly on the "false" side
+        ///   return strict(a.Imag, b.Imag) || (inclusive &amp;&amp; a.Imag == b.Imag);
+        /// </code>
+        /// where <c>strict</c> is &lt; for Less/LessEqual and &gt; for Greater/GreaterEqual,
+        /// and <c>inclusive</c> accepts equality for LessEqual / GreaterEqual.
+        ///
+        /// Stack contract: expects [Complex a, Complex b] (a pushed first, b on top),
+        /// leaves [bool] on top.
+        /// </summary>
+        private static void EmitComplexLexCompare(ILGenerator il, ComparisonOp op)
+        {
+            // Map the 4 ops to the 3 opcode choices that fully parameterize the emit.
+            // realBranchTrue  — branch to "return true" when real parts are strictly on the "true" side
+            //                   (Less/LessEqual: aR < bR → true; Greater/GreaterEqual: aR > bR → true)
+            // realBranchFalse — branch to "return false" when reals are strictly on the reverse side
+            //                   (Less/LessEqual: aR > bR → false; Greater/GreaterEqual: aR < bR → false)
+            // imagStrictCmp   — Clt or Cgt for the final imaginary compare; inclusive adds |Ceq.
+            OpCode realBranchTrue, realBranchFalse, imagStrictCmp;
+            bool inclusive;
+            switch (op)
+            {
+                case ComparisonOp.Less:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = false; break;
+                case ComparisonOp.LessEqual:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = true; break;
+                case ComparisonOp.Greater:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = false; break;
+                case ComparisonOp.GreaterEqual:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = true; break;
+                default:
+                    throw new NotSupportedException($"Comparison {op} not supported for Complex");
+            }
+
+            var locA = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locB = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locAR = il.DeclareLocal(typeof(double));
+            var locBR = il.DeclareLocal(typeof(double));
+            var lblTrue = il.DefineLabel();
+            var lblFalse = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Pop b then a (stack LIFO)
+            il.Emit(OpCodes.Stloc, locB);
+            il.Emit(OpCodes.Stloc, locA);
+
+            // Cache the Real components — they're referenced twice in the real-branch chain.
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locAR);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locBR);
+
+            // B25: NaN short-circuit. NumPy returns False for any ordered comparison when
+            // *any* component of either operand is NaN. Without this guard, aR=NaN would
+            // fall through Blt/Bgt (both false for NaN) into the imag compare which could
+            // return true. Check all four components up front; bail to lblFalse on NaN.
+            il.Emit(OpCodes.Ldloc, locAR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloc, locBR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+
+            // if (strict(aR, bR)) goto lblTrue;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchTrue, lblTrue);
+            // if (reverseStrict(aR, bR)) goto lblFalse;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchFalse, lblFalse);
+
+            // Reals tied — compare imaginaries: strict(aI, bI) [| ceq(aI, bI) if inclusive]
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(imagStrictCmp);
+            if (inclusive)
+            {
+                il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ceq);
+                il.Emit(OpCodes.Or);
+            }
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblTrue);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblFalse);
+            il.Emit(OpCodes.Ldc_I4_0);
+
+            il.MarkLabel(lblEnd);
         }
 
         #endregion
