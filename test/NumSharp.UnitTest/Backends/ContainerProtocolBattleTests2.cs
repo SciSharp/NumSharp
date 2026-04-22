@@ -233,14 +233,12 @@ public class ContainerProtocolBattleTests2
     }
 
     [TestMethod]
-    [Misaligned] // NumPy truncates (2.9 -> 2), NumSharp rounds (2.9 -> 3)
-    public void SetItem_TypePromotion_DoubleToInt_Rounds()
+    public void SetItem_TypePromotion_DoubleToInt_Truncates()
     {
-        // NumPy truncates: arr[1] = 2.9 becomes 2
-        // NumSharp rounds: arr[1] = 2.9 becomes 3
+        // NumPy and NumSharp truncate toward zero: 2.9 -> 2
         var arr = np.array(new[] { 1, 2, 3 });
         arr.__setitem__(1, 2.9);
-        ((int)arr[1]).Should().Be(3); // NumSharp rounds
+        ((int)arr[1]).Should().Be(2, "NumPy truncates toward zero: 2.9 -> 2");
     }
 
     [TestMethod]

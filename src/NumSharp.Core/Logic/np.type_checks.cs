@@ -152,17 +152,20 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.sctype2char.html
         ///
-        /// Character codes:
-        /// 'b' - boolean
-        /// 'B' - unsigned byte
-        /// 'h' - short (int16)
-        /// 'H' - unsigned short
-        /// 'i' or 'l' - int32
-        /// 'I' or 'L' - uint32
+        /// Character codes (NumPy):
+        /// '?' - boolean
+        /// 'b' - int8 (signed byte)
+        /// 'B' - uint8 (unsigned byte)
+        /// 'h' - int16 (short)
+        /// 'H' - uint16 (unsigned short)
+        /// 'i' - int32
+        /// 'I' - uint32
         /// 'q' - int64
         /// 'Q' - uint64
+        /// 'e' - float16 (Half)
         /// 'f' - float32
         /// 'd' - float64
+        /// 'D' - complex128
         /// </remarks>
         /// <example>
         /// <code>
@@ -174,8 +177,9 @@ namespace NumSharp
         {
             return sctype switch
             {
-                NPTypeCode.Boolean => 'b',
+                NPTypeCode.Boolean => '?',
                 NPTypeCode.Byte => 'B',
+                NPTypeCode.SByte => 'b',
                 NPTypeCode.Int16 => 'h',
                 NPTypeCode.UInt16 => 'H',
                 NPTypeCode.Int32 => 'i',
@@ -183,6 +187,7 @@ namespace NumSharp
                 NPTypeCode.Int64 => 'q',
                 NPTypeCode.UInt64 => 'Q',
                 NPTypeCode.Char => 'H',  // Char treated as uint16
+                NPTypeCode.Half => 'e',
                 NPTypeCode.Single => 'f',
                 NPTypeCode.Double => 'd',
                 NPTypeCode.Decimal => 'd',  // Closest approximation

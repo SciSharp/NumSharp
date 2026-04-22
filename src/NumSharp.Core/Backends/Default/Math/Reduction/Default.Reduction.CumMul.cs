@@ -85,6 +85,26 @@ namespace NumSharp.Backends
             var slices = iterAxis.Slices;
             var retType = ret.GetTypeCode;
 
+            // Complex must be accumulated as Complex — using a double iterator drops imaginary.
+            // NumPy: np.cumprod(complex_arr, axis=N) uses complex multiplication along axis.
+            if (inputArr.GetTypeCode == NPTypeCode.Complex && retType == NPTypeCode.Complex)
+            {
+                do
+                {
+                    var inputSlice = inputArr[slices];
+                    var outputSlice = ret[slices];
+                    var iter = inputSlice.AsIterator<System.Numerics.Complex>();
+                    var product = System.Numerics.Complex.One;
+                    long idx = 0;
+                    while (iter.HasNext())
+                    {
+                        product *= iter.MoveNext();
+                        outputSlice.SetAtIndex(product, idx++);
+                    }
+                } while (iterAxis.Next() != null);
+                return ret;
+            }
+
             // Use type-specific iteration based on return type
             do
             {
@@ -160,6 +180,23 @@ namespace NumSharp.Backends
                 return ret;
             }
 
+            // Handle Complex separately - requires Complex accumulator
+            if (arr.GetTypeCode == NPTypeCode.Complex && retType == NPTypeCode.Complex)
+            {
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                var addr = (System.Numerics.Complex*)ret.Address;
+                var moveNext = iter.MoveNext;
+                var hasNext = iter.HasNext;
+                int i = 0;
+                var product = System.Numerics.Complex.One;
+                while (hasNext())
+                {
+                    product *= moveNext();
+                    addr[i++] = product;
+                }
+                return ret;
+            }
+
             // All other types: use double for accumulation, convert at output
             {
                 var iter = arr.AsIterator<double>();
@@ -178,6 +215,16 @@ namespace NumSharp.Backends
                         {
                             product *= moveNext();
                             addr[i++] = (byte)product;
+                        }
+                        break;
+                    }
+                    case NPTypeCode.SByte:
+                    {
+                        var addr = (sbyte*)ret.Address;
+                        while (hasNext())
+                        {
+                            product *= moveNext();
+                            addr[i++] = (sbyte)product;
                         }
                         break;
                     }
@@ -248,6 +295,16 @@ namespace NumSharp.Backends
                         {
                             product *= moveNext();
                             addr[i++] = (float)product;
+                        }
+                        break;
+                    }
+                    case NPTypeCode.Half:
+                    {
+                        var addr = (Half*)ret.Address;
+                        while (hasNext())
+                        {
+                            product *= moveNext();
+                            addr[i++] = (Half)product;
                         }
                         break;
                     }

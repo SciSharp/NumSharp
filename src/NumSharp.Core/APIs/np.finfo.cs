@@ -87,10 +87,30 @@ namespace NumSharp
             if (!IsFloatType(typeCode))
                 throw new ArgumentException($"data type '{typeCode.AsNumpyDtypeName()}' not inexact", nameof(typeCode));
 
-            dtype = typeCode;
+            // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
+            // The finfo represents the precision of the underlying real component, so
+            // we report float64's machine limits with dtype set to the real type.
+            // System.Numerics.Complex is 2 × float64 → underlying dtype is Double.
+            dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
 
             switch (typeCode)
             {
+                case NPTypeCode.Half:
+                    // IEEE 754 binary16: 1 sign + 5 exponent + 10 mantissa bits.
+                    bits = 16;
+                    eps = 0.0009765625;              // 2^-10
+                    epsneg = 0.00048828125;          // 2^-11
+                    max = (double)Half.MaxValue;      // 65504
+                    min = (double)Half.MinValue;      // -65504
+                    smallest_normal = 6.103515625e-05; // 2^-14
+                    smallest_subnormal = 5.960464477539063e-08; // 2^-24 (= (double)Half.Epsilon)
+                    tiny = smallest_normal;
+                    precision = 3;                    // decimal digits of precision
+                    resolution = 1e-3;                // 10^-precision
+                    maxexp = 16;                      // bias+1 = 2^15*(2-eps) = MaxValue
+                    minexp = -14;                     // 2^-14 = smallest normal
+                    break;
+
                 case NPTypeCode.Single:
                     bits = 32;
                     // float.Epsilon is the smallest subnormal
@@ -110,6 +130,7 @@ namespace NumSharp
                     break;
 
                 case NPTypeCode.Double:
+                case NPTypeCode.Complex:  // NumPy: finfo(complex128) reports float64 values
                     bits = 64;
                     eps = Math.BitIncrement(1.0) - 1.0;  // ~2.22e-16
                     epsneg = 1.0 - Math.BitDecrement(1.0);
@@ -165,8 +186,10 @@ namespace NumSharp
         {
             return typeCode switch
             {
+                NPTypeCode.Half => true,
                 NPTypeCode.Single => true,
                 NPTypeCode.Double => true,
+                NPTypeCode.Complex => true, // reports underlying float precision
                 NPTypeCode.Decimal => true,  // Partial support - no subnormals
                 _ => false
             };

@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Security;
 using System.Threading;
@@ -72,41 +73,42 @@ namespace NumSharp.Utilities
             }
 
 
-            // This line is invalid for things like Enums that return a TypeCode
-            // of Int32, but the object can't actually be cast to an Int32.
-            //            if (v.GetTypeCode() == typeCode) return value;
+            // Route numeric/bool/char conversions through the NumPy-aware object dispatchers
+            // (Converts.ToXxx) so Half/Complex/char sources work and truncation/wrap/NaN match NumPy.
+            // Raw IConvertible is preserved only for DateTime (not a NumPy dtype).
             switch (typeCode)
             {
                 case TypeCode.Boolean:
-                    return ((IConvertible)value).ToBoolean(provider);
+                    return Converts.ToBoolean(value);
                 case TypeCode.Char:
-                    return ((IConvertible)value).ToChar(provider);
+                    return Converts.ToChar(value);
                 case TypeCode.SByte:
-                    return ((IConvertible)value).ToSByte(provider);
+                    return Converts.ToSByte(value);
                 case TypeCode.Byte:
-                    return ((IConvertible)value).ToByte(provider);
+                    return Converts.ToByte(value);
                 case TypeCode.Int16:
-                    return ((IConvertible)value).ToInt16(provider);
+                    return Converts.ToInt16(value);
                 case TypeCode.UInt16:
-                    return ((IConvertible)value).ToUInt16(provider);
+                    return Converts.ToUInt16(value);
                 case TypeCode.Int32:
-                    return ((IConvertible)value).ToInt32(provider);
+                    return Converts.ToInt32(value);
                 case TypeCode.UInt32:
-                    return ((IConvertible)value).ToUInt32(provider);
+                    return Converts.ToUInt32(value);
                 case TypeCode.Int64:
-                    return ((IConvertible)value).ToInt64(provider);
+                    return Converts.ToInt64(value);
                 case TypeCode.UInt64:
-                    return ((IConvertible)value).ToUInt64(provider);
+                    return Converts.ToUInt64(value);
                 case TypeCode.Single:
-                    return ((IConvertible)value).ToSingle(provider);
+                    return Converts.ToSingle(value);
                 case TypeCode.Double:
-                    return ((IConvertible)value).ToDouble(provider);
+                    return Converts.ToDouble(value);
                 case TypeCode.Decimal:
-                    return ((IConvertible)value).ToDecimal(provider);
+                    return Converts.ToDecimal(value);
                 case TypeCode.DateTime:
-                    return ((IConvertible)value).ToDateTime(provider);
+                    return ToDateTime(value, provider);
                 case TypeCode.String:
-                    return ((IConvertible)value).ToString(provider);
+                    // Half/Complex don't implement IConvertible; IFormattable covers every supported type.
+                    return value is IFormattable f ? f.ToString(null, provider) : value.ToString();
                 case TypeCode.Object:
                     return value;
                 case TypeCode.DBNull:
@@ -122,13 +124,35 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value)
         {
-            return value != null && ((IConvertible)value).ToBoolean(null);
+            if (value == null) return false;
+            return value switch
+            {
+                bool b => b,
+                double d => ToBoolean(d),
+                float f => ToBoolean(f),
+                Half h => ToBoolean(h),
+                Complex c => ToBoolean(c),
+                decimal m => ToBoolean(m),
+                long l => ToBoolean(l),
+                ulong ul => ToBoolean(ul),
+                int i => ToBoolean(i),
+                uint u => ToBoolean(u),
+                short s => ToBoolean(s),
+                ushort us => ToBoolean(us),
+                sbyte sb => ToBoolean(sb),
+                byte by => ToBoolean(by),
+                char ch => ToBoolean(ch),
+                DateTime64 d64 => ToBoolean(d64),
+                DateTime dt => ToBoolean(dt),
+                TimeSpan ts => ToBoolean(ts),
+                _ => ((IConvertible)value).ToBoolean(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value, IFormatProvider provider)
         {
-            return value != null && ((IConvertible)value).ToBoolean(provider);
+            return ToBoolean(value);
         }
 
 
@@ -145,12 +169,11 @@ namespace NumSharp.Utilities
             return value != 0;
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(char value)
         {
-            return ((IConvertible)value).ToBoolean(null);
+            // Char is a 16-bit unsigned integer in NumSharp; treat like ushort.
+            return value != (char)0;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -234,13 +257,35 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public static bool ToBoolean(DateTime value)
+        public static bool ToBoolean(Half value)
         {
-            return ((IConvertible)value).ToBoolean(null);
+            return value != (Half)0;
         }
 
-        // Disallowed conversions to Boolean
-        // [MethodImpl(OptimizeAndInline)] public static bool ToBoolean(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(System.Numerics.Complex value)
+        {
+            return value != System.Numerics.Complex.Zero;
+        }
+
+        // DateTime/TimeSpan are not NumPy dtypes, but we provide conversions mirroring
+        // NumPy's datetime64/timedelta64 semantics: both are stored as int64 (Ticks).
+        // bool(dt/ts) = (Ticks != 0) mirrors NumPy's bool(datetime64/timedelta64).
+        // NaT equivalents: TimeSpan.MinValue (Ticks == long.MinValue, exact parity);
+        // DateTime.MinValue (Ticks == 0) for overflows/NaN where .NET DateTime cannot
+        // represent the full int64 range.
+
+        [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(DateTime value)
+        {
+            return value.Ticks != 0L;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(TimeSpan value)
+        {
+            return value.Ticks != 0L;
+        }
 
         // Conversions to Char
 
@@ -248,19 +293,42 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value)
         {
-            return value == null ? (char)0 : ((IConvertible)value).ToChar(null);
+            if (value == null) return (char)0;
+            return value switch
+            {
+                char c => c,
+                byte b => (char)b,
+                sbyte sb => unchecked((char)sb),
+                short s => unchecked((char)s),
+                ushort us => (char)us,
+                int i => unchecked((char)i),
+                uint u => unchecked((char)u),
+                long l => unchecked((char)l),
+                ulong ul => unchecked((char)ul),
+                float f => ToChar(f),
+                double d => ToChar(d),
+                Half h => ToChar(h),
+                Complex cx => ToChar(cx),
+                decimal m => ToChar(m),
+                bool bo => ToChar(bo),
+                DateTime64 d64 => ToChar(d64),
+                DateTime dt => ToChar(dt),
+                TimeSpan tsv => ToChar(tsv),
+                _ => ((IConvertible)value).ToChar(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value, IFormatProvider provider)
         {
-            return value == null ? (char)0 : ((IConvertible)value).ToChar(provider);
+            return ToChar(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(bool value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // NumPy bool -> integer: true=1, false=0
+            return value ? (char)1 : (char)0;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -273,9 +341,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -287,9 +353,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
@@ -302,35 +366,27 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(int value)
         {
-            if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(uint value)
         {
-            if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(long value)
         {
-            if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(ulong value)
         {
-            if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
-            Contract.EndContractBlock();
-            return (char)value;
+            return unchecked((char)value);
         }
 
         //
@@ -356,39 +412,65 @@ namespace NumSharp.Utilities
             return value[0];
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(float value)
         {
-            return ((IConvertible)value).ToChar(null);
+            return ToChar((double)value);
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(double value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap, while values outside int32 range collapse to int.MinValue whose low 16
+            // bits are 0 (NumPy's NaT-propagation convention for small ints). char is a
+            // 16-bit unsigned integer in NumSharp, so wrap to ushort then reinterpret as char.
+            return unchecked((char)(ushort)ToInt32(value));
         }
 
-        // To be consistent with IConvertible in the base data types else we get different semantics
-        // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(decimal value)
         {
-            return ((IConvertible)value).ToChar(null);
+            // Truncate toward zero, wrap via int32 intermediate (matches NumPy uint16 pattern)
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return (char)0;
+            }
+            return unchecked((char)(ushort)(int)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for small integer types (char is 16-bit unsigned)
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return (char)0;
+            }
+            // Half always fits in int32; truncate toward zero then wrap to char (ushort)
+            return unchecked((char)(ushort)(int)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(System.Numerics.Complex value)
+        {
+            // NumPy: complex -> integer takes real part only
+            return ToChar(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static char ToChar(DateTime value)
         {
-            return ((IConvertible)value).ToChar(null);
+            return ToChar(value.Ticks);
         }
 
-
-        // Disallowed conversions to Char
-        // [MethodImpl(OptimizeAndInline)] public static char ToChar(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(TimeSpan value)
+        {
+            return ToChar(value.Ticks);
+        }
 
         // Conversions to SByte
 
@@ -396,14 +478,36 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value)
         {
-            return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                sbyte sb => sb,
+                byte b => unchecked((sbyte)b),
+                short s => unchecked((sbyte)s),
+                ushort us => unchecked((sbyte)us),
+                int i => unchecked((sbyte)i),
+                uint u => unchecked((sbyte)u),
+                long l => unchecked((sbyte)l),
+                ulong ul => unchecked((sbyte)ul),
+                float f => ToSByte(f),
+                double d => ToSByte(d),
+                Half h => ToSByte(h),
+                Complex cx => ToSByte(cx),  // NumPy: discard imaginary
+                decimal m => ToSByte(m),
+                bool bo => bo ? (sbyte)1 : (sbyte)0,
+                char c => unchecked((sbyte)c),
+                DateTime64 d64 => ToSByte(d64),
+                DateTime dt => ToSByte(dt),
+                TimeSpan ts => ToSByte(ts),
+                _ => ((IConvertible)value).ToSByte(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value, IFormatProvider provider)
         {
-            return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(provider);
+            return ToSByte(value);
         }
 
 
@@ -424,72 +528,57 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(char value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(byte value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(short value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ushort value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(int value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(uint value)
         {
-            if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(long value)
         {
-            if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ulong value)
         {
-            if (value > (ulong)sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
-            Contract.EndContractBlock();
-            return (sbyte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((sbyte)value);
         }
 
 
@@ -499,19 +588,45 @@ namespace NumSharp.Utilities
             return ToSByte((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(double value)
         {
-            return ToSByte(ToInt32(value));
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> -1), while values outside int32 range collapse to int.MinValue whose
+            // low byte is 0 (NumPy's NaT-propagation convention for small ints).
+            return unchecked((sbyte)ToInt32(value));
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToSByte(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Decimal values outside int32 range return 0 (matches float->int8 NaN/overflow pattern).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((sbyte)(int)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for int8
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((sbyte)(int)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(System.Numerics.Complex value)
+        {
+            return ToSByte(value.Real);
         }
 
 
@@ -534,24 +649,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(DateTime value)
         {
-            return ((IConvertible)value).ToSByte(null);
+            return unchecked((sbyte)value.Ticks);
         }
 
-        // Disallowed conversions to SByte
-        // [MethodImpl(OptimizeAndInline)] public static sbyte ToSByte(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(TimeSpan value)
+        {
+            return unchecked((sbyte)value.Ticks);
+        }
 
         // Conversions to Byte
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value)
         {
-            return value == null ? (byte)0 : ((IConvertible)value).ToByte(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                byte b => b,
+                sbyte sb => unchecked((byte)sb),
+                short s => unchecked((byte)s),
+                ushort us => unchecked((byte)us),
+                int i => unchecked((byte)i),
+                uint u => unchecked((byte)u),
+                long l => unchecked((byte)l),
+                ulong ul => unchecked((byte)ul),
+                float f => ToByte(f),
+                double d => ToByte(d),
+                Half h => ToByte(h),
+                Complex c => ToByte(c),  // NumPy: discard imaginary
+                decimal m => ToByte(m),
+                bool bo => bo ? (byte)1 : (byte)0,
+                char c => unchecked((byte)c),
+                DateTime64 d64 => ToByte(d64),
+                DateTime dt => ToByte(dt),
+                TimeSpan ts => ToByte(ts),
+                _ => ((IConvertible)value).ToByte(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value, IFormatProvider provider)
         {
-            return value == null ? (byte)0 : ((IConvertible)value).ToByte(provider);
+            return ToByte(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -569,69 +709,57 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(char value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(sbyte value)
         {
-            if (value < byte.MinValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(short value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ushort value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(int value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(uint value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(long value)
         {
-            if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ulong value)
         {
-            if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
-            Contract.EndContractBlock();
-            return (byte)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((byte)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -643,14 +771,42 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
-            return ToByte(ToInt32(value));
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> 255), while values outside int32 range collapse to int.MinValue whose
+            // low byte is 0 (NumPy's NaT-propagation convention for small ints).
+            return unchecked((byte)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToByte(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Negative values wrap (e.g. -1m -> 255). Values outside int32 range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((byte)(int)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for uint8
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((byte)(int)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(System.Numerics.Complex value)
+        {
+            return ToByte(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -672,25 +828,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(DateTime value)
         {
-            return ((IConvertible)value).ToByte(null);
+            return unchecked((byte)value.Ticks);
         }
 
-
-        // Disallowed conversions to Byte
-        // [MethodImpl(OptimizeAndInline)] public static byte ToByte(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(TimeSpan value)
+        {
+            return unchecked((byte)value.Ticks);
+        }
 
         // Conversions to Int16
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value)
         {
-            return value == null ? (short)0 : ((IConvertible)value).ToInt16(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                short s => s,
+                ushort us => unchecked((short)us),
+                int i => unchecked((short)i),
+                uint u => unchecked((short)u),
+                long l => unchecked((short)l),
+                ulong ul => unchecked((short)ul),
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt16(f),
+                double d => ToInt16(d),
+                Half h => ToInt16(h),
+                Complex cx => ToInt16(cx),  // NumPy: discard imaginary
+                decimal m => ToInt16(m),
+                bool bo => bo ? (short)1 : (short)0,
+                char c => unchecked((short)c),
+                DateTime64 d64 => ToInt16(d64),
+                DateTime dt => ToInt16(dt),
+                TimeSpan ts => ToInt16(ts),
+                _ => ((IConvertible)value).ToInt16(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value, IFormatProvider provider)
         {
-            return value == null ? (short)0 : ((IConvertible)value).ToInt16(provider);
+            return ToInt16(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -702,9 +882,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(char value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            return unchecked((short)value);
         }
 
 
@@ -724,26 +902,22 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ushort value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(int value)
         {
-            if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(uint value)
         {
-            if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -755,18 +929,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(long value)
         {
-            if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ulong value)
         {
-            if (value > (ulong)short.MaxValue) throw new OverflowException(("Overflow_Int16"));
-            Contract.EndContractBlock();
-            return (short)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((short)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -778,14 +949,41 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
-            return ToInt16(ToInt32(value));
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> -1), while values outside int32 range collapse to int.MinValue whose
+            // low 16 bits are 0 (NumPy's NaT-propagation convention for small ints).
+            return unchecked((short)ToInt32(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToInt16(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((short)(int)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for int16
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((short)(int)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(System.Numerics.Complex value)
+        {
+            return ToInt16(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -807,12 +1005,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(DateTime value)
         {
-            return ((IConvertible)value).ToInt16(null);
+            return unchecked((short)value.Ticks);
         }
 
-
-        // Disallowed conversions to Int16
-        // [MethodImpl(OptimizeAndInline)] public static short ToInt16(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(TimeSpan value)
+        {
+            return unchecked((short)value.Ticks);
+        }
 
         // Conversions to UInt16
 
@@ -820,13 +1020,35 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value)
         {
-            return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                ushort us => us,
+                short s => unchecked((ushort)s),
+                int i => unchecked((ushort)i),
+                uint u => unchecked((ushort)u),
+                long l => unchecked((ushort)l),
+                ulong ul => unchecked((ushort)ul),
+                sbyte sb => unchecked((ushort)sb),
+                byte b => b,
+                float f => ToUInt16(f),
+                double d => ToUInt16(d),
+                Half h => ToUInt16(h),
+                Complex cx => ToUInt16(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt16(m),
+                bool bo => bo ? (ushort)1 : (ushort)0,
+                char c => c,
+                DateTime64 d64 => ToUInt16(d64),
+                DateTime dt => ToUInt16(dt),
+                TimeSpan ts => ToUInt16(ts),
+                _ => ((IConvertible)value).ToUInt16(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value, IFormatProvider provider)
         {
-            return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(provider);
+            return ToUInt16(value);
         }
 
 
@@ -847,9 +1069,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            return unchecked((ushort)value);
         }
 
 
@@ -863,20 +1083,16 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(int value)
         {
-            if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ushort value)
@@ -884,31 +1100,25 @@ namespace NumSharp.Utilities
             return value;
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(uint value)
         {
-            if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(long value)
         {
-            if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ulong value)
         {
-            if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
-            Contract.EndContractBlock();
-            return (ushort)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((ushort)value);
         }
 
 
@@ -918,19 +1128,45 @@ namespace NumSharp.Utilities
             return ToUInt16((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
-            return ToUInt16(ToInt32(value));
+            // NumPy uses int32 as intermediate for small int types. Route through ToInt32 so
+            // fractional values inside int32 range (e.g. 2147483647.4) correctly truncate and
+            // wrap (-> 65535), while values outside int32 range collapse to int.MinValue whose
+            // low 16 bits are 0 (NumPy's NaT-propagation convention for small ints).
+            return unchecked((ushort)ToInt32(value));
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt16(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int32 intermediate.
+            // Negative values wrap (e.g. -1m -> 65535).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((ushort)(int)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for uint16
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
+            // NumPy uses int32 as intermediate - Half always fits in int32
+            return unchecked((ushort)(int)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(System.Numerics.Complex value)
+        {
+            return ToUInt16(value.Real);
         }
 
 
@@ -955,24 +1191,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(DateTime value)
         {
-            return ((IConvertible)value).ToUInt16(null);
+            return unchecked((ushort)value.Ticks);
         }
 
-        // Disallowed conversions to UInt16
-        // [MethodImpl(OptimizeAndInline)] public static ushort ToUInt16(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(TimeSpan value)
+        {
+            return unchecked((ushort)value.Ticks);
+        }
 
         // Conversions to Int32
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt32(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                int i => i,
+                uint u => unchecked((int)u),
+                long l => unchecked((int)l),
+                ulong ul => unchecked((int)ul),
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt32(f),
+                double d => ToInt32(d),
+                Half h => ToInt32(h),
+                Complex c => ToInt32(c),  // NumPy: discard imaginary
+                decimal m => ToInt32(m),
+                bool bo => bo ? 1 : 0,
+                char c => c,
+                DateTime64 d64 => ToInt32(d64),
+                DateTime dt => ToInt32(dt),
+                TimeSpan ts => ToInt32(ts),
+                _ => ((IConvertible)value).ToInt32(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt32(provider);
+            return ToInt32(value);
         }
 
 
@@ -1018,9 +1279,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(uint value)
         {
-            if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            return unchecked((int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1032,18 +1291,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(long value)
         {
-            if (value < int.MinValue || value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((int)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(ulong value)
         {
-            if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
-            Contract.EndContractBlock();
-            return (int)value;
+            // NumPy: integer-to-integer uses wrapping (modulo arithmetic)
+            return unchecked((int)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1055,22 +1311,45 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            // This matches np.astype(int) behavior: np.array([1.7, -1.7]).astype(int) -> [1, -1]
-            if (value >= int.MinValue && value <= int.MaxValue)
-            {
-                return (int)value;  // C# cast truncates toward zero
-            }
-
-            throw new OverflowException(("Overflow_Int32"));
+            // NumPy: truncate toward zero FIRST, then overflow-check the truncated integer.
+            // NaN/Inf/overflow -> int32.MinValue. Comparing `value > int.MaxValue` directly
+            // breaks for fractional values like 2147483647.4 which NumPy truncates to
+            // 2147483647 (in-range), but the naive comparison rejects as overflow.
+            if (double.IsNaN(value) || double.IsInfinity(value)) return int.MinValue;
+            double t = Math.Truncate(value);
+            if (t < int.MinValue || t > int.MaxValue) return int.MinValue;
+            return (int)t;
         }
 
         [System.Security.SecuritySafeCritical] // auto-generated
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(decimal value)
         {
-            // NumPy uses truncation toward zero for decimal->int conversion
-            return decimal.ToInt32(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Values outside int32 range -> int32.MinValue
+            // (matches NumPy float->int32 overflow behavior).
+            var truncated = decimal.Truncate(value);
+            if (truncated < int.MinValue || truncated > int.MaxValue)
+            {
+                return int.MinValue;
+            }
+            return (int)truncated;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(Half value)
+        {
+            // NumPy behavior: special values -> int.MinValue for int32
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return int.MinValue;
+            }
+            return (int)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(System.Numerics.Complex value)
+        {
+            return ToInt32(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1092,12 +1371,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(DateTime value)
         {
-            return ((IConvertible)value).ToInt32(null);
+            return unchecked((int)value.Ticks);
         }
 
-
-        // Disallowed conversions to Int32
-        // [MethodImpl(OptimizeAndInline)] public static int ToInt32(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(TimeSpan value)
+        {
+            return unchecked((int)value.Ticks);
+        }
 
         // Conversions to UInt32
 
@@ -1105,14 +1386,37 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt32(null);
+            if (value == null) return 0;
+            // Type dispatch for NumPy-compatible unchecked wrapping
+            return value switch
+            {
+                uint u => u,
+                int i => unchecked((uint)i),
+                long l => unchecked((uint)l),
+                ulong ul => unchecked((uint)ul),
+                short s => unchecked((uint)s),
+                ushort us => us,
+                sbyte sb => unchecked((uint)sb),
+                byte b => b,
+                float f => ToUInt32(f),
+                double d => ToUInt32(d),
+                Half h => ToUInt32(h),
+                Complex cx => ToUInt32(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt32(m),
+                bool bo => bo ? 1u : 0u,
+                char c => c,
+                DateTime64 d64 => ToUInt32(d64),
+                DateTime dt => ToUInt32(dt),
+                TimeSpan ts => ToUInt32(ts),
+                _ => ((IConvertible)value).ToUInt32(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt32(provider);
+            return ToUInt32(value);
         }
 
 
@@ -1133,9 +1437,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1149,9 +1451,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1165,9 +1465,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(int value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1181,18 +1479,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(long value)
         {
-            if (value < 0 || value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(ulong value)
         {
-            if (value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
-            Contract.EndContractBlock();
-            return (uint)value;
+            return unchecked((uint)value);
         }
 
 
@@ -1202,25 +1496,54 @@ namespace NumSharp.Utilities
             return ToUInt32((double)value);
         }
 
-
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            if (value >= 0 && value <= uint.MaxValue)
+            // NumPy behavior: NaN/Inf -> 0 for uint32
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                return (uint)value;  // C# cast truncates toward zero
+                return 0;
             }
-
-            throw new OverflowException(("Overflow_UInt32"));
+            // Out-of-int64-range values: NumPy's int64 overflow returns int64.MinValue,
+            // and unchecked((uint)int64.MinValue) == 0. Use exclusive upper bound 2^63
+            // (since (double)long.MaxValue rounds to 2^63 and is itself overflow).
+            if (value < (double)long.MinValue || value >= 9223372036854775808.0)
+            {
+                return 0;
+            }
+            // NumPy: truncate toward zero, then wrap modularly to uint
+            return unchecked((uint)(long)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt32(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Negative values wrap via int64 intermediate.
+            // Values outside int64 range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+            {
+                return 0;
+            }
+            return unchecked((uint)(long)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 0 for uint32
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0;
+            }
+            // NumPy: truncate toward zero, then wrap modularly
+            return unchecked((uint)(long)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(System.Numerics.Complex value)
+        {
+            return ToUInt32(value.Real);
         }
 
 
@@ -1245,24 +1568,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(DateTime value)
         {
-            return ((IConvertible)value).ToUInt32(null);
+            return unchecked((uint)value.Ticks);
         }
 
-        // Disallowed conversions to UInt32
-        // [MethodImpl(OptimizeAndInline)] public static uint ToUInt32(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(TimeSpan value)
+        {
+            return unchecked((uint)value.Ticks);
+        }
 
         // Conversions to Int64
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt64(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                long l => l,
+                ulong ul => unchecked((long)ul),
+                int i => i,
+                uint u => u,
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                float f => ToInt64(f),
+                double d => ToInt64(d),
+                Half h => ToInt64(h),
+                Complex cx => ToInt64(cx),  // NumPy: discard imaginary
+                decimal m => ToInt64(m),
+                bool bo => bo ? 1L : 0L,
+                char c => c,
+                DateTime64 d64 => ToInt64(d64),
+                DateTime dt => ToInt64(dt),
+                TimeSpan ts => ToInt64(ts),
+                _ => ((IConvertible)value).ToInt64(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToInt64(provider);
+            return ToInt64(value);
         }
 
 
@@ -1321,9 +1669,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(ulong value)
         {
-            if (value > long.MaxValue) throw new OverflowException(("Overflow_Int64"));
-            Contract.EndContractBlock();
-            return (long)value;
+            return unchecked((long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1342,15 +1688,47 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            return checked((long)value);
+            // NumPy behavior: truncation toward zero for normal values
+            // For special values (inf, -inf, nan, overflow): returns long.MinValue
+            // NOTE: `value > long.MaxValue` isn't safe — (double)long.MaxValue rounds UP
+            // to 2^63 (same bit pattern as (double)(long.MaxValue+1)) so the check misses
+            // values that NumPy treats as overflow. Use exclusive upper bound at 2^63.
+            if (double.IsNaN(value) || double.IsInfinity(value)
+                || value < (double)long.MinValue
+                || value >= 9223372036854775808.0)   // 2^63, smallest double > long.MaxValue
+            {
+                return long.MinValue;  // NumPy returns int64.min for all special/overflow cases
+            }
+            return (long)value;  // C# cast truncates toward zero
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToInt64(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero. Values outside int64 range -> int64.MinValue.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+            {
+                return long.MinValue;
+            }
+            return (long)truncated;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(Half value)
+        {
+            // NumPy behavior: special values -> long.MinValue
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return long.MinValue;
+            }
+            return (long)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(System.Numerics.Complex value)
+        {
+            return ToInt64(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1372,11 +1750,14 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(DateTime value)
         {
-            return ((IConvertible)value).ToInt64(null);
+            return value.Ticks;
         }
 
-        // Disallowed conversions to Int64
-        // [MethodImpl(OptimizeAndInline)] public static long ToInt64(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(TimeSpan value)
+        {
+            return value.Ticks;
+        }
 
         // Conversions to UInt64
 
@@ -1384,14 +1765,36 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt64(null);
+            if (value == null) return 0;
+            return value switch
+            {
+                ulong ul => ul,
+                long l => unchecked((ulong)l),
+                uint u => u,
+                int i => unchecked((ulong)i),
+                ushort us => us,
+                short s => unchecked((ulong)s),
+                byte b => b,
+                sbyte sb => unchecked((ulong)sb),
+                float f => ToUInt64(f),
+                double d => ToUInt64(d),
+                Half h => ToUInt64(h),
+                Complex cx => ToUInt64(cx),  // NumPy: discard imaginary
+                decimal m => ToUInt64(m),
+                bool bo => bo ? 1UL : 0UL,
+                char c => c,
+                DateTime64 d64 => ToUInt64(d64),
+                DateTime dt => ToUInt64(dt),
+                TimeSpan ts => ToUInt64(ts),
+                _ => ((IConvertible)value).ToUInt64(null)
+            };
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToUInt64(provider);
+            return ToUInt64(value);
         }
 
 
@@ -1412,9 +1815,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(sbyte value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1428,9 +1829,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(short value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1444,9 +1843,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(int value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1460,9 +1857,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(long value)
         {
-            if (value < 0) throw new OverflowException(("Overflow_UInt64"));
-            Contract.EndContractBlock();
-            return (ulong)value;
+            return unchecked((ulong)value);
         }
 
 
@@ -1479,20 +1874,77 @@ namespace NumSharp.Utilities
             return ToUInt64((double)value);
         }
 
+        // NumPy special value for uint64 overflow: 2^63 = 9223372036854775808
+        private const ulong NumPyUInt64Overflow = 9223372036854775808UL;
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(double value)
         {
-            // NumPy uses truncation toward zero for float->int conversion
-            return checked((ulong)value);
+            // NumPy behavior: NaN/Inf -> 2^63 for uint64
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return NumPyUInt64Overflow;
+            }
+            // Precision note: (double)long.MaxValue rounds to 2^63 (out of long range);
+            // (double)ulong.MaxValue rounds to 2^64 (out of ulong range). Both bounds must
+            // be exclusive or NumPy parity breaks.
+            //   value < -2^63               -> overflow (NaT sentinel)
+            //   value in [-2^63, 2^63)      -> cast via signed long, unchecked wrap
+            //   value in [2^63, 2^64)       -> direct ulong cast (upper half)
+            //   value >= 2^64               -> overflow (NaT sentinel)
+            const double twoPow63 = 9223372036854775808.0;           // 2^63  (= NaT / overflow marker)
+            const double twoPow64 = 18446744073709551616.0;           // 2^64  (= (double)ulong.MaxValue after rounding)
+            if (value < (double)long.MinValue || value >= twoPow64)
+            {
+                return NumPyUInt64Overflow;
+            }
+            if (value >= twoPow63)
+            {
+                return (ulong)value;
+            }
+            // NumPy: truncate toward zero, then wrap modularly to ulong.
+            // For -1.0: truncate to -1, wrap to 2^64-1. For -3.7: truncate to -3, wrap to 2^64-3.
+            return unchecked((ulong)(long)value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(decimal value)
         {
-            // NumPy uses truncation toward zero
-            return decimal.ToUInt64(decimal.Truncate(value));
+            // NumPy parity: truncate toward zero, wrap via int64 intermediate for negatives.
+            // Positive values within ulong range convert directly. Values outside range return 0.
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue)
+            {
+                return 0;
+            }
+            if (truncated < 0m)
+            {
+                return unchecked((ulong)(long)truncated);
+            }
+            if (truncated > (decimal)ulong.MaxValue)
+            {
+                return 0;
+            }
+            return (ulong)truncated;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(Half value)
+        {
+            // NumPy behavior: NaN/Inf -> 2^63 for uint64
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return NumPyUInt64Overflow;
+            }
+            // NumPy: truncate toward zero, then wrap modularly
+            // Half range is small enough to always fit in long
+            return unchecked((ulong)(long)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(System.Numerics.Complex value)
+        {
+            return ToUInt64(value.Real);
         }
 
 
@@ -1517,24 +1969,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(DateTime value)
         {
-            return ((IConvertible)value).ToUInt64(null);
+            return unchecked((ulong)value.Ticks);
         }
 
-        // Disallowed conversions to UInt64
-        // [MethodImpl(OptimizeAndInline)] public static ulong ToUInt64(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(TimeSpan value)
+        {
+            return unchecked((ulong)value.Ticks);
+        }
 
         // Conversions to Single
 
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToSingle(null);
+            if (value == null) return 0f;
+            return value switch
+            {
+                float f => f,
+                double d => ToSingle(d),
+                Half h => ToSingle(h),
+                Complex c => ToSingle(c),
+                decimal m => ToSingle(m),
+                long l => ToSingle(l),
+                ulong ul => ToSingle(ul),
+                int i => ToSingle(i),
+                uint u => ToSingle(u),
+                short s => ToSingle(s),
+                ushort us => ToSingle(us),
+                sbyte sb => ToSingle(sb),
+                byte by => ToSingle(by),
+                char ch => ToSingle(ch),
+                bool bo => bo ? 1f : 0f,
+                DateTime64 d64 => ToSingle(d64),
+                DateTime dt => ToSingle(dt),
+                TimeSpan ts => ToSingle(ts),
+                _ => ((IConvertible)value).ToSingle(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToSingle(provider);
+            return ToSingle(value);
         }
 
 
@@ -1553,7 +2030,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(char value)
         {
-            return ((IConvertible)value).ToSingle(null);
+            return (float)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1614,6 +2091,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(Half value)
+        {
+            return (float)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(System.Numerics.Complex value)
+        {
+            return (float)value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(string value)
         {
             if (value == null)
@@ -1639,24 +2128,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(DateTime value)
         {
-            return ((IConvertible)value).ToSingle(null);
+            return (float)value.Ticks;
         }
 
-        // Disallowed conversions to Single
-        // [MethodImpl(OptimizeAndInline)] public static float ToSingle(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(TimeSpan value)
+        {
+            return (float)value.Ticks;
+        }
 
         // Conversions to Double
 
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDouble(null);
+            if (value == null) return 0d;
+            return value switch
+            {
+                double d => d,
+                float f => ToDouble(f),
+                Half h => ToDouble(h),
+                Complex c => c.Real, // NumPy: discard imaginary
+                decimal m => ToDouble(m),
+                long l => ToDouble(l),
+                ulong ul => ToDouble(ul),
+                int i => ToDouble(i),
+                uint u => ToDouble(u),
+                short s => ToDouble(s),
+                ushort us => ToDouble(us),
+                sbyte sb => ToDouble(sb),
+                byte by => ToDouble(by),
+                char ch => ToDouble(ch),
+                bool bo => bo ? 1d : 0d,
+                DateTime64 d64 => ToDouble(d64),
+                DateTime dt => ToDouble(dt),
+                TimeSpan ts => ToDouble(ts),
+                _ => ((IConvertible)value).ToDouble(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDouble(provider);
+            return ToDouble(value);
         }
 
 
@@ -1681,7 +2195,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(char value)
         {
-            return ((IConvertible)value).ToDouble(null);
+            return (double)value;
         }
 
 
@@ -1736,6 +2250,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(Half value)
+        {
+            return (double)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(System.Numerics.Complex value)
+        {
+            return value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(string value)
         {
             if (value == null)
@@ -1760,24 +2286,49 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(DateTime value)
         {
-            return ((IConvertible)value).ToDouble(null);
+            return (double)value.Ticks;
         }
 
-        // Disallowed conversions to Double
-        // [MethodImpl(OptimizeAndInline)] public static double ToDouble(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(TimeSpan value)
+        {
+            return (double)value.Ticks;
+        }
 
         // Conversions to Decimal
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDecimal(null);
+            if (value == null) return 0m;
+            return value switch
+            {
+                decimal m => m,
+                double d => ToDecimal(d),
+                float f => ToDecimal(f),
+                Half h => ToDecimal(h),
+                Complex cx => ToDecimal(cx),
+                long l => l,
+                ulong ul => ul,
+                int i => i,
+                uint u => u,
+                short s => s,
+                ushort us => us,
+                sbyte sb => sb,
+                byte b => b,
+                char c => c,
+                bool bo => bo ? 1m : 0m,
+                DateTime64 d64 => ToDecimal(d64),
+                DateTime dt => ToDecimal(dt),
+                TimeSpan ts => ToDecimal(ts),
+                _ => ((IConvertible)value).ToDecimal(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value, IFormatProvider provider)
         {
-            return value == null ? 0 : ((IConvertible)value).ToDecimal(provider);
+            return ToDecimal(value);
         }
 
 
@@ -1796,7 +2347,7 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(char value)
         {
-            return ((IConvertible)value).ToDecimal(null);
+            return (decimal)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1841,13 +2392,41 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(float value)
         {
-            return (decimal)value;
+            return ToDecimal((double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(double value)
         {
+            // NaN/Inf and out-of-range values return 0 (consistent with small-integer NaN handling).
+            // Decimal cannot represent NaN/Inf and cast would throw OverflowException.
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return 0m;
+            }
+            if (value < (double)decimal.MinValue || value > (double)decimal.MaxValue)
+            {
+                return 0m;
+            }
             return (decimal)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(Half value)
+        {
+            // Half range (~±65504) fits comfortably in decimal, but Half.NaN/Inf would throw
+            if (Half.IsNaN(value) || Half.IsInfinity(value))
+            {
+                return 0m;
+            }
+            return (decimal)(double)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(System.Numerics.Complex value)
+        {
+            // Discard imaginary part, route through double->decimal for NaN/Inf safety
+            return ToDecimal(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1881,13 +2460,329 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(DateTime value)
         {
-            return ((IConvertible)value).ToDecimal(null);
+            return (decimal)value.Ticks;
         }
 
-        // Disallowed conversions to Decimal
-        // [MethodImpl(OptimizeAndInline)] public static decimal ToDecimal(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(TimeSpan value)
+        {
+            return (decimal)value.Ticks;
+        }
+
+        // Conversions to Half (float16)
+        // Note: Half doesn't implement IConvertible, so all conversions go through double
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(object value)
+        {
+            if (value == null) return default;
+            return value switch
+            {
+                Half h => h,
+                double d => ToHalf(d),
+                float f => ToHalf(f),
+                Complex c => ToHalf(c),
+                decimal m => ToHalf(m),
+                long l => ToHalf(l),
+                ulong ul => ToHalf(ul),
+                int i => ToHalf(i),
+                uint u => ToHalf(u),
+                short s => ToHalf(s),
+                ushort us => ToHalf(us),
+                sbyte sb => ToHalf(sb),
+                byte by => ToHalf(by),
+                char ch => ToHalf(ch),
+                bool bo => ToHalf(bo),
+                DateTime64 d64 => ToHalf(d64),
+                DateTime dt => ToHalf(dt),
+                TimeSpan ts => ToHalf(ts),
+                _ => (Half)((IConvertible)value).ToDouble(null)
+            };
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(object value, IFormatProvider provider)
+        {
+            return ToHalf(value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(bool value)
+        {
+            return (Half)(value ? 1 : 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(Half value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(sbyte value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(byte value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(char value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(short value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(ushort value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(int value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(uint value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(long value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(ulong value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(float value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(double value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(decimal value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(System.Numerics.Complex value)
+        {
+            // NumPy: complex -> float16 uses the real part
+            return (Half)value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(string value)
+        {
+            if (value == null)
+                return default;
+            return Half.Parse(value, CultureInfo.CurrentCulture);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(string value, IFormatProvider provider)
+        {
+            if (value == null)
+                return default;
+            return Half.Parse(value, provider);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(DateTime value)
+        {
+            return (Half)(double)value.Ticks;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(TimeSpan value)
+        {
+            return (Half)(double)value.Ticks;
+        }
+
+        // Conversions to Complex (complex128)
+        // Note: Complex and Half don't implement IConvertible
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(object value)
+        {
+            if (value == null) return default;
+            return value switch
+            {
+                Complex c => c,
+                Half h => ToComplex(h),
+                double d => ToComplex(d),
+                float f => ToComplex(f),
+                decimal m => ToComplex(m),
+                long l => ToComplex(l),
+                ulong ul => ToComplex(ul),
+                int i => ToComplex(i),
+                uint u => ToComplex(u),
+                short s => ToComplex(s),
+                ushort us => ToComplex(us),
+                sbyte sb => ToComplex(sb),
+                byte by => ToComplex(by),
+                char ch => ToComplex(ch),
+                bool bo => ToComplex(bo),
+                DateTime64 d64 => ToComplex(d64),
+                DateTime dt => ToComplex(dt),
+                TimeSpan ts => ToComplex(ts),
+                _ => new Complex(((IConvertible)value).ToDouble(null), 0)
+            };
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(object value, IFormatProvider provider)
+        {
+            return ToComplex(value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(bool value)
+        {
+            return new System.Numerics.Complex(value ? 1.0 : 0.0, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(System.Numerics.Complex value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(Half value)
+        {
+            return new System.Numerics.Complex((double)value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(sbyte value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(byte value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(char value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(short value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(ushort value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(int value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(uint value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(long value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(ulong value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(float value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(double value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(decimal value)
+        {
+            return new System.Numerics.Complex((double)value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(DateTime value)
+        {
+            return new System.Numerics.Complex((double)value.Ticks, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(TimeSpan value)
+        {
+            return new System.Numerics.Complex((double)value.Ticks, 0);
+        }
 
         // Conversions to DateTime
+        //
+        // NumPy-parity semantics: numeric values are interpreted as DateTime.Ticks
+        // (mirrors NumPy datetime64 which stores the raw int64 count of units since epoch).
+        // .NET DateTime only permits ticks in [0, DateTime.MaxValue.Ticks]; out-of-range
+        // or invalid (NaN/Inf) values collapse to DateTime.MinValue (our NaT-equivalent).
+
+        // DateTime.MaxValue.Ticks (3155378975999999999) as double loses precision at the
+        // top of the range, so we keep the upper bound as a double constant for comparison.
+        private const double DateTimeMaxTicksAsDouble = 3.1553789759999999e18;
+
+        [MethodImpl(OptimizeAndInline)]
+        private static DateTime TicksToDateTime(long ticks)
+        {
+            // Clamp to valid DateTime range. Out-of-range -> DateTime.MinValue (NaT-like).
+            if ((ulong)ticks > (ulong)DateTime.MaxValue.Ticks)
+                return DateTime.MinValue;
+            return new DateTime(ticks);
+        }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(DateTime value)
@@ -1898,20 +2793,44 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value)
         {
-            return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(null);
+            if (value == null) return DateTime.MinValue;
+            return value switch
+            {
+                DateTime dt => dt,
+                TimeSpan ts => TicksToDateTime(ts.Ticks),
+                bool b => TicksToDateTime(b ? 1L : 0L),
+                sbyte sb => TicksToDateTime(sb),
+                byte by => TicksToDateTime(by),
+                short s => TicksToDateTime(s),
+                ushort us => TicksToDateTime(us),
+                int i => TicksToDateTime(i),
+                uint u => TicksToDateTime(u),
+                long l => TicksToDateTime(l),
+                ulong ul => TicksToDateTime(unchecked((long)ul)),
+                char c => TicksToDateTime(c),
+                float f => ToDateTime(f),
+                double d => ToDateTime(d),
+                Half h => ToDateTime(h),
+                Complex cx => ToDateTime(cx),
+                decimal m => ToDateTime(m),
+                string str => ToDateTime(str),
+                _ => ((IConvertible)value).ToDateTime(null)
+            };
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value, IFormatProvider provider)
         {
-            return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(provider);
+            if (value == null) return DateTime.MinValue;
+            if (value is string s) return ToDateTime(s, provider);
+            return ToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(string value)
         {
             if (value == null)
-                return new DateTime(0);
+                return DateTime.MinValue;
             return DateTime.Parse(value, CultureInfo.CurrentCulture);
         }
 
@@ -1919,94 +2838,244 @@ namespace NumSharp.Utilities
         public static DateTime ToDateTime(string value, IFormatProvider provider)
         {
             if (value == null)
-                return new DateTime(0);
+                return DateTime.MinValue;
             return DateTime.Parse(value, provider);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(sbyte value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(byte value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(short value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ushort value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(int value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(uint value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(long value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
-
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ulong value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(unchecked((long)value));
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(bool value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            // NumPy: bool -> integer (true=1, false=0), then reinterpret as ticks.
+            return value ? new DateTime(1L) : DateTime.MinValue;
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(char value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return TicksToDateTime(value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(float value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            return ToDateTime((double)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(double value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            // NumPy: NaN/Inf -> NaT, which we map to DateTime.MinValue.
+            // Out-of-DateTime-range also collapses to MinValue (best we can do).
+            if (double.IsNaN(value) || double.IsInfinity(value)) return DateTime.MinValue;
+            if (value < 0d || value > DateTimeMaxTicksAsDouble) return DateTime.MinValue;
+            // (double)DateTime.MaxValue.Ticks rounds UP by precision loss, so even values
+            // inside the upper bound can cast to a long that exceeds MaxValue.Ticks.
+            // Route through TicksToDateTime which clamps again after the cast.
+            return TicksToDateTime((long)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(Half value)
+        {
+            if (Half.IsNaN(value) || Half.IsInfinity(value)) return DateTime.MinValue;
+            return ToDateTime((double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(System.Numerics.Complex value)
+        {
+            // NumPy: complex -> scalar uses the real part.
+            return ToDateTime(value.Real);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(decimal value)
         {
-            return ((IConvertible)value).ToDateTime(null);
+            var truncated = decimal.Truncate(value);
+            if (truncated < 0m || truncated > (decimal)DateTime.MaxValue.Ticks)
+                return DateTime.MinValue;
+            return new DateTime((long)truncated);
         }
 
-        // Disallowed conversions to DateTime
-        // [MethodImpl(OptimizeAndInline)] public static DateTime ToDateTime(TimeSpan value)
+        [MethodImpl(OptimizeAndInline)]
+        public static DateTime ToDateTime(TimeSpan value)
+        {
+            return TicksToDateTime(value.Ticks);
+        }
+
+        // Conversions to TimeSpan
+        //
+        // NumPy-parity semantics: numeric values are interpreted as TimeSpan.Ticks.
+        // .NET TimeSpan covers the full int64 range, so NaT (long.MinValue) maps exactly
+        // to TimeSpan.MinValue — perfect parity with NumPy timedelta64 NaT.
+        // NaN/Inf/out-of-range values collapse to TimeSpan.MinValue.
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(TimeSpan value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(DateTime value)
+        {
+            return new TimeSpan(value.Ticks);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(object value)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return value switch
+            {
+                TimeSpan ts => ts,
+                DateTime64 d64 => new TimeSpan(d64.Ticks),
+                DateTime dt => new TimeSpan(dt.Ticks),
+                bool b => b ? new TimeSpan(1L) : TimeSpan.Zero,
+                sbyte sb => new TimeSpan(sb),
+                byte by => new TimeSpan(by),
+                short s => new TimeSpan(s),
+                ushort us => new TimeSpan(us),
+                int i => new TimeSpan(i),
+                uint u => new TimeSpan(u),
+                long l => new TimeSpan(l),
+                ulong ul => new TimeSpan(unchecked((long)ul)),
+                char c => new TimeSpan(c),
+                float f => ToTimeSpan(f),
+                double d => ToTimeSpan(d),
+                Half h => ToTimeSpan(h),
+                Complex cx => ToTimeSpan(cx),
+                decimal m => ToTimeSpan(m),
+                string str => ToTimeSpan(str),
+                _ => TimeSpan.Zero
+            };
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(bool value)
+        {
+            return value ? new TimeSpan(1L) : TimeSpan.Zero;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(sbyte value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(byte value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(short value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(ushort value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(int value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(uint value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(long value) => new TimeSpan(value);
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(ulong value) => new TimeSpan(unchecked((long)value));
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(char value) => new TimeSpan(value);
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(float value)
+        {
+            return ToTimeSpan((double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(double value)
+        {
+            // NumPy: NaN/Inf -> NaT = int64.MinValue = TimeSpan.MinValue.Ticks (exact parity).
+            // Precision note: (double)long.MaxValue rounds UP to 2^63, which is out of long
+            // range. Use exclusive upper bound at 2^63 so boundary values overflow to NaT.
+            if (double.IsNaN(value) || double.IsInfinity(value)) return TimeSpan.MinValue;
+            if (value < (double)long.MinValue || value >= 9223372036854775808.0) return TimeSpan.MinValue;
+            return new TimeSpan((long)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(Half value)
+        {
+            if (Half.IsNaN(value) || Half.IsInfinity(value)) return TimeSpan.MinValue;
+            return new TimeSpan((long)(double)value);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(System.Numerics.Complex value)
+        {
+            return ToTimeSpan(value.Real);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(decimal value)
+        {
+            var truncated = decimal.Truncate(value);
+            if (truncated < long.MinValue || truncated > long.MaxValue)
+                return TimeSpan.MinValue;
+            return new TimeSpan((long)truncated);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(string value)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return TimeSpan.Parse(value, CultureInfo.CurrentCulture);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static TimeSpan ToTimeSpan(string value, IFormatProvider provider)
+        {
+            if (value == null) return TimeSpan.Zero;
+            return TimeSpan.Parse(value, provider);
+        }
 
         // Conversions to String
 

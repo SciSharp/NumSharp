@@ -81,7 +81,8 @@ namespace NumSharp
         {
             return typeCode switch
             {
-                NPTypeCode.Boolean => true,  // NumPy treats bool as integer-like for iinfo
+                NPTypeCode.Boolean => true,  // NumSharp extension — NumPy 2.x throws ValueError
+                NPTypeCode.SByte => true,
                 NPTypeCode.Byte => true,
                 NPTypeCode.Int16 => true,
                 NPTypeCode.UInt16 => true,
@@ -99,6 +100,7 @@ namespace NumSharp
             return typeCode switch
             {
                 NPTypeCode.Boolean => (8, 0, 1, 1, 'b'),
+                NPTypeCode.SByte => (8, sbyte.MinValue, sbyte.MaxValue, (ulong)sbyte.MaxValue, 'i'),
                 NPTypeCode.Byte => (8, 0, byte.MaxValue, byte.MaxValue, 'u'),
                 NPTypeCode.Int16 => (16, short.MinValue, short.MaxValue, (ulong)short.MaxValue, 'i'),
                 NPTypeCode.UInt16 => (16, 0, ushort.MaxValue, ushort.MaxValue, 'u'),

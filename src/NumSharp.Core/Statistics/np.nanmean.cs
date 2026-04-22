@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace NumSharp
 {
@@ -82,6 +83,46 @@ namespace NumSharp
                     result = count > 0 ? sum / count : double.NaN;
                     break;
                 }
+                case NPTypeCode.Half:
+                {
+                    // Half nanmean returns Half (NumPy parity: np.nanmean(float16) -> float16).
+                    // Accumulate in double for precision, convert result to Half.
+                    var iter = arr.AsIterator<Half>();
+                    double sum = 0.0;
+                    long count = 0;
+                    while (iter.HasNext())
+                    {
+                        Half val = iter.MoveNext();
+                        if (!Half.IsNaN(val))
+                        {
+                            sum += (double)val;
+                            count++;
+                        }
+                    }
+                    result = count > 0 ? (Half)(sum / count) : Half.NaN;
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    // Complex nanmean returns Complex. "NaN" = either real or imag is NaN.
+                    var iter = arr.AsIterator<Complex>();
+                    double sumR = 0.0, sumI = 0.0;
+                    long count = 0;
+                    while (iter.HasNext())
+                    {
+                        Complex val = iter.MoveNext();
+                        if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
+                        {
+                            sumR += val.Real;
+                            sumI += val.Imaginary;
+                            count++;
+                        }
+                    }
+                    result = count > 0
+                        ? new Complex(sumR / count, sumI / count)
+                        : new Complex(double.NaN, double.NaN);
+                    break;
+                }
                 default:
                     // Non-float types: regular mean (no NaN possible)
                     return mean(arr);
@@ -109,6 +150,14 @@ namespace NumSharp
 
             if (axis < 0 || axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {arr.ndim}");
+
+            // Half: axis-aware NaN-skipping mean, returns Half.
+            if (arr.GetTypeCode == NPTypeCode.Half)
+                return nanmean_axis_half(arr, axis, keepdims);
+
+            // Complex: axis-aware NaN-skipping mean, returns Complex.
+            if (arr.GetTypeCode == NPTypeCode.Complex)
+                return nanmean_axis_complex(arr, axis, keepdims);
 
             // Non-float types: regular mean
             if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
@@ -235,6 +284,111 @@ namespace NumSharp
             }
 
             return result;
+        }
+
+        private static NDArray nanmean_axis_half(NDArray arr, int axis, bool keepdims)
+        {
+            var inputShape = arr.shape;
+            var outputShapeList = new System.Collections.Generic.List<long>();
+            for (int i = 0; i < inputShape.Length; i++)
+                if (i != axis) outputShapeList.Add(inputShape[i]);
+            if (outputShapeList.Count == 0) outputShapeList.Add(1);
+            var outputShape = outputShapeList.ToArray();
+            long axisLen = inputShape[axis];
+
+            var result = new NDArray(NPTypeCode.Half, new Shape(outputShape));
+            long outputSize = result.size;
+
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                var outCoords = new long[outputShape.Length];
+                long temp = outIdx;
+                for (int i = outputShape.Length - 1; i >= 0; i--)
+                {
+                    outCoords[i] = temp % outputShape[i];
+                    temp /= outputShape[i];
+                }
+
+                double sum = 0.0;
+                long count = 0;
+                for (long k = 0; k < axisLen; k++)
+                {
+                    var inCoords = new long[inputShape.Length];
+                    int outCoordIdx = 0;
+                    for (int i = 0; i < inputShape.Length; i++)
+                        inCoords[i] = (i == axis) ? k : outCoords[outCoordIdx++];
+
+                    Half val = arr.GetHalf(inCoords);
+                    if (!Half.IsNaN(val))
+                    {
+                        sum += (double)val;
+                        count++;
+                    }
+                }
+
+                result.SetHalf(count > 0 ? (Half)(sum / count) : Half.NaN, outCoords);
+            }
+
+            return ApplyKeepdims(result, arr.ndim, axis, outputShape, keepdims);
+        }
+
+        private static NDArray nanmean_axis_complex(NDArray arr, int axis, bool keepdims)
+        {
+            var inputShape = arr.shape;
+            var outputShapeList = new System.Collections.Generic.List<long>();
+            for (int i = 0; i < inputShape.Length; i++)
+                if (i != axis) outputShapeList.Add(inputShape[i]);
+            if (outputShapeList.Count == 0) outputShapeList.Add(1);
+            var outputShape = outputShapeList.ToArray();
+            long axisLen = inputShape[axis];
+
+            var result = new NDArray(NPTypeCode.Complex, new Shape(outputShape));
+            long outputSize = result.size;
+
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                var outCoords = new long[outputShape.Length];
+                long temp = outIdx;
+                for (int i = outputShape.Length - 1; i >= 0; i--)
+                {
+                    outCoords[i] = temp % outputShape[i];
+                    temp /= outputShape[i];
+                }
+
+                double sumR = 0.0, sumI = 0.0;
+                long count = 0;
+                for (long k = 0; k < axisLen; k++)
+                {
+                    var inCoords = new long[inputShape.Length];
+                    int outCoordIdx = 0;
+                    for (int i = 0; i < inputShape.Length; i++)
+                        inCoords[i] = (i == axis) ? k : outCoords[outCoordIdx++];
+
+                    Complex val = arr.GetComplex(inCoords);
+                    if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
+                    {
+                        sumR += val.Real;
+                        sumI += val.Imaginary;
+                        count++;
+                    }
+                }
+
+                result.SetComplex(
+                    count > 0 ? new Complex(sumR / count, sumI / count) : new Complex(double.NaN, double.NaN),
+                    outCoords);
+            }
+
+            return ApplyKeepdims(result, arr.ndim, axis, outputShape, keepdims);
+        }
+
+        private static NDArray ApplyKeepdims(NDArray result, int ndim, int axis, long[] outputShape, bool keepdims)
+        {
+            if (!keepdims) return result;
+            var keepdimsShapeDims = new long[ndim];
+            int srcIdx = 0;
+            for (int i = 0; i < ndim; i++)
+                keepdimsShapeDims[i] = (i == axis) ? 1 : outputShape[srcIdx++];
+            return result.reshape(keepdimsShapeDims);
         }
     }
 }

@@ -44,6 +44,10 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Single => CreateAxisVarStdKernelTyped<float>(key),
                 NPTypeCode.Double => CreateAxisVarStdKernelTyped<double>(key),
                 NPTypeCode.Decimal => CreateAxisVarStdKernelTypedDecimal(key),
+                // Complex variance = E[|z - mean(z)|²], returns double. Can't use the typed
+                // helper path (uses double intermediate, dropping imaginary) — dedicated helper
+                // following the Decimal convention.
+                NPTypeCode.Complex => CreateAxisVarStdKernelTypedComplex(key),
                 _ => CreateAxisVarStdKernelGeneral(key) // Fallback for Boolean, Char
             };
         }
@@ -82,6 +86,24 @@ namespace NumSharp.Backends.Kernels
             {
                 AxisVarStdDecimalHelper(
                     (decimal*)input, (double*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    isStd, ddof: 0);
+            };
+        }
+
+        /// <summary>
+        /// Create a Complex axis Var/Std kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisVarStdKernelTypedComplex(AxisReductionKernelKey key)
+        {
+            bool isStd = key.Op == ReductionOp.Std;
+
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
+            {
+                AxisVarStdComplexHelper(
+                    (System.Numerics.Complex*)input, (double*)output,
                     inputStrides, inputShape, outputStrides,
                     axis, axisSize, ndim, outputSize,
                     isStd, ddof: 0);
@@ -585,6 +607,78 @@ namespace NumSharp.Backends.Kernels
                 }
 
                 double variance = (double)(sqDiffSum / (decimal)divisor);
+                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+            }
+        }
+
+        /// <summary>
+        /// Complex helper for axis Var/Std. NumPy parity:
+        ///   variance = E[|z - mean(z)|²] = (sum((Re - muR)² + (Im - muI)²)) / (N - ddof)
+        /// where mean is Complex, but the variance itself is a real (double).
+        /// </summary>
+        internal static unsafe void AxisVarStdComplexHelper(
+            System.Numerics.Complex* input, double* output,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
+            bool computeStd, int ddof)
+        {
+            long axisStride = inputStrides[axis];
+
+            int outputNdim = ndim - 1;
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            double divisor = axisSize - ddof;
+            if (divisor <= 0) divisor = 1;
+
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    long coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                System.Numerics.Complex* axisStart = input + inputBaseOffset;
+
+                // Pass 1: Compute Complex mean along axis
+                double sumR = 0.0, sumI = 0.0;
+                for (long i = 0; i < axisSize; i++)
+                {
+                    var z = axisStart[i * axisStride];
+                    sumR += z.Real;
+                    sumI += z.Imaginary;
+                }
+                double muR = sumR / axisSize;
+                double muI = sumI / axisSize;
+
+                // Pass 2: Sum of |z - mean|² (= dR² + dI²)
+                double sqDiffSum = 0.0;
+                for (long i = 0; i < axisSize; i++)
+                {
+                    var z = axisStart[i * axisStride];
+                    double dR = z.Real - muR;
+                    double dI = z.Imaginary - muI;
+                    sqDiffSum += dR * dR + dI * dI;
+                }
+
+                double variance = sqDiffSum / divisor;
                 output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
             }
         }

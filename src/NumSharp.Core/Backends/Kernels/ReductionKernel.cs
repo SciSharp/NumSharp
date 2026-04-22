@@ -307,6 +307,7 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => false,
                 NPTypeCode.Byte => byte.MinValue,
+                NPTypeCode.SByte => sbyte.MinValue,
                 NPTypeCode.Int16 => short.MinValue,
                 NPTypeCode.UInt16 => ushort.MinValue,
                 NPTypeCode.Int32 => int.MinValue,
@@ -314,9 +315,13 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Int64 => long.MinValue,
                 NPTypeCode.UInt64 => ulong.MinValue,
                 NPTypeCode.Char => char.MinValue,
+                NPTypeCode.Half => Half.NegativeInfinity,
                 NPTypeCode.Single => float.NegativeInfinity,
                 NPTypeCode.Double => double.NegativeInfinity,
                 NPTypeCode.Decimal => decimal.MinValue,
+                // Complex has no total ordering; Max identity uses -inf+0i so any finite
+                // value beats it, and NaN-containing values propagate NaN per NumPy.
+                NPTypeCode.Complex => new System.Numerics.Complex(double.NegativeInfinity, 0),
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -334,6 +339,7 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => true,
                 NPTypeCode.Byte => byte.MaxValue,
+                NPTypeCode.SByte => sbyte.MaxValue,
                 NPTypeCode.Int16 => short.MaxValue,
                 NPTypeCode.UInt16 => ushort.MaxValue,
                 NPTypeCode.Int32 => int.MaxValue,
@@ -341,9 +347,12 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Int64 => long.MaxValue,
                 NPTypeCode.UInt64 => ulong.MaxValue,
                 NPTypeCode.Char => char.MaxValue,
+                NPTypeCode.Half => Half.PositiveInfinity,
                 NPTypeCode.Single => float.PositiveInfinity,
                 NPTypeCode.Double => double.PositiveInfinity,
                 NPTypeCode.Decimal => decimal.MaxValue,
+                // Complex has no total ordering; Min identity uses +inf+0i.
+                NPTypeCode.Complex => new System.Numerics.Complex(double.PositiveInfinity, 0),
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }

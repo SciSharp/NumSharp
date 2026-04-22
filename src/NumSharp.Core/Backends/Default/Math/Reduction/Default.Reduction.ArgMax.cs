@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -137,12 +138,21 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
 
+            // B7: Fallback for types without an IL kernel (Half, Complex, SByte).
+            // Iterate slice-by-slice, reusing the elementwise argmax/argmin IL kernel.
+            if (inputType == NPTypeCode.Half || inputType == NPTypeCode.Complex || inputType == NPTypeCode.SByte)
+            {
+                return ArgReductionAxisFallback(arr, axis, keepdims, outputShape, axisedShape, op);
+            }
+
             // ArgMax/ArgMin always output Int64
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
             var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
 
             if (kernel == null)
-                throw new InvalidOperationException($"IL kernel not available for ArgMax/ArgMin axis reduction. Ensure ILKernelGenerator.Enabled is true. Type: {inputType}");
+            {
+                return ArgReductionAxisFallback(arr, axis, keepdims, outputShape, axisedShape, op);
+            }
 
             // Use IL kernel path
             var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
@@ -156,6 +166,35 @@ namespace NumSharp.Backends
             {
                 kernel((void*)inputAddr, (void*)ret.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
+
+            if (keepdims)
+                ret.Storage.Reshape(outputShape);
+
+            return ret;
+        }
+
+        /// <summary>
+        /// B7: Fallback argmax/argmin axis reduction when IL kernel not available.
+        /// Iterates per slice and calls the scalar argmax_elementwise_il (which has per-dtype
+        /// fallbacks for Half, Complex, SByte). Returns an Int64 NDArray with the reduced shape.
+        /// </summary>
+        private NDArray ArgReductionAxisFallback(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
+        {
+            var shape = arr.Shape;
+            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
+            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
+            var iterIndex = iterRet.Index;
+            var slices = iterAxis.Slices;
+
+            do
+            {
+                var slice = arr[slices];
+                long result = op == ReductionOp.ArgMax
+                    ? argmax_elementwise_il(slice)
+                    : argmin_elementwise_il(slice);
+                ret.SetAtIndex(result, iterIndex[0]);
+            } while (iterAxis.Next() != null && iterRet.Next() != null);
 
             if (keepdims)
                 ret.Storage.Reshape(outputShape);

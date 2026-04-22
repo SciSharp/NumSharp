@@ -100,6 +100,7 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => InvokeUnaryScalar(func, nd.GetBoolean(Array.Empty<long>()), outputType),
                 NPTypeCode.Byte => InvokeUnaryScalar(func, nd.GetByte(Array.Empty<long>()), outputType),
+                NPTypeCode.SByte => InvokeUnaryScalar(func, nd.GetSByte(Array.Empty<long>()), outputType),
                 NPTypeCode.Int16 => InvokeUnaryScalar(func, nd.GetInt16(Array.Empty<long>()), outputType),
                 NPTypeCode.UInt16 => InvokeUnaryScalar(func, nd.GetUInt16(Array.Empty<long>()), outputType),
                 NPTypeCode.Int32 => InvokeUnaryScalar(func, nd.GetInt32(Array.Empty<long>()), outputType),
@@ -107,9 +108,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Int64 => InvokeUnaryScalar(func, nd.GetInt64(Array.Empty<long>()), outputType),
                 NPTypeCode.UInt64 => InvokeUnaryScalar(func, nd.GetUInt64(Array.Empty<long>()), outputType),
                 NPTypeCode.Char => InvokeUnaryScalar(func, nd.GetChar(Array.Empty<long>()), outputType),
+                NPTypeCode.Half => InvokeUnaryScalar(func, nd.GetHalf(Array.Empty<long>()), outputType),
                 NPTypeCode.Single => InvokeUnaryScalar(func, nd.GetSingle(Array.Empty<long>()), outputType),
                 NPTypeCode.Double => InvokeUnaryScalar(func, nd.GetDouble(Array.Empty<long>()), outputType),
                 NPTypeCode.Decimal => InvokeUnaryScalar(func, nd.GetDecimal(Array.Empty<long>()), outputType),
+                NPTypeCode.Complex => InvokeUnaryScalar(func, nd.GetComplex(Array.Empty<long>()), outputType),
                 _ => throw new NotSupportedException($"Input type {inputType} not supported")
             };
         }
@@ -125,6 +128,7 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Boolean => NDArray.Scalar(((Func<TInput, bool>)func)(input)),
                 NPTypeCode.Byte => NDArray.Scalar(((Func<TInput, byte>)func)(input)),
+                NPTypeCode.SByte => NDArray.Scalar(((Func<TInput, sbyte>)func)(input)),
                 NPTypeCode.Int16 => NDArray.Scalar(((Func<TInput, short>)func)(input)),
                 NPTypeCode.UInt16 => NDArray.Scalar(((Func<TInput, ushort>)func)(input)),
                 NPTypeCode.Int32 => NDArray.Scalar(((Func<TInput, int>)func)(input)),
@@ -132,9 +136,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Int64 => NDArray.Scalar(((Func<TInput, long>)func)(input)),
                 NPTypeCode.UInt64 => NDArray.Scalar(((Func<TInput, ulong>)func)(input)),
                 NPTypeCode.Char => NDArray.Scalar(((Func<TInput, char>)func)(input)),
+                NPTypeCode.Half => NDArray.Scalar(((Func<TInput, Half>)func)(input)),
                 NPTypeCode.Single => NDArray.Scalar(((Func<TInput, float>)func)(input)),
                 NPTypeCode.Double => NDArray.Scalar(((Func<TInput, double>)func)(input)),
                 NPTypeCode.Decimal => NDArray.Scalar(((Func<TInput, decimal>)func)(input)),
+                NPTypeCode.Complex => NDArray.Scalar(((Func<TInput, System.Numerics.Complex>)func)(input)),
                 _ => throw new NotSupportedException($"Output type {outputType} not supported")
             };
         }

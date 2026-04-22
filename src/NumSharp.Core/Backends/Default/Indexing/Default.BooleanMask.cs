@@ -53,6 +53,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                     ILKernelGenerator.CopyMaskedElementsHelper((byte*)arr.Address, (bool*)mask.Address, (byte*)result.Address, size);
                     break;
+                case NPTypeCode.SByte:
+                    ILKernelGenerator.CopyMaskedElementsHelper((sbyte*)arr.Address, (bool*)mask.Address, (sbyte*)result.Address, size);
+                    break;
                 case NPTypeCode.Int16:
                     ILKernelGenerator.CopyMaskedElementsHelper((short*)arr.Address, (bool*)mask.Address, (short*)result.Address, size);
                     break;
@@ -74,6 +77,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     ILKernelGenerator.CopyMaskedElementsHelper((char*)arr.Address, (bool*)mask.Address, (char*)result.Address, size);
                     break;
+                case NPTypeCode.Half:
+                    ILKernelGenerator.CopyMaskedElementsHelper((Half*)arr.Address, (bool*)mask.Address, (Half*)result.Address, size);
+                    break;
                 case NPTypeCode.Single:
                     ILKernelGenerator.CopyMaskedElementsHelper((float*)arr.Address, (bool*)mask.Address, (float*)result.Address, size);
                     break;
@@ -82,6 +88,9 @@ namespace NumSharp.Backends
                     break;
                 case NPTypeCode.Decimal:
                     ILKernelGenerator.CopyMaskedElementsHelper((decimal*)arr.Address, (bool*)mask.Address, (decimal*)result.Address, size);
+                    break;
+                case NPTypeCode.Complex:
+                    ILKernelGenerator.CopyMaskedElementsHelper((System.Numerics.Complex*)arr.Address, (bool*)mask.Address, (System.Numerics.Complex*)result.Address, size);
                     break;
                 default:
                     throw new NotSupportedException($"Type {arr.typecode} not supported for boolean masking");

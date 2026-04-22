@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 
@@ -162,6 +163,26 @@ namespace NumSharp.Utilities
         private static readonly Func<T, decimal> _toDecimal = Converts.FindConverter<T, decimal>();
 
         /// <summary>
+        ///     Converts <typeparamref name="T"/> to <see cref="Half"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        /// </summary>
+        /// <param name="obj">The object to convert to <see cref="Half"/></param>
+        /// <returns>A <see cref="Half"/></returns>
+        [MethodImpl(Inline)]
+        public static Half ToHalf(T obj) => _toHalf(obj);
+
+        private static readonly Func<T, Half> _toHalf = Converts.FindConverter<T, Half>();
+
+        /// <summary>
+        ///     Converts <typeparamref name="T"/> to <see cref="Complex"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        /// </summary>
+        /// <param name="obj">The object to convert to <see cref="Complex"/></param>
+        /// <returns>A <see cref="Complex"/></returns>
+        [MethodImpl(Inline)]
+        public static Complex ToComplex(T obj) => _toComplex(obj);
+
+        private static readonly Func<T, Complex> _toComplex = Converts.FindConverter<T, Complex>();
+
+        /// <summary>
         ///     Converts <typeparamref name="T"/> to <see cref="String"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="String"/></param>
@@ -293,6 +314,22 @@ namespace NumSharp.Utilities
         /// <returns>A <typeparamref name="T"/></returns>
         [MethodImpl(Inline)] public static T From(decimal obj) => _fromDecimal(obj);
 		private static readonly Func<decimal, T> _fromDecimal = Converts.FindConverter<decimal, T>();
+
+        /// <summary>
+        ///     Converts <see cref="Half"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        /// </summary>
+        /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Half"/></param>
+        /// <returns>A <typeparamref name="T"/></returns>
+        [MethodImpl(Inline)] public static T From(Half obj) => _fromHalf(obj);
+        private static readonly Func<Half, T> _fromHalf = Converts.FindConverter<Half, T>();
+
+        /// <summary>
+        ///     Converts <see cref="Complex"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        /// </summary>
+        /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Complex"/></param>
+        /// <returns>A <typeparamref name="T"/></returns>
+        [MethodImpl(Inline)] public static T From(Complex obj) => _fromComplex(obj);
+        private static readonly Func<Complex, T> _fromComplex = Converts.FindConverter<Complex, T>();
 
         /// <summary>
         ///     Converts <see cref="String"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.

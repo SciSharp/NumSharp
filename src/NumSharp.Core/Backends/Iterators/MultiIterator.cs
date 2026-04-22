@@ -58,6 +58,12 @@ namespace NumSharp
                     AssignBroadcast<byte>(l, r);
                     break;
                 }
+                case NPTypeCode.SByte:
+                {
+                    var (l, r)= GetIterators<sbyte>(lhs, rhs, true);
+                    AssignBroadcast<sbyte>(l, r);
+                    break;
+                }
                 case NPTypeCode.Int16:
                 {
                     var (l, r)= GetIterators<short>(lhs, rhs, true);
@@ -100,6 +106,12 @@ namespace NumSharp
                     AssignBroadcast<char>(l, r);
                     break;
                 }
+                case NPTypeCode.Half:
+                {
+                    var (l, r)= GetIterators<Half>(lhs, rhs, true);
+                    AssignBroadcast<Half>(l, r);
+                    break;
+                }
                 case NPTypeCode.Double:
                 {
                     var (l, r)= GetIterators<double>(lhs, rhs, true);
@@ -116,6 +128,12 @@ namespace NumSharp
                 {
                     var (l, r)= GetIterators<decimal>(lhs, rhs, true);
                     AssignBroadcast<decimal>(l, r);
+                    break;
+                }
+                case NPTypeCode.Complex:
+                {
+                    var (l, r)= GetIterators<System.Numerics.Complex>(lhs, rhs, true);
+                    AssignBroadcast<System.Numerics.Complex>(l, r);
                     break;
                 }
                 default:
@@ -171,6 +189,7 @@ namespace NumSharp
 		        {
 			        case NPTypeCode.Boolean: return (new NDIterator<bool>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<bool>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Byte: return (new NDIterator<byte>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<byte>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.SByte: return (new NDIterator<sbyte>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<sbyte>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Int16: return (new NDIterator<short>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<short>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.UInt16: return (new NDIterator<ushort>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<ushort>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Int32: return (new NDIterator<int>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<int>(rhs.InternalArray, rhs.Shape, rightShape, false));
@@ -178,9 +197,11 @@ namespace NumSharp
 			        case NPTypeCode.Int64: return (new NDIterator<long>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<long>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.UInt64: return (new NDIterator<ulong>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<ulong>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Char: return (new NDIterator<char>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<char>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.Half: return (new NDIterator<Half>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<Half>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Double: return (new NDIterator<double>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<double>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Single: return (new NDIterator<float>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<float>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Decimal: return (new NDIterator<decimal>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<decimal>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.Complex: return (new NDIterator<System.Numerics.Complex>(lhs.InternalArray, lhs.Shape, leftShape, false), new NDIterator<System.Numerics.Complex>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        default:
 				        throw new NotSupportedException();
 		        }
@@ -207,6 +228,7 @@ namespace NumSharp
 		        {
 			        case NPTypeCode.Boolean: return (new NDIterator<bool>(lhs, false), new NDIterator<bool>(false));
 			        case NPTypeCode.Byte: return (new NDIterator<byte>(lhs, false), new NDIterator<byte>(false));
+			        case NPTypeCode.SByte: return (new NDIterator<sbyte>(lhs, false), new NDIterator<sbyte>(false));
 			        case NPTypeCode.Int16: return (new NDIterator<short>(lhs, false), new NDIterator<short>(false));
 			        case NPTypeCode.UInt16: return (new NDIterator<ushort>(lhs, false), new NDIterator<ushort>(false));
 			        case NPTypeCode.Int32: return (new NDIterator<int>(lhs, false), new NDIterator<int>(false));
@@ -214,9 +236,11 @@ namespace NumSharp
 			        case NPTypeCode.Int64: return (new NDIterator<long>(lhs, false), new NDIterator<long>(false));
 			        case NPTypeCode.UInt64: return (new NDIterator<ulong>(lhs, false), new NDIterator<ulong>(false));
 			        case NPTypeCode.Char: return (new NDIterator<char>(lhs, false), new NDIterator<char>(false));
+			        case NPTypeCode.Half: return (new NDIterator<Half>(lhs, false), new NDIterator<Half>(false));
 			        case NPTypeCode.Double: return (new NDIterator<double>(lhs, false), new NDIterator<double>(false));
 			        case NPTypeCode.Single: return (new NDIterator<float>(lhs, false), new NDIterator<float>(false));
 			        case NPTypeCode.Decimal: return (new NDIterator<decimal>(lhs, false), new NDIterator<decimal>(false));
+			        case NPTypeCode.Complex: return (new NDIterator<System.Numerics.Complex>(lhs, false), new NDIterator<System.Numerics.Complex>(false));
 			        default:
 				        throw new NotSupportedException();
 		        }
@@ -253,6 +277,7 @@ namespace NumSharp
 		        {
 			        case NPTypeCode.Boolean: return ((NDIterator<TOut>)(object)new NDIterator<bool>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<bool>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Byte: return ((NDIterator<TOut>)(object)new NDIterator<byte>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<byte>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.SByte: return ((NDIterator<TOut>)(object)new NDIterator<sbyte>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<sbyte>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Int16: return ((NDIterator<TOut>)(object)new NDIterator<short>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<short>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.UInt16: return ((NDIterator<TOut>)(object)new NDIterator<ushort>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<ushort>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Int32: return ((NDIterator<TOut>)(object)new NDIterator<int>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<int>(rhs.InternalArray, rhs.Shape, rightShape, false));
@@ -260,9 +285,11 @@ namespace NumSharp
 			        case NPTypeCode.Int64: return ((NDIterator<TOut>)(object)new NDIterator<long>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<long>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.UInt64: return ((NDIterator<TOut>)(object)new NDIterator<ulong>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<ulong>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Char: return ((NDIterator<TOut>)(object)new NDIterator<char>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<char>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.Half: return ((NDIterator<TOut>)(object)new NDIterator<Half>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<Half>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Double: return ((NDIterator<TOut>)(object)new NDIterator<double>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<double>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Single: return ((NDIterator<TOut>)(object)new NDIterator<float>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<float>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        case NPTypeCode.Decimal: return ((NDIterator<TOut>)(object)new NDIterator<decimal>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<decimal>(rhs.InternalArray, rhs.Shape, rightShape, false));
+			        case NPTypeCode.Complex: return ((NDIterator<TOut>)(object)new NDIterator<System.Numerics.Complex>(lhs.InternalArray, lhs.Shape, leftShape, false), (NDIterator<TOut>)(object)new NDIterator<System.Numerics.Complex>(rhs.InternalArray, rhs.Shape, rightShape, false));
 			        default:
 				        throw new NotSupportedException();
 		        }
@@ -289,6 +316,7 @@ namespace NumSharp
 		        {
 			        case NPTypeCode.Boolean: return ((NDIterator<TOut>)(object)new NDIterator<bool>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<bool>(false));
 			        case NPTypeCode.Byte: return ((NDIterator<TOut>)(object)new NDIterator<byte>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<byte>(false));
+			        case NPTypeCode.SByte: return ((NDIterator<TOut>)(object)new NDIterator<sbyte>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<sbyte>(false));
 			        case NPTypeCode.Int16: return ((NDIterator<TOut>)(object)new NDIterator<short>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<short>(false));
 			        case NPTypeCode.UInt16: return ((NDIterator<TOut>)(object)new NDIterator<ushort>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<ushort>(false));
 			        case NPTypeCode.Int32: return ((NDIterator<TOut>)(object)new NDIterator<int>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<int>(false));
@@ -296,9 +324,11 @@ namespace NumSharp
 			        case NPTypeCode.Int64: return ((NDIterator<TOut>)(object)new NDIterator<long>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<long>(false));
 			        case NPTypeCode.UInt64: return ((NDIterator<TOut>)(object)new NDIterator<ulong>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<ulong>(false));
 			        case NPTypeCode.Char: return ((NDIterator<TOut>)(object)new NDIterator<char>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<char>(false));
+			        case NPTypeCode.Half: return ((NDIterator<TOut>)(object)new NDIterator<Half>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<Half>(false));
 			        case NPTypeCode.Double: return ((NDIterator<TOut>)(object)new NDIterator<double>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<double>(false));
 			        case NPTypeCode.Single: return ((NDIterator<TOut>)(object)new NDIterator<float>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<float>(false));
 			        case NPTypeCode.Decimal: return ((NDIterator<TOut>)(object)new NDIterator<decimal>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<decimal>(false));
+			        case NPTypeCode.Complex: return ((NDIterator<TOut>)(object)new NDIterator<System.Numerics.Complex>(lhs, false), (NDIterator<TOut>)(object)new NDIterator<System.Numerics.Complex>(false));
 			        default:
 				        throw new NotSupportedException();
 		        }

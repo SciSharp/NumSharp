@@ -305,6 +305,8 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(int)");
             public static readonly MethodInfo DecimalImplicitFromByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(byte)");
+            public static readonly MethodInfo DecimalImplicitFromSByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(sbyte) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(sbyte)");
             public static readonly MethodInfo DecimalImplicitFromShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(short)");
             public static readonly MethodInfo DecimalImplicitFromUShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) })
@@ -323,6 +325,8 @@ namespace NumSharp.Backends.Kernels
             // Decimal conversion methods (from decimal)
             public static readonly MethodInfo DecimalToByte = typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "ToByte");
+            public static readonly MethodInfo DecimalToSByte = typeof(decimal).GetMethod("ToSByte", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToSByte");
             public static readonly MethodInfo DecimalToInt16 = typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "ToInt16");
             public static readonly MethodInfo DecimalToUInt16 = typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) })
@@ -417,11 +421,17 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo MathSignDouble = typeof(Math).GetMethod(nameof(Math.Sign), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, "Sign(double)");
 
-            // IsNaN methods
+            // IsNaN / IsInfinity / IsFinite methods
             public static readonly MethodInfo FloatIsNaN = typeof(float).GetMethod(nameof(float.IsNaN), new[] { typeof(float) })
                 ?? throw new MissingMethodException(typeof(float).FullName, nameof(float.IsNaN));
             public static readonly MethodInfo DoubleIsNaN = typeof(double).GetMethod(nameof(double.IsNaN), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsNaN));
+            public static readonly MethodInfo DoubleIsInfinity = typeof(double).GetMethod(nameof(double.IsInfinity), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsInfinity));
+            public static readonly MethodInfo DoubleIsFinite = typeof(double).GetMethod(nameof(double.IsFinite), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsFinite));
+            public static readonly MethodInfo MathCopySign = typeof(Math).GetMethod(nameof(Math.CopySign), new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.CopySign));
 
             // Unsafe methods
             public static readonly MethodInfo UnsafeInitBlockUnaligned = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
@@ -441,6 +451,125 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo Vector256DoubleMul = typeof(Vector256<double>).GetMethod("op_Multiply",
                 BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
                 ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Multiply");
+
+            // Half conversion methods (Half is a struct with operator methods, not IConvertible)
+            public static readonly MethodInfo HalfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+            public static readonly MethodInfo DoubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            public static readonly MethodInfo HalfIsNaN = typeof(Half).GetMethod("IsNaN", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "IsNaN");
+
+            // Half static properties (NaN, Zero, PositiveInfinity, NegativeInfinity are properties, not fields)
+            public static readonly MethodInfo HalfNaN = typeof(Half).GetProperty("NaN", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "NaN");
+            public static readonly MethodInfo HalfZero = typeof(Half).GetProperty("Zero", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Zero");
+            public static readonly MethodInfo HalfPositiveInfinity = typeof(Half).GetProperty("PositiveInfinity", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "PositiveInfinity");
+            public static readonly MethodInfo HalfNegativeInfinity = typeof(Half).GetProperty("NegativeInfinity", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
+
+            // Complex methods and fields (Complex uses static fields, not properties)
+            public static readonly MethodInfo ComplexAbs = typeof(System.Numerics.Complex).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Abs");
+            public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Division(Complex, double)");
+            public static readonly FieldInfo ComplexZero = typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(System.Numerics.Complex).FullName, "Zero");
+            public static readonly FieldInfo ComplexOne = typeof(System.Numerics.Complex).GetField("One", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(System.Numerics.Complex).FullName, "One");
+            public static readonly ConstructorInfo ComplexCtor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double, double)");
+
+            // Complex binary operator methods
+            public static readonly MethodInfo ComplexOpAddition = typeof(System.Numerics.Complex).GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Addition");
+            public static readonly MethodInfo ComplexOpMultiply = typeof(System.Numerics.Complex).GetMethod("op_Multiply", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Multiply");
+
+            // Complex unary operator methods
+            public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
+            public static readonly MethodInfo ComplexSqrt = typeof(System.Numerics.Complex).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sqrt");
+            public static readonly MethodInfo ComplexExp = typeof(System.Numerics.Complex).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Exp");
+            public static readonly MethodInfo ComplexLog = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log");
+            public static readonly MethodInfo ComplexSin = typeof(System.Numerics.Complex).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sin");
+            public static readonly MethodInfo ComplexCos = typeof(System.Numerics.Complex).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Cos");
+            public static readonly MethodInfo ComplexTan = typeof(System.Numerics.Complex).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Tan");
+            public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
+            public static readonly MethodInfo ComplexLog10 = typeof(System.Numerics.Complex).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log10");
+            // Complex doesn't have Log2/Exp2/Log1p/Expm1 directly — composed via Log(z, 2), Pow(2, z),
+            // Log(1+z), Exp(z)-1 in EmitUnaryComplexOperation.
+            public static readonly MethodInfo ComplexLogBase = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log(Complex, double)");
+            public static readonly MethodInfo ComplexOpSubtraction = typeof(System.Numerics.Complex).GetMethod("op_Subtraction", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Subtraction");
+
+            // Complex instance property getters — called via Ldloca + Call (struct instance method
+            // requires a managed reference for 'this').
+            public static readonly MethodInfo ComplexGetReal = typeof(System.Numerics.Complex)
+                .GetProperty("Real", BindingFlags.Public | BindingFlags.Instance)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "get_Real");
+            public static readonly MethodInfo ComplexGetImaginary = typeof(System.Numerics.Complex)
+                .GetProperty("Imaginary", BindingFlags.Public | BindingFlags.Instance)!.GetGetMethod()
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "get_Imaginary");
+
+            // Field handle for the runtime-computed 1/ln(2) constant used by Complex log2 inline IL.
+            public static readonly FieldInfo LogE_Inv_Ln2Field = typeof(ILKernelGenerator)
+                .GetField(nameof(ILKernelGenerator.LogE_Inv_Ln2), BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new MissingFieldException(typeof(ILKernelGenerator).FullName, nameof(ILKernelGenerator.LogE_Inv_Ln2));
+
+            // Half unary operator methods
+            public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "op_UnaryNegation");
+            public static readonly MethodInfo HalfSqrt = typeof(Half).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Sqrt");
+            public static readonly MethodInfo HalfSin = typeof(Half).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Sin");
+            public static readonly MethodInfo HalfCos = typeof(Half).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Cos");
+            public static readonly MethodInfo HalfTan = typeof(Half).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Tan");
+            public static readonly MethodInfo HalfExp = typeof(Half).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp");
+            public static readonly MethodInfo HalfLog = typeof(Half).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log");
+            public static readonly MethodInfo HalfFloor = typeof(Half).GetMethod("Floor", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Floor");
+            public static readonly MethodInfo HalfCeiling = typeof(Half).GetMethod("Ceiling", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Ceiling");
+            public static readonly MethodInfo HalfTruncate = typeof(Half).GetMethod("Truncate", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Truncate");
+            public static readonly MethodInfo HalfAbs = typeof(Half).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Abs");
+            public static readonly MethodInfo HalfLog10 = typeof(Half).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log10");
+            public static readonly MethodInfo HalfLog2 = typeof(Half).GetMethod("Log2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log2");
+            public static readonly MethodInfo HalfCbrt = typeof(Half).GetMethod("Cbrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Cbrt");
+            public static readonly MethodInfo HalfExp2 = typeof(Half).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp2");
+            // Note: .NET's Half exposes log1p as LogP1 and expm1 as ExpM1 (IFloatingPointIeee754<Half>).
+            // Half.LogP1/ExpM1 lose subnormal precision because internally they compute (1 + x) in
+            // Half, which rounds x < Half.Epsilon (≈ 2^-11) to 0. NumPy promotes to a higher-precision
+            // intermediate before log1p/expm1, then casts back — we replicate that with double
+            // (via existing HalfToDouble / DoubleToHalf op_Explicit helpers).
+            public static readonly MethodInfo DoubleLogP1 = typeof(double)
+                .GetMethod("LogP1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, "LogP1");
+            public static readonly MethodInfo DoubleExpM1 = typeof(double)
+                .GetMethod("ExpM1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, "ExpM1");
         }
 
         #endregion
@@ -478,8 +607,10 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => 1,
                 NPTypeCode.Byte => 1,
+                NPTypeCode.SByte => 1,
                 NPTypeCode.Int16 => 2,
                 NPTypeCode.UInt16 => 2,
+                NPTypeCode.Half => 2,
                 NPTypeCode.Int32 => 4,
                 NPTypeCode.UInt32 => 4,
                 NPTypeCode.Int64 => 8,
@@ -488,6 +619,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Single => 4,
                 NPTypeCode.Double => 8,
                 NPTypeCode.Decimal => 16,
+                NPTypeCode.Complex => 16,
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -501,8 +633,10 @@ namespace NumSharp.Backends.Kernels
             {
                 NPTypeCode.Boolean => typeof(bool),
                 NPTypeCode.Byte => typeof(byte),
+                NPTypeCode.SByte => typeof(sbyte),
                 NPTypeCode.Int16 => typeof(short),
                 NPTypeCode.UInt16 => typeof(ushort),
+                NPTypeCode.Half => typeof(Half),
                 NPTypeCode.Int32 => typeof(int),
                 NPTypeCode.UInt32 => typeof(uint),
                 NPTypeCode.Int64 => typeof(long),
@@ -511,6 +645,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Single => typeof(float),
                 NPTypeCode.Double => typeof(double),
                 NPTypeCode.Decimal => typeof(decimal),
+                NPTypeCode.Complex => typeof(System.Numerics.Complex),
                 _ => throw new NotSupportedException($"Type {type} not supported")
             };
         }
@@ -524,12 +659,12 @@ namespace NumSharp.Backends.Kernels
 
             return type switch
             {
-                NPTypeCode.Byte => true,
+                NPTypeCode.Byte or NPTypeCode.SByte => true,
                 NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
                 NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
                 NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
                 NPTypeCode.Single or NPTypeCode.Double => true,
-                _ => false  // Boolean, Char, Decimal
+                _ => false  // Boolean, Char, Decimal, Half, Complex
             };
         }
 
@@ -553,12 +688,18 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldind_U1);
                     break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldind_I1);
+                    break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldind_I2);
                     break;
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
                     il.Emit(OpCodes.Ldind_U2);
+                    break;
+                case NPTypeCode.Half:
+                    il.Emit(OpCodes.Ldobj, typeof(Half));
                     break;
                 case NPTypeCode.Int32:
                     il.Emit(OpCodes.Ldind_I4);
@@ -579,6 +720,9 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldobj, typeof(decimal));
                     break;
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Ldobj, typeof(System.Numerics.Complex));
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported for ldind");
             }
@@ -593,12 +737,16 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                     il.Emit(OpCodes.Stind_I1);
                     break;
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
                     il.Emit(OpCodes.Stind_I2);
+                    break;
+                case NPTypeCode.Half:
+                    il.Emit(OpCodes.Stobj, typeof(Half));
                     break;
                 case NPTypeCode.Int32:
                 case NPTypeCode.UInt32:
@@ -616,6 +764,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Stobj, typeof(decimal));
+                    break;
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Stobj, typeof(System.Numerics.Complex));
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported for stind");
@@ -637,6 +788,13 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special case: Half and Complex require method calls
+            if (from == NPTypeCode.Half || from == NPTypeCode.Complex || to == NPTypeCode.Half || to == NPTypeCode.Complex)
+            {
+                EmitHalfOrComplexConversion(il, from, to);
+                return;
+            }
+
             // For numeric types, use conv.* opcodes
             switch (to)
             {
@@ -647,6 +805,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
@@ -711,6 +872,7 @@ namespace NumSharp.Backends.Kernels
                 var method = from switch
                 {
                     NPTypeCode.Byte => CachedMethods.DecimalImplicitFromByte,
+                    NPTypeCode.SByte => CachedMethods.DecimalImplicitFromSByte,
                     NPTypeCode.Int16 => CachedMethods.DecimalImplicitFromShort,
                     NPTypeCode.UInt16 => CachedMethods.DecimalImplicitFromUShort,
                     NPTypeCode.Int32 => CachedMethods.DecimalImplicitFromInt,
@@ -745,6 +907,7 @@ namespace NumSharp.Backends.Kernels
                 var method = to switch
                 {
                     NPTypeCode.Byte => CachedMethods.DecimalToByte,
+                    NPTypeCode.SByte => CachedMethods.DecimalToSByte,
                     NPTypeCode.Int16 => CachedMethods.DecimalToInt16,
                     NPTypeCode.UInt16 => CachedMethods.DecimalToUInt16,
                     NPTypeCode.Int32 => CachedMethods.DecimalToInt32,
@@ -757,6 +920,77 @@ namespace NumSharp.Backends.Kernels
                 };
                 il.EmitCall(OpCodes.Call, method, null);
             }
+        }
+
+        /// <summary>
+        /// Emit Half or Complex type conversions (require method calls).
+        /// </summary>
+        private static void EmitHalfOrComplexConversion(ILGenerator il, NPTypeCode from, NPTypeCode to)
+        {
+            // Half -> other: convert Half to double first, then to target
+            if (from == NPTypeCode.Half)
+            {
+                // Half.op_Explicit(Half) -> double (use cached method to avoid ambiguous match)
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+                if (to == NPTypeCode.Double)
+                    return;  // Already double
+
+                // Convert double to target type
+                EmitConvertTo(il, NPTypeCode.Double, to);
+                return;
+            }
+
+            // Complex -> other: get Real part as double, then convert
+            if (from == NPTypeCode.Complex)
+            {
+                // Complex.Real property getter
+                var realGetter = typeof(System.Numerics.Complex).GetProperty("Real")?.GetGetMethod()
+                    ?? throw new InvalidOperationException("Complex.Real not found");
+                il.EmitCall(OpCodes.Call, realGetter, null);
+
+                if (to == NPTypeCode.Double)
+                    return;  // Already double
+
+                // Convert double to target type
+                EmitConvertTo(il, NPTypeCode.Double, to);
+                return;
+            }
+
+            // other -> Half: convert to double first, then to Half
+            if (to == NPTypeCode.Half)
+            {
+                // First convert source to double
+                if (from != NPTypeCode.Double && from != NPTypeCode.Single)
+                    EmitConvertTo(il, from, NPTypeCode.Double);
+                else if (from == NPTypeCode.Single)
+                    il.Emit(OpCodes.Conv_R8);  // float to double
+
+                // double -> Half via explicit cast (use cached method to avoid ambiguous match)
+                il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                return;
+            }
+
+            // other -> Complex: convert to double, then create Complex with imaginary = 0
+            if (to == NPTypeCode.Complex)
+            {
+                // First convert source to double
+                if (from != NPTypeCode.Double && from != NPTypeCode.Single)
+                    EmitConvertTo(il, from, NPTypeCode.Double);
+                else if (from == NPTypeCode.Single)
+                    il.Emit(OpCodes.Conv_R8);  // float to double
+
+                // Load 0.0 for imaginary part
+                il.Emit(OpCodes.Ldc_R8, 0.0);
+
+                // new Complex(real, imaginary)
+                var ctor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                    ?? throw new InvalidOperationException("Complex constructor not found");
+                il.Emit(OpCodes.Newobj, ctor);
+                return;
+            }
+
+            throw new NotSupportedException($"Conversion from {from} to {to} not supported");
         }
 
         /// <summary>
@@ -778,6 +1012,20 @@ namespace NumSharp.Backends.Kernels
             if (resultType == NPTypeCode.Decimal)
             {
                 EmitDecimalOperation(il, op);
+                return;
+            }
+
+            // Special handling for Half (uses operator methods)
+            if (resultType == NPTypeCode.Half)
+            {
+                EmitHalfOperation(il, op);
+                return;
+            }
+
+            // Special handling for Complex (uses operator methods)
+            if (resultType == NPTypeCode.Complex)
+            {
+                EmitComplexOperation(il, op);
                 return;
             }
 
@@ -885,7 +1133,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitFloorDivideOperation(ILGenerator il, NPTypeCode resultType)
         {
-            // For floating-point types, divide then floor
+            // For floating-point types, divide then floor.
+            // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
             if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
             {
                 il.Emit(OpCodes.Div);
@@ -893,12 +1142,12 @@ namespace NumSharp.Backends.Kernels
                 if (resultType == NPTypeCode.Single)
                 {
                     il.Emit(OpCodes.Conv_R8);
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    EmitFloorWithInfToNaN(il);
                     il.Emit(OpCodes.Conv_R4);
                 }
                 else
                 {
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    EmitFloorWithInfToNaN(il);
                 }
             }
             else if (IsUnsigned(resultType))
@@ -1100,6 +1349,9 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
                     break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
+                    break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
                     break;
@@ -1214,6 +1466,135 @@ namespace NumSharp.Backends.Kernels
             };
 
             il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit Half-specific operation using operator methods.
+        /// </summary>
+        private static void EmitHalfOperation(ILGenerator il, BinaryOp op)
+        {
+            // Bitwise operations not supported for Half
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+                throw new NotSupportedException($"Bitwise operation {op} not supported for Half type");
+
+            // Find the specific op_Explicit method: Half -> double
+            var halfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+
+            // For all other operations, convert to double, perform operation, convert back
+            // Stack: [half1, half2]
+            var locRight = il.DeclareLocal(typeof(Half));
+            il.Emit(OpCodes.Stloc, locRight);
+
+            // Convert left to double
+            il.EmitCall(OpCodes.Call, halfToDouble, null);
+
+            // Convert right to double
+            il.Emit(OpCodes.Ldloc, locRight);
+            il.EmitCall(OpCodes.Call, halfToDouble, null);
+
+            // Perform the operation in double
+            switch (op)
+            {
+                case BinaryOp.Add:
+                    il.Emit(OpCodes.Add);
+                    break;
+                case BinaryOp.Subtract:
+                    il.Emit(OpCodes.Sub);
+                    break;
+                case BinaryOp.Multiply:
+                    il.Emit(OpCodes.Mul);
+                    break;
+                case BinaryOp.Divide:
+                    il.Emit(OpCodes.Div);
+                    break;
+                case BinaryOp.Power:
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+                    break;
+                case BinaryOp.Mod:
+                    // NumPy floored modulo: a - floor(a/b) * b
+                    var locB = il.DeclareLocal(typeof(double));
+                    var locA = il.DeclareLocal(typeof(double));
+                    il.Emit(OpCodes.Stloc, locB);
+                    il.Emit(OpCodes.Stloc, locA);
+                    il.Emit(OpCodes.Ldloc, locA);
+                    il.Emit(OpCodes.Ldloc, locA);
+                    il.Emit(OpCodes.Ldloc, locB);
+                    il.Emit(OpCodes.Div);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
+                    il.Emit(OpCodes.Ldloc, locB);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Sub);
+                    break;
+                case BinaryOp.FloorDivide:
+                    // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
+                    // This matches numpy/core/src/umath/loops_arithmetic's npy_floor_divide_@type@.
+                    il.Emit(OpCodes.Div);
+                    EmitFloorWithInfToNaN(il);
+                    break;
+                case BinaryOp.ATan2:
+                    il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })!, null);
+                    break;
+                default:
+                    throw new NotSupportedException($"Operation {op} not supported for Half");
+            }
+
+            // Convert result back to Half (double -> Half)
+            var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+            il.EmitCall(OpCodes.Call, doubleToHalf, null);
+        }
+
+        /// <summary>
+        /// Emit Complex-specific operation using operator methods.
+        /// </summary>
+        private static void EmitComplexOperation(ILGenerator il, BinaryOp op)
+        {
+            // Bitwise operations not supported for Complex
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+                throw new NotSupportedException($"Bitwise operation {op} not supported for Complex type");
+
+            // Complex has operator overloads we can call
+            var complexType = typeof(System.Numerics.Complex);
+
+            // Divide goes through a NumPy-compatible helper rather than the BCL's
+            // op_Division: BCL's Smith's algorithm returns (NaN, NaN) for a/(0+0j),
+            // whereas NumPy returns IEEE component-wise division (e.g. 1+0j -> inf+nanj).
+            if (op == BinaryOp.Divide)
+            {
+                il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexDivideNumPy),
+                    BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                return;
+            }
+
+            var method = op switch
+            {
+                BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
+                BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
+                BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
+                BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
+                _ => throw new NotSupportedException($"Operation {op} not supported for Complex")
+            };
+
+            if (method == null)
+                throw new InvalidOperationException($"Could not find method for {op} on Complex");
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// NumPy-compatible complex division. The .NET BCL's Complex.op_Division uses
+        /// Smith's algorithm, which returns (NaN, NaN) when the divisor is (0+0j).
+        /// NumPy instead produces IEEE component-wise division: (a.real/0, a.imag/0),
+        /// giving (±inf, NaN) / (±inf, ±inf) / (NaN, NaN) depending on a's components.
+        /// For all other cases we defer to the BCL operator — it's ULP-identical to
+        /// NumPy for finite inputs.
+        /// </summary>
+        private static System.Numerics.Complex ComplexDivideNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            if (b.Real == 0.0 && b.Imaginary == 0.0)
+                return new System.Numerics.Complex(a.Real / 0.0, a.Imaginary / 0.0);
+            return a / b;
         }
 
         /// <summary>

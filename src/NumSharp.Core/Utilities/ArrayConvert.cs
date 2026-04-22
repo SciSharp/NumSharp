@@ -160,6 +160,7 @@ namespace NumSharp.Utilities
 #else
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
+                case NPTypeCode.SByte: return ToSByte(sourceArray);
                 case NPTypeCode.Int16: return ToInt16(sourceArray);
                 case NPTypeCode.UInt16: return ToUInt16(sourceArray);
                 case NPTypeCode.Int32: return ToInt32(sourceArray);
@@ -170,6 +171,8 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Double: return ToDouble(sourceArray);
                 case NPTypeCode.Single: return ToSingle(sourceArray);
                 case NPTypeCode.Decimal: return ToDecimal(sourceArray);
+                case NPTypeCode.Half: return ToHalf(sourceArray);
+                case NPTypeCode.Complex: return ToComplex(sourceArray);
 #endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to {returnType?.Name}.");
@@ -195,6 +198,7 @@ namespace NumSharp.Utilities
 
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
+                case NPTypeCode.SByte: return ToSByte(sourceArray);
                 case NPTypeCode.Int16: return ToInt16(sourceArray);
                 case NPTypeCode.UInt16: return ToUInt16(sourceArray);
                 case NPTypeCode.Int32: return ToInt32(sourceArray);
@@ -205,6 +209,8 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Double: return ToDouble(sourceArray);
                 case NPTypeCode.Single: return ToSingle(sourceArray);
                 case NPTypeCode.Decimal: return ToDecimal(sourceArray);
+                case NPTypeCode.Half: return ToHalf(sourceArray);
+                case NPTypeCode.Complex: return ToComplex(sourceArray);
 #endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to NPTypeCode.{typeCode}.");
@@ -760,6 +766,96 @@ namespace NumSharp.Utilities
                     return ToDecimal((Decimal[]) sourceArray);
                 case NPTypeCode.String:
                     return ToDecimal((String[]) sourceArray);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        public static SByte[] ToSByte(Array sourceArray)
+        {
+            if (sourceArray == null)
+            {
+                throw new ArgumentNullException(nameof(sourceArray));
+            }
+
+            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
+            switch (fromTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return ToSByte((Boolean[]) sourceArray);
+                case NPTypeCode.Byte:
+                    return ToSByte((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToSByte((SByte[]) sourceArray);
+                case NPTypeCode.Int16:
+                    return ToSByte((Int16[]) sourceArray);
+                case NPTypeCode.UInt16:
+                    return ToSByte((UInt16[]) sourceArray);
+                case NPTypeCode.Int32:
+                    return ToSByte((Int32[]) sourceArray);
+                case NPTypeCode.UInt32:
+                    return ToSByte((UInt32[]) sourceArray);
+                case NPTypeCode.Int64:
+                    return ToSByte((Int64[]) sourceArray);
+                case NPTypeCode.UInt64:
+                    return ToSByte((UInt64[]) sourceArray);
+                case NPTypeCode.Char:
+                    return ToSByte((Char[]) sourceArray);
+                case NPTypeCode.Double:
+                    return ToSByte((Double[]) sourceArray);
+                case NPTypeCode.Single:
+                    return ToSByte((Single[]) sourceArray);
+                case NPTypeCode.Decimal:
+                    return ToSByte((Decimal[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToSByte((Half[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToSByte((Complex[]) sourceArray);
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        public static Half[] ToHalf(Array sourceArray)
+        {
+            if (sourceArray == null)
+            {
+                throw new ArgumentNullException(nameof(sourceArray));
+            }
+
+            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
+            switch (fromTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                    return ToHalf((Boolean[]) sourceArray);
+                case NPTypeCode.Byte:
+                    return ToHalf((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToHalf((SByte[]) sourceArray);
+                case NPTypeCode.Int16:
+                    return ToHalf((Int16[]) sourceArray);
+                case NPTypeCode.UInt16:
+                    return ToHalf((UInt16[]) sourceArray);
+                case NPTypeCode.Int32:
+                    return ToHalf((Int32[]) sourceArray);
+                case NPTypeCode.UInt32:
+                    return ToHalf((UInt32[]) sourceArray);
+                case NPTypeCode.Int64:
+                    return ToHalf((Int64[]) sourceArray);
+                case NPTypeCode.UInt64:
+                    return ToHalf((UInt64[]) sourceArray);
+                case NPTypeCode.Char:
+                    return ToHalf((Char[]) sourceArray);
+                case NPTypeCode.Double:
+                    return ToHalf((Double[]) sourceArray);
+                case NPTypeCode.Single:
+                    return ToHalf((Single[]) sourceArray);
+                case NPTypeCode.Decimal:
+                    return ToHalf((Decimal[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToHalf((Half[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToHalf((Complex[]) sourceArray);
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -4114,6 +4210,367 @@ namespace NumSharp.Utilities
             }
             return output;
         }
+
+        // ToSByte conversions
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(SByte[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var output = new SByte[sourceArray.Length];
+            Array.Copy(sourceArray, output, sourceArray.Length);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Boolean[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Byte[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Int16[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(UInt16[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Int32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(UInt32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Int64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(UInt64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Char[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Single[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Double[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Decimal[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Half[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static SByte[] ToSByte(Complex[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new SByte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSByte(sourceArray[i]);
+            return output;
+        }
+
+        // ToHalf conversions
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Half[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var output = new Half[sourceArray.Length];
+            Array.Copy(sourceArray, output, sourceArray.Length);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Boolean[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Byte[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(SByte[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Int16[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(UInt16[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Int32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(UInt32[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Int64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(UInt64[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Char[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Single[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Double[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Decimal[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Half[] ToHalf(Complex[] sourceArray)
+        {
+            if (sourceArray == null)
+                throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Half[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
 #endif
 
         #endregion

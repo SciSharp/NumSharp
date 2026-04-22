@@ -23,6 +23,9 @@ namespace NumSharp
         /// <summary>An integral type representing unsigned 16-bit integers with values between 0 and 65535. The set of possible values for the <see cref="F:System.TypeCode.Char"></see> type corresponds to the Unicode character set.</summary>
         Char = 4,
 
+        /// <summary>An integral type representing signed 8-bit integers with values between -128 and 127.</summary>
+        SByte = 5,
+
         /// <summary>An integral type representing unsigned 8-bit integers with values between 0 and 255.</summary>
         Byte = 6,
 
@@ -54,22 +57,27 @@ namespace NumSharp
         /// <summary>A simple type representing values ranging from 1.0 x 10 -28 to approximately 7.9 x 10 28 with 28-29 significant digits.</summary>
         Decimal = 15, // 0x0000000F
 
+        /// <summary>A 16-bit floating point type (IEEE 754 half-precision).</summary>
+        Half = 16, // 0x00000010
+
         /// <summary>A sealed class type representing Unicode character strings.</summary>
         String = 18, // 0x00000012
 
+        /// <summary>A complex number type with two 64-bit floating point components (real and imaginary).</summary>
         Complex = 128, //0x00000080
     }
 
     public static class NPTypeCodeExtensions
     {
         /// <summary>
-        ///     Returns true if typecode is a number (incl. <see cref="bool"/>, <see cref="char"/> and <see cref="Complex"/>).
+        ///     Returns true if typecode is a number (incl. <see cref="bool"/>, <see cref="char"/>, <see cref="Half"/> and <see cref="Complex"/>).
         /// </summary>
         [DebuggerNonUserCode]
         public static bool IsNumerical(this NPTypeCode typeCode)
         {
             var val = (int)typeCode;
-            return val >= 3 && val <= 15 || val == 129;
+            // 3-16 covers Boolean through Half, 128 is Complex
+            return (val >= 3 && val <= 16) || val == 128;
         }
 
         /// <summary>
@@ -87,12 +95,18 @@ namespace NumSharp
             if (tc == TypeCode.Object)
             {
                 if (type == typeof(Complex))
-                {
                     return NPTypeCode.Complex;
-                }
+                if (type == typeof(Half))
+                    return NPTypeCode.Half;
 
                 return NPTypeCode.Empty;
             }
+
+            // TypeCode.DateTime (16) collides with NPTypeCode.Half (16). DateTime/DateTimeOffset
+            // are not NumPy dtypes; return Empty so callers know to handle them via the
+            // dedicated Converts overloads (or NumSharp's DateTime64 wrapper struct).
+            if (tc == TypeCode.DateTime)
+                return NPTypeCode.Empty;
 
             try
             {
@@ -134,6 +148,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return typeof(Complex);
                 case NPTypeCode.Boolean: return typeof(bool);
+                case NPTypeCode.SByte: return typeof(sbyte);
                 case NPTypeCode.Byte: return typeof(byte);
                 case NPTypeCode.Int16: return typeof(short);
                 case NPTypeCode.UInt16: return typeof(ushort);
@@ -142,6 +157,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return typeof(long);
                 case NPTypeCode.UInt64: return typeof(ulong);
                 case NPTypeCode.Char: return typeof(char);
+                case NPTypeCode.Half: return typeof(Half);
                 case NPTypeCode.Double: return typeof(double);
                 case NPTypeCode.Single: return typeof(float);
                 case NPTypeCode.Decimal: return typeof(decimal);
@@ -183,6 +199,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return InfoOf<Complex>.Size;
                 case NPTypeCode.Boolean: return 1;
+                case NPTypeCode.SByte: return 1;
                 case NPTypeCode.Byte: return 1;
                 case NPTypeCode.Int16: return 2;
                 case NPTypeCode.UInt16: return 2;
@@ -191,6 +208,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return 8;
                 case NPTypeCode.UInt64: return 8;
                 case NPTypeCode.Char: return 1;
+                case NPTypeCode.Half: return 2;
                 case NPTypeCode.Double: return 8;
                 case NPTypeCode.Single: return 4;
                 case NPTypeCode.Decimal: return 32;
@@ -219,6 +237,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return true;
                 case NPTypeCode.Boolean: return false;
+                case NPTypeCode.SByte: return false;
                 case NPTypeCode.Byte: return false;
                 case NPTypeCode.Int16: return false;
                 case NPTypeCode.UInt16: return false;
@@ -227,6 +246,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return false;
                 case NPTypeCode.UInt64: return false;
                 case NPTypeCode.Char: return false;
+                case NPTypeCode.Half: return true;
                 case NPTypeCode.Double: return true;
                 case NPTypeCode.Single: return true;
                 case NPTypeCode.Decimal: return true;
@@ -255,6 +275,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return true;
+                case NPTypeCode.SByte: return false;
                 case NPTypeCode.Byte: return true;
                 case NPTypeCode.Int16: return false;
                 case NPTypeCode.UInt16: return true;
@@ -263,6 +284,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return false;
                 case NPTypeCode.UInt64: return true;
                 case NPTypeCode.Char: return true;
+                case NPTypeCode.Half: return false;
                 case NPTypeCode.Double: return false;
                 case NPTypeCode.Single: return false;
                 case NPTypeCode.Decimal: return false;
@@ -291,6 +313,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return false;
+                case NPTypeCode.SByte: return true;
                 case NPTypeCode.Byte: return false;
                 case NPTypeCode.Int16: return true;
                 case NPTypeCode.UInt16: return false;
@@ -299,6 +322,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return true;
                 case NPTypeCode.UInt64: return false;
                 case NPTypeCode.Char: return false;
+                case NPTypeCode.Half: return true;
                 case NPTypeCode.Double: return true;
                 case NPTypeCode.Single: return true;
                 case NPTypeCode.Decimal: return true;
@@ -326,11 +350,12 @@ namespace NumSharp
 		            throw new NotSupportedException();
 #else
                 case NPTypeCode.Boolean: return -1;
-                
+
                 case NPTypeCode.String: return 0;
                 case NPTypeCode.Byte: return 0;
                 case NPTypeCode.Char: return 0;
 
+                case NPTypeCode.SByte: return 1;
                 case NPTypeCode.Int16: return 1;
                 case NPTypeCode.Int32: return 1;
                 case NPTypeCode.Int64: return 1;
@@ -339,6 +364,7 @@ namespace NumSharp
                 case NPTypeCode.UInt32: return 2;
                 case NPTypeCode.UInt64: return 2;
 
+                case NPTypeCode.Half: return 3;
                 case NPTypeCode.Single: return 3;
                 case NPTypeCode.Double: return 3;
 
@@ -372,6 +398,7 @@ namespace NumSharp
                 case NPTypeCode.Byte: return 0;
                 case NPTypeCode.Char: return 0;
 
+                case NPTypeCode.SByte: return 1 * 10 * 1;
                 case NPTypeCode.Int16: return 1 * 10 * 2;
                 case NPTypeCode.Int32: return 1 * 10 * 4;
                 case NPTypeCode.Int64: return 1 * 10 * 8;
@@ -380,6 +407,7 @@ namespace NumSharp
                 case NPTypeCode.UInt32: return 2 * 10 * 4;
                 case NPTypeCode.UInt64: return 2 * 10 * 8;
 
+                case NPTypeCode.Half: return 5 * 10 * 2;
                 case NPTypeCode.Single: return 5 * 10 * 4;
                 case NPTypeCode.Double: return 5 * 10 * 8;
                 case NPTypeCode.Decimal: return 5 * 10 * 32;
@@ -404,11 +432,11 @@ namespace NumSharp
                     return NPTypeCode.Boolean;
 
                 case NPY_TYPECHAR.NPY_BYTELTR:
-                    return NPTypeCode.Byte;
+                    return NPTypeCode.SByte;
 
                 case NPY_TYPECHAR.NPY_UBYTELTR:
                     //case NPY_TYPECHAR.NPY_CHARLTR: //char has been deprecated in favor of string.
-                    return NPTypeCode.Char;
+                    return NPTypeCode.Byte;
 
                 case NPY_TYPECHAR.NPY_SHORTLTR:
                     return NPTypeCode.Int16;
@@ -434,6 +462,8 @@ namespace NumSharp
                     return NPTypeCode.UInt64;
 
                 case NPY_TYPECHAR.NPY_HALFLTR:
+                    return NPTypeCode.Half;
+
                 case NPY_TYPECHAR.NPY_FLOATLTR:
                 case NPY_TYPECHAR.NPY_CFLOATLTR:
                     return NPTypeCode.Single;
@@ -476,8 +506,10 @@ namespace NumSharp
                     return NPY_TYPECHAR.NPY_BOOLLTR;
                 case NPTypeCode.Char:
                     return NPY_TYPECHAR.NPY_CHARLTR;
-                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                     return NPY_TYPECHAR.NPY_BYTELTR;
+                case NPTypeCode.Byte:
+                    return NPY_TYPECHAR.NPY_UBYTELTR;
                 case NPTypeCode.Int16:
                     return NPY_TYPECHAR.NPY_SHORTLTR;
                 case NPTypeCode.UInt16:
@@ -489,7 +521,9 @@ namespace NumSharp
                 case NPTypeCode.Int64:
                     return NPY_TYPECHAR.NPY_LONGLTR;
                 case NPTypeCode.UInt64:
-                    return NPY_TYPECHAR.NPY_ULONGLTR; //todo! is that longlong or long?
+                    return NPY_TYPECHAR.NPY_ULONGLTR;
+                case NPTypeCode.Half:
+                    return NPY_TYPECHAR.NPY_HALFLTR;
                 case NPTypeCode.Single:
                     return NPY_TYPECHAR.NPY_FLOATLTR;
                 case NPTypeCode.Double:
@@ -541,6 +575,8 @@ namespace NumSharp
                     return "bool";
                 case NPTypeCode.Char:
                     return "uint8";
+                case NPTypeCode.SByte:
+                    return "int8";
                 case NPTypeCode.Byte:
                     return "uint8";
                 case NPTypeCode.Int16:
@@ -555,6 +591,8 @@ namespace NumSharp
                     return "int64";
                 case NPTypeCode.UInt64:
                     return "uint64";
+                case NPTypeCode.Half:
+                    return "float16";
                 case NPTypeCode.Single:
                     return "float32";
                 case NPTypeCode.Double:
@@ -564,7 +602,7 @@ namespace NumSharp
                 case NPTypeCode.String:
                     return "string";
                 case NPTypeCode.Complex:
-                    return "complex64";
+                    return "complex128";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
             }
@@ -605,6 +643,7 @@ namespace NumSharp
 		    switch (typeCode)
 		    {
 			    case NPTypeCode.Boolean: return NPTypeCode.Int64;
+			    case NPTypeCode.SByte: return NPTypeCode.Int64;
 			    case NPTypeCode.Byte: return NPTypeCode.UInt64;
 			    case NPTypeCode.Int16: return NPTypeCode.Int64;
 			    case NPTypeCode.UInt16: return NPTypeCode.UInt64;
@@ -613,9 +652,11 @@ namespace NumSharp
 			    case NPTypeCode.Int64: return NPTypeCode.Int64;
 			    case NPTypeCode.UInt64: return NPTypeCode.UInt64;
 			    case NPTypeCode.Char: return NPTypeCode.UInt64;
+			    case NPTypeCode.Half: return NPTypeCode.Half;
 			    case NPTypeCode.Double: return NPTypeCode.Double;
 			    case NPTypeCode.Single: return NPTypeCode.Single;
 			    case NPTypeCode.Decimal: return NPTypeCode.Decimal;
+			    case NPTypeCode.Complex: return NPTypeCode.Complex;
 			    default:
 				    throw new NotSupportedException();
 		    }
@@ -646,6 +687,7 @@ namespace NumSharp
 		    switch (typeCode)
 		    {
 			    case NPTypeCode.Boolean: return default(bool);
+			    case NPTypeCode.SByte: return default(sbyte);
 			    case NPTypeCode.Byte: return default(byte);
 			    case NPTypeCode.Int16: return default(short);
 			    case NPTypeCode.UInt16: return default(ushort);
@@ -654,9 +696,11 @@ namespace NumSharp
 			    case NPTypeCode.Int64: return default(long);
 			    case NPTypeCode.UInt64: return default(ulong);
 			    case NPTypeCode.Char: return default(char);
+			    case NPTypeCode.Half: return default(Half);
 			    case NPTypeCode.Double: return default(double);
 			    case NPTypeCode.Single: return default(float);
 			    case NPTypeCode.Decimal: return default(decimal);
+			    case NPTypeCode.Complex: return default(Complex);
 			    default:
 				    throw new NotSupportedException();
 		    }
@@ -675,6 +719,7 @@ namespace NumSharp
             return typeCode switch
             {
                 NPTypeCode.Boolean => true,
+                NPTypeCode.SByte => (sbyte)1,
                 NPTypeCode.Byte => (byte)1,
                 NPTypeCode.Int16 => (short)1,
                 NPTypeCode.UInt16 => (ushort)1,
@@ -683,9 +728,11 @@ namespace NumSharp
                 NPTypeCode.Int64 => 1L,
                 NPTypeCode.UInt64 => 1UL,
                 NPTypeCode.Char => (char)1,
+                NPTypeCode.Half => (Half)1,
                 NPTypeCode.Single => 1f,
                 NPTypeCode.Double => 1d,
                 NPTypeCode.Decimal => 1m,
+                NPTypeCode.Complex => Complex.One,
                 _ => throw new NotSupportedException($"Type {typeCode} not supported")
             };
         }
@@ -697,7 +744,7 @@ namespace NumSharp
         [MethodImpl(OptimizeAndInline)]
         public static bool IsFloatingPoint(this NPTypeCode typeCode)
         {
-            return typeCode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal;
+            return typeCode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal;
         }
 
         /// <summary>
@@ -710,7 +757,7 @@ namespace NumSharp
         {
             return typeCode switch
             {
-                NPTypeCode.Byte => true,
+                NPTypeCode.SByte or NPTypeCode.Byte => true,
                 NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
                 NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
                 NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
@@ -732,12 +779,13 @@ namespace NumSharp
         {
             return typeCode switch
             {
-                NPTypeCode.Byte => true,
+                NPTypeCode.SByte or NPTypeCode.Byte => true,
                 NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
                 NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
                 NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
                 NPTypeCode.Single or NPTypeCode.Double => true,
-                _ => false  // Boolean, Char, Decimal, Complex, String
+                // Half has limited SIMD support through conversion, Complex is not SIMD capable
+                _ => false  // Boolean, Char, Half, Decimal, Complex, String
             };
         }
     }

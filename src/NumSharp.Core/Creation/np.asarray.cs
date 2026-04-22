@@ -31,5 +31,20 @@ namespace NumSharp
             nd.ReplaceData(data);
             return nd;
         }
+
+        /// <summary>
+        ///     Convert the input to an array. If the input is already an <see cref="NDArray"/>,
+        ///     it is returned as-is when no <paramref name="dtype"/> is requested, or converted
+        ///     to the target dtype otherwise. Mirrors <c>numpy.asarray(a, dtype=...)</c>.
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
+        public static NDArray asarray(NDArray a, Type dtype = null)
+        {
+            if (ReferenceEquals(a, null))
+                throw new ArgumentNullException(nameof(a));
+            if (dtype == null || a.dtype == dtype)
+                return a;
+            return a.astype(dtype, true);
+        }
     }
 }

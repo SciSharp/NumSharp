@@ -293,6 +293,9 @@ namespace NumSharp
                         {
                             NPTypeCode.Boolean => by == 0 || by == 1,
                             NPTypeCode.Byte => true,
+                            // Byte range (0..255) fits exactly in Half (exact up to 2048).
+                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => CanCastSafe(NPTypeCode.Byte, to)
                         };
 
@@ -303,7 +306,8 @@ namespace NumSharp
                             NPTypeCode.Byte => sb >= 0,
                             NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => true,
                             NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 => sb >= 0,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -316,7 +320,9 @@ namespace NumSharp
                             NPTypeCode.UInt16 => s >= 0,
                             NPTypeCode.Int32 or NPTypeCode.Int64 => true,
                             NPTypeCode.UInt32 or NPTypeCode.UInt64 => s >= 0,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            // Half range ±65504 covers all int16 values.
+                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -328,7 +334,10 @@ namespace NumSharp
                             NPTypeCode.Int16 => us <= short.MaxValue,
                             NPTypeCode.UInt16 => true,
                             NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
+                            // Half max is 65504; ushort max is 65535. Range check required.
+                            NPTypeCode.Half => us <= 65504,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -342,7 +351,9 @@ namespace NumSharp
                             NPTypeCode.Int32 => true,
                             NPTypeCode.UInt32 => i >= 0,
                             NPTypeCode.Int64 or NPTypeCode.UInt64 => i >= 0 || to == NPTypeCode.Int64,
+                            NPTypeCode.Half => i >= -65504 && i <= 65504,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -356,7 +367,9 @@ namespace NumSharp
                             NPTypeCode.Int32 => ui <= int.MaxValue,
                             NPTypeCode.UInt32 => true,
                             NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
+                            NPTypeCode.Half => ui <= 65504,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -371,7 +384,9 @@ namespace NumSharp
                             NPTypeCode.UInt32 => l >= 0 && l <= uint.MaxValue,
                             NPTypeCode.Int64 => true,
                             NPTypeCode.UInt64 => l >= 0,
+                            NPTypeCode.Half => l >= -65504 && l <= 65504,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
                         };
 
@@ -386,14 +401,26 @@ namespace NumSharp
                             NPTypeCode.UInt32 => ul <= uint.MaxValue,
                             NPTypeCode.Int64 => ul <= long.MaxValue,
                             NPTypeCode.UInt64 => true,
+                            NPTypeCode.Half => ul <= 65504,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false
+                        };
+
+                    case Half h:
+                        return to switch
+                        {
+                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
+                            _ => false  // Half to int requires explicit cast
                         };
 
                     case float f:
                         return to switch
                         {
+                            NPTypeCode.Half => f >= -65504f && f <= 65504f,
                             NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Complex => true,
                             _ => false  // Float to int requires explicit cast
                         };
 
@@ -401,7 +428,9 @@ namespace NumSharp
                         return to switch
                         {
                             NPTypeCode.Double or NPTypeCode.Decimal => true,
+                            NPTypeCode.Half => d >= -65504.0 && d <= 65504.0,
                             NPTypeCode.Single => d >= float.MinValue && d <= float.MaxValue,
+                            NPTypeCode.Complex => true,
                             _ => false  // Double to int requires explicit cast
                         };
 
@@ -409,7 +438,17 @@ namespace NumSharp
                         return to switch
                         {
                             NPTypeCode.Decimal => true,
+                            // Decimal -> Complex via double is lossy for large values but always
+                            // representable; align with NumPy which allows this.
+                            NPTypeCode.Complex => true,
                             _ => false  // Decimal to other types requires explicit cast
+                        };
+
+                    case System.Numerics.Complex c:
+                        return to switch
+                        {
+                            NPTypeCode.Complex => true,
+                            _ => false  // Complex to other types requires explicit cast
                         };
 
                     default:

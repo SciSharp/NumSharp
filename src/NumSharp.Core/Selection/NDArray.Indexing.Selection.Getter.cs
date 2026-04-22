@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Numerics;
 using System.Threading.Tasks;
 using NumSharp.Generic;
 using NumSharp.Utilities;
@@ -82,7 +83,7 @@ namespace NumSharp
                     case Slice _:
                         continue;
                     case null: throw new ArgumentNullException($"The {i}th dimension in given indices is null.");
-                    default:   throw new ArgumentException($"Unsupported indexing type: '{(indicesObjects[i]?.GetType()?.Name ?? "null")}'");
+                    default:   throw new IndexError($"only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer or boolean arrays are valid indices (got '{(indicesObjects[i]?.GetType()?.Name ?? "null")}')");
                 }
             }
 
@@ -106,6 +107,8 @@ namespace NumSharp
                         case int o:          return Slice.Index(o);
                         case string o:       return new Slice(o);
                         case bool o:         return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
+                        case Half h:         return Slice.Index(Converts.ToInt64(h));
+                        case Complex c:      return Slice.Index(Converts.ToInt64(c));
                         case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
                         default:             throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
                     }
@@ -169,6 +172,12 @@ namespace NumSharp
                         }
                         else
                             return new NDArray<int>(); //false bool causes nullification of return.
+                    case Half h:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(h)));
+                        continue;
+                    case Complex c:
+                        indices.Add(NDArray.Scalar<int>(Converts.ToInt32(c)));
+                        continue;
                     case IConvertible o:
                         indices.Add(NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture)));
                         continue;
@@ -270,6 +279,7 @@ namespace NumSharp
             {
                 case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
                 case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
+                case NPTypeCode.SByte:   return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
                 case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
                 case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
                 case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
@@ -277,9 +287,11 @@ namespace NumSharp
                 case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
                 case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
                 case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
+                case NPTypeCode.Half:    return FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim);
                 case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
                 case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
                 case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
+                case NPTypeCode.Complex: return FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim);
                 default:
                     throw new NotSupportedException();
             }

@@ -2,6 +2,10 @@
   href: ../index.md
 - name: Introduction
   href: intro.md
+- name: NDArray
+  href: NDArray.md
+- name: Dtypes
+  href: dtypes.md
 - name: Broadcasting
   href: broadcasting.md
 - name: Buffering & Memory

@@ -37,6 +37,20 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Complex
+            if (type == NPTypeCode.Complex)
+            {
+                EmitUnaryComplexOperation(il, op);
+                return;
+            }
+
+            // Special handling for Half
+            if (type == NPTypeCode.Half)
+            {
+                EmitUnaryHalfOperation(il, op);
+                return;
+            }
+
             switch (op)
             {
                 case UnaryOp.Negate:
@@ -302,6 +316,23 @@ namespace NumSharp.Backends.Kernels
                     // Value is already on stack, nothing to do
                     break;
 
+                case NPTypeCode.SByte:
+                    // abs(x) = (x ^ (x >> 7)) - (x >> 7)
+                    // Stack: x
+                    {
+                        var locSign = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Dup);           // x, x
+                        il.Emit(OpCodes.Ldc_I4, 7);     // x, x, 7
+                        il.Emit(OpCodes.Shr);           // x, (x >> 7) = sign extension (-1 or 0)
+                        il.Emit(OpCodes.Stloc, locSign);// x            ; locSign = s
+                        il.Emit(OpCodes.Ldloc, locSign);// x, s
+                        il.Emit(OpCodes.Xor);           // x ^ s
+                        il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
+                        il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                        il.Emit(OpCodes.Conv_I1);       // Ensure result fits in sbyte
+                    }
+                    break;
+
                 case NPTypeCode.Int16:
                     // abs(x) = (x ^ (x >> 15)) - (x >> 15)
                     // Stack: x
@@ -348,6 +379,28 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Xor);           // x ^ s
                         il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
                         il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                    }
+                    break;
+
+                case NPTypeCode.Half:
+                    // Half.Abs - convert to double, call Math.Abs, convert back
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathAbsDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    }
+                    break;
+
+                case NPTypeCode.Complex:
+                    // Complex.Abs returns double magnitude
+                    // Note: NumPy np.abs(complex) returns float64, but here we return Complex(magnitude, 0)
+                    // since ILKernelGenerator unary ops preserve type. The type change should be handled at higher level.
+                    {
+                        // Stack has Complex value, call Complex.Abs (returns double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                        // Stack now has double (magnitude), create new Complex(magnitude, 0)
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                     }
                     break;
 
@@ -533,6 +586,29 @@ namespace NumSharp.Backends.Kernels
                     EmitConvertFromInt(il, type);
                     break;
 
+                case NPTypeCode.SByte:
+                    // sign(x) = (x > 0) - (x < 0)
+                    // Stack: x
+                    {
+                        var locX = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Stloc, locX);   // save x
+
+                        // (x > 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // x
+                        il.Emit(OpCodes.Ldc_I4_0);      // x, 0
+                        il.Emit(OpCodes.Cgt);           // (x > 0) as 0 or 1
+
+                        // (x < 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // (x>0), x
+                        il.Emit(OpCodes.Ldc_I4_0);      // (x>0), x, 0
+                        il.Emit(OpCodes.Clt);           // (x>0), (x<0)
+
+                        // result = (x > 0) - (x < 0)
+                        il.Emit(OpCodes.Sub);           // (x>0) - (x<0) = -1, 0, or 1
+                        il.Emit(OpCodes.Conv_I1);       // Convert to sbyte
+                    }
+                    break;
+
                 case NPTypeCode.Int16:
                     // sign(x) = (x >> 15) | ((int)(-x) >> 31 & 1)
                     // Simplified: (x > 0) - (x < 0)
@@ -602,6 +678,135 @@ namespace NumSharp.Backends.Kernels
                     }
                     break;
 
+                case NPTypeCode.Half:
+                    {
+                        // NumPy: sign(NaN) = NaN. Half.IsNaN check.
+                        var lblNotNaN = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
+
+                        // Store Half value
+                        var locX = il.DeclareLocal(typeof(Half));
+                        il.Emit(OpCodes.Stloc, locX);
+
+                        // Check for NaN
+                        il.Emit(OpCodes.Ldloc, locX);
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfIsNaN, null);
+                        il.Emit(OpCodes.Brfalse, lblNotNaN);
+
+                        // Is NaN - return NaN
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfNaN, null);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblNotNaN);
+                        // Convert to double, call Math.Sign, convert back to Half
+                        il.Emit(OpCodes.Ldloc, locX);
+                        il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathSignDouble, null);
+                        il.Emit(OpCodes.Conv_R8);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
+
+                case NPTypeCode.Complex:
+                    // NumPy sign(z):
+                    //   |z| == 0            → 0+0j
+                    //   |z| finite, nonzero → z / |z|                         (unit vector)
+                    //   |z| infinite:
+                    //     both components infinite → nan+nanj                 (indeterminate direction)
+                    //     only real infinite       → CopySign(1, z.R) + 0j    (pure-real unit)
+                    //     only imag infinite       → 0 + CopySign(1, z.I)·j   (pure-imag unit)
+                    //   any NaN in z        → nan+nanj                        (falls naturally out of z/|z|
+                    //                                                          because |nan|=nan propagates)
+                    //
+                    // B26: the prior impl used `z / |z|` unconditionally, which for |z|=inf
+                    // (single-component infinite) produced `inf/inf = nan+nanj` instead of
+                    // the unit vector. Now we branch on isinf(|z|) and handle per-component.
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        var locMag = il.DeclareLocal(typeof(double));
+                        var locR = il.DeclareLocal(typeof(double));
+                        var locI = il.DeclareLocal(typeof(double));
+                        var lblNonZero = il.DefineLabel();
+                        var lblFiniteMag = il.DefineLabel();
+                        var lblBothInf = il.DefineLabel();
+                        var lblImagInf = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
+
+                        il.Emit(OpCodes.Stloc, locZ);
+
+                        // Compute |z|
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                        il.Emit(OpCodes.Stloc, locMag);
+
+                        // Check if magnitude is zero → return Zero
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Bne_Un, lblNonZero);
+                        il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexZero);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblNonZero);
+                        // Check if magnitude is finite → fall through to z/|z|
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Brfalse, lblFiniteMag);
+
+                        // Infinite magnitude — extract components to locals
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
+                        il.Emit(OpCodes.Stloc, locR);
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                        il.Emit(OpCodes.Stloc, locI);
+
+                        // if (isinf(r) && isinf(i)) return nan+nanj
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Ldloc, locI);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.And);
+                        il.Emit(OpCodes.Brfalse, lblBothInf);      // branch if NOT both-inf
+                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        il.Emit(OpCodes.Ldc_R8, double.NaN);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblBothInf);
+                        // Exactly one component is infinite. Check which.
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsInfinity, null);
+                        il.Emit(OpCodes.Brfalse, lblImagInf);
+                        // Real is infinite → (CopySign(1, r), 0)
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldloc, locR);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblImagInf);
+                        // Imag is infinite → (0, CopySign(1, i))
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldloc, locI);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathCopySign, null);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblFiniteMag);
+                        // Normal case: z / |z|. Complex.op_Division(Complex, double) handles
+                        // NaN-in-z naturally by propagating NaN through component-wise divide.
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexDivisionByDouble, null);
+
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
+
                 default:
                     throw new NotSupportedException($"Sign not supported for type {type}");
             }
@@ -620,6 +825,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
@@ -645,6 +853,21 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Conv_R8);
+                    break;
+                case NPTypeCode.Half:
+                    // int -> double -> Half
+                    il.Emit(OpCodes.Conv_R8);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    break;
+                case NPTypeCode.Decimal:
+                    // int -> decimal via implicit cast
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // int -> double -> Complex(real, 0)
+                    il.Emit(OpCodes.Conv_R8);
+                    il.Emit(OpCodes.Ldc_R8, 0.0);
+                    il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                     break;
                 default:
                     throw new NotSupportedException($"Conversion from int to {to} not supported");

@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -94,6 +95,9 @@ namespace NumSharp
                 case NPTypeCode.Single:
                     ConvolveFullTyped<float>(a, v, result, na, nv, outLen);
                     break;
+                case NPTypeCode.Half:
+                    ConvolveFullTyped<Half>(a, v, result, na, nv, outLen);
+                    break;
                 case NPTypeCode.Int32:
                     ConvolveFullTyped<int>(a, v, result, na, nv, outLen);
                     break;
@@ -102,6 +106,9 @@ namespace NumSharp
                     break;
                 case NPTypeCode.Int16:
                     ConvolveFullTyped<short>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.SByte:
+                    ConvolveFullTyped<sbyte>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Byte:
                     ConvolveFullTyped<byte>(a, v, result, na, nv, outLen);
@@ -117,6 +124,9 @@ namespace NumSharp
                     break;
                 case NPTypeCode.Decimal:
                     ConvolveFullTyped<decimal>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Complex:
+                    ConvolveFullTyped<System.Numerics.Complex>(a, v, result, na, nv, outLen);
                     break;
                 default:
                     throw new NotSupportedException($"Type {retType} is not supported for convolution.");
@@ -142,8 +152,9 @@ namespace NumSharp
                 for (long j = jMin; j <= jMax; j++)
                 {
                     // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
-                    double aVal = Convert.ToDouble(aPtr[j]);
-                    double vVal = Convert.ToDouble(vPtr[k - j]);
+                    // (object) boxing required since aPtr[j] is generic TIn; Converts.ToDouble dispatches on boxed type.
+                    double aVal = Converts.ToDouble((object)aPtr[j]);
+                    double vVal = Converts.ToDouble((object)vPtr[k - j]);
                     sum += aVal * vVal;
                 }
 
@@ -168,6 +179,12 @@ namespace NumSharp
                     rPtr[k] = (T)(object)(ulong)sum;
                 else if (typeof(T) == typeof(decimal))
                     rPtr[k] = (T)(object)(decimal)sum;
+                else if (typeof(T) == typeof(sbyte))
+                    rPtr[k] = (T)(object)(sbyte)sum;
+                else if (typeof(T) == typeof(Half))
+                    rPtr[k] = (T)(object)(Half)sum;
+                else if (typeof(T) == typeof(System.Numerics.Complex))
+                    rPtr[k] = (T)(object)(System.Numerics.Complex)sum;
             }
         }
 

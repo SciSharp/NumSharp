@@ -56,7 +56,8 @@ namespace NumSharp
 
                 default:
                     var type = a.GetType();
-                    if (type.IsPrimitive || type == typeof(decimal))
+                    //is it a scalar
+                    if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
                     {
                         ret = NDArray.Scalar(a);
                         break;

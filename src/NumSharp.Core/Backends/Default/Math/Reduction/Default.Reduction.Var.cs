@@ -117,20 +117,33 @@ namespace NumSharp.Backends
             {
                 //if the given div axis is 1 - variance of a single element is 0
                 //Return zeros with the appropriate shape (NumPy behavior)
+                // B23: Complex variance collapses to float64 in NumPy (variance of complex is a
+                // real non-negative number). GetComputingType preserves Complex→Complex which
+                // would give the wrong dtype here; override to Double for Complex inputs.
+                var zerosType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
                 if (keepdims)
                 {
                     var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
+                    return np.zeros(keepdimsShapeDims, zerosType);
                 }
-                return np.zeros(Shape.GetAxis(shape, axis), typeCode ?? arr.GetTypeCode.GetComputingType());
+                return np.zeros(Shape.GetAxis(shape, axis), zerosType);
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
             if (ILKernelGenerator.Enabled)
             {
-                var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
+                // B16: var axis preserves float input dtype (half → half). Complex → Double (variance
+                // is a non-negative real number). Integer → Double.
+                var axisOutType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
+                var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, axisOutType, ddof ?? 0);
                 if (ilResult is not null)
                     return ilResult;
             }
@@ -218,6 +231,9 @@ namespace NumSharp.Backends
                         case NPTypeCode.Byte:
                             variance = ILKernelGenerator.VarSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
+                        case NPTypeCode.SByte:
+                            variance = ILKernelGenerator.VarSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            break;
                         case NPTypeCode.Int16:
                             variance = ILKernelGenerator.VarSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;
@@ -277,6 +293,25 @@ namespace NumSharp.Backends
                 return Converts.ChangeType(variance, retType);
             }
 
+            // Handle Complex separately - var uses |x - mean|^2 and returns float64
+            if (arr.GetTypeCode == NPTypeCode.Complex)
+            {
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                var moveNext = iter.MoveNext;
+                var hasNext = iter.HasNext;
+                var xmean = (System.Numerics.Complex)mean_elementwise_il(arr, null);
+
+                double sum = 0;
+                while (hasNext())
+                {
+                    var diff = moveNext() - xmean;
+                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary; // |diff|^2
+                }
+
+                var variance = sum / (arr.size - _ddof);
+                return variance; // Complex var returns float64
+            }
+
             // All other types: iterate as double
             {
                 var iter = arr.AsIterator<double>();
@@ -329,11 +364,16 @@ namespace NumSharp.Backends
                 // The kernel computes variance with ddof=0 by default
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
 
-                // For ddof != 0, adjust: var_ddof = var_0 * n / (n - ddof)
+                // For ddof != 0, adjust: var_ddof = var_0 * n / max(n - ddof, 0)
+                // B24: clamp (n - ddof) to 0 to match NumPy, which uses max(n-ddof, 0) as the
+                // divisor. For ddof >= n the divisor is 0 → IEEE yields +inf (var is unbounded
+                // when degrees of freedom are exhausted). Without the clamp, ddof > n gives a
+                // negative adjustment and therefore negative variance — wrong sign AND wrong value.
                 if (ddof != 0)
                 {
                     double* resultPtr = (double*)result.Address;
-                    double adjustment = (double)axisSize / (axisSize - ddof);
+                    double divisor = Math.Max(axisSize - ddof, 0);
+                    double adjustment = (double)axisSize / divisor;
                     for (long i = 0; i < outputSize; i++)
                         resultPtr[i] *= adjustment;
                 }

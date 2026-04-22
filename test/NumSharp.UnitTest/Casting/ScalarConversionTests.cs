@@ -67,13 +67,13 @@ namespace NumSharp.UnitTest
             var int64Scalar = NDArray.Scalar(123L);
             ((double)(NDArray)int64Scalar).Should().Be(123.0);
 
-            // double -> int (IConvertible rounds to nearest, NumPy truncates)
+            // double -> int (NumPy truncates toward zero)
             var doubleScalar = NDArray.Scalar(3.7);
-            ((int)(NDArray)doubleScalar).Should().Be(4, "IConvertible rounds to nearest (NumPy truncates - known difference)");
+            ((int)(NDArray)doubleScalar).Should().Be(3, "NumPy truncates toward zero: 3.7 -> 3");
 
-            // float -> long (IConvertible rounds to nearest)
+            // float -> long (NumPy truncates toward zero)
             var floatScalar = NDArray.Scalar(999.5f);
-            ((long)(NDArray)floatScalar).Should().Be(1000L, "IConvertible rounds to nearest");
+            ((long)(NDArray)floatScalar).Should().Be(999L, "NumPy truncates toward zero: 999.5 -> 999");
 
             // byte -> double
             var byteScalar = NDArray.Scalar((byte)255);

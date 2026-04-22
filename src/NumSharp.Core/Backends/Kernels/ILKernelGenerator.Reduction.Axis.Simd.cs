@@ -561,6 +561,19 @@ namespace NumSharp.Backends.Kernels
                 };
                 return (T)(object)val;
             }
+            // B5: Add SByte identity values for axis reductions.
+            if (typeof(T) == typeof(sbyte))
+            {
+                sbyte val = op switch
+                {
+                    ReductionOp.Sum => (sbyte)0,
+                    ReductionOp.Prod => (sbyte)1,
+                    ReductionOp.Min => sbyte.MaxValue,
+                    ReductionOp.Max => sbyte.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
             if (typeof(T) == typeof(short))
             {
                 short val = op switch
@@ -777,6 +790,21 @@ namespace NumSharp.Backends.Kernels
                     ReductionOp.Prod => (short)(sa * sb),
                     ReductionOp.Min => (short)Math.Min(sa, sb),
                     ReductionOp.Max => (short)Math.Max(sa, sb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            // B5: SByte axis reduction support (pair-combine).
+            if (typeof(T) == typeof(sbyte))
+            {
+                int sba = (sbyte)(object)a;
+                int sbb = (sbyte)(object)b;
+                sbyte result = op switch
+                {
+                    ReductionOp.Sum => (sbyte)(sba + sbb),
+                    ReductionOp.Prod => (sbyte)(sba * sbb),
+                    ReductionOp.Min => (sbyte)Math.Min(sba, sbb),
+                    ReductionOp.Max => (sbyte)Math.Max(sba, sbb),
                     _ => throw new NotSupportedException()
                 };
                 return (T)(object)result;

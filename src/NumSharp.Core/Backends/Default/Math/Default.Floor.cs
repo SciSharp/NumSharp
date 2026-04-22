@@ -9,9 +9,12 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Element-wise floor using IL-generated kernels.
+        /// NumPy: for integer dtypes, floor is a no-op that preserves the input dtype.
         /// </summary>
         public override NDArray Floor(NDArray nd, NPTypeCode? typeCode = null)
         {
+            if (!typeCode.HasValue && nd.GetTypeCode.IsInteger())
+                return Cast(nd, nd.GetTypeCode, copy: true);
             return ExecuteUnaryOp(nd, UnaryOp.Floor, ResolveUnaryReturnType(nd, typeCode));
         }
     }

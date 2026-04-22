@@ -11,13 +11,18 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
 
             if (shape.IsEmpty)
-                return NDArray.Scalar((typeCode ?? arr.typecode).GetOneValue());
+            {
+                // NumPy parity: prod of empty array uses accumulating type (int/bool -> int64/uint64, floats preserved).
+                var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
+                return NDArray.Scalar(emptyType.GetOneValue());
+            }
 
             if (shape.size == 0)
             {
                 if (axis_ == null)
                 {
-                    var r = NDArray.Scalar((typeCode ?? arr.typecode).GetOneValue());
+                    var emptyType = typeCode ?? arr.typecode.GetAccumulatingType();
+                    var r = NDArray.Scalar(emptyType.GetOneValue());
                     if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                     return r;
                 }

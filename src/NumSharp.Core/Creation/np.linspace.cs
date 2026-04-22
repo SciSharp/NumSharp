@@ -177,6 +177,16 @@ namespace NumSharp
 
                     return ret;
 	            }
+	            case NPTypeCode.SByte:
+	            {
+                    unsafe
+                    {
+                        var addr = (sbyte*)ret.Address;
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSByte(start + i * step);
+                    }
+
+                    return ret;
+	            }
 	            case NPTypeCode.Int16:
 	            {
                     unsafe
@@ -247,6 +257,16 @@ namespace NumSharp
 
                     return ret;
 	            }
+	            case NPTypeCode.Half:
+	            {
+                    unsafe
+                    {
+                        var addr = (Half*)ret.Address;
+                         for (long i = 0; i < num; i++) addr[i] = (Half)(start + i * step);
+                    }
+
+                    return ret;
+	            }
 	            case NPTypeCode.Double:
 	            {
                     unsafe
@@ -273,6 +293,16 @@ namespace NumSharp
                     {
                         var addr = (decimal*)ret.Address;
                          for (long i = 0; i < num; i++) addr[i] = Converts.ToDecimal(start + i * step);
+                    }
+
+                    return ret;
+	            }
+	            case NPTypeCode.Complex:
+	            {
+                    unsafe
+                    {
+                        var addr = (System.Numerics.Complex*)ret.Address;
+                         for (long i = 0; i < num; i++) addr[i] = new System.Numerics.Complex(start + i * step, 0);
                     }
 
                     return ret;

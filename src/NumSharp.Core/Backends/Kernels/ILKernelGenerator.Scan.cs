@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+using NumSharp.Utilities;
 
 // =============================================================================
 // ILKernelGenerator.Scan.cs - Scan (prefix sum) kernel generation
@@ -1125,7 +1126,7 @@ namespace NumSharp.Backends.Kernels
                         long* dstTyped = (long*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            product *= Convert.ToInt64(src[inputOffset + i * axisStride]);
+                            product *= Converts.ToInt64((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
                         }
                     }
@@ -1135,7 +1136,7 @@ namespace NumSharp.Backends.Kernels
                         double* dstTyped = (double*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            product *= Convert.ToDouble(src[inputOffset + i * axisStride]);
+                            product *= Converts.ToDouble((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
                         }
                     }
@@ -1145,7 +1146,7 @@ namespace NumSharp.Backends.Kernels
                         decimal* dstTyped = (decimal*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            product *= Convert.ToDecimal(src[inputOffset + i * axisStride]);
+                            product *= Converts.ToDecimal((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
                         }
                     }
@@ -1944,7 +1945,7 @@ namespace NumSharp.Backends.Kernels
                         long* dstTyped = (long*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            sum += Convert.ToInt64(src[inputOffset + i * axisStride]);
+                            sum += Converts.ToInt64((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
@@ -1954,7 +1955,7 @@ namespace NumSharp.Backends.Kernels
                         double* dstTyped = (double*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            sum += Convert.ToDouble(src[inputOffset + i * axisStride]);
+                            sum += Converts.ToDouble((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
@@ -1964,7 +1965,7 @@ namespace NumSharp.Backends.Kernels
                         float* dstTyped = (float*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            sum += Convert.ToSingle(src[inputOffset + i * axisStride]);
+                            sum += Converts.ToSingle((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
@@ -1974,7 +1975,7 @@ namespace NumSharp.Backends.Kernels
                         ulong* dstTyped = (ulong*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            sum += Convert.ToUInt64(src[inputOffset + i * axisStride]);
+                            sum += Converts.ToUInt64((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
@@ -1984,7 +1985,7 @@ namespace NumSharp.Backends.Kernels
                         decimal* dstTyped = (decimal*)dst;
                         for (long i = 0; i < axisSize; i++)
                         {
-                            sum += Convert.ToDecimal(src[inputOffset + i * axisStride]);
+                            sum += Converts.ToDecimal((object)src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
@@ -2389,7 +2390,7 @@ namespace NumSharp.Backends.Kernels
                 double* dstDouble = (double*)dst;
                 for (long i = 0; i < totalSize; i++)
                 {
-                    sum += Convert.ToDouble(src[i]);
+                    sum += Converts.ToDouble((object)src[i]);
                     dstDouble[i] = sum;
                 }
             }
@@ -2399,7 +2400,7 @@ namespace NumSharp.Backends.Kernels
                 long* dstLong = (long*)dst;
                 for (long i = 0; i < totalSize; i++)
                 {
-                    sum += Convert.ToInt64(src[i]);
+                    sum += Converts.ToInt64((object)src[i]);
                     dstLong[i] = sum;
                 }
             }
@@ -2409,7 +2410,7 @@ namespace NumSharp.Backends.Kernels
                 decimal* dstDecimal = (decimal*)dst;
                 for (long i = 0; i < totalSize; i++)
                 {
-                    sum += Convert.ToDecimal(src[i]);
+                    sum += Converts.ToDecimal((object)src[i]);
                     dstDecimal[i] = sum;
                 }
             }
@@ -2419,7 +2420,7 @@ namespace NumSharp.Backends.Kernels
                 float* dstFloat = (float*)dst;
                 for (long i = 0; i < totalSize; i++)
                 {
-                    sum += Convert.ToSingle(src[i]);
+                    sum += Converts.ToSingle((object)src[i]);
                     dstFloat[i] = sum;
                 }
             }
@@ -2429,7 +2430,7 @@ namespace NumSharp.Backends.Kernels
                 ulong* dstUlong = (ulong*)dst;
                 for (long i = 0; i < totalSize; i++)
                 {
-                    sum += Convert.ToUInt64(src[i]);
+                    sum += Converts.ToUInt64((object)src[i]);
                     dstUlong[i] = sum;
                 }
             }

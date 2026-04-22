@@ -117,20 +117,32 @@ namespace NumSharp.Backends
             {
                 //if the given div axis is 1 - std of a single element is 0
                 //Return zeros with the appropriate shape (NumPy behavior)
+                // B23: Complex std collapses to float64 in NumPy. GetComputingType preserves
+                // Complex→Complex which would give the wrong dtype here; override for Complex.
+                var zerosType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
                 if (keepdims)
                 {
                     var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
-                    return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
+                    return np.zeros(keepdimsShapeDims, zerosType);
                 }
-                return np.zeros(Shape.GetAxis(shape, axis), typeCode ?? arr.GetTypeCode.GetComputingType());
+                return np.zeros(Shape.GetAxis(shape, axis), zerosType);
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
             if (ILKernelGenerator.Enabled)
             {
-                var ilResult = ExecuteAxisStdReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
+                // B16: std axis preserves float input dtype (half → half). Complex → Double (std
+                // is a non-negative real number). Integer → Double.
+                var axisOutType = typeCode
+                    ?? (arr.GetTypeCode == NPTypeCode.Complex
+                        ? NPTypeCode.Double
+                        : arr.GetTypeCode.GetComputingType());
+                var ilResult = ExecuteAxisStdReductionIL(arr, axis, keepdims, axisOutType, ddof ?? 0);
                 if (ilResult is not null)
                     return ilResult;
             }
@@ -218,6 +230,9 @@ namespace NumSharp.Backends
                         case NPTypeCode.Byte:
                             std = ILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
+                        case NPTypeCode.SByte:
+                            std = ILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            break;
                         case NPTypeCode.Int16:
                             std = ILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;
@@ -277,6 +292,25 @@ namespace NumSharp.Backends
                 return Converts.ChangeType(std, retType);
             }
 
+            // Handle Complex separately - std uses |x - mean|^2 and returns float64
+            if (arr.GetTypeCode == NPTypeCode.Complex)
+            {
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                var moveNext = iter.MoveNext;
+                var hasNext = iter.HasNext;
+                var xmean = (System.Numerics.Complex)mean_elementwise_il(arr, null);
+
+                double sum = 0;
+                while (hasNext())
+                {
+                    var diff = moveNext() - xmean;
+                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary; // |diff|^2
+                }
+
+                var std = Math.Sqrt(sum / (arr.size - _ddof));
+                return std; // Complex std returns float64
+            }
+
             // All other types: iterate as double
             {
                 var iter = arr.AsIterator<double>();
@@ -329,11 +363,15 @@ namespace NumSharp.Backends
                 // The kernel computes std with ddof=0 by default
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
 
-                // For ddof != 0, adjust: std_ddof = std_0 * sqrt(n / (n - ddof))
+                // For ddof != 0, adjust: std_ddof = std_0 * sqrt(n / max(n - ddof, 0))
+                // B24: same NumPy-parity clamp as in Var's dispatcher — ddof >= n yields +inf
+                // because sqrt(inf) = inf. Without the clamp, ddof > n would take sqrt of a
+                // negative number (NaN) or produce a negative-scaled std.
                 if (ddof != 0)
                 {
                     double* resultPtr = (double*)result.Address;
-                    double adjustment = Math.Sqrt((double)axisSize / (axisSize - ddof));
+                    double divisor = Math.Max(axisSize - ddof, 0);
+                    double adjustment = Math.Sqrt((double)axisSize / divisor);
                     for (long i = 0; i < outputSize; i++)
                         resultPtr[i] *= adjustment;
                 }

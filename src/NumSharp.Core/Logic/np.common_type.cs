@@ -43,34 +43,7 @@ namespace NumSharp
             if (arrays == null || arrays.Length == 0)
                 throw new ArgumentException("At least one array must be provided", nameof(arrays));
 
-            // Get the result type from all arrays
-            var types = arrays.Select(a => a.GetTypeCode).ToArray();
-
-            NPTypeCode result;
-            if (types.Length == 1)
-            {
-                result = types[0];
-            }
-            else
-            {
-                result = _FindCommonType_Array(types);
-            }
-
-            // common_type always returns a floating point type
-            // Integers promote to at least Double
-            return result switch
-            {
-                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
-                NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
-                NPTypeCode.Char => NPTypeCode.Double,
-
-                NPTypeCode.Single => NPTypeCode.Single,  // Keep float32 if all inputs are float32
-                NPTypeCode.Double => NPTypeCode.Double,
-                NPTypeCode.Decimal => NPTypeCode.Decimal,
-                NPTypeCode.Complex => NPTypeCode.Complex,  // Complex stays complex
-
-                _ => NPTypeCode.Double  // Default to double for unknown types
-            };
+            return common_type_code(arrays.Select(a => a.GetTypeCode).ToArray());
         }
 
         /// <summary>
@@ -78,34 +51,65 @@ namespace NumSharp
         /// </summary>
         /// <param name="types">Input type codes.</param>
         /// <returns>The common scalar type as NPTypeCode.</returns>
+        /// <remarks>
+        /// NumPy common_type rules:
+        /// - Any Complex input -> Complex (complex128).
+        /// - Any Decimal input (NumSharp extension) -> Decimal.
+        /// - Any integer/bool/char input -> Double (any int presence forces float64).
+        /// - Otherwise (all float16/float32/float64): return max-precision float.
+        /// </remarks>
         public static NPTypeCode common_type_code(params NPTypeCode[] types)
         {
             if (types == null || types.Length == 0)
                 throw new ArgumentException("At least one type must be provided", nameof(types));
 
-            NPTypeCode result;
-            if (types.Length == 1)
+            bool hasComplex = false;
+            bool hasDecimal = false;
+            bool hasInt = false;
+            // Rank pure floats: Half=1, Single=2, Double=3.
+            int maxFloatRank = 0;
+
+            foreach (var t in types)
             {
-                result = types[0];
+                switch (t)
+                {
+                    case NPTypeCode.Boolean:
+                        // NumPy parity: np.common_type rejects bool as "non-numeric".
+                        throw new TypeError("can't get common type for non-numeric array");
+                    case NPTypeCode.Complex:
+                        hasComplex = true;
+                        break;
+                    case NPTypeCode.Decimal:
+                        hasDecimal = true;
+                        break;
+                    case NPTypeCode.Half:
+                        if (maxFloatRank < 1) maxFloatRank = 1;
+                        break;
+                    case NPTypeCode.Single:
+                        if (maxFloatRank < 2) maxFloatRank = 2;
+                        break;
+                    case NPTypeCode.Double:
+                        if (maxFloatRank < 3) maxFloatRank = 3;
+                        break;
+                    // byte/sbyte, int16/uint16, int32/uint32, int64/uint64, char
+                    default:
+                        hasInt = true;
+                        break;
+                }
             }
-            else
+
+            if (hasComplex) return NPTypeCode.Complex;
+            if (hasDecimal) return NPTypeCode.Decimal;
+            // NumPy parity: any integer presence promotes to at least float64, overriding
+            // smaller float precision seen elsewhere in the inputs.
+            if (hasInt) return NPTypeCode.Double;
+
+            // All pure floats. Pick max precision.
+            return maxFloatRank switch
             {
-                result = _FindCommonType_Array(types);
-            }
-
-            // Always return floating point type
-            return result switch
-            {
-                NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
-                NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
-                NPTypeCode.Char => NPTypeCode.Double,
-
-                NPTypeCode.Single => NPTypeCode.Single,
-                NPTypeCode.Double => NPTypeCode.Double,
-                NPTypeCode.Decimal => NPTypeCode.Decimal,
-                NPTypeCode.Complex => NPTypeCode.Complex,
-
-                _ => NPTypeCode.Double
+                1 => NPTypeCode.Half,
+                2 => NPTypeCode.Single,
+                _ => NPTypeCode.Double,
             };
         }
     }
