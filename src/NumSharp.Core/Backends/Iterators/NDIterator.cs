@@ -3,34 +3,33 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
     /// <summary>
-    /// Lazy per-element iterator. Supports contiguous/sliced/strided/broadcast
-    /// source layouts and any source-to-TOut numeric dtype cast, without
-    /// materializing a copy of the iterated data.
+    /// Per-element iterator backed by an owned <see cref="NpyIterState"/>.
+    /// Contiguous / sliced / strided / broadcast layouts are handled by the
+    /// NpyIter state machine itself — MoveNext reads through
+    /// <see cref="NpyIterState.DataPtrs"/> and advances via
+    /// <see cref="NpyIterState.Advance"/> at one element per call.
+    /// AutoReset loops forever by resetting the state when IterIndex
+    /// reaches IterEnd; Reset restarts from IterStart.
     ///
-    /// Path selection at construction time picks the fastest MoveNext for the
-    /// concrete layout + cast combination:
+    /// Same-dtype: the TOut value is read directly from the source via the
+    /// data pointer (<c>*(TOut*)_state->DataPtrs[0]</c>). MoveNextReference
+    /// returns a <c>ref TOut</c> into the source buffer.
     ///
-    /// <list type="bullet">
-    ///   <item>Same-type contiguous (offset = 0, no AutoReset): direct
-    ///     <c>*(TOut*)(addr + cursor++)</c> — one pointer increment per call.</item>
-    ///   <item>Same-type strided or offset != 0: walks offsets via
-    ///     <see cref="ValueOffsetIncrementor"/> / <see cref="ValueOffsetIncrementorAutoresetting"/>,
-    ///     reads <c>*(TOut*)(addr + offset)</c>.</item>
-    ///   <item>Cross-type: reads the source bytes as the actual src dtype, passes
-    ///     through <see cref="Converts.FindConverter{TIn, TOut}"/>, and returns
-    ///     the converted TOut. MoveNextReference throws — references into a
-    ///     cast value don't exist.</item>
-    /// </list>
+    /// Cross-dtype: the source bytes are interpreted as the declared source
+    /// dtype, then pushed through <see cref="Converts.FindConverter{TSrc, TOut}"/>
+    /// on each step. MoveNextReference throws because a converted value has
+    /// no backing ref in the source.
     ///
-    /// AutoReset on non-broadcast iteration is implemented via the incrementor's
-    /// auto-resetting wrapper (or modulo on the contig-scalar-cursor path) so
-    /// iteration cycles forever without allocating.
+    /// Lifecycle: this class owns the NpyIterState pointer. Dispose (or GC
+    /// finalization via the explicit IDisposable call) frees the state via
+    /// <see cref="NpyIterRef.FreeState"/>.
     /// </summary>
     public unsafe class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable
         where TOut : unmanaged
@@ -49,42 +48,100 @@ namespace NumSharp
         /// <summary>Total number of elements this iterator visits before (non-auto-reset) end.</summary>
         public long size;
 
-        /// <summary>Moves to next iteration and returns the next value. Always check <see cref="HasNext"/> first.</summary>
         public Func<TOut> MoveNext;
-
-        /// <summary>Moves to next iteration and returns a reference to the next value. Throws when iteration involves a dtype cast.</summary>
         public MoveNextReferencedDelegate<TOut> MoveNextReference;
-
-        /// <summary>Returns whether there are more elements to iterate.</summary>
         public Func<bool> HasNext;
-
-        /// <summary>Resets the internal cursor to the beginning.</summary>
         public Action Reset;
 
+        private NpyIterState* _state;  // Owned; freed in Dispose
+        private readonly NDArray _srcKeepAlive;  // GC-anchor: keeps the underlying storage alive while we hold its pointers
         private bool _disposed;
 
-        public NDIterator(IMemoryBlock block, Shape shape, Shape? broadcastedShape, bool autoReset = false)
+        public NDIterator(NDArray arr, bool autoReset = false)
         {
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
+            var shape = arr.Shape;
             if (shape.IsEmpty || shape.size == 0)
                 throw new InvalidOperationException("Can't construct NDIterator with an empty shape.");
 
-            Block = block ?? throw new ArgumentNullException(nameof(block));
+            _srcKeepAlive = arr;
+            Block = arr.Storage.InternalArray;
+            Shape = shape;
+            BroadcastedShape = null;
+            size = shape.size;
+            AutoReset = autoReset;
+
+            _state = InitState(arr);
+            SetDelegates(arr.GetTypeCode);
+        }
+
+        public NDIterator(UnmanagedStorage storage, bool autoReset = false)
+            : this(StorageToNDArray(storage), autoReset) { }
+
+        public NDIterator(IArraySlice slice, Shape shape, Shape? broadcastedShape, bool autoReset = false)
+            : this((IMemoryBlock)slice, shape, broadcastedShape, autoReset) { }
+
+        public NDIterator(IMemoryBlock block, Shape shape, Shape? broadcastedShape, bool autoReset = false)
+        {
+            if (block is null) throw new ArgumentNullException(nameof(block));
+            if (shape.IsEmpty || shape.size == 0)
+                throw new InvalidOperationException("Can't construct NDIterator with an empty shape.");
+
+            Block = block;
             Shape = shape;
             BroadcastedShape = broadcastedShape;
             size = broadcastedShape?.size ?? shape.size;
             AutoReset = (broadcastedShape.HasValue && shape.size != broadcastedShape.Value.size) || autoReset;
 
-            SetDefaults();
+            var srcSlice = block as IArraySlice
+                ?? throw new ArgumentException(
+                    $"NDIterator expected source block to implement IArraySlice; got {block.GetType()}.");
+
+            // When broadcastedShape expands beyond shape, build an NDArray on
+            // the broadcasted shape so NpyIter iterates the full (cyclical)
+            // extent via stride=0 broadcast axes.
+            var effShape = broadcastedShape.HasValue && shape.size != broadcastedShape.Value.size
+                ? broadcastedShape.Value
+                : shape;
+            var srcStorage = UnmanagedStorage.CreateBroadcastedUnsafe(srcSlice, effShape);
+            _srcKeepAlive = new NDArray(srcStorage);
+
+            _state = InitState(_srcKeepAlive);
+            SetDelegates(block.TypeCode);
         }
 
-        public NDIterator(IArraySlice slice, Shape shape, Shape? broadcastedShape, bool autoReset = false)
-            : this((IMemoryBlock)slice, shape, broadcastedShape, autoReset) { }
+        private static NDArray StorageToNDArray(UnmanagedStorage storage)
+        {
+            if (storage is null) throw new ArgumentNullException(nameof(storage));
+            return new NDArray(storage);
+        }
 
-        public NDIterator(UnmanagedStorage storage, bool autoReset = false)
-            : this((IMemoryBlock)storage?.InternalArray, storage?.Shape ?? default, null, autoReset) { }
-
-        public NDIterator(NDArray arr, bool autoReset = false)
-            : this(arr?.Storage.InternalArray, arr?.Shape ?? default, null, autoReset) { }
+        private static NpyIterState* InitState(NDArray arr)
+        {
+            // NpyIterRef.New builds state with stride/broadcast info. Transfer
+            // ownership into our field so the state outlives the ref struct.
+            //
+            // NPY_CORDER forces traversal in the view's logical row-major
+            // order — the contract NDIterator historically provides (e.g.
+            // iterating a transposed (4, 3) view yields elements in the order
+            // 0,4,8, 1,5,9, ...). The default NPY_KEEPORDER would reorder to
+            // the underlying memory layout, which would silently break
+            // callers of AsIterator that depend on logical order.
+            var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.None,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_SAFE_CASTING);
+            try
+            {
+                return iter.ReleaseState();
+            }
+            catch
+            {
+                iter.Dispose();
+                throw;
+            }
+        }
 
         /// <summary>Reconfigure the iterator after construction.</summary>
         public void SetMode(bool autoreset, Shape reshape = default)
@@ -95,164 +152,92 @@ namespace NumSharp
                 Shape = reshape;
                 size = BroadcastedShape?.size ?? Shape.size;
             }
-            SetDefaults();
+            // Rebuild delegates — AutoReset may have changed.
+            SetDelegates(Block.TypeCode);
         }
 
-        private void SetDefaults()
+        private void SetDelegates(NPTypeCode srcType)
         {
-            var srcType = Block.TypeCode;
             var dstType = InfoOf<TOut>.NPTypeCode;
+            HasNext = DefaultHasNext;
+            Reset = DefaultReset;
 
             if (srcType == dstType)
             {
-                SetDefaults_NoCast();
+                MoveNext = SameType_MoveNext;
+                MoveNextReference = SameType_MoveNextReference;
                 return;
             }
 
-            SetDefaults_WithCast(srcType);
-        }
-
-        // ---------------------------------------------------------------------
-        // Same-type (no cast) — direct pointer reads. Four sub-paths depending
-        // on whether the shape is contiguous-with-zero-offset and whether
-        // AutoReset is active.
-        // ---------------------------------------------------------------------
-
-        private void SetDefaults_NoCast()
-        {
-            var localBlock = Block;
-            var localShape = Shape;
-
-            if (localShape.IsContiguous && localShape.offset == 0)
-            {
-                if (AutoReset)
-                {
-                    long localSize = localShape.size;
-                    long cursor = 0;
-                    MoveNext = () =>
-                    {
-                        TOut ret = *((TOut*)localBlock.Address + cursor);
-                        cursor++;
-                        if (cursor >= localSize) cursor = 0;
-                        return ret;
-                    };
-                    MoveNextReference = () =>
-                    {
-                        ref TOut r = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + cursor);
-                        cursor++;
-                        if (cursor >= localSize) cursor = 0;
-                        return ref r;
-                    };
-                    Reset = () => cursor = 0;
-                    HasNext = () => true;
-                }
-                else
-                {
-                    long localSize = size;
-                    long cursor = 0;
-                    MoveNext = () => *((TOut*)localBlock.Address + cursor++);
-                    MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + cursor++);
-                    Reset = () => cursor = 0;
-                    HasNext = () => cursor < localSize;
-                }
-                return;
-            }
-
-            // Strided / sliced / broadcast — walk offsets via the incrementor.
-            if (AutoReset)
-            {
-                var incr = new ValueOffsetIncrementorAutoresetting(localShape);
-                MoveNext = () => *((TOut*)localBlock.Address + incr.Next());
-                MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + incr.Next());
-                Reset = () => incr.Reset();
-                HasNext = () => true;
-            }
-            else
-            {
-                var incr = new ValueOffsetIncrementor(localShape);
-                MoveNext = () => *((TOut*)localBlock.Address + incr.Next());
-                MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + incr.Next());
-                Reset = () => incr.Reset();
-                HasNext = () => incr.HasNext;
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Cross-type — same offset-walking strategy, plus a Converts.FindConverter
-        // step that turns the bytes at the source pointer into TOut. MoveNextReference
-        // is not meaningful when a conversion happens, so it throws.
-        // ---------------------------------------------------------------------
-
-        private void SetDefaults_WithCast(NPTypeCode srcType)
-        {
             MoveNextReference = () => throw new NotSupportedException(
                 "Unable to return references during iteration when casting is involved.");
 
             switch (srcType)
             {
-                case NPTypeCode.Boolean: BuildCastingMoveNext<bool>(); break;
-                case NPTypeCode.Byte: BuildCastingMoveNext<byte>(); break;
-                case NPTypeCode.Int16: BuildCastingMoveNext<short>(); break;
-                case NPTypeCode.UInt16: BuildCastingMoveNext<ushort>(); break;
-                case NPTypeCode.Int32: BuildCastingMoveNext<int>(); break;
-                case NPTypeCode.UInt32: BuildCastingMoveNext<uint>(); break;
-                case NPTypeCode.Int64: BuildCastingMoveNext<long>(); break;
-                case NPTypeCode.UInt64: BuildCastingMoveNext<ulong>(); break;
-                case NPTypeCode.Char: BuildCastingMoveNext<char>(); break;
-                case NPTypeCode.Single: BuildCastingMoveNext<float>(); break;
-                case NPTypeCode.Double: BuildCastingMoveNext<double>(); break;
-                case NPTypeCode.Decimal: BuildCastingMoveNext<decimal>(); break;
+                case NPTypeCode.Boolean: MoveNext = BuildCastingMoveNext<bool>(); break;
+                case NPTypeCode.Byte: MoveNext = BuildCastingMoveNext<byte>(); break;
+                case NPTypeCode.Int16: MoveNext = BuildCastingMoveNext<short>(); break;
+                case NPTypeCode.UInt16: MoveNext = BuildCastingMoveNext<ushort>(); break;
+                case NPTypeCode.Int32: MoveNext = BuildCastingMoveNext<int>(); break;
+                case NPTypeCode.UInt32: MoveNext = BuildCastingMoveNext<uint>(); break;
+                case NPTypeCode.Int64: MoveNext = BuildCastingMoveNext<long>(); break;
+                case NPTypeCode.UInt64: MoveNext = BuildCastingMoveNext<ulong>(); break;
+                case NPTypeCode.Char: MoveNext = BuildCastingMoveNext<char>(); break;
+                case NPTypeCode.Single: MoveNext = BuildCastingMoveNext<float>(); break;
+                case NPTypeCode.Double: MoveNext = BuildCastingMoveNext<double>(); break;
+                case NPTypeCode.Decimal: MoveNext = BuildCastingMoveNext<decimal>(); break;
                 default: throw new NotSupportedException($"NDIterator: source dtype {srcType} not supported.");
             }
         }
 
-        private void BuildCastingMoveNext<TSrc>() where TSrc : unmanaged
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EnsureNext()
+        {
+            if (_state->IterIndex >= _state->IterEnd)
+            {
+                if (!AutoReset)
+                    throw new InvalidOperationException("NDIterator: no more elements.");
+                _state->Reset();
+            }
+        }
+
+        private TOut SameType_MoveNext()
+        {
+            EnsureNext();
+            TOut v = *(TOut*)_state->DataPtrs[0];
+            _state->Advance();
+            return v;
+        }
+
+        private ref TOut SameType_MoveNextReference()
+        {
+            EnsureNext();
+            ref TOut r = ref Unsafe.AsRef<TOut>((TOut*)_state->DataPtrs[0]);
+            _state->Advance();
+            return ref r;
+        }
+
+        private Func<TOut> BuildCastingMoveNext<TSrc>() where TSrc : unmanaged
         {
             var conv = Converts.FindConverter<TSrc, TOut>();
-            var localBlock = Block;
-            var localShape = Shape;
+            return () =>
+            {
+                EnsureNext();
+                TSrc v = *(TSrc*)_state->DataPtrs[0];
+                _state->Advance();
+                return conv(v);
+            };
+        }
 
-            if (localShape.IsContiguous && localShape.offset == 0)
-            {
-                if (AutoReset)
-                {
-                    long localSize = localShape.size;
-                    long cursor = 0;
-                    MoveNext = () =>
-                    {
-                        TSrc v = *((TSrc*)localBlock.Address + cursor);
-                        cursor++;
-                        if (cursor >= localSize) cursor = 0;
-                        return conv(v);
-                    };
-                    Reset = () => cursor = 0;
-                    HasNext = () => true;
-                }
-                else
-                {
-                    long localSize = size;
-                    long cursor = 0;
-                    MoveNext = () => conv(*((TSrc*)localBlock.Address + cursor++));
-                    Reset = () => cursor = 0;
-                    HasNext = () => cursor < localSize;
-                }
-                return;
-            }
+        private bool DefaultHasNext()
+        {
+            if (AutoReset) return true;
+            return _state->IterIndex < _state->IterEnd;
+        }
 
-            if (AutoReset)
-            {
-                var incr = new ValueOffsetIncrementorAutoresetting(localShape);
-                MoveNext = () => conv(*((TSrc*)localBlock.Address + incr.Next()));
-                Reset = () => incr.Reset();
-                HasNext = () => true;
-            }
-            else
-            {
-                var incr = new ValueOffsetIncrementor(localShape);
-                MoveNext = () => conv(*((TSrc*)localBlock.Address + incr.Next()));
-                Reset = () => incr.Reset();
-                HasNext = () => incr.HasNext;
-            }
+        private void DefaultReset()
+        {
+            _state->Reset();
         }
 
         public IEnumerator<TOut> GetEnumerator()
@@ -268,11 +253,25 @@ namespace NumSharp
         public void Dispose()
         {
             if (_disposed) return;
+            if (_state != null)
+            {
+                NpyIterRef.FreeState(_state);
+                _state = null;
+            }
             MoveNext = null;
             Reset = null;
             HasNext = null;
             MoveNextReference = null;
             _disposed = true;
+        }
+
+        ~NDIterator()
+        {
+            if (!_disposed && _state != null)
+            {
+                NpyIterRef.FreeState(_state);
+                _state = null;
+            }
         }
 
         #region Explicit interface implementations for non-generic NDIterator

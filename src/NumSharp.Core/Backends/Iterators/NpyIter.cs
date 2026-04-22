@@ -335,9 +335,17 @@ namespace NumSharp.Backends.Iteration
                 }
                 else
                 {
-                    // Standard broadcasting
+                    // Standard broadcasting.
+                    //
+                    // NOTE: must use NPTypeCode.SizeOf() (1 byte for bool) and
+                    // NOT arr.dtypesize, which is implemented via
+                    // Marshal.SizeOf and returns 4 for bool because bool is
+                    // marshaled as win32 BOOL. In-memory layout uses 1 byte
+                    // per bool element, so Marshal-based sizing produces
+                    // pointer offsets 4x too large.
                     var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
-                    basePtr = (byte*)arr.Address + (broadcastArr.offset * arr.dtypesize);
+                    int elemBytes = arr.GetTypeCode.SizeOf();
+                    basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
 
                     for (int d = 0; d < _state->NDim; d++)
                     {
@@ -1961,7 +1969,11 @@ namespace NumSharp.Backends.Iteration
                 var arr = newOperands[i];
                 if (arr is null)
                     throw new ArgumentException($"newOperands[{i}] is null.");
-                byte* basePtr = (byte*)arr.Address + (arr.Shape.offset * arr.dtypesize);
+                // arr.GetTypeCode.SizeOf() — not arr.dtypesize — because the
+                // latter uses Marshal.SizeOf(bool) == 4 while in-memory bool
+                // storage is 1 byte per element.
+                int elemBytes = arr.GetTypeCode.SizeOf();
+                byte* basePtr = (byte*)arr.Address + (arr.Shape.offset * elemBytes);
                 baseptrs[i] = (IntPtr)basePtr;
             }
 
@@ -3041,6 +3053,46 @@ namespace NumSharp.Backends.Iteration
                 _state = null;
                 _ownsState = false;
             }
+        }
+
+        /// <summary>
+        /// Transfer ownership of the underlying <see cref="NpyIterState"/>
+        /// pointer out of this <see cref="NpyIterRef"/>. After the call, this
+        /// instance's <see cref="Dispose"/> is a no-op and the returned
+        /// pointer becomes the caller's responsibility to free via
+        /// <see cref="FreeState"/> (or equivalent manual teardown:
+        /// <see cref="NpyIterBufferManager.FreeBuffers"/> when BUFFER is set,
+        /// <see cref="NpyIterState.FreeDimArrays"/>, and
+        /// <see cref="NativeMemory.Free"/>).
+        ///
+        /// Intended for callers that need to hold the iterator state across a
+        /// non-ref-struct boundary (class fields, long-lived objects) where a
+        /// ref struct can't live.
+        /// </summary>
+        public NpyIterState* ReleaseState()
+        {
+            if (!_ownsState)
+                throw new InvalidOperationException("Iterator does not own its state; cannot release.");
+
+            var released = _state;
+            _state = null;
+            _ownsState = false;
+            return released;
+        }
+
+        /// <summary>
+        /// Tear down a state pointer previously obtained from
+        /// <see cref="ReleaseState"/>. Mirrors <see cref="Dispose"/>'s cleanup
+        /// path but operates on a bare pointer so long-lived owners can free
+        /// the state without reconstructing an NpyIterRef.
+        /// </summary>
+        public static void FreeState(NpyIterState* state)
+        {
+            if (state == null) return;
+            if ((state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+                NpyIterBufferManager.FreeBuffers(ref *state);
+            state->FreeDimArrays();
+            NativeMemory.Free(state);
         }
     }
 
