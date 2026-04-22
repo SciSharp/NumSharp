@@ -76,7 +76,7 @@ namespace NumSharp.Backends.Iteration
     /// <param name="strides">Byte stride per operand for the inner loop (NOp).</param>
     /// <param name="count">Number of elements to process this inner loop.</param>
     /// <param name="auxdata">Opaque user cookie (may be null).</param>
-    internal unsafe delegate void NpyInnerLoopFunc(
+    public unsafe delegate void NpyInnerLoopFunc(
         void** dataptrs, long* strides, long count, void* auxdata);
 
     /// <summary>
@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Iteration
     /// <c>readonly struct</c>; JIT specializes <see cref="NpyIterRef.ExecuteGeneric"/>
     /// per type and inlines the call.
     /// </summary>
-    internal unsafe interface INpyInnerLoop
+    public unsafe interface INpyInnerLoop
     {
         void Execute(void** dataptrs, long* strides, long count);
     }
@@ -95,7 +95,7 @@ namespace NumSharp.Backends.Iteration
     /// so each inner-loop invocation can accumulate into the same scalar.
     /// Return false to abort iteration (early exit for Any/All).
     /// </summary>
-    internal unsafe interface INpyReducingInnerLoop<TAccum> where TAccum : unmanaged
+    public unsafe interface INpyReducingInnerLoop<TAccum> where TAccum : unmanaged
     {
         bool Execute(void** dataptrs, long* strides, long count, ref TAccum accumulator);
     }
@@ -104,7 +104,7 @@ namespace NumSharp.Backends.Iteration
     // Execution partial of NpyIterRef
     // -------------------------------------------------------------------------
 
-    internal unsafe ref partial struct NpyIterRef
+    public unsafe ref partial struct NpyIterRef
     {
         // =====================================================================
         // Layer 1: Canonical NumPy-style ForEach
@@ -652,6 +652,6 @@ namespace NumSharp.Backends.Iteration
         // Test-visible accessors (internal) — let the bridge tests poke state.
         // =====================================================================
 
-        internal NpyIterState* RawState => _state;
+        public NpyIterState* RawState => _state;
     }
 }

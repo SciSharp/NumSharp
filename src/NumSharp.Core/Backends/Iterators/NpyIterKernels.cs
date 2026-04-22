@@ -7,7 +7,7 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// Interface for kernels that work with NpyIter.
     /// </summary>
-    internal unsafe interface INpyIterKernel
+    public unsafe interface INpyIterKernel
     {
         /// <summary>
         /// Get the inner loop function for the specified execution path.
@@ -33,7 +33,7 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// Execution path selection logic.
     /// </summary>
-    internal static unsafe class NpyIterPathSelector
+    public static unsafe class NpyIterPathSelector
     {
         /// <summary>
         /// Determine the optimal execution path based on operand layout.
@@ -112,7 +112,7 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// Execution helpers for different paths.
     /// </summary>
-    internal static unsafe class NpyIterExecution
+    public static unsafe class NpyIterExecution
     {
         /// <summary>
         /// Execute iteration using contiguous path with SIMD kernel.

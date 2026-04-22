@@ -42,7 +42,7 @@ namespace NumSharp.Backends.Iteration
         /// Emit scalar code. On exit, the evaluation stack must have exactly
         /// one value of dtype <c>ctx.OutputType</c>.
         /// </summary>
-        internal abstract void EmitScalar(ILGenerator il, NpyExprCompileContext ctx);
+        public abstract void EmitScalar(ILGenerator il, NpyExprCompileContext ctx);
 
         /// <summary>
         /// Emit vector code. On exit, the evaluation stack must have exactly
@@ -50,25 +50,25 @@ namespace NumSharp.Backends.Iteration
         /// Called only when <see cref="SupportsSimd"/> is true and all input
         /// types equal the output type.
         /// </summary>
-        internal abstract void EmitVector(ILGenerator il, NpyExprCompileContext ctx);
+        public abstract void EmitVector(ILGenerator il, NpyExprCompileContext ctx);
 
         /// <summary>
         /// True if this node and its entire sub-tree have a SIMD emit path.
         /// </summary>
-        internal abstract bool SupportsSimd { get; }
+        public abstract bool SupportsSimd { get; }
 
         /// <summary>
         /// Stable structural signature. Used to derive a cache key when the
         /// user doesn't supply one.
         /// </summary>
-        internal abstract void AppendSignature(StringBuilder sb);
+        public abstract void AppendSignature(StringBuilder sb);
 
         // ----- Compilation -----
 
         /// <summary>
         /// Compile the tree to an <see cref="NpyInnerLoopFunc"/>.
         /// </summary>
-        internal NpyInnerLoopFunc Compile(
+        public NpyInnerLoopFunc Compile(
             NPTypeCode[] inputTypes, NPTypeCode outputType, string? cacheKey)
         {
             if (inputTypes is null) throw new ArgumentNullException(nameof(inputTypes));
@@ -312,7 +312,7 @@ namespace NumSharp.Backends.Iteration
     // Compile-time context shared with each node
     // =========================================================================
 
-    internal sealed class NpyExprCompileContext
+    public sealed class NpyExprCompileContext
     {
         public NPTypeCode[] InputTypes { get; }
         public NPTypeCode OutputType { get; }
@@ -334,7 +334,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Input(i) — reference operand i
     // =========================================================================
 
-    internal sealed class InputNode : NpyExpr
+    public sealed class InputNode : NpyExpr
     {
         private readonly int _index;
         public InputNode(int index)
@@ -343,9 +343,9 @@ namespace NumSharp.Backends.Iteration
             _index = index;
         }
 
-        internal override bool SupportsSimd => true;
+        public override bool SupportsSimd => true;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             if (_index >= ctx.InputTypes.Length)
                 throw new InvalidOperationException(
@@ -358,7 +358,7 @@ namespace NumSharp.Backends.Iteration
                 ILKernelGenerator.EmitConvertTo(il, inType, ctx.OutputType);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             if (_index >= ctx.InputTypes.Length)
                 throw new InvalidOperationException(
@@ -369,7 +369,7 @@ namespace NumSharp.Backends.Iteration
             il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
             => sb.Append("In[").Append(_index).Append(']');
     }
 
@@ -377,7 +377,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Constant
     // =========================================================================
 
-    internal sealed class ConstNode : NpyExpr
+    public sealed class ConstNode : NpyExpr
     {
         // Store as double — widest scalar; convert down to outputType on emit.
         // Also preserve an exact-int path for integer-typed outputs.
@@ -390,14 +390,14 @@ namespace NumSharp.Backends.Iteration
         public ConstNode(long v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
         public ConstNode(int v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
 
-        internal override bool SupportsSimd => true;
+        public override bool SupportsSimd => true;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             EmitLoadTyped(il, ctx.OutputType);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             EmitLoadTyped(il, ctx.OutputType);
             ILKernelGenerator.EmitVectorCreate(il, ctx.OutputType);
@@ -432,7 +432,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Const[");
             if (_isIntegerLiteral) sb.Append(_valueInt); else sb.Append(_valueFp);
@@ -444,7 +444,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Binary op
     // =========================================================================
 
-    internal sealed class BinaryNode : NpyExpr
+    public sealed class BinaryNode : NpyExpr
     {
         private readonly BinaryOp _op;
         private readonly NpyExpr _left;
@@ -457,7 +457,7 @@ namespace NumSharp.Backends.Iteration
             _right = right ?? throw new ArgumentNullException(nameof(right));
         }
 
-        internal override bool SupportsSimd
+        public override bool SupportsSimd
             => _left.SupportsSimd && _right.SupportsSimd && IsSimdOp(_op);
 
         // Must match ILKernelGenerator.EmitVectorOperation's supported set.
@@ -468,21 +468,21 @@ namespace NumSharp.Backends.Iteration
                op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr ||
                op == BinaryOp.BitwiseXor;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             _left.EmitScalar(il, ctx);
             _right.EmitScalar(il, ctx);
             ILKernelGenerator.EmitScalarOperation(il, _op, ctx.OutputType);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             _left.EmitVector(il, ctx);
             _right.EmitVector(il, ctx);
             ILKernelGenerator.EmitVectorOperation(il, _op, ctx.OutputType);
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append(_op).Append('(');
             _left.AppendSignature(sb);
@@ -496,7 +496,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Unary op
     // =========================================================================
 
-    internal sealed class UnaryNode : NpyExpr
+    public sealed class UnaryNode : NpyExpr
     {
         private readonly UnaryOp _op;
         private readonly NpyExpr _child;
@@ -507,7 +507,7 @@ namespace NumSharp.Backends.Iteration
             _child = child ?? throw new ArgumentNullException(nameof(child));
         }
 
-        internal override bool SupportsSimd
+        public override bool SupportsSimd
             => _child.SupportsSimd && IsSimdUnary(_op);
 
         // Must match ILKernelGenerator.EmitUnaryVectorOperation's supported set.
@@ -526,7 +526,7 @@ namespace NumSharp.Backends.Iteration
         private static bool IsPredicateResult(UnaryOp op)
             => op == UnaryOp.IsNan || op == UnaryOp.IsFinite || op == UnaryOp.IsInf;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             // LogicalNot needs a special path. ILKernelGenerator's emit uses Ldc_I4_0+Ceq
             // which is only correct when the input value fits in I4 (Int32 and narrower).
@@ -548,13 +548,13 @@ namespace NumSharp.Backends.Iteration
                 ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             _child.EmitVector(il, ctx);
             ILKernelGenerator.EmitUnaryVectorOperation(il, _op, ctx.OutputType);
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append(_op).Append('(');
             _child.AppendSignature(sb);
@@ -574,7 +574,7 @@ namespace NumSharp.Backends.Iteration
     // the Comparison kernel pipeline, which is beyond this tier.
     // =========================================================================
 
-    internal sealed class ComparisonNode : NpyExpr
+    public sealed class ComparisonNode : NpyExpr
     {
         private readonly ComparisonOp _op;
         private readonly NpyExpr _left;
@@ -587,9 +587,9 @@ namespace NumSharp.Backends.Iteration
             _right = right ?? throw new ArgumentNullException(nameof(right));
         }
 
-        internal override bool SupportsSimd => false;
+        public override bool SupportsSimd => false;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             _left.EmitScalar(il, ctx);
             _right.EmitScalar(il, ctx);
@@ -600,12 +600,12 @@ namespace NumSharp.Backends.Iteration
             ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             throw new InvalidOperationException("ComparisonNode has no vector path.");
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Cmp").Append(_op).Append('(');
             _left.AppendSignature(sb);
@@ -629,7 +629,7 @@ namespace NumSharp.Backends.Iteration
     // (NaN-skipping) users can compose with IsNaN + Where.
     // =========================================================================
 
-    internal sealed class MinMaxNode : NpyExpr
+    public sealed class MinMaxNode : NpyExpr
     {
         private readonly bool _isMin;
         private readonly NpyExpr _left;
@@ -642,9 +642,9 @@ namespace NumSharp.Backends.Iteration
             _right = right ?? throw new ArgumentNullException(nameof(right));
         }
 
-        internal override bool SupportsSimd => false;
+        public override bool SupportsSimd => false;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             // Prefer Math.Min/Max — they propagate NaN per IEEE 754, matching NumPy's
             // np.minimum/np.maximum. Fall back to a branchy select for dtypes without
@@ -697,12 +697,12 @@ namespace NumSharp.Backends.Iteration
             il.MarkLabel(lblEnd);
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             throw new InvalidOperationException("MinMaxNode has no vector path.");
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append(_isMin ? "Min(" : "Max(");
             _left.AppendSignature(sb);
@@ -719,7 +719,7 @@ namespace NumSharp.Backends.Iteration
     // Equivalent to np.where(cond, a, b), with cond coerced to bool.
     // =========================================================================
 
-    internal sealed class WhereNode : NpyExpr
+    public sealed class WhereNode : NpyExpr
     {
         private readonly NpyExpr _cond;
         private readonly NpyExpr _a;
@@ -732,9 +732,9 @@ namespace NumSharp.Backends.Iteration
             _b = b ?? throw new ArgumentNullException(nameof(b));
         }
 
-        internal override bool SupportsSimd => false;
+        public override bool SupportsSimd => false;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             var lblElse = il.DefineLabel();
             var lblEnd = il.DefineLabel();
@@ -759,7 +759,7 @@ namespace NumSharp.Backends.Iteration
         private static void EmitPushZero(ILGenerator il, NPTypeCode type)
             => EmitPushZeroPublic(il, type);
 
-        internal static void EmitPushZeroPublic(ILGenerator il, NPTypeCode type)
+        public static void EmitPushZeroPublic(ILGenerator il, NPTypeCode type)
         {
             switch (type)
             {
@@ -791,12 +791,12 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             throw new InvalidOperationException("WhereNode has no vector path.");
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Where(");
             _cond.AppendSignature(sb);
@@ -838,7 +838,7 @@ namespace NumSharp.Backends.Iteration
     // Always false. A managed call from inside a vector loop kills SIMD.
     // =========================================================================
 
-    internal sealed class CallNode : NpyExpr
+    public sealed class CallNode : NpyExpr
     {
         private enum Kind
         {
@@ -991,9 +991,9 @@ namespace NumSharp.Backends.Iteration
             return sb.ToString();
         }
 
-        internal override bool SupportsSimd => false;
+        public override bool SupportsSimd => false;
 
-        internal override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
             switch (_kind)
             {
@@ -1047,12 +1047,12 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        internal override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
+        public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             throw new InvalidOperationException("CallNode has no vector path.");
         }
 
-        internal override void AppendSignature(StringBuilder sb)
+        public override void AppendSignature(StringBuilder sb)
         {
             sb.Append("Call[").Append(_signatureId);
             if (_kind == Kind.BoundTarget)
@@ -1079,7 +1079,7 @@ namespace NumSharp.Backends.Iteration
     // Thread-safe: ConcurrentDictionary + Interlocked.Increment.
     // =========================================================================
 
-    internal static class DelegateSlots
+    public static class DelegateSlots
     {
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Delegate> _delegates = new();
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, object> _targets = new();
@@ -1112,9 +1112,9 @@ namespace NumSharp.Backends.Iteration
         public static object LookupTarget(int id) => _targets[id];
 
         // Test hook.
-        internal static int RegisteredCount => _delegates.Count + _targets.Count;
+        public static int RegisteredCount => _delegates.Count + _targets.Count;
 
-        internal static void Clear()
+        public static void Clear()
         {
             _delegates.Clear();
             _targets.Clear();

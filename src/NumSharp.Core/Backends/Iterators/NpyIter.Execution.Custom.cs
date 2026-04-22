@@ -22,7 +22,7 @@ using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends.Iteration
 {
-    internal unsafe ref partial struct NpyIterRef
+    public unsafe ref partial struct NpyIterRef
     {
         // =====================================================================
         // Tier 3A — Raw IL escape hatch

@@ -10,7 +10,7 @@ namespace NumSharp.Backends.Iteration
     /// NUMSHARP DIVERGENCE: This implementation supports unlimited dimensions.
     /// Uses StridesNDim for stride array indexing (allocated based on actual ndim).
     /// </summary>
-    internal static unsafe class NpyIterCoalescing
+    public static unsafe class NpyIterCoalescing
     {
         /// <summary>
         /// Coalesce adjacent axes that have compatible strides for all operands.
