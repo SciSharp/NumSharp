@@ -479,5 +479,52 @@ namespace NumSharp.Backends.Iteration
                 }
             }
         }
+
+        /// <summary>
+        /// Copy strided source to strided destination with type conversion.
+        /// Handles broadcast on the source via stride=0 dimensions and arbitrary
+        /// destination strides. Strides are in element counts (not bytes); element
+        /// size multiplication happens internally via <see cref="InfoOf.GetSize"/>.
+        /// </summary>
+        public static void CopyStridedToStridedWithCast(
+            void* src, long* srcStrides, NPTypeCode srcType,
+            void* dst, long* dstStrides, NPTypeCode dstType,
+            long* shape, int ndim, long count)
+        {
+            int srcElemSize = InfoOf.GetSize(srcType);
+            int dstElemSize = InfoOf.GetSize(dstType);
+
+            byte* srcBase = (byte*)src;
+            byte* dstBase = (byte*)dst;
+
+            var coords = stackalloc long[Math.Max(1, ndim)];
+            for (int d = 0; d < ndim; d++)
+                coords[d] = 0;
+
+            for (long i = 0; i < count; i++)
+            {
+                long srcOffset = 0;
+                long dstOffset = 0;
+                for (int d = 0; d < ndim; d++)
+                {
+                    srcOffset += coords[d] * srcStrides[d];
+                    dstOffset += coords[d] * dstStrides[d];
+                }
+
+                ConvertValue(
+                    srcBase + srcOffset * srcElemSize,
+                    dstBase + dstOffset * dstElemSize,
+                    srcType, dstType);
+
+                // Advance coordinates (innermost-first for C-order traversal).
+                for (int d = ndim - 1; d >= 0; d--)
+                {
+                    coords[d]++;
+                    if (coords[d] < shape[d])
+                        break;
+                    coords[d] = 0;
+                }
+            }
+        }
     }
 }

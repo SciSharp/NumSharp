@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
@@ -88,7 +89,7 @@ namespace NumSharp
                     fixed (char* retChars = ret)
                     {
                         var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), src.Shape.Clean());
-                        MultiIterator.Assign(dst, src);
+                        NpyIter.Copy(dst, src);
                     }
 
                     return ret;

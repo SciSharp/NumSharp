@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -322,7 +323,7 @@ namespace NumSharp.Backends
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -333,7 +334,7 @@ namespace NumSharp.Backends
             if (valueIsScalary && indices.Length != _shape.NDim)
             {
                 GetData(indices).InternalArray.Fill(Converts.ChangeType(value.GetAtIndex(0), _typecode));
-                //MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                //NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -388,7 +389,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
@@ -438,7 +439,7 @@ namespace NumSharp.Backends
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -489,7 +490,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 

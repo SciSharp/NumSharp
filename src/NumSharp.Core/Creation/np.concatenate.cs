@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -104,7 +105,7 @@ namespace NumSharp
                 {
                     var writeTo = dst[accessorDst];
                     var writeFrom = src[accessorSrc];
-                    MultiIterator.Assign(writeTo.Storage, writeFrom.Storage);
+                    NpyIter.Copy(writeTo.Storage, writeFrom.Storage);
                     accessorSrc[axis]++;
                     accessorDst[axis]++; //increment every step
                 }

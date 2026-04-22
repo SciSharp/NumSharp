@@ -23,10 +23,7 @@ namespace NumSharp
 
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
-            if (NpyIter.TryCopySameType(dst.Storage, src.Storage))
-                return;
-
-            MultiIterator.Assign(dst.Storage, src.Storage);
+            NpyIter.Copy(dst.Storage, src.Storage);
         }
     }
 }
