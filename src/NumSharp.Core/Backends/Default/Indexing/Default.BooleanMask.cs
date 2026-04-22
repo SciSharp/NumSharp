@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
@@ -100,17 +101,16 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback boolean masking using iteration.
+        /// Fallback boolean masking using NpyIter-based iteration.
+        /// Handles strided/broadcast arr and/or mask.
         /// </summary>
         private unsafe NDArray BooleanMaskFallback(NDArray arr, NDArray<bool> mask)
         {
-            // Count true values
-            long trueCount = 0;
-            var maskIter = mask.AsIterator<bool>();
-            while (maskIter.HasNext())
+            // Pass 1: Count true values in the mask (layout-aware via NpyIter).
+            long trueCount;
+            using (var maskIter = NpyIterRef.New(mask, NpyIterGlobalFlags.EXTERNAL_LOOP))
             {
-                if (maskIter.MoveNext())
-                    trueCount++;
+                trueCount = maskIter.ExecuteReducing<CountNonZeroKernel<bool>, long>(default, 0L);
             }
 
             if (trueCount == 0)
@@ -118,22 +118,71 @@ namespace NumSharp.Backends
 
             var result = new NDArray(arr.dtype, new Shape(trueCount));
 
-            // Copy elements where mask is true
-            maskIter.Reset();
-            long destIdx = 0;
-            long srcIdx = 0;
-            while (maskIter.HasNext())
+            // Pass 2: Gather elements where mask is true into flat result.
+            // NPY_CORDER forces logical C-order traversal (matching NumPy
+            // boolean indexing semantics) instead of memory-efficient order.
+            using (var iter = NpyIterRef.MultiNew(
+                2, new[] { arr, (NDArray)mask },
+                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY }))
             {
-                bool m = maskIter.MoveNext();
-                if (m)
+                var accum = new BooleanMaskGatherAccumulator
                 {
-                    result.SetAtIndex(arr.GetAtIndex(srcIdx), destIdx);
-                    destIdx++;
-                }
-                srcIdx++;
+                    DestPtr = (IntPtr)result.Address,
+                    ElemSize = arr.dtypesize,
+                    DestIdx = 0,
+                };
+                iter.ExecuteReducing<BooleanMaskGatherKernel, BooleanMaskGatherAccumulator>(default, accum);
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Accumulator threading the destination byte pointer and write cursor
+        /// through the multi-op gather loop.
+        /// </summary>
+        private struct BooleanMaskGatherAccumulator
+        {
+            public IntPtr DestPtr;
+            public long DestIdx;
+            public int ElemSize;
+        }
+
+        /// <summary>
+        /// Inner loop: for each position, if mask is true, copy arr element
+        /// into result[destIdx] and increment destIdx.
+        /// </summary>
+        private readonly struct BooleanMaskGatherKernel : INpyReducingInnerLoop<BooleanMaskGatherAccumulator>
+        {
+            public unsafe bool Execute(void** dataptrs, long* strides, long count, ref BooleanMaskGatherAccumulator accum)
+            {
+                byte* srcPtr = (byte*)dataptrs[0];
+                byte* maskPtr = (byte*)dataptrs[1];
+                long srcStride = strides[0];
+                long maskStride = strides[1];
+                byte* destBase = (byte*)accum.DestPtr;
+                long destIdx = accum.DestIdx;
+                int elemSize = accum.ElemSize;
+
+                for (long i = 0; i < count; i++)
+                {
+                    bool m = *(bool*)(maskPtr + i * maskStride);
+                    if (m)
+                    {
+                        System.Buffer.MemoryCopy(
+                            srcPtr + i * srcStride,
+                            destBase + destIdx * elemSize,
+                            elemSize, elemSize);
+                        destIdx++;
+                    }
+                }
+
+                accum.DestIdx = destIdx;
+                return true;
+            }
         }
     }
 }

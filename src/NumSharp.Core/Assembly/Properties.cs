@@ -5,5 +5,4 @@
 [assembly: InternalsVisibleTo("TensorFlowNET.UnitTest")]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]
 [assembly: InternalsVisibleTo("NeuralNetwork.NumSharp")]
-[assembly: InternalsVisibleTo("NumSharp.Bitmap")]
 #endif

@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
@@ -80,6 +81,12 @@ namespace NumSharp
                 yArr = broadcasted[2];
             }
 
+            // Coerce the condition to boolean using NumPy's truthiness rules
+            // (0/0.0 → False, everything else including NaN/±Inf → True). The
+            // iterator-driven expression kernel requires a bool condition dtype.
+            if (cond.GetTypeCode != NPTypeCode.Boolean)
+                cond = cond.astype(NPTypeCode.Boolean, copy: false);
+
             // When x and y already agree, skip the NEP50 promotion lookup. Otherwise defer to
             // _FindCommonType which handles the scalar+array NEP50 rules.
             var outType = x.GetTypeCode == y.GetTypeCode
@@ -160,19 +167,31 @@ namespace NumSharp
 
         private static void WhereImpl<T>(NDArray cond, NDArray x, NDArray y, NDArray result) where T : unmanaged
         {
-            // Use iterators for proper handling of broadcasted/strided arrays
-            using var condIter = cond.AsIterator<bool>();
-            using var xIter = x.AsIterator<T>();
-            using var yIter = y.AsIterator<T>();
-            using var resultIter = result.AsIterator<T>();
+            // Drive cond + x + y + result in lockstep via a 4-operand NpyIter
+            // compiling Where(cond, x, y) → out as a single IL expression kernel.
+            // C-order traversal matches NumPy element semantics; WRITEONLY on
+            // the output lets the iterator allocate per-inner-loop buffer space
+            // when casting is needed.
+            var dtype = result.GetTypeCode;
+            using var iter = NpyIterRef.MultiNew(
+                4, new[] { cond, x, y, result },
+                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                new[]
+                {
+                    NpyIterPerOpFlags.READONLY,
+                    NpyIterPerOpFlags.READONLY,
+                    NpyIterPerOpFlags.READONLY,
+                    NpyIterPerOpFlags.WRITEONLY,
+                });
 
-            while (condIter.HasNext())
-            {
-                var c = condIter.MoveNext();
-                var xVal = xIter.MoveNext();
-                var yVal = yIter.MoveNext();
-                resultIter.MoveNextReference() = c ? xVal : yVal;
-            }
+            var expr = NpyExpr.Where(NpyExpr.Input(0), NpyExpr.Input(1), NpyExpr.Input(2));
+            iter.ExecuteExpression(
+                expr,
+                new[] { NPTypeCode.Boolean, dtype, dtype },
+                dtype,
+                cacheKey: $"np.where.{dtype}");
         }
 
         /// <summary>
