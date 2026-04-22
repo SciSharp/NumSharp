@@ -1,62 +1,64 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
-    public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable where TOut : unmanaged
+    /// <summary>
+    /// Legacy per-element iterator surface preserved for backward compatibility.
+    ///
+    /// Internally this is now a thin wrapper over the modern <see cref="NpyIter"/>
+    /// machinery — the iteration is pre-materialized into a flat TOut buffer via
+    /// <see cref="NpyIter.Copy(UnmanagedStorage, UnmanagedStorage)"/> so that
+    /// source layout (contiguous, sliced, broadcast, transposed) and source-to-
+    /// TOut dtype casting are both handled once up front. The resulting buffer
+    /// is then walked by the <see cref="MoveNext"/>, <see cref="HasNext"/>,
+    /// and <see cref="Reset"/> delegates.
+    ///
+    /// Trade-off: iteration allocates O(size) memory for the materialized buffer.
+    /// In exchange, per-element MoveNext is a simple pointer index with no
+    /// delegate dispatch or coordinate arithmetic in the hot path, and the
+    /// dtype-dispatch switch that used to live in the 12 partial
+    /// <c>NDIterator.Cast.&lt;T&gt;.cs</c> files is gone entirely.
+    /// </summary>
+    public unsafe class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable
+        where TOut : unmanaged
     {
-        private long index;
         public readonly IMemoryBlock Block;
-        public readonly IteratorType Type;
 
-        /// <summary>
-        ///     The shape this iterator iterates
-        /// </summary>
-        public Shape Shape; //TODO! is there a performance difference if this shape is readonly or not?
+        /// <summary>The shape this iterator iterates.</summary>
+        public Shape Shape;
 
-        /// <summary>
-        ///     The broadcasted version of <see cref="Shape"/>.
-        /// </summary>
-        /// <remarks>Might be null when iterating a non-broadcasted class</remarks>
-        public Shape? BroadcastedShape; //TODO! is there a performance difference if this shape is readonly or not?
+        /// <summary>The broadcasted version of <see cref="Shape"/>. Null when iterating an un-broadcasted shape.</summary>
+        public Shape? BroadcastedShape;
 
-        /// <summary>
-        ///     Does this iterator resets automatically when it finishes?
-        /// </summary>
-        /// <remarks>When this is true, <see cref="HasNext"/> always returns true.</remarks>
+        /// <summary>When true, <see cref="HasNext"/> always returns true and <see cref="MoveNext"/> wraps around at the end.</summary>
         public bool AutoReset;
 
-        /// <summary>
-        ///     The size of this iterator.
-        /// </summary>
+        /// <summary>Total number of elements this iterator visits before (non-auto-reset) end.</summary>
         public long size;
 
-        /// <summary>
-        ///     Returns a function that when called, moves to next iteration and return the next value.
-        /// </summary>
-        /// <remarks>Make sure to check <see cref="HasNext"/> first.</remarks>
+        /// <summary>Moves to next iteration and returns the next value. Always check <see cref="HasNext"/> first.</summary>
         public Func<TOut> MoveNext;
 
-        /// <summary>
-        ///     Returns a function that when called, moves to next iteration and return a reference to the next value.
-        /// </summary>
-        /// <remarks>Make sure to check <see cref="HasNext"/> first.</remarks>
+        /// <summary>Moves to next iteration and returns a reference to the next value.</summary>
         public MoveNextReferencedDelegate<TOut> MoveNextReference;
 
-        /// <summary>
-        ///     Returns a function that when called, checks if there is a next element in this iterator.
-        /// </summary>
+        /// <summary>Returns whether there are more elements to iterate.</summary>
         public Func<bool> HasNext;
 
-        /// <summary>
-        ///     Resets internal pointer/counter.
-        /// </summary>
+        /// <summary>Resets the internal cursor to the beginning.</summary>
         public Action Reset;
+
+        // NpyIter-materialized backing storage. Owned by this iterator and released in Dispose().
+        private NDArray _materialized;
+        private long _cursor;
+        private bool _disposed;
 
         public NDIterator(IMemoryBlock block, Shape shape, Shape? broadcastedShape, bool autoReset = false)
         {
@@ -66,386 +68,129 @@ namespace NumSharp
             Block = block ?? throw new ArgumentNullException(nameof(block));
             Shape = shape;
             BroadcastedShape = broadcastedShape;
-            if (broadcastedShape.HasValue && shape.size != broadcastedShape.Value.size)
-                AutoReset = true;
-            else
-                AutoReset = autoReset;
+            long effSize = broadcastedShape?.size ?? shape.size;
+            size = effSize;
+            AutoReset = (broadcastedShape.HasValue && shape.size != broadcastedShape.Value.size) || autoReset;
 
-            // ReSharper disable once MergeConditionalExpression
-            size = broadcastedShape.HasValue ? broadcastedShape.Value.size : shape.size;
-
-            if (shape.IsScalar)
-                Type = IteratorType.Scalar;
-            else if (shape.NDim == 1)
-                Type = IteratorType.Vector;
-            else if (shape.NDim == 2)
-                Type = IteratorType.Matrix;
-            else
-                Type = IteratorType.Tensor;
-
-            SetDefaults();
+            Materialize(block, shape, broadcastedShape);
+            SetDelegates();
         }
 
-        public NDIterator(IArraySlice slice, Shape shape, Shape? broadcastedShape, bool autoReset = false) : this((IMemoryBlock)slice, shape, broadcastedShape, autoReset) { }
+        public NDIterator(IArraySlice slice, Shape shape, Shape? broadcastedShape, bool autoReset = false)
+            : this((IMemoryBlock)slice, shape, broadcastedShape, autoReset) { }
 
-        public NDIterator(UnmanagedStorage storage, bool autoReset = false) : this((IMemoryBlock)storage?.InternalArray, storage?.Shape ?? default, null, autoReset) { }
+        public NDIterator(UnmanagedStorage storage, bool autoReset = false)
+            : this((IMemoryBlock)storage?.InternalArray, storage?.Shape ?? default, null, autoReset) { }
 
-        public NDIterator(NDArray arr, bool autoReset = false) : this(arr?.Storage.InternalArray, arr?.Shape ?? default, null, autoReset) { }
+        public NDIterator(NDArray arr, bool autoReset = false)
+            : this(arr?.Storage.InternalArray, arr?.Shape ?? default, null, autoReset) { }
 
         /// <summary>
-        ///     Set the mode according to given parameters
+        /// Reconfigure after construction. Any non-default <paramref name="reshape"/>
+        /// triggers a re-materialization of the backing buffer at the new shape.
         /// </summary>
-        /// <param name="autoreset">The iterator will transparently reset after it is done.</param>
-        /// <param name="reshape">Provide a different shape to the iterator.</param>
         public void SetMode(bool autoreset, Shape reshape = default)
         {
             AutoReset = autoreset;
             if (!reshape.IsEmpty)
+            {
                 Shape = reshape;
-
-            SetDefaults();
+                size = BroadcastedShape?.size ?? Shape.size;
+                Materialize(Block, Shape, BroadcastedShape);
+                SetDelegates();
+            }
         }
 
-        protected void SetDefaults()
+        private void Materialize(IMemoryBlock srcBlock, Shape srcShape, Shape? broadcastedShape)
         {
+            var srcSlice = srcBlock as IArraySlice
+                ?? throw new ArgumentException(
+                    $"NDIterator expected source block to implement IArraySlice; got {srcBlock.GetType()}.");
 
-#if _REGEN
-            #region Compute
-		    switch (Block.TypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: setDefaults_#1(); break;
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
-            #region Compute
-		    switch (Block.TypeCode)
-		    {
-			    case NPTypeCode.Boolean: setDefaults_Boolean(); break;
-			    case NPTypeCode.Byte: setDefaults_Byte(); break;
-			    case NPTypeCode.SByte: setDefaults_SByte(); break;
-			    case NPTypeCode.Int16: setDefaults_Int16(); break;
-			    case NPTypeCode.UInt16: setDefaults_UInt16(); break;
-			    case NPTypeCode.Int32: setDefaults_Int32(); break;
-			    case NPTypeCode.UInt32: setDefaults_UInt32(); break;
-			    case NPTypeCode.Int64: setDefaults_Int64(); break;
-			    case NPTypeCode.UInt64: setDefaults_UInt64(); break;
-			    case NPTypeCode.Char: setDefaults_Char(); break;
-			    case NPTypeCode.Half: setDefaults_Half(); break;
-			    case NPTypeCode.Double: setDefaults_Double(); break;
-			    case NPTypeCode.Single: setDefaults_Single(); break;
-			    case NPTypeCode.Decimal: setDefaults_Decimal(); break;
-			    case NPTypeCode.Complex: setDefaults_Complex(); break;
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#endif
+            // Use CreateBroadcastedUnsafe to bypass the UnmanagedStorage ctor's
+            // "shape.size == slice.Count" check — our srcShape can carry stride=0
+            // broadcast axes whose logical size exceeds the backing slice.
+            var srcStorage = UnmanagedStorage.CreateBroadcastedUnsafe(srcSlice, srcShape);
 
+            // Destination must be freshly C-order-contiguous and writeable, even
+            // when srcShape (or broadcastedShape) carries broadcast stride=0. Drop
+            // the stride metadata by constructing the target shape from dimensions
+            // only — this gives a fresh, writeable, row-major shape.
+            var srcDims = broadcastedShape ?? srcShape;
+            var targetShape = new Shape((long[])srcDims.dimensions.Clone());
+            var targetTypeCode = InfoOf<TOut>.NPTypeCode;
+
+            // NpyIter.Copy broadcasts src -> targetShape and casts
+            // src.typecode -> TOut in one pass.
+            _materialized = new NDArray(targetTypeCode, targetShape, false);
+            NpyIter.Copy(_materialized.Storage, srcStorage);
         }
 
-        protected void setDefaults_NoCast()
+        private void SetDelegates()
         {
-            if (AutoReset)
-            {
-                autoresetDefault_NoCast();
-                return;
-            }
-
-            //non auto-resetting.
-            var localBlock = Block;
-            Shape shape = Shape;
-            if (!Shape.IsContiguous || Shape.offset != 0)
-            {
-                //Shape is sliced or has offset, not auto-resetting
-                switch (Type)
-                {
-                    case IteratorType.Scalar:
-                    {
-                        var hasNext = new Reference<bool>(true);
-                        var offset = shape.TransformOffset(0);
-                        if (offset != 0)
-                        {
-                            MoveNext = () =>
-                            {
-                                hasNext.Value = false;
-                                return *((TOut*)localBlock.Address + offset);
-                            };
-                            MoveNextReference = () =>
-                            {
-                                hasNext.Value = false;
-                                return ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + offset);
-                            };
-                        }
-                        else
-                        {
-                            MoveNext = () =>
-                            {
-                                hasNext.Value = false;
-                                return *((TOut*)localBlock.Address);
-                            };
-                            MoveNextReference = () =>
-                            {
-                                hasNext.Value = false;
-                                return ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address);
-                            };
-                        }
-
-                        Reset = () => hasNext.Value = true;
-                        HasNext = () => hasNext.Value;
-                        break;
-                    }
-
-                    case IteratorType.Vector:
-                    {
-                        MoveNext = () => *((TOut*)localBlock.Address + shape.GetOffset(index++));
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + shape.GetOffset(index++));
-                        Reset = () => index = 0;
-                        HasNext = () => index < Shape.size;
-                        break;
-                    }
-
-                    case IteratorType.Matrix:
-                    case IteratorType.Tensor:
-                    {
-                        var hasNext = new Reference<bool>(true);
-                        var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor _) { hasNext.Value = false; });
-                        Func<long[], long> getOffset = shape.GetOffset;
-                        var index = iterator.Index;
-
-                        MoveNext = () =>
-                        {
-                            var ret = *((TOut*)localBlock.Address + getOffset(index));
-                            iterator.Next();
-                            return ret;
-                        };
-                        MoveNextReference = () =>
-                        {
-                            ref var ret = ref Unsafe.AsRef<TOut>(((TOut*)localBlock.Address + getOffset(index)));
-                            iterator.Next();
-                            return ref ret;
-                        };
-
-                        Reset = () =>
-                        {
-                            iterator.Reset();
-                            hasNext.Value = true;
-                        };
-
-                        HasNext = () => hasNext.Value;
-                        break;
-                    }
-
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-            else
-            {
-                //Shape is not sliced, not auto-resetting
-                switch (Type)
-                {
-                    case IteratorType.Scalar:
-                        var hasNext = new Reference<bool>(true);
-                        MoveNext = () =>
-                        {
-                            hasNext.Value = false;
-                            return *((TOut*)localBlock.Address);
-                        };
-                        MoveNextReference = () =>
-                        {
-                            hasNext.Value = false;
-                            return ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address);
-                        };
-                        Reset = () => hasNext.Value = true;
-                        HasNext = () => hasNext.Value;
-                        break;
-
-                    case IteratorType.Vector:
-                    case IteratorType.Matrix:
-                    case IteratorType.Tensor:
-                    {
-                            MoveNext = () => *((TOut*)localBlock.Address + index++);
-                            MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + index++);
-                            Reset = () => index = 0;
-                            HasNext = () => index < Shape.size;
-
-                            break;
-                        }
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
+            _cursor = 0;
+            MoveNext = DefaultMoveNext;
+            HasNext = DefaultHasNext;
+            Reset = DefaultReset;
+            MoveNextReference = DefaultMoveNextReference;
         }
 
-        protected void autoresetDefault_NoCast()
+        private TOut DefaultMoveNext()
         {
-            var localBlock = Block;
-            Shape shape = Shape;
-            if (!Shape.IsContiguous || Shape.offset != 0)
+            if (_cursor >= size)
             {
-                //Shape is sliced or has offset, auto-resetting
-                switch (Type)
-                {
-                    case IteratorType.Scalar:
-                    {
-                        var offset = shape.TransformOffset(0);
-                        if (offset != 0)
-                        {
-                            MoveNext = () => *((TOut*)localBlock.Address + offset);
-                            MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + offset);
-                        }
-                        else
-                        {
-                            MoveNext = () => *((TOut*)localBlock.Address);
-                            MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address);
-                        }
-
-                        Reset = () => { };
-                        HasNext = () => true;
-                        break;
-                    }
-
-                    case IteratorType.Vector:
-                    {
-                        var size = Shape.size;
-                        MoveNext = () =>
-                        {
-                            var ret = *((TOut*)localBlock.Address + shape.GetOffset(index++));
-                            if (index >= size)
-                                index = 0;
-                            return ret;
-                        };
-                        MoveNextReference = () =>
-                        {
-                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + shape.GetOffset(index++));
-                            if (index >= size)
-                                index = 0;
-                            return ref ret;
-                        };
-                            Reset = () => index = 0;
-                        HasNext = () => true;
-                        break;
-                    }
-
-                    case IteratorType.Matrix:
-                    case IteratorType.Tensor:
-                    {
-                        var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor incr) { incr.Reset(); });
-                        var index = iterator.Index;
-                        Func<long[], long> getOffset = shape.GetOffset;
-                        MoveNext = () =>
-                        {
-                            var ret = *((TOut*)localBlock.Address + getOffset(index));
-                            iterator.Next();
-                            return ret;
-                        };
-                        MoveNextReference = () =>
-                        {
-                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + getOffset(iterator.Next()));
-                            iterator.Next();
-                            return ref ret;
-                        };
-                        Reset = () => iterator.Reset();
-                        HasNext = () => true;
-                        break;
-                    }
-
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+                if (AutoReset) _cursor = 0;
+                else throw new InvalidOperationException("NDIterator: no more elements.");
             }
-            else
-            {
-                //Shape is not sliced, auto-resetting
-                switch (Type)
-                {
-                    case IteratorType.Scalar:
-                        MoveNext = () => *(TOut*)localBlock.Address;
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address);
-                        Reset = () => { };
-                        HasNext = () => true;
-                        break;
-                    case IteratorType.Vector:
-                        var size = Shape.size;
-                        MoveNext = () =>
-                        {
-                            var ret = *((TOut*)localBlock.Address + index++);
-                            if (index >= size)
-                                index = 0;
-                            return ret;
-                        };
-                        MoveNextReference = () =>
-                        {
-                            ref var ret = ref Unsafe.AsRef<TOut>((TOut*)localBlock.Address + index++);
-                            if (index >= size)
-                                index = 0;
-                            return ref ret;
-                        };
-                        Reset = () => index = 0;
-                        HasNext = () => true;
-                        break;
-                    case IteratorType.Matrix:
-                    case IteratorType.Tensor:
-                        var iterator = new ValueOffsetIncrementorAutoresetting(Shape); //we do not copy the dimensions because there is not risk for the iterator's shape to change.
-                        MoveNext = () => *((TOut*)localBlock.Address + iterator.Next());
-                        MoveNextReference = () => ref Unsafe.AsRef<TOut>(((TOut*)localBlock.Address + iterator.Next()));
-                        HasNext = () => true;
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
+            return *((TOut*)_materialized.Address + _cursor++);
         }
 
-        /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</summary>
+        private bool DefaultHasNext() => AutoReset || _cursor < size;
+
+        private void DefaultReset() => _cursor = 0;
+
+        private ref TOut DefaultMoveNextReference()
+        {
+            if (_cursor >= size)
+            {
+                if (AutoReset) _cursor = 0;
+                else throw new InvalidOperationException("NDIterator: no more elements.");
+            }
+            return ref Unsafe.AsRef<TOut>((TOut*)_materialized.Address + _cursor++);
+        }
+
+        public IEnumerator<TOut> GetEnumerator()
+        {
+            long n = size;
+            for (long i = 0; i < n; i++)
+                yield return ReadAt(i);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private TOut ReadAt(long i) => *((TOut*)_materialized.Address + i);
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
         public void Dispose()
         {
-            //incase of a cross-reference
+            if (_disposed) return;
             MoveNext = null;
             Reset = null;
             HasNext = null;
+            MoveNextReference = null;
+            _materialized = null;
+            _disposed = true;
         }
 
-
-        /// <summary>Returns an enumerator that iterates through the collection.</summary>
-        /// <returns>An enumerator that can be used to iterate through the collection.</returns>
-        public IEnumerator<TOut> GetEnumerator()
-        {
-            var next = MoveNext;
-            var hasNext = HasNext;
-
-            while (hasNext())
-                yield return next();
-
-            yield break;
-        }
-
-        #region Implicit Implementations
-
-        /// <summary>Returns an enumerator that iterates through a collection.</summary>
-        /// <returns>An <see cref="T:System.Collections.IEnumerator"></see> object that can be used to iterate through the collection.</returns>
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        #region Explicit interface implementations for non-generic NDIterator
 
         IMemoryBlock NDIterator.Block => Block;
-
-        IteratorType NDIterator.Type => Type;
-
         Shape NDIterator.Shape => Shape;
-
         Shape? NDIterator.BroadcastedShape => BroadcastedShape;
-
         bool NDIterator.AutoReset => AutoReset;
-
         Func<T1> NDIterator.MoveNext<T1>() => (Func<T1>)(object)MoveNext;
-
         MoveNextReferencedDelegate<T1> NDIterator.MoveNextReference<T1>() => (MoveNextReferencedDelegate<T1>)(object)MoveNextReference;
-
         Func<bool> NDIterator.HasNext => HasNext;
-
         Action NDIterator.Reset => Reset;
 
         #endregion
