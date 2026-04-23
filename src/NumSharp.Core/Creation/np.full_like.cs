@@ -32,7 +32,7 @@ namespace NumSharp
             var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();
             char physical = OrderResolver.Resolve(order, a.Shape);
             var shape = new Shape((long[])a.shape.Clone(), physical);
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode) typeCode)), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape));
         }
     }
 }

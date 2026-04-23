@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -31,7 +32,7 @@ namespace NumSharp
     /// finalization via the explicit IDisposable call) frees the state via
     /// <see cref="NpyIterRef.FreeState"/>.
     /// </summary>
-    public unsafe class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable
+    public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable
         where TOut : unmanaged
     {
         public readonly IMemoryBlock Block;
@@ -176,6 +177,7 @@ namespace NumSharp
             {
                 case NPTypeCode.Boolean: MoveNext = BuildCastingMoveNext<bool>(); break;
                 case NPTypeCode.Byte: MoveNext = BuildCastingMoveNext<byte>(); break;
+                case NPTypeCode.SByte: MoveNext = BuildCastingMoveNext<sbyte>(); break;
                 case NPTypeCode.Int16: MoveNext = BuildCastingMoveNext<short>(); break;
                 case NPTypeCode.UInt16: MoveNext = BuildCastingMoveNext<ushort>(); break;
                 case NPTypeCode.Int32: MoveNext = BuildCastingMoveNext<int>(); break;
@@ -183,9 +185,11 @@ namespace NumSharp
                 case NPTypeCode.Int64: MoveNext = BuildCastingMoveNext<long>(); break;
                 case NPTypeCode.UInt64: MoveNext = BuildCastingMoveNext<ulong>(); break;
                 case NPTypeCode.Char: MoveNext = BuildCastingMoveNext<char>(); break;
+                case NPTypeCode.Half: MoveNext = BuildCastingMoveNext<Half>(); break;
                 case NPTypeCode.Single: MoveNext = BuildCastingMoveNext<float>(); break;
                 case NPTypeCode.Double: MoveNext = BuildCastingMoveNext<double>(); break;
                 case NPTypeCode.Decimal: MoveNext = BuildCastingMoveNext<decimal>(); break;
+                case NPTypeCode.Complex: MoveNext = BuildCastingMoveNext<Complex>(); break;
                 default: throw new NotSupportedException($"NDIterator: source dtype {srcType} not supported.");
             }
         }

@@ -70,6 +70,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                     RunSame<byte>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
+                case NPTypeCode.SByte:
+                    RunSame<sbyte>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
                 case NPTypeCode.Int16:
                     RunSame<short>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
@@ -91,6 +94,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     RunSame<char>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
+                case NPTypeCode.Half:
+                    RunSame<Half>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
                 case NPTypeCode.Single:
                     // Usually handled by the SIMD path in TryMatMulSimd — this
                     // branch covers the rare fall-through (ILKernel disabled etc.).
@@ -101,6 +107,10 @@ namespace NumSharp.Backends
                     break;
                 case NPTypeCode.Decimal:
                     RunSame<decimal>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't implement INumber<Complex> (no total ordering), so use a dedicated kernel.
+                    RunComplex(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 default:
                     throw new NotSupportedException($"MatMul not supported for type {result.typecode}");
@@ -132,6 +142,61 @@ namespace NumSharp.Backends
             bool* c = (bool*)result.Address + result.Shape.offset;
             new UnmanagedSpan<bool>(c, M * N).Clear();
             MatMulStridedBool(a, aStride0, aStride1, b, bStride0, bStride1, c, M, N, K);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void RunComplex(
+            NDArray left, NDArray right, NDArray result,
+            long aStride0, long aStride1, long bStride0, long bStride1,
+            long M, long N, long K)
+        {
+            Complex* a = (Complex*)left.Address   + left.Shape.offset;
+            Complex* b = (Complex*)right.Address  + right.Shape.offset;
+            Complex* c = (Complex*)result.Address + result.Shape.offset;
+            new UnmanagedSpan<Complex>(c, M * N).Clear();
+            MatMulStridedComplex(a, aStride0, aStride1, b, bStride0, bStride1, c, M, N, K);
+        }
+
+        /// <summary>
+        /// Stride-native same-type Complex GEMM. Mirrors MatMulStridedSame but uses
+        /// Complex's built-in arithmetic operators (no INumber&lt;Complex&gt; in .NET).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void MatMulStridedComplex(
+            Complex* A, long aStride0, long aStride1,
+            Complex* B, long bStride0, long bStride1,
+            Complex* C, long M, long N, long K)
+        {
+            if (bStride1 == 1)
+            {
+                for (long i = 0; i < M; i++)
+                {
+                    Complex* cRow = C + i * N;
+                    long aRowBase = i * aStride0;
+                    for (long k = 0; k < K; k++)
+                    {
+                        Complex aik = A[aRowBase + k * aStride1];
+                        Complex* bRow = B + k * bStride0;
+                        for (long j = 0; j < N; j++)
+                            cRow[j] += aik * bRow[j];
+                    }
+                }
+            }
+            else
+            {
+                for (long i = 0; i < M; i++)
+                {
+                    Complex* cRow = C + i * N;
+                    long aRowBase = i * aStride0;
+                    for (long k = 0; k < K; k++)
+                    {
+                        Complex aik = A[aRowBase + k * aStride1];
+                        long bRowBase = k * bStride0;
+                        for (long j = 0; j < N; j++)
+                            cRow[j] += aik * B[bRowBase + j * bStride1];
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -241,6 +306,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                     MatMulStridedMixed<byte>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
+                case NPTypeCode.SByte:
+                    MatMulStridedMixed<sbyte>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
                 case NPTypeCode.Int16:
                     MatMulStridedMixed<short>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
@@ -262,6 +330,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     MatMulStridedMixed<char>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
+                case NPTypeCode.Half:
+                    MatMulStridedMixed<Half>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
                 case NPTypeCode.Single:
                     MatMulStridedMixed<float>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
@@ -270,6 +341,10 @@ namespace NumSharp.Backends
                     break;
                 case NPTypeCode.Decimal:
                     MatMulStridedMixed<decimal>(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
+                    break;
+                case NPTypeCode.Complex:
+                    // Complex needs a Complex accumulator, not double. Use the dedicated path.
+                    MatMulStridedMixedComplex(left, right, result, aStride0, aStride1, bStride0, bStride1, M, N, K);
                     break;
                 default:
                     throw new NotSupportedException($"MatMul not supported for type {result.typecode}");
@@ -340,6 +415,7 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Boolean: return ((bool*)basePtr)[idx] ? 1.0 : 0.0;
                 case NPTypeCode.Byte:    return ((byte*)basePtr)[idx];
+                case NPTypeCode.SByte:   return ((sbyte*)basePtr)[idx];
                 case NPTypeCode.Int16:   return ((short*)basePtr)[idx];
                 case NPTypeCode.UInt16:  return ((ushort*)basePtr)[idx];
                 case NPTypeCode.Int32:   return ((int*)basePtr)[idx];
@@ -347,10 +423,89 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64:   return ((long*)basePtr)[idx];
                 case NPTypeCode.UInt64:  return ((ulong*)basePtr)[idx];
                 case NPTypeCode.Char:    return ((char*)basePtr)[idx];
+                case NPTypeCode.Half:    return (double)((Half*)basePtr)[idx];
                 case NPTypeCode.Single:  return ((float*)basePtr)[idx];
                 case NPTypeCode.Double:  return ((double*)basePtr)[idx];
                 case NPTypeCode.Decimal: return (double)((decimal*)basePtr)[idx];
+                case NPTypeCode.Complex: return ((Complex*)basePtr)[idx].Real;
                 default: throw new NotSupportedException($"Unsupported type {tc}");
+            }
+        }
+
+        /// <summary>
+        /// Reads an element and returns it as Complex. Used by the Complex mixed-type matmul
+        /// kernel to preserve imaginary components.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Complex ReadAsComplex(void* basePtr, NPTypeCode tc, long idx)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Boolean: return new Complex(((bool*)basePtr)[idx] ? 1.0 : 0.0, 0);
+                case NPTypeCode.Byte:    return new Complex(((byte*)basePtr)[idx], 0);
+                case NPTypeCode.SByte:   return new Complex(((sbyte*)basePtr)[idx], 0);
+                case NPTypeCode.Int16:   return new Complex(((short*)basePtr)[idx], 0);
+                case NPTypeCode.UInt16:  return new Complex(((ushort*)basePtr)[idx], 0);
+                case NPTypeCode.Int32:   return new Complex(((int*)basePtr)[idx], 0);
+                case NPTypeCode.UInt32:  return new Complex(((uint*)basePtr)[idx], 0);
+                case NPTypeCode.Int64:   return new Complex(((long*)basePtr)[idx], 0);
+                case NPTypeCode.UInt64:  return new Complex(((ulong*)basePtr)[idx], 0);
+                case NPTypeCode.Char:    return new Complex(((char*)basePtr)[idx], 0);
+                case NPTypeCode.Half:    return new Complex((double)((Half*)basePtr)[idx], 0);
+                case NPTypeCode.Single:  return new Complex(((float*)basePtr)[idx], 0);
+                case NPTypeCode.Double:  return new Complex(((double*)basePtr)[idx], 0);
+                case NPTypeCode.Decimal: return new Complex((double)((decimal*)basePtr)[idx], 0);
+                case NPTypeCode.Complex: return ((Complex*)basePtr)[idx];
+                default: throw new NotSupportedException($"Unsupported type {tc}");
+            }
+        }
+
+        /// <summary>
+        /// Complex-specific mixed-type matmul. Uses Complex accumulator so the imaginary
+        /// component is preserved — matches NumPy's complex matmul semantics.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void MatMulStridedMixedComplex(
+            NDArray left, NDArray right, NDArray result,
+            long aStride0, long aStride1, long bStride0, long bStride1,
+            long M, long N, long K)
+        {
+            Complex* c = (Complex*)result.Address + result.Shape.offset;
+            void* aBase = (byte*)left.Address  + left.Shape.offset  * left.dtypesize;
+            void* bBase = (byte*)right.Address + right.Shape.offset * right.dtypesize;
+            var aTc = left.typecode;
+            var bTc = right.typecode;
+
+            new UnmanagedSpan<Complex>(c, M * N).Clear();
+
+            var accBuf = new Complex[N];
+            fixed (Complex* accBase = accBuf)
+            {
+                Complex* acc = accBase;
+                for (long i = 0; i < M; i++)
+                {
+                    new UnmanagedSpan<Complex>(acc, N).Clear();
+                    long aRowBase = i * aStride0;
+                    for (long k = 0; k < K; k++)
+                    {
+                        Complex aik = ReadAsComplex(aBase, aTc, aRowBase + k * aStride1);
+                        long bRowBase = k * bStride0;
+                        if (bStride1 == 1)
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * ReadAsComplex(bBase, bTc, bRowBase + j);
+                        }
+                        else
+                        {
+                            for (long j = 0; j < N; j++)
+                                acc[j] += aik * ReadAsComplex(bBase, bTc, bRowBase + j * bStride1);
+                        }
+                    }
+
+                    Complex* cRow = c + i * N;
+                    for (long j = 0; j < N; j++)
+                        cRow[j] = acc[j];
+                }
             }
         }
     }
