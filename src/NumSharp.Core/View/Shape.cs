@@ -49,10 +49,9 @@ namespace NumSharp
         internal readonly int _flags;
 
         /// <summary>
-        ///     Dense data are stored contiguously in memory, addressed by a single index (the memory address). <br></br>
-        ///     Array memory ordering schemes translate that single index into multiple indices corresponding to the array coordinates.<br></br>
-        ///     0: Row major<br></br>
-        ///     1: Column major
+        ///     Hash seed constant used in <see cref="ComputeSizeAndHash"/> for stable Shape hash values.
+        ///     NOT the physical memory order — use <see cref="Order"/>, <see cref="IsContiguous"/>,
+        ///     or <see cref="IsFContiguous"/> for actual memory layout information.
         /// </summary>
         internal const char layout = 'C';
 
@@ -103,6 +102,22 @@ namespace NumSharp
             get => (_flags & (int)ArrayFlags.C_CONTIGUOUS) != 0;
         }
 
+        /// <summary>
+        ///     Does this Shape represent contiguous unmanaged memory in F-order (column-major)?
+        ///     Cached flag computed at shape creation, matching NumPy's flags['F_CONTIGUOUS'] algorithm.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy algorithm: scan left-to-right. stride[0] must equal 1.
+        ///     stride[i] must equal shape[i-1] * stride[i-1]. Size-1 dimensions are skipped.
+        ///     Empty arrays are considered contiguous by definition.
+        ///     A 1-D array that is C-contiguous is also F-contiguous (same memory layout).
+        /// </remarks>
+        public readonly bool IsFContiguous
+        {
+            [MethodImpl(Inline)]
+            get => (_flags & (int)ArrayFlags.F_CONTIGUOUS) != 0;
+        }
+
 #region Static Flag/Hash Computation (for readonly struct)
 
         /// <summary>
@@ -111,16 +126,39 @@ namespace NumSharp
         [MethodImpl(Inline)]
         private static int ComputeFlagsStatic(long[] dims, long[] strides)
         {
+            // Empty arrays (any dim == 0) short-circuit per NumPy _UpdateContiguousFlags:
+            // unconditionally both C- and F-contiguous, writeable, and NOT broadcast.
+            // With no elements, broadcast semantics have no meaning.
+            if (dims != null)
+            {
+                for (int i = 0; i < dims.Length; i++)
+                {
+                    if (dims[i] == 0)
+                    {
+                        return (int)(ArrayFlags.C_CONTIGUOUS
+                                   | ArrayFlags.F_CONTIGUOUS
+                                   | ArrayFlags.ALIGNED
+                                   | ArrayFlags.WRITEABLE);
+                    }
+                }
+            }
+
             int flags = 0;
 
-            // Check BROADCASTED first
+            // Check BROADCASTED first (only meaningful for non-empty arrays).
             bool isBroadcasted = ComputeIsBroadcastedStatic(dims, strides);
             if (isBroadcasted)
                 flags |= (int)ArrayFlags.BROADCASTED;
 
-            // Check C_CONTIGUOUS (depends on not being broadcasted)
-            if (!isBroadcasted && ComputeIsContiguousStatic(dims, strides))
-                flags |= (int)ArrayFlags.C_CONTIGUOUS;
+            // Compute C- and F-contiguity together in a single pass (NumPy-aligned).
+            // Broadcast shapes are never flagged as contiguous even if the inner
+            // stride pattern would otherwise qualify.
+            if (!isBroadcasted)
+            {
+                var (isC, isF) = ComputeContiguousFlagsStatic(dims, strides);
+                if (isC) flags |= (int)ArrayFlags.C_CONTIGUOUS;
+                if (isF) flags |= (int)ArrayFlags.F_CONTIGUOUS;
+            }
 
             // ALIGNED is always true because NumSharp uses unaligned SIMD loads (Vector.Load, not LoadAligned)
             flags |= (int)ArrayFlags.ALIGNED;
@@ -149,29 +187,65 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Computes C-contiguity from stride values (NumPy algorithm).
+        ///     Computes both C- and F-contiguity in a single call, matching NumPy's
+        ///     <c>_UpdateContiguousFlags</c> in <c>numpy/_core/src/multiarray/flagsobject.c</c>.
         /// </summary>
+        /// <remarks>
+        ///     From NumPy's source comments:
+        ///     <list type="bullet">
+        ///         <item>C-contiguous: <c>strides[-1] == itemsize</c> and <c>strides[i] == shape[i+1] * strides[i+1]</c></item>
+        ///         <item>F-contiguous: <c>strides[0] == itemsize</c> and <c>strides[i] == shape[i-1] * strides[i-1]</c></item>
+        ///         <item>A 0- or 1-dimensional array is either both C- and F-contiguous, or neither.</item>
+        ///         <item>Multi-dim arrays can be C, F, or neither, but not both (unless only one element).</item>
+        ///         <item>Size-1 dimensions don't count (their strides are unused).</item>
+        ///         <item>Any dimension of size 0 makes the array trivially both C- and F-contiguous.</item>
+        ///     </list>
+        ///     NumSharp uses element-indexed strides (sd starts at 1) rather than byte strides.
+        /// </remarks>
         [MethodImpl(Inline)]
-        private static bool ComputeIsContiguousStatic(long[] dims, long[] strides)
+        private static (bool isC, bool isF) ComputeContiguousFlagsStatic(long[] dims, long[] strides)
         {
             if (dims == null || dims.Length == 0)
-                return true;
+                return (true, true); // scalar is both
 
-            long sd = 1;
-            for (int i = dims.Length - 1; i >= 0; i--)
+            // Empty arrays (any dim == 0) are trivially both C- and F-contiguous (NumPy convention).
+            for (int i = 0; i < dims.Length; i++)
             {
-                long dim = dims[i];
-                if (dim == 0)
-                    return true;
-                if (dim != 1)
+                if (dims[i] == 0)
+                    return (true, true);
+            }
+
+            // C-contiguity: scan right-to-left, stride[-1] must be 1, stride[i] = shape[i+1] * stride[i+1]
+            bool isC = true;
+            {
+                long sd = 1;
+                for (int i = dims.Length - 1; i >= 0; i--)
                 {
-                    if (strides[i] != sd)
-                        return false;
-                    sd *= dim;
+                    long dim = dims[i];
+                    if (dim != 1)
+                    {
+                        if (strides[i] != sd) { isC = false; break; }
+                        sd *= dim;
+                    }
                 }
             }
 
-            return true;
+            // F-contiguity: scan left-to-right, stride[0] must be 1, stride[i] = shape[i-1] * stride[i-1]
+            bool isF = true;
+            {
+                long sd = 1;
+                for (int i = 0; i < dims.Length; i++)
+                {
+                    long dim = dims[i];
+                    if (dim != 1)
+                    {
+                        if (strides[i] != sd) { isF = false; break; }
+                        sd *= dim;
+                    }
+                }
+            }
+
+            return (isC, isF);
         }
 
         /// <summary>
@@ -210,6 +284,23 @@ namespace NumSharp
             strides[dims.Length - 1] = 1;
             for (int i = dims.Length - 2; i >= 0; i--)
                 strides[i] = strides[i + 1] * dims[i + 1];
+            return strides;
+        }
+
+        /// <summary>
+        ///     Computes F-contiguous (column-major) strides for given dimensions.
+        ///     strides[0] = 1, strides[i] = dims[i-1] * strides[i-1].
+        /// </summary>
+        [MethodImpl(Inline)]
+        private static long[] ComputeFContiguousStrides(long[] dims)
+        {
+            if (dims == null || dims.Length == 0)
+                return Array.Empty<long>();
+
+            var strides = new long[dims.Length];
+            strides[0] = 1;
+            for (int i = 1; i < dims.Length; i++)
+                strides[i] = strides[i - 1] * dims[i - 1];
             return strides;
         }
 
@@ -338,7 +429,12 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsEmpty => _hashCode == 0;
 
-        public readonly char Order => layout;
+        /// <summary>
+        ///     Physical memory layout: 'F' if strictly F-contiguous, otherwise 'C'.
+        ///     1-D and scalar shapes (both C- and F-contig) report 'C' by convention.
+        ///     Non-contiguous shapes also report 'C' as the default reference order.
+        /// </summary>
+        public readonly char Order => (IsFContiguous && !IsContiguous) ? 'F' : 'C';
 
         /// <summary>
         ///     Singleton instance of a <see cref="Shape"/> that represents a scalar.
@@ -441,7 +537,8 @@ namespace NumSharp
             this.size = 1;
             this._hashCode = int.MinValue; // Scalar hash
             this.IsScalar = true;
-            this._flags = (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.ALIGNED | ArrayFlags.WRITEABLE);
+            // Scalars are trivially both C- and F-contiguous
+            this._flags = (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.F_CONTIGUOUS | ArrayFlags.ALIGNED | ArrayFlags.WRITEABLE);
         }
 
         /// <summary>
@@ -605,6 +702,34 @@ namespace NumSharp
             }
 
             this.strides = ComputeContiguousStrides(this.dimensions);
+            this.offset = 0;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(this.dimensions);
+            this.bufferSize = size;
+            this.IsScalar = _hashCode == int.MinValue;
+            this._flags = ComputeFlagsStatic(this.dimensions, this.strides);
+        }
+
+        /// <summary>
+        ///     Constructs a Shape with a specified physical memory order.
+        ///     Only 'C' (row-major) and 'F' (column-major) are valid — logical orders
+        ///     ('A', 'K') must be resolved to a physical order first via OrderResolver.
+        /// </summary>
+        /// <param name="dims">Dimension sizes.</param>
+        /// <param name="order">Physical memory order: 'C' or 'F'.</param>
+        /// <exception cref="ArgumentException">Thrown if order is not 'C' or 'F'.</exception>
+        [MethodImpl(Optimize)]
+        public Shape(long[] dims, char order)
+        {
+            if (order != 'C' && order != 'F')
+                throw new ArgumentException(
+                    $"Physical order must be 'C' or 'F' (got '{order}'). Use OrderResolver to resolve 'A' or 'K'.",
+                    nameof(order));
+
+            this.dimensions = dims ?? Array.Empty<long>();
+            this.strides = order == 'F'
+                ? ComputeFContiguousStrides(this.dimensions)
+                : ComputeContiguousStrides(this.dimensions);
             this.offset = 0;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(this.dimensions);

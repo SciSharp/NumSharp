@@ -1277,6 +1277,18 @@ namespace NumSharp.Backends.Kernels
             {
                 AxisCumSumInnerContiguousDecimal((decimal*)src, (decimal*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
             }
+            else if (typeof(T) == typeof(sbyte))
+            {
+                AxisCumSumInnerContiguousSByte((sbyte*)src, (sbyte*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                AxisCumSumInnerContiguousHalf((Half*)src, (Half*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(Complex))
+            {
+                AxisCumSumInnerContiguousComplex((Complex*)src, (Complex*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
             else
             {
                 throw new NotSupportedException($"AxisCumSum not supported for type {typeof(T).Name}");
@@ -1484,6 +1496,66 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Type-specific inner contiguous cumsum for sbyte.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousSByte(
+            sbyte* src, sbyte* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                sbyte* srcRow = src + outer * inputRowStride;
+                sbyte* dstRow = dst + outer * outputOuterStride;
+
+                sbyte sum = 0;
+                for (long i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for Half.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousHalf(
+            Half* src, Half* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                Half* srcRow = src + outer * inputRowStride;
+                Half* dstRow = dst + outer * outputOuterStride;
+
+                Half sum = (Half)0;
+                for (long i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for Complex.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousComplex(
+            Complex* src, Complex* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                Complex* srcRow = src + outer * inputRowStride;
+                Complex* dstRow = dst + outer * outputOuterStride;
+
+                Complex sum = Complex.Zero;
+                for (long i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
         /// General axis cumsum using coordinate-based iteration.
         /// Handles non-contiguous axes and complex stride patterns.
         /// </summary>
@@ -1575,6 +1647,24 @@ namespace NumSharp.Backends.Kernels
             else if (typeof(T) == typeof(decimal))
             {
                 AxisCumSumGeneralDecimal((decimal*)src, (decimal*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(sbyte))
+            {
+                AxisCumSumGeneralSByte((sbyte*)src, (sbyte*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                AxisCumSumGeneralHalf((Half*)src, (Half*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(Complex))
+            {
+                AxisCumSumGeneralComplex((Complex*)src, (Complex*)dst, inputStrides, shape, axis, ndim,
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
                     outerStrides, innerStrides);
             }
@@ -1870,6 +1960,78 @@ namespace NumSharp.Backends.Kernels
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     decimal sum = 0m;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for sbyte type. Same-type accumulator wraps on overflow.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralSByte(
+            sbyte* src, sbyte* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                for (long inner = 0; inner < innerSize; inner++)
+                {
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
+                    sbyte sum = 0;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for Half type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralHalf(
+            Half* src, Half* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                for (long inner = 0; inner < innerSize; inner++)
+                {
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
+                    Half sum = (Half)0;
+                    for (long i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for Complex type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralComplex(
+            Complex* src, Complex* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
+        {
+            for (long outer = 0; outer < outerSize; outer++)
+            {
+                for (long inner = 0; inner < innerSize; inner++)
+                {
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
+                    Complex sum = Complex.Zero;
                     for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];

@@ -17,8 +17,12 @@ namespace NumSharp.Backends.Kernels
     /// - 8x16 micro-kernel with 16 Vector256 accumulators
     /// - FMA (Fused Multiply-Add) for 2x FLOP throughput
     /// - 4x k-loop unrolling for instruction-level parallelism
+    ///
+    /// Stride-aware variants (see SimdMatMul.Strided.cs / SimdMatMul.Double.cs)
+    /// accept (stride0, stride1) for each operand so transposed / sliced NDArray
+    /// views can be matmul'd without materializing contiguous copies.
     /// </summary>
-    public static class SimdMatMul
+    public static partial class SimdMatMul
     {
         // Cache blocking parameters tuned for typical L1=32KB, L2=256KB
         private const int MC = 64;   // Rows of A panel (fits in L2 with B panel)

@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
 
 namespace NumSharp.Backends
@@ -14,10 +15,6 @@ namespace NumSharp.Backends
         /// <returns>True if any element is non-zero</returns>
         public override bool Any(NDArray nd)
         {
-            if (nd.size == 0)
-                return false; // NumPy: any([]) == False
-
-            // Dispatch by type
             return nd.GetTypeCode switch
             {
                 NPTypeCode.Boolean => AnyImpl<bool>(nd),
@@ -41,56 +38,12 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Generic implementation of Any for unmanaged types.
-        /// Uses SIMD for contiguous arrays, falls back to iteration for strided arrays.
+        /// Uses the new iterator core for both contiguous and strided layouts.
         /// </summary>
-        private static unsafe bool AnyImpl<T>(NDArray nd) where T : unmanaged
-        {
-            var shape = nd.Shape;
+        private static bool AnyImpl<T>(NDArray nd) where T : unmanaged
+            => NpyIter.ReduceBool<T, NpyAnyKernel<T>>(nd);
 
-            if (shape.IsContiguous)
-            {
-                // SIMD fast path for contiguous arrays
-                if (ILKernelGenerator.Enabled)
-                {
-                    return ILKernelGenerator.AnySimdHelper<T>((void*)nd.Address, nd.size);
-                }
-
-                // Scalar fallback for contiguous arrays
-                var addr = (T*)nd.Address;
-                long len = nd.size;
-                for (long i = 0; i < len; i++)
-                {
-                    if (!addr[i].Equals(default(T)))
-                        return true;
-                }
-                return false;
-            }
-            else
-            {
-                // Iterator fallback for non-contiguous (strided/sliced) arrays
-                using var iter = nd.AsIterator<T>();
-                while (iter.HasNext())
-                {
-                    if (!iter.MoveNext().Equals(default(T)))
-                        return true;
-                }
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Special implementation for Decimal (not supported by SIMD).
-        /// </summary>
-        private static bool AnyImplDecimal(NDArray nd)
-        {
-            using var iter = nd.AsIterator<decimal>();
-            while (iter.HasNext())
-            {
-                if (iter.MoveNext() != 0m)
-                    return true;
-            }
-            return false;
-        }
+        private static bool AnyImplDecimal(NDArray nd) => NpyIter.ReduceBool<decimal, NpyAnyKernel<decimal>>(nd);
 
         /// <summary>
         /// Special implementation for Half (float16).
@@ -158,8 +111,7 @@ namespace NumSharp.Backends
         /// <returns>Array of bools with the axis dimension removed</returns>
         public override NDArray<bool> Any(NDArray nd, int axis)
         {
-            // TODO: Implement axis reduction for Any
-            throw new NotImplementedException($"DefaultEngine.Any with axis={axis} not yet implemented. Use np.any(arr, axis) directly.");
+            return Any(nd, axis, keepdims: false);
         }
     }
 }

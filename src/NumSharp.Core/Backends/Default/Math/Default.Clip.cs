@@ -52,6 +52,15 @@ namespace NumSharp.Backends
             return ClipCore(@out, min, max);
         }
 
+        private static unsafe void ClipBothDispatch<T>(nint addr, long len, object min, object max) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipHelper((T*)addr, len, Converts.ChangeType<T>(min), Converts.ChangeType<T>(max));
+
+        private static unsafe void ClipMinDispatch<T>(nint addr, long len, object min) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipMinHelper((T*)addr, len, Converts.ChangeType<T>(min));
+
+        private static unsafe void ClipMaxDispatch<T>(nint addr, long len, object max) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipMaxHelper((T*)addr, len, Converts.ChangeType<T>(max));
+
         /// <summary>
         /// Core clip implementation that dispatches to IL kernels based on dtype.
         /// Uses SIMD-optimized helpers for contiguous arrays (which is guaranteed
@@ -60,141 +69,46 @@ namespace NumSharp.Backends
         private unsafe NDArray ClipCore(NDArray arr, object min, object max)
         {
             var len = arr.size;
+            var tc = arr.GetTypeCode;
+
+            if (tc == NPTypeCode.Complex)
+                return ClipCoreComplex(arr, min, max);
 
             if (min != null && max != null)
-            {
-                switch (arr.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ILKernelGenerator.ClipHelper((byte*)arr.Address, len, Converts.ToByte(min), Converts.ToByte(max));
-                        return arr;
-                    case NPTypeCode.SByte:
-                        ILKernelGenerator.ClipHelper((sbyte*)arr.Address, len, Converts.ToSByte(min), Converts.ToSByte(max));
-                        return arr;
-                    case NPTypeCode.Int16:
-                        ILKernelGenerator.ClipHelper((short*)arr.Address, len, Converts.ToInt16(min), Converts.ToInt16(max));
-                        return arr;
-                    case NPTypeCode.UInt16:
-                        ILKernelGenerator.ClipHelper((ushort*)arr.Address, len, Converts.ToUInt16(min), Converts.ToUInt16(max));
-                        return arr;
-                    case NPTypeCode.Int32:
-                        ILKernelGenerator.ClipHelper((int*)arr.Address, len, Converts.ToInt32(min), Converts.ToInt32(max));
-                        return arr;
-                    case NPTypeCode.UInt32:
-                        ILKernelGenerator.ClipHelper((uint*)arr.Address, len, Converts.ToUInt32(min), Converts.ToUInt32(max));
-                        return arr;
-                    case NPTypeCode.Int64:
-                        ILKernelGenerator.ClipHelper((long*)arr.Address, len, Converts.ToInt64(min), Converts.ToInt64(max));
-                        return arr;
-                    case NPTypeCode.UInt64:
-                        ILKernelGenerator.ClipHelper((ulong*)arr.Address, len, Converts.ToUInt64(min), Converts.ToUInt64(max));
-                        return arr;
-                    case NPTypeCode.Single:
-                        ILKernelGenerator.ClipHelper((float*)arr.Address, len, Converts.ToSingle(min), Converts.ToSingle(max));
-                        return arr;
-                    case NPTypeCode.Double:
-                        ILKernelGenerator.ClipHelper((double*)arr.Address, len, Converts.ToDouble(min), Converts.ToDouble(max));
-                        return arr;
-                    case NPTypeCode.Decimal:
-                        ClipDecimal((decimal*)arr.Address, len, Converts.ToDecimal(min), Converts.ToDecimal(max));
-                        return arr;
-                    case NPTypeCode.Char:
-                        ClipChar((char*)arr.Address, len, Converts.ToChar(min), Converts.ToChar(max));
-                        return arr;
-                    default:
-                        throw new NotSupportedException($"Clip not supported for dtype {arr.GetTypeCode}");
-                }
-            }
+                NpFunc.Invoke(tc, ClipBothDispatch<int>, (nint)arr.Address, len, min, max);
             else if (min != null)
-            {
-                switch (arr.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ILKernelGenerator.ClipMinHelper((byte*)arr.Address, len, Converts.ToByte(min));
-                        return arr;
-                    case NPTypeCode.SByte:
-                        ILKernelGenerator.ClipMinHelper((sbyte*)arr.Address, len, Converts.ToSByte(min));
-                        return arr;
-                    case NPTypeCode.Int16:
-                        ILKernelGenerator.ClipMinHelper((short*)arr.Address, len, Converts.ToInt16(min));
-                        return arr;
-                    case NPTypeCode.UInt16:
-                        ILKernelGenerator.ClipMinHelper((ushort*)arr.Address, len, Converts.ToUInt16(min));
-                        return arr;
-                    case NPTypeCode.Int32:
-                        ILKernelGenerator.ClipMinHelper((int*)arr.Address, len, Converts.ToInt32(min));
-                        return arr;
-                    case NPTypeCode.UInt32:
-                        ILKernelGenerator.ClipMinHelper((uint*)arr.Address, len, Converts.ToUInt32(min));
-                        return arr;
-                    case NPTypeCode.Int64:
-                        ILKernelGenerator.ClipMinHelper((long*)arr.Address, len, Converts.ToInt64(min));
-                        return arr;
-                    case NPTypeCode.UInt64:
-                        ILKernelGenerator.ClipMinHelper((ulong*)arr.Address, len, Converts.ToUInt64(min));
-                        return arr;
-                    case NPTypeCode.Single:
-                        ILKernelGenerator.ClipMinHelper((float*)arr.Address, len, Converts.ToSingle(min));
-                        return arr;
-                    case NPTypeCode.Double:
-                        ILKernelGenerator.ClipMinHelper((double*)arr.Address, len, Converts.ToDouble(min));
-                        return arr;
-                    case NPTypeCode.Decimal:
-                        ClipMinDecimal((decimal*)arr.Address, len, Converts.ToDecimal(min));
-                        return arr;
-                    case NPTypeCode.Char:
-                        ClipMinChar((char*)arr.Address, len, Converts.ToChar(min));
-                        return arr;
-                    default:
-                        throw new NotSupportedException($"Clip not supported for dtype {arr.GetTypeCode}");
-                }
-            }
+                NpFunc.Invoke(tc, ClipMinDispatch<int>, (nint)arr.Address, len, min);
             else if (max != null)
-            {
-                switch (arr.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ILKernelGenerator.ClipMaxHelper((byte*)arr.Address, len, Converts.ToByte(max));
-                        return arr;
-                    case NPTypeCode.SByte:
-                        ILKernelGenerator.ClipMaxHelper((sbyte*)arr.Address, len, Converts.ToSByte(max));
-                        return arr;
-                    case NPTypeCode.Int16:
-                        ILKernelGenerator.ClipMaxHelper((short*)arr.Address, len, Converts.ToInt16(max));
-                        return arr;
-                    case NPTypeCode.UInt16:
-                        ILKernelGenerator.ClipMaxHelper((ushort*)arr.Address, len, Converts.ToUInt16(max));
-                        return arr;
-                    case NPTypeCode.Int32:
-                        ILKernelGenerator.ClipMaxHelper((int*)arr.Address, len, Converts.ToInt32(max));
-                        return arr;
-                    case NPTypeCode.UInt32:
-                        ILKernelGenerator.ClipMaxHelper((uint*)arr.Address, len, Converts.ToUInt32(max));
-                        return arr;
-                    case NPTypeCode.Int64:
-                        ILKernelGenerator.ClipMaxHelper((long*)arr.Address, len, Converts.ToInt64(max));
-                        return arr;
-                    case NPTypeCode.UInt64:
-                        ILKernelGenerator.ClipMaxHelper((ulong*)arr.Address, len, Converts.ToUInt64(max));
-                        return arr;
-                    case NPTypeCode.Single:
-                        ILKernelGenerator.ClipMaxHelper((float*)arr.Address, len, Converts.ToSingle(max));
-                        return arr;
-                    case NPTypeCode.Double:
-                        ILKernelGenerator.ClipMaxHelper((double*)arr.Address, len, Converts.ToDouble(max));
-                        return arr;
-                    case NPTypeCode.Decimal:
-                        ClipMaxDecimal((decimal*)arr.Address, len, Converts.ToDecimal(max));
-                        return arr;
-                    case NPTypeCode.Char:
-                        ClipMaxChar((char*)arr.Address, len, Converts.ToChar(max));
-                        return arr;
-                    default:
-                        throw new NotSupportedException($"Clip not supported for dtype {arr.GetTypeCode}");
-                }
-            }
+                NpFunc.Invoke(tc, ClipMaxDispatch<int>, (nint)arr.Address, len, max);
 
-            // Both min and max are null - return unchanged
+            return arr;
+        }
+
+        private static unsafe NDArray ClipCoreComplex(NDArray arr, object min, object max)
+        {
+            var addr = (System.Numerics.Complex*)arr.Address;
+            var len = arr.size;
+            var minVal = min != null ? Converts.ChangeType<System.Numerics.Complex>(min) : default;
+            var maxVal = max != null ? Converts.ChangeType<System.Numerics.Complex>(max) : default;
+            bool hasMin = min != null, hasMax = max != null;
+
+            for (long i = 0; i < len; i++)
+            {
+                var val = addr[i];
+                if (hasMin)
+                {
+                    int cmp = val.Real.CompareTo(minVal.Real);
+                    if (cmp == 0) cmp = val.Imaginary.CompareTo(minVal.Imaginary);
+                    if (cmp < 0) val = minVal;
+                }
+                if (hasMax)
+                {
+                    int cmp = val.Real.CompareTo(maxVal.Real);
+                    if (cmp == 0) cmp = val.Imaginary.CompareTo(maxVal.Imaginary);
+                    if (cmp > 0) val = maxVal;
+                }
+                addr[i] = val;
+            }
             return arr;
         }
 

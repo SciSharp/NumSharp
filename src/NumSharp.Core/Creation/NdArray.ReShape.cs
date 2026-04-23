@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
+using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -14,6 +15,38 @@ namespace NumSharp
         public NDArray reshape(Shape newShape)
         {
             return reshape(ref newShape);
+        }
+
+        /// <summary>
+        ///     Gives a new shape to an array without changing its data, filling values in the specified order.
+        /// </summary>
+        /// <param name="newShape">The new shape. Dimensions must be explicit (no -1 placeholder on the F-order path).</param>
+        /// <param name="order">
+        ///     Read/write order for the reshape.
+        ///     'C' (default) - row-major, 'F' - column-major,
+        ///     'A' - preserve source layout when possible, 'K' - memory order.
+        ///     When 'F', values are both read in F-order from the source and written in F-order
+        ///     to the destination, producing an F-contiguous result with NumPy-aligned values.
+        /// </param>
+        /// <returns>Reshaped array. For order='F' this is always a newly-allocated F-contiguous copy.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.reshape.html
+        ///     The F-order path does not currently support the -1 placeholder dimension —
+        ///     pre-compute the inferred dim and pass explicit sizes. A mismatched size raises
+        ///     <see cref="IncorrectShapeException"/> via the UnmanagedStorage constructor.
+        /// </remarks>
+        public NDArray reshape(Shape newShape, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            if (physical != 'F')
+                return reshape(ref newShape);
+
+            // F-order reshape: read source column-major, write destination column-major.
+            // Equivalent to placing flatten('F') memory into an F-contiguous shape.
+            var fFlat = this.flatten('F');
+            var dims = (long[])newShape.Dimensions.Clone();
+            var fShape = new Shape(dims, 'F');
+            return new NDArray(new UnmanagedStorage(fFlat.Storage.InternalArray, fShape));
         }
 
         /// <summary>

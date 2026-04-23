@@ -468,16 +468,59 @@ namespace NumSharp
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy = true) => TensorEngine.Cast(this, dtype, copy);
+        public NDArray astype(Type dtype, bool copy = true) => astype(dtype, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray astype(Type dtype, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, dtype, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         ///     Copy of the array, cast to a specified type.
         /// </summary>
-        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="typeCode">The dtype to cast this array.</param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy = true) => TensorEngine.Cast(this, typeCode, copy);
+        public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="typeCode">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        public NDArray astype(NPTypeCode typeCode, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, typeCode, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         /// Clone the whole NDArray
@@ -516,46 +559,31 @@ namespace NumSharp
             if (ndim > 1)
                 return _iterSlices().GetEnumerator();
 
-            // 1-D arrays: iterate over scalar elements
-#if _REGEN
-            #region Compute
-		    switch (GetTypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
-
-            #region Compute
-
+            // 1-D arrays: iterate over scalar elements.
+            // Materialize via Storage.ToArray<T>() which already handles contig,
+            // sliced, and strided layouts (Buffer.MemoryCopy fast path or
+            // coordinate walk as appropriate). Foreach over a flat T[] avoids
+            // the legacy NDIterator delegate overhead and lets the JIT inline.
             switch (GetTypeCode)
             {
-                case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
-                case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
-                case NPTypeCode.SByte: return new NDIterator<sbyte>(this, false).GetEnumerator();
-                case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
-                case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
-                case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
-                case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
-                case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
-                case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
-                case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
-                case NPTypeCode.Half: return new NDIterator<Half>(this, false).GetEnumerator();
-                case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
-                case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
-                case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
-                case NPTypeCode.Complex: return new NDIterator<System.Numerics.Complex>(this, false).GetEnumerator();
+                case NPTypeCode.Boolean: return _iter1D<bool>().GetEnumerator();
+                case NPTypeCode.Byte: return _iter1D<byte>().GetEnumerator();
+                case NPTypeCode.SByte: return _iter1D<sbyte>().GetEnumerator();
+                case NPTypeCode.Int16: return _iter1D<short>().GetEnumerator();
+                case NPTypeCode.UInt16: return _iter1D<ushort>().GetEnumerator();
+                case NPTypeCode.Int32: return _iter1D<int>().GetEnumerator();
+                case NPTypeCode.UInt32: return _iter1D<uint>().GetEnumerator();
+                case NPTypeCode.Int64: return _iter1D<long>().GetEnumerator();
+                case NPTypeCode.UInt64: return _iter1D<ulong>().GetEnumerator();
+                case NPTypeCode.Char: return _iter1D<char>().GetEnumerator();
+                case NPTypeCode.Half: return _iter1D<Half>().GetEnumerator();
+                case NPTypeCode.Double: return _iter1D<double>().GetEnumerator();
+                case NPTypeCode.Single: return _iter1D<float>().GetEnumerator();
+                case NPTypeCode.Decimal: return _iter1D<decimal>().GetEnumerator();
+                case NPTypeCode.Complex: return _iter1D<System.Numerics.Complex>().GetEnumerator();
                 default:
                     throw new NotSupportedException();
             }
-
-            #endregion
-
-#endif
 
             IEnumerable _empty()
             {
@@ -571,6 +599,13 @@ namespace NumSharp
                 {
                     yield return this[i];
                 }
+            }
+
+            System.Collections.Generic.IEnumerable<T> _iter1D<T>() where T : unmanaged
+            {
+                var flat = Storage.ToArray<T>();
+                foreach (var v in flat)
+                    yield return v;
             }
         }
 

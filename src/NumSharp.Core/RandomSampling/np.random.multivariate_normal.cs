@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
@@ -129,14 +131,11 @@ namespace NumSharp
 
             long n = mean.size;
 
-            // Copy mean to unmanaged storage
+            // Copy mean (any layout) into a flat double buffer via NpyIter.Copy.
             var meanBlock = new UnmanagedMemoryBlock<double>(n);
             var meanSlice = new ArraySlice<double>(meanBlock);
-            long idx = 0;
-            foreach (var val in mean.AsIterator<double>())
-            {
-                meanSlice[idx++] = val;
-            }
+            var meanStorage = new UnmanagedStorage(meanSlice, new Shape(n));
+            NpyIter.Copy(meanStorage, mean.Storage);
 
             // Copy cov to unmanaged storage (row-major)
             var covBlock = new UnmanagedMemoryBlock<double>(n * n);

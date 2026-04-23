@@ -41,7 +41,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="ndmin">Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.</param>
         /// <param name="copy">Always copies if the array is larger than 1-d.</param>
-        /// <param name="order">Not used.</param>
+        /// <param name="order">Memory layout: 'C' (row-major, default), 'F' (column-major), 'A'/'K' (resolved from source).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
@@ -79,7 +79,14 @@ namespace NumSharp
                 copy = false;
             }
 
-            return new NDArray(copy ? (Array)array.Clone() : array, shape, order);
+            // C-contiguous materialization from the managed array.
+            var result = new NDArray(copy ? (Array)array.Clone() : array, shape, 'C');
+
+            // Honor F-order request: relay out into F-contig layout.
+            char physical = OrderResolver.Resolve(order, result.Shape);
+            if (physical == 'F' && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+                result = result.copy('F');
+            return result;
         }
 
         /// <summary>

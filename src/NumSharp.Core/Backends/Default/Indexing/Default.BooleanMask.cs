@@ -1,11 +1,16 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        private static unsafe void CopyMaskedDispatch<T>(nint arr, nint mask, nint result, long size) where T : unmanaged
+            => ILKernelGenerator.CopyMaskedElementsHelper((T*)arr, (bool*)mask, (T*)result, size);
+
         /// <summary>
         /// Apply a boolean mask to select elements from an array.
         /// </summary>
@@ -44,73 +49,22 @@ namespace NumSharp.Backends
             // Create result array
             var result = new NDArray(arr.dtype, new Shape(trueCount));
 
-            // Copy elements where mask is true
-            switch (arr.typecode)
-            {
-                case NPTypeCode.Boolean:
-                    ILKernelGenerator.CopyMaskedElementsHelper((bool*)arr.Address, (bool*)mask.Address, (bool*)result.Address, size);
-                    break;
-                case NPTypeCode.Byte:
-                    ILKernelGenerator.CopyMaskedElementsHelper((byte*)arr.Address, (bool*)mask.Address, (byte*)result.Address, size);
-                    break;
-                case NPTypeCode.SByte:
-                    ILKernelGenerator.CopyMaskedElementsHelper((sbyte*)arr.Address, (bool*)mask.Address, (sbyte*)result.Address, size);
-                    break;
-                case NPTypeCode.Int16:
-                    ILKernelGenerator.CopyMaskedElementsHelper((short*)arr.Address, (bool*)mask.Address, (short*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt16:
-                    ILKernelGenerator.CopyMaskedElementsHelper((ushort*)arr.Address, (bool*)mask.Address, (ushort*)result.Address, size);
-                    break;
-                case NPTypeCode.Int32:
-                    ILKernelGenerator.CopyMaskedElementsHelper((int*)arr.Address, (bool*)mask.Address, (int*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt32:
-                    ILKernelGenerator.CopyMaskedElementsHelper((uint*)arr.Address, (bool*)mask.Address, (uint*)result.Address, size);
-                    break;
-                case NPTypeCode.Int64:
-                    ILKernelGenerator.CopyMaskedElementsHelper((long*)arr.Address, (bool*)mask.Address, (long*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt64:
-                    ILKernelGenerator.CopyMaskedElementsHelper((ulong*)arr.Address, (bool*)mask.Address, (ulong*)result.Address, size);
-                    break;
-                case NPTypeCode.Char:
-                    ILKernelGenerator.CopyMaskedElementsHelper((char*)arr.Address, (bool*)mask.Address, (char*)result.Address, size);
-                    break;
-                case NPTypeCode.Half:
-                    ILKernelGenerator.CopyMaskedElementsHelper((Half*)arr.Address, (bool*)mask.Address, (Half*)result.Address, size);
-                    break;
-                case NPTypeCode.Single:
-                    ILKernelGenerator.CopyMaskedElementsHelper((float*)arr.Address, (bool*)mask.Address, (float*)result.Address, size);
-                    break;
-                case NPTypeCode.Double:
-                    ILKernelGenerator.CopyMaskedElementsHelper((double*)arr.Address, (bool*)mask.Address, (double*)result.Address, size);
-                    break;
-                case NPTypeCode.Decimal:
-                    ILKernelGenerator.CopyMaskedElementsHelper((decimal*)arr.Address, (bool*)mask.Address, (decimal*)result.Address, size);
-                    break;
-                case NPTypeCode.Complex:
-                    ILKernelGenerator.CopyMaskedElementsHelper((System.Numerics.Complex*)arr.Address, (bool*)mask.Address, (System.Numerics.Complex*)result.Address, size);
-                    break;
-                default:
-                    throw new NotSupportedException($"Type {arr.typecode} not supported for boolean masking");
-            }
+            NpFunc.Invoke(arr.typecode, CopyMaskedDispatch<int>, (nint)arr.Address, (nint)mask.Address, (nint)result.Address, size);
 
             return result;
         }
 
         /// <summary>
-        /// Fallback boolean masking using iteration.
+        /// Fallback boolean masking using NpyIter-based iteration.
+        /// Handles strided/broadcast arr and/or mask.
         /// </summary>
         private unsafe NDArray BooleanMaskFallback(NDArray arr, NDArray<bool> mask)
         {
-            // Count true values
-            long trueCount = 0;
-            var maskIter = mask.AsIterator<bool>();
-            while (maskIter.HasNext())
+            // Pass 1: Count true values in the mask (layout-aware via NpyIter).
+            long trueCount;
+            using (var maskIter = NpyIterRef.New(mask, NpyIterGlobalFlags.EXTERNAL_LOOP))
             {
-                if (maskIter.MoveNext())
-                    trueCount++;
+                trueCount = maskIter.ExecuteReducing<CountNonZeroKernel<bool>, long>(default, 0L);
             }
 
             if (trueCount == 0)
@@ -118,22 +72,71 @@ namespace NumSharp.Backends
 
             var result = new NDArray(arr.dtype, new Shape(trueCount));
 
-            // Copy elements where mask is true
-            maskIter.Reset();
-            long destIdx = 0;
-            long srcIdx = 0;
-            while (maskIter.HasNext())
+            // Pass 2: Gather elements where mask is true into flat result.
+            // NPY_CORDER forces logical C-order traversal (matching NumPy
+            // boolean indexing semantics) instead of memory-efficient order.
+            using (var iter = NpyIterRef.MultiNew(
+                2, new[] { arr, (NDArray)mask },
+                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_SAFE_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY }))
             {
-                bool m = maskIter.MoveNext();
-                if (m)
+                var accum = new BooleanMaskGatherAccumulator
                 {
-                    result.SetAtIndex(arr.GetAtIndex(srcIdx), destIdx);
-                    destIdx++;
-                }
-                srcIdx++;
+                    DestPtr = (IntPtr)result.Address,
+                    ElemSize = arr.dtypesize,
+                    DestIdx = 0,
+                };
+                iter.ExecuteReducing<BooleanMaskGatherKernel, BooleanMaskGatherAccumulator>(default, accum);
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Accumulator threading the destination byte pointer and write cursor
+        /// through the multi-op gather loop.
+        /// </summary>
+        private struct BooleanMaskGatherAccumulator
+        {
+            public IntPtr DestPtr;
+            public long DestIdx;
+            public int ElemSize;
+        }
+
+        /// <summary>
+        /// Inner loop: for each position, if mask is true, copy arr element
+        /// into result[destIdx] and increment destIdx.
+        /// </summary>
+        private readonly struct BooleanMaskGatherKernel : INpyReducingInnerLoop<BooleanMaskGatherAccumulator>
+        {
+            public unsafe bool Execute(void** dataptrs, long* strides, long count, ref BooleanMaskGatherAccumulator accum)
+            {
+                byte* srcPtr = (byte*)dataptrs[0];
+                byte* maskPtr = (byte*)dataptrs[1];
+                long srcStride = strides[0];
+                long maskStride = strides[1];
+                byte* destBase = (byte*)accum.DestPtr;
+                long destIdx = accum.DestIdx;
+                int elemSize = accum.ElemSize;
+
+                for (long i = 0; i < count; i++)
+                {
+                    bool m = *(bool*)(maskPtr + i * maskStride);
+                    if (m)
+                    {
+                        System.Buffer.MemoryCopy(
+                            srcPtr + i * srcStride,
+                            destBase + destIdx * elemSize,
+                            elemSize, elemSize);
+                        destIdx++;
+                    }
+                }
+
+                accum.DestIdx = destIdx;
+                return true;
+            }
         }
     }
 }

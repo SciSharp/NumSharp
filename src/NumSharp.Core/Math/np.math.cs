@@ -70,6 +70,16 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
         public static NDArray negative(NDArray nd)
-            => nd.negative();
+        {
+            var result = nd.negative();
+            // NumPy-aligned layout preservation: negative preserves F-contig input.
+            if (nd.Shape.NDim > 1 && nd.size > 1
+                && nd.Shape.IsFContiguous && !nd.Shape.IsContiguous
+                && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+            {
+                return result.copy('F');
+            }
+            return result;
+        }
     }
 }

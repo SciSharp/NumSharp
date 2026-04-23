@@ -16,7 +16,26 @@ namespace NumSharp
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
         public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, NPTypeCode? dtype = null)
-            => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
+        {
+            var result = a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
+            return PreserveFContigFromSource(a, result);
+        }
+
+        // Internal helper: after an element-wise op whose output inherits a's layout,
+        // relay out to F-contig when the source is strictly F-contig and the result
+        // came back as C-contig (current engine default).
+        private static NDArray PreserveFContigFromSource(NDArray a, NDArray result)
+        {
+            // Note: NDArray overloads operator!=, so reference-compare via ReferenceEquals.
+            if (!ReferenceEquals(result, null)
+                && a.Shape.NDim > 1 && a.size > 1
+                && a.Shape.IsFContiguous && !a.Shape.IsContiguous
+                && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+            {
+                return result.copy('F');
+            }
+            return result;
+        }
 
         /// <summary>
         ///     Clip (limit) the values in an array.<br></br>

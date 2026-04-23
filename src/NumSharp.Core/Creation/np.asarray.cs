@@ -33,18 +33,31 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Convert the input to an array. If the input is already an <see cref="NDArray"/>,
-        ///     it is returned as-is when no <paramref name="dtype"/> is requested, or converted
-        ///     to the target dtype otherwise. Mirrors <c>numpy.asarray(a, dtype=...)</c>.
+        ///     Convert the input to an array with a specified memory layout.
+        ///     If the input is already an NDArray in the requested layout, it is returned as-is (no copy).
         /// </summary>
+        /// <param name="a">Input NDArray.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the input.</param>
+        /// <param name="order">'C' (row-major), 'F' (column-major), 'A' or 'K' (logical — resolved against a).</param>
+        /// <returns>NDArray with the requested dtype and memory layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asarray.html</remarks>
-        public static NDArray asarray(NDArray a, Type dtype = null)
+        public static NDArray asarray(NDArray a, Type dtype = null, char order = 'K')
         {
-            if (ReferenceEquals(a, null))
+            if (a is null)
                 throw new ArgumentNullException(nameof(a));
-            if (dtype == null || a.dtype == dtype)
+
+            char physical = OrderResolver.Resolve(order, a.Shape);
+            bool typeMatches = dtype == null || dtype == a.dtype;
+            bool layoutMatches = physical == 'C'
+                ? a.Shape.IsContiguous
+                : a.Shape.IsFContiguous;
+
+            if (typeMatches && layoutMatches)
                 return a;
-            return a.astype(dtype, true);
+
+            if (!typeMatches)
+                return a.astype(dtype, copy: true, order: physical);
+            return a.copy(physical);
         }
     }
 }

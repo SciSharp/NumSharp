@@ -1,5 +1,7 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -63,13 +65,9 @@ namespace NumSharp.Backends
 
             // Fast path: use IL-generated axis kernel when available
             // This avoids the overhead of iterator-based slicing and provides direct pointer access.
-            // B6: Half and Complex aren't handled by the internal AxisCumSumSameType/General helpers
-            // (they throw NotSupportedException at execution time, not creation time, so the kernel
-            // cache returns a non-null delegate that then throws on first call). Skip the fast path
-            // for these types and go straight to the iterator-based fallback.
-            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted
-                && inputArr.GetTypeCode != NPTypeCode.Half
-                && inputArr.GetTypeCode != NPTypeCode.Complex)
+            // Note: We only use the IL kernel for contiguous arrays without offset, as it doesn't
+            // handle negative strides or offset-based views correctly.
+            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
             {
                 bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
@@ -86,62 +84,36 @@ namespace NumSharp.Backends
             }
 
             // Fallback: iterator-based axis cumsum (handles broadcast, non-contiguous, edge cases)
-            return ExecuteAxisCumSumFallback(inputArr, ret, shape, axis);
+            return ExecuteAxisCumSumFallback(inputArr, ret, axis);
         }
 
         /// <summary>
-        /// Fallback axis cumsum using iterators. Used when IL kernel not available.
-        /// Handles broadcast arrays and type conversions safely.
+        /// Fallback axis cumsum on the new axis iterator path.
         /// </summary>
-        private unsafe NDArray ExecuteAxisCumSumFallback(NDArray inputArr, NDArray ret, Shape shape, int axis)
+        private unsafe NDArray ExecuteAxisCumSumFallback(NDArray inputArr, NDArray ret, int axis)
         {
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var slices = iterAxis.Slices;
             var retType = ret.GetTypeCode;
 
-            // B6: Complex cumsum must preserve imaginary part (AsIterator<double> would drop it).
-            if (retType == NPTypeCode.Complex)
-            {
-                do
-                {
-                    var inputSlice = inputArr[slices];
-                    var outputSlice = ret[slices];
-                    var inputIter = inputSlice.AsIterator<System.Numerics.Complex>();
-                    var sum = System.Numerics.Complex.Zero;
-                    long idx = 0;
-                    while (inputIter.HasNext())
-                    {
-                        sum += inputIter.MoveNext();
-                        outputSlice.SetAtIndex(sum, idx++);
-                    }
-                } while (iterAxis.Next() != null);
-                return ret;
-            }
+            if (inputArr.GetTypeCode != retType)
+                inputArr = Cast(inputArr, retType, copy: true);
 
-            // Use type-specific iteration based on return type
-            // This handles type promotion correctly (e.g., int32 input -> int64 output)
-            do
-            {
-                var inputSlice = inputArr[slices];
-                var outputSlice = ret[slices];
-
-                // Get input as double for uniform accumulation
-                var inputIter = inputSlice.AsIterator<double>();
-                var moveNext = inputIter.MoveNext;
-                var hasNext = inputIter.HasNext;
-
-                // Write to output with proper type handling
-                double sum = 0;
-                long idx = 0;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    // Use SetAtIndex with coordinate calculation for proper slice handling
-                    outputSlice.SetAtIndex(Converts.ChangeType(sum, retType), idx++);
-                }
-            } while (iterAxis.Next() != null);
+            NpFunc.Invoke(retType, CumSumAxisDispatch<int>, inputArr.Storage, ret.Storage, axis);
 
             return ret;
+        }
+
+        private static void CumSumAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
+            => NpyAxisIter.ExecuteSameType<T, CumSumAxisKernel<T>>(input, output, axis);
+
+        private static unsafe void CumSumInPlace<T>(nint addr, long size) where T : unmanaged, IAdditionOperators<T, T, T>
+        {
+            var p = (T*)addr;
+            T sum = default;
+            for (long i = 0; i < size; i++)
+            {
+                sum += p[i];
+                p[i] = sum;
+            }
         }
 
         public NDArray CumSumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
@@ -155,12 +127,15 @@ namespace NumSharp.Backends
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
 
+            if (!arr.Shape.IsContiguous)
+                return cumsum_elementwise(arr.copy(), typeCode);
+
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
-            var ret = new NDArray(retType, Shape.Vector(arr.size));
 
             // Fast path: use IL-generated kernel for contiguous arrays
             if (arr.Shape.IsContiguous && ILKernelGenerator.Enabled)
             {
+                var ret = new NDArray(retType, Shape.Vector(arr.size));
                 var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumSum, IsContiguous: true);
                 var kernel = ILKernelGenerator.TryGetCumulativeKernel(key);
                 if (kernel != null)
@@ -174,185 +149,26 @@ namespace NumSharp.Backends
                 }
             }
 
-            // Fallback: iterator-based element-wise cumsum
-            return cumsum_elementwise_fallback(arr, ret, retType);
+            // Fallback: contiguous prefix-sum loop
+            return cumsum_elementwise_fallback(arr, retType);
         }
 
         /// <summary>
-        /// Fallback element-wise cumsum using iterators.
+        /// Fallback element-wise cumsum for contiguous input.
         /// </summary>
-        private unsafe NDArray cumsum_elementwise_fallback(NDArray arr, NDArray ret, NPTypeCode retType)
+        private unsafe NDArray cumsum_elementwise_fallback(NDArray arr, NPTypeCode retType)
         {
-            // Handle Decimal separately for precision
-            if (arr.GetTypeCode == NPTypeCode.Decimal && retType == NPTypeCode.Decimal)
-            {
-                var iter = arr.AsIterator<decimal>();
-                var addr = (decimal*)ret.Address;
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                int i = 0;
-                decimal sum = 0;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    addr[i++] = sum;
-                }
-                return ret;
-            }
+            if (!arr.Shape.IsContiguous)
+                throw new InvalidOperationException("cumsum_elementwise_fallback requires contiguous input.");
 
-            // Handle Complex separately - requires Complex accumulator
-            if (arr.GetTypeCode == NPTypeCode.Complex && retType == NPTypeCode.Complex)
-            {
-                var iter = arr.AsIterator<System.Numerics.Complex>();
-                var addr = (System.Numerics.Complex*)ret.Address;
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                int i = 0;
-                var sum = System.Numerics.Complex.Zero;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    addr[i++] = sum;
-                }
-                return ret;
-            }
+            var linearInput = arr.reshape(Shape.Vector(arr.size));
+            var converted = linearInput.typecode == retType
+                ? linearInput.Clone()
+                : Cast(linearInput, retType, copy: true);
 
-            // All other types: use double for accumulation, convert at output
-            {
-                var iter = arr.AsIterator<double>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                double sum = 0;
-                int i = 0;
+            NpFunc.Invoke(retType, CumSumInPlace<int>, (nint)converted.Address, converted.size);
 
-                // Write to output based on return type
-                switch (retType)
-                {
-                    case NPTypeCode.Byte:
-                    {
-                        var addr = (byte*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (byte)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.SByte:
-                    {
-                        var addr = (sbyte*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (sbyte)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int16:
-                    {
-                        var addr = (short*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (short)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt16:
-                    {
-                        var addr = (ushort*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (ushort)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int32:
-                    {
-                        var addr = (int*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (int)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt32:
-                    {
-                        var addr = (uint*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (uint)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int64:
-                    {
-                        var addr = (long*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (long)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt64:
-                    {
-                        var addr = (ulong*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (ulong)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Single:
-                    {
-                        var addr = (float*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (float)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Half:
-                    {
-                        var addr = (Half*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (Half)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Double:
-                    {
-                        var addr = (double*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Decimal:
-                    {
-                        var addr = (decimal*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (decimal)sum;
-                        }
-                        break;
-                    }
-                    default:
-                        throw new NotSupportedException($"CumSum output type {retType} not supported");
-                }
-                return ret;
-            }
+            return converted;
         }
     }
 }

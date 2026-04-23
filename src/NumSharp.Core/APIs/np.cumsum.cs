@@ -14,7 +14,16 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
         public static NDArray cumsum(NDArray arr, int? axis = null, NPTypeCode? typeCode = null)
         {
-            return arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode);
+            var result = arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode);
+            // NumPy-aligned: with an axis argument, cumsum preserves the source memory layout.
+            // ReduceCumAdd currently allocates C-contiguous output; relay out to F when appropriate.
+            if (axis.HasValue
+                && arr.Shape.IsFContiguous && !arr.Shape.IsContiguous
+                && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+            {
+                return result.copy('F');
+            }
+            return result;
         }
     }
 }

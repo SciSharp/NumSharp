@@ -83,70 +83,72 @@ namespace NeuralNetwork.NumSharp
         /// <param name="batchSize"></param>
         public void Train(NDArray x, NDArray y, int numIterations, int batchSize)
         {
-            //Initialise bacch loss and metric list for temporary holding of result
+            //Initialise batch loss and metric list for temporary holding of result
             List<float> batchLoss = new List<float>();
             List<float> batchMetrics = new List<float>();
 
             Stopwatch sw = new Stopwatch();
 
+            int sampleCount = (int)x.shape[0];
+            int batchesPerEpoch = sampleCount / batchSize;
+            int stepCounter = 0;
+
             //Loop through till the end of specified iterations
             for (int i = 1; i <= numIterations; i++)
             {
                 sw.Start();
-
-                //Initialize local variables
-                int currentIndex = 0;
                 batchLoss.Clear();
                 batchMetrics.Clear();
 
-                //Loop untill the data is exhauted for every batch selected
-                while (true)
+                for (int b = 0; b < batchesPerEpoch; b++)
                 {
-                    //Get the batch data based on the specified batch size
-                    var xtrain = x[currentIndex, currentIndex + batchSize];
-                    var ytrain = y[currentIndex, currentIndex + batchSize];
-
-                    if (xtrain is null)
-                        break;
+                    // String-slice the outer dim; this returns a view of the
+                    // next batch. The original `x[currentIndex, currentIndex + batchSize]`
+                    // was 2-index element selection, not a slice, and quietly read
+                    // the wrong data.
+                    int start = b * batchSize;
+                    int end   = start + batchSize;
+                    NDArray xtrain = x[$"{start}:{end}"];
+                    NDArray ytrain = y[$"{start}:{end}"];
 
                     //Run forward for all the layers to predict the value for the training set
-                    var ypred = Forward(xtrain);
+                    NDArray ypred = Forward(xtrain);
 
                     //Find the loss/cost value for the prediction wrt expected result
-                    var costVal = Cost.Forward(ypred, ytrain);
+                    NDArray costVal = Cost.Forward(ypred, ytrain);
                     batchLoss.AddRange(costVal.Data<float>());
 
                     //Find the metric value for the prediction wrt expected result
                     if (Metric != null)
                     {
-                        var metric = Metric.Calculate(ypred, ytrain);
+                        NDArray metric = Metric.Calculate(ypred, ytrain);
                         batchMetrics.AddRange(metric.Data<float>());
                     }
 
                     //Get the gradient of the cost function which is the passed to the layers during back-propagation
-                    var grad = Cost.Backward(ypred, ytrain);
+                    NDArray grad = Cost.Backward(ypred, ytrain);
 
                     //Run back-propagation accross all the layers
                     Backward(grad);
 
-                    //Now time to update the neural network weights using the specified optimizer function
+                    //Optimizer step counter — Adam et al. expect a monotonically
+                    //increasing iteration index across the entire run, not a
+                    //per-epoch reset. Passing `i` (epoch) here produced stale
+                    //bias-correction terms in Adam.
+                    stepCounter++;
                     foreach (var layer in Layers)
                     {
-                        Optimizer.Update(i, layer);
+                        Optimizer.Update(stepCounter, layer);
                     }
-
-                    currentIndex = currentIndex + batchSize; ;
                 }
 
                 sw.Stop();
-                //Collect the result and fire the event
-                float batchLossAvg = (float)Math.Round(batchLoss.Average(), 2);
-
-                float batchMetricAvg = Metric != null ? (float)Math.Round(batchMetrics.Average(), 2) : 0;
+                float batchLossAvg = batchLoss.Count > 0 ? batchLoss.Average() : 0f;
+                float batchMetricAvg = Metric != null && batchMetrics.Count > 0 ? batchMetrics.Average() : 0f;
 
                 TrainingLoss.Add(batchLossAvg);
 
-                if(batchMetrics.Count > 0)
+                if (batchMetrics.Count > 0)
                     TrainingMetrics.Add(batchMetricAvg);
 
                 EpochEndEventArgs eventArgs = new EpochEndEventArgs(i, batchLossAvg, batchMetricAvg, sw.ElapsedMilliseconds);

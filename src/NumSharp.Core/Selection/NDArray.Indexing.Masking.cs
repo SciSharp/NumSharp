@@ -303,8 +303,15 @@ namespace NumSharp
                     }
                     else
                     {
-                        // Broadcast value to destination
-                        np.copyto(destSlice, value);
+                        // Broadcast value to destination. NumPy's mask-assign computes the
+                        // target shape (selected rows) and broadcasts value to that whole
+                        // target before writing. Iterating row-by-row, we must drop value's
+                        // leading singleton axes that exist only because of the outer mask
+                        // dimension — otherwise (1,4) → (4) fails the strict np.copyto rule.
+                        var v = value;
+                        while (v.ndim > destSlice.ndim && v.shape[0] == 1)
+                            v = v[0];
+                        np.copyto(destSlice, v);
                     }
                 }
             }

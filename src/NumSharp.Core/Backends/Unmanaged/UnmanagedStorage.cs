@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -140,8 +141,15 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The size in bytes of a single value of <see cref="DType"/>
+        ///     as stored in the unmanaged buffer.
         /// </summary>
-        /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
+        /// <remarks>
+        /// Returns the in-memory element stride, not the marshaling size.
+        /// For bool that is 1, not <see cref="Marshal.SizeOf(object)"/>'s 4
+        /// (bool is marshaled to win32 BOOL = int). All pointer arithmetic
+        /// over <c>Address</c> uses this value, so the in-memory layout is
+        /// the only correct reference.
+        /// </remarks>
         public int DTypeSize
         {
             get
@@ -151,7 +159,7 @@ namespace NumSharp.Backends
                     return IntPtr.Size;
                 }
 
-                return Marshal.SizeOf(_dtype);
+                return _typecode.SizeOf();
             }
         }
 
@@ -1487,7 +1495,7 @@ namespace NumSharp.Backends
             if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
-                MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
+                NpyIter.Copy(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 

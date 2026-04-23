@@ -30,7 +30,7 @@ namespace NumSharp
 
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
-            // Arrays.Create requires int[] - .NET limitation
+            // Arrays.Create requires int[] — .NET limitation on array rank indexing.
             foreach (var d in shape)
             {
                 if (d > int.MaxValue)
@@ -39,27 +39,37 @@ namespace NumSharp
             var intShape = System.Array.ConvertAll(shape, d => (int)d);
             var ret = Arrays.Create(typeof(T), intShape);
 
-            var iter = this.AsIterator<T>();
-            var hasNext = iter.HasNext;
-            var next = iter.MoveNext;
+            // Storage.ToArray<T>() already walks the NDArray in C-order and
+            // produces a flat T[] that matches the row-major layout of the
+            // .NET multi-dimensional array. For primitive types we then bulk
+            // memcpy via Buffer.BlockCopy (several times faster than
+            // Array.SetValue which does per-element runtime type checking).
+            T[] flat = ToArray<T>();
+
+            if (typeof(T) != typeof(decimal))
+            {
+                int byteCount = checked(flat.Length * dtypesize);
+                Buffer.BlockCopy(flat, 0, ret, 0, byteCount);
+                return ret;
+            }
+
+            // decimal is not a primitive — BlockCopy rejects it. Fall back to
+            // the coordinate-walk + SetValue path for that one dtype.
             var coorditer = new ValueCoordinatesIncrementor(shape);
             var indices = coorditer.Index;
-            // .NET's Array.SetValue only accepts int[] indices, convert from long[]
             var intIndices = new int[indices.Length];
-
-            while (hasNext())
+            long flatIdx = 0;
+            do
             {
                 for (int i = 0; i < indices.Length; i++)
                     intIndices[i] = (int)indices[i];
-                ret.SetValue(next(), intIndices);
-                if (coorditer.Next() == null)
-                    break;
-            }
+                ret.SetValue(flat[flatIdx++], intIndices);
+            } while (coorditer.Next() != null);
 
             return ret;
         }
 
 
     }
-    
+
 }

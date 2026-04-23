@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.Versioning;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 
 // ReSharper disable once CheckNamespace
@@ -251,7 +252,7 @@ namespace NumSharp
                 if (nd.Shape.IsContiguous)
                     nd.CopyTo(dst);
                 else
-                    MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Vector(bitdata.Stride * bitdata.Height)), nd.Unsafe.Storage);
+                    NpyIter.Copy(new UnmanagedStorage(dst, Shape.Vector(bitdata.Stride * bitdata.Height)), nd.Unsafe.Storage);
             }
             finally
             {
