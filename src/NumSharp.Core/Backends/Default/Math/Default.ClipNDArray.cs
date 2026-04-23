@@ -105,6 +105,9 @@ namespace NumSharp.Backends
         {
             var tc = @out.GetTypeCode;
 
+            if (tc == NPTypeCode.Complex)
+                return ClipNDArrayContiguousComplex(@out, min, max, len);
+
             if (!(min is null) && !(max is null))
                 NpFunc.Invoke(tc, ClipArrayBoundsDispatch<int>, (nint)@out.Address, (nint)min.Address, (nint)max.Address, len);
             else if (!(min is null))
@@ -121,6 +124,9 @@ namespace NumSharp.Backends
         private unsafe NDArray ClipNDArrayGeneral(NDArray @out, NDArray min, NDArray max, long len)
         {
             var tc = @out.GetTypeCode;
+
+            if (tc == NPTypeCode.Complex)
+                return ClipNDArrayGeneralComplex(@out, min, max, len);
 
             if (!(min is null) && !(max is null))
                 NpFunc.Invoke(tc, ClipGeneralDispatch<int>, @out, min, max, len);
@@ -299,6 +305,110 @@ namespace NumSharp.Backends
         }
 
         #endregion
+
+        #endregion
+
+        #region Complex Clip (no IComparable — lexicographic comparison)
+
+        private static int CompareLex(System.Numerics.Complex a, System.Numerics.Complex b)
+        {
+            int cmp = a.Real.CompareTo(b.Real);
+            return cmp != 0 ? cmp : a.Imaginary.CompareTo(b.Imaginary);
+        }
+
+        private static bool HasNaN(System.Numerics.Complex c)
+            => double.IsNaN(c.Real) || double.IsNaN(c.Imaginary);
+
+        private static readonly System.Numerics.Complex ComplexNaN = new(double.NaN, double.NaN);
+
+        private unsafe NDArray ClipNDArrayContiguousComplex(NDArray @out, NDArray min, NDArray max, long len)
+        {
+            var outAddr = (System.Numerics.Complex*)@out.Address;
+            if (!(min is null) && !(max is null))
+            {
+                var minAddr = (System.Numerics.Complex*)min.Address;
+                var maxAddr = (System.Numerics.Complex*)max.Address;
+                for (long i = 0; i < len; i++)
+                {
+                    var val = outAddr[i];
+                    if (HasNaN(val)) continue;
+                    if (HasNaN(minAddr[i])) { outAddr[i] = minAddr[i]; continue; }
+                    if (HasNaN(maxAddr[i])) { outAddr[i] = maxAddr[i]; continue; }
+                    if (CompareLex(val, minAddr[i]) < 0) val = minAddr[i];
+                    if (CompareLex(val, maxAddr[i]) > 0) val = maxAddr[i];
+                    outAddr[i] = val;
+                }
+            }
+            else if (!(min is null))
+            {
+                var minAddr = (System.Numerics.Complex*)min.Address;
+                for (long i = 0; i < len; i++)
+                {
+                    var val = outAddr[i];
+                    if (HasNaN(val)) continue;
+                    if (HasNaN(minAddr[i])) { outAddr[i] = minAddr[i]; continue; }
+                    if (CompareLex(val, minAddr[i]) < 0) outAddr[i] = minAddr[i];
+                }
+            }
+            else
+            {
+                var maxAddr = (System.Numerics.Complex*)max.Address;
+                for (long i = 0; i < len; i++)
+                {
+                    var val = outAddr[i];
+                    if (HasNaN(val)) continue;
+                    if (HasNaN(maxAddr[i])) { outAddr[i] = maxAddr[i]; continue; }
+                    if (CompareLex(val, maxAddr[i]) > 0) outAddr[i] = maxAddr[i];
+                }
+            }
+            return @out;
+        }
+
+        private unsafe NDArray ClipNDArrayGeneralComplex(NDArray @out, NDArray min, NDArray max, long len)
+        {
+            var outAddr = (System.Numerics.Complex*)@out.Address;
+            if (!(min is null) && !(max is null))
+            {
+                for (long i = 0; i < len; i++)
+                {
+                    long off = @out.Shape.TransformOffset(i);
+                    var val = outAddr[off];
+                    if (HasNaN(val)) continue;
+                    var minVal = (System.Numerics.Complex)min.GetAtIndex(i);
+                    if (HasNaN(minVal)) { outAddr[off] = minVal; continue; }
+                    var maxVal = (System.Numerics.Complex)max.GetAtIndex(i);
+                    if (HasNaN(maxVal)) { outAddr[off] = maxVal; continue; }
+                    if (CompareLex(val, minVal) < 0) val = minVal;
+                    if (CompareLex(val, maxVal) > 0) val = maxVal;
+                    outAddr[off] = val;
+                }
+            }
+            else if (!(min is null))
+            {
+                for (long i = 0; i < len; i++)
+                {
+                    long off = @out.Shape.TransformOffset(i);
+                    var val = outAddr[off];
+                    if (HasNaN(val)) continue;
+                    var minVal = (System.Numerics.Complex)min.GetAtIndex(i);
+                    if (HasNaN(minVal)) { outAddr[off] = minVal; continue; }
+                    if (CompareLex(val, minVal) < 0) outAddr[off] = minVal;
+                }
+            }
+            else
+            {
+                for (long i = 0; i < len; i++)
+                {
+                    long off = @out.Shape.TransformOffset(i);
+                    var val = outAddr[off];
+                    if (HasNaN(val)) continue;
+                    var maxVal = (System.Numerics.Complex)max.GetAtIndex(i);
+                    if (HasNaN(maxVal)) { outAddr[off] = maxVal; continue; }
+                    if (CompareLex(val, maxVal) > 0) outAddr[off] = maxVal;
+                }
+            }
+            return @out;
+        }
 
         #endregion
 

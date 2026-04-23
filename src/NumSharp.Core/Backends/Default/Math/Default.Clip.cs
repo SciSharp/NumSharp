@@ -71,6 +71,9 @@ namespace NumSharp.Backends
             var len = arr.size;
             var tc = arr.GetTypeCode;
 
+            if (tc == NPTypeCode.Complex)
+                return ClipCoreComplex(arr, min, max);
+
             if (min != null && max != null)
                 NpFunc.Invoke(tc, ClipBothDispatch<int>, (nint)arr.Address, len, min, max);
             else if (min != null)
@@ -78,6 +81,34 @@ namespace NumSharp.Backends
             else if (max != null)
                 NpFunc.Invoke(tc, ClipMaxDispatch<int>, (nint)arr.Address, len, max);
 
+            return arr;
+        }
+
+        private static unsafe NDArray ClipCoreComplex(NDArray arr, object min, object max)
+        {
+            var addr = (System.Numerics.Complex*)arr.Address;
+            var len = arr.size;
+            var minVal = min != null ? Converts.ChangeType<System.Numerics.Complex>(min) : default;
+            var maxVal = max != null ? Converts.ChangeType<System.Numerics.Complex>(max) : default;
+            bool hasMin = min != null, hasMax = max != null;
+
+            for (long i = 0; i < len; i++)
+            {
+                var val = addr[i];
+                if (hasMin)
+                {
+                    int cmp = val.Real.CompareTo(minVal.Real);
+                    if (cmp == 0) cmp = val.Imaginary.CompareTo(minVal.Imaginary);
+                    if (cmp < 0) val = minVal;
+                }
+                if (hasMax)
+                {
+                    int cmp = val.Real.CompareTo(maxVal.Real);
+                    if (cmp == 0) cmp = val.Imaginary.CompareTo(maxVal.Imaginary);
+                    if (cmp > 0) val = maxVal;
+                }
+                addr[i] = val;
+            }
             return arr;
         }
 

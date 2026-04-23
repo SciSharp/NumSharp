@@ -1011,7 +1011,6 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayBoundsScalar<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
-            // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
             {
                 ClipArrayBoundsScalarFloat((float*)output, (float*)minArr, (float*)maxArr, size);
@@ -1020,6 +1019,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(double))
             {
                 ClipArrayBoundsScalarDouble((double*)output, (double*)minArr, (double*)maxArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(Half))
+            {
+                ClipArrayBoundsScalarHalf((Half*)output, (Half*)minArr, (Half*)maxArr, size);
                 return;
             }
 
@@ -1041,7 +1045,6 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayMinScalar<T>(T* output, T* minArr, long size)
             where T : unmanaged, IComparable<T>
         {
-            // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
             {
                 ClipArrayMinScalarFloat((float*)output, (float*)minArr, size);
@@ -1050,6 +1053,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(double))
             {
                 ClipArrayMinScalarDouble((double*)output, (double*)minArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(Half))
+            {
+                ClipArrayMinScalarHalf((Half*)output, (Half*)minArr, size);
                 return;
             }
 
@@ -1064,7 +1072,6 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayMaxScalar<T>(T* output, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
-            // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
             {
                 ClipArrayMaxScalarFloat((float*)output, (float*)maxArr, size);
@@ -1073,6 +1080,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(double))
             {
                 ClipArrayMaxScalarDouble((double*)output, (double*)maxArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(Half))
+            {
+                ClipArrayMaxScalarHalf((Half*)output, (Half*)maxArr, size);
                 return;
             }
 
@@ -1125,6 +1137,45 @@ namespace NumSharp.Backends.Kernels
         {
             for (long i = 0; i < size; i++)
                 output[i] = Math.Min(output[i], maxArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsScalarHalf(Half* output, Half* minArr, Half* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                var val = output[i];
+                var lo = minArr[i];
+                var hi = maxArr[i];
+                if (Half.IsNaN(val) || Half.IsNaN(lo) || Half.IsNaN(hi)) { output[i] = Half.NaN; continue; }
+                if (val < lo) val = lo;
+                if (val > hi) val = hi;
+                output[i] = val;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinScalarHalf(Half* output, Half* minArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                var val = output[i];
+                var lo = minArr[i];
+                if (Half.IsNaN(val) || Half.IsNaN(lo)) { output[i] = Half.NaN; continue; }
+                if (val < lo) output[i] = lo;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxScalarHalf(Half* output, Half* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                var val = output[i];
+                var hi = maxArr[i];
+                if (Half.IsNaN(val) || Half.IsNaN(hi)) { output[i] = Half.NaN; continue; }
+                if (val > hi) output[i] = hi;
+            }
         }
 
         #endregion
