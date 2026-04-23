@@ -2,6 +2,7 @@ using System;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -120,47 +121,7 @@ namespace NumSharp
             }
 
             // Iterator fallback for non-contiguous/broadcasted arrays
-            switch (outType)
-            {
-                case NPTypeCode.Boolean:
-                    WhereImpl<bool>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Byte:
-                    WhereImpl<byte>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Int16:
-                    WhereImpl<short>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.UInt16:
-                    WhereImpl<ushort>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Int32:
-                    WhereImpl<int>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.UInt32:
-                    WhereImpl<uint>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Int64:
-                    WhereImpl<long>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.UInt64:
-                    WhereImpl<ulong>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Char:
-                    WhereImpl<char>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Single:
-                    WhereImpl<float>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Double:
-                    WhereImpl<double>(cond, xArr, yArr, result);
-                    break;
-                case NPTypeCode.Decimal:
-                    WhereImpl<decimal>(cond, xArr, yArr, result);
-                    break;
-                default:
-                    throw new NotSupportedException($"Type {outType} not supported for np.where");
-            }
+            NpFunc.Invoke(outType, WhereImpl<int>, cond, xArr, yArr, result);
 
             return result;
         }
@@ -200,50 +161,13 @@ namespace NumSharp
         /// </summary>
         private static unsafe void WhereKernelDispatch(NDArray cond, NDArray x, NDArray y, NDArray result, NPTypeCode outType)
         {
-            var condPtr = (bool*)cond.Address;
+            var condPtr = (nint)cond.Address;
             var count = result.size;
 
-            switch (outType)
-            {
-                case NPTypeCode.Boolean:
-                    ILKernelGenerator.WhereExecute(condPtr, (bool*)x.Address, (bool*)y.Address, (bool*)result.Address, count);
-                    break;
-                case NPTypeCode.Byte:
-                    ILKernelGenerator.WhereExecute(condPtr, (byte*)x.Address, (byte*)y.Address, (byte*)result.Address, count);
-                    break;
-                case NPTypeCode.Int16:
-                    ILKernelGenerator.WhereExecute(condPtr, (short*)x.Address, (short*)y.Address, (short*)result.Address, count);
-                    break;
-                case NPTypeCode.UInt16:
-                    ILKernelGenerator.WhereExecute(condPtr, (ushort*)x.Address, (ushort*)y.Address, (ushort*)result.Address, count);
-                    break;
-                case NPTypeCode.Int32:
-                    ILKernelGenerator.WhereExecute(condPtr, (int*)x.Address, (int*)y.Address, (int*)result.Address, count);
-                    break;
-                case NPTypeCode.UInt32:
-                    ILKernelGenerator.WhereExecute(condPtr, (uint*)x.Address, (uint*)y.Address, (uint*)result.Address, count);
-                    break;
-                case NPTypeCode.Int64:
-                    ILKernelGenerator.WhereExecute(condPtr, (long*)x.Address, (long*)y.Address, (long*)result.Address, count);
-                    break;
-                case NPTypeCode.UInt64:
-                    ILKernelGenerator.WhereExecute(condPtr, (ulong*)x.Address, (ulong*)y.Address, (ulong*)result.Address, count);
-                    break;
-                case NPTypeCode.Char:
-                    ILKernelGenerator.WhereExecute(condPtr, (char*)x.Address, (char*)y.Address, (char*)result.Address, count);
-                    break;
-                case NPTypeCode.Single:
-                    ILKernelGenerator.WhereExecute(condPtr, (float*)x.Address, (float*)y.Address, (float*)result.Address, count);
-                    break;
-                case NPTypeCode.Double:
-                    ILKernelGenerator.WhereExecute(condPtr, (double*)x.Address, (double*)y.Address, (double*)result.Address, count);
-                    break;
-                case NPTypeCode.Decimal:
-                    ILKernelGenerator.WhereExecute(condPtr, (decimal*)x.Address, (decimal*)y.Address, (decimal*)result.Address, count);
-                    break;
-                default:
-                    throw new NotSupportedException($"Type {outType} not supported for np.where");
-            }
+            NpFunc.Invoke(outType, WhereKernelExecute<int>, condPtr, (nint)x.Address, (nint)y.Address, (nint)result.Address, count);
         }
+
+        private static unsafe void WhereKernelExecute<T>(nint condPtr, nint xAddr, nint yAddr, nint resultAddr, long count) where T : unmanaged
+            => ILKernelGenerator.WhereExecute((bool*)condPtr, (T*)xAddr, (T*)yAddr, (T*)resultAddr, count);
     }
 }

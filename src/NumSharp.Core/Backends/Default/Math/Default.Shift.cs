@@ -11,6 +11,12 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
+        private static unsafe void ShiftArrayDispatch<T>(NDArray input, nint shifts, NDArray result, long len, bool isLeftShift) where T : unmanaged
+            => ExecuteShiftArray<T>(input, (int*)shifts, result, len, isLeftShift);
+
+        private static void ShiftScalarDispatch<T>(NDArray input, NDArray result, int shiftAmount, long len, bool isLeftShift) where T : unmanaged
+            => ExecuteShiftScalar<T>(input, result, shiftAmount, len, isLeftShift);
+
         /// <summary>
         /// Bitwise left shift (x1 &lt;&lt; x2).
         /// </summary>
@@ -74,35 +80,7 @@ namespace NumSharp.Backends
 
             var shiftPtr = (int*)contiguousRhs.Address;
 
-            switch (lhs.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
-                    ExecuteShiftArray<byte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.SByte:
-                    ExecuteShiftArray<sbyte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int16:
-                    ExecuteShiftArray<short>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt16:
-                    ExecuteShiftArray<ushort>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int32:
-                    ExecuteShiftArray<int>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt32:
-                    ExecuteShiftArray<uint>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int64:
-                    ExecuteShiftArray<long>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt64:
-                    ExecuteShiftArray<ulong>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                default:
-                    throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
-            }
+            NpFunc.Invoke(lhs.GetTypeCode, ShiftArrayDispatch<int>, contiguousLhs, (nint)shiftPtr, result, len, isLeftShift);
 
             return result;
         }
@@ -156,35 +134,7 @@ namespace NumSharp.Backends
 
             var len = result.size;
 
-            switch (lhs.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
-                    ExecuteShiftScalar<byte>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.SByte:
-                    ExecuteShiftScalar<sbyte>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int16:
-                    ExecuteShiftScalar<short>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt16:
-                    ExecuteShiftScalar<ushort>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int32:
-                    ExecuteShiftScalar<int>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt32:
-                    ExecuteShiftScalar<uint>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int64:
-                    ExecuteShiftScalar<long>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt64:
-                    ExecuteShiftScalar<ulong>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                default:
-                    throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
-            }
+            NpFunc.Invoke(lhs.GetTypeCode, ShiftScalarDispatch<int>, input, result, shiftAmount, len, isLeftShift);
 
             return result;
         }

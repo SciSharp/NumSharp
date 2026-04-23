@@ -1,6 +1,7 @@
 using System;
 using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -33,47 +34,7 @@ namespace NumSharp.Backends
             if (result.size == 0 || nd.Shape.dimensions[axis] == 0)
                 return result;
 
-            switch (nd.GetTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    ExecuteLogicalAxis<bool>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Byte:
-                    ExecuteLogicalAxis<byte>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Int16:
-                    ExecuteLogicalAxis<short>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.UInt16:
-                    ExecuteLogicalAxis<ushort>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Int32:
-                    ExecuteLogicalAxis<int>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.UInt32:
-                    ExecuteLogicalAxis<uint>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Int64:
-                    ExecuteLogicalAxis<long>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.UInt64:
-                    ExecuteLogicalAxis<ulong>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Char:
-                    ExecuteLogicalAxis<char>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Single:
-                    ExecuteLogicalAxis<float>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Double:
-                    ExecuteLogicalAxis<double>(nd, result, axis, reduceAll);
-                    break;
-                case NPTypeCode.Decimal:
-                    ExecuteLogicalAxis<decimal>(nd, result, axis, reduceAll);
-                    break;
-                default:
-                    throw new NotSupportedException($"Type {nd.GetTypeCode} not supported for logical reduction.");
-            }
+            NpFunc.Invoke(nd.GetTypeCode, ExecuteLogicalAxis<int>, nd, result, axis, reduceAll);
 
             return result;
         }

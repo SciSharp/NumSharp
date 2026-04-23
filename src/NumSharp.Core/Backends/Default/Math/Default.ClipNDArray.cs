@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -79,19 +80,37 @@ namespace NumSharp.Backends
                 return ClipNDArrayGeneral(@out, _min, _max, len);
         }
 
+        private static unsafe void ClipArrayBoundsDispatch<T>(nint @out, nint min, nint max, long len) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipArrayBounds((T*)@out, (T*)min, (T*)max, len);
+
+        private static unsafe void ClipArrayMinDispatch<T>(nint @out, nint min, long len) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipArrayMin((T*)@out, (T*)min, len);
+
+        private static unsafe void ClipArrayMaxDispatch<T>(nint @out, nint max, long len) where T : unmanaged, IComparable<T>
+            => ILKernelGenerator.ClipArrayMax((T*)@out, (T*)max, len);
+
+        private static void ClipGeneralDispatch<T>(NDArray @out, NDArray min, NDArray max, long len) where T : unmanaged, IComparable<T>
+            => ClipNDArrayGeneralCore<T>(@out, min, max, len);
+
+        private static void ClipMinGeneralDispatch<T>(NDArray @out, NDArray min, long len) where T : unmanaged, IComparable<T>
+            => ClipNDArrayMinGeneralCore<T>(@out, min, len);
+
+        private static void ClipMaxGeneralDispatch<T>(NDArray @out, NDArray max, long len) where T : unmanaged, IComparable<T>
+            => ClipNDArrayMaxGeneralCore<T>(@out, max, len);
+
         /// <summary>
         /// Fast path for contiguous arrays - uses IL kernel with SIMD support.
         /// </summary>
         private unsafe NDArray ClipNDArrayContiguous(NDArray @out, NDArray min, NDArray max, long len)
         {
-            var typeCode = @out.GetTypeCode;
+            var tc = @out.GetTypeCode;
 
             if (!(min is null) && !(max is null))
-                ClipDispatch.ArrayBounds(typeCode, (nint)@out.Address, (nint)min.Address, (nint)max.Address, len);
+                NpFunc.Invoke(tc, ClipArrayBoundsDispatch<int>, (nint)@out.Address, (nint)min.Address, (nint)max.Address, len);
             else if (!(min is null))
-                ClipDispatch.ArrayMin(typeCode, (nint)@out.Address, (nint)min.Address, len);
+                NpFunc.Invoke(tc, ClipArrayMinDispatch<int>, (nint)@out.Address, (nint)min.Address, len);
             else
-                ClipDispatch.ArrayMax(typeCode, (nint)@out.Address, (nint)max.Address, len);
+                NpFunc.Invoke(tc, ClipArrayMaxDispatch<int>, (nint)@out.Address, (nint)max.Address, len);
 
             return @out;
         }
@@ -101,129 +120,16 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray ClipNDArrayGeneral(NDArray @out, NDArray min, NDArray max, long len)
         {
+            var tc = @out.GetTypeCode;
+
             if (!(min is null) && !(max is null))
-            {
-                switch (@out.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ClipNDArrayGeneralCore<byte>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Int16:
-                        ClipNDArrayGeneralCore<short>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.UInt16:
-                        ClipNDArrayGeneralCore<ushort>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Int32:
-                        ClipNDArrayGeneralCore<int>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.UInt32:
-                        ClipNDArrayGeneralCore<uint>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Int64:
-                        ClipNDArrayGeneralCore<long>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.UInt64:
-                        ClipNDArrayGeneralCore<ulong>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Single:
-                        ClipNDArrayGeneralCore<float>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Double:
-                        ClipNDArrayGeneralCore<double>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Decimal:
-                        ClipNDArrayGeneralCore<decimal>(@out, min, max, len);
-                        return @out;
-                    case NPTypeCode.Char:
-                        ClipNDArrayGeneralCore<char>(@out, min, max, len);
-                        return @out;
-                    default:
-                        throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
-                }
-            }
+                NpFunc.Invoke(tc, ClipGeneralDispatch<int>, @out, min, max, len);
             else if (!(min is null))
-            {
-                switch (@out.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ClipNDArrayMinGeneralCore<byte>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Int16:
-                        ClipNDArrayMinGeneralCore<short>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.UInt16:
-                        ClipNDArrayMinGeneralCore<ushort>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Int32:
-                        ClipNDArrayMinGeneralCore<int>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.UInt32:
-                        ClipNDArrayMinGeneralCore<uint>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Int64:
-                        ClipNDArrayMinGeneralCore<long>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.UInt64:
-                        ClipNDArrayMinGeneralCore<ulong>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Single:
-                        ClipNDArrayMinGeneralCore<float>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Double:
-                        ClipNDArrayMinGeneralCore<double>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Decimal:
-                        ClipNDArrayMinGeneralCore<decimal>(@out, min, len);
-                        return @out;
-                    case NPTypeCode.Char:
-                        ClipNDArrayMinGeneralCore<char>(@out, min, len);
-                        return @out;
-                    default:
-                        throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
-                }
-            }
-            else // max is not null
-            {
-                switch (@out.GetTypeCode)
-                {
-                    case NPTypeCode.Byte:
-                        ClipNDArrayMaxGeneralCore<byte>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Int16:
-                        ClipNDArrayMaxGeneralCore<short>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.UInt16:
-                        ClipNDArrayMaxGeneralCore<ushort>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Int32:
-                        ClipNDArrayMaxGeneralCore<int>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.UInt32:
-                        ClipNDArrayMaxGeneralCore<uint>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Int64:
-                        ClipNDArrayMaxGeneralCore<long>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.UInt64:
-                        ClipNDArrayMaxGeneralCore<ulong>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Single:
-                        ClipNDArrayMaxGeneralCore<float>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Double:
-                        ClipNDArrayMaxGeneralCore<double>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Decimal:
-                        ClipNDArrayMaxGeneralCore<decimal>(@out, max, len);
-                        return @out;
-                    case NPTypeCode.Char:
-                        ClipNDArrayMaxGeneralCore<char>(@out, max, len);
-                        return @out;
-                    default:
-                        throw new NotSupportedException($"ClipNDArray not supported for dtype {@out.GetTypeCode}");
-                }
-            }
+                NpFunc.Invoke(tc, ClipMinGeneralDispatch<int>, @out, min, len);
+            else
+                NpFunc.Invoke(tc, ClipMaxGeneralDispatch<int>, @out, max, len);
+
+            return @out;
         }
 
         #region General Path Core Methods
