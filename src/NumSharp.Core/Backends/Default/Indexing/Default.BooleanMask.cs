@@ -2,11 +2,15 @@ using System;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        private static unsafe void CopyMaskedDispatch<T>(nint arr, nint mask, nint result, long size) where T : unmanaged
+            => ILKernelGenerator.CopyMaskedElementsHelper((T*)arr, (bool*)mask, (T*)result, size);
+
         /// <summary>
         /// Apply a boolean mask to select elements from an array.
         /// </summary>
@@ -45,57 +49,7 @@ namespace NumSharp.Backends
             // Create result array
             var result = new NDArray(arr.dtype, new Shape(trueCount));
 
-            // Copy elements where mask is true
-            switch (arr.typecode)
-            {
-                case NPTypeCode.Boolean:
-                    ILKernelGenerator.CopyMaskedElementsHelper((bool*)arr.Address, (bool*)mask.Address, (bool*)result.Address, size);
-                    break;
-                case NPTypeCode.Byte:
-                    ILKernelGenerator.CopyMaskedElementsHelper((byte*)arr.Address, (bool*)mask.Address, (byte*)result.Address, size);
-                    break;
-                case NPTypeCode.SByte:
-                    ILKernelGenerator.CopyMaskedElementsHelper((sbyte*)arr.Address, (bool*)mask.Address, (sbyte*)result.Address, size);
-                    break;
-                case NPTypeCode.Int16:
-                    ILKernelGenerator.CopyMaskedElementsHelper((short*)arr.Address, (bool*)mask.Address, (short*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt16:
-                    ILKernelGenerator.CopyMaskedElementsHelper((ushort*)arr.Address, (bool*)mask.Address, (ushort*)result.Address, size);
-                    break;
-                case NPTypeCode.Int32:
-                    ILKernelGenerator.CopyMaskedElementsHelper((int*)arr.Address, (bool*)mask.Address, (int*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt32:
-                    ILKernelGenerator.CopyMaskedElementsHelper((uint*)arr.Address, (bool*)mask.Address, (uint*)result.Address, size);
-                    break;
-                case NPTypeCode.Int64:
-                    ILKernelGenerator.CopyMaskedElementsHelper((long*)arr.Address, (bool*)mask.Address, (long*)result.Address, size);
-                    break;
-                case NPTypeCode.UInt64:
-                    ILKernelGenerator.CopyMaskedElementsHelper((ulong*)arr.Address, (bool*)mask.Address, (ulong*)result.Address, size);
-                    break;
-                case NPTypeCode.Char:
-                    ILKernelGenerator.CopyMaskedElementsHelper((char*)arr.Address, (bool*)mask.Address, (char*)result.Address, size);
-                    break;
-                case NPTypeCode.Half:
-                    ILKernelGenerator.CopyMaskedElementsHelper((Half*)arr.Address, (bool*)mask.Address, (Half*)result.Address, size);
-                    break;
-                case NPTypeCode.Single:
-                    ILKernelGenerator.CopyMaskedElementsHelper((float*)arr.Address, (bool*)mask.Address, (float*)result.Address, size);
-                    break;
-                case NPTypeCode.Double:
-                    ILKernelGenerator.CopyMaskedElementsHelper((double*)arr.Address, (bool*)mask.Address, (double*)result.Address, size);
-                    break;
-                case NPTypeCode.Decimal:
-                    ILKernelGenerator.CopyMaskedElementsHelper((decimal*)arr.Address, (bool*)mask.Address, (decimal*)result.Address, size);
-                    break;
-                case NPTypeCode.Complex:
-                    ILKernelGenerator.CopyMaskedElementsHelper((System.Numerics.Complex*)arr.Address, (bool*)mask.Address, (System.Numerics.Complex*)result.Address, size);
-                    break;
-                default:
-                    throw new NotSupportedException($"Type {arr.typecode} not supported for boolean masking");
-            }
+            NpFunc.Invoke(arr.typecode, CopyMaskedDispatch<int>, (nint)arr.Address, (nint)mask.Address, (nint)result.Address, size);
 
             return result;
         }

@@ -1496,8 +1496,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Type-specific inner contiguous cumsum for sbyte. Accumulator stays in sbyte
-        /// to match same-type semantics of the generic dispatch (wraps on overflow).
+        /// Type-specific inner contiguous cumsum for sbyte.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousSByte(
             sbyte* src, sbyte* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
@@ -1510,7 +1509,7 @@ namespace NumSharp.Backends.Kernels
                 sbyte sum = 0;
                 for (long i = 0; i < axisSize; i++)
                 {
-                    sum = (sbyte)(sum + srcRow[i]);
+                    sum += srcRow[i];
                     dstRow[i] = sum;
                 }
             }
@@ -1530,7 +1529,7 @@ namespace NumSharp.Backends.Kernels
                 Half sum = (Half)0;
                 for (long i = 0; i < axisSize; i++)
                 {
-                    sum = sum + srcRow[i];
+                    sum += srcRow[i];
                     dstRow[i] = sum;
                 }
             }
@@ -1987,7 +1986,7 @@ namespace NumSharp.Backends.Kernels
                     sbyte sum = 0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        sum = (sbyte)(sum + src[inputOffset + i * axisStride]);
+                        sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
                     }
                 }
@@ -2011,7 +2010,7 @@ namespace NumSharp.Backends.Kernels
                     Half sum = (Half)0;
                     for (long i = 0; i < axisSize; i++)
                     {
-                        sum = sum + src[inputOffset + i * axisStride];
+                        sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
                     }
                 }

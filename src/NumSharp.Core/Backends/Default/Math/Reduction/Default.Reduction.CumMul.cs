@@ -1,6 +1,8 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -87,50 +89,7 @@ namespace NumSharp.Backends
             if (inputArr.GetTypeCode != retType)
                 inputArr = Cast(inputArr, retType, copy: true);
 
-            switch (retType)
-            {
-                case NPTypeCode.Byte:
-                    NpyAxisIter.ExecuteSameType<byte, CumProdAxisKernel<byte>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.SByte:
-                    NpyAxisIter.ExecuteSameType<sbyte, CumProdAxisKernel<sbyte>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int16:
-                    NpyAxisIter.ExecuteSameType<short, CumProdAxisKernel<short>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt16:
-                    NpyAxisIter.ExecuteSameType<ushort, CumProdAxisKernel<ushort>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int32:
-                    NpyAxisIter.ExecuteSameType<int, CumProdAxisKernel<int>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt32:
-                    NpyAxisIter.ExecuteSameType<uint, CumProdAxisKernel<uint>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int64:
-                    NpyAxisIter.ExecuteSameType<long, CumProdAxisKernel<long>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt64:
-                    NpyAxisIter.ExecuteSameType<ulong, CumProdAxisKernel<ulong>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Half:
-                    NpyAxisIter.ExecuteSameType<Half, CumProdAxisKernel<Half>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Single:
-                    NpyAxisIter.ExecuteSameType<float, CumProdAxisKernel<float>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Double:
-                    NpyAxisIter.ExecuteSameType<double, CumProdAxisKernel<double>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Decimal:
-                    NpyAxisIter.ExecuteSameType<decimal, CumProdAxisKernel<decimal>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Complex:
-                    NpyAxisIter.ExecuteSameType<System.Numerics.Complex, CumProdAxisKernel<System.Numerics.Complex>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                default:
-                    throw new NotSupportedException($"Axis cumprod output type {retType} not supported");
-            }
+            NpFunc.Invoke(retType, CumProdAxisDispatch<int>, inputArr.Storage, ret.Storage, axis);
 
             return ret;
         }
@@ -179,156 +138,23 @@ namespace NumSharp.Backends
                 ? linearInput.Clone()
                 : Cast(linearInput, retType, copy: true);
 
-            switch (retType)
-            {
-                case NPTypeCode.Byte:
-                {
-                    var addr = (byte*)converted.Address;
-                    byte product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.SByte:
-                {
-                    var addr = (sbyte*)converted.Address;
-                    sbyte product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int16:
-                {
-                    var addr = (short*)converted.Address;
-                    short product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt16:
-                {
-                    var addr = (ushort*)converted.Address;
-                    ushort product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int32:
-                {
-                    var addr = (int*)converted.Address;
-                    int product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt32:
-                {
-                    var addr = (uint*)converted.Address;
-                    uint product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int64:
-                {
-                    var addr = (long*)converted.Address;
-                    long product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt64:
-                {
-                    var addr = (ulong*)converted.Address;
-                    ulong product = 1;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Single:
-                {
-                    var addr = (float*)converted.Address;
-                    float product = 1f;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Half:
-                {
-                    var addr = (Half*)converted.Address;
-                    Half product = (Half)1.0f;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Double:
-                {
-                    var addr = (double*)converted.Address;
-                    double product = 1.0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Decimal:
-                {
-                    var addr = (decimal*)converted.Address;
-                    decimal product = 1m;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                case NPTypeCode.Complex:
-                {
-                    var addr = (System.Numerics.Complex*)converted.Address;
-                    var product = System.Numerics.Complex.One;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        product *= addr[i];
-                        addr[i] = product;
-                    }
-                    break;
-                }
-                default:
-                    throw new NotSupportedException($"CumProd output type {retType} not supported");
-            }
+            NpFunc.Invoke(retType, CumProdInPlace<int>, (nint)converted.Address, converted.size);
 
             return converted;
+        }
+
+        private static void CumProdAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
+            => NpyAxisIter.ExecuteSameType<T, CumProdAxisKernel<T>>(input, output, axis);
+
+        private static unsafe void CumProdInPlace<T>(nint addr, long size) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
+        {
+            var p = (T*)addr;
+            T product = T.MultiplicativeIdentity;
+            for (long i = 0; i < size; i++)
+            {
+                product *= p[i];
+                p[i] = product;
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
@@ -95,52 +97,23 @@ namespace NumSharp.Backends
             if (inputArr.GetTypeCode != retType)
                 inputArr = Cast(inputArr, retType, copy: true);
 
-            switch (retType)
-            {
-                case NPTypeCode.Byte:
-                    NpyAxisIter.ExecuteSameType<byte, CumSumAxisKernel<byte>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.SByte:
-                    NpyAxisIter.ExecuteSameType<sbyte, CumSumAxisKernel<sbyte>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int16:
-                    NpyAxisIter.ExecuteSameType<short, CumSumAxisKernel<short>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt16:
-                    NpyAxisIter.ExecuteSameType<ushort, CumSumAxisKernel<ushort>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int32:
-                    NpyAxisIter.ExecuteSameType<int, CumSumAxisKernel<int>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt32:
-                    NpyAxisIter.ExecuteSameType<uint, CumSumAxisKernel<uint>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Int64:
-                    NpyAxisIter.ExecuteSameType<long, CumSumAxisKernel<long>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.UInt64:
-                    NpyAxisIter.ExecuteSameType<ulong, CumSumAxisKernel<ulong>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Half:
-                    NpyAxisIter.ExecuteSameType<Half, CumSumAxisKernel<Half>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Single:
-                    NpyAxisIter.ExecuteSameType<float, CumSumAxisKernel<float>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Double:
-                    NpyAxisIter.ExecuteSameType<double, CumSumAxisKernel<double>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Decimal:
-                    NpyAxisIter.ExecuteSameType<decimal, CumSumAxisKernel<decimal>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                case NPTypeCode.Complex:
-                    NpyAxisIter.ExecuteSameType<System.Numerics.Complex, CumSumAxisKernel<System.Numerics.Complex>>(inputArr.Storage, ret.Storage, axis);
-                    break;
-                default:
-                    throw new NotSupportedException($"Axis cumsum output type {retType} not supported");
-            }
+            NpFunc.Invoke(retType, CumSumAxisDispatch<int>, inputArr.Storage, ret.Storage, axis);
 
             return ret;
+        }
+
+        private static void CumSumAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
+            => NpyAxisIter.ExecuteSameType<T, CumSumAxisKernel<T>>(input, output, axis);
+
+        private static unsafe void CumSumInPlace<T>(nint addr, long size) where T : unmanaged, IAdditionOperators<T, T, T>
+        {
+            var p = (T*)addr;
+            T sum = default;
+            for (long i = 0; i < size; i++)
+            {
+                sum += p[i];
+                p[i] = sum;
+            }
         }
 
         public NDArray CumSumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
@@ -193,154 +166,7 @@ namespace NumSharp.Backends
                 ? linearInput.Clone()
                 : Cast(linearInput, retType, copy: true);
 
-            switch (retType)
-            {
-                case NPTypeCode.Byte:
-                {
-                    var addr = (byte*)converted.Address;
-                    byte sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.SByte:
-                {
-                    var addr = (sbyte*)converted.Address;
-                    sbyte sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int16:
-                {
-                    var addr = (short*)converted.Address;
-                    short sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt16:
-                {
-                    var addr = (ushort*)converted.Address;
-                    ushort sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int32:
-                {
-                    var addr = (int*)converted.Address;
-                    int sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt32:
-                {
-                    var addr = (uint*)converted.Address;
-                    uint sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Int64:
-                {
-                    var addr = (long*)converted.Address;
-                    long sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.UInt64:
-                {
-                    var addr = (ulong*)converted.Address;
-                    ulong sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Single:
-                {
-                    var addr = (float*)converted.Address;
-                    float sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Half:
-                {
-                    var addr = (Half*)converted.Address;
-                    Half sum = Half.Zero;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Double:
-                {
-                    var addr = (double*)converted.Address;
-                    double sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Decimal:
-                {
-                    var addr = (decimal*)converted.Address;
-                    decimal sum = 0;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                case NPTypeCode.Complex:
-                {
-                    var addr = (System.Numerics.Complex*)converted.Address;
-                    var sum = System.Numerics.Complex.Zero;
-                    for (long i = 0; i < converted.size; i++)
-                    {
-                        sum += addr[i];
-                        addr[i] = sum;
-                    }
-                    break;
-                }
-                default:
-                    throw new NotSupportedException($"CumSum output type {retType} not supported");
-            }
+            NpFunc.Invoke(retType, CumSumInPlace<int>, (nint)converted.Address, converted.size);
 
             return converted;
         }
