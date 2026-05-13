@@ -30,27 +30,25 @@ namespace NumSharp.Utilities
                 throw new ArgumentNullException(nameof(sourceArray));
             }
 
-            //handle element type
-            var elementType = sourceArray.GetType().GetElementType();
-            while (elementType.IsArray)
-                elementType = elementType.GetElementType();
+            var elementType = sourceArray.GetType().GetElementType()
+                              ?? throw new ArgumentException("Array element type could not be resolved.", nameof(sourceArray));
 
-            Array output;
-            //handle array length
-            var dims = sourceArray.Rank;
-            if (dims > 1)
+            var rank = sourceArray.Rank;
+            var lengths = new int[rank];
+            var lowerBounds = new int[rank];
+            var hasNonZeroLowerBound = false;
+            for (int idx = 0; idx < rank; idx++)
             {
-                int[] dimensions = new int[dims];
-                for (int idx = 0; idx < dims; idx++)
-                    dimensions[idx] = sourceArray.GetLength(idx);
-                output = Arrays.Create(elementType, dimensions);
-            }
-            else
-            {
-                output = Arrays.Create(elementType, sourceArray.Length);
+                lengths[idx] = sourceArray.GetLength(idx);
+                lowerBounds[idx] = sourceArray.GetLowerBound(idx);
+                hasNonZeroLowerBound |= lowerBounds[idx] != 0;
             }
 
-            Array.Copy(sourceArray, 0, output, 0, sourceArray.Length);
+            var output = rank == 1 && !hasNonZeroLowerBound
+                ? Array.CreateInstance(elementType, lengths[0])
+                : Array.CreateInstance(elementType, lengths, lowerBounds);
+
+            Array.Copy(sourceArray, output, sourceArray.Length);
 
             return output;
         }
@@ -117,7 +115,7 @@ namespace NumSharp.Utilities
                 throw new ArgumentNullException(nameof(sourceArray));
             }
 
-            var output = new T[sourceArray.GetLength(0), sourceArray.GetLength(1), sourceArray.GetLength(2), sourceArray.GetLength(4)];
+            var output = new T[sourceArray.GetLength(0), sourceArray.GetLength(1), sourceArray.GetLength(2), sourceArray.GetLength(3)];
             Array.Copy(sourceArray, 0, output, 0, sourceArray.Length);
 
             return output;

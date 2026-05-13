@@ -1498,28 +1498,21 @@ namespace NumSharp
 
             if (IsScalar)
             {
-                if (unbroadcast || !IsBroadcasted)
+                if (unview || unbroadcast)
                     return Scalar;
-                // Scalar broadcast: return scalar with same offset via constructor
-                return new Shape(Array.Empty<long>(), Array.Empty<long>(), offset, bufferSize);
-            }
 
-            if (deep && unview && unbroadcast)
-                return new Shape((long[])this.dimensions.Clone());
+                return deep ? new Shape(this) : this;
+            }
 
             if (!deep && !unview && !unbroadcast)
                 return this; // readonly struct copy
 
-            // Deep clone via copy constructor
-            if (deep && !unbroadcast)
-                return new Shape(this);
+            if (unview || unbroadcast)
+                return new Shape((long[])this.dimensions.Clone());
 
-            // Unbroadcast: create new shape with standard C-contiguous strides
-            if (unbroadcast)
-            {
-                var newStrides = ComputeContiguousStrides(dimensions);
-                return new Shape((long[])dimensions.Clone(), newStrides, 0, size);
-            }
+            // Deep clone via copy constructor
+            if (deep)
+                return new Shape(this);
 
             return this;
         }
