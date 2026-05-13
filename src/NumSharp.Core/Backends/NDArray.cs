@@ -96,7 +96,8 @@ namespace NumSharp
         public NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
         }
 
         /// <summary>
@@ -107,7 +108,8 @@ namespace NumSharp
         protected internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
         }
 
         /// <summary>
@@ -118,7 +120,8 @@ namespace NumSharp
         protected internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
         }
 
         /// <summary>
@@ -432,7 +435,11 @@ namespace NumSharp
         public TensorEngine TensorEngine
         {
             [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
-            set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine());
+            set
+            {
+                tensorEngine = value ?? Storage.Engine ?? BackendFactory.GetEngine();
+                Storage.Engine = tensorEngine;
+            }
         }
 
         /// <summary>
@@ -534,7 +541,7 @@ namespace NumSharp
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
         /// <returns>Cloned NDArray</returns>
-        public NDArray Clone() => new NDArray(this.Storage.Clone()) {tensorEngine = TensorEngine};
+        public virtual NDArray Clone() => new NDArray(this.Storage.Clone()) { TensorEngine = TensorEngine };
 
         /// <summary>
         /// Returns an enumerator that iterates along the first axis.
@@ -622,10 +629,10 @@ namespace NumSharp
         {
             if (dtype == null || dtype == this.dtype)
             {
-                return new NDArray(Storage.Alias()) { tensorEngine = TensorEngine };
+                return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
             }
             // AliasAs reinterprets bytes without conversion (like NumPy's view)
-            return new NDArray(Storage.AliasAs(dtype)) { tensorEngine = TensorEngine };
+            return new NDArray(Storage.AliasAs(dtype)) { TensorEngine = TensorEngine };
         }
 
         /// <summary>
@@ -683,7 +690,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (long i = 0; i < ret.Length; i++)
             {
-                ret[i] = new NDArray(Storage.GetData(index));
+                ret[i] = new NDArray(Storage.GetData(index)) { TensorEngine = TensorEngine };
                 iter.Next();
             }
 
@@ -708,14 +715,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
         /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
-        public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>
         ///     Gets a NDArray at given <paramref name="indices"/>.
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
         /// <remarks>Does not copy, returns a memory slice - this is similar to this[long[]]</remarks>
-        public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
