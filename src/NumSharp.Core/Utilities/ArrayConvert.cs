@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
@@ -291,6 +292,8 @@ namespace NumSharp.Utilities
                     return ToBoolean((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToBoolean((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToBoolean((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToBoolean((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -305,12 +308,16 @@ namespace NumSharp.Utilities
                     return ToBoolean((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToBoolean((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToBoolean((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToBoolean((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToBoolean((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToBoolean((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToBoolean((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToBoolean((String[]) sourceArray);
                 default:
@@ -332,6 +339,8 @@ namespace NumSharp.Utilities
                     return ToByte((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToByte((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToByte((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToByte((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -346,12 +355,16 @@ namespace NumSharp.Utilities
                     return ToByte((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToByte((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToByte((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToByte((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToByte((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToByte((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToByte((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToByte((String[]) sourceArray);
                 default:
@@ -373,6 +386,8 @@ namespace NumSharp.Utilities
                     return ToInt16((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt16((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt16((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToInt16((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -387,12 +402,16 @@ namespace NumSharp.Utilities
                     return ToInt16((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToInt16((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToInt16((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToInt16((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToInt16((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToInt16((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToInt16((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToInt16((String[]) sourceArray);
                 default:
@@ -414,6 +433,8 @@ namespace NumSharp.Utilities
                     return ToUInt16((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToUInt16((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt16((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToUInt16((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -428,12 +449,16 @@ namespace NumSharp.Utilities
                     return ToUInt16((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToUInt16((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToUInt16((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToUInt16((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToUInt16((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToUInt16((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToUInt16((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToUInt16((String[]) sourceArray);
                 default:
@@ -455,6 +480,8 @@ namespace NumSharp.Utilities
                     return ToInt32((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt32((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt32((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToInt32((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -469,12 +496,16 @@ namespace NumSharp.Utilities
                     return ToInt32((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToInt32((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToInt32((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToInt32((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToInt32((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToInt32((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToInt32((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToInt32((String[]) sourceArray);
                 default:
@@ -496,6 +527,8 @@ namespace NumSharp.Utilities
                     return ToUInt32((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToUInt32((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt32((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToUInt32((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -510,12 +543,16 @@ namespace NumSharp.Utilities
                     return ToUInt32((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToUInt32((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToUInt32((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToUInt32((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToUInt32((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToUInt32((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToUInt32((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToUInt32((String[]) sourceArray);
                 default:
@@ -537,6 +574,8 @@ namespace NumSharp.Utilities
                     return ToInt64((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToInt64((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToInt64((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToInt64((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -551,12 +590,16 @@ namespace NumSharp.Utilities
                     return ToInt64((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToInt64((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToInt64((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToInt64((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToInt64((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToInt64((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToInt64((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToInt64((String[]) sourceArray);
                 default:
@@ -578,6 +621,8 @@ namespace NumSharp.Utilities
                     return ToUInt64((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToUInt64((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToUInt64((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToUInt64((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -592,12 +637,16 @@ namespace NumSharp.Utilities
                     return ToUInt64((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToUInt64((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToUInt64((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToUInt64((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToUInt64((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToUInt64((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToUInt64((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToUInt64((String[]) sourceArray);
                 default:
@@ -619,6 +668,8 @@ namespace NumSharp.Utilities
                     return ToChar((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToChar((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToChar((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToChar((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -633,12 +684,16 @@ namespace NumSharp.Utilities
                     return ToChar((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToChar((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToChar((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToChar((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToChar((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToChar((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToChar((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToChar((String[]) sourceArray);
                 default:
@@ -660,6 +715,8 @@ namespace NumSharp.Utilities
                     return ToDouble((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToDouble((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToDouble((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToDouble((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -674,12 +731,16 @@ namespace NumSharp.Utilities
                     return ToDouble((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToDouble((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToDouble((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToDouble((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToDouble((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToDouble((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToDouble((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToDouble((String[]) sourceArray);
                 default:
@@ -701,6 +762,8 @@ namespace NumSharp.Utilities
                     return ToSingle((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToSingle((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToSingle((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToSingle((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -715,12 +778,16 @@ namespace NumSharp.Utilities
                     return ToSingle((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToSingle((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToSingle((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToSingle((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToSingle((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToSingle((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToSingle((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToSingle((String[]) sourceArray);
                 default:
@@ -742,6 +809,8 @@ namespace NumSharp.Utilities
                     return ToDecimal((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToDecimal((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToDecimal((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToDecimal((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -756,12 +825,16 @@ namespace NumSharp.Utilities
                     return ToDecimal((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToDecimal((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToDecimal((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToDecimal((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToDecimal((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToDecimal((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToDecimal((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToDecimal((String[]) sourceArray);
                 default:
@@ -873,6 +946,8 @@ namespace NumSharp.Utilities
                     return ToString((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToString((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToString((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToString((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -887,12 +962,16 @@ namespace NumSharp.Utilities
                     return ToString((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToString((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToString((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToString((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToString((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToString((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToString((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToString((String[]) sourceArray);
                 default:
@@ -914,6 +993,8 @@ namespace NumSharp.Utilities
                     return ToComplex((Boolean[]) sourceArray);
                 case NPTypeCode.Byte:
                     return ToComplex((Byte[]) sourceArray);
+                case NPTypeCode.SByte:
+                    return ToComplex((SByte[]) sourceArray);
                 case NPTypeCode.Int16:
                     return ToComplex((Int16[]) sourceArray);
                 case NPTypeCode.UInt16:
@@ -928,12 +1009,16 @@ namespace NumSharp.Utilities
                     return ToComplex((UInt64[]) sourceArray);
                 case NPTypeCode.Char:
                     return ToComplex((Char[]) sourceArray);
+                case NPTypeCode.Half:
+                    return ToComplex((Half[]) sourceArray);
                 case NPTypeCode.Double:
                     return ToComplex((Double[]) sourceArray);
                 case NPTypeCode.Single:
                     return ToComplex((Single[]) sourceArray);
                 case NPTypeCode.Decimal:
                     return ToComplex((Decimal[]) sourceArray);
+                case NPTypeCode.Complex:
+                    return ToComplex((Complex[]) sourceArray);
                 case NPTypeCode.String:
                     return ToComplex((String[]) sourceArray);
                 default:
@@ -4566,6 +4651,472 @@ namespace NumSharp.Utilities
             var output = new Half[length];
             for (int i = 0; i < length; i++)
                 output[i] = Converts.ToHalf(sourceArray[i]);
+            return output;
+        }
+
+        // ====================================================================
+        // Typed converters from SByte/Half/Complex source to other destinations
+        // (the remaining 12-of-15 destination types per source dtype).
+        // Delegates to Converts.To<Dest>(scalar), all of which exist as typed
+        // overloads in Converts.Native.cs.
+        // ====================================================================
+
+        // -- SByte source --
+
+        [MethodImpl(Inline)]
+        public static Boolean[] ToBoolean(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Boolean[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToBoolean(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Byte[] ToByte(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Byte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int16[] ToInt16(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt16[] ToUInt16(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int32[] ToInt32(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt32[] ToUInt32(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int64[] ToInt64(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt64[] ToUInt64(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Char[] ToChar(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Char[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToChar(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Single[] ToSingle(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Single[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToSingle(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Double[] ToDouble(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Double[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToDouble(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Decimal[] ToDecimal(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Decimal[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToDecimal(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static String[] ToString(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new String[length];
+            for (int i = 0; i < length; i++)
+                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Complex[] ToComplex(SByte[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Complex[length];
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(sourceArray[i], 0.0);
+            return output;
+        }
+
+        // -- Half source --
+
+        [MethodImpl(Inline)]
+        public static Boolean[] ToBoolean(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Boolean[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToBoolean(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Byte[] ToByte(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Byte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int16[] ToInt16(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt16[] ToUInt16(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int32[] ToInt32(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt32[] ToUInt32(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int64[] ToInt64(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt64[] ToUInt64(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Char[] ToChar(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Char[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToChar(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Single[] ToSingle(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Single[length];
+            for (int i = 0; i < length; i++)
+                output[i] = (float)sourceArray[i];
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Double[] ToDouble(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Double[length];
+            for (int i = 0; i < length; i++)
+                output[i] = (double)sourceArray[i];
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Decimal[] ToDecimal(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Decimal[length];
+            for (int i = 0; i < length; i++)
+                output[i] = (decimal)(double)sourceArray[i];
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static String[] ToString(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new String[length];
+            for (int i = 0; i < length; i++)
+                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Complex[] ToComplex(Half[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Complex[length];
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex((double)sourceArray[i], 0.0);
+            return output;
+        }
+
+        // -- Complex source --
+        // Complex -> real conversion takes the Real component (matches NumPy's
+        // ComplexWarning truncation behavior).
+
+        [MethodImpl(Inline)]
+        public static Boolean[] ToBoolean(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Boolean[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToBoolean(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Byte[] ToByte(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Byte[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToByte(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int16[] ToInt16(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt16[] ToUInt16(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt16[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt16(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int32[] ToInt32(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt32[] ToUInt32(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt32[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt32(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Int64[] ToInt64(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Int64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static UInt64[] ToUInt64(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new UInt64[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToUInt64(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Char[] ToChar(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Char[length];
+            for (int i = 0; i < length; i++)
+                output[i] = Converts.ToChar(sourceArray[i]);
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Single[] ToSingle(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Single[length];
+            for (int i = 0; i < length; i++)
+                output[i] = (float)sourceArray[i].Real;
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Double[] ToDouble(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Double[length];
+            for (int i = 0; i < length; i++)
+                output[i] = sourceArray[i].Real;
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static Decimal[] ToDecimal(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new Decimal[length];
+            for (int i = 0; i < length; i++)
+                output[i] = (decimal)sourceArray[i].Real;
+            return output;
+        }
+
+        [MethodImpl(Inline)]
+        public static String[] ToString(Complex[] sourceArray)
+        {
+            if (sourceArray == null) throw new ArgumentNullException(nameof(sourceArray));
+            var length = sourceArray.Length;
+            var output = new String[length];
+            for (int i = 0; i < length; i++)
+                output[i] = sourceArray[i].ToString(CultureInfo.InvariantCulture);
             return output;
         }
 

@@ -455,6 +455,7 @@ namespace NumSharp.Backends.Kernels
                    typeof(T) == typeof(float) ||
                    typeof(T) == typeof(double) ||
                    typeof(T) == typeof(byte) ||
+                   typeof(T) == typeof(sbyte) ||
                    typeof(T) == typeof(short) ||
                    typeof(T) == typeof(uint) ||
                    typeof(T) == typeof(ulong) ||

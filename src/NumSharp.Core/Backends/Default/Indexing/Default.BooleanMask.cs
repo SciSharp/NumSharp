@@ -108,6 +108,8 @@ namespace NumSharp.Backends
         /// <summary>
         /// Inner loop: for each position, if mask is true, copy arr element
         /// into result[destIdx] and increment destIdx.
+        /// Specialized on element size to avoid Buffer.MemoryCopy per-element overhead
+        /// for the small fixed sizes that cover all 15 NumSharp dtypes (1, 2, 4, 8, 16 bytes).
         /// </summary>
         private readonly struct BooleanMaskGatherKernel : INpyReducingInnerLoop<BooleanMaskGatherAccumulator>
         {
@@ -121,17 +123,64 @@ namespace NumSharp.Backends
                 long destIdx = accum.DestIdx;
                 int elemSize = accum.ElemSize;
 
-                for (long i = 0; i < count; i++)
+                switch (elemSize)
                 {
-                    bool m = *(bool*)(maskPtr + i * maskStride);
-                    if (m)
-                    {
-                        System.Buffer.MemoryCopy(
-                            srcPtr + i * srcStride,
-                            destBase + destIdx * elemSize,
-                            elemSize, elemSize);
-                        destIdx++;
-                    }
+                    case 1:
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                                *(destBase + destIdx++) = *(srcPtr + i * srcStride);
+                        }
+                        break;
+                    case 2:
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                                *((short*)destBase + destIdx++) = *(short*)(srcPtr + i * srcStride);
+                        }
+                        break;
+                    case 4:
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                                *((int*)destBase + destIdx++) = *(int*)(srcPtr + i * srcStride);
+                        }
+                        break;
+                    case 8:
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                                *((long*)destBase + destIdx++) = *(long*)(srcPtr + i * srcStride);
+                        }
+                        break;
+                    case 16:
+                        // 16 bytes covers Complex (2 × double) and Decimal — copy as two longs.
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                            {
+                                long* d = (long*)destBase + destIdx * 2;
+                                long* s = (long*)(srcPtr + i * srcStride);
+                                d[0] = s[0];
+                                d[1] = s[1];
+                                destIdx++;
+                            }
+                        }
+                        break;
+                    default:
+                        // Any unexpected element size falls back to the byte copy.
+                        for (long i = 0; i < count; i++)
+                        {
+                            if (*(bool*)(maskPtr + i * maskStride))
+                            {
+                                System.Buffer.MemoryCopy(
+                                    srcPtr + i * srcStride,
+                                    destBase + destIdx * elemSize,
+                                    elemSize, elemSize);
+                                destIdx++;
+                            }
+                        }
+                        break;
                 }
 
                 accum.DestIdx = destIdx;

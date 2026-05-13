@@ -27,8 +27,8 @@ Every np.* function and DefaultEngine operation MUST satisfy these criteria:
 - **Sliced views**: Correctly handles Shape.offset for base address calculation
 
 ### Dtype Support
-All 12 NumSharp types must be handled (or explicitly documented as unsupported):
-Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal
+All 15 NumSharp types must be handled (or explicitly documented as unsupported):
+Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, Single, Double, Decimal, Complex
 
 ### NumPy API Parity
 - Function signature matches NumPy (parameter names, order, defaults)
@@ -43,18 +43,26 @@ Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double
 
 **Full audit tracking:** See `docs/KERNEL_API_AUDIT.md`
 
-## Supported Types (12)
+## Supported Types (15)
 
 | NPTypeCode | C# Type | NPTypeCode | C# Type |
 |------------|---------|------------|---------|
-| Boolean | bool | Int64 | long |
-| Byte | byte | UInt64 | ulong |
-| Int16 | short | Char | char |
-| UInt16 | ushort | Single | float |
-| Int32 | int | Double | double |
-| UInt32 | uint | Decimal | decimal |
+| Boolean | bool | UInt64 | ulong |
+| Byte | byte | Char | char |
+| SByte | sbyte | Half | System.Half |
+| Int16 | short | Single | float |
+| UInt16 | ushort | Double | double |
+| Int32 | int | Decimal | decimal |
+| UInt32 | uint | Complex | System.Numerics.Complex |
+| Int64 | long |  |  |
 
-All operations must handle all 12 types via type switch pattern.
+All operations must handle all 15 types via type switch pattern.
+
+**Perf notes:**
+- SByte / Byte / Int*/UInt* / Single / Double — full SIMD via `MixedTypeKernel.SimdFull` (V128/V256/V512 detected at startup).
+- Half — scalar path (no `Vector<Half>` arithmetic in .NET BCL). Routes through `Half→double→Math.Pow→Half` for `np.power`; ~2× slower than NumPy.
+- Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy.
+- Decimal — scalar path via `DecimalMath.Pow`. Highest precision, slowest.
 
 ## Architecture
 

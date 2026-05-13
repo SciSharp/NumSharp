@@ -179,15 +179,18 @@ namespace NumSharp.Backends.Iteration
             {
                 case NPTypeCode.Boolean: CopyToBuffer<bool>(ref state, op, count); break;
                 case NPTypeCode.Byte: CopyToBuffer<byte>(ref state, op, count); break;
+                case NPTypeCode.SByte: CopyToBuffer<sbyte>(ref state, op, count); break;
                 case NPTypeCode.Int16: CopyToBuffer<short>(ref state, op, count); break;
                 case NPTypeCode.UInt16: CopyToBuffer<ushort>(ref state, op, count); break;
                 case NPTypeCode.Int32: CopyToBuffer<int>(ref state, op, count); break;
                 case NPTypeCode.UInt32: CopyToBuffer<uint>(ref state, op, count); break;
                 case NPTypeCode.Int64: CopyToBuffer<long>(ref state, op, count); break;
                 case NPTypeCode.UInt64: CopyToBuffer<ulong>(ref state, op, count); break;
+                case NPTypeCode.Half: CopyToBuffer<Half>(ref state, op, count); break;
                 case NPTypeCode.Single: CopyToBuffer<float>(ref state, op, count); break;
                 case NPTypeCode.Double: CopyToBuffer<double>(ref state, op, count); break;
                 case NPTypeCode.Decimal: CopyToBuffer<decimal>(ref state, op, count); break;
+                case NPTypeCode.Complex: CopyToBuffer<System.Numerics.Complex>(ref state, op, count); break;
                 case NPTypeCode.Char: CopyToBuffer<char>(ref state, op, count); break;
                 default: throw new NotSupportedException($"Buffer copy not supported for dtype {dtype}");
             }
@@ -214,15 +217,18 @@ namespace NumSharp.Backends.Iteration
             {
                 case NPTypeCode.Boolean: CopyFromBuffer<bool>(ref state, op, count); break;
                 case NPTypeCode.Byte: CopyFromBuffer<byte>(ref state, op, count); break;
+                case NPTypeCode.SByte: CopyFromBuffer<sbyte>(ref state, op, count); break;
                 case NPTypeCode.Int16: CopyFromBuffer<short>(ref state, op, count); break;
                 case NPTypeCode.UInt16: CopyFromBuffer<ushort>(ref state, op, count); break;
                 case NPTypeCode.Int32: CopyFromBuffer<int>(ref state, op, count); break;
                 case NPTypeCode.UInt32: CopyFromBuffer<uint>(ref state, op, count); break;
                 case NPTypeCode.Int64: CopyFromBuffer<long>(ref state, op, count); break;
                 case NPTypeCode.UInt64: CopyFromBuffer<ulong>(ref state, op, count); break;
+                case NPTypeCode.Half: CopyFromBuffer<Half>(ref state, op, count); break;
                 case NPTypeCode.Single: CopyFromBuffer<float>(ref state, op, count); break;
                 case NPTypeCode.Double: CopyFromBuffer<double>(ref state, op, count); break;
                 case NPTypeCode.Decimal: CopyFromBuffer<decimal>(ref state, op, count); break;
+                case NPTypeCode.Complex: CopyFromBuffer<System.Numerics.Complex>(ref state, op, count); break;
                 case NPTypeCode.Char: CopyFromBuffer<char>(ref state, op, count); break;
                 default: throw new NotSupportedException($"Buffer copy not supported for dtype {dtype}");
             }

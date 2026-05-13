@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.AuditV2
         /// T1.13 — UnmanagedStorage.SetValue(object, long[]) throws on SByte/Half/Complex.
         /// Generic typed `SetValue&lt;T&gt;` works; only the boxing-object overload is broken.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.13")]
+        [TestMethod]
         public void T1_13_SetValue_Object_LongIndices_Missing_SByte_Half_Complex()
         {
             // SByte
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.AuditV2
         /// T1.57 — UnmanagedStorage.SetValue(object, int[]) throws on SByte/Half/Complex.
         /// Same root cause as T1.13 but on the int[]-index overload.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.57")]
+        [TestMethod]
         public void T1_57_SetValue_Object_IntIndices_Missing_SByte_Half_Complex()
         {
             var sb = np.zeros(new Shape(3), typeof(sbyte));
@@ -124,7 +124,7 @@ namespace NumSharp.UnitTest.AuditV2
         /// <summary>
         /// T1.13 (CopyTo) — UnmanagedStorage.CopyTo(void*) throws on SByte/Half/Complex.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.13")]
+        [TestMethod]
         public unsafe void T1_13_CopyTo_VoidPtr_Missing_SByte_Half_Complex()
         {
             // SByte

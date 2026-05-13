@@ -430,7 +430,7 @@ public class AuditV2_MathReductions
     /// not NotSupportedException("Unsupported type: SByte"). The current message implies
     /// SByte isn't supported at all (it is for many other ops).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.55")]
+    [TestMethod]
     public void T1_55_CopyTo_SByte_From_Float_RaisesProperError()
     {
         var dst = np.zeros(new Shape(3), NPTypeCode.SByte);

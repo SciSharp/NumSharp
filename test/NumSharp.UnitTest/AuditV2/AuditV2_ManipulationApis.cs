@@ -156,7 +156,7 @@ public class AuditV2_ManipulationApis
     /// but is missing sbyte, Half, and Complex cases (the latter two are supported as arrays only).
     /// File: src/NumSharp.Core/Creation/np.asanyarray.cs:53-64
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.49")]
+    [TestMethod]
     public void T1_49_Asanyarray_IEnumerable_SByte()
     {
         IEnumerable<sbyte> en = new List<sbyte> { 1, 2, 3 };
@@ -168,7 +168,7 @@ public class AuditV2_ManipulationApis
     /// <summary>
     /// T1.49 — np.asanyarray throws NotSupportedException for IEnumerable&lt;Half&gt;.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.49")]
+    [TestMethod]
     public void T1_49_Asanyarray_IEnumerable_Half()
     {
         IEnumerable<Half> en = new List<Half> { (Half)1, (Half)2, (Half)3 };
@@ -180,7 +180,7 @@ public class AuditV2_ManipulationApis
     /// <summary>
     /// T1.49 — np.asanyarray throws NotSupportedException for IEnumerable&lt;Complex&gt;.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.49")]
+    [TestMethod]
     public void T1_49_Asanyarray_IEnumerable_Complex()
     {
         IEnumerable<Complex> en = new List<Complex> { new Complex(1, 2), new Complex(3, 4) };
