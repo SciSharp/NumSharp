@@ -568,6 +568,45 @@ namespace NumSharp.UnitTest.Logic
 
         #endregion
 
+        #region Output Layout
+
+        [TestMethod]
+        public void Where_FContiguousInputs_ResultIsFContiguous()
+        {
+            // NumPy 2.4.2: np.where(f > 5, f, 0) preserves F-contiguous output.
+            var f = np.arange(12).reshape(3, 4).T;
+            var result = np.where(f > 5, f, 0);
+
+            Assert.IsFalse(result.Shape.IsContiguous);
+            Assert.IsTrue(result.Shape.IsFContiguous);
+        }
+
+        [TestMethod]
+        public void Where_MixedCAndFInputs_ResultFallsBackToC()
+        {
+            // NumPy 2.4.2: conflicting full-size C/F operands allocate C-order output.
+            var f = np.arange(12).reshape(3, 4).T;
+            var cSameShape = f.copy('C');
+            var result = np.where(f > 5, cSameShape, f);
+
+            Assert.IsTrue(result.Shape.IsContiguous);
+            Assert.IsFalse(result.Shape.IsFContiguous);
+        }
+
+        [TestMethod]
+        public void Where_BroadcastConditionWithFInput_ResultIsFContiguous()
+        {
+            // NumPy 2.4.2: broadcast-only operands do not force C layout.
+            var cond = np.array(new[] { true, false, true });
+            var f = np.arange(12).reshape(3, 4).T;
+            var result = np.where(cond, f, 0);
+
+            Assert.IsFalse(result.Shape.IsContiguous);
+            Assert.IsTrue(result.Shape.IsFContiguous);
+        }
+
+        #endregion
+
         #region Alternating Patterns
 
         [TestMethod]
