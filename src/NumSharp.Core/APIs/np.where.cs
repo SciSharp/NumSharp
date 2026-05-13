@@ -82,6 +82,11 @@ namespace NumSharp
                 yArr = broadcasted[2];
             }
 
+            // Resolve output layout before dtype casts. Casts of broadcasted scalars can
+            // materialize C-contiguous temporaries, but NumPy's iterator ignores those for
+            // output-order selection.
+            char resultOrder = ResolveWhereOrder(cond, xArr, yArr);
+
             // Coerce the condition to boolean using NumPy's truthiness rules
             // (0/0.0 → False, everything else including NaN/±Inf → True). The
             // iterator-driven expression kernel requires a bool condition dtype.
@@ -99,8 +104,10 @@ namespace NumSharp
             if (yArr.GetTypeCode != outType)
                 yArr = yArr.astype(outType, copy: false);
 
-            // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides)
-            var result = empty(cond.shape, outType);
+            // Use cond.shape (dimensions only) not cond.Shape (which may have broadcast strides).
+            // NumPy's iterator allocation preserves F-order when all full-size operands agree
+            // on F layout; any full C-contiguous or non-contiguous operand falls back to C.
+            var result = empty(new Shape((long[])cond.shape.Clone(), resultOrder), outType);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
@@ -120,13 +127,13 @@ namespace NumSharp
                 return result;
             }
 
-            // Iterator fallback for non-contiguous/broadcasted arrays
-            NpFunc.Invoke(outType, WhereImpl<int>, cond, xArr, yArr, result);
+            // Iterator fallback for non-contiguous/broadcasted arrays.
+            WhereImpl(cond, xArr, yArr, result);
 
             return result;
         }
 
-        private static void WhereImpl<T>(NDArray cond, NDArray x, NDArray y, NDArray result) where T : unmanaged
+        private static void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
         {
             // Drive cond + x + y + result in lockstep via a 4-operand NpyIter
             // compiling Where(cond, x, y) → out as a single IL expression kernel.
@@ -153,6 +160,37 @@ namespace NumSharp
                 new[] { NPTypeCode.Boolean, dtype, dtype },
                 dtype,
                 cacheKey: $"np.where.{dtype}");
+        }
+
+        private static char ResolveWhereOrder(params NDArray[] operands)
+        {
+            bool sawStrictF = false;
+
+            foreach (var operand in operands)
+            {
+                var shape = operand.Shape;
+
+                // Scalar, 1-D, and broadcasted operands don't force the output layout.
+                if (shape.IsScalar || shape.NDim <= 1 || shape.IsBroadcasted)
+                    continue;
+
+                bool isC = shape.IsContiguous;
+                bool isF = shape.IsFContiguous;
+
+                if (isC && !isF)
+                    return 'C';
+
+                if (isF && !isC)
+                {
+                    sawStrictF = true;
+                    continue;
+                }
+
+                if (!isC && !isF)
+                    return 'C';
+            }
+
+            return sawStrictF ? 'F' : 'C';
         }
 
         /// <summary>
