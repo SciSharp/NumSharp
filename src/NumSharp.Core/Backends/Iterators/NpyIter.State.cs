@@ -301,19 +301,21 @@ namespace NumSharp.Backends.Iteration
         /// Must be called before using any pointer fields.
         /// Initializes Perm to identity permutation [0, 1, 2, ...].
         /// </summary>
-        public void AllocateDimArrays(int ndim, int nop)
+        public void AllocateDimArrays(int ndim, int nop, int stridesNDim = -1)
         {
             if (ndim < 0) throw new ArgumentOutOfRangeException(nameof(ndim));
             if (nop < 1) throw new ArgumentOutOfRangeException(nameof(nop), "At least one operand is required");
+            if (stridesNDim < 0) stridesNDim = ndim;
+            if (stridesNDim < ndim) throw new ArgumentOutOfRangeException(nameof(stridesNDim));
 
             NDim = ndim;
             NOp = nop;
-            StridesNDim = ndim;
+            StridesNDim = stridesNDim;
 
             // =========================================================================
             // Allocate dimension-dependent arrays
             // =========================================================================
-            if (ndim == 0)
+            if (ndim == 0 && stridesNDim == 0)
             {
                 // Scalar case - no dimension arrays needed
                 Shape = null;
@@ -325,10 +327,10 @@ namespace NumSharp.Backends.Iteration
             else
             {
                 // Allocate all dimension arrays in one contiguous block for cache efficiency
-                // Layout: [Shape: ndim longs][Coords: ndim longs][Strides: ndim*nop longs][Perm: ndim sbytes]
+                // Layout: [Shape: ndim longs][Coords: ndim longs][Strides: stridesNDim*nop longs][Perm: ndim sbytes]
                 long shapeBytes = ndim * sizeof(long);
                 long coordsBytes = ndim * sizeof(long);
-                long stridesBytes = ndim * nop * sizeof(long);
+                long stridesBytes = stridesNDim * nop * sizeof(long);
                 long permBytes = ndim * sizeof(sbyte);
 
                 // Align perm to 8 bytes for cleaner memory layout
