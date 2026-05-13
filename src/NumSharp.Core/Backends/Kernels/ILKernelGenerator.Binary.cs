@@ -593,31 +593,66 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Power operation using Math.Pow for generic type T.
+        /// Emit Power operation for generic type T (same-type contiguous kernel path).
         /// Stack: [base, exponent] -> [result]
+        ///
+        /// - Integer T: routes to <see cref="Utilities.NpyIntegerPower"/> for dtype-native wrapping.
+        /// - float: routes to <c>MathF.Pow</c> (single-precision parity with NumPy <c>powf</c>).
+        /// - double: routes to <c>Math.Pow</c>.
         /// </summary>
         private static void EmitPowerOperation<T>(ILGenerator il) where T : unmanaged
         {
-            // Math.Pow(double, double) -> double
-            // We need to convert both operands to double, call Math.Pow, then convert back
+            // Integer types: call the matching NpyIntegerPower helper.
+            // Stack already holds two T values; the helper signature is (T, T) -> T.
+            MethodInfo? intPow = GetIntegerPowMethod<T>();
+            if (intPow != null)
+            {
+                il.EmitCall(OpCodes.Call, intPow, null);
+                return;
+            }
 
-            // Store exponent temporarily
+            // float: MathF.Pow (no f64 round-trip)
+            if (typeof(T) == typeof(float))
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.MathFPow, null);
+                return;
+            }
+
+            // double: Math.Pow directly (operands already double)
+            if (typeof(T) == typeof(double))
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+                return;
+            }
+
+            // Fallback for unhandled T (e.g. Half, Complex, Decimal route through their own emit paths).
+            // Convert both to double, call Math.Pow, convert back.
             var locExp = il.DeclareLocal(typeof(T));
             il.Emit(OpCodes.Stloc, locExp);
-
-            // Convert base to double
             EmitConvertToDouble<T>(il);
-
-            // Load and convert exponent to double
             il.Emit(OpCodes.Ldloc, locExp);
             EmitConvertToDouble<T>(il);
-
-            // Call Math.Pow(double, double)
-            var powMethod = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) });
-            il.EmitCall(OpCodes.Call, powMethod!, null);
-
-            // Convert result back to T
+            il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
             EmitConvertFromDouble<T>(il);
+        }
+
+        /// <summary>
+        /// Lookup the matching <see cref="Utilities.NpyIntegerPower"/> helper for T,
+        /// or null if T is not an integer type supported by the helper.
+        /// </summary>
+        private static MethodInfo? GetIntegerPowMethod<T>() where T : unmanaged
+        {
+            var t = typeof(T);
+            if (t == typeof(sbyte)) return CachedMethods.IntPowSByte;
+            if (t == typeof(byte)) return CachedMethods.IntPowByte;
+            if (t == typeof(short)) return CachedMethods.IntPowInt16;
+            if (t == typeof(ushort)) return CachedMethods.IntPowUInt16;
+            if (t == typeof(char)) return CachedMethods.IntPowChar;
+            if (t == typeof(int)) return CachedMethods.IntPowInt32;
+            if (t == typeof(uint)) return CachedMethods.IntPowUInt32;
+            if (t == typeof(long)) return CachedMethods.IntPowInt64;
+            if (t == typeof(ulong)) return CachedMethods.IntPowUInt64;
+            return null;
         }
 
         /// <summary>
