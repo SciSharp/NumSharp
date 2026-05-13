@@ -901,6 +901,22 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
                     return;
                 }
+                if (from == NPTypeCode.Half)
+                {
+                    // Half -> double -> decimal
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalExplicitFromDouble, null);
+                    return;
+                }
+                if (from == NPTypeCode.Complex)
+                {
+                    // Complex -> Real (double) -> decimal (matches NumPy ComplexWarning truncation)
+                    var realGetter = typeof(System.Numerics.Complex).GetProperty("Real")?.GetGetMethod()
+                        ?? throw new InvalidOperationException("Complex.Real not found");
+                    il.EmitCall(OpCodes.Call, realGetter, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalExplicitFromDouble, null);
+                    return;
+                }
 
                 var method = from switch
                 {
@@ -934,6 +950,23 @@ namespace NumSharp.Backends.Kernels
                     // decimal -> int -> char
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalToInt32, null);
                     il.Emit(OpCodes.Conv_U2);
+                    return;
+                }
+                if (to == NPTypeCode.Half)
+                {
+                    // decimal -> double -> Half
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalToDouble, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    return;
+                }
+                if (to == NPTypeCode.Complex)
+                {
+                    // decimal -> double -> Complex(d, 0)
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalToDouble, null);
+                    il.Emit(OpCodes.Ldc_R8, 0.0);
+                    var ctor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
+                        ?? throw new InvalidOperationException("Complex constructor not found");
+                    il.Emit(OpCodes.Newobj, ctor);
                     return;
                 }
 

@@ -138,12 +138,13 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
 
-            // B7: Fallback for types without an IL kernel (Half, Complex, SByte).
-            // Iterate slice-by-slice, reusing the elementwise argmax/argmin IL kernel.
-            if (inputType == NPTypeCode.Half || inputType == NPTypeCode.Complex || inputType == NPTypeCode.SByte)
-            {
-                return ArgReductionAxisFallback(arr, axis, keepdims, outputShape, axisedShape, op);
-            }
+            // Half and Complex have no IL kernel (Bgt/Blt opcodes don't apply to those types
+            // and Complex needs lexicographic compare). Route through a stride-aware loop
+            // that avoids per-slice NDArray view allocation (R23).
+            if (inputType == NPTypeCode.Half)
+                return ArgReductionAxisHalf(arr, axis, keepdims, outputShape, axisedShape, op);
+            if (inputType == NPTypeCode.Complex)
+                return ArgReductionAxisComplex(arr, axis, keepdims, outputShape, axisedShape, op);
 
             // ArgMax/ArgMin always output Int64
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
@@ -195,6 +196,144 @@ namespace NumSharp.Backends
                     : argmin_elementwise_il(slice);
                 ret.SetAtIndex(result, iterIndex[0]);
             } while (iterAxis.Next() != null && iterRet.Next() != null);
+
+            if (keepdims)
+                ret.Storage.Reshape(outputShape);
+
+            return ret;
+        }
+
+        /// <summary>
+        /// Stride-aware axis ArgMax/ArgMin for Half. Avoids per-slice NDArray view allocation:
+        /// walks output coordinates and follows the axis stride directly via pointer arithmetic.
+        /// NaN-propagating (first NaN on the axis wins) to match NumPy.
+        /// </summary>
+        private unsafe NDArray ArgReductionAxisHalf(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
+        {
+            var shape = arr.Shape;
+            int ndim = arr.ndim;
+            long axisSize = shape.dimensions[axis];
+            long axisStride = shape.strides[axis];
+            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+
+            Half* basePtr = (Half*)arr.Address + shape.offset;
+            long* retPtr = (long*)ret.Address;
+
+            // Build a stride/dim view excluding the reduction axis so we can iterate
+            // outputCount positions via a single coordinate vector.
+            int outNdim = ndim - 1;
+            long outputCount = ret.size == 0 ? 1 : ret.size;
+            long* outDims = stackalloc long[Math.Max(outNdim, 1)];
+            long* outStrides = stackalloc long[Math.Max(outNdim, 1)];
+            for (int d = 0, k = 0; d < ndim; d++)
+            {
+                if (d == axis) continue;
+                outDims[k] = shape.dimensions[d];
+                outStrides[k] = shape.strides[d];
+                k++;
+            }
+            long* coords = stackalloc long[Math.Max(outNdim, 1)];
+            for (int d = 0; d < outNdim; d++) coords[d] = 0;
+
+            bool isArgMax = op == ReductionOp.ArgMax;
+            for (long outIdx = 0; outIdx < outputCount; outIdx++)
+            {
+                long baseOffset = 0;
+                for (int d = 0; d < outNdim; d++)
+                    baseOffset += coords[d] * outStrides[d];
+
+                long bestIdx = 0;
+                double best = (double)*(basePtr + baseOffset);
+                bool nanSeen = double.IsNaN(best);
+                if (!nanSeen)
+                {
+                    for (long i = 1; i < axisSize; i++)
+                    {
+                        double v = (double)*(basePtr + baseOffset + i * axisStride);
+                        if (double.IsNaN(v)) { bestIdx = i; nanSeen = true; break; }
+                        if (isArgMax ? v > best : v < best) { best = v; bestIdx = i; }
+                    }
+                }
+                retPtr[outIdx] = bestIdx;
+
+                // Advance C-order coords
+                for (int d = outNdim - 1; d >= 0; d--)
+                {
+                    coords[d]++;
+                    if (coords[d] < outDims[d]) break;
+                    coords[d] = 0;
+                }
+            }
+
+            if (keepdims)
+                ret.Storage.Reshape(outputShape);
+
+            return ret;
+        }
+
+        /// <summary>
+        /// Stride-aware axis ArgMax/ArgMin for Complex. Uses NumPy's lexicographic compare
+        /// (real, then imag). NaN in either component propagates.
+        /// </summary>
+        private unsafe NDArray ArgReductionAxisComplex(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
+        {
+            var shape = arr.Shape;
+            int ndim = arr.ndim;
+            long axisSize = shape.dimensions[axis];
+            long axisStride = shape.strides[axis];
+            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+
+            System.Numerics.Complex* basePtr = (System.Numerics.Complex*)arr.Address + shape.offset;
+            long* retPtr = (long*)ret.Address;
+
+            int outNdim = ndim - 1;
+            long outputCount = ret.size == 0 ? 1 : ret.size;
+            long* outDims = stackalloc long[Math.Max(outNdim, 1)];
+            long* outStrides = stackalloc long[Math.Max(outNdim, 1)];
+            for (int d = 0, k = 0; d < ndim; d++)
+            {
+                if (d == axis) continue;
+                outDims[k] = shape.dimensions[d];
+                outStrides[k] = shape.strides[d];
+                k++;
+            }
+            long* coords = stackalloc long[Math.Max(outNdim, 1)];
+            for (int d = 0; d < outNdim; d++) coords[d] = 0;
+
+            bool isArgMax = op == ReductionOp.ArgMax;
+            for (long outIdx = 0; outIdx < outputCount; outIdx++)
+            {
+                long baseOffset = 0;
+                for (int d = 0; d < outNdim; d++)
+                    baseOffset += coords[d] * outStrides[d];
+
+                long bestIdx = 0;
+                var best = *(basePtr + baseOffset);
+                bool nanSeen = double.IsNaN(best.Real) || double.IsNaN(best.Imaginary);
+                if (!nanSeen)
+                {
+                    for (long i = 1; i < axisSize; i++)
+                    {
+                        var v = *(basePtr + baseOffset + i * axisStride);
+                        if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
+                        {
+                            bestIdx = i; nanSeen = true; break;
+                        }
+                        bool wins = isArgMax
+                            ? (v.Real > best.Real || (v.Real == best.Real && v.Imaginary > best.Imaginary))
+                            : (v.Real < best.Real || (v.Real == best.Real && v.Imaginary < best.Imaginary));
+                        if (wins) { best = v; bestIdx = i; }
+                    }
+                }
+                retPtr[outIdx] = bestIdx;
+
+                for (int d = outNdim - 1; d >= 0; d--)
+                {
+                    coords[d]++;
+                    if (coords[d] < outDims[d]) break;
+                    coords[d] = 0;
+                }
+            }
 
             if (keepdims)
                 ret.Storage.Reshape(outputShape);

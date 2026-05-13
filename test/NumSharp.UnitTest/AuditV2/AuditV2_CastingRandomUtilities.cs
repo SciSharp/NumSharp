@@ -68,7 +68,7 @@ public class AuditV2_CastingRandomUtilities
     //   arrays. Every public ArrayConvert.ToXxx(Array) throws
     //   ArgumentOutOfRangeException for these three source types.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.30")]
+    [TestMethod]
     public void T1_30_ArrayConvert_SByteSource_Throws()
     {
         var src = new sbyte[] { -1, 0, 1 };
@@ -76,7 +76,7 @@ public class AuditV2_CastingRandomUtilities
         act.Should().NotThrow("SByte is one of NumSharp's 15 supported dtypes");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.30")]
+    [TestMethod]
     public void T1_30_ArrayConvert_HalfSource_Throws()
     {
         var src = new Half[] { (Half)1.5f, (Half)2.5f };
@@ -84,7 +84,7 @@ public class AuditV2_CastingRandomUtilities
         act.Should().NotThrow("Half is one of NumSharp's 15 supported dtypes");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.30")]
+    [TestMethod]
     public void T1_30_ArrayConvert_ComplexSource_Throws()
     {
         var src = new Complex[] { new Complex(1, 2), new Complex(3, 0) };
@@ -248,7 +248,7 @@ public class AuditV2_CastingRandomUtilities
     //   strict perf SLA — the gather path should be within 10x of the SIMD
     //   contiguous path on a half-true int32 mask.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.58")]
+    [TestMethod]
     public void T1_58_BooleanMask_Fallback_PerElement_MemoryCopy()
     {
         const int N = 100_000;

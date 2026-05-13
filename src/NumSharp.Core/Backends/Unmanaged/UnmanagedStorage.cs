@@ -1280,6 +1280,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    CopyTo<sbyte>((sbyte*)address);
+                    break;
+                }
+
                 case NPTypeCode.Int16:
                 {
                     CopyTo<short>((short*)address);
@@ -1322,6 +1328,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    CopyTo<Half>((Half*)address);
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     CopyTo<double>((double*)address);
@@ -1337,6 +1349,12 @@ namespace NumSharp.Backends
                 case NPTypeCode.Decimal:
                 {
                     CopyTo<decimal>((decimal*)address);
+                    break;
+                }
+
+                case NPTypeCode.Complex:
+                {
+                    CopyTo<System.Numerics.Complex>((System.Numerics.Complex*)address);
                     break;
                 }
 
@@ -1397,6 +1415,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    CopyTo<sbyte>((sbyte*)block.Address);
+                    break;
+                }
+
                 case NPTypeCode.Int16:
                 {
                     CopyTo<short>((short*)block.Address);
@@ -1439,6 +1463,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    CopyTo<Half>((Half*)block.Address);
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     CopyTo<double>((double*)block.Address);
@@ -1454,6 +1484,12 @@ namespace NumSharp.Backends
                 case NPTypeCode.Decimal:
                 {
                     CopyTo<decimal>((decimal*)block.Address);
+                    break;
+                }
+
+                case NPTypeCode.Complex:
+                {
+                    CopyTo<System.Numerics.Complex>((System.Numerics.Complex*)block.Address);
                     break;
                 }
 

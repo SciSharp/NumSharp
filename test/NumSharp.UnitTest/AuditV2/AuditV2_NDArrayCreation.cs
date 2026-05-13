@@ -74,7 +74,7 @@ public class AuditV2_NDArrayCreation
     //   SByte/Half to NPTypeCode but the NpyIter cast read/write paths
     //   never gained corresponding entries.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.9")]
+    [TestMethod]
     public void T1_9_Concatenate_Mixed_SByte_Byte_ThrowsNotSupported()
     {
         var s8 = np.array(new sbyte[] { 1, 2 });
@@ -84,7 +84,7 @@ public class AuditV2_NDArrayCreation
             "concatenating int8 + uint8 must not crash — NumPy promotes to int16");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.9")]
+    [TestMethod]
     public void T1_9_Concatenate_Mixed_Half_Single_ThrowsNotSupported()
     {
         var h = np.array(new Half[] { (Half)1f, (Half)2f });
@@ -94,7 +94,7 @@ public class AuditV2_NDArrayCreation
             "concatenating float16 + float32 must not crash — NumPy promotes to float32");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.9")]
+    [TestMethod]
     public void T1_9_Concatenate_Mixed_Complex_Double_ThrowsNotSupported()
     {
         var c = np.array(new System.Numerics.Complex[] { new(1, 0), new(2, 0) });

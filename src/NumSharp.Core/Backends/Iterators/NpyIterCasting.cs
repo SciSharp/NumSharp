@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
@@ -45,13 +46,29 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Check if casting is "safe" (no loss of precision).
-        /// Safe casts: smaller int -> larger int, any int -> float64, float32 -> float64
+        /// Safe casts: smaller int -> larger int, any int -> float64, float32 -> float64,
+        /// any non-complex numeric -> complex, half -> single/double.
         /// </summary>
         private static bool IsSafeCast(NPTypeCode srcType, NPTypeCode dstType)
         {
             // Same type is always safe
             if (srcType == dstType)
                 return true;
+
+            // Complex absorbs everything except: complex -> non-complex is never safe.
+            if (IsComplex(srcType) && !IsComplex(dstType))
+                return false;
+            if (IsComplex(dstType))
+            {
+                // Anything real can widen into complex128 (which carries float64 components).
+                // Int64/UInt64 lose precision above 2^53 in real -> double conversion;
+                // NumPy still classes int64->complex128 as same-kind, but not "safe" without
+                // upcast to longdouble/complex256 (which .NET doesn't have). Be conservative:
+                // mark integer->complex safe up to 32-bit, and float/half/bool->complex safe.
+                if (srcType == NPTypeCode.Int64 || srcType == NPTypeCode.UInt64)
+                    return false;
+                return true;
+            }
 
             int srcSize = InfoOf.GetSize(srcType);
             int dstSize = InfoOf.GetSize(dstType);
@@ -66,6 +83,15 @@ namespace NumSharp.Backends.Iteration
 
             // Float to int is never safe
             if (srcIsFloat && !dstIsFloat)
+                return false;
+
+            // Half (float16) widens safely to Single (float32) and Double (float64).
+            if (srcType == NPTypeCode.Half)
+                return dstType == NPTypeCode.Single || dstType == NPTypeCode.Double || dstType == NPTypeCode.Decimal;
+
+            // Half is narrower than Single/Double — only Half->Half (handled above) is safe
+            // FROM Half. Float -> Half is never safe (loss of precision).
+            if (dstType == NPTypeCode.Half)
                 return false;
 
             // Larger to smaller is never safe
@@ -137,12 +163,14 @@ namespace NumSharp.Backends.Iteration
 
         private static bool IsFloatingPoint(NPTypeCode type)
         {
-            return type == NPTypeCode.Single || type == NPTypeCode.Double || type == NPTypeCode.Decimal;
+            return type == NPTypeCode.Half || type == NPTypeCode.Single ||
+                   type == NPTypeCode.Double || type == NPTypeCode.Decimal;
         }
 
         private static bool IsSignedInteger(NPTypeCode type)
         {
-            return type == NPTypeCode.Int16 || type == NPTypeCode.Int32 || type == NPTypeCode.Int64;
+            return type == NPTypeCode.SByte || type == NPTypeCode.Int16 ||
+                   type == NPTypeCode.Int32 || type == NPTypeCode.Int64;
         }
 
         private static bool IsUnsignedInteger(NPTypeCode type)
@@ -150,6 +178,8 @@ namespace NumSharp.Backends.Iteration
             return type == NPTypeCode.Byte || type == NPTypeCode.UInt16 ||
                    type == NPTypeCode.UInt32 || type == NPTypeCode.UInt64 || type == NPTypeCode.Char;
         }
+
+        private static bool IsComplex(NPTypeCode type) => type == NPTypeCode.Complex;
 
         /// <summary>
         /// Validate all operand casts in an iterator state.
@@ -252,6 +282,10 @@ namespace NumSharp.Backends.Iteration
             if (a == b)
                 return a;
 
+            // Complex absorbs everything (highest kind).
+            if (IsComplex(a) || IsComplex(b))
+                return NPTypeCode.Complex;
+
             // Float always wins over int
             if (IsFloatingPoint(a) && !IsFloatingPoint(b))
                 return a;
@@ -314,6 +348,11 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Convert a single value from srcType to dstType.
         /// </summary>
+        /// <remarks>
+        /// Complex needs special handling on either end because a double intermediate
+        /// would drop the imaginary component. Real -> Complex sets imaginary=0; Complex
+        /// -> Real takes the real part (matching NumPy's ComplexWarning truncation).
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ConvertValue(void* src, void* dst, NPTypeCode srcType, NPTypeCode dstType)
         {
@@ -325,6 +364,27 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
+            // Complex pathways — go through a Complex intermediate to preserve both
+            // real and imaginary components when both endpoints are Complex, and to
+            // drop imaginary cleanly on Complex -> real cast (NumPy ComplexWarning).
+            if (srcType == NPTypeCode.Complex)
+            {
+                Complex c = *(Complex*)src;
+                if (dstType == NPTypeCode.Complex)
+                {
+                    *(Complex*)dst = c;
+                    return;
+                }
+                WriteFromDouble(dst, c.Real, dstType);
+                return;
+            }
+            if (dstType == NPTypeCode.Complex)
+            {
+                double real = ReadAsDouble(src, srcType);
+                *(Complex*)dst = new Complex(real, 0.0);
+                return;
+            }
+
             // Read source value as double (intermediate)
             double value = ReadAsDouble(src, srcType);
 
@@ -333,7 +393,9 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Read any numeric type as double.
+        /// Read any numeric type (except Complex) as double.
+        /// Complex must be handled by the caller — going through double would silently
+        /// drop the imaginary component.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double ReadAsDouble(void* ptr, NPTypeCode type)
@@ -342,12 +404,14 @@ namespace NumSharp.Backends.Iteration
             {
                 NPTypeCode.Boolean => *(bool*)ptr ? 1.0 : 0.0,
                 NPTypeCode.Byte => *(byte*)ptr,
+                NPTypeCode.SByte => *(sbyte*)ptr,
                 NPTypeCode.Int16 => *(short*)ptr,
                 NPTypeCode.UInt16 => *(ushort*)ptr,
                 NPTypeCode.Int32 => *(int*)ptr,
                 NPTypeCode.UInt32 => *(uint*)ptr,
                 NPTypeCode.Int64 => *(long*)ptr,
                 NPTypeCode.UInt64 => *(ulong*)ptr,
+                NPTypeCode.Half => (double)*(Half*)ptr,
                 NPTypeCode.Single => *(float*)ptr,
                 NPTypeCode.Double => *(double*)ptr,
                 NPTypeCode.Decimal => (double)*(decimal*)ptr,
@@ -357,7 +421,8 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Write double value to any numeric type.
+        /// Write double value to any numeric type (except Complex). Complex destinations
+        /// must be handled by the caller.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteFromDouble(void* ptr, double value, NPTypeCode type)
@@ -366,12 +431,14 @@ namespace NumSharp.Backends.Iteration
             {
                 case NPTypeCode.Boolean: *(bool*)ptr = value != 0; break;
                 case NPTypeCode.Byte: *(byte*)ptr = (byte)value; break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = (sbyte)value; break;
                 case NPTypeCode.Int16: *(short*)ptr = (short)value; break;
                 case NPTypeCode.UInt16: *(ushort*)ptr = (ushort)value; break;
                 case NPTypeCode.Int32: *(int*)ptr = (int)value; break;
                 case NPTypeCode.UInt32: *(uint*)ptr = (uint)value; break;
                 case NPTypeCode.Int64: *(long*)ptr = (long)value; break;
                 case NPTypeCode.UInt64: *(ulong*)ptr = (ulong)value; break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = (decimal)value; break;

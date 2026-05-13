@@ -162,7 +162,7 @@ public class AuditV2_Iterators
     /// NumSharp: throws NotSupportedException ("Unsupported type: SByte")
     /// in ReadAsDouble during buffer copy.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.12")]
+    [TestMethod]
     public void T1_12_BufferedCast_SByte_Source_Must_Not_Throw()
     {
         var a = np.array(new sbyte[] { 1, 2, 3 });
@@ -189,7 +189,7 @@ public class AuditV2_Iterators
     /// iterates correctly.
     /// NumSharp: throws NotSupportedException ("Buffer copy not supported for dtype Complex").
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.12")]
+    [TestMethod]
     public void T1_12_Buffered_Complex_Source_Must_Not_Throw()
     {
         var a = np.array(new Complex[] { new Complex(1, 0), new Complex(2, 0) });
