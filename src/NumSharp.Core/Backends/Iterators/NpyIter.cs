@@ -1528,21 +1528,6 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Copies the array of strides that are fixed during iteration into <paramref name="outStrides"/>.
-        /// Matches NumPy's NpyIter_GetInnerFixedStrideArray (nditer_api.c:1357).
-        ///
-        /// - Buffered: copies <see cref="NpyIterState.BufStrides"/> (one entry per operand).
-        /// - Non-buffered: copies the innermost-axis stride from <see cref="NpyIterState.Strides"/>
-        ///   (equivalent to NumPy's NAD_STRIDES(axisdata[0]) in its reverse-C ordering).
-        ///
-        /// Once the iterator is ready to iterate, call this to obtain strides guaranteed
-        /// not to change between inner-loop iterations — enabling the caller to choose an
-        /// optimized inner loop function.
-        ///
-        /// GIL-safe (no allocation, no exceptions under valid inputs).
-        /// </summary>
-        /// <param name="outStrides">Output span of length ≥ NOp.</param>
-        /// <summary>
         /// Dumps a verbose textual representation of the iterator's internal state to
         /// the specified TextWriter. Matches NumPy's NpyIter_DebugPrint (nditer_api.c:1402)
         /// format as closely as possible.
@@ -1834,6 +1819,15 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        /// <summary>
+        /// Copies the array of strides that are fixed during iteration into <paramref name="outStrides"/>.
+        /// Matches NumPy's NpyIter_GetInnerFixedStrideArray (nditer_api.c:1357).
+        ///
+        /// Buffered iterators copy <see cref="NpyIterState.BufStrides"/>. Non-buffered iterators
+        /// copy the innermost-axis stride from <see cref="NpyIterState.Strides"/> and convert it
+        /// to bytes.
+        /// </summary>
+        /// <param name="outStrides">Output span of length at least NOp.</param>
         public void GetInnerFixedStrideArray(scoped Span<long> outStrides)
         {
             if (outStrides.Length < _state->NOp)
@@ -2967,7 +2961,7 @@ namespace NumSharp.Backends.Iteration
                 newStatePtr->CoreOffset = _state->CoreOffset;
 
                 // ALWAYS allocate new arrays (both dimension and operand arrays are dynamic now)
-                newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp);
+                newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp, _state->StridesNDim);
 
                 // Copy dimension arrays (if NDim > 0)
                 if (_state->NDim > 0)
@@ -3003,11 +2997,28 @@ namespace NumSharp.Backends.Iteration
                     newStatePtr->ElementSizes[op] = _state->ElementSizes[op];
                     newStatePtr->SrcElementSizes[op] = _state->SrcElementSizes[op];
                     newStatePtr->InnerStrides[op] = _state->InnerStrides[op];
-                    newStatePtr->Buffers[op] = _state->Buffers[op];
                     newStatePtr->BufStrides[op] = _state->BufStrides[op];
                     newStatePtr->ReduceOuterStrides[op] = _state->ReduceOuterStrides[op];
                     newStatePtr->ReduceOuterPtrs[op] = _state->ReduceOuterPtrs[op];
                     newStatePtr->ArrayWritebackPtrs[op] = _state->ArrayWritebackPtrs[op];
+
+                    var sourceBuffer = (void*)_state->Buffers[op];
+                    if (sourceBuffer != null)
+                    {
+                        var buffer = NpyIterBufferManager.AllocateAligned(_state->BufferSize, (NPTypeCode)_state->OpDTypes[op]);
+                        if (buffer == null)
+                            throw new OutOfMemoryException("Failed to allocate iterator copy buffer.");
+
+                        var bytes = _state->BufferSize * _state->ElementSizes[op];
+                        Buffer.MemoryCopy(sourceBuffer, buffer, bytes, bytes);
+                        newStatePtr->Buffers[op] = (long)buffer;
+
+                        var dataPtr = _state->DataPtrs[op];
+                        var bufferStart = _state->Buffers[op];
+                        var bufferEnd = bufferStart + bytes;
+                        if (dataPtr >= bufferStart && dataPtr < bufferEnd)
+                            newStatePtr->DataPtrs[op] = (long)buffer + (dataPtr - bufferStart);
+                    }
                 }
 
                 // Create new iterator owning the state
@@ -3021,6 +3032,8 @@ namespace NumSharp.Backends.Iteration
             }
             catch
             {
+                if ((newStatePtr->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
+                    NpyIterBufferManager.FreeBuffers(ref *newStatePtr);
                 newStatePtr->FreeDimArrays();
                 NativeMemory.Free(newStatePtr);
                 throw;
