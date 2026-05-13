@@ -260,7 +260,7 @@ namespace NumSharp.Backends.Unmanaged
             if ((uint)Count > (uint)destination.Length)
                 return false;
 
-            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            Buffer.MemoryCopy(Address, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, Count * ItemLength);
             return true;
         }
 
@@ -270,7 +270,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             if ((uint)Count <= (uint)destination.Length)
             {
-                Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+                Buffer.MemoryCopy(Address, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, Count * ItemLength);
             }
             else
             {
@@ -290,7 +290,8 @@ namespace NumSharp.Backends.Unmanaged
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
             // we can optimize by performing the check once ourselves then calling Memmove directly.
 
-            Buffer.MemoryCopy((void*)dst, Address, Count, Count);
+            var bytes = Count * ItemLength;
+            Buffer.MemoryCopy(Address, (void*)dst, bytes, bytes);
         }
 
         /// <summary>
@@ -304,8 +305,15 @@ namespace NumSharp.Backends.Unmanaged
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
             // we can optimize by performing the check once ourselves then calling Memmove directly.
-            var len = Count * ItemLength;
-            Buffer.MemoryCopy((void*)dst, Address, len, len);
+            if (sourceOffset < 0)
+                throw new ArgumentOutOfRangeException(nameof(sourceOffset));
+            if (sourceCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(sourceCount));
+            if ((ulong)sourceOffset > (ulong)Count || (ulong)sourceCount > (ulong)(Count - sourceOffset))
+                throw new ArgumentOutOfRangeException(nameof(sourceCount));
+
+            var bytes = sourceCount * ItemLength;
+            Buffer.MemoryCopy(Address + sourceOffset, (void*)dst, bytes, bytes);
         }
 
         /// <param name="destination"></param>
@@ -322,7 +330,12 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public void CopyTo(Span<T> destination, long sourceOffset, long sourceLength)
         {
-            CopyTo(destination, sourceOffset, sourceLength);
+            if ((ulong)sourceOffset > (ulong)Count || (ulong)sourceLength > (ulong)(Count - sourceOffset))
+                throw new ArgumentOutOfRangeException();
+            if ((ulong)sourceLength > (ulong)destination.Length)
+                throw new ArgumentException("Destination was too short.");
+
+            Buffer.MemoryCopy(Address + sourceOffset, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, sourceLength * ItemLength);
         }
 
         /// <summary>
@@ -336,7 +349,7 @@ namespace NumSharp.Backends.Unmanaged
             if ((ulong)Count > (ulong)destination.Length)
                 return false;
 
-            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            Buffer.MemoryCopy(Address, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, Count * ItemLength);
             return true;
         }
 
@@ -350,7 +363,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             if ((ulong)Count <= (ulong)destination.Length)
             {
-                Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+                Buffer.MemoryCopy(Address, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, Count * ItemLength);
             }
             else
             {
@@ -385,7 +398,7 @@ namespace NumSharp.Backends.Unmanaged
             if ((ulong)sourceLength > (ulong)destination.Length)
                 throw new ArgumentException("Destination was too short.");
 
-            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address + sourceOffset, destination.Length * ItemLength, sourceLength * ItemLength);
+            Buffer.MemoryCopy(Address + sourceOffset, Unsafe.AsPointer(ref destination.GetPinnableReference()), destination.Length * ItemLength, sourceLength * ItemLength);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -459,7 +472,12 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="destination"></param>
         void IArraySlice.CopyTo<T1>(Span<T1> destination)
         {
-            this.CopyTo(Unsafe.AsPointer(ref destination.GetPinnableReference()));
+            var sourceBytes = Count * ItemLength;
+            var destinationBytes = destination.Length * InfoOf<T1>.Size;
+            if ((ulong)sourceBytes > (ulong)destinationBytes)
+                throw new ArgumentException("Destination was too short.");
+
+            Buffer.MemoryCopy(VoidAddress, Unsafe.AsPointer(ref destination.GetPinnableReference()), destinationBytes, sourceBytes);
         }
 
         /// <summary>
@@ -469,9 +487,11 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="destination"></param>
         void IArraySlice.CopyTo<T1>(UnmanagedSpan<T1> destination)
         {
-            if ((ulong)Count > (ulong)destination.Length)
+            var sourceBytes = Count * ItemLength;
+            var destinationBytes = destination.Length * InfoOf<T1>.Size;
+            if ((ulong)sourceBytes > (ulong)destinationBytes)
                 throw new ArgumentException("Destination was too short.");
-            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), VoidAddress, destination.Length * InfoOf<T1>.Size, Count * ItemLength);
+            Buffer.MemoryCopy(VoidAddress, Unsafe.AsPointer(ref destination.GetPinnableReference()), destinationBytes, sourceBytes);
         }
 
         /// <summary>
@@ -482,7 +502,15 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         IArraySlice IArraySlice.Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
-        ArraySlice<T1> IArraySlice.Clone<T1>() => new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(Address, Count));
+        ArraySlice<T1> IArraySlice.Clone<T1>()
+        {
+            var sourceBytes = Count * ItemLength;
+            var targetSize = InfoOf<T1>.Size;
+            if (sourceBytes % targetSize != 0)
+                throw new InvalidOperationException($"Cannot reinterpret {sourceBytes} bytes as {typeof(T1).Name} elements.");
+
+            return new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(VoidAddress, sourceBytes / targetSize));
+        }
 
         object ICloneable.Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 

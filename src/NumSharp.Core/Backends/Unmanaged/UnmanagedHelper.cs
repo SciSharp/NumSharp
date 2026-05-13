@@ -45,11 +45,11 @@ namespace NumSharp.Backends.Unmanaged
             if (dst.TypeCode != src.TypeCode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (src.Count > dst.Count)
+            if ((ulong)countOffsetDestination > (ulong)dst.Count || src.Count > dst.Count - countOffsetDestination)
                 throw new ArgumentOutOfRangeException(nameof(dst), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
 
             var bytesCount = src.BytesLength;
-            Buffer.MemoryCopy(src.Address, (byte*)dst.Address + countOffsetDestination * dst.ItemLength, bytesCount, bytesCount);
+            Buffer.MemoryCopy(src.Address, (byte*)dst.Address + countOffsetDestination * dst.ItemLength, (dst.Count - countOffsetDestination) * dst.ItemLength, bytesCount);
         }
 
         /// <summary>

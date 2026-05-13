@@ -825,7 +825,12 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, long arrayIndex)
         {
             //TODO! at netcore 3, AsSpan.CopyTo might be faster.
-            Buffer.MemoryCopy(Address + arrayIndex, memoryBlock.Address, InfoOf<T>.Size * memoryBlock.Count, InfoOf<T>.Size * (Count - arrayIndex));
+            if (memoryBlock == null)
+                throw new ArgumentNullException(nameof(memoryBlock));
+            if ((ulong)arrayIndex > (ulong)memoryBlock.Count || Count > memoryBlock.Count - arrayIndex)
+                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+
+            Buffer.MemoryCopy(Address, memoryBlock.Address + arrayIndex, InfoOf<T>.Size * (memoryBlock.Count - arrayIndex), InfoOf<T>.Size * Count);
         }
 
         [MethodImpl(Optimize)]
