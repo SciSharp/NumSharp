@@ -8,7 +8,7 @@
             if (a.size == 0 || a.Shape.IsEmpty)
                 return a;
 
-            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis)));
+            return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
         }
     }
 }

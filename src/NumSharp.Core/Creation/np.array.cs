@@ -21,7 +21,10 @@ namespace NumSharp
         /// <param name="nd"></param>
         /// <param name="copy">If <paramref name="copy"/> is true then returns a clone.</param>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array(NDArray nd, bool copy = false) => copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
+        public static NDArray array(NDArray nd, bool copy = false) =>
+            copy
+                ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
+                : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
 
         /// <summary>
         ///     Creates a scalar (0-dimensional) <see cref="NDArray"/> from a single value.

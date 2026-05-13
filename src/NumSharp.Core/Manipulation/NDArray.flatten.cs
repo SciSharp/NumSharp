@@ -29,10 +29,10 @@ namespace NumSharp
                 // as a 1-D array. copy('F') already allocated a fresh MemoryBlock that
                 // nothing else references, so we reuse the ArraySlice directly.
                 var fcopy = this.copy('F');
-                return new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size)));
+                return new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine };
             }
 
-            return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size)));
+            return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine };
         }
     }
 }

@@ -46,7 +46,7 @@ namespace NumSharp
             var fFlat = this.flatten('F');
             var dims = (long[])newShape.Dimensions.Clone();
             var fShape = new Shape(dims, 'F');
-            return new NDArray(new UnmanagedStorage(fFlat.Storage.InternalArray, fShape));
+            return new NDArray(new UnmanagedStorage(fFlat.Storage.InternalArray, fShape)) { TensorEngine = TensorEngine };
         }
 
         /// <summary>
@@ -62,7 +62,7 @@ namespace NumSharp
             if (!Shape.IsContiguous)
             {
                 // Clone data to contiguous, then reshape the clean copy
-                var copy = new NDArray(CloneData(), Shape.Clean());
+                var copy = new NDArray(CloneData(), Shape.Clean()) { TensorEngine = TensorEngine };
                 return copy.reshape(ref newShape);
             }
 
@@ -103,7 +103,7 @@ namespace NumSharp
             if (!Shape.IsContiguous)
             {
                 // Clone data to contiguous, then reshape the clean copy
-                var copy = new NDArray(CloneData(), Shape.Clean());
+                var copy = new NDArray(CloneData(), Shape.Clean()) { TensorEngine = TensorEngine };
                 return copy.reshape(shape);
             }
 
