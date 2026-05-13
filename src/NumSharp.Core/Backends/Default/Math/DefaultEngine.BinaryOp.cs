@@ -35,24 +35,30 @@ namespace NumSharp.Backends
                 resultType = NPTypeCode.Double;
             }
 
-            // NumPy Power type promotion rules (special cases):
-            // - int^float → float64 (regardless of float precision)
-            // - float32^float64 → float64 (promoted)
-            // - float32^int → float32 (preserved, matches Python int behavior)
-            // - float32^float32 → float32 (preserved)
-            // - float64^* → float64 (preserved)
-            // - int^int → int (preserved)
+            // NumPy Power promotion (NEP50). Most cases are already handled by
+            // _FindCommonType (which applies weak/strict scalar rules correctly):
+            //   - i32_arr ** i32_arr  → int32
+            //   - i32_arr ** i64_arr  → int64
+            //   - f32_arr ** f64_arr  → float64
+            //   - f32_arr ** i32_arr  → float64 (NEP50 strict)
+            //   - f32_arr ** Python int (0-D weak) → float32 (NEP50 weak)
+            //   - i32_arr ** f32_scalar (cross-array)  → float64 (handled below)
             //
-            // Note: NumPy has a subtle distinction where float32^np.int32 → float64, but
-            // float32^2 (Python int) → float32. Since C# int maps to Python int semantics,
-            // we preserve float32 for int exponents. This matches the common use case.
+            // The one rule _FindCommonType doesn't cover is `int_scalar ** float_arr`:
+            // a 0-D int scalar is treated as "weak", which preserves the float's dtype,
+            // but NumPy's int-base + float-exp rule promotes unconditionally to float64.
+            // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
+            //
+            // Known limitation: explicit 0-D integer arrays (`np.array(2, int32)`)
+            // are indistinguishable from C# `int 2` after `np.asanyarray`. NumPy would
+            // strict-promote `f32_arr ** np.int32(2)` to float64; NumSharp preserves
+            // float32 for both `f32_arr ** 2` (correct) and `f32_arr ** np.array(2, int32)`
+            // (misaligned with NumPy but rare in idiomatic C# code).
             if (op == BinaryOp.Power)
             {
                 var lhsGroup = lhsType.GetGroup();
                 var rhsGroup = rhsType.GetGroup();
 
-                // int base with float exponent → always float64
-                // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
                 if (lhsGroup <= 2 && rhsGroup == 3)
                 {
                     resultType = NPTypeCode.Double;

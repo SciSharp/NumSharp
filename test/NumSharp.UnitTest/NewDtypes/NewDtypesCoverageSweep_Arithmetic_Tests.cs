@@ -148,26 +148,26 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        public void B35_SByte_Power_NegativeExponent_BaseGt1_ReturnsZero()
+        public void B35_SByte_Power_NegativeExponent_BaseGt1_Throws()
         {
-            // NumPy: np.array([2], i8) ** np.array([-1], i8) = 0 (integer reciprocal)
+            // NumPy: np.array([2], i8) ** np.array([-1], i8) raises ValueError.
+            // (Previous NumSharp behavior silently returned 0 — fixed under audit-v2-T1.36.)
             var a = np.array(new sbyte[] { 2, 100 });
             var b = np.array(new sbyte[] { -1, -3 });
-            var r = np.power(a, b);
-            r.GetAtIndex<sbyte>(0).Should().Be((sbyte)0);
-            r.GetAtIndex<sbyte>(1).Should().Be((sbyte)0);
+            Action act = () => np.power(a, b);
+            act.Should().Throw<ArgumentException>()
+                .WithMessage("*negative integer powers*");
         }
 
         [TestMethod]
-        public void B35_SByte_Power_NegativeExponent_BaseIs1_OrMinus1()
+        public void B35_SByte_Power_NegativeExponent_BaseIs1_StillThrows()
         {
-            // 1^(-anything) = 1; (-1)^(-n) alternates ±1 per parity of n
+            // NumPy throws unconditionally for negative integer exponents — no special
+            // case for base ∈ {-1, 1} even though the answer would be representable.
             var a = np.array(new sbyte[] { 1, -1, -1 });
             var b = np.array(new sbyte[] { -5, -2, -3 });
-            var r = np.power(a, b);
-            r.GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
-            r.GetAtIndex<sbyte>(1).Should().Be((sbyte)1);   // (-1)^(-2) = (-1)^2 = 1
-            r.GetAtIndex<sbyte>(2).Should().Be((sbyte)(-1)); // (-1)^(-3) = (-1)^3 = -1
+            Action act = () => np.power(a, b);
+            act.Should().Throw<ArgumentException>();
         }
 
         [TestMethod]

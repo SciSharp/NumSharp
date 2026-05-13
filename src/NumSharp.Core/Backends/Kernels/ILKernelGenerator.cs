@@ -295,10 +295,43 @@ namespace NumSharp.Backends.Kernels
             // Math methods (double versions)
             public static readonly MethodInfo MathPow = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Pow));
+            public static readonly MethodInfo MathFPow = typeof(MathF).GetMethod(nameof(MathF.Pow), new[] { typeof(float), typeof(float) })
+                ?? throw new MissingMethodException(typeof(MathF).FullName, nameof(MathF.Pow));
             public static readonly MethodInfo MathFloor = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Floor));
             public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
+
+            // Integer power helpers (squared-exponentiation with native wrapping).
+            // Used by EmitPowerOperation when result type is integer to preserve
+            // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
+            public static readonly MethodInfo IntPowSByte = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowSByte), new[] { typeof(sbyte), typeof(sbyte) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowSByte));
+            public static readonly MethodInfo IntPowByte = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowByte), new[] { typeof(byte), typeof(byte) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowByte));
+            public static readonly MethodInfo IntPowInt16 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowInt16), new[] { typeof(short), typeof(short) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt16));
+            public static readonly MethodInfo IntPowUInt16 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowUInt16), new[] { typeof(ushort), typeof(ushort) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt16));
+            public static readonly MethodInfo IntPowChar = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowChar), new[] { typeof(char), typeof(char) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowChar));
+            public static readonly MethodInfo IntPowInt32 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowInt32), new[] { typeof(int), typeof(int) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt32));
+            public static readonly MethodInfo IntPowUInt32 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowUInt32), new[] { typeof(uint), typeof(uint) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt32));
+            public static readonly MethodInfo IntPowInt64 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowInt64), new[] { typeof(long), typeof(long) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt64));
+            public static readonly MethodInfo IntPowUInt64 = typeof(Utilities.NpyIntegerPower).GetMethod(
+                nameof(Utilities.NpyIntegerPower.PowUInt64), new[] { typeof(ulong), typeof(ulong) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt64));
 
             // Decimal conversion methods (to decimal)
             public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
@@ -1081,46 +1114,78 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Power operation using Math.Pow.
+        /// Emit Power operation.
         /// Stack: [base, exponent] -> [result]
+        ///
+        /// For integer result types, calls <see cref="Utilities.NpyIntegerPower"/> to
+        /// preserve dtype-native wrapping (matches NumPy's per-dtype integer power loop).
+        /// For float32 result, uses MathF.Pow (single-precision, no f64 round-trip).
+        /// For float64 result, uses Math.Pow.
+        /// For any other result type that reaches this emit (e.g. Boolean), falls back to
+        /// double round-trip to keep the kernel verifiable.
         /// </summary>
         private static void EmitPowerOperation(ILGenerator il, NPTypeCode resultType)
         {
-            // Math.Pow(double, double) -> double
-            // We need to convert both operands to double, call Math.Pow, then convert back
-
             // Stack has: base (resultType), exponent (resultType)
-            // We need to convert both to double for Math.Pow
+            //
+            // Integer result types use the NpyIntegerPower helpers (squared-exp with
+            // native wrapping). The helpers expect non-negative exponents; the caller
+            // (DefaultEngine.Power) is responsible for the neg-exp ValueError pre-check.
+            var intPow = GetIntegerPowMethod(resultType);
+            if (intPow != null)
+            {
+                il.EmitCall(OpCodes.Call, intPow, null);
+                return;
+            }
 
-            // Store exponent temporarily
+            // float32 result → MathF.Pow (single-precision, matches NumPy powf)
+            if (resultType == NPTypeCode.Single)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.MathFPow, null);
+                return;
+            }
+
+            // float64 result → Math.Pow directly (operands already double on stack).
+            if (resultType == NPTypeCode.Double)
+            {
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+                return;
+            }
+
+            // Fallback (e.g. Boolean as result type): convert to double, call Math.Pow,
+            // convert back. Keeps IL verification happy for non-numeric promotion targets.
             var locExp = il.DeclareLocal(GetClrType(resultType));
             il.Emit(OpCodes.Stloc, locExp);
-
-            // Convert base to double
-            if (resultType != NPTypeCode.Double)
-            {
-                if (IsUnsigned(resultType))
-                    il.Emit(OpCodes.Conv_R_Un);
-                il.Emit(OpCodes.Conv_R8);
-            }
-
-            // Load and convert exponent to double
+            if (IsUnsigned(resultType))
+                il.Emit(OpCodes.Conv_R_Un);
+            il.Emit(OpCodes.Conv_R8);
             il.Emit(OpCodes.Ldloc, locExp);
-            if (resultType != NPTypeCode.Double)
-            {
-                if (IsUnsigned(resultType))
-                    il.Emit(OpCodes.Conv_R_Un);
-                il.Emit(OpCodes.Conv_R8);
-            }
-
-            // Call Math.Pow(double, double)
+            if (IsUnsigned(resultType))
+                il.Emit(OpCodes.Conv_R_Un);
+            il.Emit(OpCodes.Conv_R8);
             il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
+            EmitConvertFromDouble(il, resultType);
+        }
 
-            // Convert result back to target type
-            if (resultType != NPTypeCode.Double)
+        /// <summary>
+        /// Return the integer-power helper MethodInfo for <paramref name="resultType"/>,
+        /// or null when the result dtype is not integer (caller falls back to float power).
+        /// </summary>
+        private static MethodInfo? GetIntegerPowMethod(NPTypeCode resultType)
+        {
+            return resultType switch
             {
-                EmitConvertFromDouble(il, resultType);
-            }
+                NPTypeCode.SByte => CachedMethods.IntPowSByte,
+                NPTypeCode.Byte => CachedMethods.IntPowByte,
+                NPTypeCode.Int16 => CachedMethods.IntPowInt16,
+                NPTypeCode.UInt16 => CachedMethods.IntPowUInt16,
+                NPTypeCode.Char => CachedMethods.IntPowChar,
+                NPTypeCode.Int32 => CachedMethods.IntPowInt32,
+                NPTypeCode.UInt32 => CachedMethods.IntPowUInt32,
+                NPTypeCode.Int64 => CachedMethods.IntPowInt64,
+                NPTypeCode.UInt64 => CachedMethods.IntPowUInt64,
+                _ => null
+            };
         }
 
         /// <summary>

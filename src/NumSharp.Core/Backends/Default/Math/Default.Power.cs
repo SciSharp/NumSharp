@@ -1,6 +1,5 @@
-﻿using System;
+using System;
 using NumSharp.Backends.Kernels;
-using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -13,23 +12,54 @@ namespace NumSharp.Backends
             => Power(lhs, rhs, dtype?.GetTypeCode());
 
         /// <summary>
-        /// Element-wise power with array exponents: x1 ** x2
-        /// Uses ExecuteBinaryOp with BinaryOp.Power for broadcasting support.
-        /// NumPy rule: for integer types, the result wraps modulo the dtype range
-        /// (not promoted through double, which loses precision for large exponents).
+        /// Element-wise power: <c>x1 ** x2</c>, NumPy-aligned.
+        ///
+        /// Promotion / dispatch (NEP50, matches numpy 2.x):
+        ///   - int^int        → integer result, dtype-native wrap (e.g. uint8 ** 8 = 0).
+        ///                      Negative exponent rejected: NumPy raises ValueError unconditionally
+        ///                      ("Integers to negative integer powers are not allowed.").
+        ///   - int^float      → float64 (mirrors NumPy's int-base / np-float-exp rule).
+        ///   - float^np.int   → float64 (NEP50 strict promotion: float32 ** np.int32 → float64).
+        ///   - float^float    → wider float; float32 ** float32 → float32.
+        ///   - complex^*      → complex128 (via Complex.Pow).
+        ///   - decimal^*      → decimal (via DecimalMath.Pow).
+        ///
+        /// Stride/layout: routes through <c>ExecuteBinaryOp</c>, which handles
+        /// contiguous + sliced + broadcast + F-contig via the IL kernel's
+        /// SimdFull/SimdScalarRight/SimdScalarLeft/SimdChunk/General paths.
+        /// The integer kernel calls <see cref="Utilities.NpyIntegerPower"/> for
+        /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
         public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null)
         {
-            // NumPy integer pow wraps modulo the dtype range. The existing IL kernel
-            // routes through Math.Pow(double, double) and loses precision for values
-            // outside [-2^52, 2^52] (large int^int results). Use native integer
-            // exponentiation for same-dtype integer inputs to preserve wrapping.
-            if (!typeCode.HasValue
-                && lhs.GetTypeCode == rhs.GetTypeCode
-                && lhs.GetTypeCode.IsInteger()
-                && lhs.shape.SequenceEqual(rhs.shape))
+            // NumPy rule: signed integer exponents cannot be negative when the loop is
+            // integer**integer. The check is on the exponent, regardless of base value
+            // (NumPy throws even for base=1 or base=-1 where the answer would be exact).
+            if (lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger() && IsSignedInteger(rhs.GetTypeCode))
             {
-                return PowerInteger(lhs, rhs);
+                if (ContainsNegative(rhs))
+                    throw new ArgumentException("Integers to negative integer powers are not allowed.");
+            }
+
+            // Scalar-exponent fast paths (mirror NumPy's loops.c.src constant-time bodies):
+            //   - exp = 0 → ones_like(lhs) in result dtype
+            //   - exp = 1 → lhs (cast to result dtype if needed)
+            //   - exp = 2 → lhs * lhs (uses SIMD Multiply kernel)
+            //   - exp = 0.5 (float)  → sqrt(lhs)
+            //   - exp = -1.0 (float) → reciprocal(lhs)
+            // Only triggered when:
+            //   - rhs has size == 1 (scalar or 1-element array), AND
+            //   - the trivially-substituted op produces the same result dtype the
+            //     general Power path would.
+            if (rhs.size == 1)
+            {
+                var fast = TryScalarExponentFastPath(lhs, rhs);
+                if (fast is not null)
+                {
+                    if (typeCode.HasValue && fast.typecode != typeCode.Value)
+                        return Cast(fast, typeCode.Value, copy: false);
+                    return fast;
+                }
             }
 
             var result = ExecuteBinaryOp(lhs, rhs, BinaryOp.Power);
@@ -39,152 +69,174 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// NumPy-style integer exponentiation with dtype wraparound. Matches NumPy:
-        ///   - negative exponent with |base| > 1: 0 (integer reciprocal truncation)
-        ///   - negative exponent with base == 1: 1
-        ///   - negative exponent with base == -1: ±1 based on exp parity
-        ///   - negative exponent with base == 0: NumPy raises "0 cannot be raised to a negative power"
-        ///     but with seterr=ignore it returns 0; we return 0 to match seterr=ignore behavior.
-        ///   - non-negative exponent: repeated multiplication with native wrapping.
+        /// Try the scalar-exponent fast paths. Returns null if the exponent value isn't
+        /// in {0, 1, 2, 0.5, -1.0} or if the fast substitution would produce a different
+        /// dtype than the regular Power path.
         /// </summary>
-        private static NDArray PowerInteger(NDArray lhs, NDArray rhs)
+        private NDArray TryScalarExponentFastPath(NDArray lhs, NDArray rhs)
         {
-            var tc = lhs.GetTypeCode;
-            var result = new NDArray(tc, new Shape((long[])lhs.shape.Clone()), false);
-            long n = lhs.size;
-            unsafe
+            var rhsTc = rhs.GetTypeCode;
+            var lhsTc = lhs.GetTypeCode;
+
+            // exp = 0 — works for integer or float exponent
+            if (IsScalarValueZero(rhs))
             {
-                switch (tc)
+                // ones_like preserves lhs dtype. The general Power path would promote
+                // by _FindCommonType(lhs, rhs); if that promotion differs from lhs's
+                // dtype the fast path would be wrong — bail out and use the slow path.
+                var resultType = ResolvePowerResultType(lhs, rhs);
+                if (resultType == lhsTc)
+                    return np.ones_like(lhs);
+                return null;
+            }
+
+            // exp = 1 — works for integer or float exponent. Returns lhs (in result dtype).
+            if (IsScalarValueOne(rhs))
+            {
+                var resultType = ResolvePowerResultType(lhs, rhs);
+                return resultType == lhsTc ? lhs.copy() : Cast(lhs, resultType, copy: true);
+            }
+
+            // exp = 2 — multiplication path (SIMD-optimized). Returns lhs * lhs.
+            // The general Power path promotes via _FindCommonType; we route through
+            // Multiply(lhs, lhs) so the result dtype is lhs's own dtype. For mixed-dtype
+            // Power (e.g. f32_arr ** int32_scalar where NEP50 says result is f64),
+            // bail out unless the resolved result type equals lhs's type.
+            if (IsScalarValueTwo(rhs))
+            {
+                var resultType = ResolvePowerResultType(lhs, rhs);
+                if (resultType == lhsTc)
+                    return Multiply(lhs, lhs);
+                return null;
+            }
+
+            // Float-only fast paths: exp = 0.5 (sqrt) and exp = -1.0 (reciprocal).
+            // Only fire when rhs is a float dtype with the exact constant value.
+            if (rhsTc == NPTypeCode.Single || rhsTc == NPTypeCode.Double || rhsTc == NPTypeCode.Half)
+            {
+                double v = ReadScalarAsDouble(rhs);
+                if (v == 0.5)
                 {
-                    case NPTypeCode.SByte:
-                    {
-                        var a = (sbyte*)lhs.Unsafe.Address;
-                        var b = (sbyte*)rhs.Unsafe.Address;
-                        var d = (sbyte*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowSByte(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.Byte:
-                    {
-                        var a = (byte*)lhs.Unsafe.Address;
-                        var b = (byte*)rhs.Unsafe.Address;
-                        var d = (byte*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowByte(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.Int16:
-                    {
-                        var a = (short*)lhs.Unsafe.Address;
-                        var b = (short*)rhs.Unsafe.Address;
-                        var d = (short*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowInt16(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.UInt16:
-                    {
-                        var a = (ushort*)lhs.Unsafe.Address;
-                        var b = (ushort*)rhs.Unsafe.Address;
-                        var d = (ushort*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowUInt16(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.Int32:
-                    {
-                        var a = (int*)lhs.Unsafe.Address;
-                        var b = (int*)rhs.Unsafe.Address;
-                        var d = (int*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowInt32(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.UInt32:
-                    {
-                        var a = (uint*)lhs.Unsafe.Address;
-                        var b = (uint*)rhs.Unsafe.Address;
-                        var d = (uint*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowUInt32(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.Int64:
-                    {
-                        var a = (long*)lhs.Unsafe.Address;
-                        var b = (long*)rhs.Unsafe.Address;
-                        var d = (long*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowInt64(a[i], b[i]);
-                        break;
-                    }
-                    case NPTypeCode.UInt64:
-                    {
-                        var a = (ulong*)lhs.Unsafe.Address;
-                        var b = (ulong*)rhs.Unsafe.Address;
-                        var d = (ulong*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) d[i] = PowUInt64(a[i], b[i]);
-                        break;
-                    }
-                    default:
-                        throw new NotSupportedException($"Integer power not supported for {tc}");
+                    // np.sqrt promotes int -> float64 the same way as power would,
+                    // and preserves float dtypes (f32 -> f32, f64 -> f64).
+                    return np.sqrt(lhs);
+                }
+                if (v == -1.0 && lhsTc.IsFloatingPoint())
+                {
+                    // np.reciprocal preserves float dtype. For integer base we'd need to
+                    // promote, which the general path handles — let it through.
+                    return np.reciprocal(lhs);
                 }
             }
-            return result;
+
+            return null;
         }
 
-        // Core repeated-squaring with native wrapping. Exponents cast to long to avoid
-        // signed-overflow issues inside the loop counter.
-        private static sbyte PowSByte(sbyte a, sbyte b)
+        /// <summary>
+        /// Read a size-1 NDArray's scalar value as double, regardless of dtype or rank.
+        /// </summary>
+        private static double ReadScalarAsDouble(NDArray nd)
         {
-            if (b < 0) return a == 1 ? (sbyte)1 : a == -1 ? ((b & 1) == 0 ? (sbyte)1 : (sbyte)-1) : (sbyte)0;
-            sbyte r = 1;
-            sbyte x = a;
-            long e = b;
-            unchecked
+            object v = nd.GetAtIndex(0);
+            return Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static NPTypeCode ResolvePowerResultType(NDArray lhs, NDArray rhs)
+        {
+            // Use the NDArray overload so the weak/strict scalar rule (size-1 0-D as weak)
+            // matches what ExecuteBinaryOp uses; otherwise the fast path would bail out
+            // whenever NumSharp's promotion preserves the float dtype against a 0-D int.
+            var resultType = np._FindCommonType(lhs, rhs);
+            if (lhs.GetTypeCode.GetGroup() <= 2 && rhs.GetTypeCode.GetGroup() == 3)
+                resultType = NPTypeCode.Double;
+            return resultType;
+        }
+
+        private static bool IsScalarValueZero(NDArray rhs) => ScalarEqualsExact(rhs, 0.0);
+        private static bool IsScalarValueOne(NDArray rhs) => ScalarEqualsExact(rhs, 1.0);
+        private static bool IsScalarValueTwo(NDArray rhs) => ScalarEqualsExact(rhs, 2.0);
+
+        /// <summary>
+        /// Compare a size-1 NDArray's value against an exact double constant. Skips Complex
+        /// (the fast paths don't apply) and returns false for non-numeric or unknown dtypes.
+        /// </summary>
+        private static bool ScalarEqualsExact(NDArray rhs, double target)
+        {
+            switch (rhs.GetTypeCode)
             {
-                while (e > 0) { if ((e & 1) == 1) r = (sbyte)(r * x); e >>= 1; if (e > 0) x = (sbyte)(x * x); }
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                case NPTypeCode.Decimal:
+                    return ReadScalarAsDouble(rhs) == target;
+                default:
+                    return false;
             }
-            return r;
         }
-        private static byte PowByte(byte a, byte b)
+
+        private static bool IsSignedInteger(NPTypeCode tc)
+            => tc == NPTypeCode.SByte
+            || tc == NPTypeCode.Int16
+            || tc == NPTypeCode.Int32
+            || tc == NPTypeCode.Int64;
+
+        /// <summary>
+        /// Stride/broadcast-aware scan for any negative element in a signed integer array.
+        /// Mirrors numpy's per-element check in <c>@TYPE@_power</c> but hoisted to a single
+        /// pre-pass so the inner kernel stays branch-free.
+        /// </summary>
+        private static bool ContainsNegative(NDArray nd)
         {
-            byte r = 1, x = a; long e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = (byte)(r * x); e >>= 1; if (e > 0) x = (byte)(x * x); } }
-            return r;
+            switch (nd.GetTypeCode)
+            {
+                case NPTypeCode.SByte: return AnyNegativeSByte(nd);
+                case NPTypeCode.Int16: return AnyNegativeInt16(nd);
+                case NPTypeCode.Int32: return AnyNegativeInt32(nd);
+                case NPTypeCode.Int64: return AnyNegativeInt64(nd);
+                default: return false;
+            }
         }
-        private static short PowInt16(short a, short b)
+
+        private static bool AnyNegativeSByte(NDArray nd)
         {
-            if (b < 0) return a == 1 ? (short)1 : a == -1 ? ((b & 1) == 0 ? (short)1 : (short)-1) : (short)0;
-            short r = 1, x = a; long e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = (short)(r * x); e >>= 1; if (e > 0) x = (short)(x * x); } }
-            return r;
+            long n = nd.size;
+            for (long i = 0; i < n; i++)
+                if (nd.GetSByte(i) < 0) return true;
+            return false;
         }
-        private static ushort PowUInt16(ushort a, ushort b)
+
+        private static bool AnyNegativeInt16(NDArray nd)
         {
-            ushort r = 1, x = a; long e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = (ushort)(r * x); e >>= 1; if (e > 0) x = (ushort)(x * x); } }
-            return r;
+            long n = nd.size;
+            for (long i = 0; i < n; i++)
+                if (nd.GetInt16(i) < 0) return true;
+            return false;
         }
-        private static int PowInt32(int a, int b)
+
+        private static bool AnyNegativeInt32(NDArray nd)
         {
-            if (b < 0) return a == 1 ? 1 : a == -1 ? ((b & 1) == 0 ? 1 : -1) : 0;
-            int r = 1, x = a; long e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = r * x; e >>= 1; if (e > 0) x = x * x; } }
-            return r;
+            long n = nd.size;
+            for (long i = 0; i < n; i++)
+                if (nd.GetInt32(i) < 0) return true;
+            return false;
         }
-        private static uint PowUInt32(uint a, uint b)
+
+        private static bool AnyNegativeInt64(NDArray nd)
         {
-            uint r = 1, x = a; long e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = r * x; e >>= 1; if (e > 0) x = x * x; } }
-            return r;
-        }
-        private static long PowInt64(long a, long b)
-        {
-            if (b < 0) return a == 1 ? 1L : a == -1 ? ((b & 1) == 0 ? 1L : -1L) : 0L;
-            long r = 1, x = a, e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = r * x; e >>= 1; if (e > 0) x = x * x; } }
-            return r;
-        }
-        private static ulong PowUInt64(ulong a, ulong b)
-        {
-            ulong r = 1, x = a, e = b;
-            unchecked { while (e > 0) { if ((e & 1) == 1) r = r * x; e >>= 1; if (e > 0) x = x * x; } }
-            return r;
+            long n = nd.size;
+            for (long i = 0; i < n; i++)
+                if (nd.GetInt64(i) < 0) return true;
+            return false;
         }
     }
 }
