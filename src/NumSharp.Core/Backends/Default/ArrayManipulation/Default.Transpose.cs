@@ -193,7 +193,7 @@ namespace NumSharp.Backends
             var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
 
             // Return an alias (view) with the permuted shape
-            return new NDArray(nd.Storage.Alias(newShape));
+            return new NDArray(nd.Storage.Alias(newShape)) { TensorEngine = nd.TensorEngine };
         }
     }
 }
