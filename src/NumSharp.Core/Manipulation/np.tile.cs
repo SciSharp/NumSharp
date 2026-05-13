@@ -14,7 +14,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="A">The input array.</param>
         /// <param name="reps">The number of repetitions of A along each axis. Each rep must be non-negative.</param>
-        /// <returns>The tiled output array. Always C-contiguous, dtype matches <paramref name="A"/>.</returns>
+        /// <returns>The tiled output array. Expanded outputs are C-contiguous; all-one reps produce a keep-order copy. Dtype matches <paramref name="A"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tile.html</remarks>
         /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
@@ -67,13 +67,14 @@ namespace NumSharp
             if (outSize == 0)
                 return zeros(new Shape(outShape), A.dtype);
 
-            // Trivial case: all reps are 1 → return a copy preserving the (possibly promoted) shape.
-            // Matches NumPy's array(A, copy=True, ndmin=d) shortcut.
+            // Trivial case: all reps are 1 → return a keep-order copy preserving the
+            // (possibly promoted) shape. Matches NumPy's array(A, copy=True, ndmin=d)
+            // shortcut: F-contiguous inputs stay F-contiguous, other views materialize as C.
             bool allOnes = true;
             for (int i = 0; i < outDim; i++) if (tup[i] != 1) { allOnes = false; break; }
             if (allOnes)
             {
-                var c = aDim == outDim ? A.copy() : A.reshape(new Shape(aShape)).copy();
+                var c = aDim == outDim ? A.copy('K') : A.reshape(new Shape(aShape)).copy('K');
                 return c;
             }
 

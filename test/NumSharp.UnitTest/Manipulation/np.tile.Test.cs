@@ -168,6 +168,51 @@ namespace NumSharp.UnitTest.Manipulation
             ((int)src[0, 0]).Should().Be(1);
         }
 
+        [TestMethod]
+        public void Tile_AllOnes_FContiguousInput_PreservesFContiguousLayout()
+        {
+            // NumPy 2.4.2: np.tile(arange(12).reshape(3,4).T, (1,1)) preserves F-contiguous output.
+            var src = np.arange(12).reshape(3, 4).T;
+            var got = np.tile(src, 1, 1);
+
+            got.shape.Should().Equal(new long[] { 4, 3 });
+            got.Shape.IsContiguous.Should().BeFalse();
+            got.Shape.IsFContiguous.Should().BeTrue();
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    ((long)got[i, j]).Should().Be((long)src[i, j]);
+        }
+
+        [TestMethod]
+        public void Tile_NoReps_FContiguousInput_PreservesFContiguousLayout()
+        {
+            // NumPy 2.4.2: np.tile(f_arr, ()) is a keep-order copy.
+            var src = np.arange(12).reshape(3, 4).T;
+            var got = np.tile(src);
+
+            got.shape.Should().Equal(new long[] { 4, 3 });
+            got.Shape.IsContiguous.Should().BeFalse();
+            got.Shape.IsFContiguous.Should().BeTrue();
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    ((long)got[i, j]).Should().Be((long)src[i, j]);
+        }
+
+        [TestMethod]
+        public void Tile_AllOnes_NonContiguousInput_FallsBackToCContiguousLayout()
+        {
+            // NumPy 2.4.2: np.tile(non_contiguous, (1,1)) materializes a C-contiguous copy.
+            var src = np.arange(12).reshape(3, 4)[":, ::-1"];
+            var got = np.tile(src, 1, 1);
+
+            got.shape.Should().Equal(new long[] { 3, 4 });
+            got.Shape.IsContiguous.Should().BeTrue();
+            got.Shape.IsFContiguous.Should().BeFalse();
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 4; j++)
+                    ((long)got[i, j]).Should().Be((long)src[i, j]);
+        }
+
         // ----------------------------------------------------------------------
         // Section 3 — 3D
         // ----------------------------------------------------------------------
