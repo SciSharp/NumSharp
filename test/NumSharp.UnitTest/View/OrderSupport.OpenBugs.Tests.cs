@@ -1193,13 +1193,13 @@ namespace NumSharp.UnitTest.View
         }
 
         // ============================================================================
-        // Section 30: Missing functions that would benefit from order support
+        // Section 30: Manipulation helpers that benefit from order support
         // ============================================================================
 
         [TestMethod]
-        public void Tile_ApiGap()
+        public void Tile_RepeatsLastAxis_ValuesMatchNumPy()
         {
-            // np.tile(arr, 2) repeats array along the last axis. Implemented in np.tile.cs.
+            // NumPy: np.tile([1, 2, 3], 2) -> [1, 2, 3, 1, 2, 3]
             var got = np.tile(np.array(new[] { 1, 2, 3 }), 2);
             got.shape.Should().Equal(6L);
             for (int i = 0; i < 6; i++)
@@ -1413,11 +1413,14 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.where doesn't exist in NumSharp (listed in Missing Functions)
-        public void Where_ApiGap()
+        public void Where_FContig_PreservesFContig()
         {
-            // NumPy: np.where(f_arr > 5, f_arr, 0) -> F-contig output
-            false.Should().BeTrue("np.where is not implemented (Missing Functions)");
+            var fArr = np.arange(12).reshape(3, 4).T;
+            var r = np.where(fArr > 5, fArr, 0);
+
+            r.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy preserves F-contiguous output layout for np.where on F-contiguous inputs");
+            r.Shape.IsContiguous.Should().BeFalse();
         }
 
         [TestMethod]
