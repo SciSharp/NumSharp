@@ -1316,4 +1316,3 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
     }
 }
-
