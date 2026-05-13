@@ -281,6 +281,7 @@ namespace NumSharp.Backends
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
             ret._baseStorage = storage._baseStorage ?? storage;
+            ret.Engine = storage.Engine;
             return ret;
         }
 
