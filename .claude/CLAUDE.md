@@ -74,7 +74,7 @@ np                Static API class (like `import numpy as np`)
 | Decision | Rationale |
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest; optimized for performance |
-| C-order only | Only row-major (C-order) memory layout. Uses `ArrayFlags.C_CONTIGUOUS` flag. No F-order/column-major support. The `order` parameter on `ravel`, `flatten`, `copy`, `reshape` is accepted but ignored. |
+| Order-aware layout | Row-major (C-order) remains the default. `Shape` also tracks F-contiguity, and APIs with an `order` parameter resolve NumPy `C`/`F`/`A`/`K` modes through `OrderResolver`. |
 | Regen templating | Type-specific code generation (legacy, mostly replaced by ILKernel) |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
@@ -146,7 +146,7 @@ public readonly partial struct Shape
 | Flag | Value | Meaning |
 |------|-------|---------|
 | `C_CONTIGUOUS` | 0x0001 | Data is row-major contiguous |
-| `F_CONTIGUOUS` | 0x0002 | Reserved (always false for NumSharp) |
+| `F_CONTIGUOUS` | 0x0002 | Data is column-major contiguous |
 | `OWNDATA` | 0x0004 | Array owns its data buffer |
 | `ALIGNED` | 0x0100 | Always true for managed allocations |
 | `WRITEABLE` | 0x0400 | False for broadcast views |
@@ -154,6 +154,7 @@ public readonly partial struct Shape
 
 **Key Shape properties:**
 - `IsContiguous` — O(1) check via `C_CONTIGUOUS` flag
+- `IsFContiguous` — O(1) check via `F_CONTIGUOUS` flag
 - `IsBroadcasted` — O(1) check via `BROADCASTED` flag
 - `IsWriteable` — False for broadcast views (prevents corruption)
 - `IsSliced` — True if offset != 0, different size, or non-contiguous
@@ -182,14 +183,13 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ---
 
-## Missing Functions (19)
+## Missing Functions (18)
 
 These NumPy functions are **not implemented**:
 
 | Category | Functions |
 |----------|-----------|
 | Sorting | `np.sort` |
-| Selection | `np.where` |
 | Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.pad` |
 | Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
 | Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
@@ -225,6 +225,9 @@ Tested against NumPy 2.x.
 
 ### Comparison & Logic
 `all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`
+
+### Selection
+`where`
 
 ### Sorting & Searching
 `argmax`, `argmin`, `argsort`, `nonzero`, `searchsorted`
@@ -264,7 +267,7 @@ Tested against NumPy 2.x.
 | TensorEngine | `Backends/TensorEngine.cs` |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `MultiIterator.cs` |
+| Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs`, `NpyExpr.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 
@@ -574,10 +577,10 @@ A: The `Slice` class parses Python notation (e.g., "1:5:2") into `Start`, `Stop`
 A: `Slice.All` (`:` - all elements), `Slice.Ellipsis` (`...` - fill dimensions), `Slice.NewAxis` (insert dimension), `Slice.Index(n)` (single element, reduces dimensionality).
 
 **Q: What is NDIterator used for?**
-A: Traversing arrays with different memory layouts. Handles contiguous (fast pointer increment) and sliced (uses GetOffset) arrays. Has `MoveNext()`, `HasNext()`, `Reset()`. AutoReset mode for broadcasting smaller arrays.
+A: Legacy typed traversal surface over `NpyIter`. It keeps the existing `MoveNext()`, `HasNext()`, and `Reset()` API while delegating stride, broadcast, and view traversal to the NpyIter state machinery.
 
-**Q: What is MultiIterator?**
-A: Handles paired iteration for broadcasting. `MultiIterator.Assign(lhs, rhs)` copies with broadcasting. `GetIterators(lhs, rhs, broadcast)` creates synchronized iterators.
+**Q: What is NpyIter?**
+A: The NumPy-aligned multi-operand iterator. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. `MultiIterator` was removed in favor of `NpyIter.Copy` and multi-operand iterator execution.
 
 **Q: How does broadcasting work?**
 A: Shapes align from the right. Dimensions must be equal OR one must be 1. Dimension of 1 "stretches" to match. Implemented via `DefaultEngine.Broadcast()` which resolves compatible shapes.
