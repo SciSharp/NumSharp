@@ -23,14 +23,14 @@ namespace NumSharp
             if (this.Shape.IsEmpty || this.Shape.IsScalar || this.Shape.size <= 1)
                 return Clone();
 
-            if (physical == 'C')
+            if (physical == 'C' && this.Shape.IsContiguous)
                 return Clone();
 
-            // Allocate destination with F-contiguous strides and copy values logically.
+            // Allocate destination with the requested physical strides and copy values logically.
             // Clone dimensions to avoid aliasing — Shape(long[], char) does not clone,
             // and Shape exposes an indexer setter that could otherwise mutate both shapes.
-            var destShape = new Shape((long[])this.Shape.dimensions.Clone(), 'F');
-            var dest = new NDArray(this.typecode, destShape, false);
+            var destShape = new Shape((long[])this.Shape.dimensions.Clone(), physical);
+            var dest = new NDArray(this.typecode, destShape, false) { TensorEngine = TensorEngine };
             NpyIter.Copy(dest, this);
             return dest;
         }

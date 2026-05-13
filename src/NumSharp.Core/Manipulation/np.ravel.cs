@@ -35,7 +35,7 @@ namespace NumSharp
 
             // C-order: view when possible, otherwise materialize a C-contiguous copy.
             if (!a.Shape.IsContiguous)
-                return new NDArray(new UnmanagedStorage(a.Storage.CloneData(), Shape.Vector(a.size)));
+                return new NDArray(new UnmanagedStorage(a.Storage.CloneData(), Shape.Vector(a.size))) { TensorEngine = a.TensorEngine };
 
             return a.reshape(Shape.Vector(a.size));
         }
