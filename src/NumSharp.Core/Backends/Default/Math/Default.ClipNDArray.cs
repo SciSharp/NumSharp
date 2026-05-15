@@ -32,37 +32,94 @@ namespace NumSharp.Backends
         public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
             => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
 
+        // Promotion rule for a single bound. A 0-d bound of the same kind
+        // (int / float / complex / bool / decimal) as `outType` is treated as a
+        // "weak" scalar — output dtype stays unchanged. Array bounds or
+        // cross-kind scalars promote via np.result_type, matching ufunc rules.
+        private static NPTypeCode PromoteClipBound(NPTypeCode outType, NDArray bound)
+        {
+            if (bound is null) return outType;
+            if (bound.ndim == 0 && IsSameKind(outType, bound.typecode))
+                return outType;
+            return np.result_type(outType, bound.typecode);
+        }
+
+        private static bool IsSameKind(NPTypeCode a, NPTypeCode b)
+        {
+            int ga = a.GetGroup();
+            int gb = b.GetGroup();
+            // 0 = Byte/Char (unsigned 1-byte int-like), 1 = signed int, 2 = unsigned int — all integer kind.
+            bool aInt = ga >= 0 && ga <= 2;
+            bool bInt = gb >= 0 && gb <= 2;
+            if (aInt && bInt) return true;
+            return ga == gb;
+        }
+
         public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
         {
+            // Determine the natural output dtype:
+            //   explicit `dtype=` wins; otherwise apply NEP 50 weak-scalar
+            //   promotion consistent with the binary-op engine — a 0-d bound
+            //   of the same kind (int/float/complex) as `lhs` is treated as
+            //   a "weak" scalar and does not promote, mirroring how NumPy
+            //   handles Python int/float literals (`np.clip(uint8, 50, 75)`
+            //   stays uint8). Cross-kind or array bounds promote per
+            //   `np.result_type`.
+            NPTypeCode outType;
+            if (typeCode.HasValue)
+            {
+                outType = typeCode.Value;
+            }
+            else
+            {
+                outType = lhs.typecode;
+                outType = PromoteClipBound(outType, min);
+                outType = PromoteClipBound(outType, max);
+            }
+
+            // Validate @out up front (shape, writeable, dtype) — NumPy raises
+            // _UFuncOutputCastingError when the destination dtype can't take the
+            // promoted result; we surface the same constraint as ArgumentException.
+            if (@out is not null)
+            {
+                NumSharpException.ThrowIfNotWriteable(@out.Shape);
+                if (@out.Shape != lhs.Shape)
+                    throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
+                if (@out.GetTypeCode != outType)
+                    throw new ArgumentException(
+                        $"Cannot cast ufunc 'clip' output from dtype('{outType.AsNumpyDtypeName()}') to dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') with casting rule 'same_kind'.");
+            }
+
             if (lhs.size == 0)
-                return lhs.Clone();
+            {
+                if (@out is not null) return @out;
+                return Cast(lhs, outType, copy: true);
+            }
 
-            // If both bounds are null, just return a copy (NumPy behavior)
+            // If both bounds are null, just return a copy at the requested dtype.
             if (min is null && max is null)
-                return Cast(lhs, typeCode ?? lhs.typecode, copy: true);
-
-            // Broadcast bounds arrays to match input shape
-            // np.broadcast_arrays ensures they are all broadcastable to each other
-            var boundsToCheck = new NDArray[] { lhs, min, max }.Where(nd => !(nd is null)).ToArray();
-            var broadcasted = np.broadcast_arrays(boundsToCheck);
-
-            // Determine output dtype
-            var outType = typeCode ?? lhs.typecode;
+            {
+                if (@out is not null)
+                {
+                    np.copyto(@out, Cast(lhs, outType, copy: false));
+                    return @out;
+                }
+                return Cast(lhs, outType, copy: true);
+            }
 
             // Broadcast and cast min/max to output dtype to avoid mixed-type kernel bugs
             var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
             var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
 
-            // Create or validate output array
+            // Materialize output buffer at outType, copying the (possibly promoted) input.
             if (@out is null)
-                @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
+            {
+                @out = Cast(lhs, outType, copy: true);
+            }
             else
             {
-                NumSharpException.ThrowIfNotWriteable(@out.Shape);
-                if (@out.Shape != lhs.Shape)
-                    throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
-                // Copy input data into @out - user-provided @out may contain garbage (e.g., np.empty)
-                np.copyto(@out, lhs);
+                // @out's dtype already validated to equal outType above.
+                np.copyto(@out, Cast(lhs, outType, copy: false));
             }
 
             var len = @out.size;
