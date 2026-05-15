@@ -1653,6 +1653,25 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Vector min/max (width-adaptive). Stack must hold two vectors;
+        /// result is one vector. Uses the static <c>Vector{Width}.Min/Max{T}</c>
+        /// helper on whichever container the runtime selected at startup.
+        /// </summary>
+        internal static void EmitVectorMinOrMax(ILGenerator il, bool isMax, NPTypeCode type)
+        {
+            var containerType = GetVectorContainerType();
+            var clrType = GetClrType(type);
+
+            string methodName = isMax ? "Max" : "Min";
+            var method = containerType
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
+                .MakeGenericMethod(clrType);
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
         /// Emit Vector operation for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
