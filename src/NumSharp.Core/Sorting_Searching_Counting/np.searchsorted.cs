@@ -1,4 +1,6 @@
 using System;
+using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -17,22 +19,16 @@ namespace NumSharp
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
-            return BinarySearch(a, (double)v, side == "left", sorter);
+            return SearchSortedScalar(a, Converts.ChangeType(v, a.typecode), side == "left", sorter);
         }
 
         /// <summary>
         /// Find index where a scalar should be inserted to maintain order.
         /// </summary>
-        /// <param name="a">Input 1-D array. Must be sorted ascending unless <paramref name="sorter"/> is provided.</param>
-        /// <param name="v">Value to insert into <paramref name="a"/>.</param>
-        /// <param name="side">If "left" (default), index of the first suitable location is returned. If "right", the last such index.</param>
-        /// <param name="sorter">Optional indices that sort <paramref name="a"/> into ascending order (typically <c>argsort(a)</c>).</param>
-        /// <returns>Scalar index for insertion point.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
-            return BinarySearch(a, v, side == "left", sorter);
+            return SearchSortedScalar(a, Converts.ChangeType(v, a.typecode), side == "left", sorter);
         }
 
         /// <summary>
@@ -50,37 +46,98 @@ namespace NumSharp
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
             ValidateSearchSorted(a, side, sorter);
-
             bool leftSide = side == "left";
 
-            // Scalar v -> scalar output.
             if (v.Shape.IsScalar)
             {
-                double target = Converts.ToDouble(v.Storage.GetAtIndex(0));
-                long idx = BinarySearch(a, target, leftSide, sorter);
+                object scalar = Converts.ChangeType(v.Storage.GetAtIndex(0), a.typecode);
+                long idx = SearchSortedScalar(a, scalar, leftSide, sorter);
                 return NDArray.Scalar(idx);
             }
 
-            // Build a fresh contiguous output shape with v's dimensions (drop v's offset/strides).
             Shape outShape = new Shape(v.shape);
 
-            // Empty v -> empty output preserving v's shape.
             if (v.size == 0)
                 return new NDArray(NPTypeCode.Int64, outShape, false);
 
-            // Multi-dim v -> result preserves v's shape.
+            // Promote v to a's dtype and force contiguous (NumPy: PyArray_CARRAY_RO).
+            NDArray vTyped = EnsureContiguousOfType(v, a.typecode);
+            NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
             NDArray output = new NDArray(NPTypeCode.Int64, outShape, false);
+
+            int elemSize = ILKernelGenerator.GetTypeSize(a.typecode);
             unsafe
             {
-                long* outPtr = (long*)output.Address;
-                for (long i = 0; i < v.size; i++)
-                {
-                    double target = Converts.ToDouble(v.Storage.GetAtIndex(i));
-                    outPtr[i] = BinarySearch(a, target, leftSide, sorter);
-                }
+                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null);
+                long arrStride = a.Shape.IsContiguous ? elemSize : a.Shape.strides[0] * elemSize;
+                void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
+                void* keyPtr = (void*)vTyped.Address;
+                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
+                long* retPtr = (long*)output.Address;
+                kernel(arrPtr, a.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr);
             }
 
             return output;
+        }
+
+        private static long SearchSortedScalar(NDArray a, object scalarValue, bool leftSide, NDArray sorter)
+        {
+            NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
+            int elemSize = ILKernelGenerator.GetTypeSize(a.typecode);
+            long result;
+            unsafe
+            {
+                // 16-byte buffer fits all 15 dtypes (largest = decimal/complex at 16 bytes).
+                byte* keyBuf = stackalloc byte[16];
+                WriteScalar(keyBuf, scalarValue, a.typecode);
+                long* retBuf = stackalloc long[1];
+                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null);
+                long arrStride = a.Shape.IsContiguous ? elemSize : a.Shape.strides[0] * elemSize;
+                void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
+                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
+                kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf);
+                result = retBuf[0];
+            }
+            return result;
+        }
+
+        private static unsafe void WriteScalar(byte* dest, object value, NPTypeCode typeCode)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean: *(bool*)dest = (bool)value; break;
+                case NPTypeCode.SByte:   *(sbyte*)dest = (sbyte)value; break;
+                case NPTypeCode.Byte:    *(byte*)dest = (byte)value; break;
+                case NPTypeCode.Int16:   *(short*)dest = (short)value; break;
+                case NPTypeCode.UInt16:  *(ushort*)dest = (ushort)value; break;
+                case NPTypeCode.Int32:   *(int*)dest = (int)value; break;
+                case NPTypeCode.UInt32:  *(uint*)dest = (uint)value; break;
+                case NPTypeCode.Int64:   *(long*)dest = (long)value; break;
+                case NPTypeCode.UInt64:  *(ulong*)dest = (ulong)value; break;
+                case NPTypeCode.Char:    *(char*)dest = (char)value; break;
+                case NPTypeCode.Half:    *(Half*)dest = (Half)value; break;
+                case NPTypeCode.Single:  *(float*)dest = (float)value; break;
+                case NPTypeCode.Double:  *(double*)dest = (double)value; break;
+                case NPTypeCode.Decimal: *(decimal*)dest = (decimal)value; break;
+                case NPTypeCode.Complex: *(System.Numerics.Complex*)dest = (System.Numerics.Complex)value; break;
+                default: throw new NotSupportedException($"WriteScalar: type {typeCode} not supported");
+            }
+        }
+
+        private static NDArray EnsureContiguousOfType(NDArray src, NPTypeCode target)
+        {
+            if (src.typecode == target && src.Shape.IsContiguous)
+                return src;
+            var typed = src.typecode == target ? src : src.astype(target, copy: true);
+            return typed.Shape.IsContiguous ? typed : typed.copy();
+        }
+
+        private static NDArray EnsureContiguousInt64(NDArray sorter)
+        {
+            if (sorter.typecode == NPTypeCode.Int64 && sorter.Shape.IsContiguous)
+                return sorter;
+            var typed = sorter.typecode == NPTypeCode.Int64 ? sorter : sorter.astype(NPTypeCode.Int64, copy: true);
+            return typed.Shape.IsContiguous ? typed : typed.copy();
         }
 
         private static void ValidateSearchSorted(NDArray a, string side, NDArray sorter)
@@ -88,7 +145,6 @@ namespace NumSharp
             if (side != "left" && side != "right")
                 throw new ArgumentException($"search side must be 'left' or 'right' (got '{side}')", nameof(side));
 
-            // NumPy: "object too deep for desired array" for ndim > 1.
             if (a.ndim > 1)
                 throw new ArgumentException("object too deep for desired array", nameof(a));
 
@@ -99,39 +155,6 @@ namespace NumSharp
                 if (sorter.size != a.size)
                     throw new ArgumentException("sorter.size must equal a.size", nameof(sorter));
             }
-        }
-
-        /// <summary>
-        /// Binary search for the insertion position of <paramref name="target"/> in 1-D array <paramref name="arr"/>.
-        /// </summary>
-        /// <param name="arr">Sorted 1-D array (or unsorted with <paramref name="sorter"/> giving the sort order).</param>
-        /// <param name="target">Target value to find position for.</param>
-        /// <param name="leftSide">If true, returns the leftmost insertion index (NumPy side='left' / bisect_left).
-        /// If false, returns the rightmost insertion index (NumPy side='right' / bisect_right).</param>
-        /// <param name="sorter">Optional sort-order indices. When non-null, <paramref name="arr"/> is read via <c>arr[sorter[mid]]</c>.</param>
-        /// <returns>Index where target should be inserted.</returns>
-        /// <remarks>https://en.wikipedia.org/wiki/Binary_search_algorithm</remarks>
-        private static long BinarySearch(NDArray arr, double target, bool leftSide, NDArray sorter)
-        {
-            long L = 0;
-            long R = arr.size;
-            while (L < R)
-            {
-                long m = (L + R) / 2;
-                long readIdx = sorter is null ? m : Convert.ToInt64(sorter.Storage.GetAtIndex(m));
-                // Converts.ToDouble handles all 15 dtypes including Half/Complex (System.Convert throws on those).
-                double val = Converts.ToDouble(arr.Storage.GetAtIndex(readIdx));
-
-                // bisect_left:  move right while val <  target  (returns first i with a[i] >= target)
-                // bisect_right: move right while val <= target  (returns first i with a[i] >  target)
-                bool moveRight = leftSide ? (val < target) : (val <= target);
-                if (moveRight)
-                    L = m + 1;
-                else
-                    R = m;
-            }
-
-            return L;
         }
     }
 }
