@@ -265,16 +265,16 @@ public class AuditV2_ManipulationApis
     // =====================================================================
 
     /// <summary>
-    /// Section 1.6 — np.ravel('F') on F-contiguous array always copies; NumPy returns a view.
+    /// Section 1.6 — np.ravel('F') on F-contiguous array returns a view (no copy).
     ///
     /// NumPy 2.4.2:
     ///   aF = np.arange(12).reshape(3,4).copy(order='F')
     ///   r = np.ravel(aF, order='F')
     ///   np.shares_memory(r, aF) == True
-    /// NumSharp: ravel(aF,'F') routes through flatten('F') → copy('F'), allocating fresh memory.
-    /// Audit reports 3000× perf regression. File: src/NumSharp.Core/Manipulation/np.ravel.cs:30-34
+    /// Fixed: src/NumSharp.Core/Manipulation/np.ravel.cs now takes a 1-D Alias path
+    /// when the source is F-contiguous, sharing the underlying buffer.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-ravel-fcont-fview")]
+    [TestMethod]
     public void Ravel_FContiguous_FOrder_ReturnsView()
     {
         var aF = np.arange(12).reshape(3, 4).copy('F');

@@ -29,7 +29,17 @@ namespace NumSharp
 
             if (physical == 'F' && a.Shape.NDim > 1 && a.size > 1)
             {
-                // F-order ravel: read column-major; same values as flatten('F').
+                // F-order ravel: read column-major.
+                // When the source is F-contiguous, strides[0]==1 and memory is dense, so a
+                // linear walk from `offset` for `size` elements is exactly the F-order
+                // read-out — return a 1-D view sharing the underlying buffer (no copy).
+                // NumPy: np.shares_memory(np.ravel(aF, 'F'), aF) == True.
+                if (a.Shape.IsFContiguous)
+                {
+                    var vec = new Shape(new long[] { a.size }, new long[] { 1 }, a.Shape.offset, a.Shape.bufferSize);
+                    return new NDArray(a.Storage.Alias(vec)) { TensorEngine = a.TensorEngine };
+                }
+                // Non-F-contiguous source: must materialize column-major into fresh memory.
                 return a.flatten('F');
             }
 
