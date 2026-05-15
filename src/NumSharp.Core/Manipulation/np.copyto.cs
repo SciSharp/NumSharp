@@ -60,7 +60,25 @@ namespace NumSharp
                     $"where must be a boolean array, got dtype('{@where.GetTypeCode.AsNumpyDtypeName()}')",
                     nameof(@where));
 
+            // 0-d scalar mask short-circuit (matches NumPy array_assign_array.c:433-446).
+            // Skips broadcasting+per-element iteration when the mask is unambiguous:
+            //   where=False → no-op, where=True → fall through to the unmasked fast path.
+            if (@where.Shape.IsScalar || @where.size == 1)
+            {
+                bool value = ReadScalarBool(@where);
+                if (!value)
+                    return;
+                NpyIter.Copy(dst, src);
+                return;
+            }
+
             CopyWithMask(dst, src, @where);
+        }
+
+        private static unsafe bool ReadScalarBool(NDArray array)
+        {
+            byte* basePtr = array.Storage.Address + array.Shape.offset * InfoOf.GetSize(NPTypeCode.Boolean);
+            return *(bool*)basePtr;
         }
 
         private static NPY_CASTING ParseCastingName(string casting)
