@@ -32,6 +32,23 @@ namespace NumSharp.Backends
         public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
             => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
 
+        // Returns `bound` ready to feed the array-bound kernels: same shape as
+        // `targetShape`, same dtype as `outType`, contiguous from offset 0.
+        // Skips the broadcast + clone when the bound already satisfies all
+        // three (the common case where users pass pre-shaped arrays).
+        private static NDArray PrepareBound(NDArray bound, Shape targetShape, NPTypeCode outType)
+        {
+            if (bound is null) return null;
+            if (bound.GetTypeCode == outType
+                && bound.Shape.Equals(targetShape)
+                && bound.Shape.IsContiguous
+                && bound.Shape.Offset == 0)
+            {
+                return bound;
+            }
+            return np.broadcast_to(bound, targetShape).astype(outType);
+        }
+
         // Promotion rule for a single bound. A 0-d bound of the same kind
         // (int / float / complex / bool / decimal) as `outType` is treated as a
         // "weak" scalar — output dtype stays unchanged. Array bounds or
@@ -107,6 +124,22 @@ namespace NumSharp.Backends
                 return Cast(lhs, outType, copy: true);
             }
 
+            bool minIsScalar = min is null || min.ndim == 0;
+            bool maxIsScalar = max is null || max.ndim == 0;
+
+            // Fastest path: scalar bounds + contiguous same-dtype lhs + fresh
+            // output. Use the fused copy+clip kernel — one pass over memory
+            // (1R src + 1W dst) instead of two (Cast does 1R+1W, then in-place
+            // clip does another 1R+1W). Halves memory bandwidth, brings
+            // `np.clip(a, lo, hi)` close to NumPy parity.
+            bool canFuse = minIsScalar && maxIsScalar
+                        && @out is null
+                        && lhs.GetTypeCode == outType
+                        && lhs.Shape.IsContiguous
+                        && lhs.Shape.Offset == 0;
+            if (canFuse)
+                return ClipNDArrayFusedScalarBounds(lhs, min, max, outType);
+
             // Materialize output buffer at outType, copying the (possibly promoted) input.
             if (@out is null)
             {
@@ -122,16 +155,18 @@ namespace NumSharp.Backends
             // materialization (which previously allocated and wrote two
             // `lhs.size`-element bound arrays per call) and call the scalar
             // SIMD kernels (`ClipUnified` / `ClipMinUnified` / `ClipMaxUnified`)
-            // directly. This is the dominant case for `clip(a, lo, hi)` with
-            // literal bounds.
-            bool minIsScalar = min is null || min.ndim == 0;
-            bool maxIsScalar = max is null || max.ndim == 0;
+            // directly. Reached here when @out was supplied or lhs needed
+            // casting (so the fused single-pass path doesn't apply).
             if (minIsScalar && maxIsScalar)
                 return ClipNDArrayScalarBounds(@out, min, max, outType);
 
             // Slow path: at least one bound is an array — broadcast & cast.
-            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
-            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
+            // PrepareBound skips the broadcast_to + astype clone when the bound
+            // is already same-shape, same-dtype, and contiguous, which avoids
+            // a `len`-sized memory write per bound (the dominant overhead in
+            // the array-bounds path for matched-dtype inputs).
+            var _min = PrepareBound(min, lhs.Shape, outType);
+            var _max = PrepareBound(max, lhs.Shape, outType);
 
             var len = @out.size;
 
@@ -148,6 +183,127 @@ namespace NumSharp.Backends
             else
                 return ClipNDArrayGeneral(@out, _min, _max, len);
         }
+
+        /// <summary>
+        /// Fastest path: contiguous lhs + scalar bounds + no @out + no cast.
+        /// Allocates a fresh output buffer and runs the fused CopyAndClip
+        /// kernel — single memory pass (1R src + 1W dst) instead of the
+        /// classic Cast-then-clip pattern (2R + 2W).
+        /// </summary>
+        private unsafe NDArray ClipNDArrayFusedScalarBounds(NDArray lhs, NDArray min, NDArray max, NPTypeCode outType)
+        {
+            long len = lhs.size;
+
+            // Allocate destination at outType (==lhs.typecode here, by canFuse check).
+            // np.empty avoids the redundant initial fill that np.zeros does.
+            var @out = np.empty(lhs.Shape, outType);
+
+            // Cast bounds to outType. 0-d astype is O(1).
+            var minCast = min is null ? null : min.astype(outType);
+            var maxCast = max is null ? null : max.astype(outType);
+
+            switch (outType)
+            {
+                case NPTypeCode.Byte:
+                    FusedClipScalar<byte>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.SByte:
+                    FusedClipScalar<sbyte>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Int16:
+                    FusedClipScalar<short>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.UInt16:
+                    FusedClipScalar<ushort>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Int32:
+                    FusedClipScalar<int>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.UInt32:
+                    FusedClipScalar<uint>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Int64:
+                    FusedClipScalar<long>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.UInt64:
+                    FusedClipScalar<ulong>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Single:
+                    FusedClipScalar<float>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Double:
+                    FusedClipScalar<double>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Char:
+                    FusedClipScalar<char>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Decimal:
+                    FusedClipScalar<decimal>(lhs, @out, minCast, maxCast, len,
+                        (s, d, n, lo, hi) => ILKernelGenerator.CopyAndClip(s, d, n, lo, hi),
+                        (s, d, n, lo)     => ILKernelGenerator.CopyAndClipMin(s, d, n, lo),
+                        (s, d, n, hi)     => ILKernelGenerator.CopyAndClipMax(s, d, n, hi));
+                    return @out;
+                case NPTypeCode.Half:
+                case NPTypeCode.Complex:
+                    // No fused kernel for these — fall back to allocate-then-clip.
+                    var copy = Cast(lhs, outType, copy: true);
+                    return ClipNDArrayScalarBounds(copy, min, max, outType);
+                default:
+                    throw new NotSupportedException($"ClipNDArray not supported for dtype {outType}");
+            }
+        }
+
+        private static unsafe void FusedClipScalar<T>(
+            NDArray src, NDArray dst, NDArray minCast, NDArray maxCast, long len,
+            FusedBoth<T> both, FusedMin<T> minOnly, FusedMax<T> maxOnly)
+            where T : unmanaged
+        {
+            var s = (T*)src.Address;
+            var d = (T*)dst.Address;
+            if (minCast is not null && maxCast is not null)
+                both(s, d, len, *(T*)minCast.Address, *(T*)maxCast.Address);
+            else if (minCast is not null)
+                minOnly(s, d, len, *(T*)minCast.Address);
+            else
+                maxOnly(s, d, len, *(T*)maxCast.Address);
+        }
+
+        private unsafe delegate void FusedBoth<T>(T* s, T* d, long n, T lo, T hi) where T : unmanaged;
+        private unsafe delegate void FusedMin<T>(T* s, T* d, long n, T lo) where T : unmanaged;
+        private unsafe delegate void FusedMax<T>(T* s, T* d, long n, T hi) where T : unmanaged;
 
         /// <summary>
         /// Fast path when min and max are both 0-d scalars (or one is null).
