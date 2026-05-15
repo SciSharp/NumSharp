@@ -45,14 +45,15 @@ namespace NumSharp.Backends.Kernels
             public readonly NPTypeCode Type;
             public readonly bool LeftSide;
             public readonly bool HasSorter;
+            public readonly bool ContiguousA;  // if true, arrStrideBytes ignored — use elemSize as constant
 
-            public SearchKernelKey(NPTypeCode type, bool leftSide, bool hasSorter)
-            { Type = type; LeftSide = leftSide; HasSorter = hasSorter; }
+            public SearchKernelKey(NPTypeCode type, bool leftSide, bool hasSorter, bool contiguousA)
+            { Type = type; LeftSide = leftSide; HasSorter = hasSorter; ContiguousA = contiguousA; }
 
-            public bool Equals(SearchKernelKey other) => Type == other.Type && LeftSide == other.LeftSide && HasSorter == other.HasSorter;
+            public bool Equals(SearchKernelKey other) => Type == other.Type && LeftSide == other.LeftSide && HasSorter == other.HasSorter && ContiguousA == other.ContiguousA;
             public override bool Equals(object obj) => obj is SearchKernelKey k && Equals(k);
-            public override int GetHashCode() => ((int)Type * 4) | (LeftSide ? 2 : 0) | (HasSorter ? 1 : 0);
-            public override string ToString() => $"{Type}_{(LeftSide ? "Left" : "Right")}_{(HasSorter ? "Sort" : "NoSort")}";
+            public override int GetHashCode() => ((int)Type * 8) | (LeftSide ? 4 : 0) | (HasSorter ? 2 : 0) | (ContiguousA ? 1 : 0);
+            public override string ToString() => $"{Type}_{(LeftSide ? "Left" : "Right")}_{(HasSorter ? "Sort" : "NoSort")}_{(ContiguousA ? "Contig" : "Strided")}";
         }
 
         private static readonly ConcurrentDictionary<SearchKernelKey, SearchSortedKernel> _searchCache = new();
@@ -63,25 +64,31 @@ namespace NumSharp.Backends.Kernels
         public static int SearchCachedCount => _searchCache.Count;
 
         /// <summary>
-        /// Get or generate a searchsorted kernel for the given dtype + side + sorter combo.
+        /// Get or generate a searchsorted kernel.
         /// </summary>
-        public static SearchSortedKernel GetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter)
+        /// <param name="type">Element dtype of a (and contiguous v, after caller normalizes).</param>
+        /// <param name="leftSide">true = side='left', false = side='right'.</param>
+        /// <param name="hasSorter">true = sorter param non-null (kernel emits sort_idx indirection).</param>
+        /// <param name="contiguousA">true = a is contiguous (arrStrideBytes == elemSize). Lets JIT
+        /// use scaled-index addressing instead of imul, which closes the gap to NumPy on the random-key
+        /// hot path. When false, arrStrideBytes is honored as a runtime parameter.</param>
+        public static SearchSortedKernel GetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter, bool contiguousA)
         {
             if (!Enabled)
                 throw new InvalidOperationException("IL generation is disabled");
-            return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter), GenerateSearchKernel);
+            return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter, contiguousA), GenerateSearchKernel);
         }
 
         /// <summary>
         /// Try to get or generate a kernel. Returns null on failure (caller falls back).
         /// </summary>
-        public static SearchSortedKernel TryGetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter)
+        public static SearchSortedKernel TryGetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter, bool contiguousA)
         {
             if (!Enabled) return null;
-            try { return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter), GenerateSearchKernel); }
+            try { return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter, contiguousA), GenerateSearchKernel); }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetSearchSortedKernel({type}, {leftSide}, {hasSorter}): {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetSearchSortedKernel({type}, {leftSide}, {hasSorter}, {contiguousA}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -262,9 +269,18 @@ namespace NumSharp.Backends.Kernels
             }
 
             // midVal = *(T*)(arrPtr + midIdx * arrStrideBytes)
+            // For contiguous a: bake elemSize as a constant so the JIT can use scaled-index addressing
+            // and avoid the runtime imul. (Complex stride remains 16 because the struct is 16 bytes.)
             il.Emit(OpCodes.Ldarg_0);              // arrPtr
             il.Emit(OpCodes.Ldloc, locMidIdx);
-            il.Emit(OpCodes.Ldarg_2);              // arrStrideBytes
+            if (key.ContiguousA)
+            {
+                il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldarg_2);          // arrStrideBytes (runtime)
+            }
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
