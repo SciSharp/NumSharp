@@ -795,5 +795,48 @@ namespace NumSharp.UnitTest.Manipulation
             np.ravel(np.arange(24).reshape(2, 3, 4).copy('F'), 'F').size.Should().Be(24);
             np.ravel(np.arange(120).reshape(2, 3, 4, 5).copy('F'), 'F').size.Should().Be(120);
         }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContigColumnSlice_PreservesOffset_IsView()
+        {
+            // F-contig column slice has offset != 0 but remains F-contig:
+            //   stride[1] == dim[0] * stride[0] still holds when slicing the second axis.
+            // ravel('F') must preserve the offset and bufferSize so the view continues to
+            // read from the correct buffer range.
+            var aF = np.arange(20).reshape(4, 5).copy('F');
+            var s = aF[":", "1:3"]; // (4,2), F-contig, offset=4
+            s.Shape.IsFContiguous.Should().BeTrue("column slice of F-contig preserves F-contiguity");
+            s.Shape.offset.Should().Be(4, "column 1 starts at memory offset 4 in F-contig (4,5)");
+
+            var r = np.ravel(s, 'F');
+
+            r.Should().BeShaped(8);
+            // F-order traversal of s:
+            //   s[0,0]=1, s[1,0]=6, s[2,0]=11, s[3,0]=16, s[0,1]=2, s[1,1]=7, s[2,1]=12, s[3,1]=17
+            r.Should().BeOfValues(1L, 6L, 11L, 16L, 2L, 7L, 12L, 17L);
+
+            // Write through r[0] and observe s[0,0] / aF[0,1] (all share memory[4]).
+            r.SetInt64(999L, 0);
+            s.GetInt64(0, 0).Should().Be(999L, "ravel('F') of F-contig column slice should be a view of the slice.");
+            aF.GetInt64(0, 1).Should().Be(999L, "and therefore also a view back to the parent buffer.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig_BothCAndFContig_IsView()
+        {
+            // A (1, N) shape is both C-contig and F-contig. ravel('F') should still take
+            // the view path; the 1-D Alias is also both C- and F-contig.
+            var both = np.array(new long[,] { { 10, 20, 30, 40 } });
+            both.Shape.IsContiguous.Should().BeTrue("test precondition");
+            both.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(both, 'F');
+
+            r.Should().BeShaped(4);
+            r.Should().BeOfValues(10L, 20L, 30L, 40L);
+            r.SetInt64(777L, 0);
+            both.GetInt64(0, 0).Should().Be(777L,
+                "ravel('F') on shape (1,N) (both C & F contig) should return a view sharing memory.");
+        }
     }
 }
