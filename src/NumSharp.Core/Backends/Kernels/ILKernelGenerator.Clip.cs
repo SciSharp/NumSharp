@@ -442,6 +442,288 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
+        #region Fused Copy+Clip (one-pass src→dst with scalar bounds)
+
+        // Fused kernels eliminate the cost of the initial output allocation+copy
+        // pass that np.clip needs. Old pattern: Cast(lhs, copy:true) writes
+        // `len` elements, then ClipHelper reads+writes them again — 4 memory
+        // streams (2R + 2W). Fused pattern: read src, clip in registers, write
+        // dst — 2 memory streams (1R + 1W). On AVX2 hardware where clip is
+        // memory-bandwidth-bound, this nearly halves the wall time.
+
+        /// <summary>
+        /// Fused copy + scalar-bound clip. Reads from <paramref name="src"/>,
+        /// applies min/max clamp in registers, writes to <paramref name="dst"/>.
+        /// Both buffers must be contiguous, length <paramref name="size"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void CopyAndClip<T>(T* src, T* dst, long size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))   { CopyAndClipSimd256((float*)src,  (float*)dst,  size, Unsafe.As<T, float>(ref minVal),  Unsafe.As<T, float>(ref maxVal));  return; }
+                if (typeof(T) == typeof(double))  { CopyAndClipSimd256((double*)src, (double*)dst, size, Unsafe.As<T, double>(ref minVal), Unsafe.As<T, double>(ref maxVal)); return; }
+                if (typeof(T) == typeof(int))     { CopyAndClipSimd256((int*)src,    (int*)dst,    size, Unsafe.As<T, int>(ref minVal),    Unsafe.As<T, int>(ref maxVal));    return; }
+                if (typeof(T) == typeof(uint))    { CopyAndClipSimd256((uint*)src,   (uint*)dst,   size, Unsafe.As<T, uint>(ref minVal),   Unsafe.As<T, uint>(ref maxVal));   return; }
+                if (typeof(T) == typeof(long))    { CopyAndClipSimd256((long*)src,   (long*)dst,   size, Unsafe.As<T, long>(ref minVal),   Unsafe.As<T, long>(ref maxVal));   return; }
+                if (typeof(T) == typeof(ulong))   { CopyAndClipSimd256((ulong*)src,  (ulong*)dst,  size, Unsafe.As<T, ulong>(ref minVal),  Unsafe.As<T, ulong>(ref maxVal));  return; }
+                if (typeof(T) == typeof(short))   { CopyAndClipSimd256((short*)src,  (short*)dst,  size, Unsafe.As<T, short>(ref minVal),  Unsafe.As<T, short>(ref maxVal));  return; }
+                if (typeof(T) == typeof(ushort))  { CopyAndClipSimd256((ushort*)src, (ushort*)dst, size, Unsafe.As<T, ushort>(ref minVal), Unsafe.As<T, ushort>(ref maxVal)); return; }
+                if (typeof(T) == typeof(byte))    { CopyAndClipSimd256((byte*)src,   (byte*)dst,   size, Unsafe.As<T, byte>(ref minVal),   Unsafe.As<T, byte>(ref maxVal));   return; }
+                if (typeof(T) == typeof(sbyte))   { CopyAndClipSimd256((sbyte*)src,  (sbyte*)dst,  size, Unsafe.As<T, sbyte>(ref minVal),  Unsafe.As<T, sbyte>(ref maxVal));  return; }
+            }
+
+            // Scalar fallback (also covers char, decimal, half, complex via NumSharp's
+            // ClipNDArrayScalarBounds dispatcher — those types take the non-fused path).
+            CopyAndClipScalar(src, dst, size, minVal, maxVal);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void CopyAndClipMin<T>(T* src, T* dst, long size, T minVal) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))   { CopyAndClipMinSimd256((float*)src,  (float*)dst,  size, Unsafe.As<T, float>(ref minVal));  return; }
+                if (typeof(T) == typeof(double))  { CopyAndClipMinSimd256((double*)src, (double*)dst, size, Unsafe.As<T, double>(ref minVal)); return; }
+                if (typeof(T) == typeof(int))     { CopyAndClipMinSimd256((int*)src,    (int*)dst,    size, Unsafe.As<T, int>(ref minVal));    return; }
+                if (typeof(T) == typeof(uint))    { CopyAndClipMinSimd256((uint*)src,   (uint*)dst,   size, Unsafe.As<T, uint>(ref minVal));   return; }
+                if (typeof(T) == typeof(long))    { CopyAndClipMinSimd256((long*)src,   (long*)dst,   size, Unsafe.As<T, long>(ref minVal));   return; }
+                if (typeof(T) == typeof(ulong))   { CopyAndClipMinSimd256((ulong*)src,  (ulong*)dst,  size, Unsafe.As<T, ulong>(ref minVal));  return; }
+                if (typeof(T) == typeof(short))   { CopyAndClipMinSimd256((short*)src,  (short*)dst,  size, Unsafe.As<T, short>(ref minVal));  return; }
+                if (typeof(T) == typeof(ushort))  { CopyAndClipMinSimd256((ushort*)src, (ushort*)dst, size, Unsafe.As<T, ushort>(ref minVal)); return; }
+                if (typeof(T) == typeof(byte))    { CopyAndClipMinSimd256((byte*)src,   (byte*)dst,   size, Unsafe.As<T, byte>(ref minVal));   return; }
+                if (typeof(T) == typeof(sbyte))   { CopyAndClipMinSimd256((sbyte*)src,  (sbyte*)dst,  size, Unsafe.As<T, sbyte>(ref minVal));  return; }
+            }
+            CopyAndClipMinScalar(src, dst, size, minVal);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void CopyAndClipMax<T>(T* src, T* dst, long size, T maxVal) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))   { CopyAndClipMaxSimd256((float*)src,  (float*)dst,  size, Unsafe.As<T, float>(ref maxVal));  return; }
+                if (typeof(T) == typeof(double))  { CopyAndClipMaxSimd256((double*)src, (double*)dst, size, Unsafe.As<T, double>(ref maxVal)); return; }
+                if (typeof(T) == typeof(int))     { CopyAndClipMaxSimd256((int*)src,    (int*)dst,    size, Unsafe.As<T, int>(ref maxVal));    return; }
+                if (typeof(T) == typeof(uint))    { CopyAndClipMaxSimd256((uint*)src,   (uint*)dst,   size, Unsafe.As<T, uint>(ref maxVal));   return; }
+                if (typeof(T) == typeof(long))    { CopyAndClipMaxSimd256((long*)src,   (long*)dst,   size, Unsafe.As<T, long>(ref maxVal));   return; }
+                if (typeof(T) == typeof(ulong))   { CopyAndClipMaxSimd256((ulong*)src,  (ulong*)dst,  size, Unsafe.As<T, ulong>(ref maxVal));  return; }
+                if (typeof(T) == typeof(short))   { CopyAndClipMaxSimd256((short*)src,  (short*)dst,  size, Unsafe.As<T, short>(ref maxVal));  return; }
+                if (typeof(T) == typeof(ushort))  { CopyAndClipMaxSimd256((ushort*)src, (ushort*)dst, size, Unsafe.As<T, ushort>(ref maxVal)); return; }
+                if (typeof(T) == typeof(byte))    { CopyAndClipMaxSimd256((byte*)src,   (byte*)dst,   size, Unsafe.As<T, byte>(ref maxVal));   return; }
+                if (typeof(T) == typeof(sbyte))   { CopyAndClipMaxSimd256((sbyte*)src,  (sbyte*)dst,  size, Unsafe.As<T, sbyte>(ref maxVal));  return; }
+            }
+            CopyAndClipMaxScalar(src, dst, size, maxVal);
+        }
+
+        // SIMD inner loops (Vector256) — clip in registers, never spill to memory.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipSimd256<T>(T* src, T* dst, long size, T minVal, T maxVal) where T : unmanaged
+        {
+            int step = Vector256<T>.Count;
+            long vecEnd = size - step;
+            var loV = Vector256.Create(minVal);
+            var hiV = Vector256.Create(maxVal);
+            long i = 0;
+            for (; i <= vecEnd; i += step)
+            {
+                var v = Vector256.Load(src + i);
+                v = Vector256.Min(Vector256.Max(v, loV), hiV);
+                v.Store(dst + i);
+            }
+            CopyAndClipScalarTail(src + i, dst + i, size - i, minVal, maxVal);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMinSimd256<T>(T* src, T* dst, long size, T minVal) where T : unmanaged
+        {
+            int step = Vector256<T>.Count;
+            long vecEnd = size - step;
+            var loV = Vector256.Create(minVal);
+            long i = 0;
+            for (; i <= vecEnd; i += step)
+            {
+                var v = Vector256.Max(Vector256.Load(src + i), loV);
+                v.Store(dst + i);
+            }
+            CopyAndClipMinScalarTail(src + i, dst + i, size - i, minVal);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMaxSimd256<T>(T* src, T* dst, long size, T maxVal) where T : unmanaged
+        {
+            int step = Vector256<T>.Count;
+            long vecEnd = size - step;
+            var hiV = Vector256.Create(maxVal);
+            long i = 0;
+            for (; i <= vecEnd; i += step)
+            {
+                var v = Vector256.Min(Vector256.Load(src + i), hiV);
+                v.Store(dst + i);
+            }
+            CopyAndClipMaxScalarTail(src + i, dst + i, size - i, maxVal);
+        }
+
+        // Scalar fallback (non-SIMD types or remainder tail).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipScalar<T>(T* src, T* dst, long size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst;
+                var lo = Unsafe.As<T, float>(ref minVal); var hi = Unsafe.As<T, float>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(Math.Max(s[i], lo), hi);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst;
+                var lo = Unsafe.As<T, double>(ref minVal); var hi = Unsafe.As<T, double>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(Math.Max(s[i], lo), hi);
+                return;
+            }
+            for (long i = 0; i < size; i++)
+            {
+                var v = src[i];
+                if (v.CompareTo(minVal) < 0) v = minVal;
+                if (v.CompareTo(maxVal) > 0) v = maxVal;
+                dst[i] = v;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMinScalar<T>(T* src, T* dst, long size, T minVal) where T : unmanaged, IComparable<T>
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst; var lo = Unsafe.As<T, float>(ref minVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Max(s[i], lo);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst; var lo = Unsafe.As<T, double>(ref minVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Max(s[i], lo);
+                return;
+            }
+            for (long i = 0; i < size; i++)
+            {
+                var v = src[i];
+                if (v.CompareTo(minVal) < 0) v = minVal;
+                dst[i] = v;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMaxScalar<T>(T* src, T* dst, long size, T maxVal) where T : unmanaged, IComparable<T>
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst; var hi = Unsafe.As<T, float>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(s[i], hi);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst; var hi = Unsafe.As<T, double>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(s[i], hi);
+                return;
+            }
+            for (long i = 0; i < size; i++)
+            {
+                var v = src[i];
+                if (v.CompareTo(maxVal) > 0) v = maxVal;
+                dst[i] = v;
+            }
+        }
+
+        // Scalar tails (only handle the remainder after the SIMD loop).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipScalarTail<T>(T* src, T* dst, long size, T minVal, T maxVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst;
+                var lo = Unsafe.As<T, float>(ref minVal); var hi = Unsafe.As<T, float>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(Math.Max(s[i], lo), hi);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst;
+                var lo = Unsafe.As<T, double>(ref minVal); var hi = Unsafe.As<T, double>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(Math.Max(s[i], lo), hi);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    var v = src[i];
+                    if (Comparer<T>.Default.Compare(v, minVal) < 0) v = minVal;
+                    if (Comparer<T>.Default.Compare(v, maxVal) > 0) v = maxVal;
+                    dst[i] = v;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMinScalarTail<T>(T* src, T* dst, long size, T minVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst; var lo = Unsafe.As<T, float>(ref minVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Max(s[i], lo);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst; var lo = Unsafe.As<T, double>(ref minVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Max(s[i], lo);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    var v = src[i];
+                    if (Comparer<T>.Default.Compare(v, minVal) < 0) v = minVal;
+                    dst[i] = v;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CopyAndClipMaxScalarTail<T>(T* src, T* dst, long size, T maxVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+            if (typeof(T) == typeof(float))
+            {
+                var s = (float*)src; var d = (float*)dst; var hi = Unsafe.As<T, float>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(s[i], hi);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var s = (double*)src; var d = (double*)dst; var hi = Unsafe.As<T, double>(ref maxVal);
+                for (long i = 0; i < size; i++) d[i] = Math.Min(s[i], hi);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    var v = src[i];
+                    if (Comparer<T>.Default.Compare(v, maxVal) > 0) v = maxVal;
+                    dst[i] = v;
+                }
+            }
+        }
+
+        #endregion
+
         #region Scalar Tail Helpers (NaN-aware for float/double)
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
