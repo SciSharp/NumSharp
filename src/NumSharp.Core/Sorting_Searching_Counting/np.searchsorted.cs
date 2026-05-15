@@ -68,8 +68,9 @@ namespace NumSharp
             int elemSize = ILKernelGenerator.GetTypeSize(a.typecode);
             unsafe
             {
-                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null);
-                long arrStride = a.Shape.IsContiguous ? elemSize : a.Shape.strides[0] * elemSize;
+                bool contigA = a.Shape.IsContiguous;
+                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
+                long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
                 void* keyPtr = (void*)vTyped.Address;
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
@@ -91,8 +92,9 @@ namespace NumSharp
                 byte* keyBuf = stackalloc byte[16];
                 WriteScalar(keyBuf, scalarValue, a.typecode);
                 long* retBuf = stackalloc long[1];
-                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null);
-                long arrStride = a.Shape.IsContiguous ? elemSize : a.Shape.strides[0] * elemSize;
+                bool contigA = a.Shape.IsContiguous;
+                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
+                long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
                 kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf);
