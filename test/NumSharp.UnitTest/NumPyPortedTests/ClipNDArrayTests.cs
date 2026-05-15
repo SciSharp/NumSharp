@@ -255,5 +255,120 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         #endregion
+
+        #region NumPy 2.x min=/max= Keyword Aliases & Default-None Bounds
+
+        [TestMethod]
+        public void Clip_MinKeywordAlias_OnlyLowerBound_MatchesNumPy()
+        {
+            // NumPy 2.x: np.clip(np.arange(10), min=3) == [3,3,3,3,4,5,6,7,8,9]
+            var a = np.arange(10);
+
+            var result = np.clip(a, min: 3);
+
+            result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 9);
+        }
+
+        [TestMethod]
+        public void Clip_MaxKeywordAlias_OnlyUpperBound_MatchesNumPy()
+        {
+            // NumPy 2.x: np.clip(np.arange(10), max=5) == [0,1,2,3,4,5,5,5,5,5]
+            var a = np.arange(10);
+
+            var result = np.clip(a, max: 5);
+
+            result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 5, 5, 5, 5);
+        }
+
+        [TestMethod]
+        public void Clip_MinAndMaxKeywordAliases_BothBounds_MatchesNumPy()
+        {
+            // NumPy 2.x: np.clip(np.arange(10), min=3, max=7) == [3,3,3,3,4,5,6,7,7,7]
+            var a = np.arange(10);
+
+            var result = np.clip(a, min: 3, max: 7);
+
+            result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 7, 7);
+        }
+
+        [TestMethod]
+        public void Clip_AMinNullAMaxScalar_MatchesNumPy()
+        {
+            // NumPy: np.clip(np.arange(10), a_min=None, a_max=5) == [0,1,2,3,4,5,5,5,5,5]
+            var a = np.arange(10);
+
+            var result = np.clip(a, a_min: null, a_max: 5);
+
+            result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 5, 5, 5, 5);
+        }
+
+        [TestMethod]
+        public void Clip_AMinScalarAMaxNull_MatchesNumPy()
+        {
+            // NumPy: np.clip(np.arange(10), a_min=3, a_max=None) == [3,3,3,3,4,5,6,7,8,9]
+            var a = np.arange(10);
+
+            var result = np.clip(a, a_min: 3, a_max: null);
+
+            result.Should().BeOfValues(3, 3, 3, 3, 4, 5, 6, 7, 8, 9);
+        }
+
+        [TestMethod]
+        public void Clip_NoBounds_ReturnsCopy_MatchesNumPy()
+        {
+            // NumPy: np.clip(np.arange(10)) returns copy unchanged
+            var a = np.arange(10);
+
+            var result = np.clip(a);
+
+            result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+            // Verify it's a copy (not the same instance / aliased buffer)
+            unsafe
+            {
+                Assert.AreNotEqual((IntPtr)a.Address, (IntPtr)result.Address);
+            }
+        }
+
+        [TestMethod]
+        public void Clip_MinKeywordWithArrayBound_BroadcastsCorrectly()
+        {
+            // NumPy: np.clip(np.arange(10), min=[5,4,3,2,1,1,2,3,4,5]) == [5,4,3,3,4,5,6,7,8,9]
+            var a = np.arange(10);
+            var min_arr = np.array(new int[] { 5, 4, 3, 2, 1, 1, 2, 3, 4, 5 });
+
+            var result = np.clip(a, min: min_arr);
+
+            result.Should().BeOfValues(5, 4, 3, 3, 4, 5, 6, 7, 8, 9);
+        }
+
+        [TestMethod]
+        public void Clip_ConflictingAMinAndMin_Throws()
+        {
+            var a = np.arange(10);
+
+            Assert.ThrowsExactly<ArgumentException>(() => np.clip(a, a_min: 2, min: 3));
+        }
+
+        [TestMethod]
+        public void Clip_ConflictingAMaxAndMax_Throws()
+        {
+            var a = np.arange(10);
+
+            Assert.ThrowsExactly<ArgumentException>(() => np.clip(a, a_max: 2, max: 3));
+        }
+
+        [TestMethod]
+        public void Clip_MinKeywordWithDtype_PromotesResult()
+        {
+            // NumPy: np.clip(np.arange(10), min=3.5, dtype=np.float64) == [3.5,3.5,3.5,3.5,4.,5.,6.,7.,8.,9.]
+            var a = np.arange(10);
+
+            var result = np.clip(a, min: 3.5, dtype: NPTypeCode.Double);
+
+            Assert.AreEqual(np.float64, result.dtype);
+            result.Should().BeOfValues(3.5, 3.5, 3.5, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+        }
+
+        #endregion
     }
 }
