@@ -52,7 +52,9 @@ namespace NumSharp
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<T>(return_index, return_inverse, return_counts);
-            CheckSortableLength(n);
+
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLong<T>(n, return_index, return_inverse, return_counts, firstNaN: -1);
 
             var (keys, perm) = ExtractKeysAndPerm<T>(n);
             // No comparer → uses Comparer<T>.Default which delegates to IComparable<T>.
@@ -74,7 +76,9 @@ namespace NumSharp
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<double>(return_index, return_inverse, return_counts);
-            CheckSortableLength(n);
+
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongFloat<double>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<double>(n);
             long firstNaN = PartitionNaN_Double(keys, perm, n);
@@ -89,7 +93,9 @@ namespace NumSharp
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<float>(return_index, return_inverse, return_counts);
-            CheckSortableLength(n);
+
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongFloat<float>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<float>(n);
             long firstNaN = PartitionNaN_Float(keys, perm, n);
@@ -104,7 +110,9 @@ namespace NumSharp
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<Half>(return_index, return_inverse, return_counts);
-            CheckSortableLength(n);
+
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongFloat<Half>(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<Half>(n);
             long firstNaN = PartitionNaN_Half(keys, perm, n);
@@ -119,7 +127,9 @@ namespace NumSharp
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
-            CheckSortableLength(n);
+
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongComplex(n, equal_nan, return_index, return_inverse, return_counts);
 
             var (keys, perm) = ExtractKeysAndPerm<Complex>(n);
             long firstNaN = PartitionNaN_Complex(keys, perm, n);
@@ -273,21 +283,11 @@ namespace NumSharp
         // ----- Helpers -----
 
         /// <summary>
-        ///     The sort+mask kwargs path uses managed T[] arrays, which are bounded by
-        ///     <see cref="Array.MaxLength"/> (~2.1B elements). For larger inputs, the
-        ///     caller should fall through to the hash-based <see cref="unique()"/> path
-        ///     (which uses NumSharp's <c>Hashset&lt;T&gt;</c> with long indexing).
-        ///     In practice, n &gt; int.MaxValue requires &gt;16 GB of memory for doubles,
-        ///     so this is a theoretical limit, not a practical one.
+        ///     Returns true when n fits in a managed T[] (n ≤ Array.MaxLength). When false,
+        ///     the caller routes to the unmanaged long-indexed fallback
+        ///     (<see cref="uniqueFlatSortedLong{T}"/>) which is slower but supports any size.
         /// </summary>
-        private static void CheckSortableLength(long n)
-        {
-            if (n > System.Array.MaxLength)
-                throw new NotSupportedException(
-                    $"np.unique with return_index/inverse/counts requires the input " +
-                    $"to fit in a managed T[] array (max {System.Array.MaxLength} elements). " +
-                    $"Got n={n}. Use the no-kwargs np.unique(a) for the hash-based path instead.");
-        }
+        private static bool IsManagedSortableLength(long n) => n <= System.Array.MaxLength;
 
         private unsafe (T[] keys, long[] perm) ExtractKeysAndPerm<T>(long n) where T : unmanaged
         {
@@ -783,6 +783,415 @@ namespace NumSharp
                     dst[dstBase + k] = srcPtr[srcBase + k];
             }
             return new NDArray(slice, outShape);
+        }
+
+        // ============================================================
+        //  LONG-INDEXED FALLBACK (n > Array.MaxLength ~ 2.1B)
+        //
+        //  Uses UnmanagedMemoryBlock<KeyPerm<T>> + LongIntroSort. Packs key+perm
+        //  into a 16-byte struct so we can reuse the existing single-array sort
+        //  utility without writing a parallel-array sort.
+        //
+        //  Trade-offs vs the managed fast path:
+        //  - ~30-50% slower (.NET's introsort > our LongIntroSort port)
+        //  - 2× memory for the keys+perm pair (16 bytes packed vs 8+8 separate;
+        //    same total but worse alignment in cache)
+        //  - Worth it: this path is only reached when n > Array.MaxLength,
+        //    which requires 16+ GB just for the input array.
+        // ============================================================
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct KeyPerm<T> : IComparable<KeyPerm<T>>
+            where T : unmanaged, IComparable<T>
+        {
+            public T Key;
+            public long Perm;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public int CompareTo(KeyPerm<T> other) => Key.CompareTo(other.Key);
+        }
+
+        /// <summary>
+        ///     Long-indexed unique for non-NaN-capable types (or types where the
+        ///     Comparer<T>.Default works correctly: bool/byte/short/int/long/decimal/char/etc).
+        /// </summary>
+        private unsafe NDArray[] uniqueFlatSortedLong<T>(long n,
+            bool return_index, bool return_inverse, bool return_counts,
+            long firstNaN) where T : unmanaged, IComparable<T>, IEquatable<T>
+        {
+            var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
+            KeyPerm<T>* kp = block.Address;
+            PopulateKeyPerm(kp, n);
+
+            if (firstNaN < 0)
+            {
+                // Sort entire range with default compare
+                Utilities.LongIntroSort.Sort(kp, n);
+            }
+            else
+            {
+                // Sort only the non-NaN prefix (caller already partitioned)
+                Utilities.LongIntroSort.Sort(kp, firstNaN);
+            }
+
+            return BuildMaskAndEmitLong<T>(kp, n, firstNaN, equal_nan: true,
+                                            return_index, return_inverse, return_counts);
+        }
+
+        /// <summary>
+        ///     Long-indexed unique for NaN-capable types Single/Double/Half (not Complex).
+        ///     Partitions NaN to the tail, sorts non-NaN portion with default compare,
+        ///     stabilizes the NaN-tail's perm order (ascending) to match NumPy mergesort.
+        /// </summary>
+        private unsafe NDArray[] uniqueFlatSortedLongFloat<T>(long n, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+            where T : unmanaged, IComparable<T>, IEquatable<T>
+        {
+            var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
+            KeyPerm<T>* kp = block.Address;
+            PopulateKeyPerm(kp, n);
+
+            long firstNaN = PartitionNaN_Long<T>(kp, n);
+            Utilities.LongIntroSort.Sort(kp, firstNaN);
+            StabilizeNaNTailLong<T>(kp, firstNaN, n);
+
+            return BuildMaskAndEmitLong<T>(kp, n, firstNaN, equal_nan,
+                                            return_index, return_inverse, return_counts);
+        }
+
+        /// <summary>
+        ///     Long-indexed unique for Complex. Complex doesn't implement IComparable&lt;&gt;
+        ///     so we use a dedicated <see cref="ComplexKeyPerm"/> struct and explicit lex
+        ///     comparison via Comparison&lt;&gt; delegate.
+        /// </summary>
+        private unsafe NDArray[] uniqueFlatSortedLongComplex(long n, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+        {
+            var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
+            ComplexKeyPerm* kp = block.Address;
+
+            if (Shape.IsContiguous)
+            {
+                Complex* src = (Complex*)this.Address;
+                for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
+            }
+            else
+            {
+                var flat = this.flat;
+                Complex* src = (Complex*)flat.Address;
+                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                for (long i = 0; i < n; i++) { kp[i].Key = src[getOffset(i)]; kp[i].Perm = i; }
+            }
+
+            // Partition NaN to tail
+            long hi = n, i2 = 0;
+            while (i2 < hi)
+            {
+                Complex c = kp[i2].Key;
+                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
+                {
+                    hi--;
+                    (kp[i2], kp[hi]) = (kp[hi], kp[i2]);
+                }
+                else i2++;
+            }
+            long firstNaN = hi;
+
+            // Sort non-NaN with lex comparer
+            Utilities.LongIntroSort.Sort(kp, firstNaN, (x, y) =>
+            {
+                int c = x.Key.Real.CompareTo(y.Key.Real);
+                return c != 0 ? c : x.Key.Imaginary.CompareTo(y.Key.Imaginary);
+            });
+
+            // Stabilize NaN tail by perm
+            if (firstNaN < n - 1)
+            {
+                Utilities.LongIntroSort.Sort(kp + firstNaN, n - firstNaN,
+                    (x, y) => x.Perm.CompareTo(y.Perm));
+            }
+
+            return BuildMaskAndEmitLongComplex(kp, n, firstNaN, equal_nan,
+                                                return_index, return_inverse, return_counts);
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct ComplexKeyPerm
+        {
+            public Complex Key;
+            public long Perm;
+        }
+
+        private unsafe NDArray[] BuildMaskAndEmitLongComplex(
+            ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+        {
+            long nanStart = firstNaN;
+
+            var maskBlock = new UnmanagedMemoryBlock<byte>(n);
+            byte* mask = maskBlock.Address;
+            for (long i = 0; i < n; i++) mask[i] = 0;
+            mask[0] = 1;
+            long uniqueCount = 1;
+
+            for (long i = 1; i < nanStart; i++)
+            {
+                if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
+            }
+
+            if (nanStart < n)
+            {
+                mask[nanStart] = 1;
+                if (nanStart > 0) uniqueCount++;
+                if (!equal_nan)
+                {
+                    for (long i = nanStart + 1; i < n; i++)
+                    {
+                        mask[i] = 1;
+                        uniqueCount++;
+                    }
+                }
+            }
+
+            // Inline emit (same pattern as EmitOutputsLong but reads from ComplexKeyPerm)
+            int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
+            var results = new NDArray[outCount];
+
+            var valuesBlock = new UnmanagedMemoryBlock<Complex>(uniqueCount);
+            var valuesSlice = new ArraySlice<Complex>(valuesBlock);
+            Complex* vDst = valuesBlock.Address;
+            long vIdx = 0;
+            for (long i = 0; i < n; i++) if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
+            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            int outPos = 1;
+
+            if (return_index)
+            {
+                var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                var idxSlice = new ArraySlice<long>(idxBlock);
+                long* iDst = idxBlock.Address;
+                long oIdx = 0;
+                long currentMin = kp[0].Perm;
+                for (long i = 1; i < n; i++)
+                {
+                    if (mask[i] != 0) { iDst[oIdx++] = currentMin; currentMin = kp[i].Perm; }
+                    else if (kp[i].Perm < currentMin) currentMin = kp[i].Perm;
+                }
+                iDst[oIdx++] = currentMin;
+                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount));
+            }
+
+            if (return_inverse)
+            {
+                var invBlock = new UnmanagedMemoryBlock<long>(n);
+                var invSlice = new ArraySlice<long>(invBlock);
+                long* invDst = invBlock.Address;
+                long rank = -1;
+                for (long i = 0; i < n; i++)
+                {
+                    if (mask[i] != 0) rank++;
+                    invDst[kp[i].Perm] = rank;
+                }
+                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.Dimensions);
+                results[outPos++] = new NDArray(invSlice, invShape);
+            }
+
+            if (return_counts)
+            {
+                var cntBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                var cntSlice = new ArraySlice<long>(cntBlock);
+                long* cDst = cntBlock.Address;
+                long prevPos = 0, cIdx = 0;
+                for (long i = 1; i < n; i++)
+                {
+                    if (mask[i] != 0) { cDst[cIdx++] = i - prevPos; prevPos = i; }
+                }
+                cDst[cIdx++] = n - prevPos;
+                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount));
+            }
+
+            return results;
+        }
+
+        private unsafe void PopulateKeyPerm<T>(KeyPerm<T>* kp, long n) where T : unmanaged, IComparable<T>
+        {
+            if (Shape.IsContiguous)
+            {
+                T* src = (T*)this.Address;
+                for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
+            }
+            else
+            {
+                var flat = this.flat;
+                T* src = (T*)flat.Address;
+                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                for (long i = 0; i < n; i++) { kp[i].Key = src[getOffset(i)]; kp[i].Perm = i; }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool IsNaNKey<T>(T key) where T : unmanaged
+        {
+            if (typeof(T) == typeof(double)) return double.IsNaN((double)(object)key);
+            if (typeof(T) == typeof(float)) return float.IsNaN((float)(object)key);
+            if (typeof(T) == typeof(Half)) return Half.IsNaN((Half)(object)key);
+            if (typeof(T) == typeof(Complex))
+            {
+                var c = (Complex)(object)key;
+                return double.IsNaN(c.Real) || double.IsNaN(c.Imaginary);
+            }
+            return false;
+        }
+
+        private static unsafe long PartitionNaN_Long<T>(KeyPerm<T>* kp, long n)
+            where T : unmanaged, IComparable<T>
+        {
+            long hi = n;
+            long i = 0;
+            while (i < hi)
+            {
+                if (IsNaNKey(kp[i].Key))
+                {
+                    hi--;
+                    (kp[i], kp[hi]) = (kp[hi], kp[i]);
+                }
+                else i++;
+            }
+            return hi;
+        }
+
+        /// <summary>
+        ///     Sort the NaN-tail's perm ascending (keys are all NaN, order irrelevant)
+        ///     to match NumPy's stable mergesort semantics. We sort the KeyPerm structs
+        ///     by Perm using LongIntroSort with a comparer.
+        /// </summary>
+        private static unsafe void StabilizeNaNTailLong<T>(KeyPerm<T>* kp, long firstNaN, long n)
+            where T : unmanaged, IComparable<T>
+        {
+            if (firstNaN >= n - 1) return;
+            Utilities.LongIntroSort.Sort(kp + firstNaN, n - firstNaN,
+                (x, y) => x.Perm.CompareTo(y.Perm));
+        }
+
+        /// <summary>
+        ///     Long-indexed mask + emit. Mirrors BuildMaskAndEmit but reads from
+        ///     KeyPerm&lt;T&gt;* and uses UnmanagedMemoryBlock&lt;byte&gt; for the mask.
+        /// </summary>
+        private unsafe NDArray[] BuildMaskAndEmitLong<T>(
+            KeyPerm<T>* kp, long n, long firstNaN, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+            where T : unmanaged, IComparable<T>, IEquatable<T>
+        {
+            // For non-float (firstNaN == -1), treat as "no NaN section at all" → firstNaN = n.
+            long nanStart = firstNaN >= 0 ? firstNaN : n;
+
+            var maskBlock = new UnmanagedMemoryBlock<byte>(n);
+            byte* mask = maskBlock.Address;
+            // Zero-init isn't guaranteed; clear explicitly.
+            for (long i = 0; i < n; i++) mask[i] = 0;
+            mask[0] = 1;
+            long uniqueCount = 1;
+
+            for (long i = 1; i < nanStart; i++)
+            {
+                if (!kp[i].Key.Equals(kp[i - 1].Key)) { mask[i] = 1; uniqueCount++; }
+            }
+
+            if (nanStart < n)
+            {
+                mask[nanStart] = 1;
+                if (nanStart > 0) uniqueCount++;
+                if (!equal_nan)
+                {
+                    for (long i = nanStart + 1; i < n; i++)
+                    {
+                        mask[i] = 1;
+                        uniqueCount++;
+                    }
+                }
+            }
+
+            return EmitOutputsLong<T>(kp, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+        }
+
+        private unsafe NDArray[] EmitOutputsLong<T>(
+            KeyPerm<T>* kp, byte* mask, long n, long uniqueCount,
+            bool return_index, bool return_inverse, bool return_counts)
+            where T : unmanaged, IComparable<T>
+        {
+            int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
+            var results = new NDArray[outCount];
+
+            // values
+            var valuesBlock = new UnmanagedMemoryBlock<T>(uniqueCount);
+            var valuesSlice = new ArraySlice<T>(valuesBlock);
+            T* vDst = valuesBlock.Address;
+            long vIdx = 0;
+            for (long i = 0; i < n; i++)
+                if (mask[i] != 0) vDst[vIdx++] = kp[i].Key;
+            results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+            int outPos = 1;
+
+            // index — min(perm) within each run of equal keys
+            if (return_index)
+            {
+                var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                var idxSlice = new ArraySlice<long>(idxBlock);
+                long* iDst = idxBlock.Address;
+                long oIdx = 0;
+                long currentMin = kp[0].Perm;
+                for (long i = 1; i < n; i++)
+                {
+                    if (mask[i] != 0)
+                    {
+                        iDst[oIdx++] = currentMin;
+                        currentMin = kp[i].Perm;
+                    }
+                    else if (kp[i].Perm < currentMin)
+                    {
+                        currentMin = kp[i].Perm;
+                    }
+                }
+                iDst[oIdx++] = currentMin;
+                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount));
+            }
+
+            // inverse — inv[perm[i]] = cumsum(mask)[i] - 1
+            if (return_inverse)
+            {
+                var invBlock = new UnmanagedMemoryBlock<long>(n);
+                var invSlice = new ArraySlice<long>(invBlock);
+                long* invDst = invBlock.Address;
+                long rank = -1;
+                for (long i = 0; i < n; i++)
+                {
+                    if (mask[i] != 0) rank++;
+                    invDst[kp[i].Perm] = rank;
+                }
+                var invShape = ndim <= 1 ? Shape.Vector(n) : new Shape(Storage.Shape.Dimensions);
+                results[outPos++] = new NDArray(invSlice, invShape);
+            }
+
+            // counts
+            if (return_counts)
+            {
+                var cntBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                var cntSlice = new ArraySlice<long>(cntBlock);
+                long* cDst = cntBlock.Address;
+                long prevPos = 0;
+                long cIdx = 0;
+                for (long i = 1; i < n; i++)
+                {
+                    if (mask[i] != 0)
+                    {
+                        cDst[cIdx++] = i - prevPos;
+                        prevPos = i;
+                    }
+                }
+                cDst[cIdx++] = n - prevPos;
+                results[outPos++] = new NDArray(cntSlice, Shape.Vector(uniqueCount));
+            }
+
+            return results;
         }
     }
 }
