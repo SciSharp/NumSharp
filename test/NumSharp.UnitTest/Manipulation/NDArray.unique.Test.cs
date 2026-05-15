@@ -408,5 +408,101 @@ namespace NumSharp.UnitTest.Manipulation
             allParamNames.Should().Contain("axis");
             allParamNames.Should().Contain("equal_nan");
         }
+
+        // ============================================================
+        //  Long-indexed fallback tests (n > Array.MaxLength)
+        //
+        //  Allocating an array with > 2.1B elements requires >17 GB of RAM, so
+        //  we can't actually trigger the path naturally. Instead we use reflection
+        //  to invoke the long-indexed methods directly on small data and confirm
+        //  they produce the same output as the fast managed path.
+        // ============================================================
+
+        [TestMethod]
+        public void Unique_LongPath_Int32_ProducesSameResultAsFastPath()
+        {
+            var arr = np.array(new int[] { 5, 2, 9, 2, 5, 1, 8 });
+            var method = typeof(NDArray)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .First(m => m.Name == "uniqueFlatSortedLong" && m.IsGenericMethodDefinition)
+                .MakeGenericMethod(typeof(int));
+            var r = (NDArray[])method.Invoke(arr, new object[] { (long)arr.size, true, true, true, (long)-1 });
+
+            r[0].Should().BeShaped(5).And.BeOfValues(1, 2, 5, 8, 9);
+            r[1].GetInt64(0).Should().Be(5);
+            r[1].GetInt64(1).Should().Be(1);
+            r[1].GetInt64(2).Should().Be(0);
+            r[1].GetInt64(3).Should().Be(6);
+            r[1].GetInt64(4).Should().Be(2);
+            r[3].GetInt64(0).Should().Be(1);
+            r[3].GetInt64(1).Should().Be(2);
+            r[3].GetInt64(2).Should().Be(2);
+            r[3].GetInt64(3).Should().Be(1);
+            r[3].GetInt64(4).Should().Be(1);
+        }
+
+        [TestMethod]
+        public void Unique_LongPath_Double_NaN_EqualNanTrue()
+        {
+            var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
+            var method = typeof(NDArray)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
+                .MakeGenericMethod(typeof(double));
+            // signature: (long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)
+            var r = (NDArray[])method.Invoke(arr, new object[] { (long)arr.size, true, true, true, true });
+
+            r[0].Should().BeShaped(3);
+            r[0].GetDouble(0).Should().Be(1.0);
+            r[0].GetDouble(1).Should().Be(2.0);
+            double.IsNaN(r[0].GetDouble(2)).Should().BeTrue();
+            r[1].GetInt64(0).Should().Be(1);
+            r[1].GetInt64(1).Should().Be(3);
+            r[1].GetInt64(2).Should().Be(0);
+            r[3].GetInt64(0).Should().Be(2);
+            r[3].GetInt64(1).Should().Be(1);
+            r[3].GetInt64(2).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Unique_LongPath_Double_NaN_EqualNanFalse()
+        {
+            var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
+            var method = typeof(NDArray)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
+                .MakeGenericMethod(typeof(double));
+            var r = (NDArray[])method.Invoke(arr, new object[] { (long)arr.size, false, true, true, true });
+
+            r[0].Should().BeShaped(4);
+            r[0].GetDouble(0).Should().Be(1.0);
+            r[0].GetDouble(1).Should().Be(2.0);
+            double.IsNaN(r[0].GetDouble(2)).Should().BeTrue();
+            double.IsNaN(r[0].GetDouble(3)).Should().BeTrue();
+            r[1].GetInt64(0).Should().Be(1);
+            r[1].GetInt64(1).Should().Be(3);
+            r[1].GetInt64(2).Should().Be(0);
+            r[1].GetInt64(3).Should().Be(2);
+        }
+
+        [TestMethod]
+        public void Unique_LongPath_Complex()
+        {
+            // Complex doesn't implement IComparable, so it uses a dedicated long-indexed path
+            var data = new System.Numerics.Complex[] {
+                new(3, 0), new(1, 0), new(2, 0), new(1, 0)
+            };
+            var arr = np.array(data);
+            var method = typeof(NDArray)
+                .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .First(m => m.Name == "uniqueFlatSortedLongComplex");
+            // signature: (long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)
+            var r = (NDArray[])method.Invoke(arr, new object[] { (long)arr.size, true, true, true, true });
+
+            r[0].Should().BeShaped(3);
+            r[3].GetInt64(0).Should().Be(2); // 1+0i appears twice
+            r[3].GetInt64(1).Should().Be(1); // 2+0i once
+            r[3].GetInt64(2).Should().Be(1); // 3+0i once
+        }
     }
 }
