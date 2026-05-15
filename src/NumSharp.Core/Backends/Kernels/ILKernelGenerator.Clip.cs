@@ -258,11 +258,16 @@ namespace NumSharp.Backends.Kernels
 
             for (long i = 0; i < size; i++)
             {
+                // NumPy semantics: result = min(max(val, minVal), maxVal).
+                // When minVal > maxVal, the second clamp wins → result == maxVal.
+                // Two independent `if`s are required; an `if/else if` would
+                // leave values below minVal at the lower bound instead of
+                // capping them to maxVal.
                 var val = data[i];
+                if (val.CompareTo(minVal) < 0)
+                    val = minVal;
                 if (val.CompareTo(maxVal) > 0)
                     val = maxVal;
-                else if (val.CompareTo(minVal) < 0)
-                    val = minVal;
                 data[i] = val;
             }
         }
@@ -462,13 +467,15 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
+                // NumPy semantics: min(max(val, minVal), maxVal). Two sequential
+                // clamps (not if/else if) so that minVal > maxVal still caps at maxVal.
                 for (long i = 0; i < size; i++)
                 {
                     var val = data[i];
+                    if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                        val = minVal;
                     if (Comparer<T>.Default.Compare(val, maxVal) > 0)
                         val = maxVal;
-                    else if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                        val = minVal;
                     data[i] = val;
                 }
             }
@@ -624,15 +631,17 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // Strided iteration using coordinate transformation
+            // Strided iteration using coordinate transformation.
+            // NumPy semantics: min(max(val, minVal), maxVal). Two sequential
+            // clamps so minVal > maxVal still caps at maxVal.
             for (long i = 0; i < size; i++)
             {
                 long offset = shape.TransformOffset(i);
                 var val = data[offset];
+                if (val.CompareTo(minVal) < 0)
+                    val = minVal;
                 if (val.CompareTo(maxVal) > 0)
                     val = maxVal;
-                else if (val.CompareTo(minVal) < 0)
-                    val = minVal;
                 data[offset] = val;
             }
         }
