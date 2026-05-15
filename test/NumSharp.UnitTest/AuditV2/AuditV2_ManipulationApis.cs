@@ -56,7 +56,7 @@ public class AuditV2_ManipulationApis
     }
 
     // =====================================================================
-    // T1.18 — np.copyto ignores `casting` and `where`
+    // T1.18 — np.copyto `casting` and `where` (FIXED)
     // =====================================================================
 
     /// <summary>
@@ -66,19 +66,18 @@ public class AuditV2_ManipulationApis
     ///   a = np.zeros(3, dtype=np.int32)
     ///   np.copyto(a, np.array([1.5, 2.5, 3.5]))
     ///   → TypeError: Cannot cast array data from dtype('float64') to dtype('int32') according to the rule 'same_kind'
-    /// NumSharp: silently truncates to [1, 2, 3] — no `casting` parameter exists.
-    /// File: src/NumSharp.Core/Manipulation/np.copyto.cs:16 (TODO comment acknowledges gap)
+    /// NumSharp: now matches — throws InvalidCastException (.NET equivalent of TypeError).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.18")]
+    [TestMethod]
     public void T1_18_Copyto_FloatToInt_DefaultCasting_Throws()
     {
         var dst = np.zeros(new Shape(3), np.int32);
         var src = np.array(new double[] { 1.5, 2.5, 3.5 });
 
-        // NumPy: TypeError. NumSharp should match NumPy default casting='same_kind'.
         Action act = () => np.copyto(dst, src);
-        act.Should().Throw<Exception>(
-            "NumPy raises TypeError under default casting='same_kind' rule when copying float to int");
+        act.Should().Throw<InvalidCastException>(
+            "NumPy raises TypeError under default casting='same_kind' rule when copying float to int")
+            .WithMessage("*float64*int32*same_kind*");
     }
 
     /// <summary>
@@ -88,25 +87,206 @@ public class AuditV2_ManipulationApis
     ///   a = np.zeros(5, dtype=np.int32)
     ///   np.copyto(a, np.array([10,20,30,40,50]), where=np.array([T,F,T,F,T]))
     ///   → a == [10, 0, 30, 0, 50]
-    /// NumSharp: no overload accepting `where` — the signature is just (dst, src).
+    /// NumSharp: now exposes `where=` and writes only at masked positions.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.18")]
+    [TestMethod]
     public void T1_18_Copyto_WhereParameter_OnlyWritesMaskedElements()
     {
-        // Verify the parameter is missing by checking overloads.
-        var methods = typeof(np).GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
-        bool hasWhereOverload = false;
-        foreach (var m in methods)
-        {
-            if (m.Name != "copyto") continue;
-            foreach (var p in m.GetParameters())
-            {
-                if (p.Name == "where") { hasWhereOverload = true; break; }
-            }
-        }
+        var dst = np.zeros(new Shape(5), np.int32);
+        var src = np.array(new int[] { 10, 20, 30, 40, 50 });
+        var mask = np.array(new bool[] { true, false, true, false, true });
 
-        hasWhereOverload.Should().BeTrue(
-            "NumPy 2.x supports np.copyto(dst, src, where=mask); NumSharp omits this parameter");
+        np.copyto(dst, src, @where: mask);
+
+        dst.GetInt32(0).Should().Be(10);
+        dst.GetInt32(1).Should().Be(0);
+        dst.GetInt32(2).Should().Be(30);
+        dst.GetInt32(3).Should().Be(0);
+        dst.GetInt32(4).Should().Be(50);
+    }
+
+    /// <summary>
+    /// T1.18 — casting='unsafe' allows float→int (NumPy: truncates silently).
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_Unsafe_FloatToInt_Truncates()
+    {
+        var dst = np.zeros(new Shape(3), np.int32);
+        var src = np.array(new double[] { 1.5, 2.5, 3.5 });
+
+        np.copyto(dst, src, casting: "unsafe");
+
+        dst.GetInt32(0).Should().Be(1);
+        dst.GetInt32(1).Should().Be(2);
+        dst.GetInt32(2).Should().Be(3);
+    }
+
+    /// <summary>
+    /// T1.18 — casting='safe' allows widening int32→int64.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_Safe_AllowsWidening()
+    {
+        var dst = np.zeros(new Shape(3), np.int64);
+        var src = np.array(new int[] { 1, 2, 3 });
+
+        np.copyto(dst, src, casting: "safe");
+
+        dst.GetInt64(0).Should().Be(1);
+        dst.GetInt64(1).Should().Be(2);
+        dst.GetInt64(2).Should().Be(3);
+    }
+
+    /// <summary>
+    /// T1.18 — casting='safe' rejects float→int (loss of precision).
+    /// NumPy: TypeError; NumSharp: InvalidCastException.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_Safe_RejectsFloatToInt()
+    {
+        var dst = np.zeros(new Shape(3), np.int32);
+        var src = np.array(new double[] { 1.5, 2.5, 3.5 });
+
+        Action act = () => np.copyto(dst, src, casting: "safe");
+        act.Should().Throw<InvalidCastException>()
+            .WithMessage("*float64*int32*safe*");
+    }
+
+    /// <summary>
+    /// T1.18 — casting='no' rejects ANY dtype mismatch — int32→int64 must error.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_No_RejectsDifferentDtype()
+    {
+        var dst = np.zeros(new Shape(3), np.int64);
+        var src = np.array(new int[] { 1, 2, 3 });
+
+        Action act = () => np.copyto(dst, src, casting: "no");
+        act.Should().Throw<InvalidCastException>()
+            .WithMessage("*int32*int64*no*");
+    }
+
+    /// <summary>
+    /// T1.18 — casting='no' allows identical dtype copy.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_No_AllowsSameDtype()
+    {
+        var dst = np.zeros(new Shape(3), np.int32);
+        var src = np.array(new int[] { 1, 2, 3 });
+
+        np.copyto(dst, src, casting: "no");
+
+        dst.GetInt32(0).Should().Be(1);
+        dst.GetInt32(1).Should().Be(2);
+        dst.GetInt32(2).Should().Be(3);
+    }
+
+    /// <summary>
+    /// T1.18 — invalid casting name raises ArgumentException (NumPy: ValueError).
+    /// Verifies the full set of allowed casting names is enumerated in the message.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Casting_Invalid_Throws()
+    {
+        var dst = np.zeros(new Shape(3), np.float64);
+        var src = np.array(new double[] { 1.0, 2.0, 3.0 });
+
+        Action act = () => np.copyto(dst, src, casting: "foo");
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*'no'*'equiv'*'safe'*'same_kind'*'unsafe'*foo*");
+    }
+
+    /// <summary>
+    /// T1.18 — where mask broadcasts to dst shape. A 1-D mask broadcasts across
+    /// rows of a 2-D dst (NumPy semantics).
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Where_BroadcastsAcrossRows()
+    {
+        var dst = np.array(new int[,]
+        {
+            { 10, 20, 30 },
+            { 40, 50, 60 },
+        });
+        var src = np.array(new int[] { 99, 99, 99 });
+        var mask = np.array(new bool[] { true, false, true }); // broadcasts across rows
+
+        np.copyto(dst, src, @where: mask);
+
+        var expected = np.array(new int[,]
+        {
+            { 99, 20, 99 },
+            { 99, 50, 99 },
+        });
+        np.array_equal(dst, expected).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// T1.18 — where=null (default) behaves like where=True: full copy.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_WhereNull_DefaultIsFullCopy()
+    {
+        var dst = np.zeros(new Shape(3), np.int32);
+        var src = np.array(new int[] { 7, 8, 9 });
+
+        np.copyto(dst, src);
+
+        dst.GetInt32(0).Should().Be(7);
+        dst.GetInt32(1).Should().Be(8);
+        dst.GetInt32(2).Should().Be(9);
+    }
+
+    /// <summary>
+    /// T1.18 — where with a 0-d scalar True/False broadcasts to whole-array copy or no-op.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Where_ScalarFalse_IsNoOp()
+    {
+        var dst = np.array(new int[] { 10, 20, 30 });
+        var src = np.array(new int[] { 99, 99, 99 });
+        var maskFalse = np.array(false);
+
+        np.copyto(dst, src, @where: maskFalse);
+
+        dst.GetInt32(0).Should().Be(10);
+        dst.GetInt32(1).Should().Be(20);
+        dst.GetInt32(2).Should().Be(30);
+    }
+
+    /// <summary>
+    /// T1.18 — where with non-boolean array raises ArgumentException.
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Where_NonBoolean_Throws()
+    {
+        var dst = np.zeros(new Shape(3), np.int32);
+        var src = np.array(new int[] { 1, 2, 3 });
+        var maskInt = np.array(new int[] { 1, 0, 1 });
+
+        Action act = () => np.copyto(dst, src, @where: maskInt);
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*where*bool*int32*");
+    }
+
+    /// <summary>
+    /// T1.18 — where mask combines with cross-dtype copy (cast happens only at masked positions).
+    /// </summary>
+    [TestMethod]
+    public void T1_18_Copyto_Where_WithCast_OnlyMaskedPositionsConverted()
+    {
+        var dst = np.array(new long[] { 10, 20, 30, 40, 50 });
+        var src = np.array(new int[] { 99, 99, 99, 99, 99 });
+        var mask = np.array(new bool[] { true, false, true, false, true });
+
+        np.copyto(dst, src, casting: "safe", @where: mask);
+
+        dst.GetInt64(0).Should().Be(99);
+        dst.GetInt64(1).Should().Be(20);
+        dst.GetInt64(2).Should().Be(99);
+        dst.GetInt64(3).Should().Be(40);
+        dst.GetInt64(4).Should().Be(99);
     }
 
     // =====================================================================
@@ -194,15 +374,11 @@ public class AuditV2_ManipulationApis
     // =====================================================================
 
     /// <summary>
-    /// T1.61 — copyto into unwriteable destination throws NumSharpException; NumPy raises ValueError.
-    ///
-    /// NumPy 2.4.2:
-    ///   c = np.zeros(5); c.setflags(write=False); np.copyto(c, np.ones(5))
-    ///   → ValueError: assignment destination is read-only
-    /// NumSharp: throws NumSharpException with same message. Should be ArgumentException or ValueError equivalent.
-    /// File: src/NumSharp.Core/Manipulation/np.copyto.cs:24
+    /// T1.61 — copyto into unwriteable destination throws ArgumentException (NumPy: ValueError).
+    /// FIXED — np.copyto now performs the writeability check itself and throws ArgumentException
+    /// with the canonical "assignment destination is read-only" message.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.61")]
+    [TestMethod]
     public void T1_61_Copyto_UnwriteableDst_ThrowsValueErrorEquivalent()
     {
         // Use a broadcast view to obtain an unwriteable destination.
@@ -210,11 +386,10 @@ public class AuditV2_ManipulationApis
         var bDst = np.broadcast_to(basev, new Shape(5));
         var src = np.array(new double[] { 2.0, 3.0, 4.0, 5.0, 6.0 });
 
-        // NumPy raises ValueError. The closest .NET equivalent is ArgumentException
-        // (or a NumSharp-specific exception subtype that derives from ArgumentException).
         Action act = () => np.copyto(bDst, src);
         act.Should().Throw<ArgumentException>(
-            "NumPy raises ValueError on write to read-only destination; the .NET equivalent should derive from ArgumentException");
+            "NumPy raises ValueError on write to read-only destination; the .NET equivalent is ArgumentException")
+            .WithMessage("*assignment destination is read-only*");
     }
 
     // =====================================================================
