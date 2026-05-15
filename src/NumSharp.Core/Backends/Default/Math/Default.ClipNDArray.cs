@@ -107,10 +107,6 @@ namespace NumSharp.Backends
                 return Cast(lhs, outType, copy: true);
             }
 
-            // Broadcast and cast min/max to output dtype to avoid mixed-type kernel bugs
-            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
-            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
-
             // Materialize output buffer at outType, copying the (possibly promoted) input.
             if (@out is null)
             {
@@ -122,9 +118,24 @@ namespace NumSharp.Backends
                 np.copyto(@out, Cast(lhs, outType, copy: false));
             }
 
+            // Fast path: 0-d (scalar) bounds — skip the broadcast + astype
+            // materialization (which previously allocated and wrote two
+            // `lhs.size`-element bound arrays per call) and call the scalar
+            // SIMD kernels (`ClipUnified` / `ClipMinUnified` / `ClipMaxUnified`)
+            // directly. This is the dominant case for `clip(a, lo, hi)` with
+            // literal bounds.
+            bool minIsScalar = min is null || min.ndim == 0;
+            bool maxIsScalar = max is null || max.ndim == 0;
+            if (minIsScalar && maxIsScalar)
+                return ClipNDArrayScalarBounds(@out, min, max, outType);
+
+            // Slow path: at least one bound is an array — broadcast & cast.
+            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
+            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
+
             var len = @out.size;
 
-            // Check if we can use the fast contiguous SIMD path
+            // Check if we can use the contiguous SIMD path for array bounds.
             // All participating arrays must be contiguous with zero offset
             bool canUseFastPath = @out.Shape.IsContiguous && @out.Shape.Offset == 0;
             if (!(_min is null) && canUseFastPath)
@@ -136,6 +147,167 @@ namespace NumSharp.Backends
                 return ClipNDArrayContiguous(@out, _min, _max, len);
             else
                 return ClipNDArrayGeneral(@out, _min, _max, len);
+        }
+
+        /// <summary>
+        /// Fast path when min and max are both 0-d scalars (or one is null).
+        /// Dispatches to the scalar-bound SIMD kernels (`ClipUnified` /
+        /// `ClipMinUnified` / `ClipMaxUnified`) which broadcast the scalar
+        /// internally within the vector loop — avoiding the cost of
+        /// materializing a `len`-sized bound array.
+        ///
+        /// Handles strided/sliced `@out` via the *Unified kernels (which
+        /// switch to the strided variant when `@out.Shape.IsContiguous` is
+        /// false).
+        /// </summary>
+        private unsafe NDArray ClipNDArrayScalarBounds(NDArray @out, NDArray min, NDArray max, NPTypeCode outType)
+        {
+            long len = @out.size;
+
+            // Convert scalar bounds to outType. `astype` on a 0-d array is O(1).
+            var minCast = min is null ? null : min.astype(outType);
+            var maxCast = max is null ? null : max.astype(outType);
+
+            switch (outType)
+            {
+                case NPTypeCode.Byte:
+                    ClipScalar<byte>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.SByte:
+                    ClipScalar<sbyte>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Int16:
+                    ClipScalar<short>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.UInt16:
+                    ClipScalar<ushort>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Int32:
+                    ClipScalar<int>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.UInt32:
+                    ClipScalar<uint>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Int64:
+                    ClipScalar<long>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.UInt64:
+                    ClipScalar<ulong>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Single:
+                    ClipScalar<float>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Double:
+                    ClipScalar<double>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Decimal:
+                    ClipScalar<decimal>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Char:
+                    ClipScalar<char>(@out, minCast, maxCast, len,
+                        (d, s, lo, hi, sh) => ILKernelGenerator.ClipUnified(d, s, lo, hi, sh),
+                        (d, s, lo,     sh) => ILKernelGenerator.ClipMinUnified(d, s, lo, sh),
+                        (d, s,     hi, sh) => ILKernelGenerator.ClipMaxUnified(d, s, hi, sh));
+                    return @out;
+                case NPTypeCode.Half:
+                    // Half is not IComparable<Half> in some BCL versions; fall
+                    // back to the array-bound path (cheap broadcast for 0-d).
+                    return ClipNDArrayScalarBoundsFallback(@out, min, max, outType);
+                case NPTypeCode.Complex:
+                    // Complex has lex ordering with NaN propagation — keep the
+                    // existing array-bound path which already implements the
+                    // exact semantics.
+                    return ClipNDArrayScalarBoundsFallback(@out, min, max, outType);
+                default:
+                    throw new NotSupportedException($"ClipNDArray not supported for dtype {outType}");
+            }
+        }
+
+        // Helper extracts the scalar value(s) from 0-d NDArrays and dispatches
+        // to the appropriate Unified kernel. Inlined-by-JIT delegate avoids
+        // duplicating the dispatch logic 12 times.
+        private static unsafe void ClipScalar<T>(
+            NDArray @out, NDArray minCast, NDArray maxCast, long len,
+            BothBoundsKernel<T> both,
+            MinKernel<T> minOnly,
+            MaxKernel<T> maxOnly)
+            where T : unmanaged
+        {
+            var dst = (T*)@out.Address;
+            if (minCast is not null && maxCast is not null)
+            {
+                T lo = *(T*)minCast.Address;
+                T hi = *(T*)maxCast.Address;
+                both(dst, len, lo, hi, @out.Shape);
+            }
+            else if (minCast is not null)
+            {
+                T lo = *(T*)minCast.Address;
+                minOnly(dst, len, lo, @out.Shape);
+            }
+            else
+            {
+                T hi = *(T*)maxCast.Address;
+                maxOnly(dst, len, hi, @out.Shape);
+            }
+        }
+
+        private unsafe delegate void BothBoundsKernel<T>(T* data, long size, T lo, T hi, Shape shape) where T : unmanaged;
+        private unsafe delegate void MinKernel<T>(T* data, long size, T lo, Shape shape) where T : unmanaged;
+        private unsafe delegate void MaxKernel<T>(T* data, long size, T hi, Shape shape) where T : unmanaged;
+
+        // Fallback for dtypes (Half, Complex) whose scalar SIMD kernels aren't
+        // wired. Materializes the 0-d bound by broadcast — still much cheaper
+        // than the full slow path because `np.broadcast_to(0-d, shape)` returns
+        // a stride-0 view and `astype` only allocates `1` element.
+        private NDArray ClipNDArrayScalarBoundsFallback(NDArray @out, NDArray min, NDArray max, NPTypeCode outType)
+        {
+            var _min = min is null ? null : np.broadcast_to(min, @out.Shape).astype(outType);
+            var _max = max is null ? null : np.broadcast_to(max, @out.Shape).astype(outType);
+
+            long len = @out.size;
+            bool canUseFastPath = @out.Shape.IsContiguous && @out.Shape.Offset == 0;
+            if (!(_min is null) && canUseFastPath)
+                canUseFastPath = _min.Shape.IsContiguous && _min.Shape.Offset == 0;
+            if (!(_max is null) && canUseFastPath)
+                canUseFastPath = _max.Shape.IsContiguous && _max.Shape.Offset == 0;
+
+            return canUseFastPath
+                ? ClipNDArrayContiguous(@out, _min, _max, len)
+                : ClipNDArrayGeneral(@out, _min, _max, len);
         }
 
         /// <summary>
