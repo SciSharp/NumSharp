@@ -471,6 +471,70 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locOuterNdim);
 
+            // ---- Broadcast fast path: detect "outer dims fully broadcast (srcStrides==0) AND inner contig" ----
+            //
+            // When all outer src strides are 0, every outer row of dst gets the same converted source data.
+            // Convert the source row ONCE into dst[0..innerN], then memcpy that row into each remaining
+            // outer dst position. Saves N-1 SIMD conversion passes for an N-row broadcast.
+            //
+            // This is the NumPy strategy for (1,N)→(M,N) broadcast casts; without it we'd re-convert the
+            // same src row M times when one conversion + (M-1) memcpys suffices.
+            {
+                var lblNotBroadcast = il.DefineLabel();
+                var lblBroadcastFastPath = il.DefineLabel();
+
+                // outerNdim > 0 (must have outer dims to broadcast across)
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Ble, lblNotBroadcast);
+
+                // innerSrcStride == 1 && innerDstStride == 1
+                il.Emit(OpCodes.Ldloc, locInnerSrcStride);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Bne_Un, lblNotBroadcast);
+                il.Emit(OpCodes.Ldloc, locInnerDstStride);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Bne_Un, lblNotBroadcast);
+
+                // All srcStrides[0..outerNdim-1] == 0
+                var locCheckIdx = il.DeclareLocal(typeof(int));
+                var checkHead = il.DefineLabel();
+                var checkBody = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Stloc, locCheckIdx);
+                il.MarkLabel(checkHead);
+                il.Emit(OpCodes.Ldloc, locCheckIdx);
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                il.Emit(OpCodes.Blt, checkBody);
+                il.Emit(OpCodes.Br, lblBroadcastFastPath);
+
+                il.MarkLabel(checkBody);
+                il.Emit(OpCodes.Ldarg_2);   // srcStrides
+                il.Emit(OpCodes.Ldloc, locCheckIdx);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Bne_Un, lblNotBroadcast);
+
+                il.Emit(OpCodes.Ldloc, locCheckIdx);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locCheckIdx);
+                il.Emit(OpCodes.Br, checkHead);
+
+                // ---- Broadcast fast path body ----
+                il.MarkLabel(lblBroadcastFastPath);
+                EmitBroadcastConvertThenMemcpy(il, key, strategy, simdBits, vstep,
+                    srcSize, dstSize, locInnerN, locOuterNdim);
+                il.Emit(OpCodes.Br, lblRet);
+
+                il.MarkLabel(lblNotBroadcast);
+            }
+
             // ---- coords[] = stackalloc long[outerNdim] (or 1 if outerNdim==0 to avoid 0-byte localloc) ----
             // localloc expects unsigned native int count of bytes.
             il.Emit(OpCodes.Ldloc, locOuterNdim);
@@ -788,6 +852,243 @@ namespace NumSharp.Backends.Kernels
 
             il.MarkLabel(lblRet);
             il.Emit(OpCodes.Ret);
+        }
+
+        // =================================================================
+        // Broadcast fast path helper
+        // =================================================================
+
+        /// <summary>
+        /// Emit the "convert once then memcpy the rest" body for the broadcast fast path.
+        ///
+        /// Step 1: Convert one source row (innerN elements) into dst[0..innerN].
+        ///         - Same-type (MemoryCopy): Buffer.MemoryCopy(src, dst, innerN*srcSize, innerN*srcSize).
+        ///         - Cross-type: SIMD loop + scalar tail for innerN elements (reuses EmitSimdLoopAndTail).
+        ///
+        /// Step 2: For each remaining outer position, Buffer.MemoryCopy from dst[0..innerN] into
+        ///         dst[outerDstOffset..outerDstOffset+innerN]. Outer coord advance is incremental
+        ///         (same pattern as the regular outer loop, no mod/div).
+        /// </summary>
+        private static void EmitBroadcastConvertThenMemcpy(
+            ILGenerator il,
+            CastKernelKey key,
+            CastStrategy strategy,
+            int simdBits,
+            int vstep,
+            int srcSize,
+            int dstSize,
+            LocalBuilder locInnerN,
+            LocalBuilder locOuterNdim)
+        {
+            // ---- Step 1: Convert src row → dst row 0 ----
+            if (strategy == CastStrategy.MemoryCopy)
+            {
+                // Same-type: Buffer.MemoryCopy(src, dst, innerN*srcSize, innerN*srcSize)
+                EmitMemoryCopyInline(il, srcSize,
+                    pushSrc:   () => il.Emit(OpCodes.Ldarg_0),
+                    pushDst:   () => il.Emit(OpCodes.Ldarg_1),
+                    pushCount: () => il.Emit(OpCodes.Ldloc, locInnerN));
+            }
+            else
+            {
+                // Cross-type: SIMD loop + scalar tail for innerN elements.
+                EmitSimdLoopAndTail(il, key, strategy, simdBits, vstep,
+                    pushSrcBase: () => il.Emit(OpCodes.Ldarg_0),
+                    pushDstBase: () => il.Emit(OpCodes.Ldarg_1),
+                    pushCount:   () => il.Emit(OpCodes.Ldloc, locInnerN));
+            }
+
+            // ---- Step 2: Memcpy dst[0..innerN] into each remaining outer dst row ----
+            //
+            // Layout of the rest of the body:
+            //   - Allocate coords[outerNdim] via localloc; zero it.
+            //   - outerDstOffset = 0.
+            //   - Advance coords once before the first memcpy (we've already written row 0).
+            //   - Loop:
+            //       memcpy(dst, dst + outerDstOffset * dstSize, innerN * dstSize, ...)
+            //       advance coords → outerDstOffset
+            //       if overflow → done.
+            //   The advance happens at top so the loop exits cleanly when overflowing all axes.
+
+            var locCoords         = il.DeclareLocal(typeof(long*));
+            var locOuterDstOffset = il.DeclareLocal(typeof(long));
+
+            // Allocate coords array
+            il.Emit(OpCodes.Ldloc, locOuterNdim);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_U);
+            il.Emit(OpCodes.Localloc);
+            il.Emit(OpCodes.Stloc, locCoords);
+
+            // Zero coords[]
+            {
+                var locK = il.DeclareLocal(typeof(int));
+                var zeroHead = il.DefineLabel();
+                var zeroBody = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Stloc, locK);
+                il.MarkLabel(zeroHead);
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                var zeroDone = il.DefineLabel();
+                il.Emit(OpCodes.Bge, zeroDone);
+
+                il.MarkLabel(zeroBody);
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stind_I8);
+
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locK);
+                il.Emit(OpCodes.Br, zeroHead);
+
+                il.MarkLabel(zeroDone);
+            }
+
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+            var lblBroadcastLoopHead = il.DefineLabel();
+            var lblBroadcastLoopBody = il.DefineLabel();
+            var lblBroadcastDone     = il.DefineLabel();
+
+            il.Emit(OpCodes.Br, lblBroadcastLoopHead);
+
+            // ---- Memcpy body ----
+            il.MarkLabel(lblBroadcastLoopBody);
+
+            // Buffer.MemoryCopy(dst + 0, dst + outerDstOffset * dstSize, innerN * dstSize, innerN * dstSize)
+            var memCopy = typeof(Buffer).GetMethod(
+                nameof(Buffer.MemoryCopy),
+                new[] { typeof(void*), typeof(void*), typeof(long), typeof(long) })!;
+
+            il.Emit(OpCodes.Ldarg_1);   // src = dst row 0
+
+            il.Emit(OpCodes.Ldarg_1);   // dst = dst + outerDstOffset * dstSize
+            il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+            il.Emit(OpCodes.Ldc_I8, (long)dstSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            il.Emit(OpCodes.Ldloc, locInnerN);   // sizeInBytes
+            il.Emit(OpCodes.Ldc_I8, (long)dstSize);
+            il.Emit(OpCodes.Mul);
+
+            il.Emit(OpCodes.Ldloc, locInnerN);   // bytesToCopy
+            il.Emit(OpCodes.Ldc_I8, (long)dstSize);
+            il.Emit(OpCodes.Mul);
+
+            il.EmitCall(OpCodes.Call, memCopy, null);
+
+            // ---- Advance coords (innermost first) ----
+            il.MarkLabel(lblBroadcastLoopHead);
+            {
+                var locAxis = il.DeclareLocal(typeof(int));
+                var advHead = il.DefineLabel();
+                var advBody = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locAxis);
+
+                il.MarkLabel(advHead);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Bge, advBody);
+                il.Emit(OpCodes.Br, lblBroadcastDone);   // overflowed all axes
+
+                il.MarkLabel(advBody);
+
+                // coords[axis]++
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stind_I8);
+
+                // outerDstOffset += dstStrides[axis]
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+                // if (coords[axis] < shape[axis]) goto loopBody
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldarg_S, (byte)4);   // shape
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Blt, lblBroadcastLoopBody);
+
+                // Coords overflow on this axis: reset coord, subtract stride*shape, move outward.
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stind_I8);
+
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldarg_S, (byte)4);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locAxis);
+                il.Emit(OpCodes.Br, advHead);
+            }
+
+            il.MarkLabel(lblBroadcastDone);
         }
 
         // =================================================================
