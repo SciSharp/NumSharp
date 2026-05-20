@@ -40,15 +40,12 @@ public class AuditV2_NDArrayCreation
     }
 
     // -----------------------------------------------------------------------
-    // T1.8 — np.concatenate dtype promotion violates NEP50.
-    //   File: src/NumSharp.Core/Creation/np.concatenate.cs:53-58
-    //   Uses NPTypeCode.CompareTo (group, size) instead of
-    //   np._FindCommonType / NEP50 promotion table. For
-    //   `concat([float32, int64])` it picks `float32` because the float
-    //   group ranks above the int group. NumPy returns `float64`.
-    //   Loses ~21 bits of integer precision silently.
+    // T1.8 (FIXED) — np.concatenate now routes through np.result_type for
+    //   NEP50-compliant promotion. concatenate([float32, int64]) returns
+    //   float64 matching NumPy 2.x.
+    //   File: src/NumSharp.Core/Creation/np.concatenate.cs
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.8")]
+    [TestMethod]
     public void T1_8_Concatenate_F32_I64_PromotesToFloat32_Not_Float64()
     {
         var f32 = np.array(new float[] { 1f, 2f, 3f });

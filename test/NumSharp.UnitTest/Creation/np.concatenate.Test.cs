@@ -165,5 +165,284 @@ namespace NumSharp.UnitTest.Creation
             r.GetInt64(2, 0).Should().Be(9L, "Row 2 should be [9,9,9]");
             r.GetInt64(3, 0).Should().Be(1L, "Row 3 should be [1,1,1]");
         }
+
+        // ================================================================
+        // NumPy 2.x parity: NEP50 promotion, out=, dtype=, casting=, axis=None
+        // ================================================================
+
+        // -- NEP50 promotion (T1.8) --
+
+        [TestMethod]
+        public void NEP50_Float32_Int64_PromotesToFloat64()
+        {
+            // python: np.concatenate([np.float32([1]), np.int64([2])]).dtype == float64
+            var r = np.concatenate(new[] { np.array(new float[] { 1f }), np.array(new long[] { 2L }) });
+            r.typecode.Should().Be(NPTypeCode.Double);
+            r.Data<double>().Should().Equal(1.0, 2.0);
+        }
+
+        [TestMethod]
+        public void NEP50_Int8_UInt8_PromotesToInt16()
+        {
+            // python: np.concatenate([np.int8([1]), np.uint8([2])]).dtype == int16
+            var r = np.concatenate(new[] { np.array(new sbyte[] { 1 }), np.array(new byte[] { 2 }) });
+            r.typecode.Should().Be(NPTypeCode.Int16);
+        }
+
+        [TestMethod]
+        public void NEP50_Half_Single_PromotesToSingle()
+        {
+            // python: np.concatenate([np.float16([1]), np.float32([2])]).dtype == float32
+            var r = np.concatenate(new[] { np.array(new Half[] { (Half)1f }), np.array(new float[] { 2f }) });
+            r.typecode.Should().Be(NPTypeCode.Single);
+        }
+
+        [TestMethod]
+        public void NEP50_Complex_Double_PromotesToComplex()
+        {
+            var c = np.array(new System.Numerics.Complex[] { new(1, 0) });
+            var d = np.array(new double[] { 2.0 });
+            var r = np.concatenate(new[] { c, d });
+            r.typecode.Should().Be(NPTypeCode.Complex);
+        }
+
+        [TestMethod]
+        public void NEP50_Mixed_SByte_Half_Complex_PromotesToComplex()
+        {
+            // T1.9 regression: previously crashed for mixed dtypes including SByte/Half/Complex.
+            var a = np.array(new sbyte[] { 1 });
+            var b = np.array(new Half[] { (Half)2f });
+            var c = np.array(new System.Numerics.Complex[] { new(3, 0) });
+            var r = np.concatenate(new[] { a, b, c });
+            r.typecode.Should().Be(NPTypeCode.Complex);
+        }
+
+        // -- axis=None (flatten) --
+
+        [TestMethod]
+        public void AxisNone_Flattens2DInputs()
+        {
+            // python: np.concatenate([[[1,2],[3,4]], [[5,6]]], axis=None) → [1,2,3,4,5,6]
+            var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+            var b = np.array(new int[,] { { 5, 6 } });
+            var r = np.concatenate(new[] { a, b }, axis: null);
+            r.ndim.Should().Be(1);
+            r.shape[0].Should().Be(6);
+            r.Data<int>().Should().Equal(1, 2, 3, 4, 5, 6);
+        }
+
+        [TestMethod]
+        public void AxisNone_SingleArrayReturnsFlatCopy()
+        {
+            var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+            var r = np.concatenate(new[] { a }, axis: null);
+            r.ndim.Should().Be(1);
+            r.Data<int>().Should().Equal(1, 2, 3, 4);
+        }
+
+        // -- dtype= override --
+
+        [TestMethod]
+        public void Dtype_OverridesPromotion()
+        {
+            var r = np.concatenate(
+                new[] { np.array(new int[] { 1, 2 }), np.array(new int[] { 3, 4 }) },
+                dtype: NPTypeCode.Double);
+            r.typecode.Should().Be(NPTypeCode.Double);
+            r.Data<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
+        }
+
+        [TestMethod]
+        public void Dtype_DownCastUnsafe()
+        {
+            // int64 → int32 needs unsafe casting.
+            var r = np.concatenate(
+                new[] { np.array(new long[] { 1L, 2L }), np.array(new long[] { 3L, 4L }) },
+                dtype: NPTypeCode.Int32,
+                casting: "unsafe");
+            r.typecode.Should().Be(NPTypeCode.Int32);
+            r.Data<int>().Should().Equal(1, 2, 3, 4);
+        }
+
+        // -- out= --
+
+        [TestMethod]
+        public void Out_WritesIntoProvidedBuffer()
+        {
+            var dst = np.zeros(new Shape(4), NPTypeCode.Int32);
+            var r = np.concatenate(
+                new[] { np.array(new int[] { 1, 2 }), np.array(new int[] { 3, 4 }) },
+                @out: dst);
+            r.Should().BeSameAs(dst);
+            dst.Data<int>().Should().Equal(1, 2, 3, 4);
+        }
+
+        [TestMethod]
+        public void Out_WrongShape_Throws()
+        {
+            var dst = np.zeros(new Shape(5), NPTypeCode.Int32); // wrong size
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[] { 1, 2 }), np.array(new int[] { 3, 4 }) },
+                @out: dst);
+            act.Should().Throw<IncorrectShapeException>().WithMessage("*wrong shape*");
+        }
+
+        [TestMethod]
+        public void OutPlusDtype_Throws()
+        {
+            var dst = np.zeros(new Shape(2), NPTypeCode.Int32);
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[] { 1, 2 }) },
+                @out: dst,
+                dtype: NPTypeCode.Int32);
+            act.Should().Throw<ArgumentException>().WithMessage("*only takes*out*dtype*");
+        }
+
+        // -- casting= --
+
+        [TestMethod]
+        public void Casting_DefaultSameKind_BlocksFloatToInt()
+        {
+            // NumPy: TypeError under default same_kind for float→int.
+            var dst = np.zeros(new Shape(3), NPTypeCode.Int32);
+            Action act = () => np.concatenate(
+                new[] { np.array(new double[] { 1.5, 2.5 }), np.array(new double[] { 3.5 }) },
+                @out: dst);
+            act.Should().Throw<InvalidCastException>().WithMessage("*same_kind*");
+        }
+
+        [TestMethod]
+        public void Casting_Unsafe_AllowsFloatToInt()
+        {
+            var dst = np.zeros(new Shape(3), NPTypeCode.Int32);
+            np.concatenate(
+                new[] { np.array(new double[] { 1.5, 2.5 }), np.array(new double[] { 3.5 }) },
+                @out: dst,
+                casting: "unsafe");
+            dst.Data<int>().Should().Equal(1, 2, 3);
+        }
+
+        [TestMethod]
+        public void Casting_InvalidName_Throws()
+        {
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[] { 1 }) },
+                casting: "bogus");
+            act.Should().Throw<ArgumentException>().WithMessage("*casting*");
+        }
+
+        // -- Edge cases --
+
+        [TestMethod]
+        public void ZeroDimensional_Throws()
+        {
+            // NumPy: ValueError "zero-dimensional arrays cannot be concatenated"
+            Action act = () => np.concatenate(new[] { np.array(1), np.array(2) });
+            act.Should().Throw<ArgumentException>().WithMessage("*zero-dimensional*");
+        }
+
+        [TestMethod]
+        public void AxisOutOfRange_Throws()
+        {
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[,] { { 1, 2 }, { 3, 4 } }), np.array(new int[,] { { 5, 6 } }) },
+                axis: 5);
+            act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*out of bounds*");
+        }
+
+        [TestMethod]
+        public void NdimMismatch_Throws()
+        {
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[] { 1, 2 }), np.array(new int[,] { { 3, 4 } }) });
+            act.Should().Throw<IncorrectShapeException>()
+                .WithMessage("*same number of dimensions*");
+        }
+
+        [TestMethod]
+        public void NonAxisDimMismatch_Throws()
+        {
+            Action act = () => np.concatenate(
+                new[] { np.array(new int[,] { { 1, 2 } }), np.array(new int[,] { { 3, 4, 5 } }) });
+            act.Should().Throw<IncorrectShapeException>().WithMessage("*must match exactly*");
+        }
+
+        [TestMethod]
+        public void EmptyArray_PreservesNonEmptyData()
+        {
+            var r = np.concatenate(new[] {
+                np.array(new double[] { 1.0, 2.0 }),
+                np.array(new double[] { })
+            });
+            r.Data<double>().Should().Equal(1.0, 2.0);
+        }
+
+        [TestMethod]
+        public void SingleArray_ReturnsCopy()
+        {
+            // NumPy: np.concatenate([a]) is NOT a.
+            var a = np.array(new int[] { 1, 2, 3 });
+            var r = np.concatenate(new[] { a });
+            ReferenceEquals(r, a).Should().BeFalse("NumPy returns a fresh array");
+            r.Data<int>().Should().Equal(1, 2, 3);
+        }
+
+        // -- Layout coverage --
+
+        [TestMethod]
+        public void FContiguous_Inputs_ProduceFContiguousOutput()
+        {
+            // NumPy: when all inputs are F-contig, the result is F-contig.
+            var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } }).copy('F');
+            var b = np.array(new int[,] { { 5, 6 } }).copy('F');
+            var r = np.concatenate(new[] { a, b });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void StridedView_Concat_Works()
+        {
+            var a = np.arange(12).reshape(3, 4);
+            var view = a["::2"]; // strided view, rows 0 and 2
+            var b = np.arange(8).reshape(2, 4);
+            var r = np.concatenate(new[] { view, b }, axis: 0);
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 4 });
+        }
+
+        [TestMethod]
+        public void TransposedView_Concat_Works()
+        {
+            var a = np.arange(6).reshape(2, 3).T;     // (3,2) non-contig
+            var b = np.arange(6).reshape(3, 2);
+            var r = np.concatenate(new[] { a, b }, axis: 0);
+            r.shape.Should().BeEquivalentTo(new long[] { 6, 2 });
+        }
+
+        // -- Dtype coverage (all 15 dtypes round-trip) --
+
+        [DataTestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.SByte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Half)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Complex)]
+        public void AllDtypes_SameDtype_RoundTrip(NPTypeCode tc)
+        {
+            var a = np.array(new double[] { 1.0, 2.0 }).astype(tc);
+            var b = np.array(new double[] { 3.0, 4.0 }).astype(tc);
+            var r = np.concatenate(new[] { a, b });
+            r.typecode.Should().Be(tc);
+            r.shape[0].Should().Be(4);
+        }
     }
 }

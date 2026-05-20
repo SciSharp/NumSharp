@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -9,227 +10,424 @@ namespace NumSharp
         /// <summary>
         ///     Join a sequence of arrays along an existing axis.
         /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
+        /// <param name="arrays">
+        ///     The arrays must have the same shape, except in the dimension
+        ///     corresponding to <paramref name="axis"/> (the first, by default).
+        /// </param>
+        /// <param name="axis">
+        ///     The axis along which the arrays will be joined. If
+        ///     <c>null</c>, arrays are flattened before use. Default is 0.
+        ///     Negative axes are normalized against the input ndim.
+        /// </param>
+        /// <param name="out">
+        ///     If provided, the destination to place the result. The shape must
+        ///     be correct, matching what would have been returned with no
+        ///     <c>out</c> argument. Cannot be used together with <paramref name="dtype"/>.
+        /// </param>
+        /// <param name="dtype">
+        ///     If provided, the result array will have this dtype. Cannot be
+        ///     used together with <paramref name="out"/>.
+        /// </param>
+        /// <param name="casting">
+        ///     Controls what kind of data casting may occur. One of
+        ///     <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c>
+        ///     (default), or <c>"unsafe"</c>.
+        /// </param>
         /// <returns>The concatenated array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
-        public static NDArray concatenate(NDArray[] arrays, int axis = 0)
+        public static NDArray concatenate(
+            NDArray[] arrays,
+            int? axis = 0,
+            NDArray @out = null,
+            NPTypeCode? dtype = null,
+            string casting = "same_kind")
         {
-            //What we do is we have the axis which is the only dimension that is allowed to be different
-            //We need to perform a check if the dimensions actually match.
-            //After we have the axis ax=1 where shape is (3,ax,3) - ax is the only dimension that can vary.
-            //So if we got input of (3,5,3) and (3,1,3), we create a return shape of (3,6,3).
-            //We perform the assignment by iterating a slice: (:,n,:) on src and dst where dst while n of dst grows as we iterate all arrays.
-
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
-
             if (arrays.Length == 0)
-                throw new ArgumentException("Value cannot be an empty collection.", nameof(arrays));
+                throw new ArgumentException(
+                    "need at least one array to concatenate", nameof(arrays));
 
-            if (arrays.Length == 1)
-                return arrays[0];
-
-            var first = arrays[0];
-            var firstShape = (long[])first.shape.Clone();
-
-            while (axis < 0)
-                axis = first.ndim + axis; //translate negative axis
-            int i, j;
-            long axisSize = 0; //accumulated shape[axis] size for return shape.
-            NPTypeCode retType = first.GetTypeCode;
-            foreach (var src in arrays)
+            // Validate casting name up-front. NumPy raises ValueError on invalid
+            // casting strings regardless of whether any cast actually occurs.
+            switch ((casting ?? string.Empty).ToLowerInvariant())
             {
-                //accumulate the concatenated axis
-                var shape = src.shape;
-                axisSize += shape[axis];
+                case "no":
+                case "equiv":
+                case "safe":
+                case "same_kind":
+                case "unsafe":
+                    break;
+                default:
+                    throw new ArgumentException(
+                        $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', or 'unsafe', got '{casting}'",
+                        nameof(casting));
+            }
 
-                if (ReferenceEquals(src, first))
-                    continue;
+            // NumPy: out and dtype are mutually exclusive (raises TypeError).
+            if (@out is not null && dtype is not null)
+                throw new ArgumentException(
+                    "concatenate() only takes `out` or `dtype` as an argument, but both were provided.");
 
-                var srcType = src.GetTypeCode;
+            // 0-D arrays cannot be concatenated (NumPy: "zero-dimensional arrays cannot be concatenated").
+            for (int k = 0; k < arrays.Length; k++)
+            {
+                if (arrays[k] is null)
+                    throw new ArgumentNullException($"{nameof(arrays)}[{k}]");
+                if (arrays[k].ndim == 0)
+                    throw new ArgumentException(
+                        "zero-dimensional arrays cannot be concatenated");
+            }
 
-                //resolve what the return type should be and should we perform casting.
-                if (first.GetTypeCode != srcType)
+            // axis=None: flatten every input to 1-D, then concatenate along axis 0.
+            NDArray[] workArrays = arrays;
+            int effectiveAxis;
+            if (axis is null)
+            {
+                workArrays = new NDArray[arrays.Length];
+                for (int k = 0; k < arrays.Length; k++)
+                    workArrays[k] = arrays[k].ravel();
+                effectiveAxis = 0;
+            }
+            else
+            {
+                effectiveAxis = axis.Value;
+            }
+
+            var first = workArrays[0];
+            int ndim = first.ndim;
+
+            // Normalize negative axis against input ndim (NumPy AxisError on out-of-range).
+            if (effectiveAxis < 0)
+                effectiveAxis += ndim;
+            if (effectiveAxis < 0 || effectiveAxis >= ndim)
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} is out of bounds for array of dimension {ndim}");
+
+            // Shape validation: all inputs must have same ndim and match on
+            // non-axis dimensions. Accumulate axis size for the result.
+            long axisSize = 0;
+            var firstShape = (long[])first.shape.Clone();
+            for (int k = 0; k < workArrays.Length; k++)
+            {
+                var src = workArrays[k];
+                if (src.ndim != ndim)
+                    throw new IncorrectShapeException(
+                        $"all the input arrays must have same number of dimensions, " +
+                        $"but the array at index 0 has {ndim} dimension(s) and the array at index {k} has {src.ndim} dimension(s)");
+
+                var srcShape = src.shape;
+                for (int j = 0; j < ndim; j++)
                 {
-                    if (srcType.CompareTo(retType) == 1)
+                    if (j == effectiveAxis) continue;
+                    if (srcShape[j] != firstShape[j])
+                        throw new IncorrectShapeException(
+                            $"all the input array dimensions except for the concatenation axis must match exactly, " +
+                            $"but along dimension {j}, the array at index 0 has size {firstShape[j]} and the array at index {k} has size {srcShape[j]}");
+                }
+
+                axisSize += srcShape[effectiveAxis];
+            }
+
+            // Resolve result dtype: dtype= wins, then out=, then NEP50 promotion.
+            NPTypeCode resultType;
+            if (dtype is not null)
+                resultType = dtype.Value;
+            else if (@out is not null)
+                resultType = @out.GetTypeCode;
+            else if (workArrays.Length == 1)
+                resultType = workArrays[0].GetTypeCode;
+            else
+                resultType = np.result_type(workArrays);
+
+            // Casting rule check: each input must cast to resultType under
+            // the requested casting mode. NumPy raises TypeError; we raise
+            // InvalidCastException with the NumPy-style message.
+            for (int k = 0; k < workArrays.Length; k++)
+            {
+                var srcType = workArrays[k].GetTypeCode;
+                if (srcType == resultType) continue;
+                if (!np.can_cast(srcType, resultType, casting))
+                    throw new InvalidCastException(
+                        $"Cannot cast array data from dtype('{srcType.AsNumpyDtypeName()}') " +
+                        $"to dtype('{resultType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+            }
+
+            // Compute the output shape.
+            firstShape[effectiveAxis] = axisSize;
+
+            // Allocate or validate output.
+            NDArray dst;
+            if (@out is not null)
+            {
+                if (@out.ndim != ndim)
+                    throw new IncorrectShapeException(
+                        $"Output array has wrong dimensionality: expected {ndim}, got {@out.ndim}");
+                for (int j = 0; j < ndim; j++)
+                {
+                    if (@out.shape[j] != firstShape[j])
+                        throw new IncorrectShapeException(
+                            $"Output array has wrong shape: expected " +
+                            $"({string.Join(", ", firstShape)}), got ({string.Join(", ", @out.shape)})");
+                }
+                dst = @out;
+            }
+            else
+            {
+                // NumPy-aligned: when every input is F-contiguous, produce an
+                // F-contiguous destination; otherwise default to C. A (1,N)
+                // input that is BOTH C- and F-contig (ambiguous layout) still
+                // counts toward the F-contig vote.
+                bool allF = true;
+                for (int k = 0; k < workArrays.Length; k++)
+                {
+                    if (!workArrays[k].Shape.IsFContiguous)
                     {
-                        retType = srcType;
+                        allF = false;
+                        break;
                     }
                 }
-
-                if (shape.Length != first.ndim)
-                    throw new IncorrectShapeException("all the input arrays must have same number of dimensions.");
-
-                //verify the shapes are equal
-                for (j = 0; j < shape.Length; j++)
-                {
-                    if (axis == j)
-                        continue;
-
-                    if (shape[j] != firstShape[j])
-                        throw new IncorrectShapeException("all the input array dimensions except for the concatenation axis must match exactly.");
-                }
+                var retShape = allF ? new Shape(firstShape, 'F') : new Shape(firstShape);
+                // fillZeros: false — every byte is overwritten below.
+                dst = new NDArray(resultType, retShape, fillZeros: false);
             }
 
-            //prepare return shape
-            firstShape[axis] = axisSize;
+            // Fast path: all sources same dtype as resultType, all C-contig,
+            // dst C-contig (the common case). Direct byte memcpy from each
+            // source into the right axis range, skipping NpyIter machinery.
+            if (TryDirectMemcpyConcat(dst, workArrays, effectiveAxis, ndim, resultType))
+                return dst;
 
-            // NumPy-aligned: when every input is F-contiguous and not C-contiguous,
-            // produce an F-contiguous destination; otherwise default to C.
-            bool allF = true;
-            foreach (var src in arrays)
+            // Fast path: cross-dtype but all sources C-contig and dst C-contig.
+            // Drive the IL contig cast kernel directly with computed offsets.
+            if (TryDirectCastConcat(dst, workArrays, effectiveAxis, ndim, resultType))
+                return dst;
+
+            // General path: bulk-copy each input via NpyIter.Copy, which
+            // handles cross-dtype, broadcasted, and strided sources through
+            // its IL-generated (strided) cast kernel.
+            var dstAccessor = new Slice[ndim];
+            for (int i = 0; i < ndim; i++)
+                dstAccessor[i] = Slice.All;
+
+            long dstAxisPos = 0;
+            for (int k = 0; k < workArrays.Length; k++)
             {
-                if (!src.Shape.IsFContiguous || src.Shape.IsContiguous)
-                {
-                    allF = false;
-                    break;
-                }
-            }
-            var retShape = allF ? new Shape(firstShape, 'F') : new Shape(firstShape);
+                var src = workArrays[k];
+                var len = src.shape[effectiveAxis];
+                if (len == 0) continue; // skip empty inputs along the concat axis
 
-            var dst = new NDArray(retType, retShape);
-            var accessorDst = new Slice[retShape.NDim];
-            var accessorSrc = new Slice[retShape.NDim];
+                dstAccessor[effectiveAxis] = new Slice(dstAxisPos, dstAxisPos + len);
+                var dstSlice = dst[dstAccessor];
+                NpyIter.Copy(dstSlice, src);
 
-            for (i = 0; i < accessorDst.Length; i++)
-                accessorSrc[i] = accessorDst[i] = Slice.All;
-
-            accessorSrc[axis] = Slice.Index(0);
-            accessorDst[axis] = Slice.Index(0);
-
-            foreach (var src in arrays)
-            {
-                var len = src.shape[axis];
-                for (i = 0; i < len; i++)
-                {
-                    var writeTo = dst[accessorDst];
-                    var writeFrom = src[accessorSrc];
-                    NpyIter.Copy(writeTo, writeFrom);
-                    accessorSrc[axis]++;
-                    accessorDst[axis]++; //increment every step
-                }
-
-                accessorSrc[axis] = Slice.Index(0); //reset src 
+                dstAxisPos += len;
             }
 
             return dst;
         }
 
-
-#if _REGEN
-        %pre = "arrays.Item"
-        %foreach range(2,8)%
         /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
+        ///     Fast path: when all sources match the destination dtype and
+        ///     every operand (sources + dst) is C-contiguous, perform a direct
+        ///     <see cref="Buffer.MemoryCopy"/> per outer block — no slicing,
+        ///     no NpyIter, no cast kernel.
         /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
-        public static NDArray concatenate(#(repeat("NDArray", #1 ,  ", "  ,  "("  ,  ""  ,  ""  ,  ")"  )) arrays, int axis = 0)
+        /// <returns>True if the fast path applied and the copy was performed.</returns>
+        private static unsafe bool TryDirectMemcpyConcat(
+            NDArray dst, NDArray[] sources, int axis, int ndim, NPTypeCode resultType)
         {
-            return concatenate(new NDArray[] {#(repeat("^pre+(n+1)", #1 ,  ", " ))}, axis);
+            // Dst must be C-contig and writeable for raw memcpy to be valid.
+            if (!dst.Shape.IsContiguous || !dst.Shape.IsWriteable)
+                return false;
+
+            // All sources must match dtype and be C-contig (broadcasted/strided
+            // sources need the iterator path).
+            for (int k = 0; k < sources.Length; k++)
+            {
+                var s = sources[k];
+                if (s.GetTypeCode != resultType) return false;
+                if (!s.Shape.IsContiguous) return false;
+                if (s.Shape.IsBroadcasted) return false;
+            }
+
+            int elemSize = resultType.SizeOf();
+
+            // outerCount = product of dims [0..axis-1]; innerStride = product of dims [axis+1..ndim-1].
+            long outerCount = 1;
+            for (int i = 0; i < axis; i++)
+                outerCount *= dst.shape[i];
+            long innerStride = 1;
+            for (int i = axis + 1; i < ndim; i++)
+                innerStride *= dst.shape[i];
+
+            // Per-outer dst row size in elements = sum of src.shape[axis] * innerStride.
+            // Equivalent to dst.shape[axis] * innerStride.
+            long dstRowSize = dst.shape[axis] * innerStride;
+            long dstRowBytes = dstRowSize * elemSize;
+
+            byte* dstBase = dst.Storage.Address;
+            // Account for sliced/aliased output via Shape.offset (offset is in elements for unmanaged storage).
+            long dstOffsetBytes = dst.Shape.Offset * elemSize;
+
+            // Pre-compute each source's per-outer slab size in bytes.
+            // For axis=0, outerCount==1 so this is the entire source.
+            // For axis=last, slabBytes is one element-row worth.
+            long[] slabBytes = new long[sources.Length];
+            byte*[] srcBases = new byte*[sources.Length];
+            long[] srcOffsetBytes = new long[sources.Length];
+            for (int k = 0; k < sources.Length; k++)
+            {
+                slabBytes[k] = sources[k].shape[axis] * innerStride * elemSize;
+                srcBases[k] = sources[k].Storage.Address;
+                srcOffsetBytes[k] = sources[k].Shape.Offset * elemSize;
+            }
+
+            // Walk outer iterations, copying each source's slab into the dst row.
+            for (long outer = 0; outer < outerCount; outer++)
+            {
+                long dstRowStart = dstOffsetBytes + outer * dstRowBytes;
+                long dstWritePos = 0;
+                for (int k = 0; k < sources.Length; k++)
+                {
+                    long bytes = slabBytes[k];
+                    if (bytes == 0) continue;
+                    Buffer.MemoryCopy(
+                        source: srcBases[k] + srcOffsetBytes[k] + outer * bytes,
+                        destination: dstBase + dstRowStart + dstWritePos,
+                        destinationSizeInBytes: bytes,
+                        sourceBytesToCopy: bytes);
+                    dstWritePos += bytes;
+                }
+            }
+
+            return true;
         }
 
-        %
-#else
         /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
+        ///     Cross-dtype fast path: same shape/layout assumptions as
+        ///     <see cref="TryDirectMemcpyConcat"/>, but drives the IL-generated
+        ///     contig cast kernel per source instead of <see cref="Buffer.MemoryCopy"/>.
+        ///     Skips NpyIter state construction, the slice path, and the
+        ///     intermediate astype allocation.
         /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
+        private static unsafe bool TryDirectCastConcat(
+            NDArray dst, NDArray[] sources, int axis, int ndim, NPTypeCode resultType)
+        {
+            if (!dst.Shape.IsContiguous || !dst.Shape.IsWriteable)
+                return false;
+
+            for (int k = 0; k < sources.Length; k++)
+            {
+                if (!sources[k].Shape.IsContiguous) return false;
+                if (sources[k].Shape.IsBroadcasted) return false;
+            }
+
+            // Resolve a cast kernel for every distinct (src dtype → resultType).
+            // Bail to the general path if any pair is unsupported.
+            var kernels = new Backends.Kernels.ILKernelGenerator.CastKernel[sources.Length];
+            for (int k = 0; k < sources.Length; k++)
+            {
+                if (sources[k].GetTypeCode == resultType)
+                {
+                    kernels[k] = null; // sentinel for "use memcpy"
+                }
+                else
+                {
+                    var kk = Backends.Kernels.ILKernelGenerator
+                        .TryGetCastKernel(sources[k].GetTypeCode, resultType);
+                    if (kk is null) return false;
+                    kernels[k] = kk;
+                }
+            }
+
+            int dstElemSize = resultType.SizeOf();
+
+            long outerCount = 1;
+            for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
+            long innerStride = 1;
+            for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+
+            long dstRowElems = dst.shape[axis] * innerStride;
+            long dstRowBytes = dstRowElems * dstElemSize;
+
+            byte* dstBase = dst.Storage.Address;
+            long dstOffsetBytes = dst.Shape.Offset * dstElemSize;
+
+            // Per-source: element count per outer slab + base/byte offsets.
+            long[] slabElems = new long[sources.Length];
+            long[] slabBytesDst = new long[sources.Length];
+            int[] srcElemSize = new int[sources.Length];
+            byte*[] srcBases = new byte*[sources.Length];
+            long[] srcOffsetBytes = new long[sources.Length];
+            for (int k = 0; k < sources.Length; k++)
+            {
+                slabElems[k] = sources[k].shape[axis] * innerStride;
+                srcElemSize[k] = sources[k].GetTypeCode.SizeOf();
+                slabBytesDst[k] = slabElems[k] * dstElemSize;
+                srcBases[k] = sources[k].Storage.Address;
+                srcOffsetBytes[k] = sources[k].Shape.Offset * srcElemSize[k];
+            }
+
+            for (long outer = 0; outer < outerCount; outer++)
+            {
+                long dstRowStart = dstOffsetBytes + outer * dstRowBytes;
+                long dstWritePos = 0;
+                for (int k = 0; k < sources.Length; k++)
+                {
+                    long elems = slabElems[k];
+                    if (elems == 0) continue;
+
+                    byte* srcPtr = srcBases[k] + srcOffsetBytes[k] + outer * elems * srcElemSize[k];
+                    byte* dstPtr = dstBase + dstRowStart + dstWritePos;
+
+                    var kernel = kernels[k];
+                    if (kernel is null)
+                    {
+                        Buffer.MemoryCopy(
+                            source: srcPtr,
+                            destination: dstPtr,
+                            destinationSizeInBytes: slabBytesDst[k],
+                            sourceBytesToCopy: slabBytesDst[k]);
+                    }
+                    else
+                    {
+                        kernel(srcPtr, dstPtr, elems);
+                    }
+
+                    dstWritePos += slabBytesDst[k];
+                }
+            }
+
+            return true;
+        }
+
+        // ---------------- Tuple-arity convenience overloads ----------------
+        // NumPy permits `np.concatenate((a, b, c))` as a tuple. These mirror
+        // that ergonomic with the array-form's default keyword params.
+
         public static NDArray concatenate((NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8}, axis);
-        }
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8 }, axis);
 
-        /// <summary>
-        ///     Join a sequence of arrays along an existing axis.
-        /// </summary>
-        /// <param name="axis">The axis along which the arrays will be joined. If axis is None, arrays are flattened before use. Default is 0.</param>
-        /// <param name="arrays">The arrays must have the same shape, except in the dimension corresponding to axis (the first, by default).</param>
-        /// <returns>The concatenated array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         public static NDArray concatenate((NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray) arrays, int axis = 0)
-        {
-            return concatenate(new NDArray[] {arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8, arrays.Item9}, axis);
-        }
-#endif
-
+            => concatenate(new[] { arrays.Item1, arrays.Item2, arrays.Item3, arrays.Item4, arrays.Item5, arrays.Item6, arrays.Item7, arrays.Item8, arrays.Item9 }, axis);
     }
 }
