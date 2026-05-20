@@ -558,38 +558,12 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorShift<T>(ILGenerator il, bool isLeftShift) where T : unmanaged
         {
-            var containerType = GetVectorContainerType();
-            var vectorType = GetVectorType(typeof(T));
+            string methodName = isLeftShift
+                ? "ShiftLeft"
+                : (IsUnsignedType<T>() ? "ShiftRightLogical" : "ShiftRightArithmetic");
 
-            string methodName;
-            if (isLeftShift)
-            {
-                methodName = "ShiftLeft";
-            }
-            else
-            {
-                // For right shift: arithmetic for signed, logical for unsigned
-                methodName = IsUnsignedType<T>() ? "ShiftRightLogical" : "ShiftRightArithmetic";
-            }
-
-            // Find the non-generic overload that takes Vector256<T> and int
-            var methods = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == methodName && !m.IsGenericMethod)
-                .ToList();
-
-            // Find method matching our vector type
-            var shiftMethod = methods.FirstOrDefault(m =>
-            {
-                var parms = m.GetParameters();
-                return parms.Length == 2 &&
-                       parms[0].ParameterType == vectorType &&
-                       parms[1].ParameterType == typeof(int);
-            });
-
-            if (shiftMethod == null)
-                throw new InvalidOperationException($"Could not find {methodName} for {vectorType.Name}");
-
-            il.EmitCall(OpCodes.Call, shiftMethod, null);
+            il.EmitCall(OpCodes.Call,
+                VectorMethodCache.ShiftByScalar(VectorBits, typeof(T), methodName), null);
         }
 
         /// <summary>

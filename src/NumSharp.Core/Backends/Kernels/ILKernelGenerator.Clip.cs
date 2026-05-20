@@ -176,7 +176,7 @@ namespace NumSharp.Backends.Kernels
             ILGenerator il, NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind, int sz,
             LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal)
         {
-            var vectorType = GetVectorType(GetClrType(dtype));
+            var vectorType = VectorMethodCache.V(VectorBits, GetClrType(dtype));
             int vectorCount = GetVectorCount(dtype);
             bool needLo = mode != ClipMode.MaxOnly;
             bool needHi = mode != ClipMode.MinOnly;

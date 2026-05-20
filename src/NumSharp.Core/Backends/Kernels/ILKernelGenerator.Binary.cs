@@ -486,40 +486,14 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static void EmitVectorLoad<T>(ILGenerator il) where T : unmanaged
-        {
-            var containerType = GetVectorContainerType();
-
-            var loadMethod = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(typeof(T));
-
-            il.EmitCall(OpCodes.Call, loadMethod, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Load(VectorBits, typeof(T)), null);
 
         private static void EmitVectorStore<T>(ILGenerator il) where T : unmanaged
-        {
-            var containerType = GetVectorContainerType();
-            var vectorType = GetVectorType(typeof(T));
-
-            var storeMethod = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Store" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetParameters()[0].ParameterType.IsGenericType)
-                .MakeGenericMethod(typeof(T));
-
-            il.EmitCall(OpCodes.Call, storeMethod, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Store(VectorBits, typeof(T)), null);
 
         private static void EmitVectorOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged
         {
-            var vectorType = GetVectorType(typeof(T));
-            var containerType = GetVectorContainerType();
-
-            // Bitwise operations use static methods on Vector256/Vector128 container
+            // Bitwise operations use static methods on Vector256/Vector128 container.
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
             {
                 string methodName = op switch
@@ -529,18 +503,11 @@ namespace NumSharp.Backends.Kernels
                     BinaryOp.BitwiseXor => "Xor",
                     _ => throw new NotSupportedException()
                 };
-
-                var opMethod = containerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .First(m => m.Name == methodName && m.IsGenericMethod &&
-                                m.GetParameters().Length == 2)
-                    .MakeGenericMethod(typeof(T));
-
-                il.EmitCall(OpCodes.Call, opMethod, null);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, methodName, typeof(T), paramCount: 2), null);
                 return;
             }
 
-            // Arithmetic operations use operator overloads on Vector256<T>/Vector128<T>
+            // Arithmetic operations use operator overloads on Vector256<T>/Vector128<T>.
             string operatorName = op switch
             {
                 BinaryOp.Add => "op_Addition",
@@ -549,15 +516,7 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Divide => "op_Division",
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
-
-            var operatorMethod = vectorType.GetMethod(operatorName,
-                BindingFlags.Public | BindingFlags.Static,
-                null, new[] { vectorType, vectorType }, null);
-
-            if (operatorMethod == null)
-                throw new InvalidOperationException($"Could not find {operatorName} for {vectorType.Name}");
-
-            il.EmitCall(OpCodes.Call, operatorMethod, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, typeof(T), operatorName), null);
         }
 
         private static void EmitScalarOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged

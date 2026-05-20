@@ -849,26 +849,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static MethodInfo GetConditionalSelectMethod(int simdBits, Type elementType)
-        {
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "ConditionalSelect" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 3)
-                .MakeGenericMethod(elementType);
-        }
+            => VectorMethodCache.ConditionalSelect(simdBits, elementType);
 
         /// <summary>
         /// Vector{simdBits}.Create(V128_lo, V128_hi) - combine two V128 into one V256/V512.
         /// </summary>
         private static MethodInfo GetCreateFromTwoMethod(int simdBits, Type elementType)
-        {
-            var halfV = VType(simdBits / 2, elementType);
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Create" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetParameters()[0].ParameterType == halfV);
-        }
+            => VectorMethodCache.CreateFromHalves(simdBits, elementType);
 
         /// <summary>
         /// Emit outer-coord advance for the masked kernel (3 offsets to update).
@@ -1170,14 +1157,6 @@ namespace NumSharp.Backends.Kernels
         /// Returns the IL-emittable MethodInfo.
         /// </summary>
         private static MethodInfo GetEqualsAllMethod(int simdBits, Type elementType)
-        {
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "EqualsAll" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetGenericArguments().Length == 1 &&
-                            m.ReturnType == typeof(bool))
-                .MakeGenericMethod(elementType);
-        }
+            => VectorMethodCache.EqualsAll(simdBits, elementType);
     }
 }

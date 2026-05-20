@@ -403,9 +403,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorBinaryReductionOp(ILGenerator il, ReductionOp op, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
 
             string methodName = op switch
             {
@@ -417,13 +415,11 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Vector binary op for {op} not supported")
             };
 
-            var method = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
-
-            if (method == null)
-                throw new InvalidOperationException($"Could not find {containerType.Name}.{methodName}<{clrType.Name}>");
+            // Multiply has a (V, T) scalar overload as well as (V, V); use the vector-vector
+            // variant explicitly. The other ops here only have the (V, V) overload.
+            var method = methodName == "Multiply"
+                ? VectorMethodCache.MultiplyVectorVector(VectorBits, clrType)
+                : VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2);
 
             il.EmitCall(OpCodes.Call, method, null);
         }
@@ -928,28 +924,21 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorHorizontalReduction(ILGenerator il, ReductionOp op, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
 
             switch (op)
             {
                 case ReductionOp.Sum:
-                    // Use Vector.Sum<T>()
-                    var sumMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                        .Where(m => m.Name == "Sum" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                        .Select(m => m.MakeGenericMethod(clrType))
-                        .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
+                    // Try Vector.Sum<T>(V<T>) -> T (BCL horizontal-sum intrinsic, where available).
+                    // Falls back to manual horizontal add if the type doesn't have it.
+                    MethodInfo sumMethod = null;
+                    try { sumMethod = VectorMethodCache.Generic(VectorBits, "Sum", clrType, paramCount: 1); }
+                    catch (MissingMethodException) { }
 
                     if (sumMethod != null)
-                    {
                         il.EmitCall(OpCodes.Call, sumMethod, null);
-                    }
                     else
-                    {
-                        // Fallback: manual horizontal add using GetElement
                         EmitManualHorizontalSum(il, type);
-                    }
                     break;
 
                 case ReductionOp.Max:
@@ -1020,57 +1009,26 @@ namespace NumSharp.Backends.Kernels
             var clrType = GetClrType(type);
             int currentBits = VectorBits;
 
-            // Step 1: Reduce from current width down to 128-bit using GetLower/GetUpper + op
+            // Step 1: Reduce from current width down to 128-bit using GetLower/GetUpper + op.
             while (currentBits > 128)
             {
                 int nextBits = currentBits / 2;
-                var currentContainer = currentBits switch
-                {
-                    512 => typeof(Vector512),
-                    256 => typeof(Vector256),
-                    _ => throw new InvalidOperationException()
-                };
-                var nextContainer = nextBits switch
-                {
-                    256 => typeof(Vector256),
-                    128 => typeof(Vector128),
-                    _ => throw new InvalidOperationException()
-                };
-                var currentVecType = currentBits switch
-                {
-                    512 => typeof(Vector512<>).MakeGenericType(clrType),
-                    256 => typeof(Vector256<>).MakeGenericType(clrType),
-                    _ => throw new InvalidOperationException()
-                };
-                var nextVecType = nextBits switch
-                {
-                    256 => typeof(Vector256<>).MakeGenericType(clrType),
-                    128 => typeof(Vector128<>).MakeGenericType(clrType),
-                    _ => throw new InvalidOperationException()
-                };
+                var currentVecType = VectorMethodCache.V(currentBits, clrType);
 
                 // Store current vector
                 var locVec = il.DeclareLocal(currentVecType);
                 il.Emit(OpCodes.Stloc, locVec);
 
-                // GetLower (returns half-width vector)
-                var getLowerMethod = currentContainer.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.Name == "GetLower" && m.IsGenericMethod)
-                    .Select(m => m.MakeGenericMethod(clrType))
-                    .First();
+                // GetLower → V<nextBits>
                 il.Emit(OpCodes.Ldloc, locVec);
-                il.EmitCall(OpCodes.Call, getLowerMethod, null);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.GetLower(currentBits, clrType), null);
 
-                // GetUpper
-                var getUpperMethod = currentContainer.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.Name == "GetUpper" && m.IsGenericMethod)
-                    .Select(m => m.MakeGenericMethod(clrType))
-                    .First();
+                // GetUpper → V<nextBits>
                 il.Emit(OpCodes.Ldloc, locVec);
-                il.EmitCall(OpCodes.Call, getUpperMethod, null);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.GetUpper(currentBits, clrType), null);
 
-                // Apply reduction operation on the two half-vectors
-                EmitVectorReductionOp(il, op, nextContainer, nextVecType, clrType);
+                // Apply reduction operation on the two half-vectors at the smaller width.
+                EmitVectorReductionOp(il, op, nextBits, clrType);
 
                 currentBits = nextBits;
             }
@@ -1084,10 +1042,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locFinal);
 
             // Get first element as accumulator
-            var getElementMethod = typeof(Vector128).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "GetElement" && m.IsGenericMethod)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .First();
+            var getElementMethod = VectorMethodCache.GetElement(128, clrType);
 
             il.Emit(OpCodes.Ldloc, locFinal);
             il.Emit(OpCodes.Ldc_I4_0);
@@ -1108,7 +1063,7 @@ namespace NumSharp.Backends.Kernels
         /// Stack has [vec1, vec2], result is combined vector.
         /// </summary>
         private static void EmitVectorReductionOp(ILGenerator il, ReductionOp op,
-            Type containerType, Type vectorType, Type clrType)
+            int simdBits, Type clrType)
         {
             string methodName = op switch
             {
@@ -1119,13 +1074,10 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Reduction {op} not supported for tree reduction")
             };
 
-            var method = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
-
-            if (method == null)
-                throw new InvalidOperationException($"Could not find {containerType.Name}.{methodName}<{clrType.Name}>");
+            // Multiply at the V/V form (distinct from V/T scalar overload).
+            var method = methodName == "Multiply"
+                ? VectorMethodCache.MultiplyVectorVector(simdBits, clrType)
+                : VectorMethodCache.Generic(simdBits, methodName, clrType, paramCount: 2);
 
             il.EmitCall(OpCodes.Call, method, null);
         }

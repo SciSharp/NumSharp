@@ -29,44 +29,18 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitUnaryVectorOperation(ILGenerator il, UnaryOp op, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
 
-            // Handle special cases that don't map to a single method call
-            if (op == UnaryOp.Square)
+            // Specialized emitters for ops that can't be expressed as a single container call.
+            switch (op)
             {
-                // Square = x * x: duplicate and multiply
-                EmitVectorSquare(il, containerType, clrType, vectorType);
-                return;
-            }
-
-            if (op == UnaryOp.Reciprocal)
-            {
-                // Reciprocal = 1 / x: create ones vector and divide
-                EmitVectorReciprocal(il, containerType, clrType, vectorType);
-                return;
-            }
-
-            if (op == UnaryOp.Deg2Rad)
-            {
-                // Deg2Rad = x * (π/180): multiply by constant vector
-                EmitVectorDeg2Rad(il, containerType, clrType, vectorType);
-                return;
-            }
-
-            if (op == UnaryOp.Rad2Deg)
-            {
-                // Rad2Deg = x * (180/π): multiply by constant vector
-                EmitVectorRad2Deg(il, containerType, clrType, vectorType);
-                return;
-            }
-
-            if (op == UnaryOp.BitwiseNot)
-            {
-                // BitwiseNot = ~x: OnesComplement
-                EmitVectorBitwiseNot(il, containerType, clrType, vectorType);
-                return;
+                case UnaryOp.Square:     EmitVectorSquare(il, clrType);     return;
+                case UnaryOp.Reciprocal: EmitVectorReciprocal(il, clrType); return;
+                case UnaryOp.Deg2Rad:    EmitVectorScale(il, clrType, Math.PI / 180.0); return;
+                case UnaryOp.Rad2Deg:    EmitVectorScale(il, clrType, 180.0 / Math.PI); return;
+                case UnaryOp.BitwiseNot:
+                    il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
+                    return;
             }
 
             string methodName = op switch
@@ -81,32 +55,29 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"SIMD operation {op} not supported")
             };
 
-            MethodInfo? method;
-
+            MethodInfo method;
             if (op == UnaryOp.Negate)
             {
-                // Negation is an operator on Vector<T>
-                method = vectorType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { vectorType }, null);
+                // Negation is an operator on Vector<T>.
+                method = VectorMethodCache.V(VectorBits, clrType).GetMethod(methodName,
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { VectorMethodCache.V(VectorBits, clrType) }, null)
+                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
             }
             else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Truncate)
             {
-                // Floor/Ceiling/Round/Truncate are NOT generic - they're overloaded for specific types
-                // Use the single-parameter overload (default MidpointRounding.ToEven for Round)
-                method = containerType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { vectorType }, null);
+                // Floor/Ceiling/Round/Truncate are NOT generic — overloaded per-type.
+                var vT = VectorMethodCache.V(VectorBits, clrType);
+                method = VectorMethodCache.Container(VectorBits).GetMethod(methodName,
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { vT }, null)
+                    ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
             }
             else
             {
-                // Abs, Sqrt are generic static methods on Vector container
-                method = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 1)
-                    .Select(m => m.MakeGenericMethod(clrType))
-                    .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
+                // Abs, Sqrt are generic static methods on Vector container.
+                method = VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 1);
             }
-
-            if (method == null)
-                throw new InvalidOperationException($"Could not find {methodName} for {vectorType.Name}");
 
             il.EmitCall(OpCodes.Call, method, null);
         }
@@ -114,175 +85,50 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit Vector square: x * x using Vector.Multiply.
         /// </summary>
-        private static void EmitVectorSquare(ILGenerator il, Type containerType, Type clrType, Type vectorType)
+        private static void EmitVectorSquare(ILGenerator il, Type clrType)
         {
-            // Stack has: vector x
-            // We need: x * x
-            // Duplicate the vector and call Multiply
+            // Stack has: vector x — duplicate then multiply.
             il.Emit(OpCodes.Dup);
-
-            // Vector.Multiply<T>(Vector<T>, Vector<T>) is a generic method
-            var multiplyMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Multiply" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType &&
-                                     m.GetParameters()[1].ParameterType == vectorType);
-
-            if (multiplyMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Multiply<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, multiplyMethod, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.MultiplyVectorVector(VectorBits, clrType), null);
         }
 
         /// <summary>
         /// Emit Vector reciprocal: 1 / x using Vector.Divide with ones vector.
         /// </summary>
-        private static void EmitVectorReciprocal(ILGenerator il, Type containerType, Type clrType, Type vectorType)
+        private static void EmitVectorReciprocal(ILGenerator il, Type clrType)
         {
-            // Stack has: vector x
-            // We need: ones / x
-            // Store x, create ones, load x, divide
-
+            var vectorType = VectorMethodCache.V(VectorBits, clrType);
             var locX = il.DeclareLocal(vectorType);
             il.Emit(OpCodes.Stloc, locX);
 
-            // Create ones vector: Vector<T>.One
-            var oneProperty = vectorType.GetProperty("One", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Could not find Vector<{clrType.Name}>.One");
-            var oneGetter = oneProperty.GetGetMethod()
-                ?? throw new InvalidOperationException($"Could not find getter for Vector<{clrType.Name}>.One");
-            il.EmitCall(OpCodes.Call, oneGetter, null);
-
-            // Load x
+            // Create ones vector via Vector<T>.One property.
+            il.EmitCall(OpCodes.Call, VectorMethodCache.One(VectorBits, clrType), null);
             il.Emit(OpCodes.Ldloc, locX);
 
-            // Vector.Divide<T>(Vector<T>, Vector<T>)
-            var divideMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Divide" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType &&
-                                     m.GetParameters()[1].ParameterType == vectorType);
-
-            if (divideMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Divide<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, divideMethod, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.DivideVectorVector(VectorBits, clrType), null);
         }
 
         /// <summary>
-        /// Emit Vector deg2rad: x * (π/180) using Vector.Multiply with constant vector.
+        /// Emit <c>x * factor</c> via <c>Vector.Multiply(Vector.Create(factor), x)</c> — used by
+        /// Deg2Rad and Rad2Deg with the appropriate scalar factor.
         /// </summary>
-        private static void EmitVectorDeg2Rad(ILGenerator il, Type containerType, Type clrType, Type vectorType)
+        private static void EmitVectorScale(ILGenerator il, Type clrType, double factor)
         {
-            // Stack has: vector x
-            // Create constant vector and multiply
-
-            // Create Deg2Rad factor vector
+            // Stack: [x_vector] — push the scalar, broadcast, then multiply.
             if (clrType == typeof(float))
-            {
-                il.Emit(OpCodes.Ldc_R4, (float)(Math.PI / 180.0));
-            }
-            else // double
-            {
-                il.Emit(OpCodes.Ldc_R8, Math.PI / 180.0);
-            }
+                il.Emit(OpCodes.Ldc_R4, (float)factor);
+            else
+                il.Emit(OpCodes.Ldc_R8, factor);
 
-            // Vector.Create<T>(T value) - creates vector with all elements = value
-            var createMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Create" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == clrType);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, clrType), null);
 
-            if (createMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Create<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, createMethod, null);
-
-            // Now stack has: [x_vector, factor_vector]
-            // Swap them for multiply (need x * factor, but stack has factor on top)
-            var locFactor = il.DeclareLocal(vectorType);
-            il.Emit(OpCodes.Stloc, locFactor);
-            // Stack: [x_vector]
-            il.Emit(OpCodes.Ldloc, locFactor);
-            // Stack: [x_vector, factor_vector]
-
-            // Vector.Multiply<T>(Vector<T>, Vector<T>)
-            var multiplyMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Multiply" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType &&
-                                     m.GetParameters()[1].ParameterType == vectorType);
-
-            if (multiplyMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Multiply<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, multiplyMethod, null);
-        }
-
-        /// <summary>
-        /// Emit Vector rad2deg: x * (180/π) using Vector.Multiply with constant vector.
-        /// </summary>
-        private static void EmitVectorRad2Deg(ILGenerator il, Type containerType, Type clrType, Type vectorType)
-        {
-            // Stack has: vector x
-            // Create constant vector and multiply
-
-            // Create Rad2Deg factor vector
-            if (clrType == typeof(float))
-            {
-                il.Emit(OpCodes.Ldc_R4, (float)(180.0 / Math.PI));
-            }
-            else // double
-            {
-                il.Emit(OpCodes.Ldc_R8, 180.0 / Math.PI);
-            }
-
-            // Vector.Create<T>(T value) - creates vector with all elements = value
-            var createMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Create" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == clrType);
-
-            if (createMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Create<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, createMethod, null);
-
-            // Swap for multiply
+            // Swap stack so we have [x, factor] for the multiply.
+            var vectorType = VectorMethodCache.V(VectorBits, clrType);
             var locFactor = il.DeclareLocal(vectorType);
             il.Emit(OpCodes.Stloc, locFactor);
             il.Emit(OpCodes.Ldloc, locFactor);
 
-            // Vector.Multiply<T>(Vector<T>, Vector<T>)
-            var multiplyMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Multiply" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType &&
-                                     m.GetParameters()[1].ParameterType == vectorType);
-
-            if (multiplyMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.Multiply<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, multiplyMethod, null);
-        }
-
-        /// <summary>
-        /// Emit Vector bitwise not: ~x using Vector.OnesComplement.
-        /// </summary>
-        private static void EmitVectorBitwiseNot(ILGenerator il, Type containerType, Type clrType, Type vectorType)
-        {
-            // Stack has: vector x
-            // Call Vector.OnesComplement<T>(Vector<T>)
-
-            var onesComplementMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "OnesComplement" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
-
-            if (onesComplementMethod == null)
-                throw new InvalidOperationException($"Could not find Vector.OnesComplement<{clrType.Name}>");
-
-            il.EmitCall(OpCodes.Call, onesComplementMethod, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.MultiplyVectorVector(VectorBits, clrType), null);
         }
 
         #endregion

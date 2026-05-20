@@ -1540,116 +1540,38 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetVectorStoreMethod(simdBits, elementType), null);
         }
 
-        private static Type VType(int simdBits, Type elem) => simdBits switch
-        {
-            128 => typeof(Vector128<>).MakeGenericType(elem),
-            256 => typeof(Vector256<>).MakeGenericType(elem),
-            512 => typeof(Vector512<>).MakeGenericType(elem),
-            _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
-        };
+        // Thin file-local aliases for VectorMethodCache so the existing call sites in this
+        // file (EmitStridedCastBody, EmitBroadcastConvertThenMemcpy, etc.) read unchanged.
+        // Cast.Masked.cs reuses the same aliases via the partial-class scope.
+        private static Type VType(int simdBits, Type elem) => VectorMethodCache.V(simdBits, elem);
+        private static Type ContainerType(int simdBits) => VectorMethodCache.Container(simdBits);
 
-        private static Type ContainerType(int simdBits) => simdBits switch
-        {
-            128 => typeof(Vector128),
-            256 => typeof(Vector256),
-            512 => typeof(Vector512),
-            _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
-        };
+        private static MethodInfo GetVectorLoadMethod(int simdBits, Type elementType)
+            => VectorMethodCache.Load(simdBits, elementType);
 
-        private static MethodInfo GetVectorLoadMethod(int simdBits, Type elementType) =>
-            ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(elementType);
-
-        private static MethodInfo GetVectorStoreMethod(int simdBits, Type elementType) =>
-            ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Store" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetParameters()[0].ParameterType.IsGenericType)
-                .MakeGenericMethod(elementType);
+        private static MethodInfo GetVectorStoreMethod(int simdBits, Type elementType)
+            => VectorMethodCache.Store(simdBits, elementType);
 
         private static MethodInfo GetWidenLowerMethod(int simdBits, Type sourceElementType)
-        {
-            var paramVec = VType(simdBits, sourceElementType);
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "WidenLower" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType == paramVec);
-        }
+            => VectorMethodCache.WidenLower(simdBits, sourceElementType);
 
         private static MethodInfo GetWidenUpperMethod(int simdBits, Type sourceElementType)
-        {
-            var paramVec = VType(simdBits, sourceElementType);
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "WidenUpper" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType == paramVec);
-        }
+            => VectorMethodCache.WidenUpper(simdBits, sourceElementType);
 
         private static MethodInfo GetNarrowMethod(int simdBits, Type sourceElementType)
-        {
-            var paramVec = VType(simdBits, sourceElementType);
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Narrow" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetParameters()[0].ParameterType == paramVec &&
-                            m.GetParameters()[1].ParameterType == paramVec);
-        }
+            => VectorMethodCache.Narrow(simdBits, sourceElementType);
 
         private static MethodInfo GetConvertToSingleFromInt32Method(int simdBits)
-        {
-            var paramVec = VType(simdBits, typeof(int));
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "ConvertToSingle" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType == paramVec);
-        }
+            => VectorMethodCache.ConvertToSingleFromInt32(simdBits);
 
         private static MethodInfo GetConvertToDoubleFromInt64Method(int simdBits)
-        {
-            var paramVec = VType(simdBits, typeof(long));
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "ConvertToDouble" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType == paramVec);
-        }
+            => VectorMethodCache.ConvertToDoubleFromInt64(simdBits);
 
         private static MethodInfo GetConvertToInt32FromSingleMethod(int simdBits)
-        {
-            var paramVec = VType(simdBits, typeof(float));
-            return ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "ConvertToInt32" && !m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType == paramVec);
-        }
+            => VectorMethodCache.ConvertToInt32FromSingle(simdBits);
 
         private static MethodInfo GetAsMethod(int simdBits, Type fromElem, Type toElem)
-        {
-            string name = "As" + toElem.Name;
-            var named = ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == name && m.IsGenericMethod &&
-                                     m.GetParameters().Length == 1 &&
-                                     m.GetGenericArguments().Length == 1);
-            if (named != null) return named.MakeGenericMethod(fromElem);
-
-            var generic = ContainerType(simdBits)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "As" && m.IsGenericMethod &&
-                            m.GetGenericArguments().Length == 2 &&
-                            m.GetParameters().Length == 1);
-            return generic.MakeGenericMethod(fromElem, toElem);
-        }
+            => VectorMethodCache.As(simdBits, fromElem, toElem);
 
         // =================================================================
         // Signedness helpers
