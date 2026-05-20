@@ -229,9 +229,10 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitWhereScalarXSimdBody<T>(ILGenerator il, LocalBuilder locI, bool useV256, LocalBuilder locScalarXVec, long elementSize, long laneOffset) where T : unmanaged
         {
-            var loadM = (useV256 ? CachedMethods.V256LoadGeneric : CachedMethods.V128LoadGeneric).MakeGenericMethod(typeof(T));
-            var storeM = (useV256 ? CachedMethods.V256StoreGeneric : CachedMethods.V128StoreGeneric).MakeGenericMethod(typeof(T));
-            var selectM = (useV256 ? CachedMethods.V256ConditionalSelectGeneric : CachedMethods.V128ConditionalSelectGeneric).MakeGenericMethod(typeof(T));
+            int simdBits = useV256 ? 256 : 128;
+            var loadM = VectorMethodCache.Load(simdBits, typeof(T));
+            var storeM = VectorMethodCache.Store(simdBits, typeof(T));
+            var selectM = VectorMethodCache.ConditionalSelect(simdBits, typeof(T));
 
             // Mask: cond + (i + laneOffset)
             il.Emit(OpCodes.Ldarg_0);
@@ -421,9 +422,10 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereScalarYSimdBody<T>(ILGenerator il, LocalBuilder locI, bool useV256, LocalBuilder locScalarYVec, long elementSize, long laneOffset) where T : unmanaged
         {
-            var loadM = (useV256 ? CachedMethods.V256LoadGeneric : CachedMethods.V128LoadGeneric).MakeGenericMethod(typeof(T));
-            var storeM = (useV256 ? CachedMethods.V256StoreGeneric : CachedMethods.V128StoreGeneric).MakeGenericMethod(typeof(T));
-            var selectM = (useV256 ? CachedMethods.V256ConditionalSelectGeneric : CachedMethods.V128ConditionalSelectGeneric).MakeGenericMethod(typeof(T));
+            int simdBits = useV256 ? 256 : 128;
+            var loadM = VectorMethodCache.Load(simdBits, typeof(T));
+            var storeM = VectorMethodCache.Store(simdBits, typeof(T));
+            var selectM = VectorMethodCache.ConditionalSelect(simdBits, typeof(T));
 
             // Mask
             il.Emit(OpCodes.Ldarg_0);
@@ -606,8 +608,9 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereScalarXYSimdBody<T>(ILGenerator il, LocalBuilder locI, bool useV256, LocalBuilder locXVec, LocalBuilder locYVec, long elementSize, long laneOffset) where T : unmanaged
         {
-            var storeM = (useV256 ? CachedMethods.V256StoreGeneric : CachedMethods.V128StoreGeneric).MakeGenericMethod(typeof(T));
-            var selectM = (useV256 ? CachedMethods.V256ConditionalSelectGeneric : CachedMethods.V128ConditionalSelectGeneric).MakeGenericMethod(typeof(T));
+            int simdBits = useV256 ? 256 : 128;
+            var storeM = VectorMethodCache.Store(simdBits, typeof(T));
+            var selectM = VectorMethodCache.ConditionalSelect(simdBits, typeof(T));
 
             // Mask
             il.Emit(OpCodes.Ldarg_0);

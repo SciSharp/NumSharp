@@ -471,19 +471,7 @@ namespace NumSharp.Backends.Kernels
                 new[] { typeof(void*), typeof(byte), typeof(uint) })
                 ?? throw new MissingMethodException(typeof(Unsafe).FullName, nameof(Unsafe.InitBlockUnaligned));
 
-            // Vector256 operator methods for MatMul
-            public static readonly MethodInfo Vector256FloatAdd = typeof(Vector256<float>).GetMethod("op_Addition",
-                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<float>), typeof(Vector256<float>) })
-                ?? throw new MissingMethodException(typeof(Vector256<float>).FullName, "op_Addition");
-            public static readonly MethodInfo Vector256FloatMul = typeof(Vector256<float>).GetMethod("op_Multiply",
-                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<float>), typeof(Vector256<float>) })
-                ?? throw new MissingMethodException(typeof(Vector256<float>).FullName, "op_Multiply");
-            public static readonly MethodInfo Vector256DoubleAdd = typeof(Vector256<double>).GetMethod("op_Addition",
-                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
-                ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Addition");
-            public static readonly MethodInfo Vector256DoubleMul = typeof(Vector256<double>).GetMethod("op_Multiply",
-                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
-                ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Multiply");
+            // (Vector256 operator methods used by MatMul moved to VectorMethodCache.Operator.)
 
             // Half conversion methods (Half is a struct with operator methods, not IConvertible)
             public static readonly MethodInfo HalfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)

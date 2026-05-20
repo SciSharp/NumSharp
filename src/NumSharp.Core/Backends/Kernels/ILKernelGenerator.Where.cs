@@ -260,9 +260,9 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereV256BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            var loadMethod = CachedMethods.V256LoadGeneric.MakeGenericMethod(typeof(T));
-            var storeMethod = CachedMethods.V256StoreGeneric.MakeGenericMethod(typeof(T));
-            var selectMethod = CachedMethods.V256ConditionalSelectGeneric.MakeGenericMethod(typeof(T));
+            var loadMethod = VectorMethodCache.Load(256, typeof(T));
+            var storeMethod = VectorMethodCache.Store(256, typeof(T));
+            var selectMethod = VectorMethodCache.ConditionalSelect(256, typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);  // cond
@@ -327,9 +327,9 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereV128BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            var loadMethod = CachedMethods.V128LoadGeneric.MakeGenericMethod(typeof(T));
-            var storeMethod = CachedMethods.V128StoreGeneric.MakeGenericMethod(typeof(T));
-            var selectMethod = CachedMethods.V128ConditionalSelectGeneric.MakeGenericMethod(typeof(T));
+            var loadMethod = VectorMethodCache.Load(128, typeof(T));
+            var storeMethod = VectorMethodCache.Store(128, typeof(T));
+            var selectMethod = VectorMethodCache.ConditionalSelect(128, typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);
@@ -451,145 +451,95 @@ namespace NumSharp.Backends.Kernels
         // below (see "Where Kernel Methods" region at the end of this file).
 
         /// <summary>
-        /// Emit inline V256 mask creation. Stack: byte* -> Vector256{T} (as mask)
+        /// Emit inline V256 mask creation. Stack: byte* -> Vector256{T} (as mask).
         /// </summary>
         private static void EmitInlineMaskCreationV256(ILGenerator il, int elementSize)
-        {
-            // Stack has: byte* pointing to condition bools
-
-            switch (elementSize)
-            {
-                case 8: // double/long: load 4 bytes, expand to 4 qwords
-                    // *(uint*)ptr
-                    il.Emit(OpCodes.Ldind_U4);
-                    // Vector128.CreateScalar<uint>(value)
-                    il.Emit(OpCodes.Call, CachedMethods.V128CreateScalarUInt);
-                    // .AsByte()
-                    il.Emit(OpCodes.Call, CachedMethods.V128UIntAsByte);
-                    // Avx2.ConvertToVector256Int64(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Avx2ConvertToV256Int64);
-                    // .AsUInt64()
-                    il.Emit(OpCodes.Call, CachedMethods.V256LongAsULong);
-                    // Vector256<ulong>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V256GetZeroULong);
-                    // Vector256.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V256GreaterThanULong);
-                    break;
-
-                case 4: // float/int: load 8 bytes, expand to 8 dwords
-                    // *(ulong*)ptr
-                    il.Emit(OpCodes.Ldind_I8);
-                    // Vector128.CreateScalar<ulong>(value)
-                    il.Emit(OpCodes.Call, CachedMethods.V128CreateScalarULong);
-                    // .AsByte()
-                    il.Emit(OpCodes.Call, CachedMethods.V128ULongAsByte);
-                    // Avx2.ConvertToVector256Int32(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Avx2ConvertToV256Int32);
-                    // .AsUInt32()
-                    il.Emit(OpCodes.Call, CachedMethods.V256IntAsUInt);
-                    // Vector256<uint>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V256GetZeroUInt);
-                    // Vector256.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V256GreaterThanUInt);
-                    break;
-
-                case 2: // short/char: load 16 bytes, expand to 16 words
-                    // Vector128.Load<byte>(ptr)
-                    il.Emit(OpCodes.Call, CachedMethods.V128LoadByte);
-                    // Avx2.ConvertToVector256Int16(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Avx2ConvertToV256Int16);
-                    // .AsUInt16()
-                    il.Emit(OpCodes.Call, CachedMethods.V256ShortAsUShort);
-                    // Vector256<ushort>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V256GetZeroUShort);
-                    // Vector256.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V256GreaterThanUShort);
-                    break;
-
-                case 1: // byte/bool: load 32 bytes, compare directly
-                    // Vector256.Load<byte>(ptr)
-                    il.Emit(OpCodes.Call, CachedMethods.V256LoadByte);
-                    // Vector256<byte>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V256GetZeroByte);
-                    // Vector256.GreaterThan(vec, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V256GreaterThanByte);
-                    break;
-
-                default:
-                    throw new NotSupportedException($"Element size {elementSize} not supported");
-            }
-        }
+            => EmitInlineMaskCreation(il, simdBits: 256, elementSize);
 
         /// <summary>
-        /// Emit inline V128 mask creation. Stack: byte* -> Vector128{T} (as mask)
+        /// Emit inline V128 mask creation. Stack: byte* -> Vector128{T} (as mask).
         /// </summary>
         private static void EmitInlineMaskCreationV128(ILGenerator il, int elementSize)
+            => EmitInlineMaskCreation(il, simdBits: 128, elementSize);
+
+        /// <summary>
+        /// Emit mask-creation IL for the np.where contig SIMD body. Unified across V256/V128.
+        ///
+        /// <para>Input stack:  <c>byte*</c> pointing to <paramref name="elementSize"/>'s worth
+        /// of cond bytes per output lane.</para>
+        /// <para>Output stack: <c>Vector{simdBits}&lt;UTarget&gt;</c> all-ones-where-cond-true.</para>
+        ///
+        /// <para>Strategy by element size:</para>
+        /// <list type="bullet">
+        ///   <item><c>elementSize == 1</c> — direct: V&lt;byte&gt;.Load(ptr) → GreaterThan(_, Zero).</item>
+        ///   <item>otherwise — load <c>simdBits/8/elementSize</c> bytes as a scalar
+        ///   (Ldind_U2/U4/I8 for byteCount 2/4/8) or as <c>V128&lt;byte&gt;</c> (byteCount 16),
+        ///   reinterpret as bytes, sign-extend to <c>V&lt;simdBits&gt;&lt;signedT&gt;</c> via
+        ///   <c>Avx2/Sse41.ConvertToVector{...}Int{N}</c>, reinterpret as
+        ///   <c>V&lt;simdBits&gt;&lt;unsignedT&gt;</c> for the GreaterThan compare.</item>
+        /// </list>
+        /// </summary>
+        private static void EmitInlineMaskCreation(ILGenerator il, int simdBits, int elementSize)
         {
-            switch (elementSize)
+            if (elementSize == 1)
             {
-                case 8: // double/long: load 2 bytes, expand to 2 qwords
-                    // *(ushort*)ptr
-                    il.Emit(OpCodes.Ldind_U2);
-                    // Vector128.CreateScalar<ushort>(value)
-                    il.Emit(OpCodes.Call, CachedMethods.V128CreateScalarUShort);
-                    // .AsByte()
-                    il.Emit(OpCodes.Call, CachedMethods.V128UShortAsByte);
-                    // Sse41.ConvertToVector128Int64(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Sse41ConvertToV128Int64);
-                    // .AsUInt64()
-                    il.Emit(OpCodes.Call, CachedMethods.V128LongAsULong);
-                    // Vector128<ulong>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V128GetZeroULong);
-                    // Vector128.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V128GreaterThanULong);
-                    break;
-
-                case 4: // float/int: load 4 bytes, expand to 4 dwords
-                    // *(uint*)ptr
-                    il.Emit(OpCodes.Ldind_U4);
-                    // Vector128.CreateScalar<uint>(value)
-                    il.Emit(OpCodes.Call, CachedMethods.V128CreateScalarUInt);
-                    // .AsByte()
-                    il.Emit(OpCodes.Call, CachedMethods.V128UIntAsByte);
-                    // Sse41.ConvertToVector128Int32(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Sse41ConvertToV128Int32);
-                    // .AsUInt32()
-                    il.Emit(OpCodes.Call, CachedMethods.V128IntAsUInt);
-                    // Vector128<uint>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V128GetZeroUInt);
-                    // Vector128.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V128GreaterThanUInt);
-                    break;
-
-                case 2: // short/char: load 8 bytes, expand to 8 words
-                    // *(ulong*)ptr
-                    il.Emit(OpCodes.Ldind_I8);
-                    // Vector128.CreateScalar<ulong>(value)
-                    il.Emit(OpCodes.Call, CachedMethods.V128CreateScalarULong);
-                    // .AsByte()
-                    il.Emit(OpCodes.Call, CachedMethods.V128ULongAsByte);
-                    // Sse41.ConvertToVector128Int16(bytes)
-                    il.Emit(OpCodes.Call, CachedMethods.Sse41ConvertToV128Int16);
-                    // .AsUInt16()
-                    il.Emit(OpCodes.Call, CachedMethods.V128ShortAsUShort);
-                    // Vector128<ushort>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V128GetZeroUShort);
-                    // Vector128.GreaterThan(expanded, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V128GreaterThanUShort);
-                    break;
-
-                case 1: // byte/bool: load 16 bytes, compare directly
-                    // Vector128.Load<byte>(ptr)
-                    il.Emit(OpCodes.Call, CachedMethods.V128LoadByte);
-                    // Vector128<byte>.Zero
-                    il.Emit(OpCodes.Call, CachedMethods.V128GetZeroByte);
-                    // Vector128.GreaterThan(vec, zero)
-                    il.Emit(OpCodes.Call, CachedMethods.V128GreaterThanByte);
-                    break;
-
-                default:
-                    throw new NotSupportedException($"Element size {elementSize} not supported");
+                // bool/byte: load N condition bytes, compare > 0 directly.
+                il.Emit(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)));
+                il.Emit(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)));
+                il.Emit(OpCodes.Call, VectorMethodCache.GreaterThan(simdBits, typeof(byte)));
+                return;
             }
+
+            // Number of cond bytes needed = lane count of output vector.
+            int byteCount = simdBits / 8 / elementSize;
+
+            // 2..8 bytes: scalar load + CreateScalar(scalarT) + AsByte gets us to V128<byte>.
+            // 16 bytes  : direct V128<byte>.Load.
+            switch (byteCount)
+            {
+                case 2:
+                    il.Emit(OpCodes.Ldind_U2);
+                    il.Emit(OpCodes.Call, VectorMethodCache.CreateScalar(128, typeof(ushort)));
+                    il.Emit(OpCodes.Call, VectorMethodCache.As(128, typeof(ushort), typeof(byte)));
+                    break;
+                case 4:
+                    il.Emit(OpCodes.Ldind_U4);
+                    il.Emit(OpCodes.Call, VectorMethodCache.CreateScalar(128, typeof(uint)));
+                    il.Emit(OpCodes.Call, VectorMethodCache.As(128, typeof(uint), typeof(byte)));
+                    break;
+                case 8:
+                    il.Emit(OpCodes.Ldind_I8);
+                    il.Emit(OpCodes.Call, VectorMethodCache.CreateScalar(128, typeof(ulong)));
+                    il.Emit(OpCodes.Call, VectorMethodCache.As(128, typeof(ulong), typeof(byte)));
+                    break;
+                case 16:
+                    il.Emit(OpCodes.Call, VectorMethodCache.Load(128, typeof(byte)));
+                    break;
+                default:
+                    throw new NotSupportedException($"SIMD={simdBits} elementSize={elementSize} -> byteCount={byteCount} not supported");
+            }
+
+            // Sign-extend V128<byte> → V<simdBits><signedT>, reinterpret as unsigned, compare > 0.
+            int targetElemBits = elementSize * 8;
+            Type signedT = targetElemBits switch
+            {
+                16 => typeof(short),
+                32 => typeof(int),
+                64 => typeof(long),
+                _ => throw new NotSupportedException($"Target lane width {targetElemBits} not supported")
+            };
+            Type unsignedT = targetElemBits switch
+            {
+                16 => typeof(ushort),
+                32 => typeof(uint),
+                64 => typeof(ulong),
+                _ => throw new NotSupportedException()
+            };
+
+            il.Emit(OpCodes.Call, VectorMethodCache.ByteLaneSignExtend(simdBits, targetElemBits));
+            il.Emit(OpCodes.Call, VectorMethodCache.As(simdBits, signedT, unsignedT));
+            il.Emit(OpCodes.Call, VectorMethodCache.Zero(simdBits, unsignedT));
+            il.Emit(OpCodes.Call, VectorMethodCache.GreaterThan(simdBits, unsignedT));
         }
 
         #endregion
@@ -610,90 +560,10 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        // Per the CachedMethods pattern in ILKernelGenerator.cs, reflection lookups for np.where
-        // live alongside the other cached entries. Fail-fast at type init so a renamed API shows
-        // up immediately instead of NREs at first use.
-        private static partial class CachedMethods
-        {
-            #region Where Kernel Methods
-
-            private static MethodInfo FindGenericMethod(Type container, string name, int? paramCount = null)
-            {
-                foreach (var m in container.GetMethods())
-                {
-                    if (m.Name == name && m.IsGenericMethodDefinition &&
-                        (paramCount is null || m.GetParameters().Length == paramCount.Value))
-                        return m;
-                }
-                throw new MissingMethodException(container.FullName, name);
-            }
-
-            private static MethodInfo FindMethodExact(Type container, string name, Type[] argTypes)
-                => container.GetMethod(name, argTypes)
-                   ?? throw new MissingMethodException(container.FullName, name);
-
-            private static MethodInfo GetZeroGetter(Type vectorOfT)
-                => vectorOfT.GetProperty("Zero")?.GetMethod
-                   ?? throw new MissingMethodException(vectorOfT.FullName, "get_Zero");
-
-            // Generic definitions — caller must MakeGenericMethod(typeof(T)) before emitting.
-            public static readonly MethodInfo V256LoadGeneric = FindGenericMethod(typeof(Vector256), "Load", 1);
-            public static readonly MethodInfo V256StoreGeneric = FindGenericMethod(typeof(Vector256), "Store", 2);
-            public static readonly MethodInfo V256ConditionalSelectGeneric = FindGenericMethod(typeof(Vector256), "ConditionalSelect");
-
-            public static readonly MethodInfo V128LoadGeneric = FindGenericMethod(typeof(Vector128), "Load", 1);
-            public static readonly MethodInfo V128StoreGeneric = FindGenericMethod(typeof(Vector128), "Store", 2);
-            public static readonly MethodInfo V128ConditionalSelectGeneric = FindGenericMethod(typeof(Vector128), "ConditionalSelect");
-
-            // Already-specialised generic methods used during mask creation.
-            public static readonly MethodInfo V256LoadByte = FindGenericMethod(typeof(Vector256), "Load").MakeGenericMethod(typeof(byte));
-            public static readonly MethodInfo V128LoadByte = FindGenericMethod(typeof(Vector128), "Load").MakeGenericMethod(typeof(byte));
-
-            public static readonly MethodInfo V128CreateScalarUInt = FindGenericMethod(typeof(Vector128), "CreateScalar").MakeGenericMethod(typeof(uint));
-            public static readonly MethodInfo V128CreateScalarULong = FindGenericMethod(typeof(Vector128), "CreateScalar").MakeGenericMethod(typeof(ulong));
-            public static readonly MethodInfo V128CreateScalarUShort = FindGenericMethod(typeof(Vector128), "CreateScalar").MakeGenericMethod(typeof(ushort));
-
-            public static readonly MethodInfo V128UIntAsByte = FindGenericMethod(typeof(Vector128), "AsByte").MakeGenericMethod(typeof(uint));
-            public static readonly MethodInfo V128ULongAsByte = FindGenericMethod(typeof(Vector128), "AsByte").MakeGenericMethod(typeof(ulong));
-            public static readonly MethodInfo V128UShortAsByte = FindGenericMethod(typeof(Vector128), "AsByte").MakeGenericMethod(typeof(ushort));
-
-            public static readonly MethodInfo V256LongAsULong = FindGenericMethod(typeof(Vector256), "AsUInt64").MakeGenericMethod(typeof(long));
-            public static readonly MethodInfo V256IntAsUInt = FindGenericMethod(typeof(Vector256), "AsUInt32").MakeGenericMethod(typeof(int));
-            public static readonly MethodInfo V256ShortAsUShort = FindGenericMethod(typeof(Vector256), "AsUInt16").MakeGenericMethod(typeof(short));
-
-            public static readonly MethodInfo V128LongAsULong = FindGenericMethod(typeof(Vector128), "AsUInt64").MakeGenericMethod(typeof(long));
-            public static readonly MethodInfo V128IntAsUInt = FindGenericMethod(typeof(Vector128), "AsUInt32").MakeGenericMethod(typeof(int));
-            public static readonly MethodInfo V128ShortAsUShort = FindGenericMethod(typeof(Vector128), "AsUInt16").MakeGenericMethod(typeof(short));
-
-            public static readonly MethodInfo V256GreaterThanULong = FindGenericMethod(typeof(Vector256), "GreaterThan").MakeGenericMethod(typeof(ulong));
-            public static readonly MethodInfo V256GreaterThanUInt = FindGenericMethod(typeof(Vector256), "GreaterThan").MakeGenericMethod(typeof(uint));
-            public static readonly MethodInfo V256GreaterThanUShort = FindGenericMethod(typeof(Vector256), "GreaterThan").MakeGenericMethod(typeof(ushort));
-            public static readonly MethodInfo V256GreaterThanByte = FindGenericMethod(typeof(Vector256), "GreaterThan").MakeGenericMethod(typeof(byte));
-
-            public static readonly MethodInfo V128GreaterThanULong = FindGenericMethod(typeof(Vector128), "GreaterThan").MakeGenericMethod(typeof(ulong));
-            public static readonly MethodInfo V128GreaterThanUInt = FindGenericMethod(typeof(Vector128), "GreaterThan").MakeGenericMethod(typeof(uint));
-            public static readonly MethodInfo V128GreaterThanUShort = FindGenericMethod(typeof(Vector128), "GreaterThan").MakeGenericMethod(typeof(ushort));
-            public static readonly MethodInfo V128GreaterThanByte = FindGenericMethod(typeof(Vector128), "GreaterThan").MakeGenericMethod(typeof(byte));
-
-            // Non-generic exact overloads on Avx2/Sse41 for byte-lane sign-extend expansion.
-            public static readonly MethodInfo Avx2ConvertToV256Int64 = FindMethodExact(typeof(Avx2), "ConvertToVector256Int64", new[] { typeof(Vector128<byte>) });
-            public static readonly MethodInfo Avx2ConvertToV256Int32 = FindMethodExact(typeof(Avx2), "ConvertToVector256Int32", new[] { typeof(Vector128<byte>) });
-            public static readonly MethodInfo Avx2ConvertToV256Int16 = FindMethodExact(typeof(Avx2), "ConvertToVector256Int16", new[] { typeof(Vector128<byte>) });
-            public static readonly MethodInfo Sse41ConvertToV128Int64 = FindMethodExact(typeof(Sse41), "ConvertToVector128Int64", new[] { typeof(Vector128<byte>) });
-            public static readonly MethodInfo Sse41ConvertToV128Int32 = FindMethodExact(typeof(Sse41), "ConvertToVector128Int32", new[] { typeof(Vector128<byte>) });
-            public static readonly MethodInfo Sse41ConvertToV128Int16 = FindMethodExact(typeof(Sse41), "ConvertToVector128Int16", new[] { typeof(Vector128<byte>) });
-
-            // Vector*<T>.Zero property getters — emitted as a call, not a field load, so we cache the getter MethodInfo.
-            public static readonly MethodInfo V256GetZeroULong = GetZeroGetter(typeof(Vector256<ulong>));
-            public static readonly MethodInfo V256GetZeroUInt = GetZeroGetter(typeof(Vector256<uint>));
-            public static readonly MethodInfo V256GetZeroUShort = GetZeroGetter(typeof(Vector256<ushort>));
-            public static readonly MethodInfo V256GetZeroByte = GetZeroGetter(typeof(Vector256<byte>));
-            public static readonly MethodInfo V128GetZeroULong = GetZeroGetter(typeof(Vector128<ulong>));
-            public static readonly MethodInfo V128GetZeroUInt = GetZeroGetter(typeof(Vector128<uint>));
-            public static readonly MethodInfo V128GetZeroUShort = GetZeroGetter(typeof(Vector128<ushort>));
-            public static readonly MethodInfo V128GetZeroByte = GetZeroGetter(typeof(Vector128<byte>));
-
-            #endregion
-        }
+        // The previous "Where Kernel Methods" region of CachedMethods (~30 fields covering
+        // Load/Store/ConditionalSelect/CreateScalar/AsByte/GreaterThan/Zero variants plus the
+        // x86 byte-lane sign-extend intrinsics) has been replaced by VectorMethodCache. Each
+        // entry now resolves lazily and is keyed on (simdBits, name, elemType) so cross-file
+        // call sites share one cached MethodInfo.
     }
 }

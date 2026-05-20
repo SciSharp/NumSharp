@@ -363,31 +363,11 @@ namespace NumSharp.Backends.Kernels
         {
             int elementSize = sizeof(float);
 
-            // Get method references
-            var vector256Type = typeof(Vector256<float>);
-            var vector256StaticType = typeof(Vector256);
-
-            // Vector256.Load<T>(T*) - generic method
-            var loadMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod &&
-                           m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(typeof(float));
-
-            // Vector256.Store<T>(Vector256<T>, T*)
-            var storeMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Store" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .MakeGenericMethod(typeof(float));
-
-            // Vector256.Create(float) - non-generic overload
-            var createMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Create" && !m.IsGenericMethod &&
-                           m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(float));
-
-            var addMethod = CachedMethods.Vector256FloatAdd;
-            var mulMethod = CachedMethods.Vector256FloatMul;
+            var loadMethod = VectorMethodCache.Load(256, typeof(float));
+            var storeMethod = VectorMethodCache.Store(256, typeof(float));
+            var createMethod = VectorMethodCache.CreateBroadcast(256, typeof(float));
+            var addMethod = VectorMethodCache.Operator(256, typeof(float), "op_Addition");
+            var mulMethod = VectorMethodCache.Operator(256, typeof(float), "op_Multiply");
 
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)
@@ -644,30 +624,11 @@ namespace NumSharp.Backends.Kernels
         {
             int elementSize = sizeof(double);
 
-            var vector256Type = typeof(Vector256<double>);
-            var vector256StaticType = typeof(Vector256);
-
-            // Vector256.Load<T>(T*) - generic method
-            var loadMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod &&
-                           m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(typeof(double));
-
-            // Vector256.Store<T>(Vector256<T>, T*)
-            var storeMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Store" && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .MakeGenericMethod(typeof(double));
-
-            // Vector256.Create(double) - non-generic overload
-            var createMethod = vector256StaticType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Create" && !m.IsGenericMethod &&
-                           m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
-
-            var addMethod = CachedMethods.Vector256DoubleAdd;
-            var mulMethod = CachedMethods.Vector256DoubleMul;
+            var loadMethod = VectorMethodCache.Load(256, typeof(double));
+            var storeMethod = VectorMethodCache.Store(256, typeof(double));
+            var createMethod = VectorMethodCache.CreateBroadcast(256, typeof(double));
+            var addMethod = VectorMethodCache.Operator(256, typeof(double), "op_Addition");
+            var mulMethod = VectorMethodCache.Operator(256, typeof(double), "op_Multiply");
 
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)

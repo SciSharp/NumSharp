@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 // =============================================================================
 // VectorMethodCache.cs - Centralized reflection cache for Vector{128,256,512}
@@ -211,6 +212,33 @@ namespace NumSharp.Backends.Kernels
 
         public static MethodInfo ConvertToInt32FromSingle(int simdBits)
             => GetOrAddNonGenericByArg(simdBits, "ConvertToInt32", typeof(float), paramCount: 1);
+
+        /// <summary>
+        /// x86 byte-lane sign-extend: <c>Avx2.ConvertToVector256Int{16,32,64}(V128&lt;byte&gt;)</c> or
+        /// the SSE4.1 equivalent <c>Sse41.ConvertToVector128Int{16,32,64}(V128&lt;byte&gt;)</c>.
+        /// Used by the np.where mask-expansion path to widen N bytes of bool condition into
+        /// N wider lanes matching the data element size.
+        /// </summary>
+        /// <param name="targetSimdBits">Output vector width: 256 for Avx2, 128 for Sse41.</param>
+        /// <param name="targetElemBits">Output lane bit-width: 16, 32, or 64.</param>
+        public static MethodInfo ByteLaneSignExtend(int targetSimdBits, int targetElemBits)
+        {
+            string name = targetSimdBits switch
+            {
+                256 => "ConvertToVector256Int" + targetElemBits,
+                128 => "ConvertToVector128Int" + targetElemBits,
+                _ => throw new NotSupportedException($"SIMD width {targetSimdBits} not supported for byte-lane expand")
+            };
+
+            return _methods.GetOrAdd(new Key(targetSimdBits, name, typeof(byte), /*x86Intrinsic*/ 4000), static key =>
+            {
+                Type container = key.SimdBits == 256 ? typeof(Avx2) : typeof(Sse41);
+                return container.GetMethod(key.Name,
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { typeof(Vector128<byte>) }, modifiers: null)
+                    ?? throw new MissingMethodException(container.FullName, key.Name);
+            });
+        }
 
         /// <summary>
         /// <c>Vector{N}.ShiftLeft / ShiftRightLogical / ShiftRightArithmetic(V&lt;T&gt;, int)</c>
