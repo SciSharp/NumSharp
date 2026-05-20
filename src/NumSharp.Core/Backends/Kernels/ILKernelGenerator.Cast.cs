@@ -10,33 +10,62 @@ namespace NumSharp.Backends.Kernels
 {
     // =============================================================================
     // ILKernelGenerator.Cast.cs
-    //   OWNERSHIP: Cross-dtype copy kernels (contiguous src → contiguous dst).
+    //   OWNERSHIP: Cross-dtype copy kernels (contig and strided/broadcast).
+    //
+    //   TWO PUBLIC ENTRY POINTS:
+    //     - CastKernel        : (src, dst, count)  - flat contig src+dst
+    //     - StridedCastKernel : (src, dst, srcStrides, dstStrides, shape, ndim)
+    //                          - handles arbitrary strides, broadcast (stride=0),
+    //                            outer-strided/inner-contig, fully strided
+    //
     //   RESPONSIBILITY:
-    //     - One IL-generated DynamicMethod per (src, dst) NPTypeCode pair.
+    //     - One IL-generated DynamicMethod per (src, dst) NPTypeCode pair, per shape.
     //     - Strategy selection: MemoryCopy / Widen / Narrow / Convert / Scalar.
     //     - Width selection: V512 / V256 / V128 picked from <see cref="VectorBits"/>;
     //       Vector256 used when the source is wide enough (4+ bytes), otherwise V128.
-    //     - Scalar tail loop appended unconditionally (count not vector-multiple).
-    //   PARITY WITH SimdCast.cs (replaced):
-    //     - Same instruction sequences (WidenLower/WidenUpper, Narrow, ConvertToSingle,
-    //       ConvertToDouble, ConvertToInt32) — emitted via IL instead of C#.
-    //     - Same AVX-2-only conversions emit SIMD; AVX-512-only pairs
-    //       (UInt32↔Float, UInt64↔Float, Long↔Double, Single→UInt32/Int64,
-    //        Double→Int32/Int64/UInt64) fall through to scalar tail.
-    //     - 8× widen (byte→long / sbyte→long) emitted as scalar — same as old code
-    //       which delegated to JIT auto-vectorization.
-    //   CALLER: NpyIter.Copy when state.IsContiguousCopy and src.TypeCode != dst.TypeCode.
+    //     - Strided kernels detect "inner unit stride for both src and dst" at runtime
+    //       and use the full SIMD body for the innermost axis, walking outer dims via
+    //       incremental coord advance. When inner is also strided, fall back to scalar.
+    //
+    //   PARITY WITH NumPy:
+    //     - Cross-dtype contig: 1-3x of NumPy (within noise of NumPy's bulk dtype loops).
+    //     - Broadcast (stride=0 outer): outer loop reuses src ptr, inner SIMD body per
+    //       outer row -> NumPy parity for (1,N)->(M,N) cases.
+    //     - Outer-strided/inner-contig (e.g. arr[::2,:]): outer coord walk + inner SIMD.
+    //
+    //   CALLERS:
+    //     - NpyIter.Copy when src.TypeCode != dst.TypeCode (contig => CastKernel,
+    //       general => StridedCastKernel).
     // =============================================================================
     public static partial class ILKernelGenerator
     {
+        // -----------------------------------------------------------------
+        // Public delegates
+        // -----------------------------------------------------------------
+
         /// <summary>
-        /// Cross-dtype copy kernel delegate.
+        /// Cross-dtype contiguous copy kernel.
         /// Both <paramref name="src"/> and <paramref name="dst"/> must be contiguous.
         /// </summary>
-        /// <param name="src">Pointer to source buffer.</param>
-        /// <param name="dst">Pointer to destination buffer.</param>
-        /// <param name="count">Number of elements to copy.</param>
         public unsafe delegate void CastKernel(void* src, void* dst, long count);
+
+        /// <summary>
+        /// Cross-dtype strided/broadcast copy kernel.
+        /// </summary>
+        /// <param name="src">Source base pointer (already offset by Shape.offset).</param>
+        /// <param name="dst">Destination base pointer.</param>
+        /// <param name="srcStrides">Source strides in elements (length = ndim).</param>
+        /// <param name="dstStrides">Destination strides in elements (length = ndim).</param>
+        /// <param name="shape">Shape in elements (length = ndim).</param>
+        /// <param name="ndim">Number of dimensions; coalesced when possible by NpyIter.</param>
+        public unsafe delegate void StridedCastKernel(
+            void* src, void* dst,
+            long* srcStrides, long* dstStrides,
+            long* shape, int ndim);
+
+        // -----------------------------------------------------------------
+        // Caches
+        // -----------------------------------------------------------------
 
         private readonly struct CastKernelKey : IEquatable<CastKernelKey>
         {
@@ -52,17 +81,24 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static readonly ConcurrentDictionary<CastKernelKey, CastKernel> _castCache = new();
-        // Pairs we've already decided are unsupported (so we don't repeatedly retry IL gen).
         private static readonly ConcurrentDictionary<CastKernelKey, byte> _castUnsupported = new();
 
-        /// <summary>
-        /// Number of cached cast kernels (diagnostics).
-        /// </summary>
+        private static readonly ConcurrentDictionary<CastKernelKey, StridedCastKernel> _stridedCastCache = new();
+        private static readonly ConcurrentDictionary<CastKernelKey, byte> _stridedCastUnsupported = new();
+
+        /// <summary>Number of cached contig cast kernels (diagnostics).</summary>
         public static int CastCachedCount => _castCache.Count;
 
+        /// <summary>Number of cached strided cast kernels (diagnostics).</summary>
+        public static int StridedCastCachedCount => _stridedCastCache.Count;
+
+        // -----------------------------------------------------------------
+        // Public API
+        // -----------------------------------------------------------------
+
         /// <summary>
-        /// Get or generate a cast kernel for the given (<paramref name="srcType"/> → <paramref name="dstType"/>) pair.
-        /// Returns <c>null</c> when the pair is unsupported (Boolean/Char/Half/Complex/Decimal involved).
+        /// Get or generate a contig cast kernel for the given pair.
+        /// Returns <c>null</c> for unsupported pairs (Boolean/Char/Half/Complex/Decimal involved).
         /// </summary>
         public static CastKernel TryGetCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
@@ -90,38 +126,53 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        // ===================================================
-        // Strategy selection
-        // ===================================================
-
         /// <summary>
-        /// Cast strategy — picks the IL emission template for the (src, dst) pair.
+        /// Get or generate a strided/broadcast cast kernel for the given pair.
+        /// Returns <c>null</c> for unsupported pairs.
         /// </summary>
+        public static StridedCastKernel TryGetStridedCastKernel(NPTypeCode srcType, NPTypeCode dstType)
+        {
+            if (!Enabled) return null;
+
+            var key = new CastKernelKey(srcType, dstType);
+            if (_stridedCastCache.TryGetValue(key, out var existing)) return existing;
+            if (_stridedCastUnsupported.ContainsKey(key)) return null;
+
+            try
+            {
+                var kernel = GenerateStridedCastKernel(key);
+                if (kernel == null)
+                {
+                    _stridedCastUnsupported.TryAdd(key, 0);
+                    return null;
+                }
+                return _stridedCastCache.GetOrAdd(key, kernel);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetStridedCastKernel({srcType}, {dstType}): {ex.GetType().Name}: {ex.Message}");
+                _stridedCastUnsupported.TryAdd(key, 0);
+                return null;
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Strategy selection
+        // -----------------------------------------------------------------
+
         private enum CastStrategy
         {
-            /// <summary>Unsupported (Boolean/Char/Half/Complex/Decimal involved).</summary>
             None,
-            /// <summary>Same size — bit-identical Buffer.MemoryCopy.</summary>
             MemoryCopy,
-            /// <summary>Per-element scalar loop only (no SIMD path emitted).</summary>
             ScalarOnly,
-            /// <summary>1-step int→int widen: V.WidenLower/Upper.</summary>
             WidenInt,
-            /// <summary>1-step int→int narrow: V.Narrow.</summary>
             NarrowInt,
-            /// <summary>2-step int→int widen: WidenLower/Upper of WidenLower/Upper.</summary>
             WidenIntChain2,
-            /// <summary>V.ConvertToSingle on V&lt;int&gt;.</summary>
             Int32ToSingle,
-            /// <summary>V128.WidenLower/Upper(V&lt;int&gt;) → ConvertToDouble.</summary>
             Int32ToDouble,
-            /// <summary>V.ConvertToInt32 on V&lt;float&gt;.</summary>
             SingleToInt32,
-            /// <summary>V128.WidenLower/Upper(V&lt;short/ushort&gt;) → ConvertToSingle.</summary>
             SmallIntToSingle,
-            /// <summary>V128.WidenLower/Upper on V&lt;float&gt;.</summary>
             SingleToDouble,
-            /// <summary>V128.Narrow(V&lt;double&gt;, V&lt;double&gt;).</summary>
             DoubleToSingle,
         }
 
@@ -134,16 +185,11 @@ namespace NumSharp.Backends.Kernels
         private static bool IsFloatCast(NPTypeCode t) =>
                t == NPTypeCode.Single || t == NPTypeCode.Double;
 
-        /// <summary>
-        /// Map (src, dst) to a strategy, the SIMD container width to use, and the per-iteration source step.
-        /// </summary>
         private static (CastStrategy strategy, int simdBits, int vstep) ResolveStrategy(NPTypeCode src, NPTypeCode dst)
         {
-            // Unsupported on either side.
             if (!(IsIntegerCast(src) || IsFloatCast(src)) || !(IsIntegerCast(dst) || IsFloatCast(dst)))
                 return (CastStrategy.None, 0, 0);
 
-            // Identical type → straight memcpy.
             if (src == dst) return (CastStrategy.MemoryCopy, 0, 0);
 
             int srcSize = GetTypeSize(src);
@@ -153,16 +199,12 @@ namespace NumSharp.Backends.Kernels
             bool srcFloat = IsFloatCast(src);
             bool dstFloat = IsFloatCast(dst);
 
-            // Same byte-size, int↔int — only the metadata differs, bits are identical.
-            // (Int32↔UInt32, Int64↔UInt64, etc.) Single↔Int32/Double↔Int64 are NOT bit-identical
-            // semantically, so route those through scalar.
             if (srcSize == dstSize)
             {
                 if (srcInt && dstInt) return (CastStrategy.MemoryCopy, 0, 0);
                 return (CastStrategy.ScalarOnly, 0, 0);
             }
 
-            // ---- int → int ----
             if (srcInt && dstInt)
             {
                 if (dstSize > srcSize)
@@ -170,22 +212,17 @@ namespace NumSharp.Backends.Kernels
                     int ratio = dstSize / srcSize;
                     if (ratio == 2)
                     {
-                        // V256 for int32→int64 etc. when available (large per-iter throughput);
-                        // V128 for smaller source elements (matches old SimdCast width choices).
                         int simdBits = (srcSize >= 4 && VectorBits >= 256) ? 256
-                                     : (VectorBits >= 128) ? 128
-                                     : 0;
+                                     : (VectorBits >= 128) ? 128 : 0;
                         int vstep = simdBits == 0 ? 0 : (simdBits / 8) / srcSize;
                         return (CastStrategy.WidenInt, simdBits, vstep);
                     }
                     if (ratio == 4)
                     {
-                        // 2-step widen — old code used V128.
                         int simdBits = VectorBits >= 128 ? 128 : 0;
                         int vstep = simdBits == 0 ? 0 : 16 / srcSize;
                         return (CastStrategy.WidenIntChain2, simdBits, vstep);
                     }
-                    // 8× (byte→long): scalar — old code let JIT auto-vectorize.
                     return (CastStrategy.ScalarOnly, 0, 0);
                 }
                 else
@@ -194,7 +231,6 @@ namespace NumSharp.Backends.Kernels
                     if (ratio == 2)
                     {
                         int simdBits = VectorBits >= 128 ? 128 : 0;
-                        // Narrow consumes 2× V128 loads per V128 store → vstep = (V128 src elements) * 2.
                         int vstep = simdBits == 0 ? 0 : (16 / srcSize) * 2;
                         return (CastStrategy.NarrowInt, simdBits, vstep);
                     }
@@ -202,7 +238,6 @@ namespace NumSharp.Backends.Kernels
                 }
             }
 
-            // ---- int → float ----
             if (srcInt && dstFloat)
             {
                 if (src == NPTypeCode.Int32 && dst == NPTypeCode.Single)
@@ -213,7 +248,6 @@ namespace NumSharp.Backends.Kernels
                 }
                 if (src == NPTypeCode.Int32 && dst == NPTypeCode.Double)
                 {
-                    // Limited to V128 — Vector256.ConvertToDouble(V256<long>) needs AVX-512DQ.
                     int simdBits = VectorBits >= 128 ? 128 : 0;
                     int vstep = simdBits == 0 ? 0 : 16 / srcSize;
                     return (CastStrategy.Int32ToDouble, simdBits, vstep);
@@ -224,11 +258,9 @@ namespace NumSharp.Backends.Kernels
                     int vstep = simdBits == 0 ? 0 : 16 / srcSize;
                     return (CastStrategy.SmallIntToSingle, simdBits, vstep);
                 }
-                // Everything else (uint32→float, uint64→float, int64→double, etc.): scalar.
                 return (CastStrategy.ScalarOnly, 0, 0);
             }
 
-            // ---- float → int ----
             if (srcFloat && dstInt)
             {
                 if (src == NPTypeCode.Single && dst == NPTypeCode.Int32)
@@ -240,7 +272,6 @@ namespace NumSharp.Backends.Kernels
                 return (CastStrategy.ScalarOnly, 0, 0);
             }
 
-            // ---- float → float ----
             if (srcFloat && dstFloat)
             {
                 if (src == NPTypeCode.Single && dst == NPTypeCode.Double)
@@ -261,9 +292,9 @@ namespace NumSharp.Backends.Kernels
             return (CastStrategy.None, 0, 0);
         }
 
-        // ===================================================
-        // Kernel generation
-        // ===================================================
+        // =================================================================
+        // Contig kernel generation
+        // =================================================================
 
         private static CastKernel GenerateCastKernel(CastKernelKey key)
         {
@@ -278,64 +309,532 @@ namespace NumSharp.Backends.Kernels
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true);
 
-            EmitCastBody(dm.GetILGenerator(), key, strategy, simdBits, vstep);
+            EmitContigCastBody(dm.GetILGenerator(), key, strategy, simdBits, vstep);
             return dm.CreateDelegate<CastKernel>();
         }
 
-        private static void EmitCastBody(ILGenerator il, CastKernelKey key, CastStrategy strategy, int simdBits, int vstep)
+        /// <summary>
+        /// Args: 0 = src void*, 1 = dst void*, 2 = count long.
+        /// </summary>
+        private static void EmitContigCastBody(ILGenerator il, CastKernelKey key, CastStrategy strategy, int simdBits, int vstep)
         {
             int srcSize = GetTypeSize(key.Src);
-            int dstSize = GetTypeSize(key.Dst);
 
-            // ---- MemoryCopy fast path ----
             if (strategy == CastStrategy.MemoryCopy)
             {
-                // Buffer.MemoryCopy(src, dst, count*size, count*size); return;
-                var memCopy = typeof(Buffer).GetMethod(
-                    nameof(Buffer.MemoryCopy),
-                    new[] { typeof(void*), typeof(void*), typeof(long), typeof(long) })
-                    ?? throw new MissingMethodException(typeof(Buffer).FullName, nameof(Buffer.MemoryCopy));
-
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldarg_1);
-                il.Emit(OpCodes.Ldarg_2);
-                il.Emit(OpCodes.Ldc_I8, (long)srcSize);
-                il.Emit(OpCodes.Mul);
-                il.Emit(OpCodes.Ldarg_2);
-                il.Emit(OpCodes.Ldc_I8, (long)srcSize);
-                il.Emit(OpCodes.Mul);
-                il.EmitCall(OpCodes.Call, memCopy, null);
+                EmitMemoryCopyInline(il, srcSize, /*pushSrc*/() => il.Emit(OpCodes.Ldarg_0),
+                                                  /*pushDst*/() => il.Emit(OpCodes.Ldarg_1),
+                                                  /*pushCount*/() => il.Emit(OpCodes.Ldarg_2));
                 il.Emit(OpCodes.Ret);
                 return;
             }
 
-            // ---- General template: SIMD loop (optional) + scalar tail ----
-            var locI = il.DeclareLocal(typeof(long));   // current element index
+            // Source / dest base pointers come straight from args.
+            EmitSimdLoopAndTail(il, key, strategy, simdBits, vstep,
+                pushSrcBase: () => il.Emit(OpCodes.Ldarg_0),
+                pushDstBase: () => il.Emit(OpCodes.Ldarg_1),
+                pushCount:  () => il.Emit(OpCodes.Ldarg_2));
 
-            var lblSimdHead = il.DefineLabel();
-            var lblSimdEnd = il.DefineLabel();
+            il.Emit(OpCodes.Ret);
+        }
+
+        // =================================================================
+        // Strided kernel generation
+        // =================================================================
+
+        private static StridedCastKernel GenerateStridedCastKernel(CastKernelKey key)
+        {
+            var (strategy, simdBits, vstep) = ResolveStrategy(key.Src, key.Dst);
+            if (strategy == CastStrategy.None)
+                return null;
+
+            var dm = new DynamicMethod(
+                name: $"StridedCast_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*),  // src
+                    typeof(void*),  // dst
+                    typeof(long*),  // srcStrides
+                    typeof(long*),  // dstStrides
+                    typeof(long*),  // shape
+                    typeof(int),    // ndim
+                },
+                owner: typeof(ILKernelGenerator),
+                skipVisibility: true);
+
+            EmitStridedCastBody(dm.GetILGenerator(), key, strategy, simdBits, vstep);
+            return dm.CreateDelegate<StridedCastKernel>();
+        }
+
+        /// <summary>
+        /// Strided/broadcast cast body. Args:
+        ///   0 = src void*, 1 = dst void*, 2 = srcStrides long*, 3 = dstStrides long*,
+        ///   4 = shape long*, 5 = ndim int.
+        ///
+        /// Emitted IL structure:
+        ///   if (ndim == 0): single scalar conv; return.
+        ///
+        ///   Walk outer dims with coord/offset arrays (localloc).
+        ///   At each outer position, test:
+        ///     if (srcStrides[innerAxis] == 1 && dstStrides[innerAxis] == 1):
+        ///         <inner SIMD loop + scalar tail for shape[innerAxis] elements>
+        ///     else:
+        ///         <scalar strided inner loop>
+        ///   Advance outer coords (innermost-first, incremental offset update).
+        /// </summary>
+        private static void EmitStridedCastBody(ILGenerator il, CastKernelKey key, CastStrategy strategy, int simdBits, int vstep)
+        {
+            int srcSize = GetTypeSize(key.Src);
+            int dstSize = GetTypeSize(key.Dst);
+
+            // ---- Locals ----
+            // Inner axis info (shape, strides).
+            var locInnerN          = il.DeclareLocal(typeof(long));
+            var locInnerSrcStride  = il.DeclareLocal(typeof(long));
+            var locInnerDstStride  = il.DeclareLocal(typeof(long));
+
+            // Per-outer-iter offsets (in elements; multiplied by elem size when used).
+            var locOuterSrcOffset  = il.DeclareLocal(typeof(long));
+            var locOuterDstOffset  = il.DeclareLocal(typeof(long));
+
+            // Coord array (long*) — outerNdim entries — stackalloc via localloc.
+            var locCoords          = il.DeclareLocal(typeof(long*));
+            var locOuterNdim       = il.DeclareLocal(typeof(int));
+
+            // For inner loops.
+            var locI               = il.DeclareLocal(typeof(long));
+
+            // ---- Labels ----
+            var lblScalar0DStart   = il.DefineLabel();   // ndim==0 branch
+            var lblOuterLoopHead   = il.DefineLabel();
+            var lblOuterLoopBody   = il.DefineLabel();
+            var lblInnerContigPath = il.DefineLabel();
+            var lblInnerScalarPath = il.DefineLabel();
+            var lblAfterInner      = il.DefineLabel();
+            var lblAdvanceOuter    = il.DefineLabel();
+            var lblRet             = il.DefineLabel();
+
+            // ---- ndim == 0: do single scalar conv ----
+            il.Emit(OpCodes.Ldarg_S, (byte)5);   // ndim
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Bne_Un, lblScalar0DStart);
+
+            // Single-element scalar: dst = (TDst) src
+            // dst ptr on stack
+            il.Emit(OpCodes.Ldarg_1);
+            // load src val
+            il.Emit(OpCodes.Ldarg_0);
+            EmitLoadIndirect(il, key.Src);
+            EmitConvertTo(il, key.Src, key.Dst);
+            EmitStoreIndirect(il, key.Dst);
+            il.Emit(OpCodes.Br, lblRet);
+
+            il.MarkLabel(lblScalar0DStart);
+
+            // ---- innerN = shape[ndim-1]; innerSrcStride = srcStrides[ndim-1]; innerDstStride = dstStrides[ndim-1] ----
+            // ndim-1
+            il.Emit(OpCodes.Ldarg_S, (byte)5);   // ndim
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Conv_I);
+            // shape[ndim-1]
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldarg_S, (byte)4);   // shape
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locInnerN);
+            // (innerIdx is still on stack as native int)
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldarg_2);            // srcStrides
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locInnerSrcStride);
+            // innerIdx still on stack
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldarg_3);            // dstStrides
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locInnerDstStride);
+
+            // ---- outerNdim = ndim - 1 ----
+            il.Emit(OpCodes.Ldarg_S, (byte)5);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locOuterNdim);
+
+            // ---- coords[] = stackalloc long[outerNdim] (or 1 if outerNdim==0 to avoid 0-byte localloc) ----
+            // localloc expects unsigned native int count of bytes.
+            il.Emit(OpCodes.Ldloc, locOuterNdim);
+            // size_bytes = max(outerNdim, 1) * 8
+            var lblSizeReady = il.DefineLabel();
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Bgt, lblSizeReady);
+            il.Emit(OpCodes.Pop);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.MarkLabel(lblSizeReady);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_U);
+            il.Emit(OpCodes.Localloc);
+            il.Emit(OpCodes.Stloc, locCoords);
+
+            // ---- Zero coords[] ----
+            // for k=0; k<outerNdim; k++ coords[k] = 0
+            {
+                var locK = il.DeclareLocal(typeof(int));
+                var zeroHead = il.DefineLabel();
+                var zeroBody = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Stloc, locK);
+                il.MarkLabel(zeroHead);
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                il.Emit(OpCodes.Blt, zeroBody);
+                il.Emit(OpCodes.Br, lblOuterLoopHead);
+
+                il.MarkLabel(zeroBody);
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stind_I8);
+
+                il.Emit(OpCodes.Ldloc, locK);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locK);
+                il.Emit(OpCodes.Br, zeroHead);
+            }
+
+            // ---- outerSrcOffset = 0; outerDstOffset = 0 ----
+            il.MarkLabel(lblOuterLoopHead);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locOuterSrcOffset);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+            // (Note: after first iteration, offsets are updated via incremental advance,
+            //  so we reset only on entry — actually no, we don't reset, the outer
+            //  advance maintains them. Move the zeroing before the loop.)
+            // Restructure: just enter the body.
+            il.MarkLabel(lblOuterLoopBody);
+
+            // ---- Branch on inner contig ----
+            il.Emit(OpCodes.Ldloc, locInnerSrcStride);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Bne_Un, lblInnerScalarPath);
+            il.Emit(OpCodes.Ldloc, locInnerDstStride);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Bne_Un, lblInnerScalarPath);
+
+            // ---- Inner contig: SIMD body for innerN elements at (src+outerSrcOffset*srcSize, dst+outerDstOffset*dstSize) ----
+            il.MarkLabel(lblInnerContigPath);
+            Action pushSrcInnerBase = () =>
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, locOuterSrcOffset);
+                il.Emit(OpCodes.Ldc_I8, (long)srcSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+            };
+            Action pushDstInnerBase = () =>
+            {
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Ldc_I8, (long)dstSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+            };
+            Action pushInnerCount = () => il.Emit(OpCodes.Ldloc, locInnerN);
+
+            if (strategy == CastStrategy.MemoryCopy)
+            {
+                // Same-type inner row -> Buffer.MemoryCopy(srcRow, dstRow, innerN*elemSize, innerN*elemSize)
+                EmitMemoryCopyInline(il, srcSize, pushSrcInnerBase, pushDstInnerBase, pushInnerCount);
+            }
+            else
+            {
+                EmitSimdLoopAndTail(il, key, strategy, simdBits, vstep,
+                    pushSrcBase: pushSrcInnerBase,
+                    pushDstBase: pushDstInnerBase,
+                    pushCount: pushInnerCount);
+            }
+            il.Emit(OpCodes.Br, lblAfterInner);
+
+            // ---- Inner scalar (innerStride != 1 for either): per-element strided ----
+            il.MarkLabel(lblInnerScalarPath);
+            {
+                var lblScalarHead = il.DefineLabel();
+                var lblScalarEnd  = il.DefineLabel();
+                var locSi         = il.DeclareLocal(typeof(long));   // scalar inner-index
+                var locInnerSrcOff = il.DeclareLocal(typeof(long));
+                var locInnerDstOff = il.DeclareLocal(typeof(long));
+
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stloc, locSi);
+                il.Emit(OpCodes.Ldloc, locOuterSrcOffset);
+                il.Emit(OpCodes.Stloc, locInnerSrcOff);
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Stloc, locInnerDstOff);
+
+                il.MarkLabel(lblScalarHead);
+                il.Emit(OpCodes.Ldloc, locSi);
+                il.Emit(OpCodes.Ldloc, locInnerN);
+                il.Emit(OpCodes.Bge, lblScalarEnd);
+
+                // dst[innerDstOff] = (TDst) src[innerSrcOff]
+                // dst ptr
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldloc, locInnerDstOff);
+                il.Emit(OpCodes.Ldc_I8, (long)dstSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                // load src val
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, locInnerSrcOff);
+                il.Emit(OpCodes.Ldc_I8, (long)srcSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect(il, key.Src);
+                EmitConvertTo(il, key.Src, key.Dst);
+                EmitStoreIndirect(il, key.Dst);
+
+                // Advance offsets and si
+                il.Emit(OpCodes.Ldloc, locInnerSrcOff);
+                il.Emit(OpCodes.Ldloc, locInnerSrcStride);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locInnerSrcOff);
+
+                il.Emit(OpCodes.Ldloc, locInnerDstOff);
+                il.Emit(OpCodes.Ldloc, locInnerDstStride);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locInnerDstOff);
+
+                il.Emit(OpCodes.Ldloc, locSi);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locSi);
+                il.Emit(OpCodes.Br, lblScalarHead);
+
+                il.MarkLabel(lblScalarEnd);
+            }
+
+            il.MarkLabel(lblAfterInner);
+
+            // ---- Advance outer coords. Innermost outer axis = outerNdim-1, walks first. ----
+            // If outerNdim == 0: we're done after the single inner pass.
+            il.Emit(OpCodes.Ldloc, locOuterNdim);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ble, lblRet);
+
+            il.MarkLabel(lblAdvanceOuter);
+            {
+                // for (int axis = outerNdim - 1; axis >= 0; axis--) {
+                //     coords[axis]++;
+                //     outerSrcOffset += srcStrides[axis];
+                //     outerDstOffset += dstStrides[axis];
+                //     if (coords[axis] < shape[axis]) goto outerLoopBody;
+                //     coords[axis] = 0;
+                //     outerSrcOffset -= srcStrides[axis] * shape[axis];
+                //     outerDstOffset -= dstStrides[axis] * shape[axis];
+                // }
+                // // fell through all axes => done
+                // goto lblRet;
+                var locAxis = il.DeclareLocal(typeof(int));
+                var advHead = il.DefineLabel();
+                var advBody = il.DefineLabel();
+                var advNext = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldloc, locOuterNdim);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locAxis);
+
+                il.MarkLabel(advHead);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Bge, advBody);
+                il.Emit(OpCodes.Br, lblRet);    // overflowed all axes
+
+                il.MarkLabel(advBody);
+
+                // coords[axis]++
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Dup);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stind_I8);
+
+                // outerSrcOffset += srcStrides[axis]
+                il.Emit(OpCodes.Ldloc, locOuterSrcOffset);
+                il.Emit(OpCodes.Ldarg_2);   // srcStrides
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locOuterSrcOffset);
+
+                // outerDstOffset += dstStrides[axis]
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Ldarg_3);   // dstStrides
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+                // if (coords[axis] < shape[axis]) goto lblOuterLoopBody
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldarg_S, (byte)4);   // shape
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Blt, lblOuterLoopBody);
+
+                // coords[axis] = 0; outerSrcOffset -= srcStrides[axis] * shape[axis]; outerDstOffset -= dstStrides[axis] * shape[axis]
+                il.Emit(OpCodes.Ldloc, locCoords);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stind_I8);
+
+                il.Emit(OpCodes.Ldloc, locOuterSrcOffset);
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldarg_S, (byte)4);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locOuterSrcOffset);
+
+                il.Emit(OpCodes.Ldloc, locOuterDstOffset);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Ldarg_S, (byte)4);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4_8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locOuterDstOffset);
+
+                il.MarkLabel(advNext);
+                il.Emit(OpCodes.Ldloc, locAxis);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locAxis);
+                il.Emit(OpCodes.Br, advHead);
+            }
+
+            il.MarkLabel(lblRet);
+            il.Emit(OpCodes.Ret);
+        }
+
+        // =================================================================
+        // SIMD loop + scalar tail (shared by contig and strided kernels)
+        // =================================================================
+
+        /// <summary>
+        /// Emit: { long i=0; while(i+vstep<=count) { simd_body(i); i+=vstep; } while(i<count) { scalar(i); i++; } }
+        /// using <paramref name="pushSrcBase"/> / <paramref name="pushDstBase"/> for base ptrs and
+        /// <paramref name="pushCount"/> for the count.
+        /// </summary>
+        private static void EmitSimdLoopAndTail(
+            ILGenerator il,
+            CastKernelKey key,
+            CastStrategy strategy,
+            int simdBits,
+            int vstep,
+            Action pushSrcBase,
+            Action pushDstBase,
+            Action pushCount)
+        {
+            int srcSize = GetTypeSize(key.Src);
+            int dstSize = GetTypeSize(key.Dst);
+
+            var locI = il.DeclareLocal(typeof(long));
+
+            var lblSimdHead   = il.DefineLabel();
+            var lblSimdEnd    = il.DefineLabel();
             var lblScalarHead = il.DefineLabel();
-            var lblRet = il.DefineLabel();
+            var lblRet        = il.DefineLabel();
 
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
-            // ---- SIMD loop (when strategy supports it and platform has the needed width) ----
+            // ---- SIMD loop ----
             if (strategy != CastStrategy.ScalarOnly && simdBits > 0 && vstep > 0)
             {
                 il.MarkLabel(lblSimdHead);
-
-                // if ((i + vstep) > count) goto simd_end;
                 il.Emit(OpCodes.Ldloc, locI);
                 il.Emit(OpCodes.Ldc_I8, (long)vstep);
                 il.Emit(OpCodes.Add);
-                il.Emit(OpCodes.Ldarg_2);
+                pushCount();
                 il.Emit(OpCodes.Bgt, lblSimdEnd);
 
-                EmitSimdIteration(il, key, strategy, simdBits, vstep, locI);
+                EmitSimdIteration(il, key, strategy, simdBits, vstep, locI, pushSrcBase, pushDstBase);
 
-                // i += vstep
                 il.Emit(OpCodes.Ldloc, locI);
                 il.Emit(OpCodes.Ldc_I8, (long)vstep);
                 il.Emit(OpCodes.Add);
@@ -345,15 +844,14 @@ namespace NumSharp.Backends.Kernels
                 il.MarkLabel(lblSimdEnd);
             }
 
-            // ---- Scalar tail: for (; i < count; i++) dst[i] = (TDst)src[i]; ----
+            // ---- Scalar tail ----
             il.MarkLabel(lblScalarHead);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_2);
+            pushCount();
             il.Emit(OpCodes.Bge, lblRet);
 
-            EmitScalarStore(il, key.Src, key.Dst, srcSize, dstSize, locI);
+            EmitScalarStore(il, key.Src, key.Dst, srcSize, dstSize, locI, pushSrcBase, pushDstBase);
 
-            // i++
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
@@ -361,26 +859,25 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblScalarHead);
 
             il.MarkLabel(lblRet);
-            il.Emit(OpCodes.Ret);
         }
 
-        // ===================================================
-        // Scalar element store
-        //   Emits: dst[i] = (TDst)src[i]
-        // ===================================================
+        // -----------------------------------------------------------------
+        // Scalar element store: dst[i] = (TDst) src[i]
+        // -----------------------------------------------------------------
         private static void EmitScalarStore(ILGenerator il, NPTypeCode srcType, NPTypeCode dstType,
-                                            int srcSize, int dstSize, LocalBuilder locI)
+                                            int srcSize, int dstSize, LocalBuilder locI,
+                                            Action pushSrcBase, Action pushDstBase)
         {
-            // Push dst pointer: arg1 + i * dstSize
-            il.Emit(OpCodes.Ldarg_1);
+            // dst ptr
+            pushDstBase();
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, (long)dstSize);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
-            // Load src[i]: *(TSrc*)(arg0 + i * srcSize)
-            il.Emit(OpCodes.Ldarg_0);
+            // load src
+            pushSrcBase();
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, (long)srcSize);
             il.Emit(OpCodes.Mul);
@@ -388,163 +885,137 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, srcType);
 
-            // (TDst) — uses the existing centralized conversion helper which handles
-            // signed/unsigned promotion (Conv_R_Un for unsigned → float).
             EmitConvertTo(il, srcType, dstType);
-
-            // Store at dst[i]
             EmitStoreIndirect(il, dstType);
         }
 
-        // ===================================================
-        // SIMD iteration body — dispatches to per-strategy emitter
-        // ===================================================
+        // -----------------------------------------------------------------
+        // SIMD iteration dispatch
+        // -----------------------------------------------------------------
         private static void EmitSimdIteration(ILGenerator il, CastKernelKey key, CastStrategy strategy,
-                                              int simdBits, int vstep, LocalBuilder locI)
+                                              int simdBits, int vstep, LocalBuilder locI,
+                                              Action pushSrcBase, Action pushDstBase)
         {
             switch (strategy)
             {
                 case CastStrategy.WidenInt:
-                    EmitWidenInt(il, key, simdBits, vstep, locI);
+                    EmitWidenInt(il, key, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.NarrowInt:
-                    EmitNarrowInt(il, key, simdBits, vstep, locI);
+                    EmitNarrowInt(il, key, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.WidenIntChain2:
-                    EmitWidenIntChain2(il, key, simdBits, vstep, locI);
+                    EmitWidenIntChain2(il, key, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.Int32ToSingle:
-                    EmitInt32ToSingle(il, simdBits, locI);
+                    EmitInt32ToSingle(il, simdBits, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.Int32ToDouble:
-                    EmitInt32ToDouble(il, simdBits, vstep, locI);
+                    EmitInt32ToDouble(il, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.SingleToInt32:
-                    EmitSingleToInt32(il, simdBits, locI);
+                    EmitSingleToInt32(il, simdBits, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.SmallIntToSingle:
-                    EmitSmallIntToSingle(il, key.Src, simdBits, vstep, locI);
+                    EmitSmallIntToSingle(il, key.Src, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.SingleToDouble:
-                    EmitSingleToDouble(il, simdBits, vstep, locI);
+                    EmitSingleToDouble(il, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 case CastStrategy.DoubleToSingle:
-                    EmitDoubleToSingle(il, simdBits, vstep, locI);
+                    EmitDoubleToSingle(il, simdBits, vstep, locI, pushSrcBase, pushDstBase);
                     break;
                 default:
                     throw new InvalidOperationException($"SIMD emission not implemented for {strategy}");
             }
         }
 
-        // ---- Per-strategy SIMD emitters ----
+        // =================================================================
+        // Per-strategy SIMD body emitters
+        //   Each emits the loop body for one vector iteration.
+        //   They consume `pushSrcBase` / `pushDstBase` (push base ptr on stack)
+        //   and `locI` (current element index in the inner loop).
+        // =================================================================
 
-        /// <summary>
-        /// 1-step integer widen (e.g. Int32 → Int64, Int16 → Int32, Byte → UInt16).
-        ///   v   = V.Load(src + i*srcSize)
-        ///   lo  = V.WidenLower(v)  → store at dst + i*dstSize
-        ///   hi  = V.WidenUpper(v)  → store at dst + (i + vstep/2)*dstSize
-        /// </summary>
-        private static void EmitWidenInt(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitWidenInt(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI,
+                                        Action pushSrcBase, Action pushDstBase)
         {
             int srcSize = GetTypeSize(key.Src);
             int dstSize = GetTypeSize(key.Dst);
             var srcElem = GetClrType(key.Src);
             var dstElem = WidenSrcSignedness(key.Src, key.Dst);
 
-            // Load V<srcElem>(arg0 + i*srcSize)
             EmitLoadVector(il, srcElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, srcSize);
             });
 
-            // dup → WidenLower → store at (i, dstSize)
             il.Emit(OpCodes.Dup);
             il.EmitCall(OpCodes.Call, GetWidenLowerMethod(simdBits, srcElem), null);
             EmitStoreVector(il, dstElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, dstSize);
             });
 
-            // WidenUpper → store at (i + vstep/2, dstSize)
             il.EmitCall(OpCodes.Call, GetWidenUpperMethod(simdBits, srcElem), null);
             EmitStoreVector(il, dstElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, vstep / 2, dstSize);
             });
         }
 
-        /// <summary>
-        /// 1-step integer narrow (e.g. Int32 → Int16, Int16 → Byte, Int64 → Int32).
-        ///   lo = V128.Load(src + i*srcSize)
-        ///   hi = V128.Load(src + (i + vstep/2)*srcSize)
-        ///   V128.Narrow(lo, hi) → store at dst + i*dstSize
-        /// </summary>
-        private static void EmitNarrowInt(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitNarrowInt(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI,
+                                         Action pushSrcBase, Action pushDstBase)
         {
             int srcSize = GetTypeSize(key.Src);
             int dstSize = GetTypeSize(key.Dst);
             var srcElem = GetClrType(key.Src);
             var dstElem = NarrowDstSignedness(key.Src, key.Dst);
 
-            // Push lo
             EmitLoadVector(il, srcElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, srcSize);
             });
 
-            // Push hi
             EmitLoadVector(il, srcElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, vstep / 2, srcSize);
             });
 
-            // V128.Narrow(lo, hi)
             il.EmitCall(OpCodes.Call, GetNarrowMethod(simdBits, srcElem), null);
 
-            // Store at dst + i*dstSize
             EmitStoreVector(il, dstElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, dstSize);
             });
         }
 
-        /// <summary>
-        /// 2-step integer widen (Byte → UInt32, SByte → Int32, UInt16 → UInt64, Int16 → Int64).
-        ///   v  = V128.Load(src + i*srcSize)
-        ///   s0 = WidenLower(v); s1 = WidenUpper(v)        (mid-width vectors)
-        ///   WidenLower(s0).Store(dst + i*dstSize)
-        ///   WidenUpper(s0).Store(dst + (i + 1*q)*dstSize)
-        ///   WidenLower(s1).Store(dst + (i + 2*q)*dstSize)
-        ///   WidenUpper(s1).Store(dst + (i + 3*q)*dstSize)
-        ///     where q = output elements per stored vector = vstep / 4
-        /// </summary>
-        private static void EmitWidenIntChain2(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitWidenIntChain2(ILGenerator il, CastKernelKey key, int simdBits, int vstep, LocalBuilder locI,
+                                              Action pushSrcBase, Action pushDstBase)
         {
             int srcSize = GetTypeSize(key.Src);
             int dstSize = GetTypeSize(key.Dst);
             int outPerStore = vstep / 4;
 
-            var srcElem = GetClrType(key.Src);                          // byte or sbyte
+            var srcElem = GetClrType(key.Src);
             var midElem = key.Src == NPTypeCode.Byte ? typeof(ushort)
                         : key.Src == NPTypeCode.SByte ? typeof(short)
                         : key.Src == NPTypeCode.UInt16 ? typeof(uint)
-                        : typeof(int);  // Int16 → mid=int
+                        : typeof(int);
             var dstElem = WidenSrcSignedness(key.Src, key.Dst);
 
-            // Load v
             EmitLoadVector(il, srcElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, srcSize);
             });
 
-            // Locals to hold s0, s1 (mid vectors).
             var locS0 = il.DeclareLocal(VType(simdBits, midElem));
             var locS1 = il.DeclareLocal(VType(simdBits, midElem));
 
@@ -554,15 +1025,15 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetWidenUpperMethod(simdBits, srcElem), null);
             il.Emit(OpCodes.Stloc, locS1);
 
-            // Stores at offset 0, q, 2q, 3q
-            EmitWidenAndStore(il, locS0, midElem, dstElem, simdBits, locI, 0 * outPerStore, dstSize, isUpper: false);
-            EmitWidenAndStore(il, locS0, midElem, dstElem, simdBits, locI, 1 * outPerStore, dstSize, isUpper: true);
-            EmitWidenAndStore(il, locS1, midElem, dstElem, simdBits, locI, 2 * outPerStore, dstSize, isUpper: false);
-            EmitWidenAndStore(il, locS1, midElem, dstElem, simdBits, locI, 3 * outPerStore, dstSize, isUpper: true);
+            EmitWidenAndStore(il, locS0, midElem, dstElem, simdBits, locI, 0 * outPerStore, dstSize, isUpper: false, pushDstBase);
+            EmitWidenAndStore(il, locS0, midElem, dstElem, simdBits, locI, 1 * outPerStore, dstSize, isUpper: true,  pushDstBase);
+            EmitWidenAndStore(il, locS1, midElem, dstElem, simdBits, locI, 2 * outPerStore, dstSize, isUpper: false, pushDstBase);
+            EmitWidenAndStore(il, locS1, midElem, dstElem, simdBits, locI, 3 * outPerStore, dstSize, isUpper: true,  pushDstBase);
         }
 
         private static void EmitWidenAndStore(ILGenerator il, LocalBuilder src, Type midElem, Type dstElem,
-                                              int simdBits, LocalBuilder locI, int elemOffset, int dstSize, bool isUpper)
+                                              int simdBits, LocalBuilder locI, int elemOffset, int dstSize, bool isUpper,
+                                              Action pushDstBase)
         {
             il.Emit(OpCodes.Ldloc, src);
             var widen = isUpper
@@ -571,46 +1042,33 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, widen, null);
             EmitStoreVector(il, dstElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, elemOffset, dstSize);
             });
         }
 
-        /// <summary>
-        /// V&lt;int&gt; → V&lt;float&gt; via Vector.ConvertToSingle(V&lt;int&gt;).
-        /// </summary>
-        private static void EmitInt32ToSingle(ILGenerator il, int simdBits, LocalBuilder locI)
+        private static void EmitInt32ToSingle(ILGenerator il, int simdBits, LocalBuilder locI,
+                                              Action pushSrcBase, Action pushDstBase)
         {
-            // v = V.Load(src + i*4)
             EmitLoadVector(il, typeof(int), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
-            // V.ConvertToSingle(v)
             il.EmitCall(OpCodes.Call, GetConvertToSingleFromInt32Method(simdBits), null);
-            // Store at dst + i*4
             EmitStoreVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
         }
 
-        /// <summary>
-        /// V128&lt;int&gt; → V128&lt;double&gt; via WidenLower/Upper then ConvertToDouble.
-        ///   v = V128.Load(src + i*4)
-        ///   lo = V128.WidenLower(v) → V128&lt;long&gt;
-        ///   V128.ConvertToDouble(lo) → store at dst + i*8
-        ///   hi = V128.WidenUpper(v) → V128&lt;long&gt;
-        ///   V128.ConvertToDouble(hi) → store at dst + (i+2)*8
-        /// </summary>
-        private static void EmitInt32ToDouble(ILGenerator il, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitInt32ToDouble(ILGenerator il, int simdBits, int vstep, LocalBuilder locI,
+                                              Action pushSrcBase, Action pushDstBase)
         {
-            // V128 only (vstep == 4 ints).
             EmitLoadVector(il, typeof(int), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
 
@@ -619,7 +1077,7 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetConvertToDoubleFromInt64Method(simdBits), null);
             EmitStoreVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 8);
             });
 
@@ -627,43 +1085,36 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetConvertToDoubleFromInt64Method(simdBits), null);
             EmitStoreVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, vstep / 2, 8);
             });
         }
 
-        /// <summary>
-        /// V&lt;float&gt; → V&lt;int&gt; via Vector.ConvertToInt32(V&lt;float&gt;).
-        /// </summary>
-        private static void EmitSingleToInt32(ILGenerator il, int simdBits, LocalBuilder locI)
+        private static void EmitSingleToInt32(ILGenerator il, int simdBits, LocalBuilder locI,
+                                              Action pushSrcBase, Action pushDstBase)
         {
             EmitLoadVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
             il.EmitCall(OpCodes.Call, GetConvertToInt32FromSingleMethod(simdBits), null);
             EmitStoreVector(il, typeof(int), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
         }
 
-        /// <summary>
-        /// V128&lt;short/ushort&gt; → V128&lt;float&gt; via WidenLower/Upper then ConvertToSingle.
-        /// </summary>
-        private static void EmitSmallIntToSingle(ILGenerator il, NPTypeCode src, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitSmallIntToSingle(ILGenerator il, NPTypeCode src, int simdBits, int vstep, LocalBuilder locI,
+                                                 Action pushSrcBase, Action pushDstBase)
         {
-            var srcElem = GetClrType(src);  // short or ushort
-            // After WidenLower, ushort → uint, short → int. ConvertToSingle requires V<int>.
-            // For ushort, we reinterpret V<uint> as V<int> via .As<>; bit pattern fine since values
-            // fit in [0, 65535] — no sign-bit issue.
+            var srcElem = GetClrType(src);
             bool isUnsigned = src == NPTypeCode.UInt16;
 
             EmitLoadVector(il, srcElem, simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 2);
             });
 
@@ -673,7 +1124,7 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetConvertToSingleFromInt32Method(simdBits), null);
             EmitStoreVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
 
@@ -682,19 +1133,17 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetConvertToSingleFromInt32Method(simdBits), null);
             EmitStoreVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, vstep / 2, 4);
             });
         }
 
-        /// <summary>
-        /// V128&lt;float&gt; → V128&lt;double&gt; via V128.WidenLower/Upper(V128&lt;float&gt;).
-        /// </summary>
-        private static void EmitSingleToDouble(ILGenerator il, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitSingleToDouble(ILGenerator il, int simdBits, int vstep, LocalBuilder locI,
+                                               Action pushSrcBase, Action pushDstBase)
         {
             EmitLoadVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
 
@@ -702,31 +1151,29 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, GetWidenLowerMethod(simdBits, typeof(float)), null);
             EmitStoreVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 8);
             });
 
             il.EmitCall(OpCodes.Call, GetWidenUpperMethod(simdBits, typeof(float)), null);
             EmitStoreVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, vstep / 2, 8);
             });
         }
 
-        /// <summary>
-        /// V128&lt;double&gt; → V128&lt;float&gt; via V128.Narrow(V128&lt;double&gt;, V128&lt;double&gt;).
-        /// </summary>
-        private static void EmitDoubleToSingle(ILGenerator il, int simdBits, int vstep, LocalBuilder locI)
+        private static void EmitDoubleToSingle(ILGenerator il, int simdBits, int vstep, LocalBuilder locI,
+                                               Action pushSrcBase, Action pushDstBase)
         {
             EmitLoadVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, 0, 8);
             });
             EmitLoadVector(il, typeof(double), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_0);
+                pushSrcBase();
                 EmitOffsetExpr(il, locI, vstep / 2, 8);
             });
 
@@ -734,19 +1181,38 @@ namespace NumSharp.Backends.Kernels
 
             EmitStoreVector(il, typeof(float), simdBits, () =>
             {
-                il.Emit(OpCodes.Ldarg_1);
+                pushDstBase();
                 EmitOffsetExpr(il, locI, 0, 4);
             });
         }
 
-        // ===================================================
-        // IL helpers
-        // ===================================================
+        // =================================================================
+        // MemoryCopy inline helper
+        // =================================================================
 
-        /// <summary>
-        /// Emit: i + elemOffset (or just i if 0), multiplied by elemSize, converted to native int.
-        /// Resulting native int is then added to whatever pointer was on the stack before this call.
-        /// </summary>
+        private static void EmitMemoryCopyInline(ILGenerator il, int elemSize,
+                                                 Action pushSrc, Action pushDst, Action pushCount)
+        {
+            var memCopy = typeof(Buffer).GetMethod(
+                nameof(Buffer.MemoryCopy),
+                new[] { typeof(void*), typeof(void*), typeof(long), typeof(long) })
+                ?? throw new MissingMethodException(typeof(Buffer).FullName, nameof(Buffer.MemoryCopy));
+
+            pushSrc();
+            pushDst();
+            pushCount();
+            il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+            il.Emit(OpCodes.Mul);
+            pushCount();
+            il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+            il.Emit(OpCodes.Mul);
+            il.EmitCall(OpCodes.Call, memCopy, null);
+        }
+
+        // =================================================================
+        // IL helpers (offset/vector load/store/method lookup)
+        // =================================================================
+
         private static void EmitOffsetExpr(ILGenerator il, LocalBuilder locI, int elemOffset, int elemSize)
         {
             il.Emit(OpCodes.Ldloc, locI);
@@ -761,27 +1227,17 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
         }
 
-        /// <summary>
-        /// Emit a call to Vector{simdBits}.Load&lt;T&gt;(T*). The action pushes the T* pointer onto the stack.
-        /// </summary>
         private static void EmitLoadVector(ILGenerator il, Type elementType, int simdBits, Action pushPtr)
         {
             pushPtr();
             il.EmitCall(OpCodes.Call, GetVectorLoadMethod(simdBits, elementType), null);
         }
 
-        /// <summary>
-        /// Stack must already have V&lt;T&gt; on top. Emit: pushPtr → Vector{simdBits}.Store(this V&lt;T&gt;, T*).
-        /// </summary>
         private static void EmitStoreVector(ILGenerator il, Type elementType, int simdBits, Action pushPtr)
         {
             pushPtr();
             il.EmitCall(OpCodes.Call, GetVectorStoreMethod(simdBits, elementType), null);
         }
-
-        // ===================================================
-        // Vector method lookup
-        // ===================================================
 
         private static Type VType(int simdBits, Type elem) => simdBits switch
         {
@@ -799,25 +1255,21 @@ namespace NumSharp.Backends.Kernels
             _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
         };
 
-        private static MethodInfo GetVectorLoadMethod(int simdBits, Type elementType)
-        {
-            return ContainerType(simdBits)
+        private static MethodInfo GetVectorLoadMethod(int simdBits, Type elementType) =>
+            ContainerType(simdBits)
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "Load" && m.IsGenericMethod &&
                             m.GetParameters().Length == 1 &&
                             m.GetParameters()[0].ParameterType.IsPointer)
                 .MakeGenericMethod(elementType);
-        }
 
-        private static MethodInfo GetVectorStoreMethod(int simdBits, Type elementType)
-        {
-            return ContainerType(simdBits)
+        private static MethodInfo GetVectorStoreMethod(int simdBits, Type elementType) =>
+            ContainerType(simdBits)
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "Store" && m.IsGenericMethod &&
                             m.GetParameters().Length == 2 &&
                             m.GetParameters()[0].ParameterType.IsGenericType)
                 .MakeGenericMethod(elementType);
-        }
 
         private static MethodInfo GetWidenLowerMethod(int simdBits, Type sourceElementType)
         {
@@ -880,14 +1332,9 @@ namespace NumSharp.Backends.Kernels
                             m.GetParameters()[0].ParameterType == paramVec);
         }
 
-        /// <summary>
-        /// Get Vector{N}.As&lt;TFrom, TTo&gt;(V&lt;TFrom&gt;) for bit-reinterpretation.
-        /// Used by SmallIntToSingle for V&lt;uint&gt; → V&lt;int&gt; bit-cast before ConvertToSingle.
-        /// </summary>
         private static MethodInfo GetAsMethod(int simdBits, Type fromElem, Type toElem)
         {
             string name = "As" + toElem.Name;
-            // Try named overload first (AsInt32, AsSingle, etc.)
             var named = ContainerType(simdBits)
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == name && m.IsGenericMethod &&
@@ -895,7 +1342,6 @@ namespace NumSharp.Backends.Kernels
                                      m.GetGenericArguments().Length == 1);
             if (named != null) return named.MakeGenericMethod(fromElem);
 
-            // Fallback: generic As<TFrom, TTo>
             var generic = ContainerType(simdBits)
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .First(m => m.Name == "As" && m.IsGenericMethod &&
@@ -904,27 +1350,12 @@ namespace NumSharp.Backends.Kernels
             return generic.MakeGenericMethod(fromElem, toElem);
         }
 
-        // ===================================================
+        // =================================================================
         // Signedness helpers
-        //
-        // Widening preserves the sign of the source element type (sbyte → short
-        // sign-extends; byte → ushort zero-extends). The dst NPTypeCode's signedness
-        // doesn't affect the bits — Int16 and UInt16 share storage layout. We pick
-        // the canonical destination CLR type that matches the widen behaviour.
-        //
-        // Narrowing is sign-agnostic — Narrow(V<int>, V<int>) → V<short> drops the
-        // upper 16 bits regardless of sign; same bits regardless of how dst is
-        // declared. We pick V<short> when narrowing from signed, V<ushort> when
-        // unsigned, purely to match the Narrow overload signature.
-        // ===================================================
+        // =================================================================
 
         private static Type WidenSrcSignedness(NPTypeCode src, NPTypeCode dst)
         {
-            // For int → int widening: choose dst CLR type that matches src's sign convention.
-            //   sbyte → short (signed)        byte → ushort (unsigned)
-            //   short → int   (signed)        ushort → uint  (unsigned)
-            //   int   → long  (signed)        uint   → ulong (unsigned)
-            // For float (Single → Double), use double.
             switch (src)
             {
                 case NPTypeCode.SByte:  return typeof(short);
@@ -940,11 +1371,6 @@ namespace NumSharp.Backends.Kernels
 
         private static Type NarrowDstSignedness(NPTypeCode src, NPTypeCode dst)
         {
-            // For int → int narrowing: dst CLR type that matches src's sign.
-            //   short → sbyte (signed)   ushort → byte (unsigned)
-            //   int   → short (signed)   uint   → ushort (unsigned)
-            //   long  → int   (signed)   ulong  → uint  (unsigned)
-            // For float (Double → Single), use float.
             switch (src)
             {
                 case NPTypeCode.Int16:  return typeof(sbyte);

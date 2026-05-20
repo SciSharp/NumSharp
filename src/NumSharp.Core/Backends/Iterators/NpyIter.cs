@@ -3171,21 +3171,53 @@ namespace NumSharp.Backends.Iteration
                 if (state.Size == 0)
                     return true;
 
-                var path = state.IsContiguousCopy ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
-                var kernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, path));
-                if (kernel == null)
+                // Contiguous fast path: existing IL CopyKernel uses cpblk — single block copy,
+                // minimal overhead. Cross-platform memcpy is the cheapest possible.
+                if (state.IsContiguousCopy)
+                {
+                    var copyKernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.Contiguous));
+                    if (copyKernel != null)
+                    {
+                        copyKernel(
+                            (void*)state.GetDataPointer(0),
+                            (void*)state.GetDataPointer(1),
+                            state.GetStridesPointer(0),
+                            state.GetStridesPointer(1),
+                            state.GetShapePointer(),
+                            state.NDim,
+                            state.Size);
+                        return true;
+                    }
+                }
+
+                // General path (strided / broadcast): route through the IL StridedCastKernel —
+                // detects unit-stride innermost axis and uses Buffer.MemoryCopy per row; falls
+                // back to scalar incremental-coord inner loop when inner is also strided.
+                // This replaces the old CopyGeneralSameType (mod/div per element per axis).
+                var stridedKernel = ILKernelGenerator.TryGetStridedCastKernel(dst.TypeCode, dst.TypeCode);
+                if (stridedKernel != null)
+                {
+                    stridedKernel(
+                        (void*)state.GetDataPointer(0),
+                        (void*)state.GetDataPointer(1),
+                        state.GetStridesPointer(0),
+                        state.GetStridesPointer(1),
+                        state.GetShapePointer(),
+                        state.NDim);
+                    return true;
+                }
+
+                // Final fallback: legacy IL copy kernel (still used for unsupported types like Decimal/Complex).
+                var fallbackKernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.General));
+                if (fallbackKernel == null)
                     return false;
 
-                var shape = state.GetShapePointer();
-                var srcStrides = state.GetStridesPointer(0);
-                var dstStrides = state.GetStridesPointer(1);
-
-                kernel(
+                fallbackKernel(
                     (void*)state.GetDataPointer(0),
                     (void*)state.GetDataPointer(1),
-                    srcStrides,
-                    dstStrides,
-                    shape,
+                    state.GetStridesPointer(0),
+                    state.GetStridesPointer(1),
+                    state.GetShapePointer(),
                     state.NDim,
                     state.Size);
 
@@ -3193,7 +3225,6 @@ namespace NumSharp.Backends.Iteration
             }
             finally
             {
-                // Free dynamically allocated dimension arrays
                 state.FreeDimArrays();
             }
         }
@@ -3244,11 +3275,8 @@ namespace NumSharp.Backends.Iteration
                 if (state.Size == 0)
                     return;
 
-                // SIMD fast path: both src and dst contiguous, no broadcast.
-                // IL-generated cast kernel handles all 8-int + 2-float type pairs with Vector128/256
-                // widen/narrow/convert; falls back to scalar tail for AVX-512-only conversions
-                // (UInt32↔Float, UInt64↔Float, Long↔Double, etc.) and 8× widen/narrow chains.
-                // Returns null for Decimal/Complex/Half/Char/Boolean → falls through to scalar dispatch.
+                // SIMD fast path 1: both src and dst contiguous, no broadcast.
+                // IL-generated contig cast kernel — minimal overhead for the common case.
                 if (state.IsContiguousCopy && state.Size > 0)
                 {
                     var castKernel = NumSharp.Backends.Kernels.ILKernelGenerator
@@ -3260,6 +3288,28 @@ namespace NumSharp.Backends.Iteration
                     }
                 }
 
+                // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
+                // coord advance and uses the same SIMD body as the contig kernel for any inner axis
+                // with stride==1 for both src and dst. Falls back internally to scalar strided inner
+                // loop when the innermost axis has non-unit stride for either side.
+                if (state.Size > 0)
+                {
+                    var stridedKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+                        .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
+                    if (stridedKernel != null)
+                    {
+                        stridedKernel(
+                            (void*)state.GetDataPointer(0),
+                            (void*)state.GetDataPointer(1),
+                            state.GetStridesPointer(0),
+                            state.GetStridesPointer(1),
+                            state.GetShapePointer(),
+                            state.NDim);
+                        return;
+                    }
+                }
+
+                // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
                 NpyIterCasting.CopyStridedToStridedWithCast(
                     (void*)state.GetDataPointer(0),
                     state.GetStridesPointer(0),
