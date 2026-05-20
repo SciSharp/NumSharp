@@ -160,11 +160,7 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Scan operation {key.Op} not supported")
             };
 
-            var helperMethod = typeof(ILKernelGenerator).GetMethod(
-                helperName,
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-            var genericHelper = helperMethod!.MakeGenericMethod(GetClrType(key.InputType));
+            var genericHelper = GetGenericHelper(helperName, GetClrType(key.InputType));
 
             // Call helper: CumSumHelperSameType<T>(input, output, totalSize)
             il.Emit(OpCodes.Ldarg_0); // input
@@ -543,11 +539,7 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Axis scan operation {key.Op} not supported")
             };
 
-            var helperMethod = typeof(ILKernelGenerator).GetMethod(
-                helperName,
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-            var genericHelper = helperMethod!.MakeGenericMethod(
+            var genericHelper = GetHelper(helperName).MakeGenericMethod(
                 GetClrType(key.InputType),
                 GetClrType(key.OutputType));
 

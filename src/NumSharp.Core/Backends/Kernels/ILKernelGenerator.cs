@@ -608,6 +608,21 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static Type GetVectorType(Type elementType) => VectorMethodCache.V(VectorBits, elementType);
 
+        /// <summary>
+        /// Resolve a NonPublic|Static helper method on <see cref="ILKernelGenerator"/> by name.
+        /// Throws <see cref="MissingMethodException"/> on miss rather than returning <c>null</c>,
+        /// so renamed or removed helpers fail loudly at IL emit time rather than as NREs later.
+        /// </summary>
+        internal static MethodInfo GetHelper(string name)
+            => typeof(ILKernelGenerator).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
+               ?? throw new MissingMethodException(typeof(ILKernelGenerator).FullName, name);
+
+        /// <summary>
+        /// Same as <see cref="GetHelper"/> but immediately closes a single generic argument.
+        /// </summary>
+        internal static MethodInfo GetGenericHelper(string name, Type genericArg)
+            => GetHelper(name).MakeGenericMethod(genericArg);
+
         #region NPTypeCode-Based IL Helpers
 
         /// <summary>
@@ -1635,8 +1650,7 @@ namespace NumSharp.Backends.Kernels
             // whereas NumPy returns IEEE component-wise division (e.g. 1+0j -> inf+nanj).
             if (op == BinaryOp.Divide)
             {
-                il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexDivideNumPy),
-                    BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                il.EmitCall(OpCodes.Call, GetHelper(nameof(ComplexDivideNumPy)), null);
                 return;
             }
 

@@ -35,11 +35,9 @@ namespace NumSharp.Backends.Kernels
             // 2. The helper method can be JIT-optimized effectively
             // 3. This matches the pattern used elsewhere in the codebase
 
-            var helperMethod = typeof(ILKernelGenerator).GetMethod(
+            var genericHelper = GetGenericHelper(
                 key.Op == ReductionOp.All ? nameof(AllSimdHelper) : nameof(AnySimdHelper),
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-            var genericHelper = helperMethod!.MakeGenericMethod(GetClrType(key.InputType));
+                GetClrType(key.InputType));
 
             // Call helper: AllSimdHelper<T>(input, totalSize) or AnySimdHelper<T>(input, totalSize)
             il.Emit(OpCodes.Ldarg_0); // input

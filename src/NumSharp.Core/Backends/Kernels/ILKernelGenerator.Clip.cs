@@ -348,19 +348,13 @@ namespace NumSharp.Backends.Kernels
 
             if (dtype == NPTypeCode.Half)
             {
-                var helper = typeof(ILKernelGenerator).GetMethod(
-                    isMax ? nameof(HalfMaxNaN) : nameof(HalfMinNaN),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
-                il.EmitCall(OpCodes.Call, helper, null);
+                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(HalfMaxNaN) : nameof(HalfMinNaN)), null);
                 return;
             }
 
             if (dtype == NPTypeCode.Complex)
             {
-                var helper = typeof(ILKernelGenerator).GetMethod(
-                    isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
-                il.EmitCall(OpCodes.Call, helper, null);
+                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN)), null);
                 return;
             }
 
