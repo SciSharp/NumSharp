@@ -664,13 +664,12 @@ namespace NumSharp.Backends.Iteration
             il.Emit(OpCodes.Stloc, locR);
 
             // Prefer Math.Min/Max if available (NaN-propagating for floats).
+            // ScalarMethodCache.Get throws on missing; fall back to the manual ldloc/branch
+            // path below for types without a Math overload (e.g. Char).
             string methodName = _isMin ? "Min" : "Max";
-            var method = typeof(Math).GetMethod(
-                methodName,
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-                null,
-                new[] { clrType, clrType },
-                null);
+            System.Reflection.MethodInfo method = null;
+            try { method = ScalarMethodCache.Get(typeof(Math), methodName, clrType, clrType); }
+            catch (MissingMethodException) { /* fall through */ }
             if (method != null)
             {
                 il.Emit(OpCodes.Ldloc, locL);

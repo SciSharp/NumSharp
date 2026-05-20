@@ -401,18 +401,16 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitScanCombine(ILGenerator il, ReductionOp op, NPTypeCode type)
         {
-            // Special handling for decimal
+            // Special handling for decimal — only CumSum is supported (CumProd overflows quickly
+            // on decimal, so we don't expose it).
             if (type == NPTypeCode.Decimal)
             {
-                var method = op switch
+                string opName = op switch
                 {
-                    ReductionOp.CumSum => typeof(decimal).GetMethod("op_Addition",
-                        BindingFlags.Public | BindingFlags.Static,
-                        null, new[] { typeof(decimal), typeof(decimal) }, null),
-                    // ReductionOp.CumProd => typeof(decimal).GetMethod("op_Multiply", ...),
+                    ReductionOp.CumSum => "op_Addition",
                     _ => throw new NotSupportedException($"Scan operation {op} not supported for decimal")
                 };
-                il.EmitCall(OpCodes.Call, method!, null);
+                il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), opName), null);
                 return;
             }
 

@@ -995,16 +995,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitSqrt(ILGenerator il, NPTypeCode type)
         {
-            if (type == NPTypeCode.Single)
-            {
-                var method = typeof(MathF).GetMethod("Sqrt", new[] { typeof(float) });
-                il.EmitCall(OpCodes.Call, method!, null);
-            }
-            else
-            {
-                var method = typeof(Math).GetMethod("Sqrt", new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, method!, null);
-            }
+            var elem = type == NPTypeCode.Single ? typeof(float) : typeof(double);
+            il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(elem, "Sqrt"), null);
         }
 
         #endregion

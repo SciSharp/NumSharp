@@ -365,9 +365,16 @@ namespace NumSharp.Backends.Kernels
             }
 
             // Math.Max(T, T) / Math.Min(T, T) for all sized numerics + decimal.
-            var mathMethod = typeof(Math).GetMethod(
-                isMax ? nameof(Math.Max) : nameof(Math.Min),
-                BindingFlags.Public | BindingFlags.Static, null, new[] { clrType, clrType }, null);
+            // ScalarMethodCache.Get throws on missing — fall back to the manual select below
+            // for the one type that's not covered (Char has no Math.Max overload).
+            MethodInfo mathMethod = null;
+            try
+            {
+                mathMethod = ScalarMethodCache.Get(typeof(Math),
+                    isMax ? nameof(Math.Max) : nameof(Math.Min), clrType, clrType);
+            }
+            catch (MissingMethodException) { /* fall through to manual select */ }
+
             if (mathMethod != null)
             {
                 il.EmitCall(OpCodes.Call, mathMethod, null);
