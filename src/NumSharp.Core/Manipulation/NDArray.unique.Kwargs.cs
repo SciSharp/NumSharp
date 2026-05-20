@@ -53,6 +53,11 @@ namespace NumSharp
             long n = this.size;
             if (n == 0) return BuildEmptyResults<T>(return_index, return_inverse, return_counts);
 
+            // Values-only fast path: skip perm allocation + parallel sort when caller doesn't
+            // need index/inverse/counts. Saves ~8MB allocation and ~10ms sort overhead on 1M elems.
+            if (!return_index && !return_inverse && !return_counts)
+                return new[] { uniqueValuesOnly<T>(n) };
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLong<T>(n, return_index, return_inverse, return_counts, firstNaN: -1);
 
@@ -62,6 +67,20 @@ namespace NumSharp
             System.Array.Sort(keys, perm);
 
             return BuildSortedResults<T>(keys, perm, n, return_index, return_inverse, return_counts, firstNaN: -1);
+        }
+
+        /// <summary>
+        /// Values-only path for non-float types: sort + dedup-emit, no perm tracking.
+        /// </summary>
+        private unsafe NDArray uniqueValuesOnly<T>(long n)
+            where T : unmanaged, IComparable<T>, IEquatable<T>
+        {
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLong<T>(n, false, false, false, firstNaN: -1)[0];
+
+            var keys = ExtractKeysOnly<T>(n);
+            System.Array.Sort(keys);
+            return EmitValuesOnly<T>(keys, n);
         }
 
         // ----- NaN-aware float paths -----
@@ -77,6 +96,12 @@ namespace NumSharp
             long n = this.size;
             if (n == 0) return BuildEmptyResults<double>(return_index, return_inverse, return_counts);
 
+            // Values-only fast path: skip perm allocation + parallel sort + stabilize when
+            // caller doesn't need index/inverse/counts. Saves ~8MB allocation and ~10ms sort
+            // overhead on 1M doubles. The mask/emit step also simplifies — no min-perm tracking.
+            if (!return_index && !return_inverse && !return_counts)
+                return new[] { uniqueValuesOnlyDouble(n, equal_nan) };
+
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<double>(n, equal_nan, return_index, return_inverse, return_counts);
 
@@ -89,10 +114,31 @@ namespace NumSharp
                                              return_index, return_inverse, return_counts);
         }
 
+        /// <summary>
+        /// Values-only optimized path: extract → partition NaN → sort prefix → dedup-emit.
+        /// No perm array (skips ~8MB alloc + ~10ms parallel-sort overhead on 1M doubles).
+        /// </summary>
+        private unsafe NDArray uniqueValuesOnlyDouble(long n, bool equal_nan)
+        {
+            if (!IsManagedSortableLength(n))
+            {
+                // Fall through to long path; it does its own values-only optimization via flags.
+                return uniqueFlatSortedLongFloat<double>(n, equal_nan, false, false, false)[0];
+            }
+
+            var keys = ExtractKeysOnly<double>(n);
+            long firstNaN = PartitionNaN_DoubleKeysOnly(keys, n);
+            System.Array.Sort(keys, 0, (int)firstNaN);
+            return EmitValuesOnlyFloat<double>(keys, n, firstNaN, equal_nan);
+        }
+
         private unsafe NDArray[] uniqueFlatSortedFloat(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<float>(return_index, return_inverse, return_counts);
+
+            if (!return_index && !return_inverse && !return_counts)
+                return new[] { uniqueValuesOnlyFloat(n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<float>(n, equal_nan, return_index, return_inverse, return_counts);
@@ -106,10 +152,24 @@ namespace NumSharp
                                             return_index, return_inverse, return_counts);
         }
 
+        private unsafe NDArray uniqueValuesOnlyFloat(long n, bool equal_nan)
+        {
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongFloat<float>(n, equal_nan, false, false, false)[0];
+
+            var keys = ExtractKeysOnly<float>(n);
+            long firstNaN = PartitionNaN_FloatKeysOnly(keys, n);
+            System.Array.Sort(keys, 0, (int)firstNaN);
+            return EmitValuesOnlyFloat<float>(keys, n, firstNaN, equal_nan);
+        }
+
         private unsafe NDArray[] uniqueFlatSortedHalf(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<Half>(return_index, return_inverse, return_counts);
+
+            if (!return_index && !return_inverse && !return_counts)
+                return new[] { uniqueValuesOnlyHalf(n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<Half>(n, equal_nan, return_index, return_inverse, return_counts);
@@ -123,10 +183,24 @@ namespace NumSharp
                                            return_index, return_inverse, return_counts);
         }
 
+        private unsafe NDArray uniqueValuesOnlyHalf(long n, bool equal_nan)
+        {
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongFloat<Half>(n, equal_nan, false, false, false)[0];
+
+            var keys = ExtractKeysOnly<Half>(n);
+            long firstNaN = PartitionNaN_HalfKeysOnly(keys, n);
+            System.Array.Sort(keys, 0, (int)firstNaN);
+            return EmitValuesOnlyFloat<Half>(keys, n, firstNaN, equal_nan);
+        }
+
         private unsafe NDArray[] uniqueFlatSortedComplex(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             long n = this.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
+
+            if (!return_index && !return_inverse && !return_counts)
+                return new[] { uniqueValuesOnlyComplex(n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongComplex(n, equal_nan, return_index, return_inverse, return_counts);
@@ -145,6 +219,22 @@ namespace NumSharp
 
             return BuildMaskAndEmit<Complex>(keys, perm, n, firstNaN, equal_nan,
                                               return_index, return_inverse, return_counts);
+        }
+
+        private unsafe NDArray uniqueValuesOnlyComplex(long n, bool equal_nan)
+        {
+            if (!IsManagedSortableLength(n))
+                return uniqueFlatSortedLongComplex(n, equal_nan, false, false, false)[0];
+
+            var keys = ExtractKeysOnly<Complex>(n);
+            long firstNaN = PartitionNaN_ComplexKeysOnly(keys, n);
+            System.Array.Sort(keys, 0, (int)firstNaN,
+                Comparer<Complex>.Create((x, y) =>
+                {
+                    int c = x.Real.CompareTo(y.Real);
+                    return c != 0 ? c : x.Imaginary.CompareTo(y.Imaginary);
+                }));
+            return EmitValuesOnlyFloat<Complex>(keys, n, firstNaN, equal_nan);
         }
 
         /// <summary>
@@ -313,6 +403,155 @@ namespace NumSharp
 
             for (long i = 0; i < n; i++) perm[i] = i;
             return (keys, perm);
+        }
+
+        /// <summary>
+        /// Values-only extract — skips the perm array allocation+fill (saves ~8N bytes and ~N writes).
+        /// </summary>
+        private unsafe T[] ExtractKeysOnly<T>(long n) where T : unmanaged
+        {
+            var keys = new T[n];
+            if (Shape.IsContiguous)
+            {
+                T* src = (T*)this.Address;
+                fixed (T* dst = keys)
+                {
+                    long byteCount = n * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
+                    Buffer.MemoryCopy(src, dst, byteCount, byteCount);
+                }
+            }
+            else
+            {
+                var flat = this.flat;
+                T* src = (T*)flat.Address;
+                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                for (long i = 0; i < n; i++) keys[i] = src[getOffset(i)];
+            }
+            return keys;
+        }
+
+        // ----- Partition-only helpers (no perm tracking) — used by values-only paths -----
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long PartitionNaN_DoubleKeysOnly(double[] keys, long n)
+        {
+            long hi = n;
+            long i = 0;
+            while (i < hi)
+            {
+                if (double.IsNaN(keys[i])) { hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]); }
+                else i++;
+            }
+            return hi;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long PartitionNaN_FloatKeysOnly(float[] keys, long n)
+        {
+            long hi = n;
+            long i = 0;
+            while (i < hi)
+            {
+                if (float.IsNaN(keys[i])) { hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]); }
+                else i++;
+            }
+            return hi;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long PartitionNaN_HalfKeysOnly(Half[] keys, long n)
+        {
+            long hi = n;
+            long i = 0;
+            while (i < hi)
+            {
+                if (Half.IsNaN(keys[i])) { hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]); }
+                else i++;
+            }
+            return hi;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long PartitionNaN_ComplexKeysOnly(Complex[] keys, long n)
+        {
+            long hi = n;
+            long i = 0;
+            while (i < hi)
+            {
+                Complex c = keys[i];
+                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
+                {
+                    hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]);
+                }
+                else i++;
+            }
+            return hi;
+        }
+
+        /// <summary>
+        /// Values-only emit for non-NaN-capable types: single dedup-scan over sorted keys.
+        /// </summary>
+        private unsafe NDArray EmitValuesOnly<T>(T[] keys, long n) where T : unmanaged, IEquatable<T>
+        {
+            // First pass: count uniques.
+            long uniqueCount = 1;
+            for (long i = 1; i < n; i++)
+                if (!keys[i].Equals(keys[i - 1])) uniqueCount++;
+
+            // Second pass: emit.
+            var valuesBlock = new UnmanagedMemoryBlock<T>(uniqueCount);
+            var valuesSlice = new ArraySlice<T>(valuesBlock);
+            T* vDst = valuesBlock.Address;
+            vDst[0] = keys[0];
+            long vIdx = 1;
+            for (long i = 1; i < n; i++)
+                if (!keys[i].Equals(keys[i - 1])) vDst[vIdx++] = keys[i];
+
+            return new NDArray(valuesSlice, Shape.Vector(uniqueCount));
+        }
+
+        /// <summary>
+        /// Values-only emit for float types (Double/Single/Half/Complex). Handles the NaN tail:
+        /// equal_nan=true → one NaN representative; equal_nan=false → every NaN unique.
+        /// </summary>
+        private unsafe NDArray EmitValuesOnlyFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+            where T : unmanaged, IEquatable<T>
+        {
+            // Count uniques in non-NaN prefix.
+            long uniqueCount = firstNaN > 0 ? 1 : 0;
+            for (long i = 1; i < firstNaN; i++)
+                if (!keys[i].Equals(keys[i - 1])) uniqueCount++;
+
+            // Add NaN entries: 1 if equal_nan, else (n - firstNaN).
+            long nanCount = n - firstNaN;
+            if (nanCount > 0)
+                uniqueCount += equal_nan ? 1 : nanCount;
+
+            var valuesBlock = new UnmanagedMemoryBlock<T>(uniqueCount);
+            var valuesSlice = new ArraySlice<T>(valuesBlock);
+            T* vDst = valuesBlock.Address;
+            long vIdx = 0;
+
+            if (firstNaN > 0)
+            {
+                vDst[vIdx++] = keys[0];
+                for (long i = 1; i < firstNaN; i++)
+                    if (!keys[i].Equals(keys[i - 1])) vDst[vIdx++] = keys[i];
+            }
+
+            if (nanCount > 0)
+            {
+                if (equal_nan)
+                {
+                    vDst[vIdx++] = keys[firstNaN];
+                }
+                else
+                {
+                    for (long i = firstNaN; i < n; i++) vDst[vIdx++] = keys[i];
+                }
+            }
+
+            return new NDArray(valuesSlice, Shape.Vector(uniqueCount));
         }
 
         private static long FindFirstNaN_Double(double[] keys, long n)
