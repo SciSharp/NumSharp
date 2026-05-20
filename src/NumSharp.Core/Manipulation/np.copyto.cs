@@ -155,7 +155,6 @@ namespace NumSharp
             long* srcStrides = stackalloc long[ndim];
             long* dstStrides = stackalloc long[ndim];
             long* maskStrides = stackalloc long[ndim];
-            long* coords = stackalloc long[ndim];
 
             for (int d = 0; d < ndim; d++)
             {
@@ -163,8 +162,22 @@ namespace NumSharp
                 srcStrides[d] = srcShape.strides[d];
                 dstStrides[d] = dstShape.strides[d];
                 maskStrides[d] = maskShape.strides[d];
-                coords[d] = 0;
             }
+
+            // IL fast path: SIMD masked-cast kernel (ConditionalSelect for 1:1 lane strategies;
+            // scalar inner loop with mask gate + inline conversion for widen/narrow strategies).
+            // Both paths use incremental coord advance — no mod/div per element.
+            var maskedKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+                .TryGetMaskedCastKernel(srcType, dstType);
+            if (maskedKernel != null)
+            {
+                maskedKernel(srcBase, dstBase, maskBase, srcStrides, dstStrides, maskStrides, shape, ndim);
+                return;
+            }
+
+            // Scalar fallback for unsupported types (Decimal/Complex/Half/Char/Boolean involved).
+            long* coords = stackalloc long[ndim];
+            for (int d = 0; d < ndim; d++) coords[d] = 0;
 
             for (long i = 0; i < size; i++)
             {
