@@ -3244,6 +3244,22 @@ namespace NumSharp.Backends.Iteration
                 if (state.Size == 0)
                     return;
 
+                // SIMD fast path: both src and dst contiguous, no broadcast.
+                // IL-generated cast kernel handles all 8-int + 2-float type pairs with Vector128/256
+                // widen/narrow/convert; falls back to scalar tail for AVX-512-only conversions
+                // (UInt32↔Float, UInt64↔Float, Long↔Double, etc.) and 8× widen/narrow chains.
+                // Returns null for Decimal/Complex/Half/Char/Boolean → falls through to scalar dispatch.
+                if (state.IsContiguousCopy && state.Size > 0)
+                {
+                    var castKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+                        .TryGetCastKernel(src.TypeCode, dst.TypeCode);
+                    if (castKernel != null)
+                    {
+                        castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
+                        return;
+                    }
+                }
+
                 NpyIterCasting.CopyStridedToStridedWithCast(
                     (void*)state.GetDataPointer(0),
                     state.GetStridesPointer(0),
