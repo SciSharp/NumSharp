@@ -1554,9 +1554,7 @@ namespace NumSharp.Backends.Kernels
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
                 throw new NotSupportedException($"Bitwise operation {op} not supported for Half type");
 
-            // Find the specific op_Explicit method: Half -> double
-            var halfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+            var halfToDouble = CachedMethods.HalfToDouble;
 
             // For all other operations, convert to double, perform operation, convert back
             // Stack: [half1, half2]
@@ -1610,16 +1608,14 @@ namespace NumSharp.Backends.Kernels
                     EmitFloorWithInfToNaN(il);
                     break;
                 case BinaryOp.ATan2:
-                    il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Atan2", new[] { typeof(double), typeof(double) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathAtan2, null);
                     break;
                 default:
                     throw new NotSupportedException($"Operation {op} not supported for Half");
             }
 
             // Convert result back to Half (double -> Half)
-            var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
-            il.EmitCall(OpCodes.Call, doubleToHalf, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
         }
 
         /// <summary>

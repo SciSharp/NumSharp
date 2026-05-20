@@ -240,37 +240,27 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitMathCall(ILGenerator il, string methodName, NPTypeCode type)
         {
-            MethodInfo? method;
+            MethodInfo method;
 
             if (type == NPTypeCode.Single)
             {
-                // Use MathF for float
-                method = typeof(MathF).GetMethod(methodName, new[] { typeof(float) });
+                method = ScalarMethodCache.MathFn1(typeof(float), methodName);
             }
             else if (type == NPTypeCode.Double)
             {
-                // Use Math for double
-                method = typeof(Math).GetMethod(methodName, new[] { typeof(double) });
+                method = ScalarMethodCache.MathFn1(typeof(double), methodName);
             }
             else
             {
-                // For integer types, convert to double, call Math, convert back
-                // Stack has: value (as output type)
-                // Need to: conv to double, call Math.X, conv back
-
-                // Convert to double first
+                // For integer types: convert to double, call Math.X(double), convert back.
                 EmitConvertToDouble(il, type);
-
-                // Call Math.X(double)
-                method = typeof(Math).GetMethod(methodName, new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, method!, null);
-
-                // Convert back to target type
+                method = ScalarMethodCache.MathFn1(typeof(double), methodName);
+                il.EmitCall(OpCodes.Call, method, null);
                 EmitConvertFromDouble(il, type);
                 return;
             }
 
-            il.EmitCall(OpCodes.Call, method!, null);
+            il.EmitCall(OpCodes.Call, method, null);
         }
 
         /// <summary>

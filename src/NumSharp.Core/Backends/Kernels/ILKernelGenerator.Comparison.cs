@@ -1040,15 +1040,7 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Comparison {op} not supported for decimal")
             };
 
-            var method = typeof(decimal).GetMethod(
-                methodName,
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(decimal), typeof(decimal) },
-                null
-            );
-
-            il.EmitCall(OpCodes.Call, method!, null);
+            il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), methodName), null);
         }
 
         /// <summary>
@@ -1056,7 +1048,6 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitHalfComparison(ILGenerator il, ComparisonOp op)
         {
-            // Half has comparison operators that return bool
             string methodName = op switch
             {
                 ComparisonOp.Equal => "op_Equality",
@@ -1067,19 +1058,7 @@ namespace NumSharp.Backends.Kernels
                 ComparisonOp.GreaterEqual => "op_GreaterThanOrEqual",
                 _ => throw new NotSupportedException($"Comparison {op} not supported for Half")
             };
-
-            var method = typeof(Half).GetMethod(
-                methodName,
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(Half), typeof(Half) },
-                null
-            );
-
-            if (method == null)
-                throw new InvalidOperationException($"Half.{methodName} not found");
-
-            il.EmitCall(OpCodes.Call, method, null);
+            il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(Half), methodName), null);
         }
 
         /// <summary>
@@ -1093,18 +1072,8 @@ namespace NumSharp.Backends.Kernels
             if (op == ComparisonOp.Equal || op == ComparisonOp.NotEqual)
             {
                 string methodName = op == ComparisonOp.Equal ? "op_Equality" : "op_Inequality";
-                var method = typeof(System.Numerics.Complex).GetMethod(
-                    methodName,
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) },
-                    null
-                );
-
-                if (method == null)
-                    throw new InvalidOperationException($"Complex.{methodName} not found");
-
-                il.EmitCall(OpCodes.Call, method, null);
+                il.EmitCall(OpCodes.Call,
+                    ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), methodName), null);
                 return;
             }
 

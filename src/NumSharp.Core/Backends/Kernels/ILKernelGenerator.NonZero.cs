@@ -601,25 +601,13 @@ namespace NumSharp.Backends.Kernels
 
         #region SIMD reflection helpers
 
-        // SIMD method lookups go through VectorMethodCache — see VectorMethodCache.cs for
-        // the shared catalog (EqualsAll, Equals, ExtractMostSignificantBits, etc.).
-        // BitOperations helpers stay file-local since they live outside Vector*.
+        // SIMD method lookups go through VectorMethodCache; scalar helpers (BitOperations)
+        // go through ScalarMethodCache. Thin file-local aliases preserve call-site shape.
+        private static MethodInfo BitOpsTrailingZeroCountUInt32
+            => ScalarMethodCache.BitOp(nameof(BitOperations.TrailingZeroCount), typeof(uint));
 
-        private static readonly MethodInfo BitOpsTrailingZeroCountUInt32 =
-            typeof(BitOperations).GetMethod(nameof(BitOperations.TrailingZeroCount),
-                BindingFlags.Public | BindingFlags.Static,
-                binder: null,
-                types: new[] { typeof(uint) },
-                modifiers: null)
-            ?? throw new InvalidOperationException("BitOperations.TrailingZeroCount(uint) not found");
-
-        private static readonly MethodInfo BitOpsPopCountUInt32 =
-            typeof(BitOperations).GetMethod(nameof(BitOperations.PopCount),
-                BindingFlags.Public | BindingFlags.Static,
-                binder: null,
-                types: new[] { typeof(uint) },
-                modifiers: null)
-            ?? throw new InvalidOperationException("BitOperations.PopCount(uint) not found");
+        private static MethodInfo BitOpsPopCountUInt32
+            => ScalarMethodCache.BitOp(nameof(BitOperations.PopCount), typeof(uint));
 
         #endregion
     }

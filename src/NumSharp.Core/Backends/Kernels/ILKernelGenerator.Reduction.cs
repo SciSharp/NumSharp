@@ -991,12 +991,14 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Get the Math.Max or Math.Min method for a type.
+        /// Get the Math.Max or Math.Min method for a type. <c>Math</c> has overloads for every
+        /// numeric primitive (byte, sbyte, short, ushort, int, uint, long, ulong, float, double),
+        /// so a single <c>typeof(Math).GetMethod(name, [T, T])</c> lookup works for all of them.
         /// </summary>
-        private static MethodInfo? GetMathMinMaxMethod(ReductionOp op, Type clrType)
+        private static MethodInfo GetMathMinMaxMethod(ReductionOp op, Type clrType)
         {
             string name = op == ReductionOp.Max ? "Max" : "Min";
-            return typeof(Math).GetMethod(name, new[] { clrType, clrType });
+            return ScalarMethodCache.Get(typeof(Math), name, clrType, clrType);
         }
 
         /// <summary>

@@ -674,8 +674,7 @@ namespace NumSharp.Backends.Kernels
 
                 // Divide and floor
                 il.Emit(OpCodes.Div);
-                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(typeof(double), "Floor"), null);
 
                 // Convert back to T
                 EmitConvertFromDouble<T>(il);
@@ -689,8 +688,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitFloorWithInfToNaN(ILGenerator il)
         {
-            var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })!;
-            var isInfMethod = typeof(double).GetMethod(nameof(double.IsInfinity), new[] { typeof(double) })!;
+            var floorMethod = ScalarMethodCache.MathFn1(typeof(double), "Floor");
+            var isInfMethod = ScalarMethodCache.Predicate(typeof(double), nameof(double.IsInfinity));
 
             il.EmitCall(OpCodes.Call, floorMethod, null);
             var locR = il.DeclareLocal(typeof(double));

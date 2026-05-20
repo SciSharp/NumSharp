@@ -345,20 +345,15 @@ namespace NumSharp.Backends.Kernels
         private static void EmitCmpForSide(ILGenerator il, NPTypeCode type, bool leftSide)
         {
             // Half / Decimal / Complex need operator calls.
+            string opName = leftSide ? "op_LessThan" : "op_LessThanOrEqual";
             if (type == NPTypeCode.Half)
             {
-                var op = typeof(Half).GetMethod(leftSide ? "op_LessThan" : "op_LessThanOrEqual",
-                    BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Half), typeof(Half) }, null)
-                    ?? throw new MissingMethodException(typeof(Half).FullName, leftSide ? "op_LessThan" : "op_LessThanOrEqual");
-                il.EmitCall(OpCodes.Call, op, null);
+                il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(Half), opName), null);
                 return;
             }
             if (type == NPTypeCode.Decimal)
             {
-                var op = typeof(decimal).GetMethod(leftSide ? "op_LessThan" : "op_LessThanOrEqual",
-                    BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)
-                    ?? throw new MissingMethodException(typeof(decimal).FullName, leftSide ? "op_LessThan" : "op_LessThanOrEqual");
-                il.EmitCall(OpCodes.Call, op, null);
+                il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), opName), null);
                 return;
             }
 

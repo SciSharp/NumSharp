@@ -94,11 +94,7 @@ namespace NumSharp.Backends.Kernels
                         _ => throw new NotSupportedException()
                     };
 
-                    il.EmitCall(OpCodes.Call,
-                        typeof(Math).GetMethod(mathMethod, new[] { typeof(double) })
-                            ?? throw new MissingMethodException(typeof(Math).FullName, mathMethod),
-                        null);
-
+                    il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(typeof(double), mathMethod), null);
                     il.EmitCall(OpCodes.Call, CachedMethods.DecimalExplicitFromDouble, null);
                     break;
 
@@ -259,9 +255,8 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Square:
                     // z * z
                     il.Emit(OpCodes.Dup);
-                    il.EmitCall(OpCodes.Call, typeof(System.Numerics.Complex).GetMethod("op_Multiply",
-                        BindingFlags.Public | BindingFlags.Static,
-                        new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })!, null);
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), "op_Multiply"), null);
                     break;
 
                 case UnaryOp.Reciprocal:
@@ -273,9 +268,8 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_R8, 0.0);
                         il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
                         il.Emit(OpCodes.Ldloc, locZ);
-                        il.EmitCall(OpCodes.Call, typeof(System.Numerics.Complex).GetMethod("op_Division",
-                            BindingFlags.Public | BindingFlags.Static,
-                            new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })!, null);
+                        il.EmitCall(OpCodes.Call,
+                            ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), "op_Division"), null);
                     }
                     break;
 
@@ -548,9 +542,8 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Square:
                     // x * x
                     il.Emit(OpCodes.Dup);
-                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Multiply",
-                        BindingFlags.Public | BindingFlags.Static,
-                        new[] { typeof(Half), typeof(Half) })!, null);
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.BinaryOp(typeof(Half), "op_Multiply"), null);
                     break;
 
                 case UnaryOp.Reciprocal:
@@ -579,13 +572,13 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.IsInf:
-                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("IsInfinity",
-                        BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })!, null);
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsInfinity"), null);
                     break;
 
                 case UnaryOp.IsFinite:
-                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("IsFinite",
-                        BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })!, null);
+                    il.EmitCall(OpCodes.Call,
+                        ScalarMethodCache.Predicate(typeof(Half), "IsFinite"), null);
                     break;
 
                 default:
