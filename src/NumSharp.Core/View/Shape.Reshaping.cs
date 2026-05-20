@@ -164,6 +164,58 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Expands one or more axes with size-1 dimensions, matching NumPy's
+        ///     <c>np.expand_dims(a, axis)</c> tuple-axis semantics.
+        /// </summary>
+        /// <remarks>
+        ///     Each axis is normalized against the FINAL output ndim
+        ///     (<c>inputNdim + axes.Length</c>). Duplicate normalized positions
+        ///     raise <see cref="ArgumentException"/> ("repeated axis"), matching
+        ///     NumPy's <c>ValueError</c>. Out-of-range axes throw
+        ///     <see cref="ArgumentException"/>.
+        /// </remarks>
+        /// <param name="axes">Positions in the expanded output where size-1 axes are placed.</param>
+        /// <returns>A new <see cref="Shape"/> aliasing the same storage with size-1 dims inserted.</returns>
+        public readonly Shape ExpandDimensions(int[] axes)
+        {
+            if (axes == null || axes.Length == 0)
+                return this;
+
+            int inputNdim = dimensions?.Length ?? 0;
+            int outNdim = inputNdim + axes.Length;
+
+            // Normalize each axis against the OUTPUT ndim, mirroring NumPy.
+            var normalized = new int[axes.Length];
+            for (int i = 0; i < axes.Length; i++)
+            {
+                int ax = axes[i];
+                int adjusted = ax >= 0 ? ax : outNdim + ax;
+                if (adjusted < 0 || adjusted >= outNdim)
+                    throw new ArgumentException($"axis {ax} is out of bounds for array of dimension {outNdim}");
+                normalized[i] = adjusted;
+            }
+
+            // Detect duplicates against normalized positions (NumPy: ValueError "repeated axis").
+            var seen = new HashSet<int>();
+            for (int i = 0; i < normalized.Length; i++)
+            {
+                if (!seen.Add(normalized[i]))
+                    throw new ArgumentException("repeated axis");
+            }
+
+            // Apply axes in ascending order so each ExpandDimension call sees a
+            // stable "earlier dim has already been inserted" view.
+            var sorted = (int[])normalized.Clone();
+            Array.Sort(sorted);
+
+            Shape result = this;
+            for (int i = 0; i < sorted.Length; i++)
+                result = result.ExpandDimension(sorted[i]);
+
+            return result;
+        }
+
+        /// <summary>
         ///     Expands a specific <paramref name="axis"/> with 1 dimension.
         /// </summary>
         /// <param name="axis"></param>

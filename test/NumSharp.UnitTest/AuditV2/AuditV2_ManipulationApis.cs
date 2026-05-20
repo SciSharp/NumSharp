@@ -538,10 +538,11 @@ public class AuditV2_ManipulationApis
     }
 
     /// <summary>
-    /// Section 1.3 — np.expand_dims signature only accepts a single int axis.
-    /// NumPy 2.x accepts a tuple-of-axes: np.expand_dims(np.array([1,2,3]), (0, 2)).shape == (1, 3, 1).
+    /// Section 1.3 — np.expand_dims previously only accepted a single int axis.
+    /// NumPy 2.x: np.expand_dims(np.array([1,2,3]), (0, 2)).shape == (1, 3, 1).
+    /// Now satisfied by the new int[]/IEnumerable&lt;int&gt; overloads.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-expand_dims-tuple")]
+    [TestMethod]
     public void ExpandDims_TupleAxis_Implemented()
     {
         var methods = typeof(np).GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
