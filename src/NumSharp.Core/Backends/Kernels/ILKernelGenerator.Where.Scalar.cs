@@ -176,7 +176,7 @@ namespace NumSharp.Backends.Kernels
                 int simdBits = useV256 ? 256 : 128;
                 var vType = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
-                locScalarXVec = il.DeclareLocal(useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>));
+                locScalarXVec = il.DeclareLocal(VectorMethodCache.V(simdBits, typeof(T)));
                 il.Emit(OpCodes.Ldarg_1);  // scalarX
                 il.EmitCall(OpCodes.Call, vType, null);
                 il.Emit(OpCodes.Stloc, locScalarXVec);
@@ -376,7 +376,7 @@ namespace NumSharp.Backends.Kernels
                 int simdBits = useV256 ? 256 : 128;
                 var createM = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
-                locScalarYVec = il.DeclareLocal(useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>));
+                locScalarYVec = il.DeclareLocal(VectorMethodCache.V(simdBits, typeof(T)));
                 il.Emit(OpCodes.Ldarg_2);  // scalarY
                 il.EmitCall(OpCodes.Call, createM, null);
                 il.Emit(OpCodes.Stloc, locScalarYVec);
@@ -555,7 +555,7 @@ namespace NumSharp.Backends.Kernels
                 int simdBits = useV256 ? 256 : 128;
                 var createM = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
-                var vecT = useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>);
+                var vecT = VectorMethodCache.V(simdBits, typeof(T));
                 locXVec = il.DeclareLocal(vecT);
                 locYVec = il.DeclareLocal(vecT);
 
