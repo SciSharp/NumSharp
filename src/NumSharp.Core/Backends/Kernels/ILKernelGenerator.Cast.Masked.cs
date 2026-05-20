@@ -172,6 +172,18 @@ namespace NumSharp.Backends.Kernels
 
             il.MarkLabel(lblScalar0DStart);
 
+            // ---- IL any-true prescan ----
+            // Walks the mask buffer once before doing any masked work. If no true byte is found
+            // we branch straight to lblRet, matching NumPy's all-false short-circuit. The scan
+            // is shaped to cover only the UNIQUE bytes of the mask buffer:
+            //   - broadcast dim (stride==0): skipped (those bytes repeat)
+            //   - contig dim (stride == expected): included
+            //   - other strided pattern: prescan disabled (jump to lblPrescanSkip)
+            // The contig sub-range starting at maskBase is scanned with V256/V128 EqualsAll(Zero).
+            // For mixed/all-true masks the first non-zero byte aborts the prescan immediately
+            // (~ns overhead). For all-false the scan runs to completion (~0.3 ms for 10M bytes).
+            EmitMaskAnyTruePrescan(il, lblRet);
+
             // ---- innerN, innerSrcStride, innerDstStride, innerMaskStride ----
             // (innerIdx = ndim-1)
             il.Emit(OpCodes.Ldarg_S, (byte)7);
@@ -974,6 +986,198 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locOffset);
+        }
+
+        // =================================================================
+        // IL prescan: any-true scan of the mask buffer.
+        // Branches to <paramref name="lblRet"/> when no true byte is found.
+        // Falls through (continues IL execution) otherwise.
+        // Uses arg 2 (mask), arg 5 (maskStrides), arg 6 (shape), arg 7 (ndim).
+        // =================================================================
+
+        /// <summary>
+        /// Emit IL that scans the mask buffer for any non-zero byte. If none are found,
+        /// branches to <paramref name="lblRet"/>. Else falls through.
+        ///
+        /// Phase 1: Compute the contiguous unique-byte length of the mask. Walks dims from
+        /// inner to outer; broadcast dims (stride==0) are skipped, contig dims multiply
+        /// unique_size by shape[d]. A stride that doesn't match the expected contig stride
+        /// disables the scan (falls through without branching).
+        ///
+        /// Phase 2: SIMD scan of <c>unique_size</c> bytes starting at <c>maskBase</c>.
+        /// V256<byte> when available, else V128<byte>, with a scalar tail. The first
+        /// non-zero byte aborts the scan (falls through with prescan disabled).
+        /// Reaching the end of unique_size without finding a non-zero byte branches to
+        /// <paramref name="lblRet"/>.
+        /// </summary>
+        private static void EmitMaskAnyTruePrescan(ILGenerator il, System.Reflection.Emit.Label lblRet)
+        {
+            int scanBits = VectorBits >= 256 ? 256 : (VectorBits >= 128 ? 128 : 0);
+
+            var locUniqueSize     = il.DeclareLocal(typeof(long));
+            var locExpectedStride = il.DeclareLocal(typeof(long));
+            var locAxis           = il.DeclareLocal(typeof(int));
+            var locScanI          = il.DeclareLocal(typeof(long));
+
+            var lblWalkHead       = il.DefineLabel();
+            var lblWalkBody       = il.DefineLabel();
+            var lblWalkAdvance    = il.DefineLabel();
+            var lblScanBegin      = il.DefineLabel();
+            var lblSimdHead       = il.DefineLabel();
+            var lblSimdEnd        = il.DefineLabel();
+            var lblScalarHead     = il.DefineLabel();
+            var lblSkipPrescan    = il.DefineLabel();
+
+            // ---- Phase 1: compute unique_size = product of shape[d] over non-broadcast contig dims ----
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Stloc, locUniqueSize);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Stloc, locExpectedStride);
+
+            // axis = ndim - 1
+            il.Emit(OpCodes.Ldarg_S, (byte)7);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locAxis);
+
+            il.MarkLabel(lblWalkHead);
+            il.Emit(OpCodes.Ldloc, locAxis);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Bge, lblWalkBody);
+            il.Emit(OpCodes.Br, lblScanBegin);   // axis < 0 -> done walking
+
+            il.MarkLabel(lblWalkBody);
+
+            // s = maskStrides[axis]
+            il.Emit(OpCodes.Ldarg_S, (byte)5);
+            il.Emit(OpCodes.Ldloc, locAxis);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            var locS = il.DeclareLocal(typeof(long));
+            il.Emit(OpCodes.Stloc, locS);
+
+            // if (s == 0) skip — broadcast dim
+            il.Emit(OpCodes.Ldloc, locS);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Beq, lblWalkAdvance);
+
+            // if (s != expected_stride) -> non-contig, skip prescan
+            il.Emit(OpCodes.Ldloc, locS);
+            il.Emit(OpCodes.Ldloc, locExpectedStride);
+            il.Emit(OpCodes.Bne_Un, lblSkipPrescan);
+
+            // unique_size *= shape[axis]
+            il.Emit(OpCodes.Ldloc, locUniqueSize);
+            il.Emit(OpCodes.Ldarg_S, (byte)6);
+            il.Emit(OpCodes.Ldloc, locAxis);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Stloc, locUniqueSize);
+
+            // expected_stride = unique_size
+            il.Emit(OpCodes.Ldloc, locUniqueSize);
+            il.Emit(OpCodes.Stloc, locExpectedStride);
+
+            il.MarkLabel(lblWalkAdvance);
+            il.Emit(OpCodes.Ldloc, locAxis);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locAxis);
+            il.Emit(OpCodes.Br, lblWalkHead);
+
+            // ---- Phase 2: scan unique_size bytes starting at mask base ----
+            il.MarkLabel(lblScanBegin);
+
+            // If unique_size <= 0, defensive skip (nothing to scan)
+            il.Emit(OpCodes.Ldloc, locUniqueSize);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Ble, lblSkipPrescan);
+
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locScanI);
+
+            // SIMD scan loop (only emitted when SIMD is available)
+            if (scanBits > 0)
+            {
+                int chunkBytes = scanBits / 8;
+
+                il.MarkLabel(lblSimdHead);
+                il.Emit(OpCodes.Ldloc, locScanI);
+                il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldloc, locUniqueSize);
+                il.Emit(OpCodes.Bgt, lblSimdEnd);
+
+                // v = V<scanBits>.Load((byte*)(mask + scanI))
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldloc, locScanI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                il.EmitCall(OpCodes.Call, GetVectorLoadMethod(scanBits, typeof(byte)), null);
+
+                // V<scanBits><byte>.Zero
+                var zeroProp = VType(scanBits, typeof(byte)).GetProperty("Zero",
+                    BindingFlags.Public | BindingFlags.Static)
+                    ?? throw new InvalidOperationException($"Vector{scanBits}<byte>.Zero not found");
+                il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
+
+                // EqualsAll(v, Zero) — returns bool. If true, all bytes were 0.
+                il.EmitCall(OpCodes.Call, GetEqualsAllMethod(scanBits, typeof(byte)), null);
+                il.Emit(OpCodes.Brfalse, lblSkipPrescan);   // any non-zero -> abort scan
+
+                // scanI += chunkBytes
+                il.Emit(OpCodes.Ldloc, locScanI);
+                il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locScanI);
+                il.Emit(OpCodes.Br, lblSimdHead);
+
+                il.MarkLabel(lblSimdEnd);
+            }
+
+            // Scalar tail
+            il.MarkLabel(lblScalarHead);
+            il.Emit(OpCodes.Ldloc, locScanI);
+            il.Emit(OpCodes.Ldloc, locUniqueSize);
+            il.Emit(OpCodes.Bge, lblRet);   // reached end without finding true -> all-false, return
+
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locScanI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_U1);
+            il.Emit(OpCodes.Brtrue, lblSkipPrescan);   // found true -> abort scan
+
+            il.Emit(OpCodes.Ldloc, locScanI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locScanI);
+            il.Emit(OpCodes.Br, lblScalarHead);
+
+            // Fall-through label: prescan failed or was disabled; continue with masked work.
+            il.MarkLabel(lblSkipPrescan);
+        }
+
+        /// <summary>
+        /// Vector{simdBits}.EqualsAll&lt;T&gt;(V&lt;T&gt;, V&lt;T&gt;) -> bool.
+        /// Returns the IL-emittable MethodInfo.
+        /// </summary>
+        private static MethodInfo GetEqualsAllMethod(int simdBits, Type elementType)
+        {
+            return ContainerType(simdBits)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "EqualsAll" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 2 &&
+                            m.GetGenericArguments().Length == 1 &&
+                            m.ReturnType == typeof(bool))
+                .MakeGenericMethod(elementType);
         }
     }
 }
