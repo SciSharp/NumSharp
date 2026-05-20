@@ -219,16 +219,13 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, GetVectorLoadMethod(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
 
             // zero = V<byte>.Zero;
-            var zeroProp = VType(simdBits, typeof(byte)).GetProperty("Zero",
-                BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Vector{simdBits}<byte>.Zero not found");
-            il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
 
             // EqualsAll(chunk, zero) -> bool
-            il.EmitCall(OpCodes.Call, GetEqualsAllMethodNZ(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.EqualsAll(simdBits, typeof(byte)), null);
             il.Emit(OpCodes.Brfalse, lblFoundNonZero);
 
             // i += chunkBytes;
@@ -337,19 +334,16 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, GetVectorLoadMethod(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
 
             // zero
-            var zeroProp = VType(simdBits, typeof(byte)).GetProperty("Zero",
-                BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Vector{simdBits}<byte>.Zero not found");
-            il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
 
             // cmp = Equals(chunk, zero)
-            il.EmitCall(OpCodes.Call, GetVectorEqualsMethodNZ(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, typeof(byte)), null);
 
             // bits = ExtractMostSignificantBits(cmp)
-            il.EmitCall(OpCodes.Call, GetExtractMostSignificantBitsMethodNZ(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(simdBits, typeof(byte)), null);
 
             // ~bits & chunkMask
             il.Emit(OpCodes.Not);
@@ -488,19 +482,16 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, GetVectorLoadMethod(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
 
             // zero = V<byte>.Zero;
-            var zeroProp = VType(simdBits, typeof(byte)).GetProperty("Zero",
-                BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Vector{simdBits}<byte>.Zero not found");
-            il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
 
             // cmp = Equals(chunk, zero);
-            il.EmitCall(OpCodes.Call, GetVectorEqualsMethodNZ(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, typeof(byte)), null);
 
             // bits = ExtractMostSignificantBits(cmp); (uint)
-            il.EmitCall(OpCodes.Call, GetExtractMostSignificantBitsMethodNZ(simdBits, typeof(byte)), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(simdBits, typeof(byte)), null);
 
             // nz = ~bits & chunkMask;
             il.Emit(OpCodes.Not);
@@ -608,42 +599,11 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region SIMD reflection helpers (suffixed NZ to avoid clashing with existing helpers
-        //         that have file-private visibility in Cast.cs / Cast.Masked.cs)
+        #region SIMD reflection helpers
 
-        private static MethodInfo GetEqualsAllMethodNZ(int simdBits, Type elementType)
-        {
-            return System.Linq.Enumerable.First(
-                ContainerType(simdBits).GetMethods(BindingFlags.Public | BindingFlags.Static),
-                m => m.Name == "EqualsAll" && m.IsGenericMethod &&
-                     m.GetParameters().Length == 2 &&
-                     m.GetGenericArguments().Length == 1 &&
-                     m.ReturnType == typeof(bool))
-                .MakeGenericMethod(elementType);
-        }
-
-        private static MethodInfo GetVectorEqualsMethodNZ(int simdBits, Type elementType)
-        {
-            // V<T>.Equals(V<T>, V<T>) -> V<T>   (NOT the bool-returning instance Equals — we want the static op)
-            var vt = VType(simdBits, elementType);
-            return System.Linq.Enumerable.First(
-                ContainerType(simdBits).GetMethods(BindingFlags.Public | BindingFlags.Static),
-                m => m.Name == "Equals" && m.IsGenericMethod &&
-                     m.GetParameters().Length == 2 &&
-                     m.GetGenericArguments().Length == 1 &&
-                     m.ReturnType.IsGenericType)
-                .MakeGenericMethod(elementType);
-        }
-
-        private static MethodInfo GetExtractMostSignificantBitsMethodNZ(int simdBits, Type elementType)
-        {
-            return System.Linq.Enumerable.First(
-                ContainerType(simdBits).GetMethods(BindingFlags.Public | BindingFlags.Static),
-                m => m.Name == "ExtractMostSignificantBits" && m.IsGenericMethod &&
-                     m.GetParameters().Length == 1 &&
-                     m.GetGenericArguments().Length == 1)
-                .MakeGenericMethod(elementType);
-        }
+        // SIMD method lookups go through VectorMethodCache — see VectorMethodCache.cs for
+        // the shared catalog (EqualsAll, Equals, ExtractMostSignificantBits, etc.).
+        // BitOperations helpers stay file-local since they live outside Vector*.
 
         private static readonly MethodInfo BitOpsTrailingZeroCountUInt32 =
             typeof(BitOperations).GetMethod(nameof(BitOperations.TrailingZeroCount),

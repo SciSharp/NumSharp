@@ -516,9 +516,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorComparison(ILGenerator il, ComparisonOp op, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
 
             string methodName = op switch
             {
@@ -531,23 +529,16 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Comparison op {op} not supported for SIMD")
             };
 
-            var cmpMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .First(m => m.GetParameters()[0].ParameterType == vectorType);
+            // Equals has the bool-returning EqualsAll overload too — VectorMethodCache.Equals
+            // discriminates by return type. Other compares are unambiguous at 2 params.
+            var cmpMethod = methodName == "Equals"
+                ? VectorMethodCache.Equals(VectorBits, clrType)
+                : VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2);
 
             il.EmitCall(OpCodes.Call, cmpMethod, null);
 
-            // For NotEqual, invert the result using OnesComplement
             if (op == ComparisonOp.NotEqual)
-            {
-                var onesCompMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .Where(m => m.Name == "OnesComplement" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                    .Select(m => m.MakeGenericMethod(clrType))
-                    .First(m => m.GetParameters()[0].ParameterType == vectorType);
-
-                il.EmitCall(OpCodes.Call, onesCompMethod, null);
-            }
+                il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
         }
 
         /// <summary>
@@ -557,20 +548,12 @@ namespace NumSharp.Backends.Kernels
         private static void EmitMaskToBoolExtraction(ILGenerator il, NPTypeCode type,
             int vectorCount, LocalBuilder locI, LocalBuilder locMask)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
 
-            // ExtractMostSignificantBits gives us a uint where each bit is the MSB of each lane
-            // For comparison masks (all 1s = true, all 0s = false), MSB=1 means true
-            var extractMethod = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "ExtractMostSignificantBits" && m.IsGenericMethod)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .First();
-
-            // bits = ExtractMostSignificantBits(mask)
+            // ExtractMostSignificantBits gives us a uint where each bit is the MSB of each lane.
+            // For comparison masks (all 1s = true, all 0s = false), MSB=1 means true.
             il.Emit(OpCodes.Ldloc, locMask);
-            il.EmitCall(OpCodes.Call, extractMethod, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(VectorBits, clrType), null);
             var locBits = il.DeclareLocal(typeof(uint));
             il.Emit(OpCodes.Stloc, locBits);
 

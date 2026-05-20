@@ -940,139 +940,54 @@ namespace NumSharp.Backends.Kernels
         /// Returns a vector mask where each element is all 1s (true) or all 0s (false).
         /// </summary>
         private static void EmitVectorEquals(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Equals" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit Vector.BitwiseAnd(vec1, vec2).
         /// </summary>
         private static void EmitVectorBitwiseAnd(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "BitwiseAnd" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, "BitwiseAnd", GetClrType(type), paramCount: 2), null);
 
         /// <summary>
         /// Emit Vector.Add(vec1, vec2).
         /// </summary>
         private static void EmitVectorAdd(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Add" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, "Add", GetClrType(type), paramCount: 2), null);
 
         /// <summary>
         /// Emit Vector.Subtract(vec1, vec2).
         /// </summary>
         private static void EmitVectorSubtract(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Subtract" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, "Subtract", GetClrType(type), paramCount: 2), null);
 
         /// <summary>
-        /// Emit Vector.Multiply(vec1, vec2).
+        /// Emit Vector.Multiply(vec1, vec2) — disambiguates from the (V, T) scalar overload.
         /// </summary>
         private static void EmitVectorMultiply(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Multiply" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.MultiplyVectorVector(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit Vector.Sum(vec) for horizontal reduction.
         /// </summary>
         private static void EmitVectorSum(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Sum" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, "Sum", GetClrType(type), paramCount: 1), null);
 
         /// <summary>
         /// Emit Vector.ConditionalSelect(mask, ifTrue, ifFalse).
         /// </summary>
         private static void EmitVectorConditionalSelect(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "ConditionalSelect" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 3)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit vector.AsT() to reinterpret comparison mask as the element type.
         /// </summary>
         private static void EmitVectorAsType(ILGenerator il, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
-
+            // The mask coming in is already V<T> for type T (Single/Double) — AsSingle/AsDouble
+            // here is a generic single-arg helper to mark the bit-pattern as the float type.
             string methodName = type == NPTypeCode.Single ? "AsSingle" : "AsDouble";
-
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == methodName && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 1), null);
         }
 
         /// <summary>

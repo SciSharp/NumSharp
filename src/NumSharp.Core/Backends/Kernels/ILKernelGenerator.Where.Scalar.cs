@@ -114,48 +114,6 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region Vector.Create broadcast helper
-
-        /// <summary>
-        /// Returns the static <c>Vector{simdBits}.Create</c> method that broadcasts a scalar
-        /// to a full vector. Prefers the type-specific non-generic overload (e.g.
-        /// <c>Create(double)</c>) when available — the JIT can fold it directly to a
-        /// single broadcast instruction (vbroadcastsd, vpbroadcastd, etc.) — and falls back
-        /// to the generic <c>Create&lt;T&gt;(T)</c> for types that only have the generic
-        /// overload.
-        /// </summary>
-        /// <remarks>
-        /// On .NET 8 measurements, the generic overload routed through a runtime helper for
-        /// <c>double</c> and added ~30-50% to scalar-broadcast Where kernels. The type-specific
-        /// overload erases that gap.
-        /// </remarks>
-        private static MethodInfo GetVectorCreateBroadcast(int simdBits, Type elemType)
-        {
-            var containerType = simdBits == 256 ? typeof(Vector256) :
-                                simdBits == 128 ? typeof(Vector128) :
-                                throw new NotSupportedException($"SIMD width {simdBits} not supported");
-
-            // Type-specific overload: Vector256.Create(double) -> Vector256<double>
-            var specific = containerType.GetMethod("Create",
-                BindingFlags.Public | BindingFlags.Static,
-                binder: null,
-                types: new[] { elemType },
-                modifiers: null);
-            if (specific != null && specific.ReturnType.IsGenericType &&
-                specific.ReturnType.GetGenericArguments()[0] == elemType)
-                return specific;
-
-            // Generic fallback: Vector256.Create<T>(T value) where the parameter IS the
-            // generic parameter (not T[], ReadOnlySpan<T>, Vector128<T>, etc.).
-            return containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Create" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType.IsGenericParameter)
-                .MakeGenericMethod(elemType);
-        }
-
-        #endregion
-
         #region SIMD eligibility (mirrors GenerateWhereKernelIL)
 
         // Same SIMD gate as the contig WhereKernel — V256 needs Avx2 for byte-lane
@@ -216,7 +174,7 @@ namespace NumSharp.Backends.Kernels
             {
                 // scalarXVec = V<T>.Create(scalarX)  -- ONCE before the loop.
                 int simdBits = useV256 ? 256 : 128;
-                var vType = GetVectorCreateBroadcast(simdBits, typeof(T));
+                var vType = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
                 locScalarXVec = il.DeclareLocal(useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>));
                 il.Emit(OpCodes.Ldarg_1);  // scalarX
@@ -415,7 +373,7 @@ namespace NumSharp.Backends.Kernels
             if (emitSimd)
             {
                 int simdBits = useV256 ? 256 : 128;
-                var createM = GetVectorCreateBroadcast(simdBits, typeof(T));
+                var createM = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
                 locScalarYVec = il.DeclareLocal(useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>));
                 il.Emit(OpCodes.Ldarg_2);  // scalarY
@@ -593,7 +551,7 @@ namespace NumSharp.Backends.Kernels
             if (emitSimd)
             {
                 int simdBits = useV256 ? 256 : 128;
-                var createM = GetVectorCreateBroadcast(simdBits, typeof(T));
+                var createM = VectorMethodCache.CreateBroadcast(simdBits, typeof(T));
 
                 var vecT = useV256 ? typeof(Vector256<T>) : typeof(Vector128<T>);
                 locXVec = il.DeclareLocal(vecT);

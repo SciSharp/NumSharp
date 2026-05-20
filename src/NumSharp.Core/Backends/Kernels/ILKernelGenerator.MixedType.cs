@@ -767,7 +767,7 @@ namespace NumSharp.Backends.Kernels
 
             long vectorCount = GetVectorCount(key.ResultType);
             var clrType = GetClrType(key.ResultType);
-            var vectorType = GetVectorType(clrType);
+            var vectorType = VectorMethodCache.V(VectorBits, clrType);
 
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount
@@ -903,7 +903,7 @@ namespace NumSharp.Backends.Kernels
 
             long vectorCount = GetVectorCount(key.ResultType);
             var clrType = GetClrType(key.ResultType);
-            var vectorType = GetVectorType(clrType);
+            var vectorType = VectorMethodCache.V(VectorBits, clrType);
 
             var locI = il.DeclareLocal(typeof(long));           // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(long));   // totalSize - vectorCount

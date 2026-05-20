@@ -609,25 +609,16 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Get the Vector container type (Vector128, Vector256, or Vector512).
+        /// Thin wrapper around <see cref="VectorMethodCache.Container"/> preserved
+        /// so the existing call sites in the partial-class files keep their shape.
         /// </summary>
-        internal static Type GetVectorContainerType() => VectorBits switch
-        {
-            512 => typeof(Vector512),
-            256 => typeof(Vector256),
-            128 => typeof(Vector128),
-            _ => throw new NotSupportedException("No SIMD support")
-        };
+        internal static Type GetVectorContainerType() => VectorMethodCache.Container(VectorBits);
 
         /// <summary>
         /// Get the Vector{Width}&lt;T&gt; generic type.
+        /// Thin wrapper around <see cref="VectorMethodCache.V"/>.
         /// </summary>
-        internal static Type GetVectorType(Type elementType) => VectorBits switch
-        {
-            512 => typeof(Vector512<>).MakeGenericType(elementType),
-            256 => typeof(Vector256<>).MakeGenericType(elementType),
-            128 => typeof(Vector128<>).MakeGenericType(elementType),
-            _ => throw new NotSupportedException("No SIMD support")
-        };
+        internal static Type GetVectorType(Type elementType) => VectorMethodCache.V(VectorBits, elementType);
 
         #region NPTypeCode-Based IL Helpers
 
@@ -1699,56 +1690,20 @@ namespace NumSharp.Backends.Kernels
         /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var loadMethod = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, loadMethod, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Load(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit Vector.Create for NPTypeCode (broadcasts scalar to all vector elements).
         /// Stack must have scalar value on top; result is Vector on stack.
         /// </summary>
         internal static void EmitVectorCreate(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var createMethod = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Create" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 1 &&
-                            !m.GetParameters()[0].ParameterType.IsPointer)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, createMethod, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit Vector.Store for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorStore(ILGenerator il, NPTypeCode type)
-        {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
-            var storeMethod = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Store" && m.IsGenericMethod &&
-                            m.GetParameters().Length == 2 &&
-                            m.GetParameters()[0].ParameterType.IsGenericType)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, storeMethod, null);
-        }
+            => il.EmitCall(OpCodes.Call, VectorMethodCache.Store(VectorBits, GetClrType(type)), null);
 
         /// <summary>
         /// Emit Vector min/max (width-adaptive). Stack must hold two vectors;
@@ -1757,16 +1712,9 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitVectorMinOrMax(ILGenerator il, bool isMax, NPTypeCode type)
         {
-            var containerType = GetVectorContainerType();
-            var clrType = GetClrType(type);
-
             string methodName = isMax ? "Max" : "Min";
-            var method = containerType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
-                .MakeGenericMethod(clrType);
-
-            il.EmitCall(OpCodes.Call, method, null);
+            il.EmitCall(OpCodes.Call,
+                VectorMethodCache.Generic(VectorBits, methodName, GetClrType(type), paramCount: 2), null);
         }
 
         /// <summary>
@@ -1775,10 +1723,7 @@ namespace NumSharp.Backends.Kernels
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
         {
             var clrType = GetClrType(type);
-            var vectorType = GetVectorType(clrType);
-            var containerType = GetVectorContainerType();
 
-            // Bitwise operations use static methods on Vector256/Vector128 container
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
             {
                 string methodName = op switch
@@ -1788,18 +1733,12 @@ namespace NumSharp.Backends.Kernels
                     BinaryOp.BitwiseXor => "Xor",
                     _ => throw new NotSupportedException()
                 };
-
-                var opMethod = containerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .First(m => m.Name == methodName && m.IsGenericMethod &&
-                                m.GetParameters().Length == 2)
-                    .MakeGenericMethod(clrType);
-
-                il.EmitCall(OpCodes.Call, opMethod, null);
+                il.EmitCall(OpCodes.Call,
+                    VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2), null);
                 return;
             }
 
-            // Arithmetic operations use operator overloads on Vector256<T>/Vector128<T>
+            // Arithmetic uses operator overloads on Vector256<T> / Vector128<T>.
             string operatorName = op switch
             {
                 BinaryOp.Add => "op_Addition",
@@ -1808,12 +1747,7 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Divide => "op_Division",
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
-
-            var operatorMethod = vectorType.GetMethod(operatorName,
-                BindingFlags.Public | BindingFlags.Static,
-                null, new[] { vectorType, vectorType }, null);
-
-            il.EmitCall(OpCodes.Call, operatorMethod!, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(VectorBits, clrType, operatorName), null);
         }
 
         #endregion
