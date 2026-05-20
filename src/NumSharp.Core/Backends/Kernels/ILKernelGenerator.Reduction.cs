@@ -1035,7 +1035,7 @@ namespace NumSharp.Backends.Kernels
 
             // Step 2: Now we have Vector128. Reduce to scalar.
             // Vector128 has 2-16 elements depending on type. Use GetElement for final few.
-            var vec128Type = typeof(Vector128<>).MakeGenericType(clrType);
+            var vec128Type = VectorMethodCache.V(128, clrType);
             int elemCount = 16 / GetTypeSize(type); // Vector128 is 16 bytes
 
             var locFinal = il.DeclareLocal(vec128Type);

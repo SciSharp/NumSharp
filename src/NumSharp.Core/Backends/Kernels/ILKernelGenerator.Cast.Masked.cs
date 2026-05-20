@@ -819,16 +819,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locV);
 
             // Get Zero static property
-            var zeroProp = VType(simdBits, intT).GetProperty("Zero", BindingFlags.Public | BindingFlags.Static)
-                ?? throw new InvalidOperationException($"Vector{simdBits}<{intT.Name}>.Zero not found");
-            il.EmitCall(OpCodes.Call, zeroProp.GetGetMethod(), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, intT), null);
             il.Emit(OpCodes.Ldloc, locV);
             // Stack: Zero, v. Subtract.
-            var subOp = VType(simdBits, intT).GetMethod("op_Subtraction",
-                BindingFlags.Public | BindingFlags.Static, null,
-                new[] { VType(simdBits, intT), VType(simdBits, intT) }, null)
-                ?? throw new InvalidOperationException($"Vector{simdBits}<{intT.Name}>.op_Subtraction not found");
-            il.EmitCall(OpCodes.Call, subOp, null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Operator(simdBits, intT, "op_Subtraction"), null);
         }
 
         /// <summary>
