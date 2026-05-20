@@ -79,11 +79,7 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitGeneralCopyHelperCall(ILGenerator il, NPTypeCode type)
         {
-            var helperMethod = typeof(ILKernelGenerator).GetMethod(
-                nameof(CopyGeneralSameType),
-                BindingFlags.NonPublic | BindingFlags.Static)!;
-
-            var genericHelper = helperMethod.MakeGenericMethod(GetClrType(type));
+            var genericHelper = GetGenericHelper(nameof(CopyGeneralSameType), GetClrType(type));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldarg_1);

@@ -562,9 +562,7 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Sign:
                     // Half Sign with NaN handling: if NaN, return NaN; else return sign
                     // NumPy: sign(NaN) = NaN, sign(0) = 0, sign(+x) = 1, sign(-x) = -1
-                    // Use helper method to handle NaN properly
-                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(HalfSignHelper),
-                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    il.EmitCall(OpCodes.Call, GetHelper(nameof(HalfSignHelper)), null);
                     break;
 
                 case UnaryOp.IsNan:

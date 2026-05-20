@@ -30,52 +30,41 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitArgMaxMinSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
-            // Dispatch to specialized helpers for types needing special handling
+            // Dispatch to specialized helpers for types needing special handling.
+            bool isMax = key.Op == ReductionOp.ArgMax;
             MethodInfo helperMethod;
             bool isGeneric = true;
 
             if (key.InputType == NPTypeCode.Single)
             {
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxFloatNaNHelper) : nameof(ArgMinFloatNaNHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxFloatNaNHelper) : nameof(ArgMinFloatNaNHelper));
                 isGeneric = false;
             }
             else if (key.InputType == NPTypeCode.Double)
             {
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxDoubleNaNHelper) : nameof(ArgMinDoubleNaNHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxDoubleNaNHelper) : nameof(ArgMinDoubleNaNHelper));
                 isGeneric = false;
             }
             else if (key.InputType == NPTypeCode.Half)
             {
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxHalfNaNHelper) : nameof(ArgMinHalfNaNHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxHalfNaNHelper) : nameof(ArgMinHalfNaNHelper));
                 isGeneric = false;
             }
             else if (key.InputType == NPTypeCode.Boolean)
             {
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxBoolHelper) : nameof(ArgMinBoolHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxBoolHelper) : nameof(ArgMinBoolHelper));
                 isGeneric = false;
             }
             else if (key.InputType == NPTypeCode.Complex)
             {
-                // Complex uses magnitude comparison
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxComplexHelper) : nameof(ArgMinComplexHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                // Complex uses magnitude comparison.
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxComplexHelper) : nameof(ArgMinComplexHelper));
                 isGeneric = false;
             }
             else
             {
-                // Generic SIMD path for integer types
-                helperMethod = typeof(ILKernelGenerator).GetMethod(
-                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxSimdHelper) : nameof(ArgMinSimdHelper),
-                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                // Generic SIMD path for integer types.
+                helperMethod = GetHelper(isMax ? nameof(ArgMaxSimdHelper) : nameof(ArgMinSimdHelper));
             }
 
             if (isGeneric)
