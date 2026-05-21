@@ -3357,7 +3357,26 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public static NpyIterState CreateCopyState(UnmanagedStorage src, UnmanagedStorage dst)
         {
-            var broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
+            // Fast path: when src and dst have identical dimensions, no broadcast
+            // is needed — the broadcast result is just src.Shape (same dims, same
+            // strides, same offset). Skip np.broadcast_to entirely to avoid the
+            // ValidateBroadcastTo loop and function-dispatch overhead per call.
+            //
+            // Strides are intentionally NOT compared: the iterator uses src.strides
+            // for reads and dst.strides for writes, regardless of how each side's
+            // memory is laid out. As long as the dimensions match position-by-position,
+            // no broadcast stretching is required.
+            //
+            // Falls through to np.broadcast_to for:
+            //   - Different NDim (e.g. src=(N,), dst=(M,N) requires dim prepend)
+            //   - Any axis where src=1 but dst>1 (broadcast stretch → stride 0)
+            //   - Any axis where src!=dst (validation throws)
+            Shape broadcastSrcShape;
+            if (ShapesMatchExactly(src.Shape, dst.Shape))
+                broadcastSrcShape = src.Shape;
+            else
+                broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
+
             int ndim = checked((int)dst.Shape.NDim);
 
             // NUMSHARP DIVERGENCE: No MaxDims limit - supports unlimited dimensions
@@ -3418,6 +3437,35 @@ namespace NumSharp.Backends.Iteration
             UpdateLayoutFlags(ref state, shape, srcStridePtr, dstStridePtr);
 
             return state;
+        }
+
+        /// <summary>
+        ///     Returns true iff <paramref name="src"/> and <paramref name="dst"/>
+        ///     have the same number of dimensions and every dimension matches
+        ///     position-by-position. When this is true, no broadcast stretching
+        ///     is required and the copy iterator can reuse <c>src</c>'s shape
+        ///     directly (its strides and offset are preserved as-is).
+        /// </summary>
+        /// <remarks>
+        ///     Strides are intentionally NOT compared — different layouts
+        ///     (e.g. C-contig src vs F-contig dst) still iterate correctly
+        ///     because the iterator walks each side using its own strides.
+        ///     Only dimension equality matters for "no broadcast needed".
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool ShapesMatchExactly(in Shape src, in Shape dst)
+        {
+            if (src.NDim != dst.NDim) return false;
+
+            // Scalar fast path: both 0-D = both scalar = match.
+            if (src.NDim == 0) return true;
+
+            var srcDims = src.dimensions;
+            var dstDims = dst.dimensions;
+            for (int i = 0; i < srcDims.Length; i++)
+                if (srcDims[i] != dstDims[i]) return false;
+
+            return true;
         }
 
         /// <summary>
