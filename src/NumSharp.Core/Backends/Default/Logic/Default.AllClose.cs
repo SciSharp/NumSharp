@@ -20,8 +20,11 @@
         ///considered equal to NaN's in `b` in the output array.</param>
         public override bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            bool result = np.all(np.isclose(a, b, rtol, atol, equal_nan));
-            return result;
+            // np.isclose materializes a bool array the size of broadcast(a, b). Once np.all
+            // collapses it to a single bool, the array is dead — release atomically rather
+            // than letting it ride the finalizer queue (mattered in tight comparison loops).
+            using var closeness = np.isclose(a, b, rtol, atol, equal_nan);
+            return np.all(closeness);
         }
     }
 }
