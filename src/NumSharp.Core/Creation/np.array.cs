@@ -16,12 +16,14 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Wraps given <paramref name="nd"/> in an alias. If <paramref name="copy"/> is true then returns a clone.
+        ///     Create an array from an existing <see cref="NDArray"/>. Matches NumPy's default
+        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
         /// </summary>
-        /// <param name="nd"></param>
-        /// <param name="copy">If <paramref name="copy"/> is true then returns a clone.</param>
+        /// <param name="nd">Source array.</param>
+        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array(NDArray nd, bool copy = false) =>
+        public static NDArray array(NDArray nd, bool copy = true) =>
             copy
                 ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };

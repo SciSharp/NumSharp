@@ -20,15 +20,13 @@ namespace NumSharp.UnitTest.AuditV2;
 public class AuditV2_NDArrayCreation
 {
     // -----------------------------------------------------------------------
-    // T1.7 — np.array(NDArray, copy=false) DEFAULT aliases caller storage.
-    //   File: src/NumSharp.Core/Creation/np.array.cs:24-27
-    //   NumPy default for np.array() is copy=True. NumSharp default is
-    //   copy=false. Calling `np.array(a)` returns an NDArray that shares
-    //   storage with `a` — mutating it silently corrupts `a`. Python code
-    //   that does `b = np.array(a); b[0] = 999` (a common defensive copy
-    //   idiom) silently mutates the original.
+    // T1.7 (FIXED) — np.array(NDArray) default flipped from copy=false to
+    //   copy=true to match NumPy 2.x. Calling `np.array(a)` now returns an
+    //   independent copy. Pair with the new np.asarray's tristate `copy`
+    //   parameter for explicit "copy if needed" semantics.
+    //   File: src/NumSharp.Core/Creation/np.array.cs:18-29
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.7")]
+    [TestMethod]
     public void T1_7_NpArray_NDArrayInput_DefaultAliases()
     {
         var a = np.arange(10); // int64 in NumSharp
