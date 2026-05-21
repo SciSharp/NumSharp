@@ -470,7 +470,7 @@ public class AuditV2_ManipulationApis
     /// NumPy: np.repeat(a, repeats, axis=None). With axis=0, np.repeat(2x2, 2, axis=0).shape == (4,2).
     /// NumSharp: signature is repeat(NDArray, int|long|NDArray) only — no axis overload.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-repeat-axis")]
+    [TestMethod]
     public void Repeat_WithAxis_Implemented()
     {
         var methods = typeof(np).GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
@@ -490,17 +490,15 @@ public class AuditV2_ManipulationApis
     /// <summary>
     /// Section 1.5 — verify axis behavior. NumPy:
     ///   np.repeat(np.array([[1,2],[3,4]]), 2, axis=0) == [[1,2],[1,2],[3,4],[3,4]]
-    /// NumSharp ravels the input, producing a 1-D output of length 8.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-repeat-axis")]
+    [TestMethod]
     public void Repeat_2D_Axis0_PreservesShape()
     {
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
-        // Current API has no axis parameter, so this calls the int overload which ravels first.
-        // Asserting the NumPy-correct shape forces the test to fail until axis is implemented.
-        var result = np.repeat(a, 2);
+        var result = np.repeat(a, 2, axis: 0);
         result.shape.Should().Equal(new long[] { 4L, 2L },
             "NumPy: np.repeat(2x2, 2, axis=0).shape == (4, 2)");
+        result.ravel().ToArray<int>().Should().ContainInOrder(1, 2, 1, 2, 3, 4, 3, 4);
     }
 
     /// <summary>
