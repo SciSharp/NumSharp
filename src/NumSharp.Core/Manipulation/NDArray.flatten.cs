@@ -27,11 +27,8 @@ namespace NumSharp
                 // F-order flatten: the memory of a fresh F-contiguous copy contains
                 // the values in column-major read-out order; reinterpret that buffer
                 // as a 1-D array. copy('F') already allocated a fresh MemoryBlock that
-                // nothing else references; the returned NDArray's ctor bumps the
-                // refcount via InitializeArc, so disposing `fcopy` at scope exit
-                // just drops fcopy's wrapper ref — the shared MemoryBlock stays
-                // alive through the returned NDArray.
-                using var fcopy = this.copy('F');
+                // nothing else references, so we reuse the ArraySlice directly.
+                var fcopy = this.copy('F');
                 return new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine };
             }
 
