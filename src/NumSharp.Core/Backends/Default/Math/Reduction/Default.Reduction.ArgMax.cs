@@ -190,7 +190,10 @@ namespace NumSharp.Backends
 
             do
             {
-                var slice = arr[slices];
+                // slice is an owning view wrapper into arr's storage — each
+                // outer-axis iteration would otherwise queue an NDArray
+                // wrapper on the finalizer queue. Storage stays alive via arr.
+                using var slice = arr[slices];
                 long result = op == ReductionOp.ArgMax
                     ? argmax_elementwise_il(slice)
                     : argmin_elementwise_il(slice);
