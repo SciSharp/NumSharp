@@ -344,5 +344,434 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             delta.Should().BeLessThan(20,
                 "10k cycles should not accumulate >20 MiB (allocator-level slack only)");
         }
+
+        // ====================================================================
+        //   Lessons learned — view chain, dtype coverage, creation paths,
+        //   ergonomic patterns, cross-thread behavior.
+        // ====================================================================
+
+        // ----- view chains (slice of slice of slice) -------------------------
+
+        [TestMethod]
+        public void ViewChain_ThreeLevels_AllShareRefCount()
+        {
+            // Lesson: every view-creating operation MUST bump refcount via
+            // InitializeArc. A three-level chain produces refCount = 4 (owner + 3 views).
+            var a = np.arange(100);
+            var slice = a.Storage.InternalArray;
+
+            var v1 = a["10:90"];
+            var v2 = v1["10:70"];
+            var v3 = v2["10:50"];
+            GetRefCount(slice).Should().Be(4);
+
+            v1.Dispose();
+            v2.Dispose();
+            v3.Dispose();
+            GetRefCount(slice).Should().Be(1);
+            slice.IsReleased.Should().BeFalse();
+
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ViewChain_DisposeOrder_DoesNotMatter()
+        {
+            // Reverse the dispose order — refcount must still reach 0.
+            var a = np.arange(100);
+            var slice = a.Storage.InternalArray;
+            var v1 = a["10:90"];
+            var v2 = v1["10:70"];
+            var v3 = v2["10:50"];
+
+            // Dispose owner first, then views in arbitrary order
+            a.Dispose();
+            slice.IsReleased.Should().BeFalse("3 views still alive");
+
+            v2.Dispose();
+            slice.IsReleased.Should().BeFalse("2 views still alive");
+
+            v3.Dispose();
+            slice.IsReleased.Should().BeFalse("1 view still alive");
+
+            v1.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- reshape: contig (view) vs non-contig (copy) -------------------
+
+        [TestMethod]
+        public void ReshapeContiguous_SharesRefCount()
+        {
+            // Contig reshape returns a VIEW — must share refcount.
+            var a = np.arange(12);
+            var slice = a.Storage.InternalArray;
+
+            var b = a.reshape(3, 4);
+            GetRefCount(slice).Should().Be(2, "reshape view must add a ref");
+
+            a.Dispose();
+            slice.IsReleased.Should().BeFalse("b still alive");
+
+            b.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void ReshapeNonContiguous_AllocatesNewOwningBuffer()
+        {
+            // Non-contig reshape (e.g. of a transposed array) returns a COPY —
+            // the copy has its own MemoryBlock, independent of the parent's
+            // MemoryBlock. We verify the semantic, not strict refcount math
+            // (reshape's non-contig path creates an unreachable intermediate
+            // NDArray that Debug builds keep alive until method exit, so the
+            // returned NDArray's refcount = 2, not 1).
+            var raw = np.arange(12);
+            var a = raw.reshape(3, 4);
+            var b = a.T;                  // 4x3 transposed view
+            var b_slice = b.Storage.InternalArray;
+
+            // Reshaping the transposed view forces a materialized copy
+            var c = b.reshape(12);
+            var c_slice = c.Storage.InternalArray;
+
+            object.ReferenceEquals(c_slice, b_slice).Should().BeFalse(
+                "non-contig reshape must allocate a new owning buffer");
+
+            // The semantic that matters: disposing parents must NOT affect
+            // the copy. Buffers are independent.
+            raw.Dispose();
+            a.Dispose();
+            b.Dispose();
+            c_slice.IsReleased.Should().BeFalse("copy is independent of parent chain");
+            b_slice.IsReleased.Should().BeTrue("parent chain released — sources gone");
+
+            c.Dispose();
+            // c_slice's refcount may still be > 0 from the orphan intermediate
+            // pinned in Debug builds; force-drain to verify the copy buffer is
+            // eventually reclaimable.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            c_slice.IsReleased.Should().BeTrue("copy reclaimed after Dispose + GC");
+        }
+
+        // ----- transpose / negative-stride / strided views -------------------
+
+        [TestMethod]
+        public void Transpose_ParticipatesInRefCount()
+        {
+            // Hold every NDArray explicitly. Chained creation
+            // (np.arange(N).reshape(...)) pins the intermediate in Debug
+            // builds and produces a non-zero "initial" we can't drive to -1.
+            var raw = np.arange(12);
+            var a = raw.reshape(3, 4);
+            var slice = a.Storage.InternalArray;
+            var initial = GetRefCount(slice);
+
+            var t = a.T;
+            GetRefCount(slice).Should().Be(initial + 1, "transpose view must AddRef");
+
+            t.Dispose();
+            GetRefCount(slice).Should().Be(initial);
+
+            a.Dispose();
+            raw.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void NegativeStride_ParticipatesInRefCount()
+        {
+            var a = np.arange(10);
+            var slice = a.Storage.InternalArray;
+            var rev = a["::-1"];
+            GetRefCount(slice).Should().Be(2);
+
+            rev.Dispose();
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- explicit copy independence ------------------------------------
+
+        [TestMethod]
+        public void Copy_AllocatesIndependentBuffer()
+        {
+            var a = np.arange(100);
+            var a_slice = a.Storage.InternalArray;
+
+            var b = a.copy();
+            var b_slice = b.Storage.InternalArray;
+
+            object.ReferenceEquals(a_slice, b_slice).Should().BeFalse();
+            GetRefCount(a_slice).Should().Be(1);
+            GetRefCount(b_slice).Should().Be(1);
+
+            a.Dispose();
+            a_slice.IsReleased.Should().BeTrue();
+            b_slice.IsReleased.Should().BeFalse("copy is independent");
+
+            b.Dispose();
+            b_slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- creation-path coverage ----------------------------------------
+
+        [DataTestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.SByte)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Half)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Complex)]
+        public void DtypeCoverage_AllParticipateInRefCount(NPTypeCode tc)
+        {
+            var a = new NDArray(tc, new Shape(100), fillZeros: true);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+            slice.IsReleased.Should().BeFalse();
+
+            a.Dispose();
+
+            slice.IsReleased.Should().BeTrue();
+            GetRefCount(slice).Should().Be(-1);
+        }
+
+        [TestMethod]
+        public void NpZeros_OwnsRefCount()
+        {
+            var a = np.zeros(new Shape(50), NPTypeCode.Double);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void NpOnes_OwnsRefCount()
+        {
+            var a = np.ones(new Shape(50), NPTypeCode.Double);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void NpEmpty_OwnsRefCount()
+        {
+            var a = np.empty(new Shape(50), NPTypeCode.Double);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void NpArange_OwnsRefCount()
+        {
+            var a = np.arange(50);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- ergonomic patterns --------------------------------------------
+
+        [TestMethod]
+        public void UsingStatement_ReleasesAtScopeExit()
+        {
+            // Lesson: NDArray's IDisposable lets users opt into deterministic
+            // release via `using` — without forcing it on every call site.
+            IArraySlice captured;
+            using (var a = np.arange(1000))
+            {
+                captured = a.Storage.InternalArray;
+                GetRefCount(captured).Should().Be(1);
+                captured.IsReleased.Should().BeFalse();
+            }
+            captured.IsReleased.Should().BeTrue("`using` should atomically free at scope exit");
+        }
+
+        [TestMethod]
+        public void UsingStatement_Nested_FreesInReverseOrder()
+        {
+            IArraySlice innerSlice = null!;
+            IArraySlice outerSlice = null!;
+            using (var outer = np.arange(100))
+            {
+                outerSlice = outer.Storage.InternalArray;
+                using (var inner = np.arange(50))
+                {
+                    innerSlice = inner.Storage.InternalArray;
+                    outerSlice.IsReleased.Should().BeFalse();
+                    innerSlice.IsReleased.Should().BeFalse();
+                }
+                innerSlice.IsReleased.Should().BeTrue("inner releases first");
+                outerSlice.IsReleased.Should().BeFalse("outer still alive");
+            }
+            outerSlice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- cross-thread disposal -----------------------------------------
+
+        [TestMethod]
+        public void CrossThread_Dispose_Works()
+        {
+            // Allocate on one thread, dispose on another.
+            // ARC is thread-safe by construction so this must Just Work.
+            NDArray a = null!;
+            IArraySlice slice = null!;
+            var allocThread = new Thread(() =>
+            {
+                a = np.arange(1000);
+                slice = a.Storage.InternalArray;
+            });
+            allocThread.Start();
+            allocThread.Join();
+
+            GetRefCount(slice).Should().Be(1);
+
+            var disposeThread = new Thread(() => a.Dispose());
+            disposeThread.Start();
+            disposeThread.Join();
+
+            slice.IsReleased.Should().BeTrue();
+            GetRefCount(slice).Should().Be(-1);
+        }
+
+        [TestMethod]
+        public unsafe void CrossThread_View_ReadsAndDisposes()
+        {
+            // Use raw address indexing — view[i] would build per-element
+            // orphan NDArrays that bump refcount and prevent reaching 0.
+            // Use long* because np.arange returns Int64 by default.
+            var a = np.arange(100);
+            var slice = a.Storage.InternalArray;
+            var view = a["10:50"];
+
+            long sum = 0;
+            var t = new Thread(() =>
+            {
+                long* ptr = (long*)view.Storage.Address;
+                for (int i = 0; i < view.shape[0]; i++)
+                    sum += ptr[i];
+                view.Dispose();
+            });
+            t.Start();
+            t.Join();
+
+            sum.Should().Be(10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 +
+                            20 + 21 + 22 + 23 + 24 + 25 + 26 + 27 + 28 + 29 +
+                            30 + 31 + 32 + 33 + 34 + 35 + 36 + 37 + 38 + 39 +
+                            40 + 41 + 42 + 43 + 44 + 45 + 46 + 47 + 48 + 49);
+            slice.IsReleased.Should().BeFalse("parent still alive");
+
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- refcount accumulation -----------------------------------------
+
+        [TestMethod]
+        public void ManyAddRefs_AccumulateCorrectly()
+        {
+            var a = np.arange(10);
+            var slice = a.Storage.InternalArray;
+
+            for (int i = 0; i < 1000; i++)
+                slice.TryAddRef().Should().BeTrue();
+            GetRefCount(slice).Should().Be(1001);
+
+            for (int i = 0; i < 1000; i++)
+                slice.Release();
+            GetRefCount(slice).Should().Be(1);
+            slice.IsReleased.Should().BeFalse();
+
+            a.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
+
+        // ----- weak reference proves GC eligibility --------------------------
+
+        [TestMethod]
+        public void DisposedNDArray_BecomesCollectable()
+        {
+            // After Dispose, the NDArray itself is also a regular GC candidate.
+            // GC.SuppressFinalize was called so it doesn't even enter the
+            // finalizer queue.
+            static WeakReference MakeAndDispose()
+            {
+                var a = np.arange(1000);
+                a.Dispose();
+                return new WeakReference(a);
+            }
+
+            var w = MakeAndDispose();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            w.IsAlive.Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void UndisposedNDArray_BecomesCollectable_ViaFinalizer()
+        {
+            // Without explicit Dispose, the NDArray still becomes collectable
+            // — it just takes one extra GC cycle (finalizer + reclaim).
+            static (WeakReference weak, IArraySlice slice) MakeAndDrop()
+            {
+                var a = new NDArray(NPTypeCode.Double, new Shape(1000), fillZeros: false);
+                return (new WeakReference(a), a.Storage.InternalArray);
+            }
+
+            var (w, slice) = MakeAndDrop();
+
+            // Two passes: first GC.Collect surfaces it to finalizer; second
+            // GC reclaims after finalizer ran.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            w.IsAlive.Should().BeFalse("NDArray should be reclaimed");
+            slice.IsReleased.Should().BeTrue("finalizer must release the buffer");
+        }
+
+        // ----- multi-NDArray same Storage (manual sharing) -------------------
+
+        [TestMethod]
+        public void MultipleNDArrays_SameStorageReference_EachBumpsRefCount()
+        {
+            // Anti-pattern: two NDArrays manually wrapping the same Storage.
+            // This SHOULDN'T be common, but if it happens, each ctor must
+            // independently bump refcount so disposing one doesn't break the
+            // other.
+            var a = np.arange(50);
+            var slice = a.Storage.InternalArray;
+            GetRefCount(slice).Should().Be(1);
+
+            // Manually create another wrapper around the SAME storage
+            var alias = new NDArray(a.Storage);
+            GetRefCount(slice).Should().Be(2);
+
+            a.Dispose();
+            slice.IsReleased.Should().BeFalse("alias still alive");
+
+            alias.Dispose();
+            slice.IsReleased.Should().BeTrue();
+        }
     }
 }
