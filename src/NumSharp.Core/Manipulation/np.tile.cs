@@ -98,9 +98,14 @@ namespace NumSharp
                 broadcastTarget[2 * i + 1] = aShape[i];
             }
 
-            var promoted = A.reshape(new Shape(interleaved));
-            var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
-            var contiguous = broadcasted.copy();
+            // promoted is a new wrapper (view or copy depending on A's contiguity);
+            // broadcasted is a stride-0 broadcast view of promoted; contiguous is a
+            // fresh materialized copy. All three are owning intermediates that the
+            // final reshape doesn't keep — the returned NDArray shares contiguous's
+            // storage but holds its own ARC ref via InitializeArc.
+            using var promoted = A.reshape(new Shape(interleaved));
+            using var broadcasted = broadcast_to(promoted, new Shape(broadcastTarget));
+            using var contiguous = broadcasted.copy();
             return contiguous.reshape(new Shape(outShape));
         }
 
