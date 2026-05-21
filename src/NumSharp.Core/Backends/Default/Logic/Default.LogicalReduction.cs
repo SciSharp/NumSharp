@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 
@@ -35,15 +36,59 @@ namespace NumSharp.Backends
 
             axis = NormalizeAxis(axis, nd.ndim);
 
-            var resultShape = CreateLogicalResultShape(nd.Shape, axis, keepdims);
-            NDArray<bool> result = CreateLogicalResult(resultShape, reduceAll && nd.Shape.dimensions[axis] == 0);
+            // Allocate the result in the *reduced* shape (axis dropped). keepdims is applied
+            // as a reshape at the end — matches Default.Reduction.Add.ExecuteAxisReduction and
+            // lets the axis kernels assume one fewer output dim than input.
+            var reducedDims = Shape.GetAxis(nd.Shape, axis);
+            Shape reducedShape = reducedDims.Length == 0 ? Shape.Scalar : new Shape(reducedDims);
+            NDArray<bool> result = CreateLogicalResult(reducedShape, reduceAll && nd.Shape.dimensions[axis] == 0);
 
             if (result.size == 0 || nd.Shape.dimensions[axis] == 0)
+            {
+                if (keepdims)
+                    result.Storage.Reshape(BuildKeepdimsShape(nd.Shape, axis));
                 return result;
+            }
 
-            NpFunc.Invoke(nd.GetTypeCode, ExecuteLogicalAxis<int>, nd, result, axis, reduceAll);
+            // Fast path: IL-emitted axis kernel. Inner-axis (stride==1) routes through the
+            // SIMD all/any helpers; non-inner uses AVX2 gather (float/double) or a scalar
+            // early-exit loop. Returns null for unsupported dtypes (Half / Complex / Decimal),
+            // which fall through to the NpyAxisIter scalar kernel below.
+            ReductionOp op = reduceAll ? ReductionOp.All : ReductionOp.Any;
+            var key = new AxisReductionKernelKey(nd.GetTypeCode, NPTypeCode.Boolean, op, InnerAxisContiguous: axis == nd.ndim - 1);
+            var kernel = ILKernelGenerator.TryGetBooleanAxisReductionKernel(key);
+            if (kernel != null && nd.Shape.IsContiguous)
+            {
+                unsafe
+                {
+                    fixed (long* inStrides = nd.Shape.strides)
+                    fixed (long* inDims = nd.Shape.dimensions)
+                    fixed (long* outStrides = result.Shape.strides)
+                    {
+                        byte* inBase = (byte*)nd.Storage.Address + nd.Shape.offset * nd.dtypesize;
+                        long outSize = result.size > 0 ? result.size : 1;
+                        kernel(inBase, (void*)result.Address, inStrides, inDims, outStrides,
+                               axis, nd.Shape.dimensions[axis], nd.ndim, outSize);
+                    }
+                }
+            }
+            else
+            {
+                NpFunc.Invoke(nd.GetTypeCode, ExecuteLogicalAxis<int>, nd, result, axis, reduceAll);
+            }
+
+            if (keepdims)
+                result.Storage.Reshape(BuildKeepdimsShape(nd.Shape, axis));
 
             return result;
+        }
+
+        // Build the "keepdims" shape: input shape with the reduction axis set to size 1.
+        private static Shape BuildKeepdimsShape(Shape inputShape, int axis)
+        {
+            var dims = (long[])inputShape.dimensions.Clone();
+            dims[axis] = 1;
+            return new Shape(dims);
         }
 
         // Multi-axis reduction. Matches NumPy: reduces along all listed axes.
