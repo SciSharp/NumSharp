@@ -167,9 +167,18 @@ namespace NumSharp.Backends.Iteration
             }
 
             var srcBase = (T*)state.Data0;
+
+            // Fast path: when the reduction-axis stride is 1 (e.g., reducing the inner axis
+            // of a C-contig array), each row is a contiguous buffer and the existing 1-D
+            // SIMD helpers apply. TKernel.Identity is a static-abstract bool — the JIT
+            // constant-folds the branch, so this dispatches at zero runtime cost.
+            bool useSimd = state.SourceAxisStride == 1;
+
             if (state.OuterNDim == 0)
             {
-                dstBase[0] = ExecuteBoolKernel<T, TKernel>(srcBase, state.SourceAxisStride, state.AxisLength);
+                dstBase[0] = useSimd
+                    ? ReduceBoolContigRow<T, TKernel>(srcBase, state.AxisLength)
+                    : ExecuteBoolKernel<T, TKernel>(srcBase, state.SourceAxisStride, state.AxisLength);
                 return;
             }
 
@@ -189,11 +198,22 @@ namespace NumSharp.Backends.Iteration
                     srcOffset += coord * srcOuterStrides[axisIndex];
                 }
 
-                dstBase[outerIndex] = ExecuteBoolKernel<T, TKernel>(
-                    srcBase + srcOffset,
-                    state.SourceAxisStride,
-                    state.AxisLength);
+                T* rowSrc = srcBase + srcOffset;
+                dstBase[outerIndex] = useSimd
+                    ? ReduceBoolContigRow<T, TKernel>(rowSrc, state.AxisLength)
+                    : ExecuteBoolKernel<T, TKernel>(rowSrc, state.SourceAxisStride, state.AxisLength);
             }
+        }
+
+        // Dispatch a contiguous row through the SIMD All/Any helpers. The TKernel.Identity
+        // branch is constant-folded by the JIT.
+        private static bool ReduceBoolContigRow<T, TKernel>(T* src, long length)
+            where T : unmanaged
+            where TKernel : struct, INpyBooleanReductionKernel<T>
+        {
+            if (TKernel.Identity)
+                return NumSharp.Backends.Kernels.ILKernelGenerator.AllSimdHelper<T>(src, length);
+            return NumSharp.Backends.Kernels.ILKernelGenerator.AnySimdHelper<T>(src, length);
         }
 
         private static NpyAxisState CreateState(UnmanagedStorage src, UnmanagedStorage dst, int axis)
