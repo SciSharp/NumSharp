@@ -23,6 +23,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
@@ -38,9 +39,79 @@ namespace NumSharp
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html</remarks>
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     [SuppressMessage("ReSharper", "ParameterHidesMember")]
-    public partial class NDArray : IIndex, ICloneable, IEnumerable
+    public partial class NDArray : IIndex, ICloneable, IEnumerable, IDisposable
     {
         protected TensorEngine tensorEngine;
+
+        // ---------------------------------------------------------------
+        // Atomic Reference Counting (ARC) lifecycle
+        //
+        // Every NDArray ctor holds exactly one logical reference on the
+        // underlying MemoryBlock (taken in InitializeArc, called from
+        // every concrete ctor). Dispose drops it. Multiple Disposes are
+        // idempotent. A finalizer is the safety net for the "user forgot"
+        // case — same effect as Dispose, just non-deterministic timing.
+        //
+        // _disposed is int (not byte) because Interlocked.Exchange's
+        // narrowest overload is int. Disposal is gated by a single CAS
+        // so concurrent Dispose calls don't double-Release.
+        // ---------------------------------------------------------------
+        private int _disposed;
+
+        /// <summary>
+        ///     <c>true</c> if <see cref="Dispose"/> has been called on this
+        ///     <see cref="NDArray"/>. Views and shared storage may still be
+        ///     alive; this flag only reflects the local instance.
+        /// </summary>
+        public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+        /// <summary>
+        ///     Called from every concrete ctor after <see cref="Storage"/>
+        ///     is assigned. Bumps the refcount on the underlying buffer so
+        ///     this NDArray's reference is tracked.
+        /// </summary>
+        /// <remarks>
+        ///     Returns silently when <see cref="Storage"/> or its inner
+        ///     <c>IArraySlice</c> is null — that state belongs to
+        ///     mid-construction NDArrays which finish wiring up via
+        ///     <see cref="UnmanagedStorage.Allocate(Shape, Type)"/> shortly
+        ///     after; the eventual TryAddRef call from that path completes
+        ///     the bookkeeping.
+        /// </remarks>
+        private void InitializeArc()
+        {
+            var arr = Storage?.InternalArray;
+            if (arr is null) return;
+            arr.TryAddRef();
+        }
+
+        /// <summary>
+        ///     Releases this <see cref="NDArray"/>'s reference to the
+        ///     underlying unmanaged buffer. When the last reference is
+        ///     released the buffer is freed synchronously on the calling
+        ///     thread; views that still hold references keep working.
+        ///
+        ///     Safe to call multiple times — second and subsequent calls
+        ///     are no-ops.
+        /// </summary>
+        public void Dispose()
+        {
+            // Idempotent: only the first call performs the Release.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            Storage?.InternalArray?.Release();
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        ///     Finalizer safety net: runs only when the user never called
+        ///     <see cref="Dispose"/>. Drops this NDArray's reference so the
+        ///     refcount can still reach zero even without explicit cleanup.
+        /// </summary>
+        ~NDArray()
+        {
+            if (Volatile.Read(ref _disposed) == 0)
+                Storage?.InternalArray?.Release();
+        }
 
         /// <summary>
         /// Gets the array owning the memory, or <c>null</c> if this array owns its data.
@@ -98,6 +169,7 @@ namespace NumSharp
             Storage = storage;
             tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
             Storage.Engine = tensorEngine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -110,6 +182,7 @@ namespace NumSharp
             Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
             Storage.Engine = tensorEngine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -122,6 +195,7 @@ namespace NumSharp
             Storage = storage.Alias(ref shape);
             tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
             Storage.Engine = tensorEngine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -183,6 +257,7 @@ namespace NumSharp
                 shape = Shape.ExtractShape(values);
 
             Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
+            InitializeArc();
         }
 
         /// <summary>
@@ -202,6 +277,7 @@ namespace NumSharp
                 shape = Shape.Vector(values.Count);
 
             Storage.Allocate(values, shape);
+            InitializeArc();
         }
 
         /// <summary>
@@ -311,6 +387,7 @@ namespace NumSharp
         public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
+            InitializeArc();
         }
 
         /// <summary>
@@ -324,11 +401,13 @@ namespace NumSharp
         public NDArray(NPTypeCode dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
+            InitializeArc();
         }
 
         private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
         {
             Storage.Allocate(array, shape);
+            InitializeArc();
         }
 
         #endregion
