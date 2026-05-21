@@ -100,17 +100,17 @@ namespace NumSharp
         /// </summary>
         private static void SwapSlicesAxis0(NDArray x, long i, long j)
         {
-            // Get slices at indices i and j along axis 0
-            var sliceI = x[i];
-            var sliceJ = x[j];
+            // sliceI, sliceJ are owning view wrappers (they index into x's storage);
+            // temp is an owning fresh copy of sliceI's contents. Each shuffle iteration
+            // would otherwise leak three NDArray wrappers + one unmanaged copy buffer
+            // onto the finalizer queue — Fisher-Yates on an N-element array calls this
+            // N times.
+            using var sliceI = x[i];
+            using var sliceJ = x[j];
+            using var temp = sliceI.copy();
 
-            // Create a temporary copy of slice i
-            var temp = sliceI.copy();
-
-            // Copy j to i
+            // Copy j to i, then temp (original i) to j.
             np.copyto(sliceI, sliceJ);
-
-            // Copy temp (original i) to j
             np.copyto(sliceJ, temp);
         }
     }
