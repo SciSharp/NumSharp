@@ -229,37 +229,60 @@ namespace NumSharp
 
         /// <summary>
         ///     Fast path: when all sources match the destination dtype and
-        ///     every operand (sources + dst) is C-contiguous, perform a direct
-        ///     <see cref="Buffer.MemoryCopy"/> per outer block — no slicing,
-        ///     no NpyIter, no cast kernel.
+        ///     every operand (sources + dst) is C-contiguous (or all F-contiguous),
+        ///     perform a direct <see cref="Buffer.MemoryCopy"/> per outer block —
+        ///     no slicing, no NpyIter, no cast kernel.
         /// </summary>
         /// <returns>True if the fast path applied and the copy was performed.</returns>
         private static unsafe bool TryDirectMemcpyConcat(
             NDArray dst, NDArray[] sources, int axis, int ndim, NPTypeCode resultType)
         {
-            // Dst must be C-contig and writeable for raw memcpy to be valid.
-            if (!dst.Shape.IsContiguous || !dst.Shape.IsWriteable)
+            if (!dst.Shape.IsWriteable)
                 return false;
 
-            // All sources must match dtype and be C-contig (broadcasted/strided
-            // sources need the iterator path).
+            // Try matching layouts: C-contig sources + C-contig dst, or
+            // F-contig sources + F-contig dst. Mixed layouts go through the
+            // general path.
+            bool cPath = dst.Shape.IsContiguous;
+            bool fPath = !cPath && dst.Shape.IsFContiguous;
+
+            if (!cPath && !fPath)
+                return false;
+
             for (int k = 0; k < sources.Length; k++)
             {
                 var s = sources[k];
                 if (s.GetTypeCode != resultType) return false;
-                if (!s.Shape.IsContiguous) return false;
                 if (s.Shape.IsBroadcasted) return false;
+                if (cPath)
+                {
+                    if (!s.Shape.IsContiguous) return false;
+                }
+                else // fPath
+                {
+                    if (!s.Shape.IsFContiguous) return false;
+                }
             }
 
             int elemSize = resultType.SizeOf();
 
-            // outerCount = product of dims [0..axis-1]; innerStride = product of dims [axis+1..ndim-1].
-            long outerCount = 1;
-            for (int i = 0; i < axis; i++)
-                outerCount *= dst.shape[i];
-            long innerStride = 1;
-            for (int i = axis + 1; i < ndim; i++)
-                innerStride *= dst.shape[i];
+            // For C-contig:
+            //   outerCount = product of dims [0..axis-1]   (slower-varying axes)
+            //   innerStride = product of dims [axis+1..ndim-1] (faster-varying axes)
+            // For F-contig (mirror image):
+            //   outerCount = product of dims [axis+1..ndim-1]  (slower-varying axes in F-order)
+            //   innerStride = product of dims [0..axis-1]      (faster-varying axes in F-order)
+            long outerCount = 1, innerStride = 1;
+            if (cPath)
+            {
+                for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
+                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+            }
+            else
+            {
+                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.shape[i];
+                for (int i = 0; i < axis; i++) innerStride *= dst.shape[i];
+            }
 
             // Per-outer dst row size in elements = sum of src.shape[axis] * innerStride.
             // Equivalent to dst.shape[axis] * innerStride.
@@ -314,13 +337,25 @@ namespace NumSharp
         private static unsafe bool TryDirectCastConcat(
             NDArray dst, NDArray[] sources, int axis, int ndim, NPTypeCode resultType)
         {
-            if (!dst.Shape.IsContiguous || !dst.Shape.IsWriteable)
+            if (!dst.Shape.IsWriteable)
+                return false;
+
+            bool cPath = dst.Shape.IsContiguous;
+            bool fPath = !cPath && dst.Shape.IsFContiguous;
+            if (!cPath && !fPath)
                 return false;
 
             for (int k = 0; k < sources.Length; k++)
             {
-                if (!sources[k].Shape.IsContiguous) return false;
                 if (sources[k].Shape.IsBroadcasted) return false;
+                if (cPath)
+                {
+                    if (!sources[k].Shape.IsContiguous) return false;
+                }
+                else
+                {
+                    if (!sources[k].Shape.IsFContiguous) return false;
+                }
             }
 
             // Resolve a cast kernel for every distinct (src dtype → resultType).
@@ -343,10 +378,17 @@ namespace NumSharp
 
             int dstElemSize = resultType.SizeOf();
 
-            long outerCount = 1;
-            for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
-            long innerStride = 1;
-            for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+            long outerCount = 1, innerStride = 1;
+            if (cPath)
+            {
+                for (int i = 0; i < axis; i++) outerCount *= dst.shape[i];
+                for (int i = axis + 1; i < ndim; i++) innerStride *= dst.shape[i];
+            }
+            else
+            {
+                for (int i = axis + 1; i < ndim; i++) outerCount *= dst.shape[i];
+                for (int i = 0; i < axis; i++) innerStride *= dst.shape[i];
+            }
 
             long dstRowElems = dst.shape[axis] * innerStride;
             long dstRowBytes = dstRowElems * dstElemSize;
