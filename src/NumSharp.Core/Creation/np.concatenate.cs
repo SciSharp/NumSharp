@@ -192,20 +192,35 @@ namespace NumSharp
                 dst = new NDArray(resultType, retShape, fillZeros: false);
             }
 
-            // Fast path: all sources same dtype as resultType, all C-contig,
-            // dst C-contig (the common case). Direct byte memcpy from each
-            // source into the right axis range, skipping NpyIter machinery.
+            // ---------------------------------------------------------------
+            // Why custom fast paths despite NpyIter.Copy handling everything?
+            //
+            // NpyIter.Copy *does* handle every layout/dtype combination via
+            // TryCopySameType + IL contig/strided cast kernels. The catch:
+            // the general path slices the dst (`dst[axis_range]`) and hands
+            // that slice to NpyIter.Copy. For an F-contig dst, the slice
+            // `dst[0:M, :]` produces strides (1, full_M) with dim (M, N) --
+            // which is *neither* C- nor F-contig because the inter-column
+            // stride still points to the original full-height column.
+            // NpyIter.Copy then falls into the strided path -- ~17x slower
+            // than a per-column memcpy (measured: 22ms vs 1.4ms on 1M F-contig).
+            //
+            // The fast paths below compute per-outer-slab byte offsets
+            // directly against `dst.Storage.Address`, bypassing the sliced-
+            // view detour. They cover the common case (all sources match
+            // dst layout, same or castable dtype, no broadcast) which is
+            // also where the slice path is most pathological for F-contig.
+            // ---------------------------------------------------------------
             if (TryDirectMemcpyConcat(dst, workArrays, effectiveAxis, ndim, resultType))
                 return dst;
 
-            // Fast path: cross-dtype but all sources C-contig and dst C-contig.
-            // Drive the IL contig cast kernel directly with computed offsets.
             if (TryDirectCastConcat(dst, workArrays, effectiveAxis, ndim, resultType))
                 return dst;
 
-            // General path: bulk-copy each input via NpyIter.Copy, which
-            // handles cross-dtype, broadcasted, and strided sources through
-            // its IL-generated (strided) cast kernel.
+            // General path: bulk-copy each input via NpyIter.Copy. Handles
+            // broadcasted/strided sources, exotic dtype pairs that lack a
+            // contig IL cast kernel, and any case where dst's layout doesn't
+            // match the fast paths' assumptions.
             var dstAccessor = new Slice[ndim];
             for (int i = 0; i < ndim; i++)
                 dstAccessor[i] = Slice.All;
@@ -228,10 +243,12 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Fast path: when all sources match the destination dtype and
-        ///     every operand (sources + dst) is C-contiguous (or all F-contiguous),
-        ///     perform a direct <see cref="Buffer.MemoryCopy"/> per outer block —
-        ///     no slicing, no NpyIter, no cast kernel.
+        ///     Same-dtype fast path: when all sources match the destination
+        ///     dtype and every operand (sources + dst) is C-contiguous (or
+        ///     all F-contiguous), perform a direct <see cref="Buffer.MemoryCopy"/>
+        ///     per outer block. Skips the <c>dst[axis_range]</c> slice which
+        ///     would produce a non-contig view for F-contig dst (see the
+        ///     justification block in <see cref="concatenate"/>).
         /// </summary>
         /// <returns>True if the fast path applied and the copy was performed.</returns>
         private static unsafe bool TryDirectMemcpyConcat(
@@ -331,8 +348,9 @@ namespace NumSharp
         ///     Cross-dtype fast path: same shape/layout assumptions as
         ///     <see cref="TryDirectMemcpyConcat"/>, but drives the IL-generated
         ///     contig cast kernel per source instead of <see cref="Buffer.MemoryCopy"/>.
-        ///     Skips NpyIter state construction, the slice path, and the
-        ///     intermediate astype allocation.
+        ///     Avoids the slice-then-NpyIter detour for the same F-contig
+        ///     reason (slice produces non-contig view, NpyIter falls into
+        ///     strided cast path, ~17x slower for F-contig).
         /// </summary>
         private static unsafe bool TryDirectCastConcat(
             NDArray dst, NDArray[] sources, int axis, int ndim, NPTypeCode resultType)
