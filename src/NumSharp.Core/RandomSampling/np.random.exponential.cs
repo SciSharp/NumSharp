@@ -27,7 +27,10 @@ namespace NumSharp
             if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(-Math.Log(1 - randomizer.NextDouble()) * scale);
 
-            var x = np.log(1 - uniform(0, 1, size));
+            // x = log(1 - uniform) is an owning intermediate consumed once by
+            // np.negative; the multiplication by `scale` produces the returned
+            // NDArray. Release x atomically rather than queueing it.
+            using var x = np.log(1 - uniform(0, 1, size));
             return np.negative(x) * scale;
         }
     }
