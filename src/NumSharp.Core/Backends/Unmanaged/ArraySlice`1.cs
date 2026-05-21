@@ -575,6 +575,18 @@ namespace NumSharp.Backends.Unmanaged
             MemoryBlock.Free();
         }
 
+        // ---------------------------------------------------------------
+        // ARC: forward to the underlying UnmanagedMemoryBlock.
+        // ---------------------------------------------------------------
+
+        [MethodImpl(OptimizeAndInline)]
+        public bool TryAddRef() => MemoryBlock.TryAddRef();
+
+        [MethodImpl(OptimizeAndInline)]
+        public void Release() => MemoryBlock.Release();
+
+        public bool IsReleased => MemoryBlock.IsReleased;
+
 
         /// <summary>
         /// Copies the contents of this span into a new array.  This heap
