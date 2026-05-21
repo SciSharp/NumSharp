@@ -80,13 +80,19 @@ namespace NumSharp
             }
 
             // axis=None: flatten every input to 1-D, then concatenate along axis 0.
+            // ravel() allocates a fresh NDArray wrapper per input (even when it returns a
+            // view of the caller's storage). Without explicit cleanup those wrappers sit
+            // on the finalizer queue, each holding an ARC ref to the caller's buffer.
+            // We track the owning array in `disposableWorkArrays` and release in finally.
             NDArray[] workArrays = arrays;
+            NDArray[] disposableWorkArrays = null;
             int effectiveAxis;
             if (axis is null)
             {
-                workArrays = new NDArray[arrays.Length];
+                disposableWorkArrays = new NDArray[arrays.Length];
                 for (int k = 0; k < arrays.Length; k++)
-                    workArrays[k] = arrays[k].ravel();
+                    disposableWorkArrays[k] = arrays[k].ravel();
+                workArrays = disposableWorkArrays;
                 effectiveAxis = 0;
             }
             else
@@ -94,6 +100,8 @@ namespace NumSharp
                 effectiveAxis = axis.Value;
             }
 
+            try
+            {
             var first = workArrays[0];
             int ndim = first.ndim;
 
@@ -231,13 +239,25 @@ namespace NumSharp
                 if (len == 0) continue; // skip empty inputs along the concat axis
 
                 dstAccessor[effectiveAxis] = new Slice(dstAxisPos, dstAxisPos + len);
-                var dstSlice = dst[dstAccessor];
+                // dstSlice is an owning intermediate (sliced view of dst — a fresh NDArray
+                // wrapper sharing storage). Releasing each iteration's wrapper atomically
+                // keeps N-source loops from queueing N dead wrappers per concatenate call.
+                using var dstSlice = dst[dstAccessor];
                 NpyIter.Copy(dstSlice, src);
 
                 dstAxisPos += len;
             }
 
             return dst;
+            }
+            finally
+            {
+                if (disposableWorkArrays != null)
+                {
+                    for (int k = 0; k < disposableWorkArrays.Length; k++)
+                        disposableWorkArrays[k]?.Dispose();
+                }
+            }
         }
 
         /// <summary>
