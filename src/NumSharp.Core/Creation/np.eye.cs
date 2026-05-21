@@ -62,9 +62,13 @@ namespace NumSharp
             }
 
             // Flat index of element (i, i+k) in row-major (N, cols) layout = i*cols + (i+k).
-            var flat = m.flat;
-            for (int i = rowStart; i < rowEnd; i++)
-                flat.SetAtIndex(one, (long)i * cols + (i + k));
+            // `flat` is an owning view wrapper around `m`'s storage — used only to drive
+            // SetAtIndex over the diagonal, never returned. Release at scope exit.
+            using (var flat = m.flat)
+            {
+                for (int i = rowStart; i < rowEnd; i++)
+                    flat.SetAtIndex(one, (long)i * cols + (i + k));
+            }
 
             return physical == 'F' ? m.copy('F') : m;
         }
