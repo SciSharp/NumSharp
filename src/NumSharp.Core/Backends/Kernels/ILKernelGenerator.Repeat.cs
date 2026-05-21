@@ -26,12 +26,21 @@ using System.Runtime.Intrinsics;
 //   RepeatBroadcastKernel: scalar / size-1 repeats. Tight 3-loop, no count load.
 //   RepeatPerJKernel:      per-j repeat counts. Loads perJCounts[j] each j.
 //
-// Both kernel families specialize the inner copy by chunk size:
-//   1, 2, 4, 8: preload the slab into a typed register once per j, then store
-//   it `cnt` times — saves a load on every k iteration vs. repeated cpblk.
-//   16:         same idea via a Vector128<byte> register.
+// Inner-copy strategy by chunk size:
+//   1, 2, 4, 8:  scalar pre-broadcast → Vector{N}.Create(val) hoisted into a
+//                local once per j, then a three-stage k-loop:
+//                  • SIMD body — Vector{N}.Store writes `lanes` copies per iter
+//                    (lanes = VectorBytes / chunkBytes; N is the startup-baked
+//                    VectorBits → V128/V256/V512).
+//                  • Scalar tail — single-element store for the remainder.
+//                For r ≥ lanes (typical bulk repeats) this dispatches one wide
+//                store per `lanes` k-iterations instead of `lanes` scalar stores.
+//   16:          Vector128<byte> preload + Vector128.Store in the k-loop.
+//                If VectorBits ≥ 256 we additionally pack two copies of the
+//                16-byte slab into a Vector256 via Create(v128, v128) and emit a
+//                wider SIMD body that writes 2 copies per iter.
 //   anything else: cpblk with the size baked in as a constant so the JIT
-//   specializes the memcpy (.NET 7+ optimizes constant-size cpblk).
+//                specializes the memcpy (.NET 7+ optimizes constant-size cpblk).
 //
 // One generated kernel per (chunkBytes, kind) tuple. For typical workloads
 // (axis=last on 15 dtypes -> 5 sizes; a few common shape/axis combos -> a
@@ -145,6 +154,17 @@ namespace NumSharp.Backends.Kernels
             return dm.CreateDelegate<RepeatPerJKernel>();
         }
 
+        // Element type used to broadcast a chunk-sized scalar into a wide vector.
+        // Returns null for chunks that can't be a single primitive lane.
+        private static Type GetBroadcastElemType(int chunkBytes) => chunkBytes switch
+        {
+            1 => typeof(byte),
+            2 => typeof(ushort),
+            4 => typeof(uint),
+            8 => typeof(ulong),
+            _ => null
+        };
+
         // Emits the shared 3-loop body. `emitCountLoad` pushes a `long` onto the
         // stack — the per-j repeat count. Caller controls how that's computed
         // (constant arg for broadcast, indexed load for per-j).
@@ -172,6 +192,19 @@ namespace NumSharp.Backends.Kernels
                 _ => null
             };
 
+            // Wide broadcast vector — covers chunks {1,2,4,8} when SIMD is available,
+            // and chunks=16 when VectorBits >= 256 (pack two copies into V256/V512).
+            Type wideVecElem = GetBroadcastElemType(chunkBytes);
+            bool useWideBroadcast = wideVecElem != null && VectorBits >= 128;
+            LocalBuilder locWideVec = useWideBroadcast
+                ? il.DeclareLocal(VectorMethodCache.V(VectorBits, wideVecElem))
+                : null;
+
+            bool useChunk16Wide = chunkBytes == 16 && VectorBits >= 256;
+            LocalBuilder locWide16 = useChunk16Wide
+                ? il.DeclareLocal(VectorMethodCache.V(VectorBits, typeof(byte)))
+                : null;
+
             // src/dst mutable copies
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Stloc, locSrc);
@@ -186,8 +219,8 @@ namespace NumSharp.Backends.Kernels
             var lblOuterEnd = il.DefineLabel();
             var lblInner = il.DefineLabel();
             var lblInnerEnd = il.DefineLabel();
-            var lblRepeat = il.DefineLabel();
-            var lblRepeatEnd = il.DefineLabel();
+            var lblScalarTail = il.DefineLabel();
+            var lblScalarTailEnd = il.DefineLabel();
 
             // ===== OUTER LOOP =====
             il.MarkLabel(lblOuter);
@@ -217,11 +250,62 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locK);
 
-            // ===== K (REPEAT) LOOP =====
-            il.MarkLabel(lblRepeat);
+            // ===== SIMD-broadcast stage =====
+            // The Vector.Create + SIMD loop are gated by `cnt >= lanes` so workloads
+            // with r < lanes (e.g. r=2 chunk=8 V256 where lanes=4) skip the setup
+            // entirely and fall straight to the scalar tail — no regression vs. a
+            // pure-scalar kernel.
+            if (locWideVec != null)
+            {
+                int lanes = VectorBytes / chunkBytes;
+                var lblSkipSimd = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldloc, locCnt);
+                il.Emit(OpCodes.Ldc_I8, (long)lanes);
+                il.Emit(OpCodes.Blt, lblSkipSimd);
+
+                // locWideVec = Vector{N}.Create(val) — broadcasts the scalar into all lanes.
+                il.Emit(OpCodes.Ldloc, locVal);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, wideVecElem), null);
+                il.Emit(OpCodes.Stloc, locWideVec);
+
+                EmitSimdBroadcastStage(
+                    il, locK, locCnt, locDst, locWideVec,
+                    vecElem: wideVecElem,
+                    lanesPerIter: lanes,
+                    bytesPerIter: VectorBytes);
+
+                il.MarkLabel(lblSkipSimd);
+            }
+            else if (locWide16 != null)
+            {
+                int lanes = VectorBytes / 16;
+                var lblSkipSimd = il.DefineLabel();
+
+                il.Emit(OpCodes.Ldloc, locCnt);
+                il.Emit(OpCodes.Ldc_I8, (long)lanes);
+                il.Emit(OpCodes.Blt, lblSkipSimd);
+
+                // locWide16 = Vector{N}.Create(v128, v128) — pack two copies of the 16-byte slab.
+                il.Emit(OpCodes.Ldloc, locVal);
+                il.Emit(OpCodes.Ldloc, locVal);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.CreateFromHalves(VectorBits, typeof(byte)), null);
+                il.Emit(OpCodes.Stloc, locWide16);
+
+                EmitSimdBroadcastStage(
+                    il, locK, locCnt, locDst, locWide16,
+                    vecElem: typeof(byte),
+                    lanesPerIter: lanes,
+                    bytesPerIter: VectorBytes);
+
+                il.MarkLabel(lblSkipSimd);
+            }
+
+            // ===== SCALAR TAIL — single-chunk-per-iter loop for the leftover =====
+            il.MarkLabel(lblScalarTail);
             il.Emit(OpCodes.Ldloc, locK);
             il.Emit(OpCodes.Ldloc, locCnt);
-            il.Emit(OpCodes.Bge, lblRepeatEnd);
+            il.Emit(OpCodes.Bge, lblScalarTailEnd);
 
             EmitChunkCopy(il, locSrc, locDst, locVal, chunkBytes);
 
@@ -236,8 +320,8 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locK);
-            il.Emit(OpCodes.Br, lblRepeat);
-            il.MarkLabel(lblRepeatEnd);
+            il.Emit(OpCodes.Br, lblScalarTail);
+            il.MarkLabel(lblScalarTailEnd);
 
             // src += chunkBytes
             il.Emit(OpCodes.Ldloc, locSrc);
@@ -262,6 +346,58 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblOuterEnd);
 
             il.Emit(OpCodes.Ret);
+        }
+
+        // Emits the SIMD-broadcast inner loop:
+        //   while (k + lanesPerIter <= cnt) {
+        //       Vector{N}.Store(vec, dst);
+        //       dst += bytesPerIter;
+        //       k   += lanesPerIter;
+        //   }
+        // The vector is already broadcast in `locVec` and the IL uses a single
+        // Vector{N}.Store per iter — falls through to the scalar tail for the
+        // remaining < lanesPerIter k-iterations.
+        private static void EmitSimdBroadcastStage(
+            ILGenerator il,
+            LocalBuilder locK,
+            LocalBuilder locCnt,
+            LocalBuilder locDst,
+            LocalBuilder locVec,
+            Type vecElem,
+            int lanesPerIter,
+            int bytesPerIter)
+        {
+            var lblLoop = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+            il.MarkLabel(lblLoop);
+
+            // if (k + lanes > cnt) break
+            il.Emit(OpCodes.Ldloc, locK);
+            il.Emit(OpCodes.Ldc_I8, (long)lanesPerIter);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldloc, locCnt);
+            il.Emit(OpCodes.Bgt, lblEnd);
+
+            // Vector{N}.Store(locVec, (T*)dst)
+            il.Emit(OpCodes.Ldloc, locVec);
+            il.Emit(OpCodes.Ldloc, locDst);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Store(VectorBits, vecElem), null);
+
+            // dst += bytesPerIter
+            il.Emit(OpCodes.Ldloc, locDst);
+            il.Emit(OpCodes.Ldc_I4, bytesPerIter);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locDst);
+
+            // k += lanesPerIter
+            il.Emit(OpCodes.Ldloc, locK);
+            il.Emit(OpCodes.Ldc_I8, (long)lanesPerIter);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locK);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblEnd);
         }
 
         // Emit `Ldc_I4 chunkBytes; Conv_I` — chunkBytes as a native-int constant.
@@ -298,9 +434,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locVal);
         }
 
-        // Inner-copy body. For small chunks emits a typed store from the hoisted
-        // register; for larger chunks emits `cpblk` with the size baked in as a
-        // constant (so the JIT can specialize the memcpy size).
+        // Inner scalar-tail copy. For small chunks emits a typed store from the
+        // hoisted register; for larger chunks emits `cpblk` with the size baked in
+        // as a constant (so the JIT can specialize the memcpy size).
         private static void EmitChunkCopy(ILGenerator il, LocalBuilder locSrc, LocalBuilder locDst, LocalBuilder locVal, int chunkBytes)
         {
             switch (chunkBytes)
