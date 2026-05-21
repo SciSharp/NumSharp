@@ -15,6 +15,14 @@ namespace NumSharp.Benchmark
         /// <param name="args"></param>
         static void Main(string[] args)
         {
+            // Custom non-BDN harness dispatch (works around BDN 0.12.1's
+            // LangVersion=latest incompatibility under .NET 10 SDKs).
+            if (args?.Length > 0 && args[0] == "concat")
+            {
+                npconcatenate.RunAll(args.Length > 1 ? args[1] : null);
+                return;
+            }
+
             if (args?.Length > 0)
             {
                 for (int i = 0; i < args.Length; i++)
