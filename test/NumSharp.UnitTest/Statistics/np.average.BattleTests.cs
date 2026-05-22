@@ -376,4 +376,184 @@ public class np_average_BattleTests
         var r = np.average(hi);
         At(r, 0).Should().BeApproximately(35.5, 1e-12);
     }
+
+    // ── post-audit additions ────────────────────────────────────────────
+
+    [TestMethod]
+    public void Average_Half_Weighted_PreservesDtype()
+    {
+        // NumPy: np.average(np.array([1,2,3,4], dtype=np.float16), weights=same) -> 2.5 float16
+        var a = np.array(new Half[] { (Half)1, (Half)2, (Half)3, (Half)4 });
+        var w = np.array(new Half[] { (Half)1, (Half)1, (Half)1, (Half)1 });
+        var r = np.average(a, weights: w);
+        r.typecode.Should().Be(NPTypeCode.Half);
+        ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(2.5f, 0.01f);
+    }
+
+    [TestMethod]
+    public void Average_Complex_Weighted_PreservesDtype()
+    {
+        // NumPy: np.average(complex array, weights=complex) -> Complex preserving
+        var a = np.array(new System.Numerics.Complex[] { new(1, 0), new(2, 1), new(3, -1) });
+        var w = np.array(new System.Numerics.Complex[] { new(1, 0), new(1, 0), new(1, 0) });
+        var r = np.average(a, weights: w);
+        r.typecode.Should().Be(NPTypeCode.Complex);
+        var v = r.GetAtIndex<System.Numerics.Complex>(0);
+        v.Real.Should().Be(2.0);
+        v.Imaginary.Should().Be(0.0);
+    }
+
+    [TestMethod]
+    public void Average_Complex_ZeroSumWeights_Throws()
+    {
+        // NumPy: complex zero-sum weights -> ZeroDivisionError
+        var a = np.array(new System.Numerics.Complex[] { new(1, 0), new(2, 0), new(3, 0) });
+        var w = np.array(new System.Numerics.Complex[] { new(1, 0), new(-1, 0), new(0, 0) });
+        Action act = () => np.average(a, weights: w);
+        act.Should().Throw<DivideByZeroException>();
+    }
+
+    [TestMethod]
+    public void Average_Empty1D_Unweighted_ReturnsNaN()
+    {
+        // NumPy: np.average(np.array([])) -> nan (mean returns 0-D scalar, scl=0/1=0)
+        var a = np.array(new double[0]);
+        var r = np.average(a);
+        double.IsNaN(At(r, 0)).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Average_Empty2D_AxisNone_ReturnsNaN()
+    {
+        // NumPy: np.average(np.zeros((0,3))) -> nan
+        var a = np.zeros(new Shape(0, 3));
+        var r = np.average(a);
+        double.IsNaN(At(r, 0)).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Average_Empty2D_Axis0_ReturnsNaNArray()
+    {
+        // NumPy: np.average(np.zeros((0,3)), axis=0) -> [nan, nan, nan]
+        var a = np.zeros(new Shape(0, 3));
+        var r = np.average(a, axis: 0);
+        r.shape.Should().Equal(new long[] { 3 });
+        for (int i = 0; i < 3; i++) double.IsNaN(At(r, i)).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Average_Empty2D_Axis1_RaisesZeroDivision()
+    {
+        // NumPy: np.average(np.zeros((0,3)), axis=1) raises ZeroDivisionError
+        // because avg.size == 0 and scl = a.size / avg.size = 0/0
+        var a = np.zeros(new Shape(0, 3));
+        Action act = () => np.average(a, axis: 1);
+        act.Should().Throw<DivideByZeroException>();
+    }
+
+    [TestMethod]
+    public void Average_BroadcastedView_AxisReductions()
+    {
+        // NumPy: broadcast_to (3,1) -> (3,4) average reductions match expected
+        var b = np.broadcast_to(np.arange(3).reshape(3, 1), new Shape(3, 4));
+        At(np.average(b), 0).Should().Be(1.0);
+        var ax0 = np.average(b, axis: 0);
+        ax0.shape.Should().Equal(new long[] { 4 });
+        for (int i = 0; i < 4; i++) At(ax0, i).Should().Be(1.0);
+        var ax1 = np.average(b, axis: 1);
+        ax1.shape.Should().Equal(new long[] { 3 });
+        for (int i = 0; i < 3; i++) At(ax1, i).Should().Be(i);
+    }
+
+    [TestMethod]
+    public void Average_NewAxis_PreservesSingletonDim()
+    {
+        // NumPy: np.average(a[None,:,:]) handles size-1 inserted axis
+        var a = np.arange(6).reshape(3, 2)[np.newaxis];
+        a.shape.Should().Equal(new long[] { 1, 3, 2 });
+        At(np.average(a), 0).Should().Be(2.5);
+        var ax1 = np.average(a, axis: 1);
+        ax1.shape.Should().Equal(new long[] { 1, 2 });
+        At(ax1, 0).Should().Be(2.0);
+        At(ax1, 1).Should().Be(3.0);
+    }
+
+    [TestMethod]
+    public void Average_SingletonDim_ReductionMatches()
+    {
+        // NumPy: shape (3,1) axis=0 -> [1.], axis=1 -> [0., 1., 2.]
+        var a = np.arange(3).reshape(3, 1).astype(NPTypeCode.Double);
+        var ax0 = np.average(a, axis: 0);
+        ax0.shape.Should().Equal(new long[] { 1 });
+        At(ax0, 0).Should().Be(1.0);
+
+        var ax1 = np.average(a, axis: 1);
+        ax1.shape.Should().Equal(new long[] { 3 });
+        At(ax1, 0).Should().Be(0.0);
+        At(ax1, 1).Should().Be(1.0);
+        At(ax1, 2).Should().Be(2.0);
+    }
+
+    [TestMethod]
+    public void Average_NegativeStrideView()
+    {
+        // NumPy: np.average(np.arange(20).reshape(4,5)[::-1]) -> 9.5 (same as forward)
+        var a = np.arange(20).reshape(4, 5);
+        var rev = a["::-1"];
+        At(np.average(rev), 0).Should().Be(9.5);
+        var ax0 = np.average(rev, axis: 0);
+        ax0.shape.Should().Equal(new long[] { 5 });
+        for (int i = 0; i < 5; i++) At(ax0, i).Should().BeApproximately(7.5 + i, 1e-12);
+    }
+
+    [TestMethod]
+    public void Average_FContiguous_AxisReductions()
+    {
+        // F-contiguous view via transpose-then-transpose-back
+        // F-layout (3,2) reduced along axis=0 should match (3,2) reduced along axis=0
+        var c = np.arange(6).reshape(2, 3).astype(NPTypeCode.Double);  // C-contig (2,3)
+        var f = c.T;  // shape (3,2), F-contiguous (stride[0]==1)
+        f.shape.Should().Equal(new long[] { 3, 2 });
+        var ax0 = np.average(f, axis: 0);
+        ax0.shape.Should().Equal(new long[] { 2 });
+        // f[:,0]=[0,1,2], f[:,1]=[3,4,5] -> means 1, 4
+        At(ax0, 0).Should().Be(1.0);
+        At(ax0, 1).Should().Be(4.0);
+    }
+
+    [TestMethod]
+    public void Average_Returned_FullShape_Unweighted_AxisNone()
+    {
+        // NumPy: returned axis=None unweighted -> avg=scalar, scl=scalar count
+        var data = np.arange(6).reshape(3, 2);
+        var (avg, scl) = np.average_returned(data);
+        avg.shape.Should().Equal(Array.Empty<long>());
+        scl.shape.Should().Equal(Array.Empty<long>());
+        At(avg, 0).Should().Be(2.5);
+        At(scl, 0).Should().Be(6.0);
+    }
+
+    [TestMethod]
+    public void Average_Returned_KeepdimsTrue_AxisNone()
+    {
+        // NumPy: returned, axis=None, keepdims=True -> shapes (1,1) both
+        var data = np.arange(6).reshape(3, 2);
+        var (avg, scl) = np.average_returned(data, axis: (int?)null, keepdims: true);
+        avg.shape.Should().Equal(new long[] { 1, 1 });
+        scl.shape.Should().Equal(new long[] { 1, 1 });
+        At(avg, 0).Should().Be(2.5);
+        At(scl, 0).Should().Be(6.0);
+    }
+
+    [TestMethod]
+    public void Average_Float16Result_FromFloat16Inputs()
+    {
+        // NumPy: float16 + float16 weights -> float16 result
+        var a = np.array(new[] { (Half)1, (Half)2, (Half)3, (Half)4 });
+        var w = np.array(new[] { (Half)1, (Half)2, (Half)3, (Half)4 });
+        var r = np.average(a, weights: w);
+        r.typecode.Should().Be(NPTypeCode.Half);
+        // sum(1*1+2*2+3*3+4*4)/sum(1+2+3+4) = 30/10 = 3.0
+        ((float)r.GetAtIndex<Half>(0)).Should().BeApproximately(3.0f, 0.01f);
+    }
 }
