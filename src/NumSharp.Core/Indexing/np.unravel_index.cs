@@ -50,8 +50,13 @@ namespace NumSharp
             // Dispose below only triggers when astype/ascontiguousarray actually allocated.
             bool ownIdx64 = !ReferenceEquals(idx64, indices);
 
-            // Result NDArrays have the same shape as the input.
-            var resultShape = indices.Shape;
+            // Result NDArrays have the same DIMENSIONS as the input but with fresh
+            // C-contiguous strides. Cloning indices.Shape directly would copy
+            // broadcast / strided / sliced flags that, on read via
+            // Shape.TransformOffset, would collapse the result to the unbroadcast
+            // cell — the kernel writes correct sequential values to raw memory
+            // but the user would see duplicates.
+            var resultShape = new Shape((long[])indices.Shape.dimensions.Clone());
             var result = new NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)
                 result[d] = new NDArray<long>(resultShape);
@@ -169,18 +174,23 @@ namespace NumSharp
             if (shape == null || shape.Length == 0)
                 throw new ArgumentException("shape must contain at least one dimension.", nameof(shape));
 
+            // NumPy parity: do NOT pre-reject zero or negative dims. Empty input
+            // arrays must work against any shape, including (0, 3). Non-empty input
+            // arrays against zero/negative shape are rejected naturally by the
+            // OOB check (val < 0 || val >= unravelSize) inside the kernel — for
+            // shape with zero or negative entries, unravelSize ≤ 0, so every
+            // non-negative index trips the check and we throw the same message
+            // NumPy does: "index N is out of bounds for array with size M".
             long s = 1L;
             for (int d = 0; d < shape.Length; d++)
             {
-                int dim = shape[d];
-                if (dim <= 0)
-                    throw new ArgumentException(
-                        $"shape dimensions must be positive (got dim[{d}] = {dim}); use np.indices for an empty range.",
-                        nameof(shape));
+                long dim = shape[d];
 
-                // Overflow check on accumulated size.
+                // Overflow check on accumulated size — only meaningful for positive
+                // dims (with mixed signs the int64 math is well-defined and the OOB
+                // check downstream catches any inconsistency).
                 long next = unchecked(s * dim);
-                if (dim != 0 && next / dim != s)
+                if (dim != 0 && s != 0 && next / dim != s)
                     throw new ArgumentException(
                         "invalid shape: array size defined by shape is larger than the maximum possible size.",
                         nameof(shape));

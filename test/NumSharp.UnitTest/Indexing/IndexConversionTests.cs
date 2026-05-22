@@ -117,6 +117,40 @@ public class IndexConversionTests
     }
 
     [TestMethod]
+    public void UnravelIndex_Empty_ZeroInShape_AllowedByNumPy()
+    {
+        // NumPy parity: np.unravel_index([], (0, 3)) returns a tuple of empty
+        // int64 arrays. Pre-rejecting zero dims would lock out the empty-input
+        // path that legitimate code (e.g. processing zero-row datasets) needs.
+        var idx = np.array(new int[0]);
+        var res = np.unravel_index(idx, new[] { 0, 3 });
+        res.Length.Should().Be(2);
+        res[0].size.Should().Be(0);
+        res[1].size.Should().Be(0);
+    }
+
+    [TestMethod]
+    public void UnravelIndex_NonEmpty_ZeroInShape_ThrowsOOB()
+    {
+        // With unravelSize == 0, every val ≥ 0 trips the OOB check in the kernel
+        // and we throw "index N is out of bounds for array with size 0" — same
+        // diagnostic NumPy produces.
+        var idx = np.array(new int[] { 0 });
+        var act = () => np.unravel_index(idx, new[] { 0, 3 });
+        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*size 0*");
+    }
+
+    [TestMethod]
+    public void UnravelIndex_NegativeShape_ThrowsOOB()
+    {
+        // NumPy doesn't pre-validate negative dims; the OOB check catches it.
+        // We follow the same approach so users see the same diagnostic.
+        var idx = np.array(new int[] { 0 });
+        var act = () => np.unravel_index(idx, new[] { -1, 3 });
+        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*size -3*");
+    }
+
+    [TestMethod]
     public void UnravelIndex_OOB_PositiveThrows()
     {
         var idx = np.array(new int[] { 50 });
@@ -304,15 +338,65 @@ public class IndexConversionTests
     }
 
     [TestMethod]
-    public void RavelMultiIndex_MismatchedCoordShapes_Throws()
+    public void RavelMultiIndex_NonBroadcastableCoordShapes_Throws()
     {
+        // (2,) and (3,) are not broadcast-compatible — must throw. NumPy raises
+        // ValueError; in NumSharp np.broadcast_arrays throws IncorrectShapeException.
         var coords = new NDArray[]
         {
             np.array(new int[] { 0, 1 }),
-            np.array(new int[] { 0, 1, 2 })   // different length
+            np.array(new int[] { 0, 1, 2 })
         };
         var act = () => np.ravel_multi_index(coords, new[] { 7, 6 });
-        act.Should().Throw<ArgumentException>();
+        act.Should().Throw<Exception>().Where(e => e is IncorrectShapeException || e is ArgumentException);
+    }
+
+    [TestMethod]
+    public void RavelMultiIndex_ScalarAndArray_Broadcasts()
+    {
+        // NumPy: np.ravel_multi_index(([1,2,3], 2), (5,4)) → [6, 10, 14].
+        // The 0-d scalar broadcasts across the 1-D array.
+        var coords = new NDArray[]
+        {
+            np.array(new int[] { 1, 2, 3 }),
+            NDArray.Scalar(2)
+        };
+        var res = np.ravel_multi_index(coords, new[] { 5, 4 });
+        res.shape.Should().Equal(3);
+        AsLongs(res).Should().Equal(6L, 10L, 14L);
+    }
+
+    [TestMethod]
+    public void RavelMultiIndex_CrossAxisBroadcast_2D_Result()
+    {
+        // (2,1) broadcasts with (1,3) → result shape (2,3).
+        var c0 = np.array(new int[,] { { 1 }, { 2 } });
+        var c1 = np.array(new int[,] { { 0, 1, 2 } });
+        var res = np.ravel_multi_index(new NDArray[] { c0, c1 }, new[] { 5, 4 });
+        res.shape.Should().Equal(2, 3);
+        // (1,0)=4, (1,1)=5, (1,2)=6, (2,0)=8, (2,1)=9, (2,2)=10
+        AsLongs(res).Should().Equal(4L, 5L, 6L, 8L, 9L, 10L);
+    }
+
+    [TestMethod]
+    public void RavelMultiIndex_SingletonBroadcast_1D()
+    {
+        // (1,) broadcasts with (3,) → result shape (3,).
+        var c0 = np.array(new int[] { 1 });
+        var c1 = np.array(new int[] { 0, 1, 2 });
+        var res = np.ravel_multi_index(new NDArray[] { c0, c1 }, new[] { 5, 4 });
+        res.shape.Should().Equal(3);
+        AsLongs(res).Should().Equal(4L, 5L, 6L);
+    }
+
+    [TestMethod]
+    public void RavelMultiIndex_AllScalars_Returns0D()
+    {
+        // All 0-d coords → 0-d result.
+        var coords = new NDArray[] { NDArray.Scalar(3), NDArray.Scalar(1) };
+        var res = np.ravel_multi_index(coords, new[] { 5, 4 });
+        res.ndim.Should().Be(0);
+        res.GetAtIndex(0).Should().Be(13L);
     }
 
     [TestMethod]
