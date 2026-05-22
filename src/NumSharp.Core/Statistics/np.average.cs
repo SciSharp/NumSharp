@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -87,6 +88,51 @@ namespace NumSharp
             NDArray wgtCast = wgt.typecode == resultDtype ? wgt : wgt.astype(resultDtype);
             NDArray aCast = a.typecode == resultDtype ? a : a.astype(resultDtype);
 
+            // Fused fast path: NpyIter walks a + w in one pass producing (num, scl)
+            // simultaneously — no intermediate `a*w` allocation and no second pass
+            // for sum(w). Only float32/float64 since they're the dominant result
+            // dtypes after NEP50 promotion (int+int → f8, int+float → f8, etc.).
+            if (resultDtype == NPTypeCode.Double || resultDtype == NPTypeCode.Single)
+            {
+                bool reduceAll = normalizedAxis is null || normalizedAxis.Length == a.ndim;
+                if (reduceAll)
+                {
+                    // Scalar fast path — read raw doubles, no NDArray temps.
+                    if (TryFusedWeightedSumScalar(aCast, wgtCast, resultDtype, out double sumAW, out double sumW))
+                    {
+                        if (sumW == 0.0)
+                            throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+                        NDArray avgScalar = resultDtype == NPTypeCode.Double
+                            ? NDArray.Scalar(sumAW / sumW)
+                            : NDArray.Scalar((float)(sumAW / sumW));
+                        if (keepdims) avgScalar = KeepdimsReshape(avgScalar, a.shape, normalizedAxis);
+                        if (!returned) return (avgScalar, null);
+                        NDArray sclScalar = resultDtype == NPTypeCode.Double
+                            ? NDArray.Scalar(sumW)
+                            : NDArray.Scalar((float)sumW);
+                        if (keepdims) sclScalar = KeepdimsReshape(sclScalar, a.shape, normalizedAxis);
+                        if (!sclScalar.shape.SequenceEqual(avgScalar.shape))
+                            sclScalar = np.broadcast_to(sclScalar, avgScalar).copy();
+                        return (avgScalar, sclScalar);
+                    }
+                }
+                else
+                {
+                    if (TryFusedWeightedSumAxis(aCast, wgtCast, normalizedAxis, resultDtype, out NDArray numFast, out NDArray sclFast))
+                    {
+                        if (HasZero(sclFast))
+                            throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+
+                        NDArray avgFast = numFast / sclFast;
+                        if (keepdims) (avgFast, sclFast) = (KeepdimsReshape(avgFast, a.shape, normalizedAxis), KeepdimsReshape(sclFast, a.shape, normalizedAxis));
+                        if (!returned) return (avgFast, null);
+                        if (!sclFast.shape.SequenceEqual(avgFast.shape))
+                            sclFast = np.broadcast_to(sclFast, avgFast).copy();
+                        return (avgFast, sclFast);
+                    }
+                }
+            }
+
             NDArray scl_ = SumWithAxes(wgtCast, normalizedAxis, resultDtype, keepdims);
 
             if (HasZero(scl_))
@@ -101,6 +147,111 @@ namespace NumSharp
             if (!scl_.shape.SequenceEqual(avg_.shape))
                 scl_ = np.broadcast_to(scl_, avg_).copy();
             return (avg_, scl_);
+        }
+
+        // Reshape (num, scl) from reduced shape back to keepdims shape.
+        // axes==null means "reduce-all" — every dim becomes 1.
+        private static NDArray KeepdimsReshape(NDArray reduced, long[] aShape, int[] axes)
+        {
+            int ndim = aShape.Length;
+            long[] kd = new long[ndim];
+            int outIdx = 0;
+            for (int i = 0; i < ndim; i++)
+            {
+                bool isReduced = axes is null || Array.IndexOf(axes, i) >= 0;
+                if (isReduced) kd[i] = 1L;
+                else kd[i] = reduced.shape[outIdx++];
+            }
+            return reduced.reshape(kd);
+        }
+
+        // Scalar fast path: axis=None (or every axis reduced). Returns the raw
+        // (SumAW, SumW) doubles — caller does the zero check and divide without
+        // any NDArray allocations. SumW being a double lets the zero-sum guard
+        // compare against 0.0 directly instead of going through np.any.
+        private static bool TryFusedWeightedSumScalar(
+            NDArray a, NDArray w, NPTypeCode resultDtype, out double sumAW, out double sumW)
+        {
+            using var iter = NpyIterRef.MultiNew(
+                2,
+                new[] { a, w },
+                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY });
+
+            if (resultDtype == NPTypeCode.Double)
+            {
+                var accum = iter.ExecuteReducing<WeightedSumScalarDoubleKernel, WeightedSumAccumDouble>(default, default);
+                sumAW = accum.SumAW;
+                sumW = accum.SumW;
+            }
+            else
+            {
+                var accum = iter.ExecuteReducing<WeightedSumScalarFloatKernel, WeightedSumAccumFloat>(default, default);
+                sumAW = accum.SumAW;
+                sumW = accum.SumW;
+            }
+            return true;
+        }
+
+        // Axis-specific fused weighted sum. Builds [a, w, num_out, scl_out]
+        // with EXTERNAL_LOOP + REDUCE_OK + op_axes(-1 in reduce dims). The
+        // kernel writes both num and scl in place to pre-zeroed outputs.
+        // BufferedReduce is intentionally avoided — under our 4-operand setup
+        // its iteration model double-counts elements (see NpyAverageKernels.cs).
+        private static bool TryFusedWeightedSumAxis(
+            NDArray a, NDArray w, int[] axes, NPTypeCode resultDtype,
+            out NDArray num, out NDArray scl)
+        {
+            int ndim = a.ndim;
+
+            long[] outShape = new long[ndim - axes.Length];
+            int oi = 0;
+            for (int i = 0; i < ndim; i++)
+                if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.shape[i];
+
+            num = np.zeros(new Shape(outShape), resultDtype);
+            scl = np.zeros(new Shape(outShape), resultDtype);
+
+            // Pre-broadcast w to a's shape so both inputs have identical iter shape.
+            NDArray wBcast = w.shape.SequenceEqual(a.shape) ? w : np.broadcast_to(w, a.Shape);
+
+            int[] aAxes = new int[ndim];
+            int[] wAxes = new int[ndim];
+            int[] numAxes = new int[ndim];
+            int outAxisCounter = 0;
+            for (int i = 0; i < ndim; i++)
+            {
+                aAxes[i] = i;
+                wAxes[i] = i;
+                bool isReduced = Array.IndexOf(axes, i) >= 0;
+                numAxes[i] = isReduced ? -1 : outAxisCounter++;
+            }
+
+            using var iter = NpyIterRef.AdvancedNew(
+                4,
+                new[] { a, wBcast, num, scl },
+                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[]
+                {
+                    NpyIterPerOpFlags.READONLY,
+                    NpyIterPerOpFlags.READONLY,
+                    NpyIterPerOpFlags.READWRITE,
+                    NpyIterPerOpFlags.READWRITE,
+                },
+                null,
+                ndim,
+                new[] { aAxes, wAxes, numAxes, numAxes });
+
+            if (resultDtype == NPTypeCode.Double)
+                iter.ExecuteGeneric<WeightedSumAxisDoubleKernel>(default);
+            else
+                iter.ExecuteGeneric<WeightedSumAxisFloatKernel>(default);
+
+            return true;
         }
 
         private static int[] NormalizeAxisTuple(int[] axis, int ndim)
