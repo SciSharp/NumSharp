@@ -279,6 +279,51 @@ public class SelectionTests
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
+    // ── out= parameter (NumPy parity) ────────────────────────────────
+
+    [TestMethod]
+    public void Take_OutParam_ReturnsSameReference_AndFillsValues()
+    {
+        var a = np.array(new int[] { 10, 20, 30, 40, 50 });
+        var idx = np.array(new int[] { 0, 2, 4 });
+        var outArr = np.zeros<int>(new int[] { 3 });
+        var r = np.take(a, idx, @out: outArr);
+        ReferenceEquals(r, outArr).Should().BeTrue("out= must return the supplied buffer");
+        outArr.ToArray<int>().Should().Equal(10, 30, 50);
+    }
+
+    [TestMethod]
+    public void Take_OutParam_DtypeCast_FillsWithCastedValues()
+    {
+        // NumPy lets out= specify a different dtype; values are unsafe-cast.
+        var a = np.array(new int[] { 10, 20, 30 });
+        var outFloat = np.zeros<double>(new int[] { 2 });
+        np.take(a, np.array(new int[] { 0, 2 }), @out: outFloat);
+        outFloat.ToArray<double>().Should().Equal(10.0, 30.0);
+    }
+
+    [TestMethod]
+    public void Take_OutParam_ShapeMismatch_Throws()
+    {
+        var a = np.array(new int[] { 10, 20, 30 });
+        var outBad = np.zeros<int>(new int[] { 5 });
+        var act = () => np.take(a, np.array(new int[] { 0 }), @out: outBad);
+        act.Should().Throw<ArgumentException>().WithMessage("*output array does not match*");
+    }
+
+    [TestMethod]
+    public void Take_OutParam_2D_PreservesShape()
+    {
+        var a = np.array(new int[] { 10, 20, 30, 40, 50 });
+        var idx = np.array(new int[,] { { 0, 2 }, { 4, 1 } });
+        var outArr = np.zeros<int>(new int[] { 2, 2 });
+        np.take(a, idx, @out: outArr);
+        outArr.GetInt32(0, 0).Should().Be(10);
+        outArr.GetInt32(0, 1).Should().Be(30);
+        outArr.GetInt32(1, 0).Should().Be(50);
+        outArr.GetInt32(1, 1).Should().Be(20);
+    }
+
     // =================================================================
     // np.put — basic, broadcasting, modes
     // =================================================================
@@ -377,6 +422,44 @@ public class SelectionTests
         a.GetInt32(2).Should().Be(2);
     }
 
+    [TestMethod]
+    public void Put_DuplicateIndices_LastWriteWins()
+    {
+        // NumPy parity: when the same flat index appears multiple times in
+        // indices, the value paired with the last occurrence wins.
+        var a = np.array(new int[] { 10, 20, 30 });
+        np.put(a, np.array(new int[] { 0, 0, 0 }), np.array(new int[] { 100, 200, 300 }));
+        a.ToArray<int>().Should().Equal(300, 20, 30);
+    }
+
+    [TestMethod]
+    public void Put_NonContig_Target_PropagatesToParent()
+    {
+        // NumPy WRITEBACKIFCOPY semantics: writes to a non-contig view propagate
+        // back to the parent's storage at the view-translated positions.
+        var a = np.array(new int[,]
+        {
+            { 0,  1,  2,  3,  4 },
+            { 5,  6,  7,  8,  9 },
+            { 10, 11, 12, 13, 14 },
+            { 15, 16, 17, 18, 19 }
+        });
+        var aSlice = a["1::2, :"];   // rows 1, 3 — shape (2, 5), non-contig
+        aSlice.Shape.IsContiguous.Should().BeFalse();
+
+        np.put(aSlice, np.array(new int[] { 0, 5 }), np.array(new int[] { 100, 200 }));
+
+        // View sees the writes
+        aSlice.GetInt32(0, 0).Should().Be(100);
+        aSlice.GetInt32(1, 0).Should().Be(200);
+        // Parent sees them too — rows 1 and 3 of the original
+        a.GetInt32(1, 0).Should().Be(100);
+        a.GetInt32(3, 0).Should().Be(200);
+        // Other parent rows untouched
+        a.GetInt32(0, 0).Should().Be(0);
+        a.GetInt32(2, 0).Should().Be(10);
+    }
+
     // =================================================================
     // np.place — basic, broadcasting, edge cases
     // =================================================================
@@ -447,6 +530,56 @@ public class SelectionTests
         var mask = np.array(new bool[] { true, false });   // wrong size
         var act = () => np.place(a, mask, np.array(new int[] { 99 }));
         act.Should().Throw<ArgumentException>();
+    }
+
+    [TestMethod]
+    public void Place_IntMask_TreatedAsTruthy()
+    {
+        // NumPy coerces int masks to bool via non-zero → True.
+        var a = np.array(new int[] { 10, 20, 30, 40 });
+        var imask = np.array(new int[] { 0, 1, 2, 3 });   // first is False, rest truthy
+        np.place(a, imask, np.array(new int[] { 99 }));
+        a.ToArray<int>().Should().Equal(10, 99, 99, 99);
+    }
+
+    [TestMethod]
+    public void Place_NonContig_Target_PropagatesToParent()
+    {
+        var a = np.array(new int[,]
+        {
+            { 0,  1,  2,  3,  4 },
+            { 5,  6,  7,  8,  9 },
+            { 10, 11, 12, 13, 14 },
+            { 15, 16, 17, 18, 19 }
+        });
+        var aSlice = a["1::2, :"];   // (2, 5) non-contig view of rows 1, 3
+        aSlice.Shape.IsContiguous.Should().BeFalse();
+
+        np.place(aSlice, aSlice > 6, np.array(new int[] { 99 }));
+
+        // After: slice values >6 replaced with 99. Slice = [[5,6,99,99,99],[99,99,99,99,99]].
+        aSlice.GetInt32(0, 0).Should().Be(5);
+        aSlice.GetInt32(0, 1).Should().Be(6);
+        aSlice.GetInt32(0, 2).Should().Be(99);
+        aSlice.GetInt32(1, 0).Should().Be(99);
+        aSlice.GetInt32(1, 4).Should().Be(99);
+        // Parent row 1 = [5, 6, 99, 99, 99]; row 3 = [99, 99, 99, 99, 99].
+        a.GetInt32(1, 0).Should().Be(5);
+        a.GetInt32(1, 2).Should().Be(99);
+        a.GetInt32(3, 0).Should().Be(99);
+        a.GetInt32(3, 4).Should().Be(99);
+        // Untouched rows
+        a.GetInt32(0, 0).Should().Be(0);
+        a.GetInt32(2, 0).Should().Be(10);
+    }
+
+    [TestMethod]
+    public void Place_0d_Arr_WritesScalar()
+    {
+        // NumPy accepts 0-d arrays — np.place(np.array(5), True, [99]) → 99.
+        var a = NDArray.Scalar(5);
+        np.place(a, NDArray.Scalar(true), np.array(new int[] { 99 }));
+        a.GetInt32(0).Should().Be(99);
     }
 
     // =================================================================

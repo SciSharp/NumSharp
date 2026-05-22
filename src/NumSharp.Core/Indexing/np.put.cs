@@ -42,13 +42,23 @@ namespace NumSharp
             if (values.size == 0)
                 throw new ArgumentException("put: values cannot be empty when indices is non-empty.", nameof(values));
 
-            // a must be C-contig for in-place modification at the flat indices we
-            // compute. NumPy resolves this by copying-back-on-non-contig, but our
-            // primary API contract is "in place" — reject non-contig targets here.
+            // NumPy WRITEBACKIFCOPY semantics: when the target is non-contig (e.g. a
+            // strided view), allocate a contig scratch with the view's content, run
+            // the kernel into the scratch, then np.copyto back to the view which
+            // propagates the writes through the original strides to the underlying
+            // storage. Slower than the contig fast path (extra O(view.size) traffic)
+            // but matches NumPy's "writes flow through to parent" semantics.
             if (!a.Shape.IsContiguous)
-                throw new ArgumentException(
-                    "np.put requires a C-contiguous target array. Call np.ascontiguousarray first or assign via flat indexing.",
-                    nameof(a));
+            {
+                var scratch = np.ascontiguousarray(a);
+                try
+                {
+                    PutImpl(scratch, indices, values, modeInt);
+                    np.copyto(a, scratch, casting: "unsafe");
+                }
+                finally { scratch.Dispose(); }
+                return;
+            }
 
             PutImpl(a, indices, values, modeInt);
         }
