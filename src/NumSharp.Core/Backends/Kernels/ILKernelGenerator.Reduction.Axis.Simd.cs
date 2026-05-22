@@ -109,6 +109,50 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — F-contig leading-axis (axis == ndim-1 on F-contig).
+            //
+            // For F-contig input, axis=ndim-1 has the LARGEST stride (analogous
+            // to axis=0 on C-contig). The slab below it (axes 0..ndim-2) is
+            // contiguous (it's just F-contig of size prod(shape[0..ndim-2])).
+            // Same memory access pattern as the C-contig leading-axis case:
+            // walk the axis row-by-row, SIMD-fold each into the output buffer.
+            //
+            // Output is 1D (or higher with F-contig layout — the output buffer
+            // happens to be C-contig but for a 1D output that's identical).
+            // For higher-rank F-contig with non-innermost axis the slab/output
+            // layouts mismatch, so we restrict to the common case.
+            // ─────────────────────────────────────────────────────────────────
+            if (axis == ndim - 1 && ndim == 2 && IsFContig(inputStrides, inputShape, ndim))
+            {
+                long innerSize = inputShape[0]; // the contig slab (axis 0)
+                long outerSize = 1;             // no outer dims
+                ReductionOp innerOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+                DispatchLeading<T>(input, output, outerSize, axisSize, innerSize, innerOp);
+                if (op == ReductionOp.Mean)
+                    DivideArrayByCount<T>(output, innerSize, axisSize);
+                return;
+            }
+
+            // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — F-contig innermost-axis (axis == 0 on F-contig).
+            //
+            // For F-contig axis=0, each output reduces a contiguous run of
+            // axisSize elements (stride 1). Same pattern as C-contig innermost
+            // — route through the same typed kernel. Output is 1D (for 2D
+            // input) or F-contig higher-rank; for 2D input the output is 1D
+            // so layout doesn't matter.
+            // ─────────────────────────────────────────────────────────────────
+            if (axis == 0 && ndim == 2 && IsFContig(inputStrides, inputShape, ndim))
+            {
+                long inner = inputShape[1]; // number of contig rows along axis=1
+                ReductionOp innerOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+                DispatchInnermost<T>(input, output, inner, axisSize, innerOp);
+                if (op == ReductionOp.Mean)
+                    DivideArrayByCount<T>(output, inner, axisSize);
+                return;
+            }
+
             // Check if the reduction axis is contiguous (stride == 1)
             bool axisContiguous = axisStride == 1;
 
@@ -920,6 +964,18 @@ namespace NumSharp.Backends.Kernels
             if (strides[ndim - 1] != 1) return false;
             for (int d = ndim - 2; d >= 0; d--)
                 if (strides[d] != strides[d + 1] * shape[d + 1]) return false;
+            return true;
+        }
+
+        // Detect F-contiguous: stride[0] == 1 and stride[i] == stride[i-1] * shape[i-1]
+        // for all i in [1, ndim-1]. Common case: `.T` on a C-contig 2D array.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool IsFContig(long* strides, long* shape, int ndim)
+        {
+            if (ndim == 0) return true;
+            if (strides[0] != 1) return false;
+            for (int d = 1; d < ndim; d++)
+                if (strides[d] != strides[d - 1] * shape[d - 1]) return false;
             return true;
         }
 
