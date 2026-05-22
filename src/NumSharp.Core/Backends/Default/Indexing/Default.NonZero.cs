@@ -1,180 +1,163 @@
 using System;
-using NumSharp.Generic;
 using System.Collections.Generic;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
-using NumSharp.Backends.Unmanaged;
+using NumSharp.Generic;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        private static NDArray<long>[] NonZeroDispatch<T>(NDArray nd) where T : unmanaged
-            => nonzeros<T>(nd.MakeGeneric<T>());
-
         private static long CountNonZeroDispatch<T>(NDArray nd) where T : unmanaged
             => count_nonzero<T>(nd.MakeGeneric<T>());
 
         private static void CountNonZeroAxisDispatch<T>(NDArray nd, NDArray result, int axis) where T : unmanaged
             => count_nonzero_axis<T>(nd.MakeGeneric<T>(), result, axis);
 
-        public override NDArray<long>[] NonZero(NDArray nd)
-        {
-            return NpFunc.Invoke(nd.typecode, NonZeroDispatch<int>, nd);
-        }
-
         /// <summary>
-        /// Generic implementation of nonzero.
+        ///     <c>np.nonzero</c> — returns a tuple of <c>ndim</c> int64 arrays of length
+        ///     <c>N</c>, containing the per-dim coordinates of non-zero elements in C-order.
         ///
-        /// Routing:
-        ///   * Empty → tuple of empty index arrays (one per dimension).
-        ///   * Contiguous + <c>T=bool</c> → IL-emitted SIMD path:
-        ///     1. <c>IsAllZeroBoolKernel</c> prescan (closes the NumPy all-false short-circuit gap).
-        ///     2. <c>NonZeroFlatBoolKernel</c> bit-scan that writes flat indices into a stackalloc/heap buffer.
-        ///     3. Single flat→coord conversion pass at the end.
-        ///   * Contiguous other dtypes → existing <see cref="ILKernelGenerator.NonZeroSimdHelper{T}"/>.
-        ///   * Non-contiguous (sliced/transposed/broadcast) → strided coordinate-based helper.
+        ///     <para>
+        ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
+        ///     (<see cref="ILKernelGenerator.GetArgwhereCountKernel"/>,
+        ///     <see cref="ILKernelGenerator.GetArgwhereFlatKernel"/>,
+        ///     <see cref="ILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
+        ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
+        ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
+        ///     cache and invokes them. Every loop (SIMD popcount, SIMD bit-scan, coord
+        ///     expand + carry chain) lives inside the emitted IL.
+        ///     </para>
         ///
-        /// Why the bool path matters: the most common nonzero caller is <c>np.where(condition)</c>,
-        /// which always coerces to bool. The IL kernels are emitted once on first use and cached
-        /// for the process lifetime via <see cref="ILKernelGenerator.GetIsAllZeroBoolKernel"/>
-        /// and <see cref="ILKernelGenerator.GetNonZeroFlatBoolKernel"/>.
+        ///     <para>
+        ///     <b>Two-pass pre-size-then-fill:</b> the SIMD popcount sizes the result
+        ///     exactly, the SIMD bit-scan writes flat indices either straight into the
+        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL per-dim
+        ///     expand kernel walks once to emit the per-axis columns. Mirrors the design
+        ///     of <see cref="DefaultEngine.Argwhere"/>.
+        ///     </para>
+        ///
+        ///     <para>
+        ///     Routing:
+        ///     <list type="bullet">
+        ///       <item>0-d → promote via <c>atleast_1d</c>, recurse
+        ///             (truthy→<c>([0],)</c>, falsy→<c>([],)</c>).</item>
+        ///       <item>size == 0 → tuple of <c>ndim</c> empty int64 arrays.</item>
+        ///       <item>Contiguous → IL count + IL flat-scan + (ndim==1 ? direct write : IL per-dim expand).</item>
+        ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
+        ///             same path as contig.</item>
+        ///     </list>
+        ///     </para>
         /// </summary>
-        private static unsafe NDArray<long>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
+        public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
-            // Ensure at least 1D (NumPy behavior)
-            x = np.atleast_1d(x).MakeGeneric<T>();
-            var shape = x.Shape;
-            var size = x.size;
-            var ndim = x.ndim;
+            // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
+            // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
+            // historical implementation has always produced. Preserve that semantic
+            // (otherwise this becomes a breaking-change PR for downstream callers).
+            if (nd.ndim == 0)
+                return NonZero(np.atleast_1d(nd));
 
-            // Handle empty arrays: return tuple of empty arrays (one per dimension)
-            // NumPy: np.nonzero(np.array([])) -> (array([], dtype=int64),)
+            int ndim = nd.ndim;
+            long size = nd.size;
+
+            // Empty input → tuple of `ndim` empty int64 arrays.
+            // Covers shape (0,), (0, 3), (2, 0, 4), ….
             if (size == 0)
                 return MakeEmptyNonZeroResult(ndim);
 
-            if (shape.IsContiguous)
+            // Materialize non-contig to C-contig. For contig inputs we read from `nd`
+            // directly (no copy); the local `materialized` is only set on the non-contig
+            // branch and disposed in `finally` — see the ARC note at the bottom of the
+            // method for why the explicit Dispose matters here.
+            NDArray materialized = null;
+            NDArray source = nd;
+            if (!nd.Shape.IsContiguous)
             {
-                T* basePtr = (T*)x.Address + shape.offset;
+                materialized = np.ascontiguousarray(nd);
+                source = materialized;
+            }
+            var sourceShape = source.Shape;
 
-                // Bool-specific IL-emitted fast path. Coerces bool* to byte* for SIMD treatment
-                // since .NET's Vector*<bool> isn't supported but Vector*<byte> is.
-                if (typeof(T) == typeof(bool))
+            byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
+
+            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
+            var flatKernel = ILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            if (countKernel == null || flatKernel == null)
+                throw new NotSupportedException($"np.nonzero: no IL kernel available for {nd.dtype.Name}");
+
+            try
+            {
+                long count = countKernel(basePtr, size);
+                if (count == 0)
+                    return MakeEmptyNonZeroResult(ndim);
+
+                // ndim == 1: flat index IS the coord — scan straight into result[0].
+                if (ndim == 1)
                 {
-                    byte* maskPtr = (byte*)basePtr;
-
-                    // Stage 1: IL-emitted any-true prescan — short-circuits when the entire mask
-                    // is zero. NumPy's nonzero does the same to keep all-false 10M elements at
-                    // sub-millisecond cost. Returns null when SIMD is unavailable (VectorBits==0),
-                    // in which case the bit-scan kernel below will simply walk byte-by-byte.
-                    var prescan = ILKernelGenerator.GetIsAllZeroBoolKernel();
-                    if (prescan != null && prescan(maskPtr, size))
-                        return MakeEmptyNonZeroResult(ndim);
-
-                    // Stages 2+3: count → exact-size alloc → bit-scan write.
-                    //
-                    // The two-pass approach (count first, then collect) matches NumPy. It costs
-                    // one extra SIMD scan of the mask, but lets us:
-                    //   * Skip the buffer entirely if count == 0 (rare after a successful prescan,
-                    //     but possible if SIMD is unavailable).
-                    //   * Allocate result NDArrays of exactly `count` longs — no max-size waste
-                    //     (10M bool * 8 = 80MB) for dense masks.
-                    var countKernel = ILKernelGenerator.GetNonZeroCountBoolKernel();
-                    var scanKernel = ILKernelGenerator.GetNonZeroFlatBoolKernel();
-                    if (countKernel != null && scanKernel != null)
-                    {
-                        long count = countKernel(maskPtr, size);
-
-                        if (count == 0)
-                            return MakeEmptyNonZeroResult(ndim);
-
-                        // 1D fast path: write flat indices directly into result[0] — no
-                        // intermediate buffer, no flat→coord conversion.
-                        if (ndim == 1)
-                        {
-                            var result = new NDArray<long>[1] { new NDArray<long>(count) };
-                            long written;
-                            long* dst = (long*)result[0].Address;
-                            written = scanKernel(maskPtr, dst, size);
-                            // Sanity: written should equal count. If not (corrupt mask between
-                            // calls in a multithreaded scenario), the result NDArray will have
-                            // garbage past `written`. We trust count for sizing.
-                            return result;
-                        }
-
-                        // Multi-dim: write to a temp buffer of exact size `count`, then convert
-                        // to per-dim coordinates.
-                        var buffer = new long[count];
-                        fixed (long* bufPtr = buffer)
-                            scanKernel(maskPtr, bufPtr, size);
-
-                        return BuildCoordinatesFromFlat(buffer, count, shape.dimensions);
-                    }
-
-                    // Fallback: no SIMD available — generic helper handles bool via its scalar
-                    // branch (EqualityComparer<bool>.Default).
-                    var flatBoolFb = new System.Collections.Generic.List<long>(EstimateNonZeroCapacity(size));
-                    ILKernelGenerator.NonZeroSimdHelper(basePtr, size, flatBoolFb);
-                    return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flatBoolFb, shape.dimensions);
+                    var result1d = new NDArray<long>[1] { new NDArray<long>(count) };
+                    flatKernel(basePtr, size, (long*)result1d[0].Address);
+                    return result1d;
                 }
 
-                // Non-bool numeric dtypes: existing generic SIMD helper (V256/V128/scalar internally).
-                // Avoids the per-non-zero long[ndim] allocation that the strided helper performs.
-                var flat = new System.Collections.Generic.List<long>(EstimateNonZeroCapacity(size));
-                ILKernelGenerator.NonZeroSimdHelper(basePtr, size, flat);
-                return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flat, shape.dimensions);
-            }
-
-            // Non-contiguous: strided coordinate-based helper.
-            return ILKernelGenerator.FindNonZeroStridedHelper((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
-        }
-
-        /// <summary>
-        /// Build per-dimension coordinate <see cref="NDArray{Int64}"/> outputs from a flat-index
-        /// buffer of length <paramref name="count"/>. Single pass with precomputed dim strides
-        /// (no allocation per element).
-        /// </summary>
-        private static unsafe NDArray<long>[] BuildCoordinatesFromFlat(long[] flatBuffer, long count, long[] shape)
-        {
-            int ndim = shape.Length;
-
-            var result = new NDArray<long>[ndim];
-            for (int d = 0; d < ndim; d++)
-                result[d] = new NDArray<long>(count);
-
-            // count is bounded by size, which fits in long. The List path used (int)count safely
-            // because List<T> capacity is int — here we know count <= size <= long.MaxValue.
-            if (count == 0)
-                return result;
-
-            var addresses = new long*[ndim];
-            for (int d = 0; d < ndim; d++)
-                addresses[d] = (long*)result[d].Address;
-
-            // Pre-compute dim-product strides (row-major / C-order).
-            var dimStrides = new long[ndim];
-            dimStrides[ndim - 1] = 1;
-            for (int d = ndim - 2; d >= 0; d--)
-                dimStrides[d] = dimStrides[d + 1] * shape[d + 1];
-
-            for (long i = 0; i < count; i++)
-            {
-                long flat = flatBuffer[i];
+                // ndim > 1: scan into a temp flat buffer then expand into ndim per-dim columns.
+                var perDim = new NDArray<long>[ndim];
                 for (int d = 0; d < ndim; d++)
+                    perDim[d] = new NDArray<long>(count);
+
+                // Pack the per-dim column pointers into a stack-local long** buffer the
+                // kernel can index into. .Address returns the raw unmanaged storage pointer
+                // for each NDArray<long> — no pinning needed.
+                long** colPtrs = stackalloc long*[ndim];
+                for (int d = 0; d < ndim; d++)
+                    colPtrs[d] = (long*)perDim[d].Address;
+
+                var flatBuffer = new long[count];
+                fixed (long* flatPtr = flatBuffer)
+                fixed (long* dimsPtr = sourceShape.dimensions)
                 {
-                    addresses[d][i] = flat / dimStrides[d];
-                    flat %= dimStrides[d];
+                    flatKernel(basePtr, size, flatPtr);
+
+                    // Pre-compute dim strides for the expand kernel:
+                    //   dimStrides[ndim-1] = 1
+                    //   dimStrides[d]      = dimStrides[d+1] * dims[d+1]
+                    // Cheap O(ndim) prologue. Mirrors the argwhere expand-kernel prologue.
+                    Span<long> dimStrides = stackalloc long[ndim];
+                    dimStrides[ndim - 1] = 1;
+                    for (int d = ndim - 2; d >= 0; d--)
+                        dimStrides[d] = dimStrides[d + 1] * sourceShape.dimensions[d + 1];
+
+                    fixed (long* dimStridesPtr = dimStrides)
+                    {
+                        var perDimKernel = ILKernelGenerator.GetNonZeroPerDimKernel();
+                        if (perDimKernel == null)
+                            throw new NotSupportedException("np.nonzero: per-dim IL kernel unavailable");
+
+                        perDimKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, colPtrs);
+                    }
                 }
+
+                return perDim;
             }
-
-            return result;
+            finally
+            {
+                // ARC: source.Storage.Address is an unmanaged pointer that does NOT
+                // keep `materialized` GC-alive. Under repeated nonzero() calls on a
+                // non-contig input, the JIT can decide `materialized` is dead after
+                // basePtr is computed — then the result-NDArray allocations below
+                // trigger GC, the freshly materialized array's UnmanagedStorage gets
+                // its refcount finalized to zero, and the buffer behind basePtr is
+                // freed mid-IL-scan (the bench harness reproduces this as a Release-
+                // mode AccessViolationException in IL_ArgwhereFlat_*).
+                //
+                // Explicit Dispose() is the established ARC-release pattern in this
+                // codebase (see commits 392529f2, 294d4329) — it forces the JIT to
+                // keep `materialized` rooted until the call site here. For the contig
+                // fast path materialized is null and Dispose is skipped.
+                materialized?.Dispose();
+            }
         }
-
-        // List<T> capacity is int-limited by the BCL. For very large arrays, start with a
-        // reasonable capacity and let it grow rather than pre-sizing to int.MaxValue.
-        private static int EstimateNonZeroCapacity(long size)
-            => size <= int.MaxValue ? Math.Max(16, (int)(size / 4)) : 1 << 20;
 
         private static NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {

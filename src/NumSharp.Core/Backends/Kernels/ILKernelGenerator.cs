@@ -121,8 +121,9 @@ using NumSharp.Utilities;
 //     - SIMD helpers called DIRECTLY by other NumSharp code (not just via kernels):
 //       * All/Any with early-exit optimization
 //       * ArgMax/ArgMin with SIMD two-pass (find value, then find index)
-//       * NonZero for finding non-zero indices
 //       * Boolean masking: CountTrue, CopyMaskedElements
+//   (np.nonzero / np.argwhere live in ILKernelGenerator.Argwhere.cs +
+//    ILKernelGenerator.NonZero.cs as per-dtype IL kernels.)
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Kernels called by DefaultEngine; helpers called directly by np.all/any/nonzero/masking
 //   KEY MEMBERS:
@@ -130,7 +131,6 @@ using NumSharp.Utilities;
 //     - GetTypedElementReductionKernel<T>()
 //     - AllSimdHelper<T>(), AnySimdHelper<T>() - early-exit boolean reductions
 //     - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - index-tracking reductions
-//     - NonZeroSimdHelper<T>(), ConvertFlatIndicesToCoordinates()
 //     - CountTrueSimdHelper(), CopyMaskedElementsHelper<T>()
 //     - EmitTreeReduction(), EmitVectorHorizontalReduction()
 //
@@ -229,8 +229,9 @@ using NumSharp.Utilities;
 //     - SIMD helpers called DIRECTLY by other NumSharp code (not just via kernels):
 //       * All/Any with early-exit optimization
 //       * ArgMax/ArgMin with SIMD two-pass (find value, then find index)
-//       * NonZero for finding non-zero indices
 //       * Boolean masking: CountTrue, CopyMaskedElements
+//   (np.nonzero / np.argwhere live in ILKernelGenerator.Argwhere.cs +
+//    ILKernelGenerator.NonZero.cs as per-dtype IL kernels.)
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Kernels called by DefaultEngine; helpers called directly by np.all/any/nonzero/masking
 //   KEY MEMBERS:
@@ -238,7 +239,6 @@ using NumSharp.Utilities;
 //     - GetTypedElementReductionKernel<T>(), ClearReduction()
 //     - AllSimdHelper<T>(), AnySimdHelper<T>() - early-exit boolean reductions
 //     - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - index-tracking reductions
-//     - NonZeroSimdHelper<T>(), ConvertFlatIndicesToCoordinates()
 //     - CountTrueSimdHelper(), CopyMaskedElementsHelper<T>()
 //     - EmitTreeReduction(), EmitVectorHorizontalReduction()
 //
