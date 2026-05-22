@@ -91,32 +91,46 @@ namespace NumSharp
             ValidateOrder(order, nameof(order));
 
             int ndim = multi_index.Length;
-            var refShape = multi_index[0].Shape;
 
-            // Ensure all coord arrays match the reference shape — NumPy raises if they don't.
-            for (int d = 1; d < ndim; d++)
-            {
-                if (multi_index[d].Shape != refShape)
-                    throw new ArgumentException(
-                        $"multi_index[{d}] shape {multi_index[d].Shape} does not match multi_index[0] shape {refShape}.",
-                        nameof(multi_index));
-            }
+            // NumPy broadcasts the coord arrays against each other before folding —
+            // e.g. (np.array([1,2,3]), np.array(2)) is legal and the result has the
+            // broadcast shape. Use the existing np.broadcast_arrays which throws a
+            // ValueError-equivalent on incompatible shapes (matches NumPy's
+            // "operands could not be broadcast together" diagnostic). For the
+            // common case of all-same-shape coords this is a no-op view.
+            var broadcasted = np.broadcast_arrays(multi_index);
+            var refShape = broadcasted[0].Shape;
 
-            long count = multi_index[0].size;
-            var result = new NDArray<long>(refShape);
+            long count = broadcasted[0].size;
+
+            // CRITICAL: construct the result with fresh C-contiguous strides built
+            // from the broadcast dimensions alone — using `refShape` directly would
+            // inherit the broadcast view's stride=0 axes, and subsequent reads via
+            // NDArray<T>.GetAtIndex (which translates through Shape.TransformOffset)
+            // would collapse to the unbroadcast cell, returning duplicated values
+            // even though the kernel wrote the correct sequence to raw memory.
+            var resultShape = new Shape((long[])refShape.dimensions.Clone());
+            var result = new NDArray<long>(resultShape);
 
             if (count == 0)
                 return result;
 
-            // Cast each coord array to contig int64. Track which ones we allocated so we
-            // can dispose them after the kernel call (ARC).
+            // Cast each broadcast result to contig int64. The broadcast views above
+            // are non-contig stride-0 layouts, so the IsContiguous gate falls
+            // through to ascontiguousarray which materialises the proper buffer for
+            // the IL kernel to walk linearly.
+            //
+            // ARC: track which entries we allocated so we can Dispose them in the
+            // finally block — the materialised copies own their storage and must be
+            // explicitly released (see commits 392529f2 / 294d4329 / 4ad62bb3 for
+            // the established pattern).
             var casts = new NDArray[ndim];
             var ownCast = new bool[ndim];
             try
             {
                 for (int d = 0; d < ndim; d++)
                 {
-                    var src = multi_index[d];
+                    var src = broadcasted[d];
                     NDArray c;
                     if (src.GetTypeCode == NPTypeCode.Int64 && src.Shape.IsContiguous)
                     {
