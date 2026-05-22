@@ -15,6 +15,13 @@ namespace NumSharp
         ///     Axis along which to take. <c>null</c> (default) flattens <paramref name="a"/>
         ///     and treats <paramref name="indices"/> as flat indices.
         /// </param>
+        /// <param name="out">
+        ///     Optional destination array. When supplied, its shape must match the
+        ///     natural take output; values are cast to <paramref name="out"/>'s dtype
+        ///     via <see cref="np.copyto"/> with unsafe casting and the method returns
+        ///     <paramref name="out"/> itself. When <c>null</c> (default), a fresh
+        ///     array is allocated with <paramref name="a"/>'s dtype.
+        /// </param>
         /// <param name="mode">
         ///     Boundary mode: <c>"raise"</c> (default — throw on OOB), <c>"wrap"</c>
         ///     (modulo with sign correction), or <c>"clip"</c> (saturate).
@@ -25,10 +32,11 @@ namespace NumSharp
         ///       <item><c>axis=None</c>: same as <paramref name="indices"/>.</item>
         ///       <item><c>axis=k</c>: <c>a.shape[:k] + indices.shape + a.shape[k+1:]</c>.</item>
         ///     </list>
-        ///     Dtype matches <paramref name="a"/>.
+        ///     Dtype matches <paramref name="a"/> (or <paramref name="out"/>'s dtype
+        ///     when <paramref name="out"/> is supplied).
         /// </returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take.html</remarks>
-        public static NDArray take(NDArray a, NDArray indices, int? axis = null, string mode = "raise")
+        public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
@@ -37,34 +45,49 @@ namespace NumSharp
 
             // 0-d source — treat as 1-element 1-D for the gather. Output shape =
             // indices.shape regardless of axis (NumPy parity).
+            NDArray result;
             if (a.ndim == 0)
             {
                 var flat0d = a.reshape(new Shape(1));
-                return TakeFlat(flat0d, indices, modeInt);
+                result = TakeFlat(flat0d, indices, modeInt);
+            }
+            else if (axis == null)
+            {
+                result = TakeFlat(a, indices, modeInt);
+            }
+            else
+            {
+                int ax = axis.Value;
+                if (ax < 0) ax += a.ndim;
+                if (ax < 0 || ax >= a.ndim)
+                    throw new ArgumentOutOfRangeException(nameof(axis),
+                        $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
+                result = TakeAxis(a, indices, ax, modeInt);
             }
 
-            // axis=None ⇒ flat take from the C-order flattening of a.
-            if (axis == null)
-                return TakeFlat(a, indices, modeInt);
+            // out= dispatch: validate shape, then copyto with unsafe casting (matches
+            // NumPy's writeback-if-copy behaviour for dtype mismatches).
+            if (@out is null)
+                return result;
 
-            int ax = axis.Value;
-            if (ax < 0) ax += a.ndim;
-            if (ax < 0 || ax >= a.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
+            if (!@out.Shape.Equals(result.Shape))
+                throw new ArgumentException(
+                    $"output array does not match result of ndarray.take: expected shape {result.Shape}, got {@out.Shape}",
+                    nameof(@out));
 
-            return TakeAxis(a, indices, ax, modeInt);
+            np.copyto(@out, result, casting: "unsafe");
+            return @out;
         }
 
         /// <summary>
         ///     Scalar convenience overload — take a single element by flat index.
         /// </summary>
-        public static NDArray take(NDArray a, long index, int? axis = null, string mode = "raise")
+        public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
             // logic emits a 0-d result (NumPy semantic for scalar input).
             var idxArr = NDArray.Scalar(index);
-            return take(a, idxArr, axis, mode);
+            return take(a, idxArr, axis, @out, mode);
         }
 
         private static unsafe NDArray TakeFlat(NDArray a, NDArray indices, int mode)

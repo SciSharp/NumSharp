@@ -34,14 +34,25 @@ namespace NumSharp
                     $"place: mask and data must be the same size (mask.size={mask.size}, arr.size={arr.size}).",
                     nameof(mask));
 
-            if (!arr.Shape.IsContiguous)
-                throw new ArgumentException(
-                    "np.place requires a C-contiguous target array. Call np.ascontiguousarray first.",
-                    nameof(arr));
-
             // Empty arr ⇒ empty mask ⇒ no-op.
             if (arr.size == 0)
                 return;
+
+            // NumPy WRITEBACKIFCOPY semantics for non-contig views — see np.put for
+            // the same pattern. ascontiguousarray clones the view into a contig
+            // scratch; the kernel writes into the scratch; np.copyto pushes the
+            // changes back through the view's strides to the parent storage.
+            if (!arr.Shape.IsContiguous)
+            {
+                var scratch = np.ascontiguousarray(arr);
+                try
+                {
+                    place(scratch, mask, vals);
+                    np.copyto(arr, scratch, casting: "unsafe");
+                }
+                finally { scratch.Dispose(); }
+                return;
+            }
 
             // Cast mask to contig bool; cast vals to contig arr.dtype.
             NDArray maskCast;
