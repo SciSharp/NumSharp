@@ -7,9 +7,10 @@ using NumSharp;
 namespace NumSharp.UnitTest.Indexing;
 
 /// <summary>
-/// Tests for the np.* selection family: <c>take</c>, <c>put</c>, <c>place</c>.
-/// All three are IL-kernel-backed and dtype-agnostic via byte-level
-/// <c>cpblk</c>. Test buckets:
+/// Tests for the np.* selection family: <c>take</c>, <c>put</c>, <c>place</c>,
+/// <c>extract</c>, <c>compress</c>. The first three are IL-kernel-backed and
+/// dtype-agnostic via byte-level <c>cpblk</c>; <c>extract</c> and
+/// <c>compress</c> compose <c>flatnonzero</c> + <c>take</c>. Test buckets:
 /// <list type="bullet">
 ///   <item>Per-dtype coverage on all 15 supported types (one round-trip).</item>
 ///   <item>Axis variations for <c>take</c> (None / 0 / 1 / -1 / -2).</item>
@@ -18,6 +19,8 @@ namespace NumSharp.UnitTest.Indexing;
 ///   <item>OOB raise diagnostics matching NumPy's "out of bounds" messages.</item>
 ///   <item>Cycling: put values shorter than indices, place vals shorter than mask trues.</item>
 ///   <item>Round-trip consistency: take ∘ put should restore original at indexed positions.</item>
+///   <item>extract: bool/int/float condition, multi-dim ravel, size mismatch.</item>
+///   <item>compress: axis None/0/1/-1, 1-D validation, truncation, out= dispatch.</item>
 /// </list>
 /// </summary>
 [TestClass]
@@ -618,5 +621,369 @@ public class SelectionTests
 
         for (long i = 0; i < m; i++)
             r.GetInt32(i).Should().Be(data[indices[i]]);
+    }
+
+    // =================================================================
+    // np.extract — composes flatnonzero + take(axis=None)
+    // =================================================================
+
+    [TestMethod]
+    public void Extract_Basic_2DBoolCondition()
+    {
+        // Doc example: arr.ravel()[condition.ravel()]. np.arange defaults to int64.
+        var arr = np.arange(12).reshape(3, 4);
+        var cond = (arr % 3) == 0;
+        var r = np.extract(cond, arr);
+        r.Shape.Should().Be(new Shape(4));
+        r.ToArray<long>().Should().Equal(0L, 3L, 6L, 9L);
+    }
+
+    [TestMethod]
+    public void Extract_1DCondAgainst2DArr_Ravels()
+    {
+        var arr = np.arange(12).reshape(3, 4);
+        var cond = np.array(new bool[] { false, true, false, true, true, false });
+        var r = np.extract(cond, arr);
+        // ravel(arr) = [0..11]; True at idx 1,3,4 → [1, 3, 4]
+        r.ToArray<long>().Should().Equal(1L, 3L, 4L);
+    }
+
+    [TestMethod]
+    public void Extract_ShorterCond_TruncatesByAlignment()
+    {
+        var cond = np.array(new bool[] { true, false, true });
+        var arr = np.arange(10);
+        var r = np.extract(cond, arr);
+        r.ToArray<long>().Should().Equal(0L, 2L);
+    }
+
+    [TestMethod]
+    public void Extract_0DSource()
+    {
+        var r = np.extract(np.array(new bool[] { true }), NDArray.Scalar(7));
+        r.Shape.Should().Be(new Shape(1));
+        r.GetInt32(0).Should().Be(7);
+    }
+
+    [TestMethod]
+    public void Extract_AllFalse_EmptyResult()
+    {
+        var r = np.extract(np.array(new bool[] { false, false, false, false, false }), np.arange(5));
+        r.size.Should().Be(0);
+        r.ndim.Should().Be(1);
+    }
+
+    [TestMethod]
+    public void Extract_IntCondition_TreatedAsNonzero()
+    {
+        // Negative & nonzero ints both count as True.
+        var cond = np.array(new int[] { 1, 0, -3, 0, 5 });
+        var r = np.extract(cond, np.arange(5));
+        r.ToArray<long>().Should().Equal(0L, 2L, 4L);
+    }
+
+    [TestMethod]
+    public void Extract_FloatCondition_NonzeroIsTrue()
+    {
+        var cond = np.array(new double[] { 0.0, 1.5, 0.0, 0.5, 0.0 });
+        var r = np.extract(cond, np.arange(5));
+        r.ToArray<long>().Should().Equal(1L, 3L);
+    }
+
+    [TestMethod]
+    public void Extract_2DCondAnd2DArr_RavelsBoth()
+    {
+        var cond = np.array(new bool[,] { { true, false }, { true, true } });
+        var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+        var r = np.extract(cond, arr);
+        r.ndim.Should().Be(1);
+        r.ToArray<int>().Should().Equal(1, 3, 4);
+    }
+
+    [TestMethod]
+    public void Extract_EmptyCond_EmptyResult()
+    {
+        var r = np.extract(np.array(new bool[] { }), np.arange(5));
+        r.size.Should().Be(0);
+        r.ndim.Should().Be(1);
+    }
+
+    [TestMethod]
+    public void Extract_LongerCondWithOOBTrue_Raises()
+    {
+        // Cond size 20 but arr size 5; True at idx 15 → OOB.
+        var bigCond = new bool[20];
+        bigCond[0] = true;
+        bigCond[15] = true;
+        var action = () => np.extract(np.array(bigCond), np.arange(5));
+        action.Should().Throw<Exception>()
+            .Where(e => e is IndexOutOfRangeException || e is ArgumentOutOfRangeException);
+    }
+
+    [TestMethod]
+    public void Extract_LongerCondAllTruesInRange_OK()
+    {
+        // Cond longer than arr but all True positions are < arr.size → no error.
+        var cond = new bool[10];
+        cond[0] = true; cond[2] = true;
+        var r = np.extract(np.array(cond), np.arange(5));
+        r.ToArray<long>().Should().Equal(0L, 2L);
+    }
+
+    [TestMethod]
+    public void Extract_NonContigSource_View()
+    {
+        var src = np.arange(20).reshape(4, 5);
+        var view = src["::2, ::2"]; // shape (2, 3), non-contig
+        var cond = np.array(new bool[] { true, false, true, false, true, true });
+        var r = np.extract(cond, view);
+        // ravel(view) = [0, 2, 4, 10, 12, 14]; trues at 0,2,4,5 → [0, 4, 12, 14]
+        r.ToArray<long>().Should().Equal(0L, 4L, 12L, 14L);
+    }
+
+    [TestMethod]
+    public void Extract_DtypePreservation_Float()
+    {
+        var r = np.extract(np.array(new bool[] { true, false }), np.array(new double[] { 1.5, 2.5 }));
+        r.dtype.Should().Be(typeof(double));
+        r.GetDouble(0).Should().Be(1.5);
+    }
+
+    [TestMethod]
+    public void Extract_AllDtypes_Smoke()
+    {
+        // One round-trip on each of the 15 dtypes; relies on take's dtype-agnostic kernel.
+        var cond = np.array(new bool[] { true, false, true });
+
+        np.extract(cond, np.array(new bool[] { true, false, true })).ToArray<bool>().Should().Equal(true, true);
+        np.extract(cond, np.array(new byte[] { 1, 2, 3 })).ToArray<byte>().Should().Equal((byte)1, (byte)3);
+        np.extract(cond, np.array(new sbyte[] { -1, 2, -3 })).ToArray<sbyte>().Should().Equal((sbyte)(-1), (sbyte)(-3));
+        np.extract(cond, np.array(new short[] { 10, 20, 30 })).ToArray<short>().Should().Equal((short)10, (short)30);
+        np.extract(cond, np.array(new ushort[] { 10, 20, 30 })).ToArray<ushort>().Should().Equal((ushort)10, (ushort)30);
+        np.extract(cond, np.array(new int[] { 100, 200, 300 })).ToArray<int>().Should().Equal(100, 300);
+        np.extract(cond, np.array(new uint[] { 100, 200, 300 })).ToArray<uint>().Should().Equal(100u, 300u);
+        np.extract(cond, np.array(new long[] { 1000, 2000, 3000 })).ToArray<long>().Should().Equal(1000L, 3000L);
+        np.extract(cond, np.array(new ulong[] { 1000, 2000, 3000 })).ToArray<ulong>().Should().Equal(1000UL, 3000UL);
+        np.extract(cond, np.array(new char[] { 'a', 'b', 'c' })).ToArray<char>().Should().Equal('a', 'c');
+        np.extract(cond, np.array(new Half[] { (Half)1, (Half)2, (Half)3 })).ToArray<Half>().Should().Equal((Half)1, (Half)3);
+        np.extract(cond, np.array(new float[] { 1f, 2f, 3f })).ToArray<float>().Should().Equal(1f, 3f);
+        np.extract(cond, np.array(new double[] { 1.0, 2.0, 3.0 })).ToArray<double>().Should().Equal(1.0, 3.0);
+        np.extract(cond, np.array(new decimal[] { 1m, 2m, 3m })).ToArray<decimal>().Should().Equal(1m, 3m);
+        np.extract(cond, np.array(new Complex[] { new(1, 2), new(3, 4), new(5, 6) })).ToArray<Complex>()
+            .Should().Equal(new Complex(1, 2), new Complex(5, 6));
+    }
+
+    [TestMethod]
+    public void Extract_NullArgs_Throws()
+    {
+        var arr = np.arange(5);
+        var cond = np.array(new bool[] { true });
+        ((Action)(() => np.extract(null, arr))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.extract(cond, null))).Should().Throw<ArgumentNullException>();
+    }
+
+    // =================================================================
+    // np.compress — validates 1-D, delegates to flatnonzero + take(axis)
+    // =================================================================
+
+    [TestMethod]
+    public void Compress_Axis0_IntCondition()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new int[] { 0, 1, 0 }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(1, 2));
+        np.ravel(r).ToArray<int>().Should().Equal(3, 4);
+    }
+
+    [TestMethod]
+    public void Compress_Axis0_BoolCondition()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { false, true, true }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 2));
+        np.ravel(r).ToArray<int>().Should().Equal(3, 4, 5, 6);
+    }
+
+    [TestMethod]
+    public void Compress_Axis1()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { false, true }), a, axis: 1);
+        r.Shape.Should().Be(new Shape(3, 1));
+        np.ravel(r).ToArray<int>().Should().Equal(2, 4, 6);
+    }
+
+    [TestMethod]
+    public void Compress_AxisNone_FlattensFirst()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        // axis=None: ravel(a) = [1,2,3,4,5,6]; cond [F,T] of len 2 → True at idx 1 → [2].
+        var r = np.compress(np.array(new bool[] { false, true }), a);
+        r.Shape.Should().Be(new Shape(1));
+        r.GetInt32(0).Should().Be(2);
+    }
+
+    [TestMethod]
+    public void Compress_AxisNegative()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { false, true }), a, axis: -1);
+        r.Shape.Should().Be(new Shape(3, 1));
+        np.ravel(r).ToArray<int>().Should().Equal(2, 4, 6);
+    }
+
+    [TestMethod]
+    public void Compress_ShorterCond_Truncates()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { true }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(1, 2));
+        np.ravel(r).ToArray<int>().Should().Equal(1, 2);
+    }
+
+    [TestMethod]
+    public void Compress_LongerCondWithOOBTrue_Raises()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        // axis=1 has size 2; cond has 4 Trues; index 2,3 OOB.
+        var action = () => np.compress(np.array(new bool[] { true, true, true, true }), a, axis: 1);
+        action.Should().Throw<Exception>()
+            .Where(e => e is IndexOutOfRangeException || e is ArgumentOutOfRangeException);
+    }
+
+    [TestMethod]
+    public void Compress_TwoDimCondition_Raises()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var action = () => np.compress(np.array(new bool[,] { { true, false }, { true, true } }), a, axis: 0);
+        action.Should().Throw<ArgumentException>().WithMessage("*condition must be a 1-d array*");
+    }
+
+    [TestMethod]
+    public void Compress_ZeroDimCondition_Raises()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+        var action = () => np.compress(NDArray.Scalar(true), a, axis: 0);
+        action.Should().Throw<ArgumentException>().WithMessage("*condition must be a 1-d array*");
+    }
+
+    [TestMethod]
+    public void Compress_FloatCondition()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new double[] { 0.0, 1.5, 0.0 }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(1, 2));
+        np.ravel(r).ToArray<int>().Should().Equal(3, 4);
+    }
+
+    [TestMethod]
+    public void Compress_EmptyCond_Axis0_RetainsOtherDims()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(0, 2));
+    }
+
+    [TestMethod]
+    public void Compress_EmptyCond_AxisNone()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { }), a);
+        r.Shape.Should().Be(new Shape(0));
+    }
+
+    [TestMethod]
+    public void Compress_AllFalse_Axis0()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var r = np.compress(np.array(new bool[] { false, false, false }), a, axis: 0);
+        r.Shape.Should().Be(new Shape(0, 2));
+    }
+
+    [TestMethod]
+    public void Compress_OutOfBoundsAxis_Raises()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+        var action = () => np.compress(np.array(new bool[] { true }), a, axis: -3);
+        action.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [TestMethod]
+    public void Compress_OutDispatch_ReturnsOutWithCorrectDtype()
+    {
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
+        var r = np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
+        ReferenceEquals(r, outArr).Should().BeTrue();
+        r.dtype.Should().Be(typeof(long));
+        np.ravel(r).ToArray<long>().Should().Equal(1L, 2L, 5L, 6L);
+    }
+
+    [TestMethod]
+    public void Compress_ZeroDimSource_AxisNone()
+    {
+        var r = np.compress(np.array(new bool[] { true }), NDArray.Scalar(5));
+        r.Shape.Should().Be(new Shape(1));
+        r.GetInt32(0).Should().Be(5);
+    }
+
+    [TestMethod]
+    public void Compress_NullArgs_Throws()
+    {
+        var a = np.arange(5);
+        var cond = np.array(new bool[] { true });
+        ((Action)(() => np.compress(null, a))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => np.compress(cond, null))).Should().Throw<ArgumentNullException>();
+    }
+
+    [TestMethod]
+    public void Compress_NonContigSource_GathersCorrectly()
+    {
+        // Sliced source along axis=0; compress should hit the WRITEBACKIFCOPY path
+        // inside take (when needed) and produce correct results.
+        var src = np.arange(24).reshape(6, 4);
+        var view = src["::2"]; // shape (3, 4), non-contig
+        var r = np.compress(np.array(new bool[] { true, false, true }), view, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 4));
+        // src[::2] rows: [0..3], [8..11], [16..19]; pick rows 0,2 → [0..3, 16..19]
+        np.ravel(r).ToArray<long>().Should().Equal(0L, 1L, 2L, 3L, 16L, 17L, 18L, 19L);
+    }
+
+    [TestMethod]
+    public void Compress_AllDtypes_Smoke()
+    {
+        // Per-dtype gather along axis=0 from a (3,2) shape.
+        var cond = np.array(new bool[] { false, true, true });
+
+        np.compress(cond, np.array(new bool[,] { { false, true }, { true, false }, { true, true } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new byte[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new sbyte[,] { { -1, 2 }, { 3, -4 }, { -5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new short[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new ushort[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new uint[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new long[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new ulong[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new char[,] { { 'a', 'b' }, { 'c', 'd' }, { 'e', 'f' } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new Half[,] { { (Half)1, (Half)2 }, { (Half)3, (Half)4 }, { (Half)5, (Half)6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new float[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new decimal[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
+        np.compress(cond, np.array(new Complex[,] { { new(1, 2), new(3, 4) }, { new(5, 6), new(7, 8) }, { new(9, 10), new(11, 12) } }), axis: 0)
+            .Shape.Should().Be(new Shape(2, 2));
     }
 }
