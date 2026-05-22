@@ -29,9 +29,21 @@ namespace NumSharp.Utilities
         public static unsafe void PartitionAt<T>(T* buf, int n, int[] sortedKs) where T : unmanaged, IComparable<T>
         {
             if (sortedKs.Length == 0) return;
+            fixed (int* p = sortedKs) PartitionAtMany(buf, n, p, sortedKs.Length);
+        }
+
+        /// <summary>
+        ///     Pointer-+-length variant suitable for IL-emitted callers that prefer to avoid
+        ///     managed-array allocation per row. <paramref name="sortedKs"/> must already be
+        ///     sorted ascending and within <c>[0, n-1]</c>.
+        /// </summary>
+        public static unsafe void PartitionAtMany<T>(T* buf, int n, int* sortedKs, int nKs)
+            where T : unmanaged, IComparable<T>
+        {
+            if (nKs == 0) return;
             int lo = 0;
             int hi = n - 1;
-            for (int i = 0; i < sortedKs.Length; i++)
+            for (int i = 0; i < nKs; i++)
             {
                 int k = sortedKs[i];
                 if (k < lo || k > hi) continue;
