@@ -75,9 +75,17 @@ namespace NumSharp.Backends
             if (size == 0)
                 return new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
 
-            // Materialize non-contig to C-contig. For contig inputs ascontiguousarray
-            // is a no-op view (the same Storage with offset preserved).
-            var source = nd.Shape.IsContiguous ? nd : np.ascontiguousarray(nd);
+            // Materialize non-contig to C-contig. For contig inputs we read from `nd`
+            // directly (no copy); the local `materialized` is only set on the non-contig
+            // branch and disposed in `finally` — see the ARC note at the bottom of the
+            // method for why the explicit Dispose matters here.
+            NDArray materialized = null;
+            NDArray source = nd;
+            if (!nd.Shape.IsContiguous)
+            {
+                materialized = np.ascontiguousarray(nd);
+                source = materialized;
+            }
             var sourceShape = source.Shape;
 
             byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
@@ -87,45 +95,66 @@ namespace NumSharp.Backends
             if (countKernel == null || flatKernel == null)
                 throw new NotSupportedException($"np.argwhere: no IL kernel available for {nd.dtype.Name}");
 
-            long count = countKernel(basePtr, size);
-            if (count == 0)
-                return new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
-
-            var result = new NDArray(NPTypeCode.Int64, new Shape(count, ndim), false);
-            long* resPtr = (long*)result.Storage.Address;
-
-            // ndim == 1: flat index IS the coord — scan straight into the result buffer.
-            if (ndim == 1)
+            try
             {
-                flatKernel(basePtr, size, resPtr);
+                long count = countKernel(basePtr, size);
+                if (count == 0)
+                    return new NDArray(NPTypeCode.Int64, new Shape(0, ndim), false);
+
+                var result = new NDArray(NPTypeCode.Int64, new Shape(count, ndim), false);
+                long* resPtr = (long*)result.Storage.Address;
+
+                // ndim == 1: flat index IS the coord — scan straight into the result buffer.
+                if (ndim == 1)
+                {
+                    flatKernel(basePtr, size, resPtr);
+                    return result;
+                }
+
+                // ndim > 1: scan into a temp flat buffer then expand via IL kernel.
+                var flatBuffer = new long[count];
+                fixed (long* flatPtr = flatBuffer)
+                fixed (long* dimsPtr = sourceShape.dimensions)
+                {
+                    flatKernel(basePtr, size, flatPtr);
+
+                    // Pre-compute dim strides for the expand kernel: dimStrides[ndim-1] = 1;
+                    // dimStrides[d] = dimStrides[d+1] * dims[d+1]. Cheap O(ndim) prologue.
+                    Span<long> dimStrides = stackalloc long[ndim];
+                    dimStrides[ndim - 1] = 1;
+                    for (int d = ndim - 2; d >= 0; d--)
+                        dimStrides[d] = dimStrides[d + 1] * sourceShape.dimensions[d + 1];
+
+                    fixed (long* dimStridesPtr = dimStrides)
+                    {
+                        var expandKernel = ILKernelGenerator.GetArgwhereExpandKernel();
+                        if (expandKernel == null)
+                            throw new NotSupportedException("np.argwhere: expand IL kernel unavailable");
+
+                        expandKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, resPtr);
+                    }
+                }
+
                 return result;
             }
-
-            // ndim > 1: scan into a temp flat buffer then expand via IL kernel.
-            var flatBuffer = new long[count];
-            fixed (long* flatPtr = flatBuffer)
-            fixed (long* dimsPtr = sourceShape.dimensions)
+            finally
             {
-                flatKernel(basePtr, size, flatPtr);
-
-                // Pre-compute dim strides for the expand kernel: dimStrides[ndim-1] = 1;
-                // dimStrides[d] = dimStrides[d+1] * dims[d+1]. Cheap O(ndim) prologue.
-                Span<long> dimStrides = stackalloc long[ndim];
-                dimStrides[ndim - 1] = 1;
-                for (int d = ndim - 2; d >= 0; d--)
-                    dimStrides[d] = dimStrides[d + 1] * sourceShape.dimensions[d + 1];
-
-                fixed (long* dimStridesPtr = dimStrides)
-                {
-                    var expandKernel = ILKernelGenerator.GetArgwhereExpandKernel();
-                    if (expandKernel == null)
-                        throw new NotSupportedException("np.argwhere: expand IL kernel unavailable");
-
-                    expandKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, resPtr);
-                }
+                // ARC: source.Storage.Address is an unmanaged pointer that does NOT
+                // keep `materialized` GC-alive. Under repeated argwhere() calls on a
+                // non-contig input, the JIT can decide `materialized` is dead after
+                // basePtr is computed — then the result-NDArray allocations below
+                // trigger GC, the freshly materialized array's UnmanagedStorage gets
+                // its refcount finalized to zero, and the buffer behind basePtr is
+                // freed mid-IL-scan (the np.nonzero bench harness reproduces this
+                // exact pattern as a Release-mode AccessViolationException; argwhere
+                // shares the same fix preventively).
+                //
+                // Explicit Dispose() is the established ARC-release pattern in this
+                // codebase (see commits 392529f2, 294d4329) — it forces the JIT to
+                // keep `materialized` rooted until the call site here. For the contig
+                // fast path materialized is null and Dispose is skipped.
+                materialized?.Dispose();
             }
-
-            return result;
         }
     }
 }

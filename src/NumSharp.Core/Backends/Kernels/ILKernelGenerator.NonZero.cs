@@ -1,613 +1,507 @@
 using System;
-using System.Numerics;
-using System.Reflection;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using System.Runtime.Intrinsics;
+using System.Threading;
 
 // =============================================================================
-// ILKernelGenerator.NonZero.cs - IL-emitted nonzero kernels for boolean masks
+// ILKernelGenerator.NonZero.cs — IL-emitted expand kernel for np.nonzero
 // =============================================================================
 //
 // RESPONSIBILITY:
-//   Replace the slow scalar coord-iter path in np.nonzero / np.where(cond) for
-//   contiguous boolean arrays. Closes the 8x-241x gap to NumPy.
+//   np.nonzero shares the per-dtype count + flat-scan IL kernels with np.argwhere
+//   (ArgwhereCountKernel, ArgwhereFlatKernel) — the only piece that differs is the
+//   "expand flat → coords" stage:
+//     * argwhere writes a row-major (count, ndim) matrix
+//     * nonzero writes ndim separate (count,) column arrays
 //
-// KERNELS (all DynamicMethod-emitted at first use, cached as delegates):
-//   * IsAllZeroBoolKernel    : (byte* mask, long size) -> bool
-//       SIMD any-true prescan via Vector*.EqualsAll. Branches out of the loop
-//       on the first non-zero chunk. NumPy's nonzero does this exact short-
-//       circuit, which is why all-false 10M elements is 0.2ms there.
+//   This file emits the column-layout expand kernel:
 //
-//   * NonZeroFlatBoolKernel  : (byte* mask, long* outBuf, long size) -> long
-//       SIMD bit-scan index materialization. For each SIMD chunk:
-//         1. Load V<byte> chunk
-//         2. Equals(chunk, Zero) -> mask
-//         3. ExtractMostSignificantBits -> bits
-//         4. nonZeroBits = ~bits   (V256: full 32, V128: masked to low 16)
-//         5. while (nonZeroBits != 0):
-//              pos = BitOperations.TrailingZeroCount(nonZeroBits)
-//              outBuf[outIdx++] = i + pos
-//              nonZeroBits &= nonZeroBits - 1
-//       Scalar tail handles the residual bytes. Returns outIdx (count written).
+//   * NonZeroPerDimKernel (long* flat, long count, long* dims,
+//                          long* dimStrides, long ndim, long** outCols)
+//       Dtype-agnostic singleton. Single DM that incrementally advances a
+//       stack-allocated coord buffer, propagating the carry chain through
+//       the outer dims, and writes coords[d] into outCols[d][i] each step.
 //
-// CHOSEN SIMD WIDTH:
-//   ILKernelGenerator.VectorBits is detected once at startup. The kernel emits
-//   a single specialized loop (no V128/V256 if/else branches at runtime — the
-//   JIT'd kernel only contains the chosen path).
+// CACHE:
+//   Singleton field _nonZeroPerDimKernel populated lazily on first use via
+//   Interlocked.CompareExchange.
+//
+// BOOL-ONLY KERNELS (removed):
+//   The previous IsAllZeroBoolKernel / NonZeroCountBoolKernel / NonZeroFlatBoolKernel
+//   trio existed because the original np.nonzero contig path branched on
+//   `typeof(T) == typeof(bool)` and only had a bool-specific IL implementation.
+//   The argwhere refactor introduced per-dtype IL kernels (Argwhere*) that cover
+//   all 15 dtypes including bool (via byte reinterpretation), so the bool-only
+//   kernels are dead code. They were deleted along with the dtype branch.
 //
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
-    /// IL-emitted prescan: returns true iff every byte in the mask is zero.
-    /// Used by np.where(cond) to short-circuit when the condition is entirely
-    /// false (no index array materialization needed — NumPy parity).
+    /// IL-emitted coord expand for <c>np.nonzero</c>: converts a flat-index buffer
+    /// (monotonic ascending C-order) into <c>ndim</c> separate per-dim coordinate
+    /// columns via incremental coord advance — no per-element divmod.
+    /// Dtype-agnostic (operates on long*).
+    /// <para>
+    /// <paramref name="outCols"/> is a pointer to an array of <c>ndim</c>
+    /// <c>long*</c> pointers, one per output dimension. <c>outCols[d][i]</c> receives
+    /// the coordinate along dim <c>d</c> for the <c>i</c>'th non-zero element.
+    /// </para>
     /// </summary>
-    public unsafe delegate bool IsAllZeroBoolKernel(byte* mask, long size);
-
-    /// <summary>
-    /// IL-emitted SIMD popcount: returns the count of non-zero bytes in the mask.
-    /// Used to pre-size the output buffer for the bit-scan kernel — avoids the
-    /// pathological "allocate max-size temp" case for dense masks (10M all-true
-    /// elements would otherwise allocate 80MB just to discard it).
-    /// </summary>
-    public unsafe delegate long NonZeroCountBoolKernel(byte* mask, long size);
-
-    /// <summary>
-    /// IL-emitted bit-scan: writes flat indices of non-zero bytes into outBuf
-    /// (must be pre-sized to at least <c>count</c> longs — caller obtains the
-    /// count via <see cref="NonZeroCountBoolKernel"/>). Returns the number of
-    /// indices written.
-    /// </summary>
-    public unsafe delegate long NonZeroFlatBoolKernel(byte* mask, long* outBuf, long size);
+    public unsafe delegate void NonZeroPerDimKernel(
+        long* flat, long count, long* dims, long* dimStrides, long ndim, long** outCols);
 
     public static partial class ILKernelGenerator
     {
-        #region Cached delegates (lazy init)
+        #region Cached delegate (lazy init)
 
-        private static IsAllZeroBoolKernel _isAllZeroBoolKernel;
-        private static NonZeroCountBoolKernel _nonZeroCountBoolKernel;
-        private static NonZeroFlatBoolKernel _nonZeroFlatBoolKernel;
+        private static NonZeroPerDimKernel _nonZeroPerDimKernel;
 
         /// <summary>
-        /// Returns the IL-emitted any-true prescan for boolean masks. The kernel
-        /// is built lazily on first call and cached for the process lifetime.
-        /// Returns <c>null</c> when SIMD is unavailable (VectorBits == 0) — caller
-        /// falls back to scalar logic.
+        /// IL-emitted per-dim coord expander (singleton — same kernel handles any ndim).
+        /// Returns <c>null</c> only when <see cref="Enabled"/> is false.
         /// </summary>
-        public static IsAllZeroBoolKernel GetIsAllZeroBoolKernel()
+        public static NonZeroPerDimKernel GetNonZeroPerDimKernel()
         {
-            if (!Enabled || VectorBits == 0)
+            if (!Enabled)
                 return null;
 
-            var cached = _isAllZeroBoolKernel;
+            var cached = _nonZeroPerDimKernel;
             if (cached != null)
                 return cached;
 
             try
             {
-                var kernel = GenerateIsAllZeroBoolKernelIL();
-                System.Threading.Interlocked.CompareExchange(ref _isAllZeroBoolKernel, kernel, null);
-                return _isAllZeroBoolKernel;
+                var k = GenerateNonZeroPerDimKernelIL();
+                Interlocked.CompareExchange(ref _nonZeroPerDimKernel, k, null);
+                return _nonZeroPerDimKernel;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetIsAllZeroBoolKernel: {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Returns the IL-emitted popcount kernel. Lazy-built, cached.
-        /// </summary>
-        public static NonZeroCountBoolKernel GetNonZeroCountBoolKernel()
-        {
-            if (!Enabled || VectorBits == 0)
-                return null;
-
-            var cached = _nonZeroCountBoolKernel;
-            if (cached != null)
-                return cached;
-
-            try
-            {
-                var kernel = GenerateNonZeroCountBoolKernelIL();
-                System.Threading.Interlocked.CompareExchange(ref _nonZeroCountBoolKernel, kernel, null);
-                return _nonZeroCountBoolKernel;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetNonZeroCountBoolKernel: {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Returns the IL-emitted bit-scan flat-index collector. Lazy-built, cached.
-        /// Returns <c>null</c> when SIMD is unavailable; caller falls back to scalar.
-        /// </summary>
-        public static NonZeroFlatBoolKernel GetNonZeroFlatBoolKernel()
-        {
-            if (!Enabled || VectorBits == 0)
-                return null;
-
-            var cached = _nonZeroFlatBoolKernel;
-            if (cached != null)
-                return cached;
-
-            try
-            {
-                var kernel = GenerateNonZeroFlatBoolKernelIL();
-                System.Threading.Interlocked.CompareExchange(ref _nonZeroFlatBoolKernel, kernel, null);
-                return _nonZeroFlatBoolKernel;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetNonZeroFlatBoolKernel: {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetNonZeroPerDimKernel: {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
 
         #endregion
 
-        #region IsAllZeroBoolKernel emission
+        #region Per-dim kernel IL emission
 
         /// <summary>
-        /// Emits:
+        /// Emits the per-dim expand kernel. Pseudocode:
         /// <code>
-        /// long i = 0;
-        /// long vectorEnd = size - chunkBytes;
-        /// while (i &lt;= vectorEnd) {
-        ///     if (!V&lt;byte&gt;.EqualsAll(V&lt;byte&gt;.Load(mask + i), V&lt;byte&gt;.Zero))
-        ///         return false;
-        ///     i += chunkBytes;
-        /// }
-        /// while (i &lt; size) {
-        ///     if (mask[i] != 0) return false;
-        ///     i++;
-        /// }
-        /// return true;
-        /// </code>
-        /// </summary>
-        private static IsAllZeroBoolKernel GenerateIsAllZeroBoolKernelIL()
-        {
-            // V512<byte>.EqualsAll exists on .NET 8+; the EqualsAll helper just calls
-            // the underlying generic. Use the detected width directly.
-            int simdBits = VectorBits;
-            int chunkBytes = simdBits / 8;
-
-            var dm = new DynamicMethod(
-                name: $"IL_IsAllZeroBool_V{simdBits}",
-                returnType: typeof(bool),
-                parameterTypes: new[] { typeof(byte*), typeof(long) },
-                owner: typeof(ILKernelGenerator),
-                skipVisibility: true);
-
-            var il = dm.GetILGenerator();
-
-            var locI = il.DeclareLocal(typeof(long));
-            var locVecEnd = il.DeclareLocal(typeof(long));
-
-            var lblSimdHead = il.DefineLabel();
-            var lblSimdEnd = il.DefineLabel();
-            var lblScalarHead = il.DefineLabel();
-            var lblFoundNonZero = il.DefineLabel();
-            var lblAllZero = il.DefineLabel();
-
-            // i = 0;
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locI);
-
-            // vectorEnd = size - chunkBytes;
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.Stloc, locVecEnd);
-
-            // ---- SIMD loop ----
-            il.MarkLabel(lblSimdHead);
-
-            // if (i > vectorEnd) goto SimdEnd;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldloc, locVecEnd);
-            il.Emit(OpCodes.Bgt, lblSimdEnd);
-
-            // chunk = V<byte>.Load(mask + i);
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
-
-            // zero = V<byte>.Zero;
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
-
-            // EqualsAll(chunk, zero) -> bool
-            il.EmitCall(OpCodes.Call, VectorMethodCache.EqualsAll(simdBits, typeof(byte)), null);
-            il.Emit(OpCodes.Brfalse, lblFoundNonZero);
-
-            // i += chunkBytes;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblSimdHead);
-
-            il.MarkLabel(lblSimdEnd);
-
-            // ---- Scalar tail ----
-            il.MarkLabel(lblScalarHead);
-
-            // if (i >= size) goto AllZero;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Bge, lblAllZero);
-
-            // if (mask[i] != 0) goto FoundNonZero;
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_U1);
-            il.Emit(OpCodes.Brtrue, lblFoundNonZero);
-
-            // i++;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblScalarHead);
-
-            // ---- Returns ----
-            il.MarkLabel(lblFoundNonZero);
-            il.Emit(OpCodes.Ldc_I4_0);  // false
-            il.Emit(OpCodes.Ret);
-
-            il.MarkLabel(lblAllZero);
-            il.Emit(OpCodes.Ldc_I4_1);  // true
-            il.Emit(OpCodes.Ret);
-
-            return (IsAllZeroBoolKernel)dm.CreateDelegate(typeof(IsAllZeroBoolKernel));
-        }
-
-        #endregion
-
-        #region NonZeroCountBoolKernel emission
-
-        /// <summary>
-        /// Emits a SIMD popcount over the mask bytes. For each chunk:
-        /// <code>
-        /// cmp = V&lt;byte&gt;.Equals(V&lt;byte&gt;.Load(mask + i), Zero);
-        /// uint bits = ExtractMostSignificantBits(cmp);
-        /// count += PopCount(~bits &amp; chunkMask);   // popcount of "is non-zero" lanes
-        /// </code>
-        /// Scalar tail counts the residual bytes. PopCount of inverted MSB-bits is the
-        /// same as counting non-zero bytes in the chunk.
-        /// </summary>
-        private static NonZeroCountBoolKernel GenerateNonZeroCountBoolKernelIL()
-        {
-            int simdBits = VectorBits >= 256 ? 256 : 128;
-            int chunkBytes = simdBits / 8;
-            uint chunkMask = simdBits == 256 ? 0xFFFFFFFFu : 0x0000FFFFu;
-
-            var dm = new DynamicMethod(
-                name: $"IL_NonZeroCountBool_V{simdBits}",
-                returnType: typeof(long),
-                parameterTypes: new[] { typeof(byte*), typeof(long) },
-                owner: typeof(ILKernelGenerator),
-                skipVisibility: true);
-
-            var il = dm.GetILGenerator();
-
-            var locI = il.DeclareLocal(typeof(long));
-            var locVecEnd = il.DeclareLocal(typeof(long));
-            var locCount = il.DeclareLocal(typeof(long));
-
-            var lblSimdHead = il.DefineLabel();
-            var lblSimdEnd = il.DefineLabel();
-            var lblScalarHead = il.DefineLabel();
-            var lblScalarEnd = il.DefineLabel();
-            var lblScalarSkip = il.DefineLabel();
-
-            // i = 0; count = 0;
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locCount);
-
-            // vectorEnd = size - chunkBytes;
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.Stloc, locVecEnd);
-
-            // ---- SIMD loop ----
-            il.MarkLabel(lblSimdHead);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldloc, locVecEnd);
-            il.Emit(OpCodes.Bgt, lblSimdEnd);
-
-            // chunk = V<byte>.Load(mask + i);
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
-
-            // zero
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
-
-            // cmp = Equals(chunk, zero)
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, typeof(byte)), null);
-
-            // bits = ExtractMostSignificantBits(cmp)
-            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(simdBits, typeof(byte)), null);
-
-            // ~bits & chunkMask
-            il.Emit(OpCodes.Not);
-            il.Emit(OpCodes.Ldc_I4, unchecked((int)chunkMask));
-            il.Emit(OpCodes.And);
-
-            // PopCount(uint)
-            il.EmitCall(OpCodes.Call, BitOpsPopCountUInt32, null);
-
-            // count += (long)PopCount(...);
-            il.Emit(OpCodes.Conv_I8);
-            il.Emit(OpCodes.Ldloc, locCount);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locCount);
-
-            // i += chunkBytes;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblSimdHead);
-
-            il.MarkLabel(lblSimdEnd);
-
-            // ---- Scalar tail ----
-            il.MarkLabel(lblScalarHead);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Bge, lblScalarEnd);
-
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_U1);
-            il.Emit(OpCodes.Brfalse, lblScalarSkip);
-
-            // count++;
-            il.Emit(OpCodes.Ldloc, locCount);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locCount);
-
-            il.MarkLabel(lblScalarSkip);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblScalarHead);
-
-            il.MarkLabel(lblScalarEnd);
-            il.Emit(OpCodes.Ldloc, locCount);
-            il.Emit(OpCodes.Ret);
-
-            return (NonZeroCountBoolKernel)dm.CreateDelegate(typeof(NonZeroCountBoolKernel));
-        }
-
-        #endregion
-
-        #region NonZeroFlatBoolKernel emission
-
-        /// <summary>
-        /// Emits a SIMD bit-scan that materializes flat indices of non-zero bytes
-        /// from <c>mask</c> into <c>outBuf</c>. Returns the number written.
+        /// void Expand(long* flat, long count, long* dims, long* dimStrides, long ndim, long** outCols) {
+        ///     long[ndim] coords = stackalloc;
         ///
-        /// Layout per SIMD chunk (chunkBytes = simdBits/8 elements):
-        /// <code>
-        /// chunk = V&lt;byte&gt;.Load(mask + i);
-        /// cmp = V&lt;byte&gt;.Equals(chunk, Zero);
-        /// uint bits = V&lt;byte&gt;.ExtractMostSignificantBits(cmp);
-        /// uint nz = ~bits &amp; chunkMask;          // chunkMask handles V128's 16-bit case
-        /// while (nz != 0) {
-        ///     int pos = BitOperations.TrailingZeroCount(nz);
-        ///     outBuf[outIdx++] = i + pos;
-        ///     nz &amp;= nz - 1;
+        ///     // Seed coords from flat[0] via one divmod chain.
+        ///     long f = flat[0];
+        ///     for (long d = 0; d &lt; ndim; d++) {
+        ///         long s = dimStrides[d];
+        ///         coords[d] = f / s; f %= s;
+        ///     }
+        ///     // Write column 0 row 0.
+        ///     for (long d = 0; d &lt; ndim; d++) outCols[d][0] = coords[d];
+        ///
+        ///     long lastFlat = flat[0];
+        ///     long innerSize = dims[ndim - 1];
+        ///     for (long i = 1; i &lt; count; i++) {
+        ///         long fi = flat[i];
+        ///         long delta = fi - lastFlat; lastFlat = fi;
+        ///         long newInner = coords[ndim - 1] + delta;
+        ///         if (newInner &lt; innerSize) {
+        ///             coords[ndim - 1] = newInner;
+        ///         } else {
+        ///             long carry = newInner / innerSize;
+        ///             coords[ndim - 1] = newInner % innerSize;
+        ///             for (long d = ndim - 2; d &gt;= 0 &amp;&amp; carry &gt; 0; d--) {
+        ///                 long sum = coords[d] + carry;
+        ///                 if (sum &lt; dims[d]) { coords[d] = sum; carry = 0; }
+        ///                 else { coords[d] = sum % dims[d]; carry = sum / dims[d]; }
+        ///             }
+        ///         }
+        ///         for (long d = 0; d &lt; ndim; d++) outCols[d][i] = coords[d];
+        ///     }
         /// }
-        /// i += chunkBytes;
         /// </code>
-        /// Scalar tail walks the residual bytes one at a time.
+        ///
+        /// The structural twin of <see cref="ArgwhereExpandKernel"/>; the only difference
+        /// is the destination layout in the write step — argwhere writes a row-major
+        /// (count, ndim) matrix, nonzero writes ndim per-dim columns indexed by the
+        /// row index.
         /// </summary>
-        private static NonZeroFlatBoolKernel GenerateNonZeroFlatBoolKernelIL()
+        private static NonZeroPerDimKernel GenerateNonZeroPerDimKernelIL()
         {
-            // The bit-scan uses ExtractMostSignificantBits which returns a uint with up to
-            // 32 valid lanes. V256<byte>.Count = 32 (full 32 bits), V128<byte>.Count = 16
-            // (low 16 bits valid). V512<byte>.ExtractMostSignificantBits returns ulong —
-            // for simplicity we cap at V256 here. V512 hardware will still benefit because
-            // the byte-load throughput is generally the bottleneck, not the per-chunk
-            // mask extraction.
-            int simdBits = VectorBits >= 256 ? 256 : 128;
-            int chunkBytes = simdBits / 8;
-            uint chunkMask = simdBits == 256 ? 0xFFFFFFFFu : 0x0000FFFFu;
-
             var dm = new DynamicMethod(
-                name: $"IL_NonZeroFlatBool_V{simdBits}",
-                returnType: typeof(long),
-                parameterTypes: new[] { typeof(byte*), typeof(long*), typeof(long) },
+                name: "IL_NonZeroPerDim",
+                returnType: typeof(void),
+                parameterTypes: new[] { typeof(long*), typeof(long), typeof(long*), typeof(long*), typeof(long), typeof(long**) },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true);
 
             var il = dm.GetILGenerator();
 
-            var locI = il.DeclareLocal(typeof(long));        // mask byte index
-            var locOut = il.DeclareLocal(typeof(long));      // outBuf write index
-            var locVecEnd = il.DeclareLocal(typeof(long));   // vector loop bound
-            var locNz = il.DeclareLocal(typeof(uint));       // inverted bits
-            var locPos = il.DeclareLocal(typeof(int));       // trailing zero count
+            var locCoords = il.DeclareLocal(typeof(long*));    // stackalloc'd coord buffer
+            var locF = il.DeclareLocal(typeof(long));
+            var locS = il.DeclareLocal(typeof(long));
+            var locD = il.DeclareLocal(typeof(long));
+            var locI = il.DeclareLocal(typeof(long));
+            var locInnerSize = il.DeclareLocal(typeof(long));
+            var locLastFlat = il.DeclareLocal(typeof(long));
+            var locFi = il.DeclareLocal(typeof(long));
+            var locDelta = il.DeclareLocal(typeof(long));
+            var locNewInner = il.DeclareLocal(typeof(long));
+            var locCarry = il.DeclareLocal(typeof(long));
+            var locSum = il.DeclareLocal(typeof(long));
 
-            var lblSimdHead = il.DefineLabel();
-            var lblSimdEnd = il.DefineLabel();
-            var lblBitHead = il.DefineLabel();
-            var lblBitEnd = il.DefineLabel();
-            var lblScalarHead = il.DefineLabel();
-            var lblScalarEnd = il.DefineLabel();
-            var lblScalarSkip = il.DefineLabel();
+            // --- coords = stackalloc long[ndim] ---
+            il.Emit(OpCodes.Ldarg, 4);            // ndim
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_U);
+            il.Emit(OpCodes.Localloc);
+            il.Emit(OpCodes.Stloc, locCoords);
 
-            // i = 0; out = 0;
+            // --- Seed: f = flat[0] ---
+            il.Emit(OpCodes.Ldarg_0);             // flat
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locF);
+            il.Emit(OpCodes.Ldloc, locF);
+            il.Emit(OpCodes.Stloc, locLastFlat);
+
+            // --- for (d = 0; d < ndim; d++) coords[d] = f / dimStrides[d]; f %= dimStrides[d]; ---
+            var lblSeedHead = il.DefineLabel();
+            var lblSeedEnd = il.DefineLabel();
             il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Ldc_I8, 0L);
-            il.Emit(OpCodes.Stloc, locOut);
+            il.Emit(OpCodes.Stloc, locD);
 
-            // vectorEnd = size - chunkBytes;
-            il.Emit(OpCodes.Ldarg_2);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.Stloc, locVecEnd);
+            il.MarkLabel(lblSeedHead);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldarg, 4);
+            il.Emit(OpCodes.Bge, lblSeedEnd);
 
-            // ---- SIMD outer loop ----
-            il.MarkLabel(lblSimdHead);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldloc, locVecEnd);
-            il.Emit(OpCodes.Bgt, lblSimdEnd);
-
-            // chunk = V<byte>.Load(mask + i);
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(simdBits, typeof(byte)), null);
-
-            // zero = V<byte>.Zero;
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Zero(simdBits, typeof(byte)), null);
-
-            // cmp = Equals(chunk, zero);
-            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, typeof(byte)), null);
-
-            // bits = ExtractMostSignificantBits(cmp); (uint)
-            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(simdBits, typeof(byte)), null);
-
-            // nz = ~bits & chunkMask;
-            il.Emit(OpCodes.Not);
-            il.Emit(OpCodes.Ldc_I4, unchecked((int)chunkMask));
-            il.Emit(OpCodes.And);
-            il.Emit(OpCodes.Stloc, locNz);
-
-            // ---- Inner bit-scan loop ----
-            il.MarkLabel(lblBitHead);
-            il.Emit(OpCodes.Ldloc, locNz);
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Beq, lblBitEnd);
-
-            // pos = BitOperations.TrailingZeroCount(nz);
-            il.Emit(OpCodes.Ldloc, locNz);
-            il.EmitCall(OpCodes.Call, BitOpsTrailingZeroCountUInt32, null);
-            il.Emit(OpCodes.Stloc, locPos);
-
-            // outBuf[out] = i + pos;
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Ldloc, locOut);
-            il.Emit(OpCodes.Ldc_I4_8);  // sizeof(long) = 8
-            il.Emit(OpCodes.Conv_I8);
+            // s = dimStrides[d]
+            il.Emit(OpCodes.Ldarg_3);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locS);
 
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldloc, locPos);
-            il.Emit(OpCodes.Conv_I8);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stind_I8);
-
-            // out++;
-            il.Emit(OpCodes.Ldloc, locOut);
-            il.Emit(OpCodes.Ldc_I8, 1L);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locOut);
-
-            // nz &= nz - 1;
-            il.Emit(OpCodes.Ldloc, locNz);
-            il.Emit(OpCodes.Ldloc, locNz);
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.And);
-            il.Emit(OpCodes.Stloc, locNz);
-
-            il.Emit(OpCodes.Br, lblBitHead);
-
-            il.MarkLabel(lblBitEnd);
-
-            // i += chunkBytes;
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)chunkBytes);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblSimdHead);
-
-            il.MarkLabel(lblSimdEnd);
-
-            // ---- Scalar tail ----
-            il.MarkLabel(lblScalarHead);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_2);
-            il.Emit(OpCodes.Bge, lblScalarEnd);
-
-            // if (mask[i] == 0) skip;
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_U1);
-            il.Emit(OpCodes.Brfalse, lblScalarSkip);
-
-            // outBuf[out++] = i;
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Ldloc, locOut);
-            il.Emit(OpCodes.Ldc_I4_8);
-            il.Emit(OpCodes.Conv_I8);
+            // coords[d] = f / s
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locF);
+            il.Emit(OpCodes.Ldloc, locS);
+            il.Emit(OpCodes.Div);
             il.Emit(OpCodes.Stind_I8);
 
-            il.Emit(OpCodes.Ldloc, locOut);
+            // f = f % s
+            il.Emit(OpCodes.Ldloc, locF);
+            il.Emit(OpCodes.Ldloc, locS);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stloc, locF);
+
+            // d++
+            il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locOut);
+            il.Emit(OpCodes.Stloc, locD);
+            il.Emit(OpCodes.Br, lblSeedHead);
 
-            il.MarkLabel(lblScalarSkip);
-            // i++;
+            il.MarkLabel(lblSeedEnd);
+
+            // --- Write row 0 to per-dim columns: for (d = 0; d < ndim; d++) outCols[d][0] = coords[d] ---
+            EmitWritePerDimRow(il, /*rowIndexLocal=*/ null, locCoords);
+
+            // --- innerSize = dims[ndim - 1] ---
+            il.Emit(OpCodes.Ldarg_2);                        // dims
+            il.Emit(OpCodes.Ldarg, 4);                       // ndim
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locInnerSize);
+
+            // --- Outer loop: for (i = 1; i < count; i++) ---
+            var lblOuterHead = il.DefineLabel();
+            var lblOuterEnd = il.DefineLabel();
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblOuterHead);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Bge, lblOuterEnd);
+
+            // fi = flat[i]
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Stloc, locFi);
+
+            // delta = fi - lastFlat
+            il.Emit(OpCodes.Ldloc, locFi);
+            il.Emit(OpCodes.Ldloc, locLastFlat);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locDelta);
+
+            // lastFlat = fi
+            il.Emit(OpCodes.Ldloc, locFi);
+            il.Emit(OpCodes.Stloc, locLastFlat);
+
+            // newInner = coords[ndim-1] + delta
+            var lblInnerNoOverflow = il.DefineLabel();
+            var lblAdvanceEnd = il.DefineLabel();
+
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldarg, 4);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Ldloc, locDelta);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locNewInner);
+
+            // if (newInner < innerSize) goto inner_no_overflow
+            il.Emit(OpCodes.Ldloc, locNewInner);
+            il.Emit(OpCodes.Ldloc, locInnerSize);
+            il.Emit(OpCodes.Blt, lblInnerNoOverflow);
+
+            // --- Overflow path: carry chain ---
+            // carry = newInner / innerSize; coords[ndim-1] = newInner % innerSize
+            il.Emit(OpCodes.Ldloc, locNewInner);
+            il.Emit(OpCodes.Ldloc, locInnerSize);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locCarry);
+
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldarg, 4);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldloc, locNewInner);
+            il.Emit(OpCodes.Ldloc, locInnerSize);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stind_I8);
+
+            // for (d = ndim - 2; d >= 0 && carry > 0; d--) { ... }
+            il.Emit(OpCodes.Ldarg, 4);
+            il.Emit(OpCodes.Ldc_I8, 2L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            var lblCarryHead = il.DefineLabel();
+            var lblCarryEnd = il.DefineLabel();
+
+            il.MarkLabel(lblCarryHead);
+            // if (d < 0) break
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Blt, lblCarryEnd);
+            // if (carry == 0) break
+            il.Emit(OpCodes.Ldloc, locCarry);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Ble, lblCarryEnd);
+
+            // sum = coords[d] + carry
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Ldloc, locCarry);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locSum);
+
+            // axisSize = dims[d] on the stack for the comparison
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+
+            // if (sum <= axisSize) sum < axisSize is the no-overflow predicate; Ble(axisSize, sum) jumps when axisSize <= sum, i.e. sum >= axisSize → overflow.
+            var lblCarryOverflow = il.DefineLabel();
+            var lblCarryStep = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, locSum);
+            il.Emit(OpCodes.Ble, lblCarryOverflow);
+
+            // sum < axisSize → assign + zero carry
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldloc, locSum);
+            il.Emit(OpCodes.Stind_I8);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locCarry);
+            il.Emit(OpCodes.Br, lblCarryStep);
+
+            // sum >= axisSize → recompute coords[d] = sum % dims[d] and carry = sum / dims[d].
+            // Ble already consumed (axisSize, sum) from the stack.
+            il.MarkLabel(lblCarryOverflow);
+
+            // coords[d] = sum % dims[d]
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldloc, locSum);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stind_I8);
+
+            // carry = sum / dims[d]
+            il.Emit(OpCodes.Ldloc, locSum);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locCarry);
+
+            il.MarkLabel(lblCarryStep);
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+            il.Emit(OpCodes.Br, lblCarryHead);
+
+            il.MarkLabel(lblCarryEnd);
+            il.Emit(OpCodes.Br, lblAdvanceEnd);
+
+            // --- No overflow path: just store newInner into innermost coord ---
+            il.MarkLabel(lblInnerNoOverflow);
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldarg, 4);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldloc, locNewInner);
+            il.Emit(OpCodes.Stind_I8);
+
+            il.MarkLabel(lblAdvanceEnd);
+
+            // --- Write row i to per-dim columns: for (d = 0; d < ndim; d++) outCols[d][i] = coords[d] ---
+            EmitWritePerDimRow(il, locI, locCoords);
+
+            // i++
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
-            il.Emit(OpCodes.Br, lblScalarHead);
+            il.Emit(OpCodes.Br, lblOuterHead);
 
-            il.MarkLabel(lblScalarEnd);
-            il.Emit(OpCodes.Ldloc, locOut);
+            il.MarkLabel(lblOuterEnd);
             il.Emit(OpCodes.Ret);
 
-            return (NonZeroFlatBoolKernel)dm.CreateDelegate(typeof(NonZeroFlatBoolKernel));
+            return (NonZeroPerDimKernel)dm.CreateDelegate(typeof(NonZeroPerDimKernel));
         }
 
-        #endregion
+        /// <summary>
+        /// Emits an inner IL loop that copies the current <c>coords</c> array into
+        /// the per-dim output columns at row index <paramref name="rowIndexLocal"/>.
+        /// When <paramref name="rowIndexLocal"/> is <c>null</c> the row index is 0
+        /// (used for the seed write before the main loop).
+        /// </summary>
+        private static void EmitWritePerDimRow(ILGenerator il, LocalBuilder rowIndexLocal, LocalBuilder locCoords)
+        {
+            var locDw = il.DeclareLocal(typeof(long));
+            var locColPtr = il.DeclareLocal(typeof(long*));
+            var lblHead = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
 
-        #region SIMD reflection helpers
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locDw);
 
-        // SIMD method lookups go through VectorMethodCache; scalar helpers (BitOperations)
-        // go through ScalarMethodCache. Thin file-local aliases preserve call-site shape.
-        private static MethodInfo BitOpsTrailingZeroCountUInt32
-            => ScalarMethodCache.BitOp(nameof(BitOperations.TrailingZeroCount), typeof(uint));
+            il.MarkLabel(lblHead);
+            il.Emit(OpCodes.Ldloc, locDw);
+            il.Emit(OpCodes.Ldarg, 4); // ndim
+            il.Emit(OpCodes.Bge, lblEnd);
 
-        private static MethodInfo BitOpsPopCountUInt32
-            => ScalarMethodCache.BitOp(nameof(BitOperations.PopCount), typeof(uint));
+            // colPtr = outCols[dw]  i.e.  *(long**)(outCols + dw*sizeof(long*))
+            // sizeof(long*) is 8 on x64; the entire codebase targets 64-bit runtimes
+            // (UnmanagedStorage uses long for byte sizes etc.). Using 8 here mirrors
+            // the rest of the kernel's pointer arithmetic.
+            il.Emit(OpCodes.Ldarg, 5);   // outCols (long**)
+            il.Emit(OpCodes.Ldloc, locDw);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I);    // dereference: now have outCols[dw] (long*)
+            il.Emit(OpCodes.Stloc, locColPtr);
+
+            // dest = colPtr + rowIndex * 8 (or colPtr for row 0)
+            il.Emit(OpCodes.Ldloc, locColPtr);
+            if (rowIndexLocal != null)
+            {
+                il.Emit(OpCodes.Ldloc, rowIndexLocal);
+                il.Emit(OpCodes.Ldc_I8, 8L);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+            }
+
+            // value = coords[dw]
+            il.Emit(OpCodes.Ldloc, locCoords);
+            il.Emit(OpCodes.Ldloc, locDw);
+            il.Emit(OpCodes.Ldc_I8, 8L);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+
+            il.Emit(OpCodes.Stind_I8);
+
+            il.Emit(OpCodes.Ldloc, locDw);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locDw);
+            il.Emit(OpCodes.Br, lblHead);
+
+            il.MarkLabel(lblEnd);
+        }
 
         #endregion
     }
