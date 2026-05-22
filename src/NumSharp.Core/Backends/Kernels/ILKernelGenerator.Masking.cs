@@ -29,6 +29,163 @@ namespace NumSharp.Backends.Kernels
         #region NonZero SIMD Helpers
 
         /// <summary>
+        /// SIMD popcount of non-zero elements in a contiguous T-typed buffer. Mirrors the
+        /// bool-mask <see cref="NonZeroCountBoolKernel"/> pattern but generic over <typeparamref name="T"/>
+        /// so the JIT specializes V256/V128 paths per dtype (and degrades to scalar for
+        /// non-SIMD dtypes like Decimal/Half/Complex). Used as the count pass of the two-pass
+        /// argwhere/nonzero pipeline so the result buffer can be exact-sized — no List&lt;long&gt;
+        /// growth, no max-size waste.
+        /// </summary>
+        internal static unsafe long NonZeroCountHelper<T>(T* src, long size) where T : unmanaged
+        {
+            if (size == 0) return 0;
+
+            long count = 0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && size >= Vector256<T>.Count)
+            {
+                int vectorCount = Vector256<T>.Count;
+                long vectorEnd = size - vectorCount;
+                var zero = Vector256<T>.Zero;
+                uint laneMask = vectorCount == 32 ? uint.MaxValue : (1u << vectorCount) - 1;
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+                    uint nonZeroBits = ~bits & laneMask;
+                    count += BitOperations.PopCount(nonZeroBits);
+                }
+
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        count++;
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && size >= Vector128<T>.Count)
+            {
+                int vectorCount = Vector128<T>.Count;
+                long vectorEnd = size - vectorCount;
+                var zero = Vector128<T>.Zero;
+                uint laneMask = (1u << vectorCount) - 1;
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+                    uint nonZeroBits = ~bits & laneMask;
+                    count += BitOperations.PopCount(nonZeroBits);
+                }
+
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        count++;
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// SIMD bit-scan that writes flat indices of non-zero elements into a pre-sized
+        /// <paramref name="outBuf"/> (caller must obtain the count via
+        /// <see cref="NonZeroCountHelper{T}"/> first). Returns the number of indices written.
+        ///
+        /// Mirrors <see cref="NonZeroSimdHelper{T}"/> but avoids the List&lt;long&gt; growth
+        /// path so the dense case becomes a tight SIMD scan + pointer store, matching the
+        /// bool-mask <see cref="NonZeroFlatBoolKernel"/> shape.
+        /// </summary>
+        internal static unsafe long NonZeroFlatHelper<T>(T* src, long size, long* outBuf) where T : unmanaged
+        {
+            if (size == 0) return 0;
+
+            long count = 0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && size >= Vector256<T>.Count)
+            {
+                int vectorCount = Vector256<T>.Count;
+                long vectorEnd = size - vectorCount;
+                var zero = Vector256<T>.Zero;
+                uint laneMask = vectorCount == 32 ? uint.MaxValue : (1u << vectorCount) - 1;
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+                    uint nonZeroBits = ~bits & laneMask;
+
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = BitOperations.TrailingZeroCount(nonZeroBits);
+                        outBuf[count++] = i + bitPos;
+                        nonZeroBits &= nonZeroBits - 1;
+                    }
+                }
+
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        outBuf[count++] = i;
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && size >= Vector128<T>.Count)
+            {
+                int vectorCount = Vector128<T>.Count;
+                long vectorEnd = size - vectorCount;
+                var zero = Vector128<T>.Zero;
+                uint laneMask = (1u << vectorCount) - 1;
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+                    uint nonZeroBits = ~bits & laneMask;
+
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = BitOperations.TrailingZeroCount(nonZeroBits);
+                        outBuf[count++] = i + bitPos;
+                        nonZeroBits &= nonZeroBits - 1;
+                    }
+                }
+
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        outBuf[count++] = i;
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        outBuf[count++] = i;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
         /// SIMD helper for NonZero operation.
         /// Finds all indices where elements are non-zero.
         /// </summary>
