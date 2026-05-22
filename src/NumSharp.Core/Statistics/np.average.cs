@@ -65,9 +65,15 @@ namespace NumSharp
             {
                 NDArray avg = MeanWithAxes(a, normalizedAxis, keepdims);
 
+                // NumPy computes `scl = avg.dtype.type(a.size / avg.size)` unconditionally
+                // (before the returned check), so 0/0 raises ZeroDivisionError even when
+                // returned=False — see lib/_function_base_impl.average lines 576-578.
+                if (avg.size == 0)
+                    throw new DivideByZeroException("division by zero");
+
                 if (!returned) return (avg, null);
 
-                double count = avg.size == 0 ? 0.0 : (double)a.size / avg.size;
+                double count = (double)a.size / avg.size;
                 NDArray scl = NDArray.Scalar(count).astype(avg.typecode);
                 if (!scl.shape.SequenceEqual(avg.shape))
                     scl = np.broadcast_to(scl, avg).copy();
@@ -261,17 +267,14 @@ namespace NumSharp
             }
         }
 
+        // Dtype-generic zero-detection. Mirrors numpy's `np.any(scl == 0.0)` — uses
+        // ILKernelGenerator-backed equality + np.any (vacuous-false on empty input).
+        // Works for Half/Complex/Decimal where Convert.ToDouble fails (no IConvertible).
         private static bool HasZero(NDArray scl)
         {
-            long n = scl.size;
-            for (long i = 0; i < n; i++)
-            {
-                object v = scl.GetAtIndex(i);
-                if (v is null) continue;
-                double d = Convert.ToDouble(v);
-                if (d == 0.0) return true;
-            }
-            return false;
+            if (scl.size == 0) return false;
+            NDArray zero = NDArray.Scalar(0).astype(scl.typecode);
+            return np.any(scl == zero);
         }
     }
 }
