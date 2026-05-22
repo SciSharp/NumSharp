@@ -29,12 +29,11 @@ namespace NumSharp.Backends.Kernels
         #region NonZero SIMD Helpers
 
         /// <summary>
-        /// SIMD popcount of non-zero elements in a contiguous T-typed buffer. Mirrors the
-        /// bool-mask <see cref="NonZeroCountBoolKernel"/> pattern but generic over <typeparamref name="T"/>
-        /// so the JIT specializes V256/V128 paths per dtype (and degrades to scalar for
-        /// non-SIMD dtypes like Decimal/Half/Complex). Used as the count pass of the two-pass
-        /// argwhere/nonzero pipeline so the result buffer can be exact-sized — no List&lt;long&gt;
-        /// growth, no max-size waste.
+        /// [Legacy generic-T fallback — superseded by the IL-emitted
+        /// <see cref="ArgwhereCountKernel"/> per-dtype kernels in
+        /// <c>ILKernelGenerator.Argwhere.cs</c>. Retained for callers that may not have
+        /// reached the IL refactor yet.]
+        /// SIMD popcount of non-zero elements in a contiguous T-typed buffer.
         /// </summary>
         internal static unsafe long NonZeroCountHelper<T>(T* src, long size) where T : unmanaged
         {
