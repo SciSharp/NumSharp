@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
@@ -63,6 +64,50 @@ namespace NumSharp.Backends.Kernels
             where T : unmanaged
         {
             long axisStride = inputStrides[axis];
+
+            // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — leading-axis on C-contiguous input.
+            //
+            // For C-contig input with axis < ndim-1, the inner slab
+            // (dims axis+1..ndim-1) is contiguous, and the axis stride equals
+            // innerSize. We walk axis rows sequentially and SIMD-elementwise-
+            // reduce each row into the output slab — output stays hot in cache,
+            // input streams sequentially. This is the NumPy reduction pattern
+            // and turns axis=0 from O(out × stridedGather) into O(in_bytes).
+            // For axis = ndim-1 (innermost) the existing per-output contig
+            // SIMD reduce is optimal; we don't take this path.
+            // ─────────────────────────────────────────────────────────────────
+            if (axis < ndim - 1 && IsCContig(inputStrides, inputShape, ndim))
+            {
+                long innerSize = 1;
+                for (int d = axis + 1; d < ndim; d++) innerSize *= inputShape[d];
+                long outerSize = 1;
+                for (int d = 0; d < axis; d++) outerSize *= inputShape[d];
+
+                ReductionOp innerOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+                DispatchLeading<T>(input, output, outerSize, axisSize, innerSize, innerOp);
+
+                if (op == ReductionOp.Mean)
+                    DivideArrayByCount<T>(output, outerSize * innerSize, axisSize);
+                return;
+            }
+
+            // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — innermost-axis on C-contiguous input.
+            //
+            // axis == ndim-1 and the array is C-contig: each output reduces a
+            // single contiguous run of axisSize elements. Walk outputs sequentially
+            // and call the typed per-row reducer (struct-generic op tag → JIT
+            // inlines the SIMD intrinsic with no per-output runtime switch).
+            // ─────────────────────────────────────────────────────────────────
+            if (axis == ndim - 1 && IsCContig(inputStrides, inputShape, ndim))
+            {
+                ReductionOp innerOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+                DispatchInnermost<T>(input, output, outputSize, axisSize, innerOp);
+                if (op == ReductionOp.Mean)
+                    DivideArrayByCount<T>(output, outputSize, axisSize);
+                return;
+            }
 
             // Check if the reduction axis is contiguous (stride == 1)
             bool axisContiguous = axisStride == 1;
@@ -190,6 +235,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce a contiguous axis using SIMD.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe T ReduceContiguousAxis<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
@@ -499,6 +545,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the identity value for a reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T GetIdentityValue<T>(ReductionOp op) where T : unmanaged
         {
             if (typeof(T) == typeof(float))
@@ -629,6 +676,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Create identity Vector256 for reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<T> CreateIdentityVector256<T>(ReductionOp op) where T : unmanaged
         {
             T identity = GetIdentityValue<T>(op);
@@ -638,6 +686,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Create identity Vector128 for reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector128<T> CreateIdentityVector128<T>(ReductionOp op) where T : unmanaged
         {
             T identity = GetIdentityValue<T>(op);
@@ -647,6 +696,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two Vector256 values using reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<T> CombineVectors256<T>(Vector256<T> a, Vector256<T> b, ReductionOp op)
             where T : unmanaged
         {
@@ -663,6 +713,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two Vector128 values using reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector128<T> CombineVectors128<T>(Vector128<T> a, Vector128<T> b, ReductionOp op)
             where T : unmanaged
         {
@@ -708,6 +759,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two scalar values using reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T CombineScalars<T>(T a, T b, ReductionOp op) where T : unmanaged
         {
             if (typeof(T) == typeof(float))
@@ -853,6 +905,391 @@ namespace NumSharp.Backends.Kernels
             }
 
             throw new NotSupportedException($"Type {typeof(T)} not supported");
+        }
+
+        #endregion
+
+        #region Leading-axis fast path (axis < ndim-1 on C-contiguous input)
+
+        // Detect C-contiguous from strides+shape: stride[ndim-1] == 1 and
+        // stride[i] == stride[i+1] * shape[i+1] for all i in [0, ndim-2].
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool IsCContig(long* strides, long* shape, int ndim)
+        {
+            if (ndim == 0) return true;
+            if (strides[ndim - 1] != 1) return false;
+            for (int d = ndim - 2; d >= 0; d--)
+                if (strides[d] != strides[d + 1] * shape[d + 1]) return false;
+            return true;
+        }
+
+        // Per-op dispatch into the typed kernel. The runtime branch on `op` happens
+        // ONCE here (not in the hot loop), and routes to a kernel with the op
+        // hard-coded via struct generic — JIT inlines the SIMD intrinsic.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void DispatchLeading<T>(
+            T* input, T* output, long outerSize, long axisSize, long innerSize, ReductionOp op)
+            where T : unmanaged
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:  AxisReductionLeadingTyped<T, AddOp<T>>(input, output, outerSize, axisSize, innerSize); return;
+                case ReductionOp.Prod: AxisReductionLeadingTyped<T, MulOp<T>>(input, output, outerSize, axisSize, innerSize); return;
+                case ReductionOp.Min:  AxisReductionLeadingTyped<T, MinOp<T>>(input, output, outerSize, axisSize, innerSize); return;
+                case ReductionOp.Max:  AxisReductionLeadingTyped<T, MaxOp<T>>(input, output, outerSize, axisSize, innerSize); return;
+                default: throw new NotSupportedException($"DispatchLeading: {op}");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void DispatchInnermost<T>(
+            T* input, T* output, long outputSize, long axisSize, ReductionOp op)
+            where T : unmanaged
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:  AxisReductionInnermostTyped<T, AddOp<T>>(input, output, outputSize, axisSize); return;
+                case ReductionOp.Prod: AxisReductionInnermostTyped<T, MulOp<T>>(input, output, outputSize, axisSize); return;
+                case ReductionOp.Min:  AxisReductionInnermostTyped<T, MinOp<T>>(input, output, outputSize, axisSize); return;
+                case ReductionOp.Max:  AxisReductionInnermostTyped<T, MaxOp<T>>(input, output, outputSize, axisSize); return;
+                default: throw new NotSupportedException($"DispatchInnermost: {op}");
+            }
+        }
+
+        // Innermost-axis reduction (axis == ndim-1, C-contiguous). Each output
+        // reduces a contiguous run of axisSize elements. Per output: 4× unrolled
+        // SIMD with the op-struct (JIT inlines Vector.Add/Min/Max/Multiply) and
+        // tree-reduces to a scalar. The identity vectors are hoisted out of the
+        // per-output loop; the op-tag struct ensures no runtime switch.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void AxisReductionInnermostTyped<T, TOp>(
+            T* input, T* output, long outputSize, long axisSize)
+            where T : unmanaged
+            where TOp : struct, ITypedReductionOp<T>
+        {
+            TOp opAgent = default;
+            bool useV256 = Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && axisSize >= Vector256<T>.Count;
+            bool useV128 = !useV256 && Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && axisSize >= Vector128<T>.Count;
+
+            // Hoist: identity vector / scalar identity created once.
+            Vector256<T> identV256 = default;
+            Vector128<T> identV128 = default;
+            T identity = opAgent.Identity();
+            if (useV256) identV256 = Vector256.Create(identity);
+            else if (useV128) identV128 = Vector128.Create(identity);
+
+            if (useV256)
+            {
+                int vc = Vector256<T>.Count;
+                long unrollStep = vc * 4;
+                long unrollEnd = axisSize - unrollStep;
+                long vectorEnd = axisSize - vc;
+
+                for (long o = 0; o < outputSize; o++)
+                {
+                    T* row = input + o * axisSize;
+                    long i = 0;
+                    var acc0 = identV256;
+                    var acc1 = identV256;
+                    var acc2 = identV256;
+                    var acc3 = identV256;
+
+                    for (; i <= unrollEnd; i += unrollStep)
+                    {
+                        acc0 = opAgent.Combine256(acc0, Vector256.Load(row + i));
+                        acc1 = opAgent.Combine256(acc1, Vector256.Load(row + i + vc));
+                        acc2 = opAgent.Combine256(acc2, Vector256.Load(row + i + vc * 2));
+                        acc3 = opAgent.Combine256(acc3, Vector256.Load(row + i + vc * 3));
+                    }
+                    var acc = opAgent.Combine256(opAgent.Combine256(acc0, acc1), opAgent.Combine256(acc2, acc3));
+                    for (; i <= vectorEnd; i += vc)
+                        acc = opAgent.Combine256(acc, Vector256.Load(row + i));
+
+                    var acc128 = opAgent.Combine128(acc.GetLower(), acc.GetUpper());
+                    T scalarAcc = HorizontalReduceTyped<T, TOp>(acc128);
+                    for (; i < axisSize; i++)
+                        scalarAcc = opAgent.CombineScalar(scalarAcc, row[i]);
+                    output[o] = scalarAcc;
+                }
+            }
+            else if (useV128)
+            {
+                int vc = Vector128<T>.Count;
+                long unrollStep = vc * 4;
+                long unrollEnd = axisSize - unrollStep;
+                long vectorEnd = axisSize - vc;
+
+                for (long o = 0; o < outputSize; o++)
+                {
+                    T* row = input + o * axisSize;
+                    long i = 0;
+                    var acc0 = identV128;
+                    var acc1 = identV128;
+                    var acc2 = identV128;
+                    var acc3 = identV128;
+
+                    for (; i <= unrollEnd; i += unrollStep)
+                    {
+                        acc0 = opAgent.Combine128(acc0, Vector128.Load(row + i));
+                        acc1 = opAgent.Combine128(acc1, Vector128.Load(row + i + vc));
+                        acc2 = opAgent.Combine128(acc2, Vector128.Load(row + i + vc * 2));
+                        acc3 = opAgent.Combine128(acc3, Vector128.Load(row + i + vc * 3));
+                    }
+                    var acc = opAgent.Combine128(opAgent.Combine128(acc0, acc1), opAgent.Combine128(acc2, acc3));
+                    for (; i <= vectorEnd; i += vc)
+                        acc = opAgent.Combine128(acc, Vector128.Load(row + i));
+
+                    T scalarAcc = HorizontalReduceTyped<T, TOp>(acc);
+                    for (; i < axisSize; i++)
+                        scalarAcc = opAgent.CombineScalar(scalarAcc, row[i]);
+                    output[o] = scalarAcc;
+                }
+            }
+            else
+            {
+                // Fully scalar
+                for (long o = 0; o < outputSize; o++)
+                {
+                    T* row = input + o * axisSize;
+                    T scalarAcc = identity;
+                    for (long i = 0; i < axisSize; i++)
+                        scalarAcc = opAgent.CombineScalar(scalarAcc, row[i]);
+                    output[o] = scalarAcc;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T HorizontalReduceTyped<T, TOp>(Vector128<T> v)
+            where T : unmanaged
+            where TOp : struct, ITypedReductionOp<T>
+        {
+            TOp op = default;
+            int count = Vector128<T>.Count;
+            T r = v.GetElement(0);
+            for (int j = 1; j < count; j++) r = op.CombineScalar(r, v.GetElement(j));
+            return r;
+        }
+
+        // Leading-axis reduction (struct-generic op tag → JIT specializes per op).
+        // For each outer slab: copy the first axis row to the output slab as the
+        // accumulator seed, then SIMD-elementwise-reduce every remaining axis row
+        // into it. Output stays L1-hot; input streams sequentially. The op is
+        // passed via a zero-sized struct that implements ITypedReductionOp<T>,
+        // so the JIT inlines the actual SIMD instruction (Vector256.Max etc.)
+        // with no runtime switch in the hot loop.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void AxisReductionLeadingTyped<T, TOp>(
+            T* input, T* output,
+            long outerSize, long axisSize, long innerSize)
+            where T : unmanaged
+            where TOp : struct, ITypedReductionOp<T>
+        {
+            long inputSlab = axisSize * innerSize;
+            long bytesPerSlab = innerSize * sizeof(T);
+            TOp opAgent = default;
+
+            for (long o = 0; o < outerSize; o++)
+            {
+                T* outSlab = output + o * innerSize;
+                T* inBase = input + o * inputSlab;
+
+                Buffer.MemoryCopy(inBase, outSlab, bytesPerSlab, bytesPerSlab);
+
+                for (long a = 1; a < axisSize; a++)
+                {
+                    T* row = inBase + a * innerSize;
+                    long i = 0;
+                    if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && innerSize >= Vector256<T>.Count)
+                    {
+                        int vc = Vector256<T>.Count;
+                        long unrollEnd = innerSize - vc * 4;
+                        for (; i <= unrollEnd; i += vc * 4)
+                        {
+                            Vector256.Store(opAgent.Combine256(Vector256.Load(outSlab + i),         Vector256.Load(row + i)),         outSlab + i);
+                            Vector256.Store(opAgent.Combine256(Vector256.Load(outSlab + i + vc),    Vector256.Load(row + i + vc)),    outSlab + i + vc);
+                            Vector256.Store(opAgent.Combine256(Vector256.Load(outSlab + i + vc*2),  Vector256.Load(row + i + vc*2)),  outSlab + i + vc*2);
+                            Vector256.Store(opAgent.Combine256(Vector256.Load(outSlab + i + vc*3),  Vector256.Load(row + i + vc*3)),  outSlab + i + vc*3);
+                        }
+                        for (; i + vc <= innerSize; i += vc)
+                            Vector256.Store(opAgent.Combine256(Vector256.Load(outSlab + i), Vector256.Load(row + i)), outSlab + i);
+                    }
+                    else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && innerSize >= Vector128<T>.Count)
+                    {
+                        int vc = Vector128<T>.Count;
+                        long unrollEnd = innerSize - vc * 4;
+                        for (; i <= unrollEnd; i += vc * 4)
+                        {
+                            Vector128.Store(opAgent.Combine128(Vector128.Load(outSlab + i),         Vector128.Load(row + i)),         outSlab + i);
+                            Vector128.Store(opAgent.Combine128(Vector128.Load(outSlab + i + vc),    Vector128.Load(row + i + vc)),    outSlab + i + vc);
+                            Vector128.Store(opAgent.Combine128(Vector128.Load(outSlab + i + vc*2),  Vector128.Load(row + i + vc*2)),  outSlab + i + vc*2);
+                            Vector128.Store(opAgent.Combine128(Vector128.Load(outSlab + i + vc*3),  Vector128.Load(row + i + vc*3)),  outSlab + i + vc*3);
+                        }
+                        for (; i + vc <= innerSize; i += vc)
+                            Vector128.Store(opAgent.Combine128(Vector128.Load(outSlab + i), Vector128.Load(row + i)), outSlab + i);
+                    }
+                    for (; i < innerSize; i++)
+                        outSlab[i] = opAgent.CombineScalar(outSlab[i], row[i]);
+                }
+            }
+        }
+
+        // Op-tag interface. The JIT specializes the generic method per implementing
+        // struct, so opAgent.Combine256(a, b) compiles to a single SIMD instruction
+        // (no switch, no virtual call).
+        internal interface ITypedReductionOp<T> where T : unmanaged
+        {
+            Vector256<T> Combine256(Vector256<T> a, Vector256<T> b);
+            Vector128<T> Combine128(Vector128<T> a, Vector128<T> b);
+            T CombineScalar(T a, T b);
+            T Identity();
+        }
+
+        // Per-T identity helpers (one/min/max) — JIT-folded per specialization.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T OneOf<T>() where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  return (T)(object)1f;
+            if (typeof(T) == typeof(double)) return (T)(object)1.0;
+            if (typeof(T) == typeof(int))    return (T)(object)1;
+            if (typeof(T) == typeof(long))   return (T)(object)1L;
+            if (typeof(T) == typeof(byte))   return (T)(object)(byte)1;
+            if (typeof(T) == typeof(sbyte))  return (T)(object)(sbyte)1;
+            if (typeof(T) == typeof(short))  return (T)(object)(short)1;
+            if (typeof(T) == typeof(ushort)) return (T)(object)(ushort)1;
+            if (typeof(T) == typeof(uint))   return (T)(object)1u;
+            if (typeof(T) == typeof(ulong))  return (T)(object)1UL;
+            throw new NotSupportedException();
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T MaxValueOf<T>() where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  return (T)(object)float.PositiveInfinity;
+            if (typeof(T) == typeof(double)) return (T)(object)double.PositiveInfinity;
+            if (typeof(T) == typeof(int))    return (T)(object)int.MaxValue;
+            if (typeof(T) == typeof(long))   return (T)(object)long.MaxValue;
+            if (typeof(T) == typeof(byte))   return (T)(object)byte.MaxValue;
+            if (typeof(T) == typeof(sbyte))  return (T)(object)sbyte.MaxValue;
+            if (typeof(T) == typeof(short))  return (T)(object)short.MaxValue;
+            if (typeof(T) == typeof(ushort)) return (T)(object)ushort.MaxValue;
+            if (typeof(T) == typeof(uint))   return (T)(object)uint.MaxValue;
+            if (typeof(T) == typeof(ulong))  return (T)(object)ulong.MaxValue;
+            throw new NotSupportedException();
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T MinValueOf<T>() where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  return (T)(object)float.NegativeInfinity;
+            if (typeof(T) == typeof(double)) return (T)(object)double.NegativeInfinity;
+            if (typeof(T) == typeof(int))    return (T)(object)int.MinValue;
+            if (typeof(T) == typeof(long))   return (T)(object)long.MinValue;
+            if (typeof(T) == typeof(byte))   return (T)(object)byte.MinValue;
+            if (typeof(T) == typeof(sbyte))  return (T)(object)sbyte.MinValue;
+            if (typeof(T) == typeof(short))  return (T)(object)short.MinValue;
+            if (typeof(T) == typeof(ushort)) return (T)(object)ushort.MinValue;
+            if (typeof(T) == typeof(uint))   return (T)(object)uint.MinValue;
+            if (typeof(T) == typeof(ulong))  return (T)(object)ulong.MinValue;
+            throw new NotSupportedException();
+        }
+
+        internal readonly struct AddOp<T> : ITypedReductionOp<T> where T : unmanaged
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => AddScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => default;
+        }
+        internal readonly struct MulOp<T> : ITypedReductionOp<T> where T : unmanaged
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MulScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => OneOf<T>();
+        }
+        internal readonly struct MinOp<T> : ITypedReductionOp<T> where T : unmanaged
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Min(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Min(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MinScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MaxValueOf<T>();
+        }
+        internal readonly struct MaxOp<T> : ITypedReductionOp<T> where T : unmanaged
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Max(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Max(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MaxScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MinValueOf<T>();
+        }
+
+        // Per-T scalar helpers. The typeof(T)==typeof(X) chain JIT-folds to a single
+        // branch per specialization.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T AddScalar<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)(x + y); }
+            if (typeof(T) == typeof(double)) { double x = (double)(object)a, y = (double)(object)b; return (T)(object)(x + y); }
+            if (typeof(T) == typeof(int))    { int    x = (int)   (object)a, y = (int)   (object)b; return (T)(object)(x + y); }
+            if (typeof(T) == typeof(long))   { long   x = (long)  (object)a, y = (long)  (object)b; return (T)(object)(x + y); }
+            if (typeof(T) == typeof(byte))   { byte   x = (byte)  (object)a, y = (byte)  (object)b; return (T)(object)((byte)(x + y)); }
+            if (typeof(T) == typeof(sbyte))  { sbyte  x = (sbyte) (object)a, y = (sbyte) (object)b; return (T)(object)((sbyte)(x + y)); }
+            if (typeof(T) == typeof(short))  { short  x = (short) (object)a, y = (short) (object)b; return (T)(object)((short)(x + y)); }
+            if (typeof(T) == typeof(ushort)) { ushort x = (ushort)(object)a, y = (ushort)(object)b; return (T)(object)((ushort)(x + y)); }
+            if (typeof(T) == typeof(uint))   { uint   x = (uint)  (object)a, y = (uint)  (object)b; return (T)(object)(x + y); }
+            if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)(x + y); }
+            throw new NotSupportedException();
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T MulScalar<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)(x * y); }
+            if (typeof(T) == typeof(double)) { double x = (double)(object)a, y = (double)(object)b; return (T)(object)(x * y); }
+            if (typeof(T) == typeof(int))    { int    x = (int)   (object)a, y = (int)   (object)b; return (T)(object)(x * y); }
+            if (typeof(T) == typeof(long))   { long   x = (long)  (object)a, y = (long)  (object)b; return (T)(object)(x * y); }
+            if (typeof(T) == typeof(byte))   { byte   x = (byte)  (object)a, y = (byte)  (object)b; return (T)(object)((byte)(x * y)); }
+            if (typeof(T) == typeof(sbyte))  { sbyte  x = (sbyte) (object)a, y = (sbyte) (object)b; return (T)(object)((sbyte)(x * y)); }
+            if (typeof(T) == typeof(short))  { short  x = (short) (object)a, y = (short) (object)b; return (T)(object)((short)(x * y)); }
+            if (typeof(T) == typeof(ushort)) { ushort x = (ushort)(object)a, y = (ushort)(object)b; return (T)(object)((ushort)(x * y)); }
+            if (typeof(T) == typeof(uint))   { uint   x = (uint)  (object)a, y = (uint)  (object)b; return (T)(object)(x * y); }
+            if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)(x * y); }
+            throw new NotSupportedException();
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T MinScalar<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(double)) { double x = (double)(object)a, y = (double)(object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(int))    { int    x = (int)   (object)a, y = (int)   (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(long))   { long   x = (long)  (object)a, y = (long)  (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(byte))   { byte   x = (byte)  (object)a, y = (byte)  (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(sbyte))  { sbyte  x = (sbyte) (object)a, y = (sbyte) (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(short))  { short  x = (short) (object)a, y = (short) (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(ushort)) { ushort x = (ushort)(object)a, y = (ushort)(object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(uint))   { uint   x = (uint)  (object)a, y = (uint)  (object)b; return (T)(object)Math.Min(x, y); }
+            if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)Math.Min(x, y); }
+            throw new NotSupportedException();
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T MaxScalar<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(double)) { double x = (double)(object)a, y = (double)(object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(int))    { int    x = (int)   (object)a, y = (int)   (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(long))   { long   x = (long)  (object)a, y = (long)  (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(byte))   { byte   x = (byte)  (object)a, y = (byte)  (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(sbyte))  { sbyte  x = (sbyte) (object)a, y = (sbyte) (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(short))  { short  x = (short) (object)a, y = (short) (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(ushort)) { ushort x = (ushort)(object)a, y = (ushort)(object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(uint))   { uint   x = (uint)  (object)a, y = (uint)  (object)b; return (T)(object)Math.Max(x, y); }
+            if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)Math.Max(x, y); }
+            throw new NotSupportedException();
+        }
+
+        // Divide an array in place by an integer count. Used by Mean axis
+        // reductions after the leading-axis Sum accumulation finishes.
+        private static unsafe void DivideArrayByCount<T>(T* arr, long n, long count) where T : unmanaged
+        {
+            for (long i = 0; i < n; i++)
+                arr[i] = DivideByCountTyped(arr[i], count);
         }
 
         #endregion
