@@ -110,6 +110,26 @@ namespace NumSharp.Backends.Kernels
             }
 
             // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — axis=0 with INNER SLAB C-contig (covers sliced inputs
+            // like a[::2,:], a[::-1,:], a[100:900, 100:900]). The slab traversal
+            // is identical to the C-contig leading-axis case, but axis-row spacing
+            // uses the natural axis stride (could be != innerSize for sliced inputs,
+            // could be negative for reversed views). Output is shape (inner...,)
+            // which is freshly allocated C-contig — matches the slab layout.
+            // ─────────────────────────────────────────────────────────────────
+            if (axis == 0 && ndim >= 2 && IsInnerSlabCContig(inputStrides, inputShape, 0, ndim))
+            {
+                long innerSize = 1;
+                for (int d = 1; d < ndim; d++) innerSize *= inputShape[d];
+                long axisStrideEl = inputStrides[0];
+                ReductionOp innerOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+                DispatchLeadingStrided<T>(input, output, axisSize, innerSize, axisStrideEl, innerOp);
+                if (op == ReductionOp.Mean)
+                    DivideArrayByCount<T>(output, innerSize, axisSize);
+                return;
+            }
+
+            // ─────────────────────────────────────────────────────────────────
             // FAST PATH — F-contig leading-axis (axis == ndim-1 on F-contig).
             //
             // For F-contig input, axis=ndim-1 has the LARGEST stride (analogous
@@ -979,6 +999,21 @@ namespace NumSharp.Backends.Kernels
             return true;
         }
 
+        // Detect whether the INNER slab (dims after axis) is C-contiguous as a flat
+        // run of memory. This is looser than full C-contig — it does NOT require the
+        // outer strides to match the C-contig formula, so it covers sliced inputs
+        // like a[::2,:], a[::-1,:], or a[100:900, 100:900], whose inner dim is still
+        // stride-1 but whose outer stride differs from a fresh C-contig array.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool IsInnerSlabCContig(long* strides, long* shape, int axis, int ndim)
+        {
+            if (axis >= ndim - 1) return false;
+            if (strides[ndim - 1] != 1) return false;
+            for (int d = ndim - 2; d > axis; d--)
+                if (strides[d] != strides[d + 1] * shape[d + 1]) return false;
+            return true;
+        }
+
         // Per-op dispatch into the typed kernel. The runtime branch on `op` happens
         // ONCE here (not in the hot loop), and routes to a kernel with the op
         // hard-coded via struct generic — JIT inlines the SIMD intrinsic.
@@ -1009,6 +1044,75 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.Min:  AxisReductionInnermostTyped<T, MinOp<T>>(input, output, outputSize, axisSize); return;
                 case ReductionOp.Max:  AxisReductionInnermostTyped<T, MaxOp<T>>(input, output, outputSize, axisSize); return;
                 default: throw new NotSupportedException($"DispatchInnermost: {op}");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void DispatchLeadingStrided<T>(
+            T* input, T* output, long axisSize, long innerSize, long axisStride, ReductionOp op)
+            where T : unmanaged
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:  AxisReductionLeadingStridedTyped<T, AddOp<T>>(input, output, axisSize, innerSize, axisStride); return;
+                case ReductionOp.Prod: AxisReductionLeadingStridedTyped<T, MulOp<T>>(input, output, axisSize, innerSize, axisStride); return;
+                case ReductionOp.Min:  AxisReductionLeadingStridedTyped<T, MinOp<T>>(input, output, axisSize, innerSize, axisStride); return;
+                case ReductionOp.Max:  AxisReductionLeadingStridedTyped<T, MaxOp<T>>(input, output, axisSize, innerSize, axisStride); return;
+                default: throw new NotSupportedException($"DispatchLeadingStrided: {op}");
+            }
+        }
+
+        // axis=0 leading-axis where the inner slab is C-contig but the axis
+        // stride may differ from innerSize (sliced/reversed inputs). The slab
+        // (output buffer) is C-contig of innerSize elements; we copy the first
+        // axis row in as the accumulator seed, then SIMD-fold each subsequent
+        // axis row using the per-row pointer `input + a*axisStride`.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void AxisReductionLeadingStridedTyped<T, TOp>(
+            T* input, T* output, long axisSize, long innerSize, long axisStride)
+            where T : unmanaged
+            where TOp : struct, ITypedReductionOp<T>
+        {
+            long bytesPerSlab = innerSize * sizeof(T);
+            TOp opAgent = default;
+
+            // Seed: first axis row (a=0) copied to output. Axis row starts at input + 0*axisStride.
+            Buffer.MemoryCopy(input, output, bytesPerSlab, bytesPerSlab);
+
+            for (long a = 1; a < axisSize; a++)
+            {
+                T* row = input + a * axisStride;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && innerSize >= Vector256<T>.Count)
+                {
+                    int vc = Vector256<T>.Count;
+                    long unrollEnd = innerSize - vc * 4;
+                    for (; i <= unrollEnd; i += vc * 4)
+                    {
+                        Vector256.Store(opAgent.Combine256(Vector256.Load(output + i),         Vector256.Load(row + i)),         output + i);
+                        Vector256.Store(opAgent.Combine256(Vector256.Load(output + i + vc),    Vector256.Load(row + i + vc)),    output + i + vc);
+                        Vector256.Store(opAgent.Combine256(Vector256.Load(output + i + vc*2),  Vector256.Load(row + i + vc*2)),  output + i + vc*2);
+                        Vector256.Store(opAgent.Combine256(Vector256.Load(output + i + vc*3),  Vector256.Load(row + i + vc*3)),  output + i + vc*3);
+                    }
+                    for (; i + vc <= innerSize; i += vc)
+                        Vector256.Store(opAgent.Combine256(Vector256.Load(output + i), Vector256.Load(row + i)), output + i);
+                }
+                else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && innerSize >= Vector128<T>.Count)
+                {
+                    int vc = Vector128<T>.Count;
+                    long unrollEnd = innerSize - vc * 4;
+                    for (; i <= unrollEnd; i += vc * 4)
+                    {
+                        Vector128.Store(opAgent.Combine128(Vector128.Load(output + i),         Vector128.Load(row + i)),         output + i);
+                        Vector128.Store(opAgent.Combine128(Vector128.Load(output + i + vc),    Vector128.Load(row + i + vc)),    output + i + vc);
+                        Vector128.Store(opAgent.Combine128(Vector128.Load(output + i + vc*2),  Vector128.Load(row + i + vc*2)),  output + i + vc*2);
+                        Vector128.Store(opAgent.Combine128(Vector128.Load(output + i + vc*3),  Vector128.Load(row + i + vc*3)),  output + i + vc*3);
+                    }
+                    for (; i + vc <= innerSize; i += vc)
+                        Vector128.Store(opAgent.Combine128(Vector128.Load(output + i), Vector128.Load(row + i)), output + i);
+                }
+                for (; i < innerSize; i++)
+                    output[i] = opAgent.CombineScalar(output[i], row[i]);
             }
         }
 
