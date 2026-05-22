@@ -223,7 +223,7 @@ Tested against NumPy 2.x.
 `abs`, `absolute`, `add`, `cbrt`, `ceil`, `clip`, `convolve`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `reciprocal`, `sign`, `sin`, `cos`, `tan`, `sqrt`, `square`, `subtract`, `true_divide`, `trunc`
 
 ### Math — Reductions
-`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `quantile`, `std`, `sum`, `var`
+`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 
 ### Math — NaN-Aware
 `nanmax`, `nanmean`, `nanmin`, `nanprod`, `nanstd`, `nansum`, `nanvar`
