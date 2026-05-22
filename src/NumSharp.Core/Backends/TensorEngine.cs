@@ -206,6 +206,8 @@ namespace NumSharp
 
         public abstract NDArray<long>[] NonZero(NDArray a);
 
+        public abstract NDArray<long> FlatNonZero(NDArray a);
+
         public abstract NDArray Argwhere(NDArray a);
 
         public abstract long CountNonZero(NDArray a);
