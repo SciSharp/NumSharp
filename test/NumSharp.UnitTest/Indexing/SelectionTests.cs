@@ -298,11 +298,14 @@ public class SelectionTests
     [TestMethod]
     public void Take_OutParam_DtypeCast_FillsWithCastedValues()
     {
-        // NumPy lets out= specify a different dtype; values are unsafe-cast.
-        var a = np.array(new int[] { 10, 20, 30 });
-        var outFloat = np.zeros<double>(new int[] { 2 });
-        np.take(a, np.array(new int[] { 0, 2 }), @out: outFloat);
-        outFloat.ToArray<double>().Should().Equal(10.0, 30.0);
+        // NumPy out= permits unsafe writeback IF the source's dtype can be safely
+        // cast back from out's dtype (i.e. can_cast(out, src, "safe") = True).
+        // src=float64, out=int32 satisfies that direction (int32→float64 is safe),
+        // so the writeback truncates values into int32.
+        var a = np.array(new double[] { 10.7, 20.5, 30.0 });
+        var outInt = np.zeros<int>(new int[] { 2 });
+        np.take(a, np.array(new int[] { 0, 2 }), @out: outInt);
+        outInt.ToArray<int>().Should().Equal(10, 30);
     }
 
     [TestMethod]
@@ -911,12 +914,42 @@ public class SelectionTests
     [TestMethod]
     public void Compress_OutDispatch_ReturnsOutWithCorrectDtype()
     {
-        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
-        var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
+        // out.dtype must be safely castable to src.dtype (NumPy rule —
+        // mirrors PyArray_TakeFrom's WRITEBACKIFCOPY scratch init via
+        // PyArray_FromArray(out, src_dtype, ...)). Here src=int64, out=int32
+        // → can_cast(int32, int64, "safe") = True, so this is allowed.
+        var a = np.array(new long[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int32);
         var r = np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
         ReferenceEquals(r, outArr).Should().BeTrue();
-        r.dtype.Should().Be(typeof(long));
-        np.ravel(r).ToArray<long>().Should().Equal(1L, 2L, 5L, 6L);
+        r.dtype.Should().Be(typeof(int));
+        np.ravel(r).ToArray<int>().Should().Equal(1, 2, 5, 6);
+    }
+
+    [TestMethod]
+    public void Compress_OutDispatch_UnsafeCastDirection_Raises()
+    {
+        // out.dtype int64 cannot be safely cast to src.dtype int32 — NumPy
+        // raises TypeError with this exact message.
+        var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+        var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
+        var action = () => np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
+        action.Should().Throw<TypeError>()
+            .WithMessage("Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'");
+    }
+
+    [TestMethod]
+    public void Compress_OutDispatch_FloatToInt_AllowedUnsafeWriteback()
+    {
+        // src=float64, out=int32 → can_cast(int32, float64, "safe") = True, so
+        // NumPy permits this even though the writeback truncates. Values:
+        // float64 src [0.5,1.5,...,8.5] → take rows 0,2 → [0.5,1.5,2.5,6.5,7.5,8.5]
+        // writeback to int32 truncates toward zero: [0,1,2,6,7,8].
+        var src = np.arange(9, NPTypeCode.Double).reshape(3, 3) + 0.5;
+        var outArr = np.zeros(new Shape(2, 3), NPTypeCode.Int32);
+        var r = np.compress(np.array(new bool[] { true, false, true }), src, axis: 0, @out: outArr);
+        r.dtype.Should().Be(typeof(int));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 1, 2, 6, 7, 8);
     }
 
     [TestMethod]
@@ -947,6 +980,194 @@ public class SelectionTests
         r.Shape.Should().Be(new Shape(2, 4));
         // src[::2] rows: [0..3], [8..11], [16..19]; pick rows 0,2 → [0..3, 16..19]
         np.ravel(r).ToArray<long>().Should().Equal(0L, 1L, 2L, 3L, 16L, 17L, 18L, 19L);
+    }
+
+    [TestMethod]
+    public void Extract_TransposedSource_RavelsLogicalOrder()
+    {
+        // Transposed view of (3,4) → (4,3); ravel walks logical C-order.
+        // src.T.ravel() = [0,4,8, 1,5,9, 2,6,10, 3,7,11].
+        var src = np.arange(12, NPTypeCode.Int32).reshape(3, 4).T;
+        src.Shape.IsContiguous.Should().BeFalse();
+        var cond = np.array(new bool[] { true, false, true, false, true, false, true, false, true, false, true, false });
+        var r = np.extract(cond, src);
+        r.ToArray<int>().Should().Equal(0, 8, 5, 2, 10, 7);
+    }
+
+    [TestMethod]
+    public void Extract_NegativeStrideSource()
+    {
+        var src = np.arange(10, NPTypeCode.Int32)["::-1"];
+        var cond = np.array(new bool[] { true, false, true, false, true, false, true, false, true, false });
+        var r = np.extract(cond, src);
+        // src reversed = [9,8,...,0]; keep every other → [9,7,5,3,1]
+        r.ToArray<int>().Should().Equal(9, 7, 5, 3, 1);
+    }
+
+    [TestMethod]
+    public void Extract_BroadcastedSource()
+    {
+        var src = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(4, 3));
+        src.Shape.IsBroadcasted.Should().BeTrue();
+        var cond = np.array(Enumerable.Repeat(true, 12).ToArray());
+        var r = np.extract(cond, src);
+        r.ToArray<int>().Should().Equal(1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3);
+    }
+
+    [TestMethod]
+    public void Extract_NaNConditionIsTruthy()
+    {
+        // NumPy treats NaN as nonzero (truthy) in mask interpretation.
+        var cond = np.array(new double[] { double.NaN, 0.0, double.NaN });
+        var arr = np.array(new int[] { 10, 20, 30 });
+        var r = np.extract(cond, arr);
+        r.ToArray<int>().Should().Equal(10, 30);
+    }
+
+    [TestMethod]
+    public void Extract_ComplexConditionZeroIsFalse()
+    {
+        // Complex 0+0j is False; non-zero real OR imag → True.
+        var cond = np.array(new Complex[] { new(0, 0), new(1, 0), new(0, 1), new(0, 0) });
+        var arr = np.array(new int[] { 10, 20, 30, 40 });
+        var r = np.extract(cond, arr);
+        r.ToArray<int>().Should().Equal(20, 30);
+    }
+
+    [TestMethod]
+    public void Extract_NonContigConditionView()
+    {
+        // Condition is a strided view of a larger buffer.
+        var bigCond = np.array(new bool[] { true, false, false, true, false, true, true, false });
+        var view = bigCond["::2"]; // [T, F, F, T]
+        var arr = np.array(new int[] { 10, 20, 30, 40 });
+        var r = np.extract(view, arr);
+        r.ToArray<int>().Should().Equal(10, 40);
+    }
+
+    [TestMethod]
+    public void Extract_0DConditionTrue()
+    {
+        // 0-d True cond: ravel gives 1-element 1-D; nonzero gives [0]; take arr[0].
+        var r = np.extract(NDArray.Scalar(true), np.array(new int[] { 10, 20, 30 }));
+        r.Shape.Should().Be(new Shape(1));
+        r.GetInt32(0).Should().Be(10);
+    }
+
+    [TestMethod]
+    public void Extract_0DConditionFalse_Empty()
+    {
+        var r = np.extract(NDArray.Scalar(false), np.array(new int[] { 10, 20, 30 }));
+        r.size.Should().Be(0);
+    }
+
+    [TestMethod]
+    public void Compress_TransposedSource_Axis0()
+    {
+        // T view of (3,4) is (4,3) non-contig; compress axis=0 selects logical rows.
+        var src = np.arange(12, NPTypeCode.Int32).reshape(3, 4).T;
+        var r = np.compress(np.array(new bool[] { true, false, true, false }), src, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 3));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 4, 8, 2, 6, 10);
+    }
+
+    [TestMethod]
+    public void Compress_TransposedSource_Axis1()
+    {
+        var src = np.arange(12, NPTypeCode.Int32).reshape(3, 4).T; // (4, 3)
+        var r = np.compress(np.array(new bool[] { true, false, true }), src, axis: 1);
+        r.Shape.Should().Be(new Shape(4, 2));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 8, 1, 9, 2, 10, 3, 11);
+    }
+
+    [TestMethod]
+    public void Compress_NegativeStrideSource_Axis0()
+    {
+        var src = np.arange(20, NPTypeCode.Int32).reshape(4, 5)["::-1"];
+        // src is reversed-row view: [[15..19],[10..14],[5..9],[0..4]]
+        var r = np.compress(np.array(new bool[] { true, false, true, false }), src, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 5));
+        np.ravel(r).ToArray<int>().Should().Equal(15, 16, 17, 18, 19, 5, 6, 7, 8, 9);
+    }
+
+    [TestMethod]
+    public void Compress_BroadcastedSource()
+    {
+        var src = np.broadcast_to(np.arange(3, NPTypeCode.Int32), new Shape(4, 3));
+        var r = np.compress(np.array(new bool[] { true, false, true, false }), src, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 3));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 1, 2, 0, 1, 2);
+    }
+
+    [TestMethod]
+    public void Compress_NaNCondition()
+    {
+        var cond = np.array(new double[] { double.NaN, 0.0, double.NaN });
+        var src = np.arange(9, NPTypeCode.Int32).reshape(3, 3);
+        var r = np.compress(cond, src, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 3));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 1, 2, 6, 7, 8);
+    }
+
+    [TestMethod]
+    public void Compress_ComplexCondition()
+    {
+        var cond = np.array(new Complex[] { new(0, 0), new(1, 0), new(0, 1) });
+        var src = np.arange(9, NPTypeCode.Int32).reshape(3, 3);
+        var r = np.compress(cond, src, axis: 0);
+        r.Shape.Should().Be(new Shape(2, 3));
+        np.ravel(r).ToArray<int>().Should().Equal(3, 4, 5, 6, 7, 8);
+    }
+
+    [TestMethod]
+    public void Compress_NonContigCondition()
+    {
+        // 1-D cond via slicing → strided cond, but still ndim==1.
+        var bigCond = np.zeros(new Shape(20), NPTypeCode.Boolean);
+        for (int i = 0; i < 20; i += 4) bigCond.SetByte((byte)1, i); // every 4th true
+        var view = bigCond[":10:2"]; // size 5: [T, F, T, F, T]
+        var src = np.arange(15, NPTypeCode.Int32).reshape(5, 3);
+        var r = np.compress(view, src, axis: 0);
+        r.Shape.Should().Be(new Shape(3, 3));
+        np.ravel(r).ToArray<int>().Should().Equal(0, 1, 2, 6, 7, 8, 12, 13, 14);
+    }
+
+    [TestMethod]
+    public void Compress_5DSource()
+    {
+        // 7-D was too large to construct easily here; use 5-D from probes.
+        var src = np.arange(2 * 3 * 2 * 3 * 2, NPTypeCode.Int32).reshape(2, 3, 2, 3, 2);
+        var r = np.compress(np.array(new bool[] { true, false }), src, axis: 2);
+        r.Shape.Should().Be(new Shape(2, 3, 1, 3, 2));
+    }
+
+    [TestMethod]
+    public void Compress_EmptyAxisSource_EmptyCond_PreservesShape()
+    {
+        // src is (3, 0, 4); empty cond is valid since len(cond) == axis dim (0).
+        var src = np.zeros(new Shape(3, 0, 4), NPTypeCode.Int32);
+        var r = np.compress(np.array(new bool[] { }), src, axis: 1);
+        r.Shape.Should().Be(new Shape(3, 0, 4));
+    }
+
+    [TestMethod]
+    public void Compress_EmptyAxisSource_NonEmptyCond_Raises()
+    {
+        // src is (3, 0, 4); cond [T] would need axis dim ≥ 1, but it's 0.
+        var src = np.zeros(new Shape(3, 0, 4), NPTypeCode.Int32);
+        var action = () => np.compress(np.array(new bool[] { true }), src, axis: 1);
+        action.Should().Throw<Exception>()
+            .Where(e => e is ArgumentException || e is IndexOutOfRangeException || e is ArgumentOutOfRangeException);
+    }
+
+    [TestMethod]
+    public void Compress_AliasedCondAndSource_Independent()
+    {
+        // cond computed from src (so cond shares semantic content but separate buffer).
+        var src = np.array(new int[] { 0, 1, 0, 2, 0, 3 });
+        var cond = src > 0;
+        var r = np.extract(cond, src);
+        r.ToArray<int>().Should().Equal(1, 2, 3);
     }
 
     [TestMethod]

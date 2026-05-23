@@ -65,8 +65,15 @@ namespace NumSharp
                 result = TakeAxis(a, indices, ax, modeInt);
             }
 
-            // out= dispatch: validate shape, then copyto with unsafe casting (matches
-            // NumPy's writeback-if-copy behaviour for dtype mismatches).
+            // out= dispatch: validate shape, validate safe-cast direction
+            // (out.dtype → a.dtype), then writeback-if-copy via copyto with unsafe
+            // casting. NumPy's PyArray_TakeFrom invokes PyArray_FromArray(out,
+            // src_dtype, WRITEBACKIFCOPY) which checks out.dtype can be SAFELY
+            // cast to src.dtype — i.e. the user-supplied out must be at least as
+            // narrow as src so the kernel's writes don't lose precision when later
+            // written back. Matching error message:
+            //   "Cannot cast array data from dtype('{out}') to dtype('{src}')
+            //    according to the rule 'safe'".
             if (@out is null)
                 return result;
 
@@ -74,6 +81,13 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"output array does not match result of ndarray.take: expected shape {result.Shape}, got {@out.Shape}",
                     nameof(@out));
+
+            if (@out.GetTypeCode != a.GetTypeCode &&
+                !np.can_cast(@out.GetTypeCode, a.GetTypeCode, "safe"))
+            {
+                throw new TypeError(
+                    $"Cannot cast array data from dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') to dtype('{a.GetTypeCode.AsNumpyDtypeName()}') according to the rule 'safe'");
+            }
 
             np.copyto(@out, result, casting: "unsafe");
             return @out;
