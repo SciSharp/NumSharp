@@ -194,7 +194,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Byte size for the trace accum dtypes (int64 / uint64 / single / double).
+        /// Byte size for the trace result dtypes.
         /// </summary>
         private static int NPTypeCodeBytes(NPTypeCode code) => code switch
         {
@@ -202,7 +202,10 @@ namespace NumSharp
             NPTypeCode.UInt64 => 8,
             NPTypeCode.Single => 4,
             NPTypeCode.Double => 8,
-            _ => throw new NotSupportedException($"Trace accum dtype {code} has no size mapping")
+            NPTypeCode.Half => 2,
+            NPTypeCode.Decimal => 16,
+            NPTypeCode.Complex => 16,
+            _ => throw new NotSupportedException($"Trace result dtype {code} has no size mapping")
         };
 
         /// <summary>

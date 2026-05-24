@@ -357,6 +357,98 @@ public class DiagonalTraceTests
     }
 
     [TestMethod]
+    public void Trace_Half_PreservesDtypeAndPrecision()
+    {
+        // NumPy: np.trace(np.array([[1.5, 2.5], [3.5, 4.5]], dtype=float16)) = 6.0 float16.
+        var a = np.array(new Half[,] { { (Half)1.5f, (Half)2.5f }, { (Half)3.5f, (Half)4.5f } });
+        var r = np.trace(a);
+        r.dtype.Should().Be(typeof(Half));
+        ((float)(Half)r.GetValue(0)).Should().BeApproximately(6.0f, 0.001f);
+    }
+
+    [TestMethod]
+    public void Trace_Half_HighPrecisionAccumulation()
+    {
+        // Accumulating 100 × 0.1 in float16 lane-by-lane drifts; the kernel
+        // accumulates in double then casts to Half, matching NumPy's exact 10.0.
+        var a = np.zeros(new Shape(100, 100), NPTypeCode.Half);
+        for (int i = 0; i < 100; i++)
+            a.SetValue((Half)0.1f, i, i);
+        var r = np.trace(a);
+        r.dtype.Should().Be(typeof(Half));
+        ((float)(Half)r.GetValue(0)).Should().BeApproximately(10.0f, 0.05f);
+    }
+
+    [TestMethod]
+    public void Trace_Decimal_NativeAddition()
+    {
+        var a = np.array(new decimal[,] { { 1m, 2m }, { 3m, 4m } });
+        var r = np.trace(a);
+        r.dtype.Should().Be(typeof(decimal));
+        ((decimal)r.GetValue(0)).Should().Be(5m);
+    }
+
+    [TestMethod]
+    public void Trace_Complex_FastPath()
+    {
+        var a = np.array(new Complex[,] { { new(1, 2), new(3, 0) }, { new(4, 0), new(5, 6) } });
+        var r = np.trace(a);
+        r.dtype.Should().Be(typeof(Complex));
+        var v = (Complex)r.GetValue(0);
+        v.Real.Should().Be(6);
+        v.Imaginary.Should().Be(8);
+    }
+
+    [TestMethod]
+    public void Trace_3D_Half()
+    {
+        var a = np.zeros(new Shape(2, 3, 3), NPTypeCode.Half);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 3; j++)
+                for (int k = 0; k < 3; k++)
+                    a.SetValue((Half)(i * 9 + j * 3 + k), i, j, k);
+        var r = np.trace(a);
+        r.Shape.Should().Be(new Shape(3));
+        // diag along axis=0, axis=1; outer axis=2 (size 3)
+        // For each k: src[0,0,k] + src[1,1,k] = k + (12+k) = 12 + 2k → 12, 14, 16
+        ((float)(Half)r.GetValue(0)).Should().BeApproximately(12.0f, 0.01f);
+        ((float)(Half)r.GetValue(1)).Should().BeApproximately(14.0f, 0.01f);
+        ((float)(Half)r.GetValue(2)).Should().BeApproximately(16.0f, 0.01f);
+    }
+
+    [TestMethod]
+    public void Trace_3D_Decimal()
+    {
+        var a = np.zeros(new Shape(2, 3, 3), NPTypeCode.Decimal);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 3; j++)
+                for (int k = 0; k < 3; k++)
+                    a.SetValue((decimal)(i * 9 + j * 3 + k), i, j, k);
+        var r = np.trace(a);
+        r.Shape.Should().Be(new Shape(3));
+        ((decimal)r.GetValue(0)).Should().Be(12m);
+        ((decimal)r.GetValue(1)).Should().Be(14m);
+        ((decimal)r.GetValue(2)).Should().Be(16m);
+    }
+
+    [TestMethod]
+    public void Trace_3D_Complex()
+    {
+        var a = np.zeros(new Shape(2, 2, 2), NPTypeCode.Complex);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                for (int k = 0; k < 2; k++)
+                    a.SetValue(new Complex(i + j + k, i * j + k), i, j, k);
+        var r = np.trace(a);
+        r.Shape.Should().Be(new Shape(2));
+        // Per k: diag (0,0,k) + (1,1,k) = (0+0+k, 0+k) + (2+k, 1+k) = (2+2k, 1+2k)
+        var v0 = (Complex)r.GetValue(0);
+        v0.Real.Should().Be(2); v0.Imaginary.Should().Be(1);
+        var v1 = (Complex)r.GetValue(1);
+        v1.Real.Should().Be(4); v1.Imaginary.Should().Be(3);
+    }
+
+    [TestMethod]
     public void Trace_TransposedSource_StillCorrect()
     {
         // T view of (3,4) is (4,3) non-contig; trace should work via the diagonal
