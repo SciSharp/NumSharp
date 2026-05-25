@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -78,12 +79,13 @@ namespace NumSharp.Backends
             // field directly instead of routing through SetInternalArray's full
             // 15-case typecode dispatch. The aliased storage exposes the same
             // backing buffer; the type-specific field is still needed for typed
-            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot.
+            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot
+            // via an IL-emitted delegate cached per dtype (no switch in hot path).
             if (InternalArray != null)
             {
                 r.InternalArray = InternalArray;
                 r.Address = Address;
-                CopyTypedArrayRef(r);
+                ILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
             }
 
             r._shape = shape;
@@ -93,34 +95,6 @@ namespace NumSharp.Backends
             return r;
         }
 
-        /// <summary>
-        ///     Copy the one live <c>_array{Type}</c> field from this storage into
-        ///     <paramref name="r"/>. Dispatch on <see cref="_typecode"/> — one
-        ///     reference store per call — instead of <see cref="SetInternalArray"/>'s
-        ///     interface-to-concrete cast (<c>(ArraySlice&lt;T&gt;)IArraySlice</c>),
-        ///     which is a virtual call when the concrete type isn't sealed.
-        /// </summary>
-        private void CopyTypedArrayRef(UnmanagedStorage r)
-        {
-            switch (_typecode)
-            {
-                case NPTypeCode.Boolean: r._arrayBoolean = _arrayBoolean; break;
-                case NPTypeCode.SByte:   r._arraySByte   = _arraySByte;   break;
-                case NPTypeCode.Byte:    r._arrayByte    = _arrayByte;    break;
-                case NPTypeCode.Int16:   r._arrayInt16   = _arrayInt16;   break;
-                case NPTypeCode.UInt16:  r._arrayUInt16  = _arrayUInt16;  break;
-                case NPTypeCode.Int32:   r._arrayInt32   = _arrayInt32;   break;
-                case NPTypeCode.UInt32:  r._arrayUInt32  = _arrayUInt32;  break;
-                case NPTypeCode.Int64:   r._arrayInt64   = _arrayInt64;   break;
-                case NPTypeCode.UInt64:  r._arrayUInt64  = _arrayUInt64;  break;
-                case NPTypeCode.Char:    r._arrayChar    = _arrayChar;    break;
-                case NPTypeCode.Half:    r._arrayHalf    = _arrayHalf;    break;
-                case NPTypeCode.Single:  r._arraySingle  = _arraySingle;  break;
-                case NPTypeCode.Double:  r._arrayDouble  = _arrayDouble;  break;
-                case NPTypeCode.Decimal: r._arrayDecimal = _arrayDecimal; break;
-                case NPTypeCode.Complex: r._arrayComplex = _arrayComplex; break;
-            }
-        }
 
         /// <summary>
         /// Creates an alias (view) of this storage with a different shape (by reference).
