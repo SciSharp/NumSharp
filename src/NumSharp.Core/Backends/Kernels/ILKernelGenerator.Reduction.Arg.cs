@@ -346,6 +346,18 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// ArgMax helper for float with NaN awareness.
         /// NumPy behavior: first NaN always wins (considered "maximum").
+        ///
+        /// Known gap: NumSharp ~12× behind NumPy on 1M float (1322 µs vs 106 µs).
+        /// The gap is platform-specific. NumPy uses x86 vmaxps + a separate
+        /// VPTEST for NaN detection in their C kernel; .NET's Vector256.Max
+        /// for float falls through a lane-by-lane NaN-propagating path that's
+        /// ~57% slower than vmaxps (measured 887 µs vs 565 µs on 1M float).
+        /// Switching to System.Runtime.Intrinsics.X86.Avx.Max would close
+        /// half the gap but introduces a correctness bug: vmaxps returns the
+        /// SECOND operand when either input is NaN, so NaN from the first
+        /// operand silently disappears — breaks the (data=[NaN, ...]) case.
+        /// Proper fix requires IL-emitted single-pass argmax with vectorized
+        /// index tracking; tracked separately.
         /// </summary>
         internal static unsafe long ArgMaxFloatNaNHelper(void* input, long totalSize)
         {
