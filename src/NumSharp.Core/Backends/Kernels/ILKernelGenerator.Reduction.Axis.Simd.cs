@@ -1170,50 +1170,14 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && innerSize >= Vector256<T>.Count)
             {
                 int vc = Vector256<T>.Count;
+                long unrollEnd = innerSize - vc * 4;
 
-                // ── 8× unrolled column-tile (8*vc elements per tile) ────
-                // 8 register-resident vector accumulators per tile feed
-                // straight from axisSize row reads. 8 accs == 8 YMM regs
-                // (plus working temps for loads + the loop's i/a longs);
-                // fits the 16-YMM AVX2 register file without spilling.
-                // Wider tile means each L2 miss amortizes over more
-                // arithmetic before the next outer-tile boundary.
-                long unrollEnd8 = innerSize - vc * 8;
-                for (; i <= unrollEnd8; i += vc * 8)
-                {
-                    var a0 = Vector256.Load(input + i);
-                    var a1 = Vector256.Load(input + i + vc);
-                    var a2 = Vector256.Load(input + i + vc * 2);
-                    var a3 = Vector256.Load(input + i + vc * 3);
-                    var a4 = Vector256.Load(input + i + vc * 4);
-                    var a5 = Vector256.Load(input + i + vc * 5);
-                    var a6 = Vector256.Load(input + i + vc * 6);
-                    var a7 = Vector256.Load(input + i + vc * 7);
-                    for (long a = 1; a < axisSize; a++)
-                    {
-                        T* row = input + a * axisStride + i;
-                        a0 = opAgent.Combine256(a0, Vector256.Load(row));
-                        a1 = opAgent.Combine256(a1, Vector256.Load(row + vc));
-                        a2 = opAgent.Combine256(a2, Vector256.Load(row + vc * 2));
-                        a3 = opAgent.Combine256(a3, Vector256.Load(row + vc * 3));
-                        a4 = opAgent.Combine256(a4, Vector256.Load(row + vc * 4));
-                        a5 = opAgent.Combine256(a5, Vector256.Load(row + vc * 5));
-                        a6 = opAgent.Combine256(a6, Vector256.Load(row + vc * 6));
-                        a7 = opAgent.Combine256(a7, Vector256.Load(row + vc * 7));
-                    }
-                    Vector256.Store(a0, output + i);
-                    Vector256.Store(a1, output + i + vc);
-                    Vector256.Store(a2, output + i + vc * 2);
-                    Vector256.Store(a3, output + i + vc * 3);
-                    Vector256.Store(a4, output + i + vc * 4);
-                    Vector256.Store(a5, output + i + vc * 5);
-                    Vector256.Store(a6, output + i + vc * 6);
-                    Vector256.Store(a7, output + i + vc * 7);
-                }
-
-                // ── 4× unrolled remainder (4*vc elements) ────────────────
-                long unrollEnd4 = innerSize - vc * 4;
-                for (; i <= unrollEnd4; i += vc * 4)
+                // ── 4× unrolled column-tile (4*vc elements per tile) ────
+                // 4 register-resident vector accumulators per tile feed
+                // straight from axisSize row reads. Output is touched
+                // ONCE per tile at the end — no per-row store-to-load
+                // RAW chain on the accumulators.
+                for (; i <= unrollEnd; i += vc * 4)
                 {
                     var a0 = Vector256.Load(input + i);
                     var a1 = Vector256.Load(input + i + vc);
@@ -1548,6 +1512,14 @@ namespace NumSharp.Backends.Kernels
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MulScalar(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => OneOf<T>();
         }
+        // Min/Max stay on the cross-platform Vector256.Min/Max because the
+        // x86 vminps/vmaxps intrinsics do NOT propagate NaN (they always
+        // return the second operand when either is NaN, by design — see
+        // Intel SDM "MAXPS — Maximum of Packed Single-Precision Floating-
+        // Point Values"). NumPy requires Min(x, NaN) = NaN and similarly
+        // for Max. Vector256.Min/Max use IEEE 754 semantics with proper
+        // NaN propagation. Sum/Prod don't have this issue, so they're
+        // wired through the faster Add256/Mul256 wrappers.
         internal readonly struct MinOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Min(a, b);
