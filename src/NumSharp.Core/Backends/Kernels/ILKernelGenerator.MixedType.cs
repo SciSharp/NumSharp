@@ -199,7 +199,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Check if operation has SIMD support via Vector256.
         /// </summary>
-        private static bool CanUseSimdForOp(BinaryOp op)
+        internal static bool CanUseSimdForOp(BinaryOp op)
         {
             // Add, Subtract, Multiply, Divide have Vector256 operators
             // BitwiseAnd, BitwiseOr, BitwiseXor use Vector256.BitwiseAnd/Or/Xor
