@@ -81,8 +81,6 @@ namespace NumSharp.Statistics
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
-            if (a.typecode == NPTypeCode.Complex)
-                throw new ArgumentException("a must be an array of real numbers");
 
             NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method);
 
@@ -182,20 +180,39 @@ namespace NumSharp.Statistics
                     fixed (double* qPtr = qCopy)
                     {
                         long dstOuterStride = qIsScalar ? 0L : outerSize;
-                        ILKernelGenerator.Quantile(
-                            srcType: a.typecode,
-                            outType: outTypeCode,
-                            method: method,
-                            srcBase: staged.Address,
-                            scratchBase: scratchPtr,
-                            outer: outerSize,
-                            n: n,
-                            kSorted: kPtr,
-                            nKs: kSortedManaged.Length,
-                            q: qPtr,
-                            nQs: qCopy.Length,
-                            dstBase: resultRaw.Address,
-                            dstOuterStride: dstOuterStride);
+                        // Complex has no IL quantile kernel — values have no natural
+                        // total order and the IL pipeline is float/int-only.  Route
+                        // through a managed lexicographic-sort + interpolate path that
+                        // matches NumPy's complex quantile semantics (lexicographic
+                        // by real first, imag as tie-break; q-interpolation operates
+                        // on Complex × double which is well-defined).
+                        if (a.typecode == NPTypeCode.Complex)
+                        {
+                            ComputeComplexQuantile(
+                                srcBase: (System.Numerics.Complex*)staged.Address,
+                                outer: outerSize, n: n,
+                                method: method,
+                                q: qPtr, nQs: qCopy.Length,
+                                dstBase: (System.Numerics.Complex*)resultRaw.Address,
+                                dstOuterStride: dstOuterStride);
+                        }
+                        else
+                        {
+                            ILKernelGenerator.Quantile(
+                                srcType: a.typecode,
+                                outType: outTypeCode,
+                                method: method,
+                                srcBase: staged.Address,
+                                scratchBase: scratchPtr,
+                                outer: outerSize,
+                                n: n,
+                                kSorted: kPtr,
+                                nKs: kSortedManaged.Length,
+                                q: qPtr,
+                                nQs: qCopy.Length,
+                                dstBase: resultRaw.Address,
+                                dstOuterStride: dstOuterStride);
+                        }
                     }
                 }
             }
@@ -243,8 +260,125 @@ namespace NumSharp.Statistics
                 case NPTypeCode.Double:
                 case NPTypeCode.Decimal:
                     return inTc;
+                case NPTypeCode.Complex:
+                    return NPTypeCode.Complex;
                 default:
                     throw new NotSupportedException(inTc.ToString());
+            }
+        }
+
+        /// <summary>
+        ///     Managed quantile path for <see cref="System.Numerics.Complex"/> inputs.
+        ///     Sorts each outer row lexicographically (Real first, Imaginary as
+        ///     tie-break — matches NumPy's complex ordering) then computes each
+        ///     <paramref name="q"/> via the requested <paramref name="method"/>.
+        ///     Continuous methods interpolate between two adjacent sorted values
+        ///     via <c>(1-γ)·a + γ·b</c>, which is well-defined for Complex.
+        ///
+        ///     Used because Complex has no total order and the IL quantile kernel
+        ///     is integer/float only. Throughput is dominated by Array.Sort —
+        ///     adequate for typical quantile workloads (np.median, np.percentile)
+        ///     which are not in the hot path for most callers.
+        /// </summary>
+        private static unsafe void ComputeComplexQuantile(
+            System.Numerics.Complex* srcBase, long outer, int n,
+            QuantileMethod method, double* q, int nQs,
+            System.Numerics.Complex* dstBase, long dstOuterStride)
+        {
+            var scratch = new System.Numerics.Complex[n];
+            for (long row = 0; row < outer; row++)
+            {
+                System.Numerics.Complex* srcRow = srcBase + row * n;
+                for (int i = 0; i < n; i++) scratch[i] = srcRow[i];
+                Array.Sort(scratch, ComplexLexicographicComparer.Instance);
+
+                for (int qi = 0; qi < nQs; qi++)
+                {
+                    double qv = q[qi];
+                    System.Numerics.Complex result = ComplexQuantileAtMethod(scratch, n, qv, method);
+                    dstBase[qi * dstOuterStride + row] = result;
+                }
+            }
+        }
+
+        private static System.Numerics.Complex ComplexQuantileAtMethod(
+            System.Numerics.Complex[] sorted, int n, double q, QuantileMethod method)
+        {
+            // Continuous (Linear / R-7) is the default; other methods adjust α, β.
+            // For Complex we support every method by computing the fractional index
+            // via the same rule used in the IL kernel and interpolating with the
+            // Complex+double mixed operators.
+            (double alpha, double beta, bool discrete) = MethodParameters(method);
+
+            double virtualIndex;
+            if (discrete)
+            {
+                virtualIndex = DiscreteIndex(n, q, method);
+                int idx = (int)Math.Round(virtualIndex);
+                if (idx < 0) idx = 0;
+                if (idx >= n) idx = n - 1;
+                return sorted[idx];
+            }
+
+            virtualIndex = ContinuousVirtualIndex(n, q, alpha, beta);
+            int lo = (int)Math.Floor(virtualIndex);
+            int hi = (int)Math.Ceiling(virtualIndex);
+            if (lo < 0) lo = 0;
+            if (hi >= n) hi = n - 1;
+            double gamma = virtualIndex - lo;
+            if (lo == hi) return sorted[lo];
+            // Linear interpolation: (1-γ)·a + γ·b — Complex × double promotes both ops.
+            return (1.0 - gamma) * sorted[lo] + gamma * sorted[hi];
+        }
+
+        private static (double alpha, double beta, bool discrete) MethodParameters(QuantileMethod m)
+        {
+            switch (m)
+            {
+                case QuantileMethod.Linear:                  return (1.0, 1.0, false); // R-7
+                case QuantileMethod.Lower:                   return (0, 0, true);
+                case QuantileMethod.Higher:                  return (0, 0, true);
+                case QuantileMethod.Nearest:                 return (0, 0, true);
+                case QuantileMethod.Midpoint:                return (0.5, 0.5, false);
+                case QuantileMethod.InvertedCdf:             return (0, 0, true);
+                case QuantileMethod.AveragedInvertedCdf:     return (0, 1, false);
+                case QuantileMethod.ClosestObservation:      return (0, 0, true);
+                case QuantileMethod.InterpolatedInvertedCdf: return (0, 1, false);
+                case QuantileMethod.Hazen:                   return (0.5, 0.5, false);
+                case QuantileMethod.Weibull:                 return (0, 0, false);
+                case QuantileMethod.MedianUnbiased:          return (1.0/3, 1.0/3, false);
+                case QuantileMethod.NormalUnbiased:          return (3.0/8, 3.0/8, false);
+                default: return (1.0, 1.0, false);
+            }
+        }
+
+        private static double ContinuousVirtualIndex(int n, double q, double alpha, double beta)
+        {
+            // NumPy R-α,β rule: virtual_index = q*(n - α - β + 1) + α - 1
+            return q * (n - alpha - beta + 1) + alpha - 1;
+        }
+
+        private static double DiscreteIndex(int n, double q, QuantileMethod method)
+        {
+            switch (method)
+            {
+                case QuantileMethod.Lower:   return Math.Floor(q * (n - 1));
+                case QuantileMethod.Higher:  return Math.Ceiling(q * (n - 1));
+                case QuantileMethod.Nearest: return Math.Round(q * (n - 1), MidpointRounding.ToEven);
+                case QuantileMethod.InvertedCdf:        return Math.Max(0, Math.Ceiling(q * n) - 1);
+                case QuantileMethod.ClosestObservation: return Math.Max(0, Math.Round(q * n - 0.5, MidpointRounding.ToEven) - 1);
+                default: return q * (n - 1);
+            }
+        }
+
+        private sealed class ComplexLexicographicComparer : System.Collections.Generic.IComparer<System.Numerics.Complex>
+        {
+            public static readonly ComplexLexicographicComparer Instance = new();
+            public int Compare(System.Numerics.Complex x, System.Numerics.Complex y)
+            {
+                int r = x.Real.CompareTo(y.Real);
+                if (r != 0) return r;
+                return x.Imaginary.CompareTo(y.Imaginary);
             }
         }
 
@@ -333,6 +467,7 @@ namespace NumSharp.Statistics
             NPTypeCode.UInt64  => 8,
             NPTypeCode.Double  => 8,
             NPTypeCode.Decimal => 16,
+            NPTypeCode.Complex => 16,
             _                  => throw new NotSupportedException(tc.ToString()),
         };
     }
