@@ -340,7 +340,7 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             if (shape.size != arraySlice.Count)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({Count})");
+                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})");
 
             _Allocate(shape, arraySlice);
         }

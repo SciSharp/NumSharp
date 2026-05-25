@@ -214,7 +214,7 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `dstack`, `expand_dims`, `flatten`, `hstack`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
+`append`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dstack`, `expand_dims`, `flatten`, `hstack`, `insert`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
 
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
