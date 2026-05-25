@@ -198,7 +198,7 @@ These NumPy functions are **not implemented**:
 | Category | Functions |
 |----------|-----------|
 | Sorting | `np.sort` |
-| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.pad` |
+| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90` |
 | Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
 | Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
 | Cumulative | `np.diff`, `np.gradient`, `np.ediff1d` |
@@ -214,7 +214,7 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`append`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dstack`, `expand_dims`, `flatten`, `hstack`, `insert`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
+`append`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dstack`, `expand_dims`, `flatten`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
 
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
