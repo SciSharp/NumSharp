@@ -1,5 +1,7 @@
 using System;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 using NumSharp.Utilities;
@@ -30,6 +32,20 @@ namespace NumSharp.Backends
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
                 return ExecuteComparisonScalarScalar(lhs, rhs, op);
+            }
+
+            // -------- NpyIter Tier 3B fast path (all comparison ops) -----------
+            // Mirrors the binary-op routing pattern. The iterator coalesces
+            // dimensions, normalizes negative strides, and resolves stride=0
+            // broadcast operands into per-outer-iter pointer advance — turning
+            // the (M,N) op (M,1) broadcast from a per-element gather into a
+            // contig inner-loop kernel of size N, repeated M times. Closes
+            // 14-30× regressions on strided/broadcast comparison variants vs
+            // the direct path. Contig same-dtype is at parity with the direct
+            // path because the same SIMD body lives inside the inner kernel.
+            {
+                var routed = TryExecuteComparisonOpViaNpyIter(lhs, rhs, op, lhsType, rhsType);
+                if (routed is not null) return routed;
             }
 
             // Broadcast shapes
@@ -210,5 +226,139 @@ namespace NumSharp.Backends
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
 
         #endregion
+
+        /// <summary>
+        ///     Tier 3B NpyIter routing for comparison ops. Output is always bool.
+        ///
+        ///     Returns the result NDArray&lt;bool&gt; on success, or null when the
+        ///     iterator can't handle the shapes (e.g. > int.MaxValue dimension) so
+        ///     the caller falls back to the direct path.
+        ///
+        ///     ─── Why this beats the direct path on broadcast/strided ───
+        ///     The direct ComparisonKernel walks the output via coordinate math
+        ///     (one ndim-loop per output element). For (M,N) op (M,1) it does M*N
+        ///     full coord recomputes and gather loads. NpyIter coalesces the
+        ///     M*N output into the canonical iteration order, sets the broadcast
+        ///     operand's stride to 0, and dispatches a contig inner kernel of
+        ///     length N for each of M outer steps — the inner kernel becomes a
+        ///     tight scalar/SIMD loop without coord math.
+        ///
+        ///     ─── Scalar vs vector body ───
+        ///     For same-dtype with a SIMD-capable comparison type, the vector
+        ///     body would produce the mask + PDEP-store fast path that the
+        ///     direct kernel already does. The Tier 3B 4×-unrolled wrapper
+        ///     however requires same-type-across-all-operands (CanSimdAllOperands
+        ///     in the InnerLoop factory) which doesn't hold here because the
+        ///     output is bool. We pass null for the vector body; the iterator
+        ///     drops to a per-element scalar loop driven by the emitted body.
+        ///     This trades some contig perf for huge wins on strided/broadcast.
+        /// </summary>
+        private unsafe NDArray<bool>? TryExecuteComparisonOpViaNpyIter(
+            NDArray lhs, NDArray rhs, ComparisonOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType)
+        {
+            // ─── Routing decision: NpyIter wins on broadcast/strided, the
+            // direct SIMD kernel wins on plain contig same-shape.
+            //
+            // The direct ComparisonKernel has a vector body that emits
+            // Vector256.Compare + ExtractMostSignificantBits + PDEP-packed
+            // store — the fastest contig path we have. The Tier 3B 4×-unrolled
+            // wrapper can't host that because bool-output breaks its same-type
+            // invariant, so routing contig through here costs us 3× on the
+            // simple shape.
+            //
+            // Skip NpyIter routing for the "easy" contig cases that the direct
+            // kernel handles best. Anything with broadcast (different shapes)
+            // or non-contig storage benefits from the iterator's coalesce +
+            // stride normalization + per-outer-iter pointer advance.
+            bool sameShape = lhs.Shape.NDim == rhs.Shape.NDim
+                             && lhs.Shape.size == rhs.Shape.size;
+            if (sameShape && lhs.Shape.IsContiguous && rhs.Shape.IsContiguous)
+                return null;
+
+            var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
+            var cleanShape = leftShape.Clean();
+
+            // NpyIter shape arithmetic is int-bounded.
+            if (cleanShape.size < 0) return null;
+            for (int i = 0; i < cleanShape.NDim; i++)
+                if (cleanShape.dimensions[i] > int.MaxValue) return null;
+
+            // Mirror binary-op F-preservation: F-allocate when every non-scalar
+            // operand is strict-F; else default to C and let the post-kernel
+            // looser-F copy step rectify.
+            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+
+            var result = new NDArray<bool>(resultShape, true);
+
+            var order = allStrictFContig
+                ? NPY_ORDER.NPY_FORTRANORDER
+                : NPY_ORDER.NPY_CORDER;
+
+            // Resolve common comparison type once (same rule as the kernel key).
+            var comparisonType = lhsType == rhsType
+                ? lhsType
+                : np._FindCommonScalarType(lhsType, rhsType);
+
+            // Per-element body. Stack on entry: [lhs (lhsType), rhs (rhsType)].
+            // Stash rhs into a local so we can convert lhs (bottom of stack)
+            // first, then reload rhs and convert it, matching the mixed-binary
+            // pattern. Then EmitComparisonOperation pops both and pushes bool.
+            NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
+            ComparisonOp capOp = op;
+            Action<ILGenerator> scalarBody = il =>
+            {
+                if (capLhs == capRhs && capLhs == capCmp)
+                {
+                    // Same-dtype fast path — no convert pass.
+                    ILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                }
+                else
+                {
+                    var locRhs = il.DeclareLocal(ILKernelGenerator.GetClrType(capRhs));
+                    il.Emit(OpCodes.Stloc, locRhs);
+                    if (capLhs != capCmp)
+                        ILKernelGenerator.EmitConvertTo(il, capLhs, capCmp);
+                    il.Emit(OpCodes.Ldloc, locRhs);
+                    if (capRhs != capCmp)
+                        ILKernelGenerator.EmitConvertTo(il, capRhs, capCmp);
+                    ILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                }
+            };
+
+            // Vector body intentionally null: the Tier 3B 4×-unrolled wrapper
+            // requires same-dtype-across-all-operands and bool output breaks
+            // that invariant. Inner-loop factory falls to scalar-strided body.
+            string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
+
+            try
+            {
+                using var iter = NpyIterRef.MultiNew(
+                    3, new[] { lhs, rhs, result },
+                    NpyIterGlobalFlags.EXTERNAL_LOOP,
+                    order,
+                    NPY_CASTING.NPY_SAFE_CASTING,
+                    new[]
+                    {
+                        NpyIterPerOpFlags.READONLY,
+                        NpyIterPerOpFlags.READONLY,
+                        NpyIterPerOpFlags.WRITEONLY,
+                    });
+
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+
+            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+                return result.copy('F').MakeGeneric<bool>();
+
+            return result;
+        }
     }
 }
