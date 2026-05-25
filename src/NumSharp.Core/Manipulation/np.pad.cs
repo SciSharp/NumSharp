@@ -713,19 +713,26 @@ namespace NumSharp
             for (int i = 0; i < ndim; i++) coefShape[i] = i == axis ? width : 1L;
             var coefReshaped = coef.reshape(new Shape(coefShape));
 
-            // Build end_value NDArray (0-D) with type double for arithmetic precision.
-            using var endNd = NDArray.Scalar(NumSharp.Utilities.Converts.ChangeType(endValue, NPTypeCode.Double), NPTypeCode.Double);
+            // Arithmetic dtype selection — must preserve the source dtype's
+            // structure (especially Complex's imaginary component).  For integer
+            // dtypes we promote to double for precision and cast back at the
+            // end (matching NumPy's linspace(dtype=int) truncate-cast semantics).
+            // For floating / complex source we compute in the source dtype so
+            // imaginary parts and float32 precision are preserved.
+            bool isInteger = IsIntegerDtype(dtype);
+            NPTypeCode workType = isInteger ? NPTypeCode.Double : dtype;
+            using var endNd = NDArray.Scalar(
+                NumSharp.Utilities.Converts.ChangeType(endValue, workType), workType);
 
-            // Cast edge to double for arithmetic (NumPy computes in float when needed).
-            NDArray edgeD = edge.GetTypeCode == NPTypeCode.Double ? edge : edge.astype(typeof(double));
+            NDArray edgeWork = edge.GetTypeCode == workType ? edge : edge.astype(NumSharp.NPTypeCodeExtensions.AsType(workType));
             try
             {
                 // ramp = end + coef * (edge - end)
-                using var diff = edgeD - endNd;
+                using var diff = edgeWork - endNd;
                 using var scaled = coefReshaped * diff;
                 NDArray ramp = scaled + endNd;
                 coef.Dispose();
-                if (!ReferenceEquals(edgeD, edge)) edgeD.Dispose();
+                if (!ReferenceEquals(edgeWork, edge)) edgeWork.Dispose();
 
                 // NumPy linear_ramp uses np.linspace(..., dtype=padded.dtype) which
                 // truncates float→int (no rounding), unlike stat modes which round.
@@ -739,7 +746,7 @@ namespace NumSharp
             }
             catch
             {
-                if (!ReferenceEquals(edgeD, edge)) edgeD.Dispose();
+                if (!ReferenceEquals(edgeWork, edge)) edgeWork.Dispose();
                 throw;
             }
         }
