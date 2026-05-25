@@ -541,9 +541,42 @@ namespace NumSharp.Backends.Kernels
                 il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
         }
 
+        // BMI2 PDEP method handle — resolved once at static init so the
+        // EmitMaskToBoolExtraction codegen can decide between the fast
+        // single-PDEP-then-pointer-store path and the scalar shift-mask-
+        // store-per-lane fallback without paying GetMethod cost per emit.
+        // The X64 variant is required because we want a 64-bit deposit
+        // (8 bytes packed at once into a single ulong).
+        private static readonly MethodInfo? s_bmi2X64Pdep =
+            System.Runtime.Intrinsics.X86.Bmi2.X64.IsSupported
+                ? typeof(System.Runtime.Intrinsics.X86.Bmi2.X64).GetMethod(
+                    nameof(System.Runtime.Intrinsics.X86.Bmi2.X64.ParallelBitDeposit),
+                    BindingFlags.Public | BindingFlags.Static,
+                    new[] { typeof(ulong), typeof(ulong) })
+                : null;
+
         /// <summary>
         /// Emit extraction of comparison mask vector to individual booleans.
-        /// Uses ExtractMostSignificantBits for O(1) extraction instead of O(N) GetElement calls.
+        ///
+        /// FAST PATH (BMI2 X64, V256/V128 with ≤8 lanes):
+        ///   ExtractMostSignificantBits → uint (N MSB bits)
+        ///   PDEP(bits, 0x0101…01)      → ulong (N bytes, each 0x00 or 0x01)
+        ///   *(ulong*)(result + i) = packed   // single 8-byte store
+        ///
+        /// One PDEP + one ulong store replaces N individual byte stores —
+        /// for 8-lane Vector256<float> that's 8× fewer memory writes per
+        /// mask, which lifts the compare-to-bool kernel from 2× slower
+        /// than NumPy toward parity. For ≤4 lanes (Vector128 path) the
+        /// PDEP still writes 8 bytes but only the first N are meaningful
+        /// — the per-mask emit knows the lane count so it stores via
+        /// stind.i{N×8} sized exactly.
+        ///
+        /// FALLBACK (no BMI2 X64, or lane count &gt; 8):
+        ///   Per-lane shift-mask-store, identical to the prior
+        ///   implementation. Vector512<bool> with 16 lanes would need
+        ///   two PDEPs or a 16-byte VPSHUFB-based expansion — not worth
+        ///   the IL complexity until we measure a V512 binding actually
+        ///   hitting this kernel.
         /// </summary>
         private static void EmitMaskToBoolExtraction(ILGenerator il, NPTypeCode type,
             int vectorCount, LocalBuilder locI, LocalBuilder locMask)
@@ -557,7 +590,53 @@ namespace NumSharp.Backends.Kernels
             var locBits = il.DeclareLocal(typeof(uint));
             il.Emit(OpCodes.Stloc, locBits);
 
-            // For each lane j, store (bits >> j) & 1 as bool
+            // ── FAST PATH: BMI2 PDEP for ≤8 lanes ────────────────────────
+            // Single PDEP turns the N-bit mask into a ulong with N bytes
+            // of 0x00/0x01, then one aligned store covers the lot.
+            if (s_bmi2X64Pdep != null && vectorCount <= 8)
+            {
+                // packed = PDEP((ulong)bits, 0x0101010101010101)
+                il.Emit(OpCodes.Ldloc, locBits);
+                il.Emit(OpCodes.Conv_U8);
+                il.Emit(OpCodes.Ldc_I8, unchecked((long)0x0101010101010101UL));
+                il.EmitCall(OpCodes.Call, s_bmi2X64Pdep, null);
+                var locPacked = il.DeclareLocal(typeof(ulong));
+                il.Emit(OpCodes.Stloc, locPacked);
+
+                // *(result + i) = packed  — store as ulong/uint/ushort
+                // sized to the exact lane count so we never write past
+                // the meaningful bytes.
+                il.Emit(OpCodes.Ldarg_2);    // result (bool*)
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldloc, locPacked);
+                if (vectorCount == 8)
+                {
+                    il.Emit(OpCodes.Stind_I8);  // 8 bytes
+                }
+                else if (vectorCount == 4)
+                {
+                    il.Emit(OpCodes.Conv_U4);
+                    il.Emit(OpCodes.Stind_I4);  // 4 bytes
+                }
+                else if (vectorCount == 2)
+                {
+                    il.Emit(OpCodes.Conv_U2);
+                    il.Emit(OpCodes.Stind_I2);  // 2 bytes
+                }
+                else
+                {
+                    // Odd count (e.g. lane-count 3 from some V128 dtype).
+                    // Fall through to per-lane below; emit nothing here.
+                    il.Emit(OpCodes.Pop);   // discard the packed ulong
+                    il.Emit(OpCodes.Pop);   // discard the addr we pushed
+                    goto PerLane;
+                }
+                return;
+            }
+
+            PerLane:
+            // ── FALLBACK: per-lane shift-mask-store ──────────────────────
             for (int j = 0; j < vectorCount; j++)
             {
                 // result + i + j
