@@ -234,14 +234,35 @@ namespace NumSharp.Backends.Kernels
             if (key.Op == UnaryOp.LogicalNot)
                 return false;
 
-            // Float/double operations with SIMD support
+            // Negate / Abs SIMD also works on signed/unsigned integer types in .NET 8+.
+            // Vector.Negate on unsigned does two's-complement wrap (matches NumPy scalar
+            // semantics: -np.uint32(1) == 4294967295). Vector.Abs on unsigned is identity
+            // (matches np.abs(uint) returning the value unchanged). Square (x*x) also
+            // works for integer SIMD via Vector.Multiply.
+            //
+            // Excluded: Int64/UInt64. Vector256.Abs<long> has no x86 intrinsic; the JIT
+            // emulates it via compare+xor+sub which is SLOWER than the scalar abs loop
+            // (measured: 2222µs scalar → 2569µs SIMD on 1M int64). int32 and narrower
+            // use PABSD/PABSW/PABSB which are single-cycle intrinsics.
+            if (key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Square)
+            {
+                return key.InputType == NPTypeCode.SByte ||
+                       key.InputType == NPTypeCode.Byte ||
+                       key.InputType == NPTypeCode.Int16 ||
+                       key.InputType == NPTypeCode.UInt16 ||
+                       key.InputType == NPTypeCode.Int32 ||
+                       key.InputType == NPTypeCode.UInt32 ||
+                       key.InputType == NPTypeCode.Single ||
+                       key.InputType == NPTypeCode.Double;
+            }
+
+            // Float/double-only operations
             if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
                 return false;
 
-            // Operations with SIMD support for float/double
-            return key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Sqrt ||
+            return key.Op == UnaryOp.Sqrt ||
                    key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil || key.Op == UnaryOp.Round ||
-                   key.Op == UnaryOp.Truncate || key.Op == UnaryOp.Reciprocal || key.Op == UnaryOp.Square ||
+                   key.Op == UnaryOp.Truncate || key.Op == UnaryOp.Reciprocal ||
                    key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
         }
 
