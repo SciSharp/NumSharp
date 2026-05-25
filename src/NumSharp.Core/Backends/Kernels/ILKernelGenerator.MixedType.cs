@@ -1243,19 +1243,42 @@ namespace NumSharp.Backends.Kernels
                 key.LhsType == key.RhsType && key.LhsType == key.ResultType &&
                 CanUseSimd(key.ResultType) && CanUseSimdForOp(key.Op);
 
-            var lblSimdInner = il.DefineLabel();
+            var lblSimdInner    = il.DefineLabel(); // contig+contig
+            var lblSimdScalarL  = il.DefineLabel(); // lhs broadcast (inner=0), rhs contig
+            var lblSimdScalarR  = il.DefineLabel(); // lhs contig, rhs broadcast (inner=0)
             var lblSimdInnerEnd = il.DefineLabel();
 
             if (canSimdInner)
             {
-                // if (lhsInner == 1 && rhsInner == 1) goto simdInner else fall to scalar
+                // ── 4-way runtime dispatch on (lhsInner, rhsInner) ─────────────
+                // We branch into one of {simdCC, simdScalarL, simdScalarR, scalarInner}
+                // based on the (1, 1), (0, 1), (1, 0), or other combination.
+                // (0, 0) is theoretically possible but ClassifyPath sends that to
+                // SimdScalarLeft/Right earlier — so we just fall to scalar inner.
+                var lblCheckScalarL = il.DefineLabel();
+                var lblCheckScalarR = il.DefineLabel();
+
+                // if (lhsInner == 1) jump to check rhsInner against {1, 0}
                 il.Emit(OpCodes.Ldloc, locLhsInner);
                 il.Emit(OpCodes.Ldc_I8, 1L);
-                il.Emit(OpCodes.Bne_Un, lblInnerLoop); // not equal → scalar inner
+                il.Emit(OpCodes.Bne_Un, lblCheckScalarL); // lhsInner != 1 → check SL
                 il.Emit(OpCodes.Ldloc, locRhsInner);
                 il.Emit(OpCodes.Ldc_I8, 1L);
-                il.Emit(OpCodes.Beq, lblSimdInner);   // both == 1 → SIMD inner
-                // fall through to scalar inner
+                il.Emit(OpCodes.Beq, lblSimdInner);        // (1,1) → CC
+                il.Emit(OpCodes.Ldloc, locRhsInner);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Beq, lblSimdScalarR);      // (1,0) → SR
+                il.Emit(OpCodes.Br, lblInnerLoop);         // (1, other) → scalar
+
+                // lhsInner != 1: check if it's 0
+                il.MarkLabel(lblCheckScalarL);
+                il.Emit(OpCodes.Ldloc, locLhsInner);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Bne_Un, lblInnerLoop);     // lhsInner != 0 either → scalar
+                il.Emit(OpCodes.Ldloc, locRhsInner);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Beq, lblSimdScalarL);      // (0,1) → SL
+                il.Emit(OpCodes.Br, lblInnerLoop);         // (0, other) → scalar
             }
 
             // ════════════════════════ SCALAR INNER LOOP ══════════════════════════
@@ -1446,6 +1469,24 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Br, lblSimdTail);
                 il.MarkLabel(lblSimdTailEnd);
 
+                // ════════════════════════ SIMD INNER (SCALAR LHS) ════════════════
+                // (M,1)+(M,N) pattern: lhs has inner stride 0 — every inner element
+                // reads the SAME scalar at lhsRowOff. Hoist Vector.Create(*lhsAddr)
+                // outside the loop; inside, just SIMD load rhs, op, store.
+                il.Emit(OpCodes.Br, lblSimdInnerEnd);
+                il.MarkLabel(lblSimdScalarL);
+                EmitChunkSimdScalarBlock(il, key, lhsSize, rhsSize, resultSize,
+                    locLhsRowOff, locRhsRowOff, locResBase, locInnerSize, locVecEnd, locI,
+                    scalarIsLhs: true, vectorCount);
+
+                // ════════════════════════ SIMD INNER (SCALAR RHS) ════════════════
+                // (M,N)+(M,1) pattern — symmetric to ScalarLhs.
+                il.Emit(OpCodes.Br, lblSimdInnerEnd);
+                il.MarkLabel(lblSimdScalarR);
+                EmitChunkSimdScalarBlock(il, key, lhsSize, rhsSize, resultSize,
+                    locLhsRowOff, locRhsRowOff, locResBase, locInnerSize, locVecEnd, locI,
+                    scalarIsLhs: false, vectorCount);
+
                 il.MarkLabel(lblSimdInnerEnd);
             }
 
@@ -1457,6 +1498,180 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Br, lblOuterLoop);
             il.MarkLabel(lblOuterEnd);
+        }
+
+        /// <summary>
+        ///     L3-d: SIMD inner loop where ONE operand is scalar-broadcast on the
+        ///     inner dim (stride == 0). Hoists <c>Vector.Create(*scalarPtr)</c>
+        ///     outside the loop so per-iter work is just one SIMD load + op + store
+        ///     against the other (contig) operand. Symmetric for scalarIsLhs=true/false.
+        /// </summary>
+        private static void EmitChunkSimdScalarBlock(
+            ILGenerator il, MixedTypeKernelKey key,
+            int lhsSize, int rhsSize, int resultSize,
+            System.Reflection.Emit.LocalBuilder locLhsRowOff,
+            System.Reflection.Emit.LocalBuilder locRhsRowOff,
+            System.Reflection.Emit.LocalBuilder locResBase,
+            System.Reflection.Emit.LocalBuilder locInnerSize,
+            System.Reflection.Emit.LocalBuilder locVecEnd,
+            System.Reflection.Emit.LocalBuilder locI,
+            bool scalarIsLhs, long vectorCount)
+        {
+            var clrType = GetClrType(key.ResultType);
+            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            var locVScalar = il.DeclareLocal(vecType);
+
+            // ── vecEnd = innerSize - vectorCount (shared with CC block; re-set here) ──
+            il.Emit(OpCodes.Ldloc, locInnerSize);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVecEnd);
+
+            // ── Pre-compute the broadcast vector from the scalar value at row start ──
+            // For scalarIsLhs: load lhs[lhsRowOff], broadcast to V<T>
+            // For scalarIsLhs=false: load rhs[rhsRowOff], broadcast
+            int scalarArg = scalarIsLhs ? 0 : 1;
+            int scalarSize = scalarIsLhs ? lhsSize : rhsSize;
+            var locScalarRowOff = scalarIsLhs ? locLhsRowOff : locRhsRowOff;
+            NPTypeCode scalarType = scalarIsLhs ? key.LhsType : key.RhsType;
+
+            il.Emit(scalarArg == 0 ? OpCodes.Ldarg_0 : OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Ldloc, locScalarRowOff);
+            il.Emit(OpCodes.Ldc_I8, (long)scalarSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, scalarType);
+            // Convert scalar to result type if necessary (still scalar at this point).
+            EmitConvertTo(il, scalarType, key.ResultType);
+            EmitVectorCreate(il, key.ResultType);
+            il.Emit(OpCodes.Stloc, locVScalar);
+
+            // ── Loop variables ───────────────────────────────────────────────────
+            // i is already 0 (initialized in EmitChunkLoop before the dispatch).
+            var lblSimdLoop = il.DefineLabel();
+            var lblSimdLoopEnd = il.DefineLabel();
+            var lblTail = il.DefineLabel();
+            var lblTailEnd = il.DefineLabel();
+
+            il.MarkLabel(lblSimdLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVecEnd);
+            il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+
+            // ── SIMD body: order arguments to match (LHS op RHS) regardless of mode ──
+            if (scalarIsLhs)
+            {
+                // v_lhs = broadcast scalar; v_rhs = load from rhs
+                il.Emit(OpCodes.Ldloc, locVScalar);
+                // v_rhs = Vector.Load(rhs + (rhsRowOff + i) * rhsSize)
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Ldloc, locRhsRowOff);
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, key.RhsType);
+            }
+            else
+            {
+                // v_lhs = Vector.Load(lhs + (lhsRowOff + i) * lhsSize); v_rhs = broadcast scalar
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, locLhsRowOff);
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, key.LhsType);
+                il.Emit(OpCodes.Ldloc, locVScalar);
+            }
+
+            // v_result = op(v_lhs, v_rhs)
+            EmitVectorOperation(il, key.Op, key.ResultType);
+
+            // Store v_result to result + (resBase + i) * resultSize
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locResBase);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldc_I8, (long)resultSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorStore(il, key.ResultType);
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblSimdLoop);
+            il.MarkLabel(lblSimdLoopEnd);
+
+            // ── Scalar tail (i..innerSize) ───────────────────────────────────────
+            il.MarkLabel(lblTail);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locInnerSize);
+            il.Emit(OpCodes.Bge, lblTailEnd);
+
+            // result_addr = result + (resBase + i) * resultSize
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, locResBase);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldc_I8, (long)resultSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            // lhs_val: either scalar (lhs[lhsRowOff] reused — inner stride 0) or
+            // strided load at (lhsRowOff + i*lhsInner). For ScalarLhs we know
+            // lhsInner==0, so just load lhs[lhsRowOff]. For ScalarRhs lhsInner==1.
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldloc, locLhsRowOff);
+            if (!scalarIsLhs)
+            {
+                // lhsInner == 1, so add i
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+            }
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+            EmitConvertTo(il, key.LhsType, key.ResultType);
+
+            // rhs_val
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Ldloc, locRhsRowOff);
+            if (scalarIsLhs)
+            {
+                // rhsInner == 1, so add i
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+            }
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+            EmitConvertTo(il, key.RhsType, key.ResultType);
+
+            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitStoreIndirect(il, key.ResultType);
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblTail);
+            il.MarkLabel(lblTailEnd);
         }
 
         /// <summary>
