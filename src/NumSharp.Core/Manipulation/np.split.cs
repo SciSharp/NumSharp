@@ -37,7 +37,7 @@ namespace NumSharp
             if (N % indices_or_sections != 0)
                 throw new ArgumentException("array split does not result in an equal division");
 
-            return SplitContext.FromParent(ary, ax).SplitInt(indices_or_sections);
+            return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
         }
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace NumSharp
                 throw new ArgumentException("number sections must be larger than 0.");
 
             int ax = NormalizeSplitAxis(axis, ary.ndim);
-            return SplitContext.FromParent(ary, ax).SplitInt(indices_or_sections);
+            return SplitContext.FromParent(ary, ax).SplitBySections(indices_or_sections);
         }
 
         /// <summary>
@@ -115,9 +115,15 @@ namespace NumSharp
         /// <summary>
         ///     Shared state for one split call. Snapshots the parent's shape /
         ///     storage / engine / per-axis derivation once and exposes
-        ///     <see cref="SplitInt"/> for int-section paths and
+        ///     <see cref="SplitBySections"/> for the integer-section paths
+        ///     (<c>split(a, N)</c> / <c>array_split(a, N)</c>) and
         ///     <see cref="SplitIndices(long[])"/> / <see cref="SplitIndices(int[])"/>
-        ///     for the indices paths. Each per-sub-array call:
+        ///     for the explicit-indices paths
+        ///     (<c>split(a, [3,5,6])</c> / <c>array_split(a, [3,5,6])</c>).
+        ///     Naming note: "Sections" refers to NumPy's
+        ///     <c>indices_or_sections</c> integer mode — NOT a dtype. Split is
+        ///     dtype-agnostic; only views are produced, no element loop runs.
+        ///     Each per-sub-array call:
         ///     <list type="bullet">
         ///         <item>Reuses a shared dims[] when the previous sub had the same length on the split axis (typical case for int sections — at most 2 distinct lengths)</item>
         ///         <item>Derives sub flags from parent flags in O(1) via <see cref="DeriveSubFlags"/></item>
@@ -167,12 +173,15 @@ namespace NumSharp
             internal static SplitContext FromParent(NDArray ary, int axis) => new SplitContext(ary, axis);
 
             /// <summary>
-            ///     Int-sections split: <c>extras = N%nsections</c> sub-arrays of size
-            ///     <c>N/nsections + 1</c> then the rest of size <c>N/nsections</c>.
-            ///     Only TWO distinct sub-lengths exist — we materialise dims[] for
-            ///     each and share across all subs with the matching length.
+            ///     Equal-section split (NumPy <c>split(a, N)</c> /
+            ///     <c>array_split(a, N)</c> when <c>indices_or_sections</c> is an
+            ///     integer). <c>extras = N % Nsections</c> sub-arrays get size
+            ///     <c>N/Nsections + 1</c>, the rest get <c>N/Nsections</c>.
+            ///     Only TWO distinct sub-lengths exist — we materialise dims[]
+            ///     for each and share across all subs with the matching length.
             /// </summary>
-            internal NDArray[] SplitInt(int Nsections)
+            /// <param name="Nsections">Number of sections to split into. Must be &gt; 0.</param>
+            internal NDArray[] SplitBySections(int Nsections)
             {
                 long Neach = _axisDim / Nsections;
                 long extras = _axisDim % Nsections;
