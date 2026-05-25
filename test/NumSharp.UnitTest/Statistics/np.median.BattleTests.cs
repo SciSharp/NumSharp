@@ -220,11 +220,23 @@ public class np_median_BattleTests
     // ── error paths ──────────────────────────────────────────────────────
 
     [TestMethod]
-    public void Median_Complex_Throws()
+    public void Median_Complex_LexicographicSort()
     {
+        // NumPy parity: complex median sorts lexicographically (real first,
+        // imag tie-break) then picks middle. np.median([1+0j, 2+0j, 3+0j]) = (2+0j).
         var a = np.array(new Complex[] { new(1, 0), new(2, 0), new(3, 0) });
-        Action act = () => np.median(a);
-        act.Should().Throw<ArgumentException>();
+        var r = np.median(a);
+        r.GetComplex(0).Should().Be(new Complex(2, 0));
+    }
+
+    [TestMethod]
+    public void Median_Complex_TieBreakOnImaginary()
+    {
+        // Tie on Real → break on Imaginary; lexicographic ascending.
+        // Sorted: (1+0j), (1+5j), (2+3j). Middle = (1+5j).
+        var a = np.array(new Complex[] { new(2, 3), new(1, 0), new(1, 5) });
+        var r = np.median(a);
+        r.GetComplex(0).Should().Be(new Complex(1, 5));
     }
 
     [TestMethod]

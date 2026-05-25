@@ -222,6 +222,10 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Max, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MaxElementwiseComplexFallback(arr),
+                // Boolean: max == "any true" (logical OR). NumPy: np.max([T,F,T]) → True.
+                NPTypeCode.Boolean => MaxElementwiseBooleanFallback(arr),
+                // Char: scalar comparison via char's natural ordering.
+                NPTypeCode.Char => MaxElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Max not supported for type {retType}")
             };
         }
@@ -254,6 +258,9 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Min, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MinElementwiseComplexFallback(arr),
+                // Boolean: min == "all true" (logical AND). NumPy: np.min([T,F,T]) → False.
+                NPTypeCode.Boolean => MinElementwiseBooleanFallback(arr),
+                NPTypeCode.Char => MinElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Min not supported for type {retType}")
             };
         }
@@ -333,6 +340,57 @@ namespace NumSharp.Backends
                     best = v;
                     seenAny = true;
                 }
+            }
+            return best;
+        }
+
+        /// <summary>
+        ///     Boolean max == "any true" (logical OR). NumPy parity:
+        ///     <c>np.max([T,F,T])</c> → <c>True</c>. Short-circuits on first true.
+        /// </summary>
+        private object MaxElementwiseBooleanFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<bool>();
+            while (iter.HasNext())
+                if (iter.MoveNext()) return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Boolean min == "all true" (logical AND). NumPy parity:
+        ///     <c>np.min([T,F,T])</c> → <c>False</c>. Short-circuits on first false.
+        /// </summary>
+        private object MinElementwiseBooleanFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<bool>();
+            while (iter.HasNext())
+                if (!iter.MoveNext()) return false;
+            return true;
+        }
+
+        /// <summary>Char max/min via natural <c>char</c> ordering (UTF-16 code unit).</summary>
+        private object MaxElementwiseCharFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<char>();
+            char best = '\0';
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                char v = iter.MoveNext();
+                if (!seenAny || v > best) { best = v; seenAny = true; }
+            }
+            return best;
+        }
+
+        private object MinElementwiseCharFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<char>();
+            char best = char.MaxValue;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                char v = iter.MoveNext();
+                if (!seenAny || v < best) { best = v; seenAny = true; }
             }
             return best;
         }
