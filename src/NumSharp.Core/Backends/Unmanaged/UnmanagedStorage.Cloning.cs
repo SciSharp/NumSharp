@@ -370,19 +370,38 @@ namespace NumSharp.Backends
         #region Cloning
 
         /// <summary>
-        ///     Clone internal storage and get reference to it
+        ///     Clone internal storage and return an owning <see cref="IArraySlice"/>
+        ///     sized to <c>_shape.size</c> (NOT <c>InternalArray.Count</c>).
         /// </summary>
-        /// <returns>reference to cloned storage as System.Array</returns>
+        /// <returns>
+        ///     A freshly-allocated <see cref="IArraySlice"/> whose
+        ///     <c>Count == _shape.size</c>. For contiguous shapes the
+        ///     elements come from <c>InternalArray[_shape.offset.._shape.offset + _shape.size)</c>
+        ///     via <see cref="IArraySlice.Slice(int, int)"/> + Clone; for strided /
+        ///     broadcast / transposed shapes they are materialised via <see cref="NpyIter.Copy"/>.
+        /// </returns>
+        /// <remarks>
+        ///     Subtle: the C-contig branch must <b>always</b> slice to
+        ///     <c>_shape.size</c> when <c>_shape.bufferSize &gt; _shape.size</c>,
+        ///     even when <c>offset == 0</c>. A 1-D slice like
+        ///     <c>arr[0:4]</c> on a 5-element source has offset 0 yet covers
+        ///     only the first 4 elements; a previous version unconditionally
+        ///     cloned the entire <c>InternalArray</c> in the <c>offset == 0</c>
+        ///     branch, then handed the 5-element clone to <see cref="UnmanagedStorage(IArraySlice, Shape)"/>
+        ///     paired with a (4,) shape, tripping
+        ///     <see cref="IncorrectShapeException"/>.
+        /// </remarks>
         public IArraySlice CloneData()
         {
             // Contiguous shapes can copy directly from memory.
-            // Must account for offset - slice the internal array at the correct position.
+            // Must account for offset AND the size-vs-buffer mismatch — slice
+            // to exactly _shape.size starting at _shape.offset so the cloned
+            // IArraySlice matches the shape we'll pair it with downstream.
             if (_shape.IsContiguous)
             {
-                if (_shape.offset == 0)
+                if (_shape.offset == 0 && _shape.size == InternalArray.Count)
                     return InternalArray.Clone();
-                else
-                    return InternalArray.Slice(_shape.offset, _shape.size).Clone();
+                return InternalArray.Slice(_shape.offset, _shape.size).Clone();
             }
 
             if (_shape.IsScalar)
