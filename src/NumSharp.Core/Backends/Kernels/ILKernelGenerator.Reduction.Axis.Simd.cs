@@ -1117,10 +1117,11 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Innermost-axis reduction (axis == ndim-1, C-contiguous). Each output
-        // reduces a contiguous run of axisSize elements. Per output: 4× unrolled
-        // SIMD with the op-struct (JIT inlines Vector.Add/Min/Max/Multiply) and
-        // tree-reduces to a scalar. The identity vectors are hoisted out of the
-        // per-output loop; the op-tag struct ensures no runtime switch.
+        // reduces a contiguous run of axisSize elements. Per output: 8× unrolled
+        // SIMD with 8 independent accumulators (breaks dep chains across both FP
+        // add ports — matches NumPy's pairwise_sum.c shape). The op-struct keeps
+        // Vector.Add/Min/Max/Multiply inlined with no runtime switch. Identity
+        // vectors are hoisted out of the per-output loop.
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AxisReductionInnermostTyped<T, TOp>(
             T* input, T* output, long outputSize, long axisSize)
@@ -1141,7 +1142,7 @@ namespace NumSharp.Backends.Kernels
             if (useV256)
             {
                 int vc = Vector256<T>.Count;
-                long unrollStep = vc * 4;
+                long unrollStep = vc * 8;
                 long unrollEnd = axisSize - unrollStep;
                 long vectorEnd = axisSize - vc;
 
@@ -1149,19 +1150,26 @@ namespace NumSharp.Backends.Kernels
                 {
                     T* row = input + o * axisSize;
                     long i = 0;
-                    var acc0 = identV256;
-                    var acc1 = identV256;
-                    var acc2 = identV256;
-                    var acc3 = identV256;
+                    var a0 = identV256; var a1 = identV256;
+                    var a2 = identV256; var a3 = identV256;
+                    var a4 = identV256; var a5 = identV256;
+                    var a6 = identV256; var a7 = identV256;
 
                     for (; i <= unrollEnd; i += unrollStep)
                     {
-                        acc0 = opAgent.Combine256(acc0, Vector256.Load(row + i));
-                        acc1 = opAgent.Combine256(acc1, Vector256.Load(row + i + vc));
-                        acc2 = opAgent.Combine256(acc2, Vector256.Load(row + i + vc * 2));
-                        acc3 = opAgent.Combine256(acc3, Vector256.Load(row + i + vc * 3));
+                        a0 = opAgent.Combine256(a0, Vector256.Load(row + i));
+                        a1 = opAgent.Combine256(a1, Vector256.Load(row + i + vc));
+                        a2 = opAgent.Combine256(a2, Vector256.Load(row + i + vc * 2));
+                        a3 = opAgent.Combine256(a3, Vector256.Load(row + i + vc * 3));
+                        a4 = opAgent.Combine256(a4, Vector256.Load(row + i + vc * 4));
+                        a5 = opAgent.Combine256(a5, Vector256.Load(row + i + vc * 5));
+                        a6 = opAgent.Combine256(a6, Vector256.Load(row + i + vc * 6));
+                        a7 = opAgent.Combine256(a7, Vector256.Load(row + i + vc * 7));
                     }
-                    var acc = opAgent.Combine256(opAgent.Combine256(acc0, acc1), opAgent.Combine256(acc2, acc3));
+                    // Pairwise tree: 8 -> 4 -> 2 -> 1.
+                    var lo = opAgent.Combine256(opAgent.Combine256(a0, a1), opAgent.Combine256(a2, a3));
+                    var hi = opAgent.Combine256(opAgent.Combine256(a4, a5), opAgent.Combine256(a6, a7));
+                    var acc = opAgent.Combine256(lo, hi);
                     for (; i <= vectorEnd; i += vc)
                         acc = opAgent.Combine256(acc, Vector256.Load(row + i));
 
@@ -1175,7 +1183,7 @@ namespace NumSharp.Backends.Kernels
             else if (useV128)
             {
                 int vc = Vector128<T>.Count;
-                long unrollStep = vc * 4;
+                long unrollStep = vc * 8;
                 long unrollEnd = axisSize - unrollStep;
                 long vectorEnd = axisSize - vc;
 
@@ -1183,19 +1191,25 @@ namespace NumSharp.Backends.Kernels
                 {
                     T* row = input + o * axisSize;
                     long i = 0;
-                    var acc0 = identV128;
-                    var acc1 = identV128;
-                    var acc2 = identV128;
-                    var acc3 = identV128;
+                    var a0 = identV128; var a1 = identV128;
+                    var a2 = identV128; var a3 = identV128;
+                    var a4 = identV128; var a5 = identV128;
+                    var a6 = identV128; var a7 = identV128;
 
                     for (; i <= unrollEnd; i += unrollStep)
                     {
-                        acc0 = opAgent.Combine128(acc0, Vector128.Load(row + i));
-                        acc1 = opAgent.Combine128(acc1, Vector128.Load(row + i + vc));
-                        acc2 = opAgent.Combine128(acc2, Vector128.Load(row + i + vc * 2));
-                        acc3 = opAgent.Combine128(acc3, Vector128.Load(row + i + vc * 3));
+                        a0 = opAgent.Combine128(a0, Vector128.Load(row + i));
+                        a1 = opAgent.Combine128(a1, Vector128.Load(row + i + vc));
+                        a2 = opAgent.Combine128(a2, Vector128.Load(row + i + vc * 2));
+                        a3 = opAgent.Combine128(a3, Vector128.Load(row + i + vc * 3));
+                        a4 = opAgent.Combine128(a4, Vector128.Load(row + i + vc * 4));
+                        a5 = opAgent.Combine128(a5, Vector128.Load(row + i + vc * 5));
+                        a6 = opAgent.Combine128(a6, Vector128.Load(row + i + vc * 6));
+                        a7 = opAgent.Combine128(a7, Vector128.Load(row + i + vc * 7));
                     }
-                    var acc = opAgent.Combine128(opAgent.Combine128(acc0, acc1), opAgent.Combine128(acc2, acc3));
+                    var lo = opAgent.Combine128(opAgent.Combine128(a0, a1), opAgent.Combine128(a2, a3));
+                    var hi = opAgent.Combine128(opAgent.Combine128(a4, a5), opAgent.Combine128(a6, a7));
+                    var acc = opAgent.Combine128(lo, hi);
                     for (; i <= vectorEnd; i += vc)
                         acc = opAgent.Combine128(acc, Vector128.Load(row + i));
 
@@ -1379,6 +1393,183 @@ namespace NumSharp.Backends.Kernels
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Max(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MaxScalar(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MinValueOf<T>();
+        }
+
+        // =====================================================================
+        // Per-T SIMD wrappers — route Vector256/128 ops to Avx/Avx2/Sse/Sse2 on x86.
+        //
+        // The cross-platform Vector{N}.Add/Min/Max methods JIT to ~2x slower code
+        // than the X86 intrinsics on .NET 10 (verified empirically). The typeof(T)
+        // chains here are JIT-folded per generic specialization, so the runtime
+        // path for AddOp<float>.Combine256 becomes a single vaddps with no
+        // branches. Vector256.AsX/As<TFrom,TTo> are zero-cost bit casts.
+        //
+        // For ops with no x86 vector instruction at this width (int64 Min/Max/Mul
+        // on Avx2, integer Divide), fall back to Vector{N}.* — keeps the existing
+        // behavior.
+        // =====================================================================
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> Add256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(float))  return System.Runtime.Intrinsics.X86.Avx.Add(a.AsSingle(),  b.AsSingle()).As<float, T>();
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Avx.Add(a.AsDouble(),  b.AsDouble()).As<double, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)
+            {
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsInt32(),  b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsUInt32(), b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(long))   return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsInt64(),  b.AsInt64()).As<long, T>();
+                if (typeof(T) == typeof(ulong))  return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsUInt64(), b.AsUInt64()).As<ulong, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsInt16(),  b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsUInt16(), b.AsUInt16()).As<ushort, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsByte(),   b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Avx2.Add(a.AsSByte(),  b.AsSByte()).As<sbyte, T>();
+            }
+            return Vector256.Add(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<T> Add128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
+                return System.Runtime.Intrinsics.X86.Sse.Add(a.AsSingle(),  b.AsSingle()).As<float, T>();
+            if (System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsDouble(),  b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsInt32(),   b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsUInt32(),  b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(long))   return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsInt64(),   b.AsInt64()).As<long, T>();
+                if (typeof(T) == typeof(ulong))  return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsUInt64(),  b.AsUInt64()).As<ulong, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsInt16(),   b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsUInt16(),  b.AsUInt16()).As<ushort, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsByte(),    b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Sse2.Add(a.AsSByte(),   b.AsSByte()).As<sbyte, T>();
+            }
+            return Vector128.Add(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> Mul256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(float))  return System.Runtime.Intrinsics.X86.Avx.Multiply(a.AsSingle(),  b.AsSingle()).As<float, T>();
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Avx.Multiply(a.AsDouble(),  b.AsDouble()).As<double, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)
+            {
+                // Avx2 has MultiplyLow for int32/uint32 (returns low 32 bits) and int16/uint16.
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Avx2.MultiplyLow(a.AsInt32(),  b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Avx2.MultiplyLow(a.AsUInt32(), b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Avx2.MultiplyLow(a.AsInt16(),  b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Avx2.MultiplyLow(a.AsUInt16(), b.AsUInt16()).As<ushort, T>();
+            }
+            // No int8 / int64 SIMD multiply on Avx2 → fall back.
+            return Vector256.Multiply(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<T> Mul128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
+                return System.Runtime.Intrinsics.X86.Sse.Multiply(a.AsSingle(),  b.AsSingle()).As<float, T>();
+            if (System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Sse2.Multiply(a.AsDouble(),  b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Sse2.MultiplyLow(a.AsInt16(), b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Sse2.MultiplyLow(a.AsUInt16(),b.AsUInt16()).As<ushort, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Sse41.IsSupported)
+            {
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Sse41.MultiplyLow(a.AsInt32(),  b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Sse41.MultiplyLow(a.AsUInt32(), b.AsUInt32()).As<uint, T>();
+            }
+            return Vector128.Multiply(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> Min256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(float))  return System.Runtime.Intrinsics.X86.Avx.Min(a.AsSingle(),  b.AsSingle()).As<float, T>();
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Avx.Min(a.AsDouble(),  b.AsDouble()).As<double, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)
+            {
+                // Avx2 covers byte/sbyte/int16/uint16/int32/uint32 — NO int64/uint64 min/max.
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsInt32(),   b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsUInt32(),  b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsInt16(),   b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsUInt16(),  b.AsUInt16()).As<ushort, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsByte(),    b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Avx2.Min(a.AsSByte(),   b.AsSByte()).As<sbyte, T>();
+            }
+            return Vector256.Min(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<T> Min128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
+                return System.Runtime.Intrinsics.X86.Sse.Min(a.AsSingle(),  b.AsSingle()).As<float, T>();
+            if (System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Sse2.Min(a.AsDouble(),  b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Sse2.Min(a.AsByte(),    b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Sse2.Min(a.AsInt16(),   b.AsInt16()).As<short, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Sse41.IsSupported)
+            {
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Sse41.Min(a.AsInt32(),   b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Sse41.Min(a.AsUInt32(),  b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Sse41.Min(a.AsSByte(),   b.AsSByte()).As<sbyte, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Sse41.Min(a.AsUInt16(),  b.AsUInt16()).As<ushort, T>();
+            }
+            return Vector128.Min(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> Max256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(float))  return System.Runtime.Intrinsics.X86.Avx.Max(a.AsSingle(),  b.AsSingle()).As<float, T>();
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Avx.Max(a.AsDouble(),  b.AsDouble()).As<double, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Avx2.IsSupported)
+            {
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsInt32(),   b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsUInt32(),  b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsInt16(),   b.AsInt16()).As<short, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsUInt16(),  b.AsUInt16()).As<ushort, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsByte(),    b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Avx2.Max(a.AsSByte(),   b.AsSByte()).As<sbyte, T>();
+            }
+            return Vector256.Max(a, b);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<T> Max128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
+        {
+            if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
+                return System.Runtime.Intrinsics.X86.Sse.Max(a.AsSingle(),  b.AsSingle()).As<float, T>();
+            if (System.Runtime.Intrinsics.X86.Sse2.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return System.Runtime.Intrinsics.X86.Sse2.Max(a.AsDouble(),  b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(byte))   return System.Runtime.Intrinsics.X86.Sse2.Max(a.AsByte(),    b.AsByte()).As<byte, T>();
+                if (typeof(T) == typeof(short))  return System.Runtime.Intrinsics.X86.Sse2.Max(a.AsInt16(),   b.AsInt16()).As<short, T>();
+            }
+            if (System.Runtime.Intrinsics.X86.Sse41.IsSupported)
+            {
+                if (typeof(T) == typeof(int))    return System.Runtime.Intrinsics.X86.Sse41.Max(a.AsInt32(),   b.AsInt32()).As<int, T>();
+                if (typeof(T) == typeof(uint))   return System.Runtime.Intrinsics.X86.Sse41.Max(a.AsUInt32(),  b.AsUInt32()).As<uint, T>();
+                if (typeof(T) == typeof(sbyte))  return System.Runtime.Intrinsics.X86.Sse41.Max(a.AsSByte(),   b.AsSByte()).As<sbyte, T>();
+                if (typeof(T) == typeof(ushort)) return System.Runtime.Intrinsics.X86.Sse41.Max(a.AsUInt16(),  b.AsUInt16()).As<ushort, T>();
+            }
+            return Vector128.Max(a, b);
         }
 
         // Per-T scalar helpers. The typeof(T)==typeof(X) chain JIT-folds to a single

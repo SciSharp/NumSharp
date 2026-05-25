@@ -1686,9 +1686,21 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).
+        /// Prefers <c>Avx.LoadVector256</c> / <c>Sse.LoadVector128</c> / <c>Avx512F.LoadVector512</c>
+        /// when running on x86 — the JIT generates ~1.8x faster code than the cross-platform
+        /// <c>Vector{N}.Load</c> path.
         /// </summary>
         internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
-            => il.EmitCall(OpCodes.Call, VectorMethodCache.Load(VectorBits, GetClrType(type)), null);
+        {
+            var clrType = GetClrType(type);
+            var x86 = VectorMethodCache.LoadX86(VectorBits, clrType);
+            if (x86 != null)
+            {
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Load(VectorBits, clrType), null);
+        }
 
         /// <summary>
         /// Emit Vector.Create for NPTypeCode (broadcasts scalar to all vector elements).
@@ -1699,24 +1711,54 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Emit Vector.Store for NPTypeCode (adapts to V128/V256/V512).
+        /// Stack convention: <c>..., Vector, T*</c> (matches <c>Vector{N}.Store(V, T*)</c>).
+        /// When the x86 fast path applies, we swap the stack args because <c>Avx.Store</c>
+        /// has reversed parameter order (<c>T*, V</c>) and use the X86 intrinsic instead.
         /// </summary>
         internal static void EmitVectorStore(ILGenerator il, NPTypeCode type)
-            => il.EmitCall(OpCodes.Call, VectorMethodCache.Store(VectorBits, GetClrType(type)), null);
+        {
+            var clrType = GetClrType(type);
+            var x86 = VectorMethodCache.StoreX86(VectorBits, clrType);
+            if (x86 != null)
+            {
+                // Stack: ..., V<T>, T*
+                // Need:  ..., T*, V<T>  — swap via two locals.
+                var vecType = VectorMethodCache.V(VectorBits, clrType);
+                var locPtr = il.DeclareLocal(typeof(void*));
+                var locVec = il.DeclareLocal(vecType);
+                il.Emit(OpCodes.Stloc, locPtr);  // pop T*  → stack: ..., V
+                il.Emit(OpCodes.Stloc, locVec);  // pop V   → stack: ...
+                il.Emit(OpCodes.Ldloc, locPtr);  // push T* → stack: ..., T*
+                il.Emit(OpCodes.Ldloc, locVec);  // push V  → stack: ..., T*, V
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Store(VectorBits, clrType), null);
+        }
 
         /// <summary>
         /// Emit Vector min/max (width-adaptive). Stack must hold two vectors;
-        /// result is one vector. Uses the static <c>Vector{Width}.Min/Max{T}</c>
-        /// helper on whichever container the runtime selected at startup.
+        /// result is one vector. Prefers Avx/Avx2/Sse2 intrinsics on x86; falls back
+        /// to the cross-platform <c>Vector{N}.Min/Max</c> for unsupported (op, T) — e.g.
+        /// int64 on Avx2.
         /// </summary>
         internal static void EmitVectorMinOrMax(ILGenerator il, bool isMax, NPTypeCode type)
         {
             string methodName = isMax ? "Max" : "Min";
+            var clrType = GetClrType(type);
+            var x86 = VectorMethodCache.BinaryX86(VectorBits, methodName, clrType);
+            if (x86 != null)
+            {
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
             il.EmitCall(OpCodes.Call,
-                VectorMethodCache.Generic(VectorBits, methodName, GetClrType(type), paramCount: 2), null);
+                VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2), null);
         }
 
         /// <summary>
         /// Emit Vector operation for NPTypeCode (adapts to V128/V256/V512).
+        /// Prefers x86 Avx/Avx2 intrinsics where available; falls back to operator overload.
         /// </summary>
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
         {
@@ -1731,11 +1773,31 @@ namespace NumSharp.Backends.Kernels
                     BinaryOp.BitwiseXor => "Xor",
                     _ => throw new NotSupportedException()
                 };
+                var x86Bit = VectorMethodCache.BinaryX86(VectorBits, methodName, clrType);
+                if (x86Bit != null)
+                {
+                    il.EmitCall(OpCodes.Call, x86Bit, null);
+                    return;
+                }
                 il.EmitCall(OpCodes.Call,
                     VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2), null);
                 return;
             }
 
+            string arithName = op switch
+            {
+                BinaryOp.Add => "Add",
+                BinaryOp.Subtract => "Subtract",
+                BinaryOp.Multiply => "Multiply",
+                BinaryOp.Divide => "Divide",
+                _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
+            };
+            var x86Arith = VectorMethodCache.BinaryX86(VectorBits, arithName, clrType);
+            if (x86Arith != null)
+            {
+                il.EmitCall(OpCodes.Call, x86Arith, null);
+                return;
+            }
             // Arithmetic uses operator overloads on Vector256<T> / Vector128<T>.
             string operatorName = op switch
             {
