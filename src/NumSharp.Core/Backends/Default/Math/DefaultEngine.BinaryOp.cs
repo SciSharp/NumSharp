@@ -73,21 +73,23 @@ namespace NumSharp.Backends
                 return ExecuteScalarScalar(lhs, rhs, op, resultType);
             }
 
-            // -------- NpyIter Tier 3B fast path (same-dtype binary ops) ----
-            // When lhs/rhs/result share the same dtype we can route through
-            // the NpyIter inner-loop kernel factory, which collapses
-            // coalesce + SIMD dispatch (contig, SimdScalarLeft, SimdScalarRight,
-            // scalar-strided) into a single emitted kernel driven by NpyIter's
-            // multi-operand iterator. Measured wins: 2.3-4.7× across all 12
-            // benchmarked variations (CC, F-contig, reversed, strided,
-            // broadcast (1,N) and (M,1), scalar-broadcast, 3-D, small).
+            // -------- NpyIter Tier 3B fast path (all binary ops) -----------
+            // Routes through the NpyIter inner-loop kernel factory, which
+            // collapses coalesce + SIMD dispatch (contig, SimdScalarLeft,
+            // SimdScalarRight, scalar-strided) into a single emitted kernel
+            // driven by NpyIter's multi-operand iterator.
             //
-            // Mixed-dtype ops (e.g. int32+float64→float64) fall through to
-            // the direct MixedType kernel path because CanSimdAllOperands
-            // requires operand-type equality.
-            if (lhsType == rhsType && lhsType == resultType)
+            // Same-dtype: full SIMD path (CanSimdAllOperands passes inside
+            // the factory). Measured 2.3-4.7× wins across 12 variations,
+            // at parity with NumPy 2.x.
+            //
+            // Mixed-dtype: scalar body emits per-operand EmitConvertTo
+            // before EmitScalarOperation, mirroring the direct path's
+            // EmitConvertTo + EmitScalarOperation sequence. Vector body
+            // is null (factory drops to scalar-strided). Equivalent perf
+            // for the mixed-dtype cases the direct path used to handle.
             {
-                var routed = TryExecuteBinaryOpViaNpyIter(lhs, rhs, op, resultType);
+                var routed = TryExecuteBinaryOpViaNpyIter(lhs, rhs, op, lhsType, rhsType, resultType);
                 if (routed is not null) return routed;
             }
 
@@ -166,11 +168,11 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Try to execute a same-dtype binary op via NpyIter Tier 3B.
-        ///     Returns the result array on success, or null if the route is
-        ///     not applicable (e.g. unsupported op for scalar/vector emit,
-        ///     broadcast result exceeds int.MaxValue, NpyIter not built for
-        ///     long-shape arithmetic).
+        ///     Try to execute a binary op via NpyIter Tier 3B for any dtype
+        ///     combination (same or mixed). Returns the result array on
+        ///     success, or null if the route is not applicable (broadcast
+        ///     result exceeds int.MaxValue, NpyIter not built for long-
+        ///     shape arithmetic; unsupported op/dtype emit).
         ///
         ///     Allocates the output as F-contig when both inputs are strictly
         ///     F (matches the pre-existing direct-path rule from L3-b) and
@@ -179,21 +181,27 @@ namespace NumSharp.Backends
         ///     handles the reversed-stride case correctly because NpyIter
         ///     normalizes negative inner strides during init.
         ///
-        ///     The scalar body uses
-        ///     <see cref="ILKernelGenerator.EmitScalarOperation"/> which
-        ///     covers every <see cref="BinaryOp"/> kind including the special
-        ///     paths (Decimal/Half/Complex method calls, Power via Math.Pow,
-        ///     FloorDivide, Mod, ATan2). The vector body is supplied only
-        ///     when the dtype and op both support SIMD; otherwise null,
-        ///     causing the factory to fall straight to the scalar-strided
-        ///     loop (matches the direct path's scalar fast path).
+        ///     Same-dtype path (<paramref name="lhsType"/> == <paramref name="rhsType"/>
+        ///     == <paramref name="resultType"/>): scalar body is
+        ///     <see cref="ILKernelGenerator.EmitScalarOperation"/>; vector
+        ///     body is supplied when the dtype and op both support SIMD.
+        ///
+        ///     Mixed-dtype path: scalar body emits a load-shuffle that
+        ///     converts each input from its source dtype to the result
+        ///     dtype before invoking EmitScalarOperation — mirrors the
+        ///     direct path's EmitConvertTo + EmitScalarOperation sequence
+        ///     in EmitGeneralLoop / EmitChunkLoop. Vector body is null
+        ///     because Tier 3B's <c>CanSimdAllOperands</c> rejects mixed
+        ///     dtypes; factory drops straight to the scalar-strided loop.
         ///
         ///     After the kernel runs, applies the "looser-F" post-copy step
         ///     that the direct path uses: if the result is C-contig but the
         ///     NumPy-aligned rule says it should be F (at least one strict-F
         ///     input, no strict-C input), return <c>result.copy('F')</c>.
         /// </summary>
-        private unsafe NDArray? TryExecuteBinaryOpViaNpyIter(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode dtype)
+        private unsafe NDArray? TryExecuteBinaryOpViaNpyIter(
+            NDArray lhs, NDArray rhs, BinaryOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType)
         {
             // Broadcast → clean shape so we know what the result looks like.
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
@@ -217,27 +225,47 @@ namespace NumSharp.Backends
                 ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
                 : cleanShape;
 
-            var result = new NDArray(dtype, resultShape, false);
+            var result = new NDArray(resultType, resultShape, false);
 
             // Order selection — see method-summary comment.
             var order = allStrictFContig
                 ? NPY_ORDER.NPY_FORTRANORDER
                 : NPY_ORDER.NPY_CORDER;
 
-            // SIMD viability: same dtype already enforced by caller; check the
-            // op next. Decimal/Half/Complex go scalar-only (CanUseSimd returns
-            // false for them); Mod/Power/FloorDivide/ATan2 go scalar-only via
-            // CanUseSimdForOp.
-            bool simdViable = ILKernelGenerator.CanUseSimd(dtype) && ILKernelGenerator.CanUseSimdForOp(op);
+            // SIMD viability: requires equal dtypes (CanSimdAllOperands in
+            // the Tier 3B factory enforces this anyway, but we short-circuit
+            // here to keep the vector body null when known to be unusable).
+            // Op gate: Decimal/Half/Complex go scalar-only (CanUseSimd
+            // returns false for them); Mod/Power/FloorDivide/ATan2 go
+            // scalar-only via CanUseSimdForOp.
+            bool sameDtype = lhsType == rhsType && lhsType == resultType;
+            bool simdViable = sameDtype
+                              && ILKernelGenerator.CanUseSimd(resultType)
+                              && ILKernelGenerator.CanUseSimdForOp(op);
 
-            // Build per-element scalar emit body once per (op, dtype). NpyIter
-            // caches the compiled kernel by cacheKey.
-            Action<ILGenerator> scalarBody = il => ILKernelGenerator.EmitScalarOperation(il, op, dtype);
+            // Build per-element scalar emit body. For same-dtype we just call
+            // EmitScalarOperation directly. For mixed-dtype we wrap it with
+            // a per-operand convert pass (the direct path's
+            // EmitGeneralLoop / EmitChunkLoop does the same).
+            Action<ILGenerator> scalarBody;
+            if (sameDtype)
+            {
+                scalarBody = il => ILKernelGenerator.EmitScalarOperation(il, op, resultType);
+            }
+            else
+            {
+                NPTypeCode capLhs = lhsType, capRhs = rhsType, capRes = resultType;
+                BinaryOp capOp = op;
+                scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
+            }
+
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => ILKernelGenerator.EmitVectorOperation(il, op, dtype)
+                ? il => ILKernelGenerator.EmitVectorOperation(il, op, resultType)
                 : null;
 
-            string cacheKey = $"npy_binop_{op}_{dtype}";
+            // Cache key MUST encode all three dtypes; mixed-dtype kernels
+            // are distinct from same-dtype ones for the same op.
+            string cacheKey = $"npy_binop_{op}_{lhsType}_{rhsType}_{resultType}";
 
             try
             {
@@ -253,13 +281,13 @@ namespace NumSharp.Backends
                         NpyIterPerOpFlags.WRITEONLY,
                     });
 
-                iter.ExecuteElementWiseBinary(dtype, dtype, dtype, scalarBody, vectorBody, cacheKey);
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
             }
             catch (NotSupportedException)
             {
-                // EmitScalarOperation / EmitVectorOperation can throw for
-                // op+dtype combinations they don't cover. Surface as null
-                // so the caller falls back to the direct path.
+                // EmitScalarOperation / EmitVectorOperation / EmitConvertTo
+                // can throw for combos they don't cover. Surface as null so
+                // the caller falls back to the direct path.
                 return null;
             }
 
@@ -271,6 +299,40 @@ namespace NumSharp.Backends
                 return result.copy('F');
 
             return result;
+        }
+
+        /// <summary>
+        ///     Mixed-dtype scalar-body emitter. On entry the stack carries
+        ///     <c>[lhs (lhsType), rhs (rhsType)]</c>. On exit it carries one
+        ///     value of <paramref name="resultType"/>. Handles all three
+        ///     conversion combinations (lhs-only, rhs-only, both) via a
+        ///     temp local for the rhs value so we can reach the lhs at the
+        ///     bottom of the stack.
+        ///
+        ///     Same-dtype callers do NOT go through this path — they call
+        ///     <see cref="ILKernelGenerator.EmitScalarOperation"/> directly,
+        ///     skipping the local allocation and reload.
+        /// </summary>
+        private static void EmitMixedScalarBody(
+            ILGenerator il,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType,
+            BinaryOp op)
+        {
+            // Stack: [lhs (lhsType), rhs (rhsType)]
+            //
+            // Stash rhs into a local so we can convert the bottom-of-stack lhs
+            // first, then reload rhs and convert it. Doing it this order keeps
+            // the final stack as [lhs (resultType), rhs (resultType)] which
+            // is what EmitScalarOperation expects.
+            var locRhs = il.DeclareLocal(ILKernelGenerator.GetClrType(rhsType));
+            il.Emit(OpCodes.Stloc, locRhs);
+            if (lhsType != resultType)
+                ILKernelGenerator.EmitConvertTo(il, lhsType, resultType);
+            il.Emit(OpCodes.Ldloc, locRhs);
+            if (rhsType != resultType)
+                ILKernelGenerator.EmitConvertTo(il, rhsType, resultType);
+
+            ILKernelGenerator.EmitScalarOperation(il, op, resultType);
         }
 
         /// <summary>

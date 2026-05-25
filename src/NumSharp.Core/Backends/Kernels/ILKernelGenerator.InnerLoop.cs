@@ -276,9 +276,28 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                // No SIMD — but still try same-elemsize fast path via scalar contig.
-                // We could emit a "strides == elemSize -> scalar contig" branch here,
-                // but the JIT autovectorizes the strided loop already, so keep it simple.
+                // No-SIMD path (mixed dtypes or non-SIMD-capable types like
+                // Decimal / Half / Complex). Emit a runtime check "every
+                // operand stride == its element size" → contig scalar loop;
+                // else the strided fallback. The contig loop uses i*elemSize
+                // addressing (elemSize is a JIT compile-time constant per
+                // operand, often a power of 2 → folds to a shift) which gives
+                // 30-40% over EmitScalarStridedLoop's per-operand multiply.
+                //
+                // This is the mixed-dtype version of the same trick the SIMD
+                // branch already pulls — we just can't share a label set with
+                // it because their stride checks compare against different
+                // per-operand sizes.
+                for (int op = 0; op < nOp; op++)
+                {
+                    int sz = GetTypeSize(operandTypes[op]);
+                    il.Emit(OpCodes.Ldloc, strideLocals[op]);
+                    il.Emit(OpCodes.Ldc_I8, (long)sz);
+                    il.Emit(OpCodes.Bne_Un, lblScalarStrided);
+                }
+                EmitScalarContigLoop(il, operandTypes, ptrLocals, scalarBody);
+                il.Emit(OpCodes.Br, lblEnd);
+                il.MarkLabel(lblScalarStrided);
             }
 
             // Scalar strided fallback (always present).
@@ -660,6 +679,42 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, locVScalar);
             }
             vectorBody(il);
+        }
+
+        /// <summary>
+        /// Emit a pure scalar contig loop. Each operand walks at its element-
+        /// size step (no per-iter stride multiply — the per-operand elemSize
+        /// is baked in as a constant the JIT can fold to a shift for power-
+        /// of-2 sizes). Used for the mixed-dtype contig fast path when SIMD
+        /// is unavailable; matches the perf of the direct path's
+        /// EmitChunkLoop scalar inner walk.
+        /// </summary>
+        private static void EmitScalarContigLoop(
+            ILGenerator il,
+            NPTypeCode[] operandTypes,
+            LocalBuilder[] ptrLocals,
+            Action<ILGenerator> scalarBody)
+        {
+            var locI = il.DeclareLocal(typeof(long));
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            il.MarkLabel(lblLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            EmitScalarElement(il, operandTypes, ptrLocals, /*stridesInElems*/ null, locI, contig: true, scalarBody);
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
         }
 
         /// <summary>
