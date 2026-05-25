@@ -202,13 +202,14 @@ namespace NumSharp
             object cv = constantValues ?? BoxedZero(array.GetTypeCode);
             object[,] valuePairs = _AsPairsValues(cv, ndim);
 
-            // Same-value-everywhere shortcut: every (b,a) pair is identical and
-            // every axis matches → single Fill of the entire buffer + center copy.
-            // Saves the per-axis _SetPadArea loop.
-            if (TryUniformConstant(valuePairs, ndim, out object uniform))
-                return _PadSimple(array, padPairs, fillValue: CastBoxToDType(uniform, array.GetTypeCode)).padded;
-
-            // Allocate uninitialized, copy original, then fill each axis's pad band.
+            // NumPy strategy: allocate uninitialized, center-copy the original, then
+            // fill each axis's pad band via _SetPadArea. The corner-propagation logic
+            // in _ViewRoi ensures corners are written by axis 0 and not re-overwritten.
+            //
+            // Note: a "uniform-fill-whole-buffer" shortcut is tempting (one Fill of N
+            // elements vs ~2*N_pad_band tiny writes), but for typical pad sizes
+            // (pad << array size) the whole-buffer fill is the dominant cost and
+            // makes constant mode slower than NumPy. Skip the shortcut entirely.
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
             for (int axis = 0; axis < ndim; axis++)
             {
@@ -541,12 +542,9 @@ namespace NumSharp
 
         private static NDArray StatReduce(NDArray chunk, int axis, string mode)
         {
-            // Fast path: 1D chunk on the only axis — use the no-axis overload
-            // which is 100×+ faster than the axis-keepdims path for np.mean
-            // (a known NumSharp DefaultEngine.Mean perf bug; reduction without
-            // axis hits the SIMD fast path, with axis goes through the slow
-            // strided iterator). The result is 0-D rather than (1,), but
-            // 0-D broadcasts identically when assigned into the pad band.
+            // 1D fast path: no-axis variants are 100×+ faster than axis+keepdims
+            // for np.mean (DefaultEngine.Mean axis-path perf bug).  Returns 0-D,
+            // broadcasts identically.
             if (chunk.ndim == 1 && axis == 0)
             {
                 switch (mode)
@@ -557,14 +555,50 @@ namespace NumSharp
                     case "median":  return np.median(chunk);
                 }
             }
-            switch (mode)
+
+            // N-D path. Two pre-emptive workarounds for DefaultEngine bugs:
+            //
+            //  1. np.mean(arr, axis, keepdims) on N-D arrays is ~100× slower
+            //     than np.sum(arr, axis, keepdims) (DefaultEngine.Mean axis-path
+            //     reflection-loop bug). Compute as sum/N instead.
+            //
+            //  2. Axis reductions on sliced/non-contig 3D+ views are ~20× slower
+            //     than on contiguous arrays (the strided reduction inner loop
+            //     does mod/div per element for outer-axis reductions). The 2D
+            //     non-contig case has near-identical perf to contig, so the
+            //     materialisation is only worth it from ndim ≥ 3.
+            NDArray src = chunk;
+            bool ownsSrc = false;
+            if (chunk.ndim >= 3 && !chunk.Shape.IsContiguous)
             {
-                case "maximum": return np.amax(chunk, axis: axis, keepdims: true);
-                case "minimum": return np.amin(chunk, axis: axis, keepdims: true);
-                case "mean":    return np.mean(chunk, axis: axis, keepdims: true);
-                case "median":  return np.median(chunk, axis: axis, keepdims: true);
-                default: throw new NotSupportedException($"stat mode '{mode}'");
+                src = chunk.copy();
+                ownsSrc = true;
             }
+            try
+            {
+                switch (mode)
+                {
+                    case "maximum": return np.amax(src, axis: axis, keepdims: true);
+                    case "minimum": return np.amin(src, axis: axis, keepdims: true);
+                    case "mean":
+                    {
+                        using var sum = np.sum(src, axis: axis, keepdims: true);
+                        long n = src.shape[axis];
+                        // Promote sum to float for the divide if it isn't already.
+                        if (IsIntegerDtype(sum.GetTypeCode))
+                        {
+                            using var asF = sum.astype(typeof(double));
+                            using var divisor = NDArray.Scalar((double)n, NPTypeCode.Double);
+                            return asF / divisor;
+                        }
+                        using var divisorF = NDArray.Scalar((double)n, sum.GetTypeCode);
+                        return sum / divisorF;
+                    }
+                    case "median":  return np.median(src, axis: axis, keepdims: true);
+                    default: throw new NotSupportedException($"stat mode '{mode}'");
+                }
+            }
+            finally { if (ownsSrc) src.Dispose(); }
         }
 
         /// <summary>
