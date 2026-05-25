@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 // =============================================================================
@@ -142,6 +143,32 @@ namespace NumSharp.Backends.Kernels
             long axisStride = inputStrides[axis];
             bool axisContiguous = axisStride == 1;
 
+            // ─────────────────────────────────────────────────────────────────
+            // FAST PATH — leading-axis on C-contiguous input (axis < ndim-1).
+            //
+            // Mirror of AxisReductionSimdHelper's leading-axis path: walk axis
+            // rows sequentially and column-tile the accumulators into the inner
+            // slab. Eliminates the 85× regression on std(axis=0) where the
+            // generic per-output loop was walking stride=innerSize columns one
+            // by one (cache-cold) AND repeating the walk in pass 2.
+            //
+            // Two-pass algorithm:
+            //   Pass 1 — column-tiled sum → per-column double mean.
+            //   Pass 2 — column-tiled (val - mean[col])² accumulation.
+            // The shared temp buffer holds N doubles per outer slab; rented
+            // from ArrayPool to avoid pressuring the LOH for large inner dims.
+            // ─────────────────────────────────────────────────────────────────
+            if (axis < ndim - 1 && IsCContig(inputStrides, inputShape, ndim))
+            {
+                long innerSize = 1;
+                for (int d = axis + 1; d < ndim; d++) innerSize *= inputShape[d];
+                long outerSize = 1;
+                for (int d = 0; d < axis; d++) outerSize *= inputShape[d];
+
+                AxisVarStdLeadingTyped<TInput>(input, output, outerSize, axisSize, innerSize, computeStd, ddof);
+                return;
+            }
+
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
 
@@ -213,6 +240,213 @@ namespace NumSharp.Backends.Kernels
                     double variance = sqDiffSum / divisor;
                     output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
                 }
+        }
+
+        /// <summary>
+        /// Column-tiled Var/Std for the C-contig leading-axis case (axis &lt; ndim-1).
+        ///
+        /// Output shape is (outerSize × innerSize) flattened; for each outer slab we
+        /// hold per-column sums and squared-diffs in a rented double buffer, walking
+        /// axis rows sequentially so the input streams contig from memory and per-
+        /// column accumulators stay hot in L1.
+        ///
+        /// Two passes over the input. Float widening (Vector256&lt;float&gt; → 2× Vector256&lt;double&gt;)
+        /// keeps the SIMD body engaged for the dominant TInput=float case.
+        /// </summary>
+        private static unsafe void AxisVarStdLeadingTyped<TInput>(
+            TInput* input, double* output,
+            long outerSize, long axisSize, long innerSize,
+            bool computeStd, int ddof)
+            where TInput : unmanaged
+        {
+            // ddof semantics match the per-output path: clamp to 1 to produce NaN
+            // through (sqDiff/divisor) when ddof >= axisSize. Matches existing parity.
+            double divisor = axisSize - ddof;
+            if (divisor <= 0) divisor = 1;
+
+            // Two scratch buffers per outer slab: sums (Pass 1 → means after divide)
+            // and sqdiffs (Pass 2 → variance after divide). Rented to avoid LOH
+            // pressure for very wide innerSize.
+            var pool = System.Buffers.ArrayPool<double>.Shared;
+            double[] scratch = pool.Rent((int)Math.Min(innerSize * 2, int.MaxValue));
+            try
+            {
+                fixed (double* scratchPin = scratch)
+                {
+                    double* sums = scratchPin;
+                    double* sqdiffs = scratchPin + innerSize;
+
+                    for (long o = 0; o < outerSize; o++)
+                    {
+                        TInput* inBase = input + o * axisSize * innerSize;
+                        double* outSlab = output + o * innerSize;
+
+                        // ─── Pass 1: per-column sum ───────────────────────────
+                        // Initialize from row 0 (widening cast TInput → double).
+                        // Subsequent rows accumulate in place.
+                        AxisVarStdSeedRowAsDouble<TInput>(inBase, sums, innerSize);
+                        for (long a = 1; a < axisSize; a++)
+                            AxisVarStdAddRowAsDouble<TInput>(inBase + a * innerSize, sums, innerSize);
+
+                        // Compute means in place (sums[] becomes means[])
+                        double invN = 1.0 / axisSize;
+                        for (long i = 0; i < innerSize; i++)
+                            sums[i] *= invN;
+
+                        // ─── Pass 2: per-column sum of squared diffs ─────────
+                        // Zero the sqdiffs buffer.
+                        new Span<double>(sqdiffs, (int)innerSize).Clear();
+                        for (long a = 0; a < axisSize; a++)
+                            AxisVarStdAccumulateSqDiff<TInput>(inBase + a * innerSize, sums, sqdiffs, innerSize);
+
+                        // Finalize: variance = sqdiff/divisor, std = sqrt(variance).
+                        double invDiv = 1.0 / divisor;
+                        if (computeStd)
+                        {
+                            for (long i = 0; i < innerSize; i++)
+                                outSlab[i] = Math.Sqrt(sqdiffs[i] * invDiv);
+                        }
+                        else
+                        {
+                            for (long i = 0; i < innerSize; i++)
+                                outSlab[i] = sqdiffs[i] * invDiv;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                pool.Return(scratch);
+            }
+        }
+
+        /// <summary>
+        /// Seed the per-column accumulator from a single input row, widening TInput → double.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void AxisVarStdSeedRowAsDouble<TInput>(TInput* row, double* sums, long n)
+            where TInput : unmanaged
+        {
+            if (typeof(TInput) == typeof(double))
+            {
+                Buffer.MemoryCopy(row, sums, n * sizeof(double), n * sizeof(double));
+                return;
+            }
+            if (typeof(TInput) == typeof(float))
+            {
+                float* p = (float*)(void*)row;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && n >= Vector256<float>.Count)
+                {
+                    int vc = Vector256<float>.Count;            // 8 floats
+                    long end = n - vc;
+                    for (; i <= end; i += vc)
+                    {
+                        var (lo, hi) = Vector256.Widen(Vector256.Load(p + i));
+                        Vector256.Store(lo, sums + i);
+                        Vector256.Store(hi, sums + i + Vector256<double>.Count);
+                    }
+                }
+                for (; i < n; i++) sums[i] = p[i];
+                return;
+            }
+            // Scalar fallback for other integral types (int16/int32/etc.) — JIT folds typeof.
+            for (long i = 0; i < n; i++) sums[i] = ConvertToDouble(row[i]);
+        }
+
+        /// <summary>
+        /// Add one input row to the per-column accumulator, widening TInput → double.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void AxisVarStdAddRowAsDouble<TInput>(TInput* row, double* sums, long n)
+            where TInput : unmanaged
+        {
+            if (typeof(TInput) == typeof(double))
+            {
+                double* p = (double*)(void*)row;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && n >= Vector256<double>.Count)
+                {
+                    int vc = Vector256<double>.Count;
+                    long end = n - vc;
+                    for (; i <= end; i += vc)
+                        Vector256.Store(Vector256.Add(Vector256.Load(sums + i), Vector256.Load(p + i)), sums + i);
+                }
+                for (; i < n; i++) sums[i] += p[i];
+                return;
+            }
+            if (typeof(TInput) == typeof(float))
+            {
+                float* p = (float*)(void*)row;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && n >= Vector256<float>.Count)
+                {
+                    int vc = Vector256<float>.Count;
+                    int vcD = Vector256<double>.Count;
+                    long end = n - vc;
+                    for (; i <= end; i += vc)
+                    {
+                        var (lo, hi) = Vector256.Widen(Vector256.Load(p + i));
+                        Vector256.Store(Vector256.Add(Vector256.Load(sums + i), lo), sums + i);
+                        Vector256.Store(Vector256.Add(Vector256.Load(sums + i + vcD), hi), sums + i + vcD);
+                    }
+                }
+                for (; i < n; i++) sums[i] += p[i];
+                return;
+            }
+            for (long i = 0; i < n; i++) sums[i] += ConvertToDouble(row[i]);
+        }
+
+        /// <summary>
+        /// Accumulate (val - mean[col])² per column from one input row.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void AxisVarStdAccumulateSqDiff<TInput>(TInput* row, double* means, double* sqdiffs, long n)
+            where TInput : unmanaged
+        {
+            if (typeof(TInput) == typeof(double))
+            {
+                double* p = (double*)(void*)row;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && n >= Vector256<double>.Count)
+                {
+                    int vc = Vector256<double>.Count;
+                    long end = n - vc;
+                    for (; i <= end; i += vc)
+                    {
+                        var diff = Vector256.Subtract(Vector256.Load(p + i), Vector256.Load(means + i));
+                        Vector256.Store(Vector256.Add(Vector256.Load(sqdiffs + i), Vector256.Multiply(diff, diff)), sqdiffs + i);
+                    }
+                }
+                for (; i < n; i++) { double d = p[i] - means[i]; sqdiffs[i] += d * d; }
+                return;
+            }
+            if (typeof(TInput) == typeof(float))
+            {
+                float* p = (float*)(void*)row;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated && n >= Vector256<float>.Count)
+                {
+                    int vc = Vector256<float>.Count;
+                    int vcD = Vector256<double>.Count;
+                    long end = n - vc;
+                    for (; i <= end; i += vc)
+                    {
+                        var (lo, hi) = Vector256.Widen(Vector256.Load(p + i));
+                        var diffLo = Vector256.Subtract(lo, Vector256.Load(means + i));
+                        var diffHi = Vector256.Subtract(hi, Vector256.Load(means + i + vcD));
+                        Vector256.Store(Vector256.Add(Vector256.Load(sqdiffs + i), Vector256.Multiply(diffLo, diffLo)), sqdiffs + i);
+                        Vector256.Store(Vector256.Add(Vector256.Load(sqdiffs + i + vcD), Vector256.Multiply(diffHi, diffHi)), sqdiffs + i + vcD);
+                    }
+                }
+                for (; i < n; i++) { double d = p[i] - means[i]; sqdiffs[i] += d * d; }
+                return;
+            }
+            for (long i = 0; i < n; i++)
+            {
+                double d = ConvertToDouble(row[i]) - means[i];
+                sqdiffs[i] += d * d;
+            }
         }
 
         /// <summary>

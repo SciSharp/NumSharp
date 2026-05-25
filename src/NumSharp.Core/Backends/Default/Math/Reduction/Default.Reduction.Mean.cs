@@ -69,7 +69,12 @@ namespace NumSharp.Backends
 
             // B16: Half mean axis computes in Double then casts back to preserve Half dtype.
             bool needsCast = !typeCode.HasValue && inputTc == NPTypeCode.Half;
-            var outputType2 = needsCast ? NPTypeCode.Double : (typeCode ?? NPTypeCode.Double);
+            // NumPy parity: mean preserves float input dtype (float32→float32, float64→float64);
+            // integer inputs promote to float64. GetComputingType() encodes exactly this rule and
+            // also keeps InputType == AccumulatorType for floats, which is what unlocks the
+            // SIMD same-type axis-reduction kernel. Forcing Double here was a 2576× regression
+            // on mean(float32, axis=0) because it dropped into the scalar promoted helper.
+            var outputType2 = needsCast ? NPTypeCode.Double : (typeCode ?? inputTc.GetComputingType());
 
             NDArray result2;
             if (shape[axis2] == 1)
