@@ -216,7 +216,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Check if SIMD can be used for this unary operation.
         /// </summary>
-        private static bool CanUseUnarySimd(UnaryKernelKey key)
+        internal static bool CanUseUnarySimd(UnaryKernelKey key)
         {
             // SIMD only for same-type operations
             if (!key.IsSameType)

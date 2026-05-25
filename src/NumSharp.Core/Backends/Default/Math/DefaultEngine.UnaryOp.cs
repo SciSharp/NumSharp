@@ -1,5 +1,8 @@
 using System;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -58,6 +61,19 @@ namespace NumSharp.Backends
                 return ExecuteScalarUnary(nd, op, outputType);
             }
 
+            // -------- NpyIter Tier 3B fast path (all unary ops) ------------
+            // Funnels through the NpyIter inner-loop kernel factory for the
+            // same architectural reasons as the binary route: unified driver,
+            // coalesce + SIMD dispatch baked in, F-aware order handling.
+            // Returns null only when EmitUnaryScalarOperation /
+            // EmitUnaryVectorOperation can't lower (op+dtype combos those
+            // emitters don't cover) — in which case we drop to the existing
+            // direct UnaryKernel path below.
+            {
+                var routed = TryExecuteUnaryOpViaNpyIter(nd, op, inputType, outputType);
+                if (routed is not null) return routed;
+            }
+
             // Determine if array is contiguous
             bool isContiguous = nd.Shape.IsContiguous;
 
@@ -86,6 +102,141 @@ namespace NumSharp.Backends
             // NumPy-aligned layout preservation: unary ops preserve F-contig.
             // The kernel writes in linear C-order; relay out when the input is strictly F-contig.
             if (ShouldProduceFContigOutput(nd, result.Shape))
+                return result.copy('F');
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Mirror of <c>ILKernelGenerator.IsPredicateOp</c> (private to
+        ///     that partial) — the routing layer needs the same answer.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsUnaryPredicateOp(UnaryOp op)
+            => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
+
+        /// <summary>
+        ///     <see cref="System.Numerics.Complex.Abs"/> — resolved once and
+        ///     cached. Routes the Complex-magnitude special case in
+        ///     <see cref="TryExecuteUnaryOpViaNpyIter"/> without depending on
+        ///     <c>ILKernelGenerator.CachedMethods</c>, which is private to
+        ///     the kernel partial.
+        /// </summary>
+        private static readonly MethodInfo s_complexAbs =
+            typeof(System.Numerics.Complex).GetMethod(
+                "Abs", BindingFlags.Public | BindingFlags.Static,
+                new[] { typeof(System.Numerics.Complex) })
+            ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Abs");
+
+        /// <summary>
+        ///     Try to execute a unary op via NpyIter Tier 3B. Returns the
+        ///     result on success or null if the route is unsupported (size
+        ///     overflow vs int.MaxValue, NotSupportedException from emit).
+        ///
+        ///     Layout: F-allocates output when input is strict-F (matches
+        ///     the post-kernel <c>result.copy('F')</c> the direct path
+        ///     applies via <see cref="ShouldProduceFContigOutput(NDArray, Shape)"/>);
+        ///     picks NPY_FORTRANORDER in that case, NPY_CORDER otherwise.
+        ///
+        ///     Same-dtype path: scalar body =
+        ///     <see cref="ILKernelGenerator.EmitUnaryScalarOperation"/>;
+        ///     vector body when SIMD is viable.
+        ///
+        ///     Mixed-dtype path (Abs(complex)→double, IsNan(float)→bool,
+        ///     Cast(int)→float, etc.): scalar body emits
+        ///     EmitUnaryScalarOperation on the INPUT type (which produces
+        ///     the output type for predicate ops like IsNan) or
+        ///     EmitUnaryScalarOperation + EmitConvertTo (for math ops that
+        ///     compute in input type then convert). Vector body is null
+        ///     because cross-type unary SIMD isn't templated in Tier 3B.
+        /// </summary>
+        private unsafe NDArray? TryExecuteUnaryOpViaNpyIter(NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var cleanShape = nd.Shape.Clean();
+            if (cleanShape.size < 0) return null;
+            for (int i = 0; i < cleanShape.NDim; i++)
+                if (cleanShape.dimensions[i] > int.MaxValue) return null;
+
+            // Mirror the direct path's F-preservation: input strict-F →
+            // allocate F-contig output AND iterate in F-order. Otherwise
+            // C-contig output + C-order; the post-kernel copy step at the
+            // end of this function handles the looser-F case.
+            bool inputStrictF = nd.Shape.IsFContiguous && !nd.Shape.IsContiguous
+                                 && cleanShape.NDim > 1 && cleanShape.size > 1
+                                 && !nd.Shape.IsScalar;
+            Shape resultShape = inputStrictF
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+            var result = new NDArray(outputType, resultShape, false);
+
+            var order = inputStrictF
+                ? NPY_ORDER.NPY_FORTRANORDER
+                : NPY_ORDER.NPY_CORDER;
+
+            // SIMD viability: same-dtype only (existing rule from the
+            // direct path's CanUseUnarySimd) + op-supported check.
+            var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
+            bool simdViable = ILKernelGenerator.CanUseUnarySimd(key);
+
+            // Scalar body — mirrors the direct path's per-element sequence
+            // in ILKernelGenerator.Unary's emit loops:
+            //   • Predicate ops (IsNan / IsInf / IsFinite) operate on the
+            //     INPUT type and the emitter itself produces bool — no
+            //     convert before or after.
+            //   • Complex Abs is a magnitude reduction: call ComplexAbs
+            //     intrinsic, then convert from double to outputType if it
+            //     differs (matches the direct path's special-case block).
+            //   • Everything else: convert input → output type, then run
+            //     the op on output type. This is required for promoting
+            //     ops like Sqrt(int32) → double where EmitMathCall expects
+            //     the value to already be in the floating-point domain.
+            NPTypeCode capIn = inputType, capOut = outputType;
+            UnaryOp capOp = op;
+            Action<ILGenerator> scalarBody = il =>
+            {
+                if (IsUnaryPredicateOp(capOp))
+                {
+                    ILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
+                }
+                else if (capOp == UnaryOp.Abs && capIn == NPTypeCode.Complex)
+                {
+                    il.EmitCall(OpCodes.Call, s_complexAbs, null);
+                    if (capOut != NPTypeCode.Double)
+                        ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, capOut);
+                }
+                else
+                {
+                    if (capIn != capOut)
+                        ILKernelGenerator.EmitConvertTo(il, capIn, capOut);
+                    ILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
+                }
+            };
+            Action<ILGenerator>? vectorBody = simdViable
+                ? il => ILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
+                : null;
+
+            string cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
+
+            try
+            {
+                using var iter = NpyIterRef.MultiNew(
+                    2, new[] { nd, result },
+                    NpyIterGlobalFlags.EXTERNAL_LOOP,
+                    order, NPY_CASTING.NPY_SAFE_CASTING,
+                    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY });
+
+                iter.ExecuteElementWiseUnary(inputType, outputType, scalarBody, vectorBody, cacheKey);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+
+            // Post-kernel "looser-F" copy step (mirrors the direct path's
+            // tail branch): triggers when result is currently C-contig but
+            // input is strict-F so the NumPy rule says output should be F.
+            // strict-F-input cases skipped this by allocating F up front.
+            if (!inputStrictF && ShouldProduceFContigOutput(nd, result.Shape))
                 return result.copy('F');
 
             return result;
