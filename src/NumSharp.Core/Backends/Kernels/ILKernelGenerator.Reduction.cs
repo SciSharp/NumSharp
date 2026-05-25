@@ -154,8 +154,40 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit a SIMD reduction loop for contiguous arrays with 4x unrolling.
-        /// Uses 4 independent vector accumulators to break dependency chains.
+        /// Per-accumulator load+combine emit for the 8x unrolled SIMD reduction body.
+        /// Stack before:  empty
+        /// Stack after:   empty (the result is stored back to locAcc)
+        /// IL emitted (inline):
+        ///   locAcc = locAcc OP Vector.Load(input + (i + offsetInVectorCounts) * inputSize)
+        /// </summary>
+        private static void EmitAccumLoadCombine(
+            ILGenerator il, ElementReductionKernelKey key,
+            LocalBuilder locAcc, LocalBuilder locI, int inputSize, long offsetInElements)
+        {
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            if (offsetInElements != 0)
+            {
+                il.Emit(OpCodes.Ldc_I8, offsetInElements);
+                il.Emit(OpCodes.Add);
+            }
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc);
+        }
+
+        /// <summary>
+        /// Emit a SIMD reduction loop for contiguous arrays with 8x unrolling.
+        /// Uses 8 independent vector accumulators to break dependency chains
+        /// across the FP add/mul pipeline (3-4 cycle latency, but issue rate of
+        /// 1-2 per cycle — 8 chains keeps both add ports saturated). Tree-merge
+        /// at the end matches NumPy's pairwise_sum.c shape, which also gives
+        /// better numerical accuracy on long reductions.
         /// </summary>
         private static void EmitReductionSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
@@ -180,10 +212,8 @@ namespace NumSharp.Backends.Kernels
             var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - unrollStep
             var locVectorEnd = il.DeclareLocal(typeof(long)); // totalSize - vectorCount
-            var locVecAccum0 = il.DeclareLocal(vectorType); // VECTOR accumulator 0
-            var locVecAccum1 = il.DeclareLocal(vectorType); // VECTOR accumulator 1
-            var locVecAccum2 = il.DeclareLocal(vectorType); // VECTOR accumulator 2
-            var locVecAccum3 = il.DeclareLocal(vectorType); // VECTOR accumulator 3
+            var locAcc = new LocalBuilder[8];
+            for (int k = 0; k < 8; k++) locAcc[k] = il.DeclareLocal(vectorType);
             var locScalarAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // scalar for tail
 
             var lblUnrolledLoop = il.DefineLabel();
@@ -193,17 +223,15 @@ namespace NumSharp.Backends.Kernels
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
 
-            long unrollStep = vectorCount * 4;
+            long unrollStep = vectorCount * 8;
 
-            // Initialize 4 VECTOR accumulators with identity value broadcast
-            EmitVectorIdentity(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum0);
-            EmitVectorIdentity(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum1);
-            EmitVectorIdentity(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum2);
-            EmitVectorIdentity(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum3);
+            // Initialize 8 vector accumulators with the op's identity (0 for Sum/Mean,
+            // 1 for Prod, +Inf/-Inf for Min/Max) broadcast across all lanes.
+            for (int k = 0; k < 8; k++)
+            {
+                EmitVectorIdentity(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
 
             // unrollEnd = totalSize - unrollStep
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
@@ -221,7 +249,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
-            // === 4x UNROLLED SIMD LOOP ===
+            // === 8x UNROLLED SIMD LOOP ===
             il.MarkLabel(lblUnrolledLoop);
 
             // if (i > unrollEnd) goto UnrolledLoopEnd
@@ -229,59 +257,8 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locUnrollEnd);
             il.Emit(OpCodes.Bgt, lblUnrolledLoopEnd);
 
-            // Load and combine vector 0: acc0 = acc0 OP input[i]
-            il.Emit(OpCodes.Ldloc, locVecAccum0);
-            il.Emit(OpCodes.Ldarg_0); // input
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad(il, key.InputType);
-            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum0);
-
-            // Load and combine vector 1: acc1 = acc1 OP input[i + vectorCount]
-            il.Emit(OpCodes.Ldloc, locVecAccum1);
-            il.Emit(OpCodes.Ldarg_0); // input
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, vectorCount);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad(il, key.InputType);
-            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum1);
-
-            // Load and combine vector 2: acc2 = acc2 OP input[i + vectorCount * 2]
-            il.Emit(OpCodes.Ldloc, locVecAccum2);
-            il.Emit(OpCodes.Ldarg_0); // input
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, vectorCount * 2);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad(il, key.InputType);
-            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum2);
-
-            // Load and combine vector 3: acc3 = acc3 OP input[i + vectorCount * 3]
-            il.Emit(OpCodes.Ldloc, locVecAccum3);
-            il.Emit(OpCodes.Ldarg_0); // input
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, vectorCount * 3);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad(il, key.InputType);
-            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum3);
+            for (int k = 0; k < 8; k++)
+                EmitAccumLoadCombine(il, key, locAcc[k], locI, inputSize, vectorCount * k);
 
             // i += unrollStep
             il.Emit(OpCodes.Ldloc, locI);
@@ -292,24 +269,33 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblUnrolledLoop);
             il.MarkLabel(lblUnrolledLoopEnd);
 
-            // === TREE REDUCTION: 4 -> 2 -> 1 ===
-            // acc01 = acc0 OP acc1
-            il.Emit(OpCodes.Ldloc, locVecAccum0);
-            il.Emit(OpCodes.Ldloc, locVecAccum1);
+            // === PAIRWISE TREE REDUCTION: 8 -> 4 -> 2 -> 1 ===
+            // Layer 1: (0,1)(2,3)(4,5)(6,7) → 4 accumulators in slots 0,2,4,6.
+            for (int k = 0; k < 8; k += 2)
+            {
+                il.Emit(OpCodes.Ldloc, locAcc[k]);
+                il.Emit(OpCodes.Ldloc, locAcc[k + 1]);
+                EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
+            // Layer 2: (0,2)(4,6) → slots 0,4.
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[2]);
             EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum0); // reuse acc0 as acc01
+            il.Emit(OpCodes.Stloc, locAcc[0]);
 
-            // acc23 = acc2 OP acc3
-            il.Emit(OpCodes.Ldloc, locVecAccum2);
-            il.Emit(OpCodes.Ldloc, locVecAccum3);
+            il.Emit(OpCodes.Ldloc, locAcc[4]);
+            il.Emit(OpCodes.Ldloc, locAcc[6]);
             EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum2); // reuse acc2 as acc23
+            il.Emit(OpCodes.Stloc, locAcc[4]);
 
-            // final = acc01 OP acc23
-            il.Emit(OpCodes.Ldloc, locVecAccum0);
-            il.Emit(OpCodes.Ldloc, locVecAccum2);
+            // Layer 3: (0,4) → slot 0 (final reduced vector).
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[4]);
             EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum0); // reuse acc0 as final
+            il.Emit(OpCodes.Stloc, locAcc[0]);
+
+            var locVecAccum0 = locAcc[0];
 
             // === REMAINDER LOOP (0-3 vectors) ===
             il.MarkLabel(lblRemainderLoop);
@@ -414,6 +400,16 @@ namespace NumSharp.Backends.Kernels
                 ReductionOp.Mean => "Add", // Mean uses Sum internally
                 _ => throw new NotSupportedException($"Vector binary op for {op} not supported")
             };
+
+            // x86 fast path: Avx/Avx2 intrinsic when available (1.8-2x faster JIT codegen
+            // than Vector256.* on .NET 10). BinaryX86 returns null for ops/types without an
+            // x86 vector instruction (int64 Min/Max/Mul on Avx2), falling through to V256.
+            var x86 = VectorMethodCache.BinaryX86(VectorBits, methodName, clrType);
+            if (x86 != null)
+            {
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
 
             // Multiply has a (V, T) scalar overload as well as (V, V); use the vector-vector
             // variant explicitly. The other ops here only have the (V, V) overload.

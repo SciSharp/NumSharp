@@ -73,6 +73,37 @@ namespace NumSharp.Backends.Kernels
         private static readonly ConcurrentDictionary<(int, Type, Type), MethodInfo> _asMethods = new();
         // (simdBits, elem) -> Vector{N}<T>.Zero getter (and other properties later if needed).
         private static readonly ConcurrentDictionary<(int, Type, string), MethodInfo> _propGetters = new();
+        // (simdBits, op, elem) -> x86 intrinsic MethodInfo (Avx/Avx2/Sse/Sse2). Null = no x86 path.
+        private static readonly ConcurrentDictionary<(int, string, Type), MethodInfo> _x86Methods = new();
+
+        // =================================================================
+        // x86 intrinsic capability detection (cached at startup)
+        // =================================================================
+        // Empirical: System.Runtime.Intrinsics.Vector256.* JIT-emits ~1.8-2x slower
+        // code than System.Runtime.Intrinsics.X86.Avx.* / Avx2.* on the same hardware
+        // (verified .NET 10, AVX2-only host). When x86 intrinsics are present, route
+        // Load / Store / Add / Sub / Mul / Div / Min / Max / Sqrt / And / Or / Xor /
+        // Equals / GreaterThan / LessThan through the platform-specific MethodInfo
+        // — same IL call instruction, just a faster code-gen path.
+
+        internal static readonly bool UseX86_256 =
+            System.Runtime.Intrinsics.X86.Avx.IsSupported &&
+            System.Runtime.Intrinsics.X86.Avx2.IsSupported;
+
+        internal static readonly bool UseX86_128 =
+            System.Runtime.Intrinsics.X86.Sse.IsSupported &&
+            System.Runtime.Intrinsics.X86.Sse2.IsSupported;
+
+        internal static readonly bool UseX86_512 =
+            System.Runtime.Intrinsics.X86.Avx512F.IsSupported;
+
+        internal static bool UseX86For(int simdBits) => simdBits switch
+        {
+            512 => UseX86_512,
+            256 => UseX86_256,
+            128 => UseX86_128,
+            _ => false
+        };
 
         // =================================================================
         // Type resolution
@@ -398,6 +429,170 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static MethodInfo Generic(int simdBits, string name, Type elem, int? paramCount = null)
             => GetOrAddGeneric(simdBits, name, elem, paramCount: paramCount ?? -1, disc: 0);
+
+        // =================================================================
+        // x86 intrinsic routing — Avx/Avx2/Sse/Sse2/Avx512F MethodInfo lookups
+        // =================================================================
+        //
+        // These return the platform-specific MethodInfo when the host supports the
+        // matching intrinsic set. Callers in IL emission paths prefer these because
+        // the JIT generates better machine code for X86.* intrinsics than for the
+        // cross-platform Vector{N}.* statics (1.8-2x for hot SIMD loops).
+        //
+        // Return null when the requested (simdBits, op, elem) has no x86 intrinsic
+        // available — caller falls back to the cross-platform Vector{N}.* path.
+
+        /// <summary>x86 vector load (<c>Avx.LoadVector256(T*)</c>, <c>Sse.LoadVector128(T*)</c>,
+        /// <c>Avx512F.LoadVector512(T*)</c>). All element types supported via Avx/Sse.</summary>
+        public static MethodInfo LoadX86(int simdBits, Type elem)
+        {
+            if (!UseX86For(simdBits)) return null;
+            return _x86Methods.GetOrAdd((simdBits, "LoadX86", elem), static k =>
+            {
+                Type api = X86ApiForLoadStore(k.Item1, k.Item3);
+                string name = k.Item1 switch { 512 => "LoadVector512", 256 => "LoadVector256", _ => "LoadVector128" };
+                return api.GetMethod(name, BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { k.Item3.MakePointerType() }, modifiers: null);
+            });
+        }
+
+        /// <summary>x86 vector store (<c>Avx.Store(T*, V&lt;T&gt;)</c>). NOTE: parameter
+        /// order is REVERSED from <see cref="Store"/> (which is <c>(V&lt;T&gt;, T*)</c>).
+        /// The IL emitter must arrange the stack accordingly.</summary>
+        public static MethodInfo StoreX86(int simdBits, Type elem)
+        {
+            if (!UseX86For(simdBits)) return null;
+            return _x86Methods.GetOrAdd((simdBits, "StoreX86", elem), static k =>
+            {
+                Type api = X86ApiForLoadStore(k.Item1, k.Item3);
+                Type vT = V(k.Item1, k.Item3);
+                return api.GetMethod("Store", BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { k.Item3.MakePointerType(), vT }, modifiers: null);
+            });
+        }
+
+        /// <summary>x86 vector arithmetic: <c>Avx.Add/Sub/Mul/Div/Min/Max</c> for float/double,
+        /// <c>Avx2.Add/Sub/Min/Max/MultiplyLow/And/Or/Xor</c> for integer types. Returns null
+        /// when the op has no x86 vector instruction (e.g. integer Divide; int64 Min/Max via Avx2).</summary>
+        public static MethodInfo BinaryX86(int simdBits, string opName, Type elem)
+        {
+            if (!UseX86For(simdBits)) return null;
+            return _x86Methods.GetOrAdd((simdBits, "Bin:" + opName, elem), static k =>
+            {
+                var (bits, key, e) = k;
+                string op = key.Substring(4); // strip "Bin:" prefix
+                Type api = ResolveX86BinaryApi(bits, op, e);
+                if (api is null) return null;
+                Type vT = V(bits, e);
+                string methodName = TranslateBinaryOpName(op, e);
+                return api.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { vT, vT }, modifiers: null);
+            });
+        }
+
+        /// <summary>x86 vector unary (Sqrt). Float/double only.</summary>
+        public static MethodInfo UnaryX86(int simdBits, string opName, Type elem)
+        {
+            if (!UseX86For(simdBits)) return null;
+            if (elem != typeof(float) && elem != typeof(double)) return null;
+            return _x86Methods.GetOrAdd((simdBits, "Un:" + opName, elem), static k =>
+            {
+                var (bits, key, e) = k;
+                string op = key.Substring(3);
+                Type api = bits switch
+                {
+                    512 => typeof(System.Runtime.Intrinsics.X86.Avx512F),
+                    256 => typeof(System.Runtime.Intrinsics.X86.Avx),
+                    _ => typeof(System.Runtime.Intrinsics.X86.Sse) // Sqrt(V128<float>) - double on Sse2
+                };
+                if (bits == 128 && e == typeof(double))
+                    api = typeof(System.Runtime.Intrinsics.X86.Sse2);
+                Type vT = V(bits, e);
+                return api.GetMethod(op, BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { vT }, modifiers: null);
+            });
+        }
+
+        // Resolve which X86 namespace owns the given binary op for the given element type.
+        // Returns null when no x86 SIMD instruction covers (op, elem) at this width
+        // (e.g. integer Divide, int64 Multiply/Min/Max on Avx2).
+        private static Type ResolveX86BinaryApi(int simdBits, string op, Type elem)
+        {
+            bool isFp = elem == typeof(float) || elem == typeof(double);
+            bool isI64 = elem == typeof(long) || elem == typeof(ulong);
+
+            if (simdBits == 512)
+            {
+                // AVX-512 covers most ops including int64 min/max/mul - delegate to its container.
+                return typeof(System.Runtime.Intrinsics.X86.Avx512F);
+            }
+
+            if (simdBits == 256)
+            {
+                if (isFp)
+                {
+                    if (op == "Add" || op == "Subtract" || op == "Multiply" || op == "Divide" ||
+                        op == "Min" || op == "Max" || op == "And" || op == "Or" || op == "Xor")
+                        return typeof(System.Runtime.Intrinsics.X86.Avx);
+                    return null;
+                }
+                // Integer at 256-bit lives in Avx2.
+                if (op == "Divide") return null;          // no integer SIMD divide
+                if (isI64 && (op == "Min" || op == "Max")) return null; // Avx2 has no int64 min/max
+                if (isI64 && op == "Multiply") return null;             // no int64 mul (vpmullq is Avx512DQ)
+                if (op == "Add" || op == "Subtract" || op == "Multiply" || op == "Min" || op == "Max" ||
+                    op == "And" || op == "Or" || op == "Xor")
+                    return typeof(System.Runtime.Intrinsics.X86.Avx2);
+                return null;
+            }
+
+            // 128-bit
+            if (isFp)
+            {
+                if (elem == typeof(double))
+                {
+                    // double Sse2 covers Add/Sub/Mul/Div/Min/Max/And/Or/Xor
+                    return typeof(System.Runtime.Intrinsics.X86.Sse2);
+                }
+                // float Sse covers Add/Sub/Mul/Div/Min/Max/And/Or/Xor
+                return typeof(System.Runtime.Intrinsics.X86.Sse);
+            }
+            // Integer 128-bit lives in Sse2.
+            if (op == "Divide") return null;
+            if (isI64 && (op == "Min" || op == "Max")) return null;
+            if (isI64 && op == "Multiply") return null;
+            if (op == "Add" || op == "Subtract" || op == "Multiply" || op == "Min" || op == "Max" ||
+                op == "And" || op == "Or" || op == "Xor")
+                return typeof(System.Runtime.Intrinsics.X86.Sse2);
+            return null;
+        }
+
+        // Map Vector256-style op names to X86 intrinsic method names.
+        // "And"/"Or" on Vector{N} are spelled "BitwiseAnd"/"BitwiseOr" via Generic("BitwiseAnd") in
+        // the caller; the X86 intrinsics use "And"/"Or" directly. The Multiply variant for int16/int32
+        // on Avx2 is "MultiplyLow" (low 16/32 bits of product) — this matches Vector256.Multiply's
+        // truncating semantics.
+        private static string TranslateBinaryOpName(string op, Type elem)
+        {
+            if (op == "BitwiseAnd") return "And";
+            if (op == "BitwiseOr") return "Or";
+            bool isInt32_16 = elem == typeof(int) || elem == typeof(uint) ||
+                              elem == typeof(short) || elem == typeof(ushort);
+            if (op == "Multiply" && isInt32_16) return "MultiplyLow";
+            return op;
+        }
+
+        // Which X86 namespace owns Load/Store for the given width + element.
+        // Avx covers all element types at 256-bit via vmovups/vmovupd/vmovdqu — Avx2 not needed here.
+        // 128-bit splits: Sse owns float, Sse2 owns double + all integer types.
+        private static Type X86ApiForLoadStore(int simdBits, Type elem) => simdBits switch
+        {
+            512 => typeof(System.Runtime.Intrinsics.X86.Avx512F),
+            256 => typeof(System.Runtime.Intrinsics.X86.Avx),
+            _ => elem == typeof(float)
+                ? typeof(System.Runtime.Intrinsics.X86.Sse)
+                : typeof(System.Runtime.Intrinsics.X86.Sse2)
+        };
 
         // =================================================================
         // Internals
