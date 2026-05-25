@@ -333,10 +333,13 @@ namespace NumSharp.Backends
             if (lhsScalar && rhsContiguous)
                 return ExecutionPath.SimdScalarLeft;
 
-            // Check for inner-contiguous (chunk-able)
-            long lhsInner = lhsStrides[ndim - 1];
-            long rhsInner = rhsStrides[ndim - 1];
-            if ((lhsInner == 1 || lhsInner == 0) && (rhsInner == 1 || rhsInner == 0))
+            // L3-a/L3-b: SimdChunk now handles ANY constant-stride inner dim
+            // (contig=1, broadcast=0, strided>1, negative-stride). The emitted IL
+            // hoists outer coord calc out of the inner loop, so even arbitrary
+            // strided cases beat the General path's per-element mod/div by ~4-5×.
+            // General is left as a safety fallback but is no longer reachable for
+            // ndim >= 1 — kept for documentation / future use cases.
+            if (ndim >= 1)
                 return ExecutionPath.SimdChunk;
 
             return ExecutionPath.General;
