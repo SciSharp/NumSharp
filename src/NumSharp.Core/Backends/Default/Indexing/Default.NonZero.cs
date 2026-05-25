@@ -230,6 +230,13 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Generic implementation of count_nonzero (element-wise).
+        ///
+        /// Contig fast path reuses <see cref="ILKernelGenerator.GetArgwhereCountKernel"/>
+        /// which is the SAME SIMD popcount kernel used by <c>np.nonzero</c>'s pre-size
+        /// pass: load a Vector&lt;T&gt;, compare-ne-zero, ExtractMostSignificantBits,
+        /// PopCount the inverted mask. The earlier scalar
+        /// <see cref="EqualityComparer{T}.Default.Equals"/> per-element loop was a
+        /// 109× regression vs NumPy (2.1 ms vs 19 µs on 1 M bool).
         /// </summary>
         private static unsafe long count_nonzero<T>(NDArray<T> x) where T : unmanaged
         {
@@ -238,8 +245,17 @@ namespace NumSharp.Backends
 
             if (shape.IsContiguous)
             {
-                // Fast path for contiguous arrays
-                T* ptr = (T*)x.Address;
+                var ilKernel = ILKernelGenerator.GetArgwhereCountKernel(typeof(T));
+                if (ilKernel != null)
+                {
+                    // Sliced views: Address ignores shape.offset; advance manually so
+                    // the kernel sees the live element window.
+                    byte* basePtr = (byte*)x.Address + shape.offset * sizeof(T);
+                    return ilKernel(basePtr, size);
+                }
+
+                // Fallback (only if IL kernel generation is disabled).
+                T* ptr = (T*)x.Address + shape.offset;
                 T zero = default;
                 long count = 0;
                 for (long i = 0; i < size; i++)
