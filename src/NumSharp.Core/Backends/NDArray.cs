@@ -199,6 +199,21 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Hot-path view ctor: wraps an already-aliased storage whose Engine
+        ///     field is known to be set. Skips the standard ctor's
+        ///     <c>storage.Engine ?? BackendFactory.GetEngine()</c> guard and the
+        ///     <c>Storage.Engine = tensorEngine</c> writeback (it's already there).
+        ///     Used by <c>np.split</c> sub-array construction where we already own
+        ///     the parent's resolved engine.
+        /// </summary>
+        internal NDArray(UnmanagedStorage aliasedStorage, TensorEngine engine, bool skipEngineResolve)
+        {
+            Storage = aliasedStorage;
+            tensorEngine = engine;
+            InitializeArc();
+        }
+
+        /// <summary>
         /// Constructor for init data type
         /// internal storage is 1D with 1 element
         /// </summary>

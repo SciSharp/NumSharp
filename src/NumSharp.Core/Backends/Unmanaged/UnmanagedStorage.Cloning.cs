@@ -68,19 +68,58 @@ namespace NumSharp.Backends
         /// </para>
         /// </remarks>
         /// <seealso cref="Clone"/>
-        public UnmanagedStorage Alias(Shape shape)
+        public unsafe UnmanagedStorage Alias(Shape shape)
         {
             var r = new UnmanagedStorage();
             r._typecode = _typecode;
             r._dtype = _dtype;
+            // Hot path: when this storage is already wired (InternalArray + Address
+            // set), copy the IArraySlice surface and the *single* live type-specific
+            // field directly instead of routing through SetInternalArray's full
+            // 15-case typecode dispatch. The aliased storage exposes the same
+            // backing buffer; the type-specific field is still needed for typed
+            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot.
             if (InternalArray != null)
-                r.SetInternalArray(InternalArray);
+            {
+                r.InternalArray = InternalArray;
+                r.Address = Address;
+                CopyTypedArrayRef(r);
+            }
 
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
             r.Engine = Engine;
             return r;
+        }
+
+        /// <summary>
+        ///     Copy the one live <c>_array{Type}</c> field from this storage into
+        ///     <paramref name="r"/>. Dispatch on <see cref="_typecode"/> — one
+        ///     reference store per call — instead of <see cref="SetInternalArray"/>'s
+        ///     interface-to-concrete cast (<c>(ArraySlice&lt;T&gt;)IArraySlice</c>),
+        ///     which is a virtual call when the concrete type isn't sealed.
+        /// </summary>
+        private void CopyTypedArrayRef(UnmanagedStorage r)
+        {
+            switch (_typecode)
+            {
+                case NPTypeCode.Boolean: r._arrayBoolean = _arrayBoolean; break;
+                case NPTypeCode.SByte:   r._arraySByte   = _arraySByte;   break;
+                case NPTypeCode.Byte:    r._arrayByte    = _arrayByte;    break;
+                case NPTypeCode.Int16:   r._arrayInt16   = _arrayInt16;   break;
+                case NPTypeCode.UInt16:  r._arrayUInt16  = _arrayUInt16;  break;
+                case NPTypeCode.Int32:   r._arrayInt32   = _arrayInt32;   break;
+                case NPTypeCode.UInt32:  r._arrayUInt32  = _arrayUInt32;  break;
+                case NPTypeCode.Int64:   r._arrayInt64   = _arrayInt64;   break;
+                case NPTypeCode.UInt64:  r._arrayUInt64  = _arrayUInt64;  break;
+                case NPTypeCode.Char:    r._arrayChar    = _arrayChar;    break;
+                case NPTypeCode.Half:    r._arrayHalf    = _arrayHalf;    break;
+                case NPTypeCode.Single:  r._arraySingle  = _arraySingle;  break;
+                case NPTypeCode.Double:  r._arrayDouble  = _arrayDouble;  break;
+                case NPTypeCode.Decimal: r._arrayDecimal = _arrayDecimal; break;
+                case NPTypeCode.Complex: r._arrayComplex = _arrayComplex; break;
+            }
         }
 
         /// <summary>
