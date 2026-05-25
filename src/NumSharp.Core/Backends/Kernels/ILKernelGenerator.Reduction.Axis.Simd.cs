@@ -7,6 +7,7 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using NumSharp.Utilities;
 
 // =============================================================================
 // ILKernelGenerator.Reduction.Axis.Simd.cs - SIMD Axis Reduction Kernels
@@ -1037,6 +1038,16 @@ namespace NumSharp.Backends.Kernels
             T* input, T* output, long outputSize, long axisSize, ReductionOp op)
             where T : unmanaged
         {
+            // L2: For C-contig innermost-axis, route per output through the
+            // IL-emitted flat reduction kernel. The IL body uses x86 intrinsics
+            // (Avx.Add etc) which produce ~1.8-2x faster codegen on .NET 10 JIT
+            // than Vector256.* (used by AxisReductionInnermostTyped), and is
+            // 8x-unrolled with a pairwise tree merge — matches NumPy's
+            // pairwise_sum.c shape. The per-call dispatch overhead amortizes
+            // for axisSize >= ~16; for smaller axes it still wins thanks to
+            // the faster inner loop.
+            if (TryDispatchInnermostIL<T>(input, output, outputSize, axisSize, op)) return;
+
             switch (op)
             {
                 case ReductionOp.Sum:  AxisReductionInnermostTyped<T, AddOp<T>>(input, output, outputSize, axisSize); return;
@@ -1045,6 +1056,56 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.Max:  AxisReductionInnermostTyped<T, MaxOp<T>>(input, output, outputSize, axisSize); return;
                 default: throw new NotSupportedException($"DispatchInnermost: {op}");
             }
+        }
+
+        /// <summary>
+        ///     Try to dispatch the innermost-axis reduction through the IL-emitted
+        ///     flat reduction kernel. Per output, the kernel reduces a contiguous
+        ///     run of <paramref name="axisSize"/> elements. Returns true on success;
+        ///     false if no IL kernel is available for (op, T) — caller falls back.
+        /// </summary>
+        /// <remarks>
+        ///     The IL flat kernel signature is
+        ///     <c>T(void* input, long* strides, long* shape, int ndim, long totalSize)</c>.
+        ///     For the contiguous SIMD path, only <c>input</c> and <c>totalSize</c>
+        ///     are read by the emitted body; <c>strides</c>/<c>shape</c>/<c>ndim</c>
+        ///     are unused. We still pass real values via <c>stackalloc</c> so the
+        ///     kernel is safe if it ever falls into a non-contig branch.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool TryDispatchInnermostIL<T>(
+            T* input, T* output, long outputSize, long axisSize, ReductionOp op)
+            where T : unmanaged
+        {
+            // ReductionOp.Mean is excluded — caller (AxisReductionSimdHelper) has
+            // already converted Mean → Sum + post-divide, but we double-check.
+            // Other ops (All/Any/Std/Var/ArgMax/ArgMin) are out of scope for this
+            // dispatcher (different output type / different kernel family).
+            if (op != ReductionOp.Sum && op != ReductionOp.Prod &&
+                op != ReductionOp.Min && op != ReductionOp.Max)
+                return false;
+
+            NPTypeCode tc = InfoOf<T>.NPTypeCode;
+            // The IL flat-reduction SIMD path requires same input/accumulator type
+            // (Vector<T> can't widen; e.g. int32→int64 promotion drops to scalar).
+            // For innermost-axis we're always in the same-T case (the caller is
+            // typed on a single T), so passing tc==tc is correct.
+            var key = new ElementReductionKernelKey(tc, tc, op, IsContiguous: true);
+            var kernel = TryGetTypedElementReductionKernel<T>(key);
+            if (kernel == null) return false;
+
+            // Single stackalloc reused as both strides[0]=1 and shape[0]=axisSize.
+            // The IL kernel's contig SIMD path doesn't read these; passing valid
+            // pointers keeps us safe if the kernel ever takes the strided branch.
+            long* axisInfo = stackalloc long[2];
+            axisInfo[0] = 1L;       // stride
+            axisInfo[1] = axisSize; // shape
+
+            for (long o = 0; o < outputSize; o++)
+            {
+                output[o] = kernel((void*)(input + o * axisSize), axisInfo, axisInfo + 1, 1, axisSize);
+            }
+            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
