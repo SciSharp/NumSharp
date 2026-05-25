@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -41,6 +42,30 @@ namespace NumSharp.Backends
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
 
+            // ─── NpyIter routing for non-contig flat reduction ─────────────
+            // The direct ElementReductionKernel walks non-contig inputs via
+            // coordinate math per element, which made strided/transposed
+            // reductions 20-54× slower than NumPy. NpyIter coalesces dims,
+            // permutes axes by stride magnitude (NPY_KEEPORDER-style), and
+            // normalizes negative strides — so the kernel is called with a
+            // layout it can handle as contig in the inner loop.
+            //
+            // Contig stays on the direct path: zero dispatch overhead, and
+            // the existing kernel is already at parity / faster than NumPy
+            // there.
+            //
+            // ArgMax/ArgMin opt out: the returned index must be the C-order
+            // flat position of the extreme element, but NpyIter permutes axes
+            // by stride magnitude which can re-order the traversal and break
+            // that contract. (e.g. argmax(arr.T) on a 2D F-contig view: C-order
+            // expects [1,9,2,4]→idx 1; NpyIter's F-walk gives [1,2,9,4]→idx 2.)
+            // Direct path's coordinate walk preserves the C-order contract.
+            if (!isContiguous && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
+            {
+                var routed = TryExecuteElementReductionViaNpyIter<TResult>(arr, op, inputType, accumType);
+                if (routed.HasValue) return routed.Value;
+            }
+
             // Get kernel key
             var key = new ElementReductionKernelKey(inputType, accumType, op, isContiguous);
 
@@ -57,6 +82,41 @@ namespace NumSharp.Backends
                 throw new NotSupportedException(
                     $"IL kernel not available for {op}({inputType}) -> {accumType}. " +
                     "Please report this as a bug.");
+            }
+        }
+
+        /// <summary>
+        ///     NpyIter routing for non-contig flat reductions.
+        ///
+        ///     The iterator does the heavy lifting before the kernel runs:
+        ///     dimension coalescing, axis permutation by stride magnitude,
+        ///     negative-stride normalization. After that, the existing
+        ///     ElementReductionKernel handles the per-element loop.
+        ///
+        ///     Returns the reduction result on success, null when the iterator
+        ///     can't be set up (e.g. dim > int.MaxValue) so the caller falls
+        ///     back to the direct path.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private unsafe TResult? TryExecuteElementReductionViaNpyIter<TResult>(
+            NDArray arr, ReductionOp op, NPTypeCode inputType, NPTypeCode accumType)
+            where TResult : unmanaged
+        {
+            var shape = arr.Shape;
+            if (shape.size < 0) return null;
+            for (int i = 0; i < shape.NDim; i++)
+                if (shape.dimensions[i] > int.MaxValue) return null;
+
+            try
+            {
+                using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.None);
+                return iter.ExecuteReduction<TResult>(op);
+            }
+            catch (Exception)
+            {
+                // Catch broadly: iterator setup or kernel resolution may fail
+                // for combos that the direct path still handles via fallback.
+                return null;
             }
         }
 
