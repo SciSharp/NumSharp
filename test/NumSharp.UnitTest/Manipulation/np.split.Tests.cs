@@ -622,5 +622,136 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         #endregion
+
+        #region Flag Inheritance (NumPy parity)
+
+        [TestMethod]
+        public void Split_ReadOnlyDiagonalView_SubsAreReadOnly()
+        {
+            // np.diagonal returns a read-only view (WRITEABLE flag cleared per
+            // NumPy contract). Sub-arrays of that view must also be read-only.
+            var m = np.arange(16).reshape(4, 4);
+            var diag = np.diagonal(m);
+            diag.Shape.IsWriteable.Should().BeFalse();
+
+            var parts = np.split(diag, 2);
+            foreach (var p in parts)
+                p.Shape.IsWriteable.Should().BeFalse("read-only parents must yield read-only sub-arrays");
+        }
+
+        [TestMethod]
+        public void Split_BroadcastedInput_SubsRetainBroadcastAndAreReadOnly()
+        {
+            // np.broadcast_to(shape (1,3) -> (4,3)) produces a stride-0 view that's
+            // broadcasted along axis 0. Each sub-array of a split must keep the
+            // BROADCASTED flag and stay non-writeable.
+            var b = np.array(new double[] { 1, 2, 3 }).reshape(1, 3);
+            var bcast = np.broadcast_to(b, new Shape(4, 3));
+            bcast.Shape.IsBroadcasted.Should().BeTrue();
+            bcast.Shape.IsWriteable.Should().BeFalse();
+
+            var parts = np.split(bcast, 2, axis: 0);
+            foreach (var p in parts)
+            {
+                p.Shape.IsBroadcasted.Should().BeTrue();
+                p.Shape.IsWriteable.Should().BeFalse();
+                p.Should().BeShaped(2, 3);
+            }
+        }
+
+        [TestMethod]
+        public void Split_FContiguousInput_AxisShrinksLoseFContig()
+        {
+            // F-contig (4,3) split on axis 0 shrinks the leading axis. For F-contig
+            // the invariant `strides[i] = dims[i-1]*strides[i-1]` breaks at i=1
+            // when dims[0] changes — sub is no longer F-contig (matches NumPy).
+            var t = np.arange(12).reshape(3, 4).T;
+            t.Shape.IsFContiguous.Should().BeTrue();
+
+            var parts = np.split(t, 2, axis: 0);
+            parts[0].Shape.IsFContiguous.Should().BeFalse(
+                "shrinking axis 0 of an F-contig array breaks F-contig (NumPy parity)");
+        }
+
+        [TestMethod]
+        public void Split_CContiguousInput_LeadingAxisPreservesCContig()
+        {
+            // C-contig array split on axis 0 keeps C-contig — the i=0 invariant
+            // is the only one involving dim[0], and it's strictly satisfied for
+            // the sub when strides remain unchanged.
+            var a = np.arange(12).reshape(3, 4);
+            a.Shape.IsContiguous.Should().BeTrue();
+
+            var parts = np.split(a, 3, axis: 0);
+            foreach (var p in parts)
+                p.Shape.IsContiguous.Should().BeTrue(
+                    "C-contig preserved when splitting along leading axis");
+        }
+
+        [TestMethod]
+        public void Split_CContiguousInput_NonLeadingAxisLosesCContig()
+        {
+            // C-contig (3,4) split on axis 1 breaks the i=0 invariant
+            // (strides[0]==4 but new dim[1]==2 → expected strides[0]==2).
+            var a = np.arange(12).reshape(3, 4);
+            a.Shape.IsContiguous.Should().BeTrue();
+
+            var parts = np.split(a, 2, axis: 1);
+            parts[0].Shape.IsContiguous.Should().BeFalse(
+                "C-contig lost when splitting along a non-leading axis");
+        }
+
+        [TestMethod]
+        public void Split_NegativeStride_ReversedInput()
+        {
+            // Reversed view ([::-1]) has stride=-1 and offset=N-1.
+            // split should walk forward through the reversed elements.
+            var n = np.arange(10)["::-1"];
+            var parts = np.split(n, 5);
+
+            parts.Length.Should().Be(5);
+            parts[0].ToArray<long>().Should().ContainInOrder(9, 8);
+            parts[1].ToArray<long>().Should().ContainInOrder(7, 6);
+            parts[4].ToArray<long>().Should().ContainInOrder(1, 0);
+        }
+
+        [TestMethod]
+        public void Split_FiveDimensional()
+        {
+            // High-rank: 5-D (2,3,4,5,1) split on axis 2 (size 4) into 2 pieces.
+            // Verifies axis-removal logic works beyond 3-D.
+            var x5 = np.arange(120).reshape(2, 3, 4, 5, 1);
+            var parts = np.split(x5, 2, axis: 2);
+
+            parts.Length.Should().Be(2);
+            parts[0].Should().BeShaped(2, 3, 2, 5, 1);
+            parts[1].Should().BeShaped(2, 3, 2, 5, 1);
+        }
+
+        [TestMethod]
+        public void Split_EmptyInputOnEmptyAxis_PreservesShape()
+        {
+            // (0,3) array split into 1 → one (0,3) sub-array. NumPy parity.
+            var e = np.zeros(new Shape(0, 3));
+            var parts = np.split(e, 1);
+            parts.Length.Should().Be(1);
+            parts[0].Should().BeShaped(0, 3);
+        }
+
+        [TestMethod]
+        public void Split_EmptyInput_NonEmptyAxisSubsAreEmpty()
+        {
+            // (5,0) array split into 5 pieces along axis 0 → all empty.
+            var e = np.zeros(new Shape(5, 0));
+            var parts = np.split(e, 5);
+            parts.Length.Should().Be(5);
+            foreach (var p in parts)
+            {
+                p.Should().BeShaped(1, 0);
+                p.size.Should().Be(0);
+            }
+        }
+
+        #endregion
     }
 }

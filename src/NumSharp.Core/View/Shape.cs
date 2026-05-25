@@ -585,6 +585,32 @@ namespace NumSharp
             this.IsScalar = size == 1 && (dims == null || dims.Length == 0);
         }
 
+        /// <summary>
+        ///     Hot-path constructor for view kernels that already know the final
+        ///     <paramref name="flags"/>, <paramref name="size"/>, and
+        ///     <paramref name="hashCode"/>. Skips both <c>ComputeFlagsStatic</c>
+        ///     (3 walks of dims/strides) and <c>ComputeSizeAndHash</c> (1 walk).
+        ///     Caller must guarantee values are consistent with
+        ///     <paramref name="dims"/> / <paramref name="strides"/>; this ctor
+        ///     does no validation.
+        /// </summary>
+        /// <remarks>
+        ///     Used by <c>np.split</c> / <c>np.array_split</c> where every
+        ///     sub-array shares the parent strides and only <c>dims[axis]</c>
+        ///     changes, so the parent's flags and size scale by an O(1) ratio.
+        /// </remarks>
+        internal Shape(long[] dims, long[] strides, long offset, long bufferSize, int flags, long size, int hashCode)
+        {
+            this.dimensions = dims;
+            this.strides = strides;
+            this.offset = offset;
+            this.bufferSize = bufferSize;
+            this._flags = flags;
+            this.size = size;
+            this._hashCode = hashCode;
+            this.IsScalar = size == 1 && (dims == null || dims.Length == 0);
+        }
+
         public Shape(Shape other)
         {
             if (other.IsEmpty)
