@@ -1023,6 +1023,21 @@ namespace NumSharp.Backends.Kernels
             T* input, T* output, long outerSize, long axisSize, long innerSize, ReductionOp op)
             where T : unmanaged
         {
+            // Type-specialized fast paths for float/double Sum/Prod — the BCL
+            // Vector256.Add/Multiply wrapper is ~21% slower than direct AVX
+            // intrinsics on this hot loop. Per-type structs avoid the JIT
+            // confusion that wrappers-with-typeof caused in earlier attempts.
+            if (typeof(T) == typeof(float))
+            {
+                if (op == ReductionOp.Sum) { AxisReductionLeadingTyped<float, AddOpFloat>((float*)input, (float*)output, outerSize, axisSize, innerSize); return; }
+                if (op == ReductionOp.Prod) { AxisReductionLeadingTyped<float, MulOpFloat>((float*)input, (float*)output, outerSize, axisSize, innerSize); return; }
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                if (op == ReductionOp.Sum) { AxisReductionLeadingTyped<double, AddOpDouble>((double*)input, (double*)output, outerSize, axisSize, innerSize); return; }
+                if (op == ReductionOp.Prod) { AxisReductionLeadingTyped<double, MulOpDouble>((double*)input, (double*)output, outerSize, axisSize, innerSize); return; }
+            }
+
             switch (op)
             {
                 case ReductionOp.Sum:  AxisReductionLeadingTyped<T, AddOp<T>>(input, output, outerSize, axisSize, innerSize); return;
@@ -1113,6 +1128,18 @@ namespace NumSharp.Backends.Kernels
             T* input, T* output, long axisSize, long innerSize, long axisStride, ReductionOp op)
             where T : unmanaged
         {
+            // Type-specialized float/double fast paths — see DispatchLeading note.
+            if (typeof(T) == typeof(float))
+            {
+                if (op == ReductionOp.Sum) { AxisReductionLeadingStridedTyped<float, AddOpFloat>((float*)input, (float*)output, axisSize, innerSize, axisStride); return; }
+                if (op == ReductionOp.Prod) { AxisReductionLeadingStridedTyped<float, MulOpFloat>((float*)input, (float*)output, axisSize, innerSize, axisStride); return; }
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                if (op == ReductionOp.Sum) { AxisReductionLeadingStridedTyped<double, AddOpDouble>((double*)input, (double*)output, axisSize, innerSize, axisStride); return; }
+                if (op == ReductionOp.Prod) { AxisReductionLeadingStridedTyped<double, MulOpDouble>((double*)input, (double*)output, axisSize, innerSize, axisStride); return; }
+            }
+
             switch (op)
             {
                 case ReductionOp.Sum:  AxisReductionLeadingStridedTyped<T, AddOp<T>>(input, output, axisSize, innerSize, axisStride); return;
@@ -1511,6 +1538,85 @@ namespace NumSharp.Backends.Kernels
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Multiply(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MulScalar(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => OneOf<T>();
+        }
+
+        // ─── Type-specialized Add/Mul ops for hot-loop SIMD on float/double ──
+        // .NET's Vector256.Add/Multiply for float-double route through a BCL
+        // wrapper that's ~21-30% slower than the direct x86 intrinsic in the
+        // axis-reduction column-tile hot loop (measured: 907 µs Vector256.Add
+        // vs 716 µs Avx.Add on 1Kx1K f32 sum-axis-0).
+        //
+        // The earlier wrapper experiment (Add256<T> with typeof(T) checks)
+        // regressed perf because the JIT couldn't fold the type checks
+        // through generic specialization on this call shape. Per-type structs
+        // bypass that: the kernel is compiled for the SPECIFIC type and the
+        // intrinsic is the only code path. Dispatcher picks float/double
+        // variants at kernel-creation time.
+        //
+        // Identity is `default` for Add (0) and `1` for Mul; the typed scalar
+        // CombineScalar matches AddOp/MulOp.
+        internal readonly struct AddOpFloat : ITypedReductionOp<float>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector256<float> Combine256(Vector256<float> a, Vector256<float> b)
+                => System.Runtime.Intrinsics.X86.Avx.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Avx.Add(a, b)
+                    : Vector256.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector128<float> Combine128(Vector128<float> a, Vector128<float> b)
+                => System.Runtime.Intrinsics.X86.Sse.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Sse.Add(a, b)
+                    : Vector128.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float CombineScalar(float a, float b) => a + b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float Identity() => 0f;
+        }
+
+        internal readonly struct AddOpDouble : ITypedReductionOp<double>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector256<double> Combine256(Vector256<double> a, Vector256<double> b)
+                => System.Runtime.Intrinsics.X86.Avx.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Avx.Add(a, b)
+                    : Vector256.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector128<double> Combine128(Vector128<double> a, Vector128<double> b)
+                => System.Runtime.Intrinsics.X86.Sse2.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Sse2.Add(a, b)
+                    : Vector128.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double CombineScalar(double a, double b) => a + b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double Identity() => 0.0;
+        }
+
+        internal readonly struct MulOpFloat : ITypedReductionOp<float>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector256<float> Combine256(Vector256<float> a, Vector256<float> b)
+                => System.Runtime.Intrinsics.X86.Avx.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Avx.Multiply(a, b)
+                    : Vector256.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector128<float> Combine128(Vector128<float> a, Vector128<float> b)
+                => System.Runtime.Intrinsics.X86.Sse.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Sse.Multiply(a, b)
+                    : Vector128.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float CombineScalar(float a, float b) => a * b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float Identity() => 1f;
+        }
+
+        internal readonly struct MulOpDouble : ITypedReductionOp<double>
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector256<double> Combine256(Vector256<double> a, Vector256<double> b)
+                => System.Runtime.Intrinsics.X86.Avx.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Avx.Multiply(a, b)
+                    : Vector256.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public Vector128<double> Combine128(Vector128<double> a, Vector128<double> b)
+                => System.Runtime.Intrinsics.X86.Sse2.IsSupported
+                    ? System.Runtime.Intrinsics.X86.Sse2.Multiply(a, b)
+                    : Vector128.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double CombineScalar(double a, double b) => a * b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double Identity() => 1.0;
         }
         // Min/Max stay on the cross-platform Vector256.Min/Max because the
         // x86 vminps/vmaxps intrinsics do NOT propagate NaN (they always
