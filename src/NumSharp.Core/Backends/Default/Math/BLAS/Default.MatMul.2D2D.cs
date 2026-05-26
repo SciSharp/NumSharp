@@ -70,7 +70,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
-            if (!ILKernelGenerator.Enabled)
+            if (!DirectILKernelGenerator.Enabled)
                 return false;
 
             // C is written as row-major contiguous; the inputs can have

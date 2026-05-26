@@ -16,7 +16,7 @@ using NumSharp.Backends.Kernels;
 //
 // NumSharp has two halves that need to meet:
 //   - NpyIter produces data pointers, strides, buffers, reduction scheduling
-//   - ILKernelGenerator produces type-specific SIMD kernels by emitting IL
+//   - DirectILKernelGenerator produces type-specific SIMD kernels by emitting IL
 //
 // This partial class is the bridge. It exposes NumPy-style APIs where a caller
 // supplies (or lets NumSharp synthesize via IL) the inner-loop kernel, and the
@@ -301,7 +301,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         // =====================================================================
-        // Layer 2: Typed helpers — generate and run an ILKernelGenerator kernel
+        // Layer 2: Typed helpers — generate and run an DirectILKernelGenerator kernel
         // =====================================================================
 
         /// <summary>
@@ -330,7 +330,7 @@ namespace NumSharp.Backends.Iteration
                 op,
                 DetectExecutionPath());
 
-            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
             // Gather byte-stride arrays per operand, sized NDim.
             int ndim = _state->NDim;
@@ -368,7 +368,7 @@ namespace NumSharp.Backends.Iteration
                 op,
                 isContig);
 
-            var kernel = ILKernelGenerator.GetUnaryKernel(key);
+            var kernel = DirectILKernelGenerator.GetUnaryKernel(key);
 
             long* strides = stackalloc long[Math.Max(1, ndim)];
             FillElementStrides(0, strides, ndim);
@@ -401,7 +401,7 @@ namespace NumSharp.Backends.Iteration
             var accumType = DetermineAccumulatorType(srcType, op, typeof(TResult));
 
             var key = new ElementReductionKernelKey(srcType, accumType, op, isContig);
-            var kernel = ILKernelGenerator.GetTypedElementReductionKernel<TResult>(key);
+            var kernel = DirectILKernelGenerator.GetTypedElementReductionKernel<TResult>(key);
 
             int ndim = _state->NDim;
             long* strides = stackalloc long[Math.Max(1, ndim)];
@@ -460,7 +460,7 @@ namespace NumSharp.Backends.Iteration
                 op,
                 DetectExecutionPath());
 
-            var kernel = ILKernelGenerator.GetComparisonKernel(key);
+            var kernel = DirectILKernelGenerator.GetComparisonKernel(key);
 
             int ndim = _state->NDim;
             long* lhsStrides = stackalloc long[Math.Max(1, ndim)];
@@ -497,7 +497,7 @@ namespace NumSharp.Backends.Iteration
                 op,
                 isContig);
 
-            var kernel = ILKernelGenerator.GetCumulativeKernel(key);
+            var kernel = DirectILKernelGenerator.GetCumulativeKernel(key);
 
             long* strides = stackalloc long[Math.Max(1, ndim)];
             FillElementStrides(0, strides, ndim);
@@ -524,7 +524,7 @@ namespace NumSharp.Backends.Iteration
             var dtype = _state->GetOpDType(1);  // target dtype
             bool bothContig = (_state->ItFlags & (uint)NpyIterFlags.CONTIGUOUS) != 0;
             var path = bothContig ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
-            var kernel = ILKernelGenerator.GetCopyKernel(new CopyKernelKey(dtype, path));
+            var kernel = DirectILKernelGenerator.GetCopyKernel(new CopyKernelKey(dtype, path));
 
             int ndim = _state->NDim;
             long* srcStrides = stackalloc long[Math.Max(1, ndim)];
@@ -606,7 +606,7 @@ namespace NumSharp.Backends.Iteration
         /// into <paramref name="dst"/>. The destination buffer must hold at
         /// least <paramref name="ndim"/> longs.
         ///
-        /// ILKernelGenerator kernels expect ELEMENT strides (they multiply by
+        /// DirectILKernelGenerator kernels expect ELEMENT strides (they multiply by
         /// elementSize internally). Do NOT convert to bytes here.
         /// </summary>
         private void FillElementStrides(int op, long* dst, int ndim)
@@ -688,7 +688,7 @@ namespace NumSharp.Backends.Iteration
                 _state->GetOpDType(2),
                 op,
                 ExecutionPath.SimdFull);  // buffers are always contiguous
-            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
             // Single-axis byte strides for each operand = element size (buffer is tight).
             long s0 = _state->BufStrides[0];

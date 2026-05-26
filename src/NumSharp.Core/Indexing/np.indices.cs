@@ -95,7 +95,7 @@ namespace NumSharp
                 dimStrides[d] = dimStrides[d + 1] * dimensions[d + 1];
             for (int d = 0; d < ndim; d++) dimsSpan[d] = dimensions[d];
 
-            var kernel = ILKernelGenerator.GetIndicesKernel();
+            var kernel = DirectILKernelGenerator.GetIndicesKernel();
             if (kernel == null)
                 throw new NotSupportedException("np.indices: IL kernel unavailable");
 

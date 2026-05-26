@@ -85,7 +85,7 @@ namespace NumSharp.Backends
             {
                 r.InternalArray = InternalArray;
                 r.Address = Address;
-                ILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
+                DirectILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
             }
 
             r._shape = shape;

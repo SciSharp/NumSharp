@@ -41,13 +41,13 @@ namespace NumSharp.UnitTest
         // BUG 65 (np.unique unsorted) — REMOVED: Duplicate of Bug 10 in OpenBugs.cs
         // which already covers np.unique returning first-appearance order instead of sorted.
 
-        // BUG 66 (operator != NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // BUG 66 (operator != NDArray-NDArray) — FIXED in DirectILKernelGenerator.Comparison.cs
         // Tests: ComparisonOpTests.NotEqual_Int32_SameType, np_comparison_Test.not_equal_ArrayArray
 
-        // BUG 67 (operator > NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // BUG 67 (operator > NDArray-NDArray) — FIXED in DirectILKernelGenerator.Comparison.cs
         // Tests: ComparisonOpTests.Greater_Int32_SameType, np_comparison_Test.greater_ArrayArray
 
-        // BUG 68 (operator < NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // BUG 68 (operator < NDArray-NDArray) — FIXED in DirectILKernelGenerator.Comparison.cs
         // Tests: ComparisonOpTests.Less_Int32_SameType, np_comparison_Test.less_ArrayArray
 
         /// <summary>

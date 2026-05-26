@@ -95,7 +95,7 @@ namespace NumSharp
 
             try
             {
-                var kernel = ILKernelGenerator.GetPutKernel();
+                var kernel = DirectILKernelGenerator.GetPutKernel();
                 if (kernel == null)
                     throw new NotSupportedException("np.put: IL kernel unavailable");
 

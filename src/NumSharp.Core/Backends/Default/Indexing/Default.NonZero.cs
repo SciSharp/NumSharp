@@ -21,9 +21,9 @@ namespace NumSharp.Backends
         ///
         ///     <para>
         ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
-        ///     (<see cref="ILKernelGenerator.GetArgwhereCountKernel"/>,
-        ///     <see cref="ILKernelGenerator.GetArgwhereFlatKernel"/>,
-        ///     <see cref="ILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
+        ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
         ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
         ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
         ///     cache and invokes them. Every loop (SIMD popcount, SIMD bit-scan, coord
@@ -82,8 +82,8 @@ namespace NumSharp.Backends
 
             byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
 
-            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
-            var flatKernel = ILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
+            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
             if (countKernel == null || flatKernel == null)
                 throw new NotSupportedException($"np.nonzero: no IL kernel available for {nd.dtype.Name}");
 
@@ -130,7 +130,7 @@ namespace NumSharp.Backends
 
                     fixed (long* dimStridesPtr = dimStrides)
                     {
-                        var perDimKernel = ILKernelGenerator.GetNonZeroPerDimKernel();
+                        var perDimKernel = DirectILKernelGenerator.GetNonZeroPerDimKernel();
                         if (perDimKernel == null)
                             throw new NotSupportedException("np.nonzero: per-dim IL kernel unavailable");
 
@@ -231,7 +231,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Generic implementation of count_nonzero (element-wise).
         ///
-        /// Contig fast path reuses <see cref="ILKernelGenerator.GetArgwhereCountKernel"/>
+        /// Contig fast path reuses <see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>
         /// which is the SAME SIMD popcount kernel used by <c>np.nonzero</c>'s pre-size
         /// pass: load a Vector&lt;T&gt;, compare-ne-zero, ExtractMostSignificantBits,
         /// PopCount the inverted mask. The earlier scalar
@@ -245,7 +245,7 @@ namespace NumSharp.Backends
 
             if (shape.IsContiguous)
             {
-                var ilKernel = ILKernelGenerator.GetArgwhereCountKernel(typeof(T));
+                var ilKernel = DirectILKernelGenerator.GetArgwhereCountKernel(typeof(T));
                 if (ilKernel != null)
                 {
                     // Sliced views: Address ignores shape.offset; advance manually so

@@ -67,11 +67,11 @@ namespace NumSharp.Backends
             // This avoids the overhead of iterator-based slicing and provides direct pointer access.
             // Note: We only use the IL kernel for contiguous arrays without offset, as it doesn't
             // handle negative strides or offset-based views correctly.
-            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
+            if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
             {
                 bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
                 var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
-                var kernel = ILKernelGenerator.TryGetCumulativeAxisKernel(key);
+                var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
                 if (kernel != null)
                 {
                     fixed (long* inputStrides = arr.strides)
@@ -133,11 +133,11 @@ namespace NumSharp.Backends
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
             // Fast path: use IL-generated kernel for contiguous arrays
-            if (arr.Shape.IsContiguous && ILKernelGenerator.Enabled)
+            if (arr.Shape.IsContiguous && DirectILKernelGenerator.Enabled)
             {
                 var ret = new NDArray(retType, Shape.Vector(arr.size));
                 var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumSum, IsContiguous: true);
-                var kernel = ILKernelGenerator.TryGetCumulativeKernel(key);
+                var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
                 if (kernel != null)
                 {
                     fixed (long* strides = arr.strides)

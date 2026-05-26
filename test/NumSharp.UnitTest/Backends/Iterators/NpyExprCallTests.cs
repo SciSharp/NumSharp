@@ -400,7 +400,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Call_SameStaticMethodReusesKernel()
         {
-            ILKernelGenerator.ClearInnerLoopCache();
+            DirectILKernelGenerator.ClearInnerLoopCache();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);
@@ -409,13 +409,13 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "call_reuse_v1");
-            int after1 = ILKernelGenerator.InnerLoopCachedCount;
+            int after1 = DirectILKernelGenerator.InnerLoopCachedCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "call_reuse_v1");
-            int after2 = ILKernelGenerator.InnerLoopCachedCount;
+            int after2 = DirectILKernelGenerator.InnerLoopCachedCount;
 
             Assert.AreEqual(after1, after2, "Same cache key → same kernel");
         }
@@ -423,7 +423,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Call_DifferentMethodsProduceDistinctKernels()
         {
-            ILKernelGenerator.ClearInnerLoopCache();
+            DirectILKernelGenerator.ClearInnerLoopCache();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);
@@ -431,12 +431,12 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterSqrt = ILKernelGenerator.InnerLoopCachedCount;
+            int afterSqrt = DirectILKernelGenerator.InnerLoopCachedCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Cbrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterCbrt = ILKernelGenerator.InnerLoopCachedCount;
+            int afterCbrt = DirectILKernelGenerator.InnerLoopCachedCount;
 
             Assert.AreEqual(afterSqrt + 1, afterCbrt,
                 "Different MethodInfos must produce distinct cache entries");

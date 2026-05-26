@@ -360,7 +360,7 @@ public class AuditV2_MathReductions
     // ============================================================================
     // T1.37 — var / std with ddof >= n returns NaN; NumPy returns +inf
     // ============================================================================
-    // File: src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Masking.VarStd.cs:42-43
+    // File: src/NumSharp.Core/Backends/Kernels/DirectILKernelGenerator.Masking.VarStd.cs:42-43
     //
     //   if (size <= ddof)
     //       return double.NaN; // Division by zero or negative

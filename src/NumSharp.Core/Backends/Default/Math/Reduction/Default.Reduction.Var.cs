@@ -136,7 +136,7 @@ namespace NumSharp.Backends
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
-            if (ILKernelGenerator.Enabled)
+            if (DirectILKernelGenerator.Enabled)
             {
                 // B16: var axis preserves float input dtype (half → half). Complex → Double (variance
                 // is a non-negative real number). Integer → Double.
@@ -189,7 +189,7 @@ namespace NumSharp.Backends
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
 
             // SIMD fast-path for contiguous arrays
-            if (ILKernelGenerator.Enabled && arr.Shape.IsContiguous)
+            if (DirectILKernelGenerator.Enabled && arr.Shape.IsContiguous)
             {
                 int _ddof = ddof ?? 0;
                 double variance;
@@ -199,34 +199,34 @@ namespace NumSharp.Backends
                     switch (arr.GetTypeCode)
                     {
                         case NPTypeCode.Single:
-                            variance = ILKernelGenerator.VarSimdHelper((float*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((float*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Double:
-                            variance = ILKernelGenerator.VarSimdHelper((double*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((double*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Byte:
-                            variance = ILKernelGenerator.VarSimdHelper((byte*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.SByte:
-                            variance = ILKernelGenerator.VarSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int16:
-                            variance = ILKernelGenerator.VarSimdHelper((short*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt16:
-                            variance = ILKernelGenerator.VarSimdHelper((ushort*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((ushort*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int32:
-                            variance = ILKernelGenerator.VarSimdHelper((int*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((int*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt32:
-                            variance = ILKernelGenerator.VarSimdHelper((uint*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((uint*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int64:
-                            variance = ILKernelGenerator.VarSimdHelper((long*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((long*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt64:
-                            variance = ILKernelGenerator.VarSimdHelper((ulong*)arr.Address, arr.size, _ddof);
+                            variance = DirectILKernelGenerator.VarSimdHelper((ulong*)arr.Address, arr.size, _ddof);
                             break;
                         default:
                             goto fallback;
@@ -328,7 +328,7 @@ namespace NumSharp.Backends
 
             // Var axis reduction always outputs double for accuracy
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Double, ReductionOp.Var, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
 
             if (kernel == null)
                 return null;

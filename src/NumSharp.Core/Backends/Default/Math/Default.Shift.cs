@@ -90,7 +90,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, long count, bool isLeftShift) where T : unmanaged
         {
-            var kernel = ILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
+            var kernel = DirectILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
             if (kernel != null)
             {
                 kernel((T*)input.Address, shifts, (T*)output.Address, count);
@@ -144,7 +144,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, long count, bool isLeftShift) where T : unmanaged
         {
-            var kernel = ILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
+            var kernel = DirectILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
             if (kernel != null)
             {
                 kernel((T*)input.Address, (T*)output.Address, shiftAmount, count);

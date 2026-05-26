@@ -10,7 +10,7 @@ using System.Runtime.Intrinsics.X86;
 // =============================================================================
 //
 // Replaces ~10 file-private getters + ~30 inline `.GetMethods(...).Where(...).
-// MakeGenericMethod(...)` patterns scattered across ILKernelGenerator partials.
+// MakeGenericMethod(...)` patterns scattered across DirectILKernelGenerator partials.
 //
 // All lookups are cached as closed (already-bound-to-T) MethodInfo so callers
 // don't allocate a fresh closed generic on every IL emission. Keys discriminate

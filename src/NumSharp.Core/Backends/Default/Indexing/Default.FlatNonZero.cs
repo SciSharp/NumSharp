@@ -13,8 +13,8 @@ namespace NumSharp.Backends
         ///
         ///     <para>
         ///     <b>Implementation:</b> two IL-emitted kernels keyed off the element type
-        ///     (<see cref="ILKernelGenerator.GetArgwhereCountKernel"/>,
-        ///     <see cref="ILKernelGenerator.GetArgwhereFlatKernel"/>). Same SIMD popcount
+        ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>). Same SIMD popcount
         ///     and bit-scan as <see cref="NonZero"/> / <see cref="Argwhere"/>, except we
         ///     never expand the flat indices into per-axis coords — the flat indices ARE
         ///     the result. No per-dim allocation, no expand kernel, no coord carry chain.
@@ -71,8 +71,8 @@ namespace NumSharp.Backends
 
             byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
 
-            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
-            var flatKernel = ILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
+            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
             if (countKernel == null || flatKernel == null)
                 throw new NotSupportedException($"np.flatnonzero: no IL kernel available for {nd.dtype.Name}");
 

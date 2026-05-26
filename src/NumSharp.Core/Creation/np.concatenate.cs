@@ -396,7 +396,7 @@ namespace NumSharp
 
             // Resolve a cast kernel for every distinct (src dtype → resultType).
             // Bail to the general path if any pair is unsupported.
-            var kernels = new Backends.Kernels.ILKernelGenerator.CastKernel[sources.Length];
+            var kernels = new Backends.Kernels.DirectILKernelGenerator.CastKernel[sources.Length];
             for (int k = 0; k < sources.Length; k++)
             {
                 if (sources[k].GetTypeCode == resultType)
@@ -405,7 +405,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    var kk = Backends.Kernels.ILKernelGenerator
+                    var kk = Backends.Kernels.DirectILKernelGenerator
                         .TryGetCastKernel(sources[k].GetTypeCode, resultType);
                     if (kk is null) return false;
                     kernels[k] = kk;

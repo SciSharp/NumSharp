@@ -132,7 +132,7 @@ namespace NumSharp
             int ndim = shape.Length;
             long count = idx64.size;
 
-            var kernel = ILKernelGenerator.GetUnravelIndexKernel();
+            var kernel = DirectILKernelGenerator.GetUnravelIndexKernel();
             if (kernel == null)
                 throw new NotSupportedException("np.unravel_index: IL kernel unavailable");
 

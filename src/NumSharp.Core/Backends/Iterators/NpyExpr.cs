@@ -9,7 +9,7 @@ using NumSharp.Backends.Kernels;
 //
 // A small algebraic AST over NpyIter operands. Compiles to an
 // NpyInnerLoopFunc by emitting (scalarBody, vectorBody) pairs that
-// ILKernelGenerator.CompileInnerLoop wraps in the standard 4× unroll shell.
+// DirectILKernelGenerator.CompileInnerLoop wraps in the standard 4× unroll shell.
 //
 // TYPE DISCIPLINE
 // ---------------
@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Iteration
                 var scalarLocals = new LocalBuilder[nIn];
                 for (int i = nIn - 1; i >= 0; i--)
                 {
-                    scalarLocals[i] = il.DeclareLocal(ILKernelGenerator.GetClrType(inputTypes[i]));
+                    scalarLocals[i] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[i]));
                     il.Emit(OpCodes.Stloc, scalarLocals[i]);
                 }
                 var ctx = new NpyExprCompileContext(inputTypes, outputType, scalarLocals, vectorMode: false);
@@ -99,7 +99,7 @@ namespace NumSharp.Backends.Iteration
                 vectorBody = il =>
                 {
                     var vectorLocals = new LocalBuilder[nIn];
-                    var vecType = ILKernelGenerator.GetVectorType(ILKernelGenerator.GetClrType(inputTypes[0]));
+                    var vecType = DirectILKernelGenerator.GetVectorType(DirectILKernelGenerator.GetClrType(inputTypes[0]));
                     for (int i = nIn - 1; i >= 0; i--)
                     {
                         vectorLocals[i] = il.DeclareLocal(vecType);
@@ -114,7 +114,7 @@ namespace NumSharp.Backends.Iteration
             Array.Copy(inputTypes, operandTypes, nIn);
             operandTypes[nIn] = outputType;
 
-            return ILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
+            return DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
         }
 
         private string DeriveCacheKey(NPTypeCode[] inputTypes, NPTypeCode outputType)
@@ -355,7 +355,7 @@ namespace NumSharp.Backends.Iteration
             // Auto-convert if input type differs from output type.
             var inType = ctx.InputTypes[_index];
             if (inType != ctx.OutputType)
-                ILKernelGenerator.EmitConvertTo(il, inType, ctx.OutputType);
+                DirectILKernelGenerator.EmitConvertTo(il, inType, ctx.OutputType);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -400,7 +400,7 @@ namespace NumSharp.Backends.Iteration
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             EmitLoadTyped(il, ctx.OutputType);
-            ILKernelGenerator.EmitVectorCreate(il, ctx.OutputType);
+            DirectILKernelGenerator.EmitVectorCreate(il, ctx.OutputType);
         }
 
         private void EmitLoadTyped(ILGenerator il, NPTypeCode target)
@@ -460,7 +460,7 @@ namespace NumSharp.Backends.Iteration
         public override bool SupportsSimd
             => _left.SupportsSimd && _right.SupportsSimd && IsSimdOp(_op);
 
-        // Must match ILKernelGenerator.EmitVectorOperation's supported set.
+        // Must match DirectILKernelGenerator.EmitVectorOperation's supported set.
         // Mod, Power, FloorDivide, ATan2 are scalar-only.
         private static bool IsSimdOp(BinaryOp op)
             => op == BinaryOp.Add || op == BinaryOp.Subtract ||
@@ -472,14 +472,14 @@ namespace NumSharp.Backends.Iteration
         {
             _left.EmitScalar(il, ctx);
             _right.EmitScalar(il, ctx);
-            ILKernelGenerator.EmitScalarOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitScalarOperation(il, _op, ctx.OutputType);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             _left.EmitVector(il, ctx);
             _right.EmitVector(il, ctx);
-            ILKernelGenerator.EmitVectorOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitVectorOperation(il, _op, ctx.OutputType);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -510,8 +510,8 @@ namespace NumSharp.Backends.Iteration
         public override bool SupportsSimd
             => _child.SupportsSimd && IsSimdUnary(_op);
 
-        // Must match ILKernelGenerator.EmitUnaryVectorOperation's supported set.
-        // (See ILKernelGenerator.Unary.Vector.cs). Ops not listed here stay scalar-only.
+        // Must match DirectILKernelGenerator.EmitUnaryVectorOperation's supported set.
+        // (See DirectILKernelGenerator.Unary.Vector.cs). Ops not listed here stay scalar-only.
         // Round and Truncate are intentionally excluded: Vector256.Round/Truncate only
         // exist in .NET 9+ but NumSharp's library targets net8 as well, and the emit
         // path fails there with "Could not find Round/Truncate for Vector256`1".
@@ -528,7 +528,7 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
-            // LogicalNot needs a special path. ILKernelGenerator's emit uses Ldc_I4_0+Ceq
+            // LogicalNot needs a special path. DirectILKernelGenerator's emit uses Ldc_I4_0+Ceq
             // which is only correct when the input value fits in I4 (Int32 and narrower).
             // For Int64/Single/Double/Decimal the types mismatch on the stack. Rewrite
             // as (x == 0) using the comparison emit, which handles all types correctly.
@@ -537,21 +537,21 @@ namespace NumSharp.Backends.Iteration
                 _child.EmitScalar(il, ctx);
                 // push zero of outputType, compare Equal
                 WhereNode.EmitPushZeroPublic(il, ctx.OutputType);
-                ILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.Equal, ctx.OutputType);
-                ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+                DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.Equal, ctx.OutputType);
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
                 return;
             }
 
             _child.EmitScalar(il, ctx);
-            ILKernelGenerator.EmitUnaryScalarOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, ctx.OutputType);
             if (IsPredicateResult(_op))
-                ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
             _child.EmitVector(il, ctx);
-            ILKernelGenerator.EmitUnaryVectorOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitUnaryVectorOperation(il, _op, ctx.OutputType);
         }
 
         public override void AppendSignature(StringBuilder sb)
@@ -594,10 +594,10 @@ namespace NumSharp.Backends.Iteration
             _left.EmitScalar(il, ctx);
             _right.EmitScalar(il, ctx);
             // Both operands are already at ctx.OutputType (InputNode auto-converts).
-            ILKernelGenerator.EmitComparisonOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitComparisonOperation(il, _op, ctx.OutputType);
             // EmitComparisonOperation leaves an I4 (0 or 1) on the stack.
             // Convert to ctx.OutputType so the final Stind opcode matches.
-            ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -654,7 +654,7 @@ namespace NumSharp.Backends.Iteration
 
         private void EmitBranchy(ILGenerator il, NpyExprCompileContext ctx)
         {
-            var clrType = ILKernelGenerator.GetClrType(ctx.OutputType);
+            var clrType = DirectILKernelGenerator.GetClrType(ctx.OutputType);
             var locL = il.DeclareLocal(clrType);
             var locR = il.DeclareLocal(clrType);
 
@@ -684,7 +684,7 @@ namespace NumSharp.Backends.Iteration
 
             il.Emit(OpCodes.Ldloc, locL);
             il.Emit(OpCodes.Ldloc, locR);
-            ILKernelGenerator.EmitComparisonOperation(
+            DirectILKernelGenerator.EmitComparisonOperation(
                 il,
                 _isMin ? ComparisonOp.LessEqual : ComparisonOp.GreaterEqual,
                 ctx.OutputType);
@@ -742,7 +742,7 @@ namespace NumSharp.Backends.Iteration
             // verifiable I4 0/1 on the stack before brfalse.
             _cond.EmitScalar(il, ctx);
             EmitPushZero(il, ctx.OutputType);
-            ILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, ctx.OutputType);
+            DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, ctx.OutputType);
 
             il.Emit(OpCodes.Brfalse, lblElse);
 
@@ -1031,7 +1031,7 @@ namespace NumSharp.Backends.Iteration
             }
 
             if (_returnCode != ctx.OutputType)
-                ILKernelGenerator.EmitConvertTo(il, _returnCode, ctx.OutputType);
+                DirectILKernelGenerator.EmitConvertTo(il, _returnCode, ctx.OutputType);
         }
 
         private void EmitArgs(ILGenerator il, NpyExprCompileContext ctx)
@@ -1042,7 +1042,7 @@ namespace NumSharp.Backends.Iteration
                 // Every arg leaves ctx.OutputType on the stack — convert if the
                 // method's parameter dtype is different.
                 if (_paramCodes[i] != ctx.OutputType)
-                    ILKernelGenerator.EmitConvertTo(il, ctx.OutputType, _paramCodes[i]);
+                    DirectILKernelGenerator.EmitConvertTo(il, ctx.OutputType, _paramCodes[i]);
             }
         }
 

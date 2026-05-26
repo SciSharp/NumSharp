@@ -68,7 +68,7 @@ namespace NumSharp.Backends
             var key = new ComparisonKernelKey(lhsType, rhsType, op, path);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.GetComparisonKernel(key);
+            var kernel = DirectILKernelGenerator.GetComparisonKernel(key);
 
             if (kernel != null)
             {
@@ -99,7 +99,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new ComparisonScalarKernelKey(lhsType, rhsType, op);
-            var func = ILKernelGenerator.GetComparisonScalarDelegate(key);
+            var func = DirectILKernelGenerator.GetComparisonScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch
@@ -314,18 +314,18 @@ namespace NumSharp.Backends
                 if (capLhs == capRhs && capLhs == capCmp)
                 {
                     // Same-dtype fast path — no convert pass.
-                    ILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                    DirectILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
                 }
                 else
                 {
-                    var locRhs = il.DeclareLocal(ILKernelGenerator.GetClrType(capRhs));
+                    var locRhs = il.DeclareLocal(DirectILKernelGenerator.GetClrType(capRhs));
                     il.Emit(OpCodes.Stloc, locRhs);
                     if (capLhs != capCmp)
-                        ILKernelGenerator.EmitConvertTo(il, capLhs, capCmp);
+                        DirectILKernelGenerator.EmitConvertTo(il, capLhs, capCmp);
                     il.Emit(OpCodes.Ldloc, locRhs);
                     if (capRhs != capCmp)
-                        ILKernelGenerator.EmitConvertTo(il, capRhs, capCmp);
-                    ILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                        DirectILKernelGenerator.EmitConvertTo(il, capRhs, capCmp);
+                    DirectILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
                 }
             };
 

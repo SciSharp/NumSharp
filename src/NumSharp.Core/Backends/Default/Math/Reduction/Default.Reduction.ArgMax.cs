@@ -148,7 +148,7 @@ namespace NumSharp.Backends
 
             // ArgMax/ArgMin always output Int64
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
 
             if (kernel == null)
             {

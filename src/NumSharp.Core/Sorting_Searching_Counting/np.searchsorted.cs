@@ -65,11 +65,11 @@ namespace NumSharp
             NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
             NDArray output = new NDArray(NPTypeCode.Int64, outShape, false);
 
-            int elemSize = ILKernelGenerator.GetTypeSize(a.typecode);
+            int elemSize = DirectILKernelGenerator.GetTypeSize(a.typecode);
             unsafe
             {
                 bool contigA = a.Shape.IsContiguous;
-                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
+                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
                 long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
                 void* keyPtr = (void*)vTyped.Address;
@@ -84,7 +84,7 @@ namespace NumSharp
         private static long SearchSortedScalar(NDArray a, object scalarValue, bool leftSide, NDArray sorter)
         {
             NDArray sorterTyped = (sorter is null) ? null : EnsureContiguousInt64(sorter);
-            int elemSize = ILKernelGenerator.GetTypeSize(a.typecode);
+            int elemSize = DirectILKernelGenerator.GetTypeSize(a.typecode);
             long result;
             unsafe
             {
@@ -93,7 +93,7 @@ namespace NumSharp
                 WriteScalar(keyBuf, scalarValue, a.typecode);
                 long* retBuf = stackalloc long[1];
                 bool contigA = a.Shape.IsContiguous;
-                var kernel = ILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
+                var kernel = DirectILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
                 long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;

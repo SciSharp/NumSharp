@@ -56,7 +56,7 @@ namespace NumSharp.Backends
             // which fall through to the NpyAxisIter scalar kernel below.
             ReductionOp op = reduceAll ? ReductionOp.All : ReductionOp.Any;
             var key = new AxisReductionKernelKey(nd.GetTypeCode, NPTypeCode.Boolean, op, InnerAxisContiguous: axis == nd.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetBooleanAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetBooleanAxisReductionKernel(key);
             if (kernel != null && nd.Shape.IsContiguous)
             {
                 unsafe

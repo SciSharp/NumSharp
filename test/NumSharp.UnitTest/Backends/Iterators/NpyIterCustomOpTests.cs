@@ -133,10 +133,10 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 vectorBody: il =>
                 {
                     // Stack: [va, vb]
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Single);
                     il.Emit(OpCodes.Ldc_R4, 1.0f);
-                    ILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
                 },
                 cacheKey: "test_fma_f32_const1");
 
@@ -165,11 +165,11 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 NPTypeCode.Single, NPTypeCode.Single,
                 scalarBody: il =>
                 {
-                    ILKernelGenerator.EmitUnaryScalarOperation(il, UnaryOp.Sqrt, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitUnaryScalarOperation(il, UnaryOp.Sqrt, NPTypeCode.Single);
                 },
                 vectorBody: il =>
                 {
-                    ILKernelGenerator.EmitUnaryVectorOperation(il, UnaryOp.Sqrt, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitUnaryVectorOperation(il, UnaryOp.Sqrt, NPTypeCode.Single);
                 },
                 cacheKey: "test_sqrt_f32");
 
@@ -215,11 +215,11 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 },
                 vectorBody: il =>
                 {
-                    var tmpC = il.DeclareLocal(ILKernelGenerator.GetVectorType(typeof(float)));
+                    var tmpC = il.DeclareLocal(DirectILKernelGenerator.GetVectorType(typeof(float)));
                     il.Emit(OpCodes.Stloc, tmpC);
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Single);
                     il.Emit(OpCodes.Ldloc, tmpC);
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
                 },
                 cacheKey: "test_fma_ternary_f32");
 
@@ -259,8 +259,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 vectorBody: il =>
                 {
                     il.Emit(OpCodes.Ldc_R4, 10.0f);
-                    ILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
                 },
                 cacheKey: "test_add10_f32");
 
@@ -273,7 +273,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         {
             // Two distinct iters calling ExecuteElementWise with the same
             // cacheKey should hit the same compiled delegate.
-            ILKernelGenerator.ClearInnerLoopCache();
+            DirectILKernelGenerator.ClearInnerLoopCache();
 
             var a1 = np.arange(4).astype(np.float32);
             var b1 = np.arange(4).astype(np.float32);
@@ -283,7 +283,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             var c2 = np.empty(new Shape(4), np.float32);
 
             Action<ILGenerator> scalar = il => il.Emit(OpCodes.Add);
-            Action<ILGenerator> vec = il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
+            Action<ILGenerator> vec = il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
 
             using (var iter = NpyIterRef.MultiNew(3, new[] { a1, b1, c1 },
                 NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
@@ -292,7 +292,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter.ExecuteElementWiseBinary(NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
                     scalar, vec, "test_reuse_add_f32");
             }
-            int afterFirst = (int)typeof(ILKernelGenerator)
+            int afterFirst = (int)typeof(DirectILKernelGenerator)
                 .GetProperty("InnerLoopCachedCount", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
                 .GetValue(null)!;
 
@@ -303,7 +303,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter2.ExecuteElementWiseBinary(NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
                     scalar, vec, "test_reuse_add_f32");  // same key
             }
-            int afterSecond = (int)typeof(ILKernelGenerator)
+            int afterSecond = (int)typeof(DirectILKernelGenerator)
                 .GetProperty("InnerLoopCachedCount", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
                 .GetValue(null)!;
 

@@ -107,7 +107,7 @@ namespace NumSharp
                 return (avgScalar, returned ? sclScalar : null);
             }
 
-            // Fused fast path via ILKernelGenerator: NpyIter walks a + w in one
+            // Fused fast path via DirectILKernelGenerator: NpyIter walks a + w in one
             // pass producing (num, scl) into pre-zeroed output NDArrays. The
             // cached kernel handles per-dtype specialization (SIMD via Vector256<T>
             // for SIMD-capable types, scalar otherwise). When the dtype has no
@@ -171,8 +171,8 @@ namespace NumSharp
             NDArray a, NDArray w, NPTypeCode resultDtype,
             out NDArray avg, out NDArray scl)
         {
-            NpyInnerLoopFunc kernel = ILKernelGenerator.GetWeightedSumIterKernel(
-                new ILKernelGenerator.WeightedSumKernelKey(resultDtype));
+            NpyInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
+                new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
             if (kernel is null) { avg = null; scl = null; return false; }
 
             int elemSize = a.dtypesize;
@@ -262,7 +262,7 @@ namespace NumSharp
             _ => throw new NotSupportedException($"IsScalarZero for {dt} not in fast path")
         };
 
-        // Fused weighted sum via ILKernelGenerator-cached kernel + NpyIter.
+        // Fused weighted sum via DirectILKernelGenerator-cached kernel + NpyIter.
         //
         // Setup: 4-operand iter [a, w, num_out, scl_out] with op_axes encoding
         // the reduction axes as -1 for the writable operands. EXTERNAL_LOOP +
@@ -270,14 +270,14 @@ namespace NumSharp
         // pointers pinned (stride==0) along the reduction axis — the kernel's
         // pinned-output fast path then runs a tight 4×-unrolled SIMD loop.
         // Single source of truth for dtype dispatch lives inside
-        // ILKernelGenerator.GetWeightedSumIterKernel; this method is dtype-
+        // DirectILKernelGenerator.GetWeightedSumIterKernel; this method is dtype-
         // agnostic at the call site.
         private static bool TryFusedWeightedSum(
             NDArray a, NDArray w, int[] axes, NPTypeCode resultDtype,
             out NDArray num, out NDArray scl)
         {
-            NpyInnerLoopFunc kernel = ILKernelGenerator.GetWeightedSumIterKernel(
-                new ILKernelGenerator.WeightedSumKernelKey(resultDtype));
+            NpyInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
+                new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
             if (kernel is null)
             {
                 num = null;
@@ -508,7 +508,7 @@ namespace NumSharp
         }
 
         // Dtype-generic zero-detection. Mirrors numpy's `np.any(scl == 0.0)` — uses
-        // ILKernelGenerator-backed equality + np.any (vacuous-false on empty input).
+        // DirectILKernelGenerator-backed equality + np.any (vacuous-false on empty input).
         // Works for Half/Complex/Decimal where Convert.ToDouble fails (no IConvertible).
         private static bool HasZero(NDArray scl)
         {
