@@ -82,9 +82,13 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static AxisReductionKernel CreateAxisReductionKernel(AxisReductionKernelKey key)
         {
-            // For type promotion cases or non-SIMD types, use the general dispatcher
+            // For type promotion cases or non-SIMD types, use the general dispatcher.
+            // First try the widening SIMD fast path (int32->int64, float->double, etc).
             if (key.InputType != key.AccumulatorType || !CanUseSimd(key.InputType))
             {
+                var wideningKernel = TryGetAxisReductionWideningKernel(key);
+                if (wideningKernel != null) return wideningKernel;
+
                 return CreateAxisReductionKernelGeneral(key);
             }
 
