@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         private static int VectorCountFloat32()
         {
-            // Matches ILKernelGenerator.GetVectorCount(NPTypeCode.Single).
+            // Matches DirectILKernelGenerator.GetVectorCount(NPTypeCode.Single).
             int bits = Vector512.IsHardwareAccelerated ? 512 :
                        Vector256.IsHardwareAccelerated ? 256 :
                        Vector128.IsHardwareAccelerated ? 128 : 32;
@@ -124,8 +124,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 vectorBody: il =>
                 {
                     il.Emit(OpCodes.Ldc_R4, 3.0f);
-                    ILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
-                    ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorCreate(il, NPTypeCode.Single);
+                    DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single);
                 },
                 cacheKey: "edge_add3_f32");
 
@@ -201,7 +201,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Byte, NPTypeCode.Byte, NPTypeCode.Byte,
                 scalarBody: il => il.Emit(OpCodes.Add),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Byte),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Byte),
                 cacheKey: "edge_byte_add");
 
             for (int i = 0; i < 16; i++)
@@ -219,7 +219,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Int16, NPTypeCode.Int16, NPTypeCode.Int16,
                 scalarBody: il => il.Emit(OpCodes.Sub),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Subtract, NPTypeCode.Int16),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Subtract, NPTypeCode.Int16),
                 cacheKey: "edge_i16_sub");
 
             for (int i = 0; i < 20; i++)
@@ -237,7 +237,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.UInt32, NPTypeCode.UInt32, NPTypeCode.UInt32,
                 scalarBody: il => il.Emit(OpCodes.And),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.BitwiseAnd, NPTypeCode.UInt32),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.BitwiseAnd, NPTypeCode.UInt32),
                 cacheKey: "edge_u32_and");
 
             for (int i = 0; i < 16; i++)
@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Int64, NPTypeCode.Int64, NPTypeCode.Int64,
                 scalarBody: il => il.Emit(OpCodes.Mul),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Int64),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Multiply, NPTypeCode.Int64),
                 cacheKey: "edge_i64_mul");
 
             for (int i = 0; i < 12; i++)
@@ -273,7 +273,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Double, NPTypeCode.Double, NPTypeCode.Double,
                 scalarBody: il => il.Emit(OpCodes.Div),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Divide, NPTypeCode.Double),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Divide, NPTypeCode.Double),
                 cacheKey: "edge_f64_div");
 
             for (int i = 0; i < 16; i++)
@@ -314,7 +314,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using var iter = Iter(a, b, c);
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Decimal, NPTypeCode.Decimal, NPTypeCode.Decimal,
-                scalarBody: il => ILKernelGenerator.EmitScalarOperation(il, BinaryOp.Add, NPTypeCode.Decimal),
+                scalarBody: il => DirectILKernelGenerator.EmitScalarOperation(il, BinaryOp.Add, NPTypeCode.Decimal),
                 vectorBody: null,        // Decimal is not SIMD-capable
                 cacheKey: "edge_decimal_add");
 
@@ -767,7 +767,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
                 scalarBody: il => il.Emit(OpCodes.Add),
-                vectorBody: il => ILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single),
+                vectorBody: il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Add, NPTypeCode.Single),
                 cacheKey: "edge_mixedlayout_add");
 
             float[] expectedB = { 0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11 };
@@ -867,7 +867,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using var iter = Iter(a, b, c);
             iter.ExecuteElementWiseBinary(
                 NPTypeCode.Decimal, NPTypeCode.Decimal, NPTypeCode.Decimal,
-                scalarBody: il => ILKernelGenerator.EmitScalarOperation(il, BinaryOp.Add, NPTypeCode.Decimal),
+                scalarBody: il => DirectILKernelGenerator.EmitScalarOperation(il, BinaryOp.Add, NPTypeCode.Decimal),
                 vectorBody: null,
                 cacheKey: "edge_decimal_add_postfix");
 
@@ -907,10 +907,10 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // Reflection helpers for internal cache count
         // =====================================================================
 
-        private static PropertyInfo _cacheCountProp = typeof(ILKernelGenerator)
+        private static PropertyInfo _cacheCountProp = typeof(DirectILKernelGenerator)
             .GetProperty("InnerLoopCachedCount", BindingFlags.Static | BindingFlags.NonPublic)!;
 
-        private static MethodInfo _clearCacheMethod = typeof(ILKernelGenerator)
+        private static MethodInfo _clearCacheMethod = typeof(DirectILKernelGenerator)
             .GetMethod("ClearInnerLoopCache", BindingFlags.Static | BindingFlags.NonPublic)!;
 
         private static int GetInnerLoopCacheCount() => (int)_cacheCountProp.GetValue(null)!;

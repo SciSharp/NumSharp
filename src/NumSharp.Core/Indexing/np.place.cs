@@ -118,7 +118,7 @@ namespace NumSharp
 
         private static unsafe void ExecutePlace(NDArray arr, NDArray maskBool, NDArray valsCast)
         {
-            var kernel = ILKernelGenerator.GetPlaceKernel();
+            var kernel = DirectILKernelGenerator.GetPlaceKernel();
             if (kernel == null)
                 throw new NotSupportedException("np.place: IL kernel unavailable");
 

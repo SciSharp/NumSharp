@@ -132,7 +132,7 @@ namespace NumSharp
             //
             // The non-scalar operand must be contig (its shape already matches the result
             // because of the broadcast above). Two scalars + contig cond is also covered.
-            if (ILKernelGenerator.Enabled &&
+            if (DirectILKernelGenerator.Enabled &&
                 cond.typecode == NPTypeCode.Boolean &&
                 cond.Shape.IsContiguous &&
                 (xIsScalar || yIsScalar))
@@ -166,7 +166,7 @@ namespace NumSharp
 
             // IL Kernel fast path: all arrays contiguous, bool condition, SIMD enabled
             // Broadcasted arrays (stride=0) are NOT contiguous, so they use iterator path.
-            bool canUseKernel = ILKernelGenerator.Enabled &&
+            bool canUseKernel = DirectILKernelGenerator.Enabled &&
                                 cond.typecode == NPTypeCode.Boolean &&
                                 cond.Shape.IsContiguous &&
                                 xArr.Shape.IsContiguous &&
@@ -257,7 +257,7 @@ namespace NumSharp
         }
 
         private static unsafe void WhereKernelExecute<T>(nint condPtr, nint xAddr, nint yAddr, nint resultAddr, long count) where T : unmanaged
-            => ILKernelGenerator.WhereExecute((bool*)condPtr, (T*)xAddr, (T*)yAddr, (T*)resultAddr, count);
+            => DirectILKernelGenerator.WhereExecute((bool*)condPtr, (T*)xAddr, (T*)yAddr, (T*)resultAddr, count);
 
         // -----------------------------------------------------------------
         // Scalar-broadcast dispatch
@@ -302,7 +302,7 @@ namespace NumSharp
 
         private static unsafe bool TryWhereScalarXExecute<T>(nint condPtr, nint xScalarPtr, nint yPtr, nint resPtr, long count) where T : unmanaged
         {
-            var kernel = ILKernelGenerator.GetWhereScalarXKernel<T>();
+            var kernel = DirectILKernelGenerator.GetWhereScalarXKernel<T>();
             if (kernel == null) return false;
 
             T scalarX = *(T*)xScalarPtr;
@@ -312,7 +312,7 @@ namespace NumSharp
 
         private static unsafe bool TryWhereScalarYExecute<T>(nint condPtr, nint xPtr, nint yScalarPtr, nint resPtr, long count) where T : unmanaged
         {
-            var kernel = ILKernelGenerator.GetWhereScalarYKernel<T>();
+            var kernel = DirectILKernelGenerator.GetWhereScalarYKernel<T>();
             if (kernel == null) return false;
 
             T scalarY = *(T*)yScalarPtr;
@@ -322,7 +322,7 @@ namespace NumSharp
 
         private static unsafe bool TryWhereScalarXYExecute<T>(nint condPtr, nint xScalarPtr, nint yScalarPtr, nint resPtr, long count) where T : unmanaged
         {
-            var kernel = ILKernelGenerator.GetWhereScalarXYKernel<T>();
+            var kernel = DirectILKernelGenerator.GetWhereScalarXYKernel<T>();
             if (kernel == null) return false;
 
             T scalarX = *(T*)xScalarPtr;

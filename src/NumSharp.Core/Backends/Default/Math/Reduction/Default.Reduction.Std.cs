@@ -135,7 +135,7 @@ namespace NumSharp.Backends
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
-            if (ILKernelGenerator.Enabled)
+            if (DirectILKernelGenerator.Enabled)
             {
                 // B16: std axis preserves float input dtype (half → half). Complex → Double (std
                 // is a non-negative real number). Integer → Double.
@@ -188,7 +188,7 @@ namespace NumSharp.Backends
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
 
             // SIMD fast-path for contiguous arrays
-            if (ILKernelGenerator.Enabled && arr.Shape.IsContiguous)
+            if (DirectILKernelGenerator.Enabled && arr.Shape.IsContiguous)
             {
                 int _ddof = ddof ?? 0;
                 double std;
@@ -198,34 +198,34 @@ namespace NumSharp.Backends
                     switch (arr.GetTypeCode)
                     {
                         case NPTypeCode.Single:
-                            std = ILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Double:
-                            std = ILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Byte:
-                            std = ILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.SByte:
-                            std = ILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int16:
-                            std = ILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt16:
-                            std = ILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int32:
-                            std = ILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt32:
-                            std = ILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int64:
-                            std = ILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt64:
-                            std = ILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
                             break;
                         default:
                             goto fallback;
@@ -327,7 +327,7 @@ namespace NumSharp.Backends
 
             // Std axis reduction always outputs double for accuracy
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Double, ReductionOp.Std, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
 
             if (kernel == null)
                 return null;

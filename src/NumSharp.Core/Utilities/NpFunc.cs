@@ -19,7 +19,7 @@ namespace NumSharp.Utilities
     //
     //        static unsafe void ClipBounds<T>(nint @out, nint min, nint max, long len)
     //            where T : unmanaged, IComparable<T>
-    //            => ILKernelGenerator.ClipArrayBounds((T*)@out, (T*)min, (T*)max, len);
+    //            => DirectILKernelGenerator.ClipArrayBounds((T*)@out, (T*)min, (T*)max, len);
     //
     //  2.  Call NpFunc.Invoke — pass ANY instantiation (the <int> is a dummy;
     //      NpFunc re-instantiates for the actual type):

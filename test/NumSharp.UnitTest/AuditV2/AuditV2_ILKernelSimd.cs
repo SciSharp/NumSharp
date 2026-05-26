@@ -23,7 +23,7 @@ public class AuditV2_ILKernelSimd
     // ======================================================================
     // T1.6 — Scalar IL path emits NaN <= x and NaN >= x as True
     //
-    // File: src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Comparison.cs
+    // File: src/NumSharp.Core/Backends/Kernels/DirectILKernelGenerator.Comparison.cs
     // Function: EmitComparisonOperation (lines 1009–1036)
     //
     // Root cause: the scalar IL path emits
@@ -319,7 +319,7 @@ public class AuditV2_ILKernelSimd
     // ======================================================================
     // EXTRA — Missing `sbyte` in IsSimdSupported<T>
     //
-    // File: src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Binary.cs:451
+    // File: src/NumSharp.Core/Backends/Kernels/DirectILKernelGenerator.Binary.cs:451
     // Function: IsSimdSupported<T>()
     //
     // Issue: sbyte is excluded from the SIMD allow-list even though
@@ -347,6 +347,6 @@ public class AuditV2_ILKernelSimd
         // should verify SIMD path is reached after fix via micro-benchmark.
         Assert.Inconclusive(
             "Correctness OK. Perf gap: sbyte missing from IsSimdSupported<T> in " +
-            "ILKernelGenerator.Binary.cs:451. Vector256<sbyte> is supported on .NET 8+.");
+            "DirectILKernelGenerator.Binary.cs:451. Vector256<sbyte> is supported on .NET 8+.");
     }
 }

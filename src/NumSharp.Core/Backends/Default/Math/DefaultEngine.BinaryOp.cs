@@ -143,7 +143,7 @@ namespace NumSharp.Backends
             var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, path);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
             if (kernel != null)
             {
@@ -183,7 +183,7 @@ namespace NumSharp.Backends
         ///
         ///     Same-dtype path (<paramref name="lhsType"/> == <paramref name="rhsType"/>
         ///     == <paramref name="resultType"/>): scalar body is
-        ///     <see cref="ILKernelGenerator.EmitScalarOperation"/>; vector
+        ///     <see cref="DirectILKernelGenerator.EmitScalarOperation"/>; vector
         ///     body is supplied when the dtype and op both support SIMD.
         ///
         ///     Mixed-dtype path: scalar body emits a load-shuffle that
@@ -240,8 +240,8 @@ namespace NumSharp.Backends
             // scalar-only via CanUseSimdForOp.
             bool sameDtype = lhsType == rhsType && lhsType == resultType;
             bool simdViable = sameDtype
-                              && ILKernelGenerator.CanUseSimd(resultType)
-                              && ILKernelGenerator.CanUseSimdForOp(op);
+                              && DirectILKernelGenerator.CanUseSimd(resultType)
+                              && DirectILKernelGenerator.CanUseSimdForOp(op);
 
             // Build per-element scalar emit body. For same-dtype we just call
             // EmitScalarOperation directly. For mixed-dtype we wrap it with
@@ -250,7 +250,7 @@ namespace NumSharp.Backends
             Action<ILGenerator> scalarBody;
             if (sameDtype)
             {
-                scalarBody = il => ILKernelGenerator.EmitScalarOperation(il, op, resultType);
+                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
             }
             else
             {
@@ -260,7 +260,7 @@ namespace NumSharp.Backends
             }
 
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => ILKernelGenerator.EmitVectorOperation(il, op, resultType)
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
                 : null;
 
             // Cache key MUST encode all three dtypes; mixed-dtype kernels
@@ -310,7 +310,7 @@ namespace NumSharp.Backends
         ///     bottom of the stack.
         ///
         ///     Same-dtype callers do NOT go through this path — they call
-        ///     <see cref="ILKernelGenerator.EmitScalarOperation"/> directly,
+        ///     <see cref="DirectILKernelGenerator.EmitScalarOperation"/> directly,
         ///     skipping the local allocation and reload.
         /// </summary>
         private static void EmitMixedScalarBody(
@@ -324,15 +324,15 @@ namespace NumSharp.Backends
             // first, then reload rhs and convert it. Doing it this order keeps
             // the final stack as [lhs (resultType), rhs (resultType)] which
             // is what EmitScalarOperation expects.
-            var locRhs = il.DeclareLocal(ILKernelGenerator.GetClrType(rhsType));
+            var locRhs = il.DeclareLocal(DirectILKernelGenerator.GetClrType(rhsType));
             il.Emit(OpCodes.Stloc, locRhs);
             if (lhsType != resultType)
-                ILKernelGenerator.EmitConvertTo(il, lhsType, resultType);
+                DirectILKernelGenerator.EmitConvertTo(il, lhsType, resultType);
             il.Emit(OpCodes.Ldloc, locRhs);
             if (rhsType != resultType)
-                ILKernelGenerator.EmitConvertTo(il, rhsType, resultType);
+                DirectILKernelGenerator.EmitConvertTo(il, rhsType, resultType);
 
-            ILKernelGenerator.EmitScalarOperation(il, op, resultType);
+            DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
         }
 
         /// <summary>
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new BinaryScalarKernelKey(lhsType, rhsType, resultType, op);
-            var func = ILKernelGenerator.GetBinaryScalarDelegate(key);
+            var func = DirectILKernelGenerator.GetBinaryScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch

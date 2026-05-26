@@ -11,7 +11,7 @@ using NumSharp.Utilities;
 //
 // Mirrors the float simple path but with Vector256<double> (4 doubles per
 // vector). Large contiguous double matmul already has an IL-generated IKJ
-// SIMD kernel (ILKernelGenerator.GetMatMulKernel<double>), so the job here
+// SIMD kernel (DirectILKernelGenerator.GetMatMulKernel<double>), so the job here
 // is only to add a stride-aware entry point that handles transposed / sliced
 // double views without materializing a contiguous copy.
 //

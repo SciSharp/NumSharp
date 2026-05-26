@@ -13,9 +13,9 @@ namespace NumSharp.Backends
         ///
         ///     <para>
         ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
-        ///     (<see cref="ILKernelGenerator.GetArgwhereCountKernel"/>,
-        ///     <see cref="ILKernelGenerator.GetArgwhereFlatKernel"/>,
-        ///     <see cref="ILKernelGenerator.GetArgwhereExpandKernel"/>). The runtime call
+        ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereExpandKernel"/>). The runtime call
         ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
         ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
         ///     cache and invokes them. Every loop (SIMD body, scalar tail, coord-expand
@@ -90,8 +90,8 @@ namespace NumSharp.Backends
 
             byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
 
-            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
-            var flatKernel = ILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
+            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
             if (countKernel == null || flatKernel == null)
                 throw new NotSupportedException($"np.argwhere: no IL kernel available for {nd.dtype.Name}");
 
@@ -127,7 +127,7 @@ namespace NumSharp.Backends
 
                     fixed (long* dimStridesPtr = dimStrides)
                     {
-                        var expandKernel = ILKernelGenerator.GetArgwhereExpandKernel();
+                        var expandKernel = DirectILKernelGenerator.GetArgwhereExpandKernel();
                         if (expandKernel == null)
                             throw new NotSupportedException("np.argwhere: expand IL kernel unavailable");
 

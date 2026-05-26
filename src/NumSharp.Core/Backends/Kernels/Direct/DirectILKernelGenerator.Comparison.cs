@@ -1,0 +1,1340 @@
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.Intrinsics;
+
+// =============================================================================
+// DirectILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
+// =============================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// This partial class generates high-performance kernels at runtime using IL emission.
+// The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
+// Kernels are cached by operation key to avoid repeated IL generation.
+//
+// FLOW: Caller (DefaultEngine, np.*, NDArray ops)
+//         -> Requests kernel via Get*Kernel() or *Helper() methods
+//         -> DirectILKernelGenerator checks cache, generates IL if needed
+//         -> Returns delegate that caller invokes with array pointers
+//
+// =============================================================================
+// PARTIAL CLASS FILES
+// =============================================================================
+//
+// DirectILKernelGenerator.cs
+//   OWNERSHIP: Core infrastructure - foundation for all other partial files
+//   RESPONSIBILITY:
+//     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
+//     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
+//     - Shared IL emission primitives used by all other partials
+//   DEPENDENCIES: None (other partials depend on this)
+//
+// DirectILKernelGenerator.Binary.cs
+//   OWNERSHIP: Same-type binary operations on contiguous arrays (fast path)
+//   RESPONSIBILITY:
+//     - Optimized kernels when both operands have identical type and layout
+//     - SIMD loop + scalar tail for Add, Sub, Mul, Div
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for same-type contiguous operations
+//
+// DirectILKernelGenerator.MixedType.cs
+//   OWNERSHIP: Mixed-type binary operations with type promotion
+//   RESPONSIBILITY:
+//     - Handles all binary ops where operand types may differ
+//     - Generates path-specific kernels based on stride patterns
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for general binary operations
+//
+// DirectILKernelGenerator.Unary.cs
+//   OWNERSHIP: Unary element-wise operations
+//   RESPONSIBILITY:
+//     - Math functions: Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, Floor, Ceil, etc.
+//     - Scalar delegate generation for single-value operations (Func<TIn,TOut>)
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for unary ops; scalar delegates used in broadcasting
+//
+// DirectILKernelGenerator.Comparison.cs (THIS FILE)
+//   OWNERSHIP: Comparison operations returning boolean arrays
+//   RESPONSIBILITY:
+//     - Element-wise comparisons: Equal (==), NotEqual (!=), Less (<),
+//       Greater (>), LessEqual (<=), GreaterEqual (>=)
+//     - Type promotion: operands promoted to common type before comparison
+//     - SIMD comparison using Vector.Equals/LessThan/etc. with mask extraction
+//     - Efficient mask-to-bool conversion using ExtractMostSignificantBits
+//     - Path-specific kernels: SimdFull, ScalarRight, ScalarLeft, General
+//     - Scalar comparison delegates for single-value operations
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by NDArray comparison operators (==, !=, <, >, <=, >=)
+//   KEY MEMBERS:
+//     - ComparisonKernel delegate - writes bool* result array
+//     - _comparisonCache - caches by ComparisonKernelKey (types, op, path)
+//     - _comparisonScalarCache - Func<TLhs, TRhs, bool> for scalar comparisons
+//     - GetComparisonKernel(), TryGetComparisonKernel()
+//     - GetComparisonScalarDelegate() - for element-by-element comparison
+//     - EmitVectorComparison() - SIMD comparison producing mask vector
+//     - EmitMaskToBoolExtraction() - efficient mask bits -> bool array
+//     - EmitComparisonOperation() - scalar comparison IL emission
+//     - EmitComparisonSimdLoop(), EmitComparisonScalarLoop(), EmitComparisonGeneralLoop()
+//
+// DirectILKernelGenerator.Reduction.cs
+//   OWNERSHIP: Reduction operations and specialized SIMD helpers
+//   RESPONSIBILITY:
+//     - Reductions: Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any
+//     - SIMD helpers called directly by np.all/any/nonzero/masking
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Kernels called by DefaultEngine; helpers called directly by np.*
+//
+// =============================================================================
+
+namespace NumSharp.Backends.Kernels
+{
+    public static partial class DirectILKernelGenerator
+    {
+        #region Comparison Kernel Generation
+
+        /// <summary>
+        /// Cache for comparison kernels.
+        /// Key: ComparisonKernelKey (LhsType, RhsType, Op, Path)
+        /// </summary>
+        private static readonly ConcurrentDictionary<ComparisonKernelKey, ComparisonKernel> _comparisonCache = new();
+
+        /// <summary>
+        /// Number of comparison kernels in cache.
+        /// </summary>
+        public static int ComparisonCachedCount => _comparisonCache.Count;
+
+        /// <summary>
+        /// Get or generate a comparison kernel for the specified key.
+        /// </summary>
+        public static ComparisonKernel GetComparisonKernel(ComparisonKernelKey key)
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
+        }
+
+        /// <summary>
+        /// Try to get or generate a comparison kernel. Returns null if generation fails.
+        /// </summary>
+        public static ComparisonKernel? TryGetComparisonKernel(ComparisonKernelKey key)
+        {
+            if (!Enabled)
+                return null;
+
+            try
+            {
+                return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetComparisonKernel({key}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Check if SIMD can be used for this comparison operation.
+        /// </summary>
+        private static bool CanUseComparisonSimd(ComparisonKernelKey key)
+        {
+            if (VectorBits == 0) return false;
+            if (!CanUseSimd(key.ComparisonType)) return false;
+
+            // SIMD comparison only works when both operands have the same type.
+            // Mixed-type comparisons require scalar conversion before comparison,
+            // which cannot be done efficiently with SIMD vector loads.
+            if (key.LhsType != key.RhsType) return false;
+
+            // Only for contiguous (SimdFull) path initially
+            return key.Path == ExecutionPath.SimdFull;
+        }
+
+        /// <summary>
+        /// Generate a comparison kernel for the specified key.
+        /// </summary>
+        private static ComparisonKernel GenerateComparisonKernel(ComparisonKernelKey key)
+        {
+            return key.Path switch
+            {
+                ExecutionPath.SimdFull => GenerateComparisonSimdFullKernel(key),
+                ExecutionPath.SimdScalarRight => GenerateComparisonScalarRightKernel(key),
+                ExecutionPath.SimdScalarLeft => GenerateComparisonScalarLeftKernel(key),
+                ExecutionPath.SimdChunk => GenerateComparisonGeneralKernel(key), // Fall through to general
+                ExecutionPath.General => GenerateComparisonGeneralKernel(key),
+                _ => throw new NotSupportedException($"Path {key.Path} not supported")
+            };
+        }
+
+        /// <summary>
+        /// Generate a comparison kernel for contiguous arrays.
+        /// </summary>
+        private static ComparisonKernel GenerateComparisonSimdFullKernel(ComparisonKernelKey key)
+        {
+            // ComparisonKernel signature:
+            // void(void* lhs, void* rhs, bool* result, long* lhsStrides, long* rhsStrides, long* shape, int ndim, long totalSize)
+            var dm = new DynamicMethod(
+                name: $"Comparison_SimdFull_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(void*), typeof(bool*),
+                    typeof(long*), typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int lhsSize = GetTypeSize(key.LhsType);
+            int rhsSize = GetTypeSize(key.RhsType);
+            var comparisonType = key.ComparisonType;
+
+            if (CanUseComparisonSimd(key))
+            {
+                EmitComparisonSimdLoop(il, key, lhsSize, rhsSize, comparisonType);
+            }
+            else
+            {
+                EmitComparisonScalarLoop(il, key, lhsSize, rhsSize, comparisonType);
+            }
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<ComparisonKernel>();
+        }
+
+        /// <summary>
+        /// Generate a comparison kernel for scalar right operand.
+        /// </summary>
+        private static ComparisonKernel GenerateComparisonScalarRightKernel(ComparisonKernelKey key)
+        {
+            var dm = new DynamicMethod(
+                name: $"Comparison_ScalarRight_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(void*), typeof(bool*),
+                    typeof(long*), typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int lhsSize = GetTypeSize(key.LhsType);
+            int rhsSize = GetTypeSize(key.RhsType);
+            var comparisonType = key.ComparisonType;
+
+            EmitComparisonScalarRightLoop(il, key, lhsSize, rhsSize, comparisonType);
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<ComparisonKernel>();
+        }
+
+        /// <summary>
+        /// Generate a comparison kernel for scalar left operand.
+        /// </summary>
+        private static ComparisonKernel GenerateComparisonScalarLeftKernel(ComparisonKernelKey key)
+        {
+            var dm = new DynamicMethod(
+                name: $"Comparison_ScalarLeft_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(void*), typeof(bool*),
+                    typeof(long*), typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int lhsSize = GetTypeSize(key.LhsType);
+            int rhsSize = GetTypeSize(key.RhsType);
+            var comparisonType = key.ComparisonType;
+
+            EmitComparisonScalarLeftLoop(il, key, lhsSize, rhsSize, comparisonType);
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<ComparisonKernel>();
+        }
+
+        /// <summary>
+        /// Generate a general comparison kernel for arbitrary strides.
+        /// </summary>
+        private static ComparisonKernel GenerateComparisonGeneralKernel(ComparisonKernelKey key)
+        {
+            var dm = new DynamicMethod(
+                name: $"Comparison_General_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(void*), typeof(bool*),
+                    typeof(long*), typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int lhsSize = GetTypeSize(key.LhsType);
+            int rhsSize = GetTypeSize(key.RhsType);
+            var comparisonType = key.ComparisonType;
+
+            EmitComparisonGeneralLoop(il, key, lhsSize, rhsSize, comparisonType);
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<ComparisonKernel>();
+        }
+
+        #region Comparison Loop Emission
+
+        /// <summary>
+        /// Emit a SIMD loop for contiguous comparison with 4x unrolling (adapts to V128/V256/V512).
+        /// </summary>
+        private static void EmitComparisonSimdLoop(ILGenerator il, ComparisonKernelKey key,
+            int lhsSize, int rhsSize, NPTypeCode comparisonType)
+        {
+            long vectorCount = GetVectorCount(comparisonType);
+            int unrollFactor = 4;
+            long unrollStep = vectorCount * unrollFactor;
+            var clrType = GetClrType(comparisonType);
+            var vectorType = GetVectorType(clrType);
+
+            // Args: void* lhs (0), void* rhs (1), bool* result (2),
+            //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
+            //       int ndim (6), long totalSize (7)
+
+            var locI = il.DeclareLocal(typeof(long));
+            var locUnrollEnd = il.DeclareLocal(typeof(long));
+            var locVectorEnd = il.DeclareLocal(typeof(long));
+
+            // Declare mask locals for 4x unrolling
+            var locMask0 = il.DeclareLocal(vectorType);
+            var locMask1 = il.DeclareLocal(vectorType);
+            var locMask2 = il.DeclareLocal(vectorType);
+            var locMask3 = il.DeclareLocal(vectorType);
+            var maskLocals = new[] { locMask0, locMask1, locMask2, locMask3 };
+
+            // unrollEnd = totalSize - unrollStep + 1 (last valid 4x start position)
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Ldc_I8, unrollStep - 1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+
+            // vectorEnd = totalSize - vectorCount + 1 (last valid SIMD start position)
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Ldc_I8, vectorCount - 1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            var lblUnrollLoop = il.DefineLabel();
+            var lblUnrollEnd = il.DefineLabel();
+            var lblRemainderLoop = il.DefineLabel();
+            var lblRemainderEnd = il.DefineLabel();
+            var lblTailLoop = il.DefineLabel();
+            var lblTailEnd = il.DefineLabel();
+
+            // === 4x UNROLLED SIMD LOOP ===
+            il.MarkLabel(lblUnrollLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollEnd);
+
+            // Load 4 lhs vectors, 4 rhs vectors, compare, store masks
+            for (int n = 0; n < unrollFactor; n++)
+            {
+                long offset = n * vectorCount;
+
+                // Load lhs vector at (i + offset) * lhsSize
+                il.Emit(OpCodes.Ldarg_0); // lhs
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, comparisonType);
+
+                // Load rhs vector at (i + offset) * rhsSize
+                il.Emit(OpCodes.Ldarg_1); // rhs
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, comparisonType);
+
+                // Compare: produces mask vector
+                EmitVectorComparison(il, key.Op, comparisonType);
+                il.Emit(OpCodes.Stloc, maskLocals[n]);
+            }
+
+            // Extract all 4 masks to booleans
+            for (int n = 0; n < unrollFactor; n++)
+            {
+                long offset = n * vectorCount;
+
+                // Create a temporary local to hold (i + offset) for extraction
+                var locIOffset = il.DeclareLocal(typeof(long));
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Stloc, locIOffset);
+
+                EmitMaskToBoolExtraction(il, comparisonType, (int)vectorCount, locIOffset, maskLocals[n]);
+            }
+
+            // i += unrollStep
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblUnrollLoop);
+
+            // === REMAINDER SIMD LOOP (0-3 vectors) ===
+            il.MarkLabel(lblUnrollEnd);
+            il.MarkLabel(lblRemainderLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemainderEnd);
+
+            // Load lhs vector: lhs + i * elemSize
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, comparisonType);
+
+            // Load rhs vector: rhs + i * elemSize
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, comparisonType);
+
+            // Compare: produces mask vector
+            EmitVectorComparison(il, key.Op, comparisonType);
+            il.Emit(OpCodes.Stloc, locMask0);
+
+            // Extract mask to booleans
+            EmitMaskToBoolExtraction(il, comparisonType, (int)vectorCount, locI, locMask0);
+
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblRemainderLoop);
+
+            // === SCALAR TAIL LOOP ===
+            il.MarkLabel(lblRemainderEnd);
+            il.MarkLabel(lblTailLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblTailEnd);
+
+            // result[i] = (lhs[i] op rhs[i])
+            il.Emit(OpCodes.Ldarg_2); // result (bool*)
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Add);
+
+            // Load lhs[i]
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+            if (key.LhsType != comparisonType)
+                EmitConvertTo(il, key.LhsType, comparisonType);
+
+            // Load rhs[i]
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+            if (key.RhsType != comparisonType)
+                EmitConvertTo(il, key.RhsType, comparisonType);
+
+            // Compare
+            EmitComparisonOperation(il, key.Op, comparisonType);
+
+            // Store result
+            il.Emit(OpCodes.Stind_I1);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblTailLoop);
+
+            il.MarkLabel(lblTailEnd);
+        }
+
+        /// <summary>
+        /// Emit a SIMD comparison operation (adapts to V128/V256/V512).
+        /// Stack has [lhs_vector, rhs_vector], result is comparison mask vector.
+        /// </summary>
+        private static void EmitVectorComparison(ILGenerator il, ComparisonOp op, NPTypeCode type)
+        {
+            var clrType = GetClrType(type);
+
+            string methodName = op switch
+            {
+                ComparisonOp.Equal => "Equals",
+                ComparisonOp.NotEqual => "Equals",  // Invert later
+                ComparisonOp.Less => "LessThan",
+                ComparisonOp.LessEqual => "LessThanOrEqual",
+                ComparisonOp.Greater => "GreaterThan",
+                ComparisonOp.GreaterEqual => "GreaterThanOrEqual",
+                _ => throw new NotSupportedException($"Comparison op {op} not supported for SIMD")
+            };
+
+            // Equals has the bool-returning EqualsAll overload too — VectorMethodCache.Equals
+            // discriminates by return type. Other compares are unambiguous at 2 params.
+            var cmpMethod = methodName == "Equals"
+                ? VectorMethodCache.Equals(VectorBits, clrType)
+                : VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2);
+
+            il.EmitCall(OpCodes.Call, cmpMethod, null);
+
+            if (op == ComparisonOp.NotEqual)
+                il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
+        }
+
+        // BMI2 PDEP method handle — resolved once at static init so the
+        // EmitMaskToBoolExtraction codegen can decide between the fast
+        // single-PDEP-then-pointer-store path and the scalar shift-mask-
+        // store-per-lane fallback without paying GetMethod cost per emit.
+        // The X64 variant is required because we want a 64-bit deposit
+        // (8 bytes packed at once into a single ulong).
+        private static readonly MethodInfo? s_bmi2X64Pdep =
+            System.Runtime.Intrinsics.X86.Bmi2.X64.IsSupported
+                ? typeof(System.Runtime.Intrinsics.X86.Bmi2.X64).GetMethod(
+                    nameof(System.Runtime.Intrinsics.X86.Bmi2.X64.ParallelBitDeposit),
+                    BindingFlags.Public | BindingFlags.Static,
+                    new[] { typeof(ulong), typeof(ulong) })
+                : null;
+
+        /// <summary>
+        /// Emit extraction of comparison mask vector to individual booleans.
+        ///
+        /// FAST PATH (BMI2 X64, V256/V128 with ≤8 lanes):
+        ///   ExtractMostSignificantBits → uint (N MSB bits)
+        ///   PDEP(bits, 0x0101…01)      → ulong (N bytes, each 0x00 or 0x01)
+        ///   *(ulong*)(result + i) = packed   // single 8-byte store
+        ///
+        /// One PDEP + one ulong store replaces N individual byte stores —
+        /// for 8-lane Vector256<float> that's 8× fewer memory writes per
+        /// mask, which lifts the compare-to-bool kernel from 2× slower
+        /// than NumPy toward parity. For ≤4 lanes (Vector128 path) the
+        /// PDEP still writes 8 bytes but only the first N are meaningful
+        /// — the per-mask emit knows the lane count so it stores via
+        /// stind.i{N×8} sized exactly.
+        ///
+        /// FALLBACK (no BMI2 X64, or lane count &gt; 8):
+        ///   Per-lane shift-mask-store, identical to the prior
+        ///   implementation. Vector512<bool> with 16 lanes would need
+        ///   two PDEPs or a 16-byte VPSHUFB-based expansion — not worth
+        ///   the IL complexity until we measure a V512 binding actually
+        ///   hitting this kernel.
+        /// </summary>
+        private static void EmitMaskToBoolExtraction(ILGenerator il, NPTypeCode type,
+            int vectorCount, LocalBuilder locI, LocalBuilder locMask)
+        {
+            var clrType = GetClrType(type);
+
+            // ExtractMostSignificantBits gives us a uint where each bit is the MSB of each lane.
+            // For comparison masks (all 1s = true, all 0s = false), MSB=1 means true.
+            il.Emit(OpCodes.Ldloc, locMask);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ExtractMostSignificantBits(VectorBits, clrType), null);
+            var locBits = il.DeclareLocal(typeof(uint));
+            il.Emit(OpCodes.Stloc, locBits);
+
+            // ── FAST PATH: BMI2 PDEP for ≤8 lanes ────────────────────────
+            // Single PDEP turns the N-bit mask into a ulong with N bytes
+            // of 0x00/0x01, then one aligned store covers the lot.
+            if (s_bmi2X64Pdep != null && vectorCount <= 8)
+            {
+                // packed = PDEP((ulong)bits, 0x0101010101010101)
+                il.Emit(OpCodes.Ldloc, locBits);
+                il.Emit(OpCodes.Conv_U8);
+                il.Emit(OpCodes.Ldc_I8, unchecked((long)0x0101010101010101UL));
+                il.EmitCall(OpCodes.Call, s_bmi2X64Pdep, null);
+                var locPacked = il.DeclareLocal(typeof(ulong));
+                il.Emit(OpCodes.Stloc, locPacked);
+
+                // *(result + i) = packed  — store as ulong/uint/ushort
+                // sized to the exact lane count so we never write past
+                // the meaningful bytes.
+                il.Emit(OpCodes.Ldarg_2);    // result (bool*)
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldloc, locPacked);
+                if (vectorCount == 8)
+                {
+                    il.Emit(OpCodes.Stind_I8);  // 8 bytes
+                }
+                else if (vectorCount == 4)
+                {
+                    il.Emit(OpCodes.Conv_U4);
+                    il.Emit(OpCodes.Stind_I4);  // 4 bytes
+                }
+                else if (vectorCount == 2)
+                {
+                    il.Emit(OpCodes.Conv_U2);
+                    il.Emit(OpCodes.Stind_I2);  // 2 bytes
+                }
+                else
+                {
+                    // Odd count (e.g. lane-count 3 from some V128 dtype).
+                    // Fall through to per-lane below; emit nothing here.
+                    il.Emit(OpCodes.Pop);   // discard the packed ulong
+                    il.Emit(OpCodes.Pop);   // discard the addr we pushed
+                    goto PerLane;
+                }
+                return;
+            }
+
+            PerLane:
+            // ── FALLBACK: per-lane shift-mask-store ──────────────────────
+            for (int j = 0; j < vectorCount; j++)
+            {
+                // result + i + j
+                il.Emit(OpCodes.Ldarg_2); // result (bool*)
+                il.Emit(OpCodes.Ldloc, locI);  // Stack: [ptr, int64]
+                if (j > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, (long)j);  // Stack: [ptr, int64, int64]
+                    il.Emit(OpCodes.Add);              // int64 + int64 = OK
+                }
+                il.Emit(OpCodes.Add);  // ptr + int64 = OK
+
+                // (bits >> j) & 1
+                il.Emit(OpCodes.Ldloc, locBits);  // Stack: [uint32]
+                if (j > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I4, j);   // Shift amount - always int32
+                    il.Emit(OpCodes.Shr_Un);
+                }
+                il.Emit(OpCodes.Ldc_I4_1);        // Mask - int32
+                il.Emit(OpCodes.And);
+
+                // Store as bool (1 byte)
+                il.Emit(OpCodes.Stind_I1);
+            }
+        }
+
+        /// <summary>
+        /// Emit a scalar loop for contiguous comparison.
+        /// </summary>
+        private static void EmitComparisonScalarLoop(ILGenerator il, ComparisonKernelKey key,
+            int lhsSize, int rhsSize, NPTypeCode comparisonType)
+        {
+            // Args: void* lhs (0), void* rhs (1), bool* result (2),
+            //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
+            //       int ndim (6), long totalSize (7)
+
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // result[i] = (lhs[i] op rhs[i])
+            // Load result address
+            il.Emit(OpCodes.Ldarg_2); // result (bool*)
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add); // bool is 1 byte, so just add i
+
+            // Load lhs[i] and convert to comparison type
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+            EmitConvertTo(il, key.LhsType, comparisonType);
+
+            // Load rhs[i] and convert to comparison type
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+            EmitConvertTo(il, key.RhsType, comparisonType);
+
+            // Perform comparison
+            EmitComparisonOperation(il, key.Op, comparisonType);
+
+            // Store bool result
+            il.Emit(OpCodes.Stind_I1);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit loop for scalar right operand comparison.
+        /// </summary>
+        private static void EmitComparisonScalarRightLoop(ILGenerator il, ComparisonKernelKey key,
+            int lhsSize, int rhsSize, NPTypeCode comparisonType)
+        {
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locRhsVal = il.DeclareLocal(GetClrType(comparisonType)); // scalar value
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // Load rhs[0] and convert to comparison type, store in local
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            EmitLoadIndirect(il, key.RhsType);
+            EmitConvertTo(il, key.RhsType, comparisonType);
+            il.Emit(OpCodes.Stloc, locRhsVal);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // result[i] = (lhs[i] op rhsVal)
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            // Load lhs[i] and convert
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+            EmitConvertTo(il, key.LhsType, comparisonType);
+
+            // Load cached rhs scalar
+            il.Emit(OpCodes.Ldloc, locRhsVal);
+
+            EmitComparisonOperation(il, key.Op, comparisonType);
+            il.Emit(OpCodes.Stind_I1);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit loop for scalar left operand comparison.
+        /// </summary>
+        private static void EmitComparisonScalarLeftLoop(ILGenerator il, ComparisonKernelKey key,
+            int lhsSize, int rhsSize, NPTypeCode comparisonType)
+        {
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locLhsVal = il.DeclareLocal(GetClrType(comparisonType)); // scalar value
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // Load lhs[0] and convert to comparison type, store in local
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            EmitLoadIndirect(il, key.LhsType);
+            EmitConvertTo(il, key.LhsType, comparisonType);
+            il.Emit(OpCodes.Stloc, locLhsVal);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // result[i] = (lhsVal op rhs[i])
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            // Load cached lhs scalar
+            il.Emit(OpCodes.Ldloc, locLhsVal);
+
+            // Load rhs[i] and convert
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+            EmitConvertTo(il, key.RhsType, comparisonType);
+
+            EmitComparisonOperation(il, key.Op, comparisonType);
+            il.Emit(OpCodes.Stind_I1);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit general coordinate-based iteration loop for comparison.
+        /// </summary>
+        private static void EmitComparisonGeneralLoop(ILGenerator il, ComparisonKernelKey key,
+            int lhsSize, int rhsSize, NPTypeCode comparisonType)
+        {
+            // Args: void* lhs (0), void* rhs (1), bool* result (2),
+            //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
+            //       int ndim (6), long totalSize (7)
+
+            var locI = il.DeclareLocal(typeof(long)); // linear index
+            var locD = il.DeclareLocal(typeof(int)); // dimension counter
+            var locLhsOffset = il.DeclareLocal(typeof(long)); // lhs offset
+            var locRhsOffset = il.DeclareLocal(typeof(long)); // rhs offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+            var lblDimLoop = il.DefineLabel();
+            var lblDimLoopEnd = il.DefineLabel();
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // Main loop
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // Calculate lhsOffset and rhsOffset from linear index
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locLhsOffset);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locRhsOffset);
+
+            // idx = i (for coordinate calculation)
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // d = ndim - 1
+            il.Emit(OpCodes.Ldarg_S, (byte)6); // ndim
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.MarkLabel(lblDimLoop);
+
+            // if (d < 0) goto DimLoopEnd
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Blt, lblDimLoopEnd);
+
+            // coord = idx % shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stloc, locCoord);
+
+            // idx /= shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // lhsOffset += coord * lhsStrides[d]
+            il.Emit(OpCodes.Ldloc, locLhsOffset);
+            il.Emit(OpCodes.Ldloc, locCoord);
+            il.Emit(OpCodes.Ldarg_3); // lhsStrides
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locLhsOffset);
+
+            // rhsOffset += coord * rhsStrides[d]
+            il.Emit(OpCodes.Ldloc, locRhsOffset);
+            il.Emit(OpCodes.Ldloc, locCoord);
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // rhsStrides
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locRhsOffset);
+
+            // d--
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.Emit(OpCodes.Br, lblDimLoop);
+            il.MarkLabel(lblDimLoopEnd);
+
+            // result[i] = (lhs[lhsOffset] op rhs[rhsOffset])
+            // Load result address (contiguous output)
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Add);
+
+            // Load lhs[lhsOffset]
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locLhsOffset);
+            il.Emit(OpCodes.Ldc_I8, (long)lhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+            EmitConvertTo(il, key.LhsType, comparisonType);
+
+            // Load rhs[rhsOffset]
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locRhsOffset);
+            il.Emit(OpCodes.Ldc_I8, (long)rhsSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+            EmitConvertTo(il, key.RhsType, comparisonType);
+
+            // Comparison
+            EmitComparisonOperation(il, key.Op, comparisonType);
+
+            // Store bool
+            il.Emit(OpCodes.Stind_I1);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        #endregion
+
+        #region Comparison Operation Emission
+
+        /// <summary>
+        /// Emit comparison operation. Stack has two values of comparisonType, result is bool (0 or 1).
+        /// </summary>
+        internal static void EmitComparisonOperation(ILGenerator il, ComparisonOp op, NPTypeCode comparisonType)
+        {
+            // Special handling for decimal comparisons
+            if (comparisonType == NPTypeCode.Decimal)
+            {
+                EmitDecimalComparison(il, op);
+                return;
+            }
+
+            // Special handling for Half comparisons (uses operator methods)
+            if (comparisonType == NPTypeCode.Half)
+            {
+                EmitHalfComparison(il, op);
+                return;
+            }
+
+            // Special handling for Complex comparisons (only == and != supported)
+            if (comparisonType == NPTypeCode.Complex)
+            {
+                EmitComplexComparison(il, op);
+                return;
+            }
+
+            bool isUnsigned = IsUnsigned(comparisonType);
+            bool isFloat = comparisonType == NPTypeCode.Single || comparisonType == NPTypeCode.Double;
+
+            switch (op)
+            {
+                case ComparisonOp.Equal:
+                    il.Emit(OpCodes.Ceq);
+                    break;
+
+                case ComparisonOp.NotEqual:
+                    il.Emit(OpCodes.Ceq);
+                    // Negate: result = !result (xor with 1)
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ceq);
+                    break;
+
+                case ComparisonOp.Less:
+                    if (isUnsigned)
+                        il.Emit(OpCodes.Clt_Un);
+                    else
+                        il.Emit(OpCodes.Clt);
+                    break;
+
+                case ComparisonOp.LessEqual:
+                    // a <= b is !(a > b)
+                    if (isUnsigned)
+                        il.Emit(OpCodes.Cgt_Un);
+                    else
+                        il.Emit(OpCodes.Cgt);
+                    // Negate
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ceq);
+                    break;
+
+                case ComparisonOp.Greater:
+                    if (isUnsigned)
+                        il.Emit(OpCodes.Cgt_Un);
+                    else
+                        il.Emit(OpCodes.Cgt);
+                    break;
+
+                case ComparisonOp.GreaterEqual:
+                    // a >= b is !(a < b)
+                    if (isUnsigned)
+                        il.Emit(OpCodes.Clt_Un);
+                    else
+                        il.Emit(OpCodes.Clt);
+                    // Negate
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ceq);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Comparison operation {op} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit decimal comparison using operator methods.
+        /// </summary>
+        private static void EmitDecimalComparison(ILGenerator il, ComparisonOp op)
+        {
+            // decimal has comparison operators that return bool
+            string methodName = op switch
+            {
+                ComparisonOp.Equal => "op_Equality",
+                ComparisonOp.NotEqual => "op_Inequality",
+                ComparisonOp.Less => "op_LessThan",
+                ComparisonOp.LessEqual => "op_LessThanOrEqual",
+                ComparisonOp.Greater => "op_GreaterThan",
+                ComparisonOp.GreaterEqual => "op_GreaterThanOrEqual",
+                _ => throw new NotSupportedException($"Comparison {op} not supported for decimal")
+            };
+
+            il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(decimal), methodName), null);
+        }
+
+        /// <summary>
+        /// Emit Half comparison using operator methods.
+        /// </summary>
+        private static void EmitHalfComparison(ILGenerator il, ComparisonOp op)
+        {
+            string methodName = op switch
+            {
+                ComparisonOp.Equal => "op_Equality",
+                ComparisonOp.NotEqual => "op_Inequality",
+                ComparisonOp.Less => "op_LessThan",
+                ComparisonOp.LessEqual => "op_LessThanOrEqual",
+                ComparisonOp.Greater => "op_GreaterThan",
+                ComparisonOp.GreaterEqual => "op_GreaterThanOrEqual",
+                _ => throw new NotSupportedException($"Comparison {op} not supported for Half")
+            };
+            il.EmitCall(OpCodes.Call, ScalarMethodCache.BinaryOp(typeof(Half), methodName), null);
+        }
+
+        /// <summary>
+        /// Emit Complex comparison using operator methods or lexicographic ordering.
+        /// NumPy 2.x supports ordered comparisons (&lt;, &gt;, &lt;=, &gt;=) using lexicographic ordering:
+        /// first by real part, then by imaginary part.
+        /// </summary>
+        private static void EmitComplexComparison(ILGenerator il, ComparisonOp op)
+        {
+            // For == and !=, use the built-in operators
+            if (op == ComparisonOp.Equal || op == ComparisonOp.NotEqual)
+            {
+                string methodName = op == ComparisonOp.Equal ? "op_Equality" : "op_Inequality";
+                il.EmitCall(OpCodes.Call,
+                    ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), methodName), null);
+                return;
+            }
+
+            // For ordered comparisons, use lexicographic ordering (NumPy 2.x behavior):
+            //   a vs b  =  first by Real, then by Imaginary.
+            // Stack: [lhs: Complex a, rhs: Complex b]
+            EmitComplexLexCompare(il, op);
+        }
+
+        /// <summary>
+        /// Emit IL for Complex lexicographic ordered comparison. Pseudo-C#:
+        /// <code>
+        ///   if (strict(a.Real, b.Real)) return true;    // Real strictly on the "true" side
+        ///   if (strict(b.Real, a.Real)) return false;   // Real strictly on the "false" side
+        ///   return strict(a.Imag, b.Imag) || (inclusive &amp;&amp; a.Imag == b.Imag);
+        /// </code>
+        /// where <c>strict</c> is &lt; for Less/LessEqual and &gt; for Greater/GreaterEqual,
+        /// and <c>inclusive</c> accepts equality for LessEqual / GreaterEqual.
+        ///
+        /// Stack contract: expects [Complex a, Complex b] (a pushed first, b on top),
+        /// leaves [bool] on top.
+        /// </summary>
+        private static void EmitComplexLexCompare(ILGenerator il, ComparisonOp op)
+        {
+            // Map the 4 ops to the 3 opcode choices that fully parameterize the emit.
+            // realBranchTrue  — branch to "return true" when real parts are strictly on the "true" side
+            //                   (Less/LessEqual: aR < bR → true; Greater/GreaterEqual: aR > bR → true)
+            // realBranchFalse — branch to "return false" when reals are strictly on the reverse side
+            //                   (Less/LessEqual: aR > bR → false; Greater/GreaterEqual: aR < bR → false)
+            // imagStrictCmp   — Clt or Cgt for the final imaginary compare; inclusive adds |Ceq.
+            OpCode realBranchTrue, realBranchFalse, imagStrictCmp;
+            bool inclusive;
+            switch (op)
+            {
+                case ComparisonOp.Less:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = false; break;
+                case ComparisonOp.LessEqual:
+                    realBranchTrue = OpCodes.Blt; realBranchFalse = OpCodes.Bgt;
+                    imagStrictCmp = OpCodes.Clt; inclusive = true; break;
+                case ComparisonOp.Greater:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = false; break;
+                case ComparisonOp.GreaterEqual:
+                    realBranchTrue = OpCodes.Bgt; realBranchFalse = OpCodes.Blt;
+                    imagStrictCmp = OpCodes.Cgt; inclusive = true; break;
+                default:
+                    throw new NotSupportedException($"Comparison {op} not supported for Complex");
+            }
+
+            var locA = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locB = il.DeclareLocal(typeof(System.Numerics.Complex));
+            var locAR = il.DeclareLocal(typeof(double));
+            var locBR = il.DeclareLocal(typeof(double));
+            var lblTrue = il.DefineLabel();
+            var lblFalse = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Pop b then a (stack LIFO)
+            il.Emit(OpCodes.Stloc, locB);
+            il.Emit(OpCodes.Stloc, locA);
+
+            // Cache the Real components — they're referenced twice in the real-branch chain.
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locAR);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null); il.Emit(OpCodes.Stloc, locBR);
+
+            // B25: NaN short-circuit. NumPy returns False for any ordered comparison when
+            // *any* component of either operand is NaN. Without this guard, aR=NaN would
+            // fall through Blt/Bgt (both false for NaN) into the imag compare which could
+            // return true. Check all four components up front; bail to lblFalse on NaN.
+            il.Emit(OpCodes.Ldloc, locAR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloc, locBR);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
+            il.Emit(OpCodes.Brtrue, lblFalse);
+
+            // if (strict(aR, bR)) goto lblTrue;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchTrue, lblTrue);
+            // if (reverseStrict(aR, bR)) goto lblFalse;
+            il.Emit(OpCodes.Ldloc, locAR); il.Emit(OpCodes.Ldloc, locBR);
+            il.Emit(realBranchFalse, lblFalse);
+
+            // Reals tied — compare imaginaries: strict(aI, bI) [| ceq(aI, bI) if inclusive]
+            il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+            il.Emit(imagStrictCmp);
+            if (inclusive)
+            {
+                il.Emit(OpCodes.Ldloca, locA); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ldloca, locB); il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
+                il.Emit(OpCodes.Ceq);
+                il.Emit(OpCodes.Or);
+            }
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblTrue);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblFalse);
+            il.Emit(OpCodes.Ldc_I4_0);
+
+            il.MarkLabel(lblEnd);
+        }
+
+        #endregion
+
+        #region Comparison Scalar Kernel Generation
+
+        // ComparisonScalarKernelKey is now defined in ScalarKernel.cs
+
+        /// <summary>
+        /// Cache for comparison scalar kernels.
+        /// </summary>
+        private static readonly ConcurrentDictionary<ComparisonScalarKernelKey, Delegate> _comparisonScalarCache = new();
+
+        /// <summary>
+        /// Number of comparison scalar kernels in cache.
+        /// </summary>
+        public static int ComparisonScalarCachedCount => _comparisonScalarCache.Count;
+
+        /// <summary>
+        /// Get or generate a comparison scalar delegate.
+        /// Returns a Func&lt;TLhs, TRhs, bool&gt; delegate.
+        /// </summary>
+        public static Delegate GetComparisonScalarDelegate(ComparisonScalarKernelKey key)
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            return _comparisonScalarCache.GetOrAdd(key, GenerateComparisonScalarDelegate);
+        }
+
+        /// <summary>
+        /// Generate an IL-based comparison scalar delegate.
+        /// </summary>
+        private static Delegate GenerateComparisonScalarDelegate(ComparisonScalarKernelKey key)
+        {
+            var lhsClr = GetClrType(key.LhsType);
+            var rhsClr = GetClrType(key.RhsType);
+            var comparisonType = key.ComparisonType;
+
+            // Create DynamicMethod: bool Method(TLhs lhs, TRhs rhs)
+            var dm = new DynamicMethod(
+                name: $"ScalarComparison_{key}",
+                returnType: typeof(bool),
+                parameterTypes: new[] { lhsClr, rhsClr },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            // Load lhs, convert to comparison type
+            il.Emit(OpCodes.Ldarg_0);
+            EmitConvertTo(il, key.LhsType, comparisonType);
+
+            // Load rhs, convert to comparison type
+            il.Emit(OpCodes.Ldarg_1);
+            EmitConvertTo(il, key.RhsType, comparisonType);
+
+            // Perform comparison
+            EmitComparisonOperation(il, key.Op, comparisonType);
+
+            // Return
+            il.Emit(OpCodes.Ret);
+
+            // Create typed Func<TLhs, TRhs, bool>
+            var funcType = typeof(Func<,,>).MakeGenericType(lhsClr, rhsClr, typeof(bool));
+            return dm.CreateDelegate(funcType);
+        }
+
+        #endregion
+
+        #endregion
+    }
+}

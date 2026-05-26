@@ -212,7 +212,7 @@ namespace NumSharp
             NDArray source, NDArray idx64, NDArray result,
             long outerSize, long indicesCount, long maxItem, long innerSize, int mode)
         {
-            var kernel = ILKernelGenerator.GetTakeKernel();
+            var kernel = DirectILKernelGenerator.GetTakeKernel();
             if (kernel == null)
                 throw new NotSupportedException("np.take: IL kernel unavailable");
 

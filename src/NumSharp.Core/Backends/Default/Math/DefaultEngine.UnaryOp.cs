@@ -84,7 +84,7 @@ namespace NumSharp.Backends
             var key = new UnaryKernelKey(inputType, outputType, op, isContiguous);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.GetUnaryKernel(key);
+            var kernel = DirectILKernelGenerator.GetUnaryKernel(key);
 
             if (kernel != null)
             {
@@ -108,7 +108,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Mirror of <c>ILKernelGenerator.IsPredicateOp</c> (private to
+        ///     Mirror of <c>DirectILKernelGenerator.IsPredicateOp</c> (private to
         ///     that partial) — the routing layer needs the same answer.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
         ///     <see cref="System.Numerics.Complex.Abs"/> — resolved once and
         ///     cached. Routes the Complex-magnitude special case in
         ///     <see cref="TryExecuteUnaryOpViaNpyIter"/> without depending on
-        ///     <c>ILKernelGenerator.CachedMethods</c>, which is private to
+        ///     <c>DirectILKernelGenerator.CachedMethods</c>, which is private to
         ///     the kernel partial.
         /// </summary>
         private static readonly MethodInfo s_complexAbs =
@@ -139,7 +139,7 @@ namespace NumSharp.Backends
         ///     picks NPY_FORTRANORDER in that case, NPY_CORDER otherwise.
         ///
         ///     Same-dtype path: scalar body =
-        ///     <see cref="ILKernelGenerator.EmitUnaryScalarOperation"/>;
+        ///     <see cref="DirectILKernelGenerator.EmitUnaryScalarOperation"/>;
         ///     vector body when SIMD is viable.
         ///
         ///     Mixed-dtype path (Abs(complex)→double, IsNan(float)→bool,
@@ -176,10 +176,10 @@ namespace NumSharp.Backends
             // SIMD viability: same-dtype only (existing rule from the
             // direct path's CanUseUnarySimd) + op-supported check.
             var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
-            bool simdViable = ILKernelGenerator.CanUseUnarySimd(key);
+            bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
             // Scalar body — mirrors the direct path's per-element sequence
-            // in ILKernelGenerator.Unary's emit loops:
+            // in DirectILKernelGenerator.Unary's emit loops:
             //   • Predicate ops (IsNan / IsInf / IsFinite) operate on the
             //     INPUT type and the emitter itself produces bool — no
             //     convert before or after.
@@ -196,23 +196,23 @@ namespace NumSharp.Backends
             {
                 if (IsUnaryPredicateOp(capOp))
                 {
-                    ILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
+                    DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
                 }
                 else if (capOp == UnaryOp.Abs && capIn == NPTypeCode.Complex)
                 {
                     il.EmitCall(OpCodes.Call, s_complexAbs, null);
                     if (capOut != NPTypeCode.Double)
-                        ILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, capOut);
+                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, capOut);
                 }
                 else
                 {
                     if (capIn != capOut)
-                        ILKernelGenerator.EmitConvertTo(il, capIn, capOut);
-                    ILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
+                        DirectILKernelGenerator.EmitConvertTo(il, capIn, capOut);
+                    DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
                 }
             };
             Action<ILGenerator>? vectorBody = simdViable
-                ? il => ILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
+                ? il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
                 : null;
 
             string cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
@@ -249,7 +249,7 @@ namespace NumSharp.Backends
         {
             var inputType = nd.GetTypeCode;
             var key = new UnaryScalarKernelKey(inputType, outputType, op);
-            var func = ILKernelGenerator.GetUnaryScalarDelegate(key);
+            var func = DirectILKernelGenerator.GetUnaryScalarDelegate(key);
 
             // Dispatch based on input type to avoid boxing
             return inputType switch

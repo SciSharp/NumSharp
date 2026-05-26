@@ -34,7 +34,7 @@ namespace NumSharp.Statistics
     ///       <list type="bullet">
     ///         <item>This file: input validation, axis normalization, dtype-promotion rule,
     ///               output-shape computation, keepdims/out plumbing, scratch rental.</item>
-    ///         <item><see cref="ILKernelGenerator.Quantile"/>: per-dtype IL-emitted kernel
+    ///         <item><see cref="DirectILKernelGenerator.Quantile"/>: per-dtype IL-emitted kernel
     ///               that owns the outer row-loop and dispatches into a JIT-specialized
     ///               generic row processor. No per-dtype switch executes per call after
     ///               the first cache miss.</item>
@@ -198,7 +198,7 @@ namespace NumSharp.Statistics
                         }
                         else
                         {
-                            ILKernelGenerator.Quantile(
+                            DirectILKernelGenerator.Quantile(
                                 srcType: a.typecode,
                                 outType: outTypeCode,
                                 method: method,
@@ -433,7 +433,7 @@ namespace NumSharp.Statistics
 
         /// <summary>
         ///     Builds the unique, ascending list of buffer indices the partition will touch.
-        ///     Same formula as <see cref="ILKernelGenerator.ComputeIndex"/> — duplicated here so
+        ///     Same formula as <see cref="DirectILKernelGenerator.ComputeIndex"/> — duplicated here so
         ///     the engine can hand the IL kernel a pre-sized int[] without circular calls.
         /// </summary>
         private static int[] BuildSortedTargetIndices(int n, double[] q, QuantileMethod method)
@@ -442,7 +442,7 @@ namespace NumSharp.Statistics
             var set = new HashSet<int>();
             for (int j = 0; j < q.Length; j++)
             {
-                ILKernelGenerator.ComputeIndex(n, q[j], method, out int prev, out int next, out _);
+                DirectILKernelGenerator.ComputeIndex(n, q[j], method, out int prev, out int next, out _);
                 set.Add(prev);
                 set.Add(next);
             }

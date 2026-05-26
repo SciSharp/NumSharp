@@ -167,7 +167,7 @@ namespace NumSharp
             // IL fast path: SIMD masked-cast kernel (ConditionalSelect for 1:1 lane strategies;
             // scalar inner loop with mask gate + inline conversion for widen/narrow strategies).
             // Both paths use incremental coord advance — no mod/div per element.
-            var maskedKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+            var maskedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
                 .TryGetMaskedCastKernel(srcType, dstType);
             if (maskedKernel != null)
             {

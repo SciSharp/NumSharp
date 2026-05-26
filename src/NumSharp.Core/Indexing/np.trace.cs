@@ -118,10 +118,10 @@ namespace NumSharp
                     "axis1 and axis2 cannot be the same",
                     nameof(axis2));
 
-            var (accumCode, supported) = ILKernelGenerator.GetTraceAccumTypeCode(a.GetTypeCode);
+            var (accumCode, supported) = DirectILKernelGenerator.GetTraceAccumTypeCode(a.GetTypeCode);
             if (!supported) return false;
 
-            var kernel = ILKernelGenerator.GetTraceKernel(a.dtype);
+            var kernel = DirectILKernelGenerator.GetTraceKernel(a.dtype);
             if (kernel == null) return false;
 
             var shape = a.Shape;

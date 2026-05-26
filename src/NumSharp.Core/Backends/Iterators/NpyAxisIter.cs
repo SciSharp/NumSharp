@@ -212,8 +212,8 @@ namespace NumSharp.Backends.Iteration
             where TKernel : struct, INpyBooleanReductionKernel<T>
         {
             if (TKernel.Identity)
-                return NumSharp.Backends.Kernels.ILKernelGenerator.AllSimdHelper<T>(src, length);
-            return NumSharp.Backends.Kernels.ILKernelGenerator.AnySimdHelper<T>(src, length);
+                return NumSharp.Backends.Kernels.DirectILKernelGenerator.AllSimdHelper<T>(src, length);
+            return NumSharp.Backends.Kernels.DirectILKernelGenerator.AnySimdHelper<T>(src, length);
         }
 
         private static NpyAxisState CreateState(UnmanagedStorage src, UnmanagedStorage dst, int axis)

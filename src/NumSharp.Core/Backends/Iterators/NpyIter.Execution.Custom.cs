@@ -41,7 +41,7 @@ namespace NumSharp.Backends.Iteration
         public void ExecuteRawIL(Action<ILGenerator> emitBody, string cacheKey, void* auxdata = null)
         {
             if (emitBody is null) throw new ArgumentNullException(nameof(emitBody));
-            var kernel = ILKernelGenerator.CompileRawInnerLoop(emitBody, cacheKey);
+            var kernel = DirectILKernelGenerator.CompileRawInnerLoop(emitBody, cacheKey);
             ForEach(kernel, auxdata);
         }
 
@@ -83,7 +83,7 @@ namespace NumSharp.Backends.Iteration
                     $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp}).",
                     nameof(operandTypes));
 
-            var kernel = ILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey);
+            var kernel = DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey);
             ForEach(kernel);
         }
 

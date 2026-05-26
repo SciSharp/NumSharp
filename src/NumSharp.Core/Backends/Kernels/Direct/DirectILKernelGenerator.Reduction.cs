@@ -1,0 +1,1439 @@
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Numerics;
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.Intrinsics;
+
+// =============================================================================
+// DirectILKernelGenerator.Reduction.cs - Element-wise Reduction Kernels
+// =============================================================================
+//
+// RESPONSIBILITY:
+//   - Element-wise reduction kernel generation (Sum, Prod, Min, Max, Mean)
+//   - SIMD loop emission with 4x unrolling
+//   - Scalar and strided fallback loops
+//   - Shared IL emission helpers for reduction operations
+//
+// RELATED FILES:
+//   - DirectILKernelGenerator.Reduction.Boolean.cs - All/Any with early-exit
+//   - DirectILKernelGenerator.Reduction.Arg.cs - ArgMax/ArgMin
+//   - DirectILKernelGenerator.Reduction.Axis.cs - Axis reductions
+//   - DirectILKernelGenerator.Masking.cs - NonZero and boolean masking
+//
+// =============================================================================
+
+namespace NumSharp.Backends.Kernels
+{
+    public static partial class DirectILKernelGenerator
+    {
+        #region Element Reduction Kernel Generation
+        /// <summary>
+        /// Cache for element-wise reduction kernels.
+        /// Key: ElementReductionKernelKey
+        /// </summary>
+        private static readonly ConcurrentDictionary<ElementReductionKernelKey, Delegate> _elementReductionCache = new();
+
+        /// <summary>
+        /// Number of element reduction kernels in cache.
+        /// </summary>
+        public static int ElementReductionCachedCount => _elementReductionCache.Count;
+
+        /// <summary>
+        /// Get or generate a typed element-wise reduction kernel.
+        /// Returns a delegate that reduces all elements to a single value of type TResult.
+        /// </summary>
+        public static TypedElementReductionKernel<TResult> GetTypedElementReductionKernel<TResult>(ElementReductionKernelKey key)
+            where TResult : unmanaged
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            var kernel = _elementReductionCache.GetOrAdd(key, GenerateTypedElementReductionKernel<TResult>);
+            return (TypedElementReductionKernel<TResult>)kernel;
+        }
+
+        /// <summary>
+        /// Try to get or generate an element reduction kernel.
+        /// </summary>
+        public static TypedElementReductionKernel<TResult>? TryGetTypedElementReductionKernel<TResult>(ElementReductionKernelKey key)
+            where TResult : unmanaged
+        {
+            if (!Enabled)
+                return null;
+
+            try
+            {
+                var kernel = _elementReductionCache.GetOrAdd(key, GenerateTypedElementReductionKernel<TResult>);
+                return (TypedElementReductionKernel<TResult>)kernel;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetTypedElementReductionKernel<{typeof(TResult).Name}>({key}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Generate a typed element-wise reduction kernel.
+        /// </summary>
+        private static Delegate GenerateTypedElementReductionKernel<TResult>(ElementReductionKernelKey key)
+            where TResult : unmanaged
+        {
+            // TypedElementReductionKernel<TResult> signature:
+            // TResult(void* input, long* strides, long* shape, int ndim, long totalSize)
+            var dm = new DynamicMethod(
+                name: $"ElemReduce_{key}",
+                returnType: typeof(TResult),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(long*), typeof(long*), typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int inputSize = GetTypeSize(key.InputType);
+            int accumSize = GetTypeSize(key.AccumulatorType);
+
+            if (key.IsContiguous)
+            {
+                // Check if we can use SIMD
+                bool canSimd = CanUseReductionSimd(key);
+                if (canSimd)
+                {
+                    EmitReductionSimdLoop(il, key, inputSize);
+                }
+                else
+                {
+                    EmitReductionScalarLoop(il, key, inputSize);
+                }
+            }
+            else
+            {
+                EmitReductionStridedLoop(il, key, inputSize);
+            }
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<TypedElementReductionKernel<TResult>>();
+        }
+
+        /// <summary>
+        /// Check if SIMD can be used for this reduction operation.
+        /// </summary>
+        private static bool CanUseReductionSimd(ElementReductionKernelKey key)
+        {
+            // Must be contiguous
+            if (!key.IsContiguous)
+                return false;
+
+            // SIMD for numeric types (not bool, char, decimal)
+            if (!CanUseSimd(key.InputType))
+                return false;
+
+            // For Sum/Prod, SIMD vectors work on same type - can't widen int32 to int64 in SIMD
+            // When accumulator type differs from input type, use scalar path to prevent overflow
+            if ((key.Op == ReductionOp.Sum || key.Op == ReductionOp.Prod) &&
+                key.InputType != key.AccumulatorType)
+            {
+                return false;
+            }
+
+            // Only certain operations have SIMD support
+            // Sum: Vector.Sum() or manual horizontal add
+            // Max/Min: Reduce vector then scalar reduce remainder
+            // Prod: Manual horizontal multiply
+            // All/Any: SIMD comparison with early-exit
+            // ArgMax/ArgMin: SIMD with index tracking
+            return key.Op == ReductionOp.Sum || key.Op == ReductionOp.Max || key.Op == ReductionOp.Min ||
+                   key.Op == ReductionOp.Prod || key.Op == ReductionOp.All || key.Op == ReductionOp.Any ||
+                   key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin;
+        }
+
+        /// <summary>
+        /// Per-accumulator load+combine emit for the 8x unrolled SIMD reduction body.
+        /// Stack before:  empty
+        /// Stack after:   empty (the result is stored back to locAcc)
+        /// IL emitted (inline):
+        ///   locAcc = locAcc OP Vector.Load(input + (i + offsetInVectorCounts) * inputSize)
+        /// </summary>
+        private static void EmitAccumLoadCombine(
+            ILGenerator il, ElementReductionKernelKey key,
+            LocalBuilder locAcc, LocalBuilder locI, int inputSize, long offsetInElements)
+        {
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            if (offsetInElements != 0)
+            {
+                il.Emit(OpCodes.Ldc_I8, offsetInElements);
+                il.Emit(OpCodes.Add);
+            }
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc);
+        }
+
+        /// <summary>
+        /// Emit a SIMD reduction loop for contiguous arrays with 8x unrolling.
+        /// Uses 8 independent vector accumulators to break dependency chains
+        /// across the FP add/mul pipeline (3-4 cycle latency, but issue rate of
+        /// 1-2 per cycle — 8 chains keeps both add ports saturated). Tree-merge
+        /// at the end matches NumPy's pairwise_sum.c shape, which also gives
+        /// better numerical accuracy on long reductions.
+        /// </summary>
+        private static void EmitReductionSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
+        {
+            // All/Any use special early-exit logic
+            if (key.Op == ReductionOp.All || key.Op == ReductionOp.Any)
+            {
+                EmitAllAnySimdLoop(il, key, inputSize);
+                return;
+            }
+
+            // ArgMax/ArgMin use special index-tracking logic
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                EmitArgMaxMinSimdLoop(il, key, inputSize);
+                return;
+            }
+
+            long vectorCount = GetVectorCount(key.InputType);
+            var clrType = GetClrType(key.InputType);
+            var vectorType = GetVectorType(clrType);
+
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - unrollStep
+            var locVectorEnd = il.DeclareLocal(typeof(long)); // totalSize - vectorCount
+            var locAcc = new LocalBuilder[8];
+            for (int k = 0; k < 8; k++) locAcc[k] = il.DeclareLocal(vectorType);
+            var locScalarAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // scalar for tail
+
+            var lblUnrolledLoop = il.DefineLabel();
+            var lblUnrolledLoopEnd = il.DefineLabel();
+            var lblRemainderLoop = il.DefineLabel();
+            var lblRemainderLoopEnd = il.DefineLabel();
+            var lblTailLoop = il.DefineLabel();
+            var lblTailLoopEnd = il.DefineLabel();
+
+            long unrollStep = vectorCount * 8;
+
+            // Initialize 8 vector accumulators with the op's identity (0 for Sum/Mean,
+            // 1 for Prod, +Inf/-Inf for Min/Max) broadcast across all lanes.
+            for (int k = 0; k < 8; k++)
+            {
+                EmitVectorIdentity(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
+
+            // unrollEnd = totalSize - unrollStep
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+
+            // vectorEnd = totalSize - vectorCount
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // === 8x UNROLLED SIMD LOOP ===
+            il.MarkLabel(lblUnrolledLoop);
+
+            // if (i > unrollEnd) goto UnrolledLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrolledLoopEnd);
+
+            for (int k = 0; k < 8; k++)
+                EmitAccumLoadCombine(il, key, locAcc[k], locI, inputSize, vectorCount * k);
+
+            // i += unrollStep
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblUnrolledLoop);
+            il.MarkLabel(lblUnrolledLoopEnd);
+
+            // === PAIRWISE TREE REDUCTION: 8 -> 4 -> 2 -> 1 ===
+            // Layer 1: (0,1)(2,3)(4,5)(6,7) → 4 accumulators in slots 0,2,4,6.
+            for (int k = 0; k < 8; k += 2)
+            {
+                il.Emit(OpCodes.Ldloc, locAcc[k]);
+                il.Emit(OpCodes.Ldloc, locAcc[k + 1]);
+                EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
+            // Layer 2: (0,2)(4,6) → slots 0,4.
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[2]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc[0]);
+
+            il.Emit(OpCodes.Ldloc, locAcc[4]);
+            il.Emit(OpCodes.Ldloc, locAcc[6]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc[4]);
+
+            // Layer 3: (0,4) → slot 0 (final reduced vector).
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[4]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc[0]);
+
+            var locVecAccum0 = locAcc[0];
+
+            // === REMAINDER LOOP (0-3 vectors) ===
+            il.MarkLabel(lblRemainderLoop);
+
+            // if (i > vectorEnd) goto RemainderLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemainderLoopEnd);
+
+            // Load vector accumulator
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
+
+            // Load vector from input[i]
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+
+            // vecAccum = vecAccum OP inputVec
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum0);
+
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblRemainderLoop);
+            il.MarkLabel(lblRemainderLoopEnd);
+
+            // === HORIZONTAL REDUCTION (once at end) ===
+            // Reduce vector accumulator to scalar
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
+            EmitVectorHorizontalReduction(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locScalarAccum);
+
+            // === TAIL LOOP (scalar) ===
+            il.MarkLabel(lblTailLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Bge, lblTailLoopEnd);
+
+            // Load input[i], convert to accumulator type
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+            EmitConvertTo(il, key.InputType, key.AccumulatorType);
+
+            // Combine with scalar accumulator
+            il.Emit(OpCodes.Ldloc, locScalarAccum);
+            EmitReductionCombine(il, key.Op, key.AccumulatorType);
+            il.Emit(OpCodes.Stloc, locScalarAccum);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblTailLoop);
+            il.MarkLabel(lblTailLoopEnd);
+
+            // Return scalar accumulator
+            il.Emit(OpCodes.Ldloc, locScalarAccum);
+        }
+
+        /// <summary>
+        /// Emit vector identity value (broadcast identity to all lanes).
+        /// </summary>
+        private static void EmitVectorIdentity(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            // Load scalar identity
+            EmitLoadIdentity(il, op, type);
+            // Broadcast to vector
+            EmitVectorCreate(il, type);
+        }
+
+        /// <summary>
+        /// Emit vector-vector binary reduction operation.
+        /// Stack has [vec1, vec2], result is combined vector.
+        /// </summary>
+        private static void EmitVectorBinaryReductionOp(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            var clrType = GetClrType(type);
+
+            string methodName = op switch
+            {
+                ReductionOp.Sum => "Add",
+                ReductionOp.Prod => "Multiply",
+                ReductionOp.Max => "Max",
+                ReductionOp.Min => "Min",
+                ReductionOp.Mean => "Add", // Mean uses Sum internally
+                _ => throw new NotSupportedException($"Vector binary op for {op} not supported")
+            };
+
+            // x86 fast path: Avx/Avx2 intrinsic when available (1.8-2x faster JIT codegen
+            // than Vector256.* on .NET 10). BinaryX86 returns null for ops/types without an
+            // x86 vector instruction (int64 Min/Max/Mul on Avx2), falling through to V256.
+            var x86 = VectorMethodCache.BinaryX86(VectorBits, methodName, clrType);
+            if (x86 != null)
+            {
+                il.EmitCall(OpCodes.Call, x86, null);
+                return;
+            }
+
+            // Multiply has a (V, T) scalar overload as well as (V, V); use the vector-vector
+            // variant explicitly. The other ops here only have the (V, V) overload.
+            var method = methodName == "Multiply"
+                ? VectorMethodCache.MultiplyVectorVector(VectorBits, clrType)
+                : VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2);
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit a scalar reduction loop for contiguous arrays (no SIMD).
+        /// </summary>
+        private static void EmitReductionScalarLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
+        {
+            // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
+
+            // For Half/Complex ArgMax/ArgMin, use helper method (comparison via IL doesn't work correctly)
+            if ((key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin) &&
+                (key.InputType == NPTypeCode.Half || key.InputType == NPTypeCode.Complex))
+            {
+                EmitArgMaxMinSimdLoop(il, key, inputSize);
+                return;
+            }
+
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
+            var locIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // Initialize accumulator with identity value
+            EmitLoadIdentity(il, key.Op, key.AccumulatorType);
+            il.Emit(OpCodes.Stloc, locAccum);
+
+            // For ArgMax/ArgMin, initialize index to 0
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stloc, locIdx);
+            }
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // Load input[i], convert to accumulator type
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+            EmitConvertTo(il, key.InputType, key.AccumulatorType);
+
+            // Combine with accumulator (and track index for ArgMax/ArgMin)
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                EmitArgReductionStep(il, key.Op, key.AccumulatorType, locAccum, locIdx, locI);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, locAccum);
+                EmitReductionCombine(il, key.Op, key.AccumulatorType);
+                il.Emit(OpCodes.Stloc, locAccum);
+            }
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+
+            // Return accumulator or index
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                il.Emit(OpCodes.Ldloc, locIdx);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, locAccum);
+            }
+        }
+
+        /// <summary>
+        /// Emit a strided reduction loop for non-contiguous arrays.
+        /// </summary>
+        private static void EmitReductionStridedLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
+        {
+            // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
+
+            var locI = il.DeclareLocal(typeof(long)); // linear index
+            var locD = il.DeclareLocal(typeof(int)); // dimension counter
+            var locOffset = il.DeclareLocal(typeof(long)); // input offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate (long for int64 shapes)
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation (long for int64 shapes)
+            var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
+            var locArgIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+            var lblDimLoop = il.DefineLabel();
+            var lblDimLoopEnd = il.DefineLabel();
+
+            // Initialize accumulator
+            EmitLoadIdentity(il, key.Op, key.AccumulatorType);
+            il.Emit(OpCodes.Stloc, locAccum);
+
+            // For ArgMax/ArgMin, initialize index to 0
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stloc, locArgIdx);
+            }
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // Main loop
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // Calculate offset from linear index
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locOffset);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // d = ndim - 1
+            il.Emit(OpCodes.Ldarg_3); // ndim
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.MarkLabel(lblDimLoop);
+
+            // if (d < 0) goto DimLoopEnd
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Blt, lblDimLoopEnd);
+
+            // coord = idx % shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_2); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stloc, locCoord);
+
+            // idx /= shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_2); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // offset += coord * strides[d]
+            il.Emit(OpCodes.Ldloc, locOffset);
+            il.Emit(OpCodes.Ldloc, locCoord);
+            il.Emit(OpCodes.Ldarg_1); // strides
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locOffset);
+
+            // d--
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.Emit(OpCodes.Br, lblDimLoop);
+            il.MarkLabel(lblDimLoopEnd);
+
+            // Load input[offset]
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locOffset);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+            EmitConvertTo(il, key.InputType, key.AccumulatorType);
+
+            // Combine with accumulator
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                EmitArgReductionStep(il, key.Op, key.AccumulatorType, locAccum, locArgIdx, locI);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, locAccum);
+                EmitReductionCombine(il, key.Op, key.AccumulatorType);
+                il.Emit(OpCodes.Stloc, locAccum);
+            }
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+
+            // Return accumulator or index (ArgMax/ArgMin returns int64 per NumPy 2.x)
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                il.Emit(OpCodes.Ldloc, locArgIdx);
+                // locArgIdx is already long (int64), return as-is for >2GB array support
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, locAccum);
+            }
+        }
+        #region Reduction IL Helpers
+
+        /// <summary>
+        /// Load the identity value for a reduction operation.
+        /// </summary>
+        private static void EmitLoadIdentity(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:
+                case ReductionOp.Mean:
+                case ReductionOp.CumSum:
+                    // Identity is 0
+                    EmitLoadZero(il, type);
+                    break;
+
+                case ReductionOp.Prod:
+                    // Identity is 1
+                    EmitLoadOne(il, type);
+                    break;
+
+                case ReductionOp.Max:
+                    // Identity is minimum value (so first element becomes max)
+                    EmitLoadMinValue(il, type);
+                    break;
+
+                case ReductionOp.Min:
+                    // Identity is maximum value (so first element becomes min)
+                    EmitLoadMaxValue(il, type);
+                    break;
+
+                case ReductionOp.ArgMax:
+                case ReductionOp.ArgMin:
+                    // For ArgMax/ArgMin, accumulator holds current best value
+                    // Initialize with first element value (handled separately)
+                    if (op == ReductionOp.ArgMax)
+                        EmitLoadMinValue(il, type);
+                    else
+                        EmitLoadMaxValue(il, type);
+                    break;
+
+                case ReductionOp.All:
+                    // Identity for AND is true (vacuous truth)
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
+
+                case ReductionOp.Any:
+                    // Identity for OR is false
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Identity for {op} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Load zero for a type.
+        /// </summary>
+        private static void EmitLoadZero(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    break;
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    il.Emit(OpCodes.Ldc_I8, 0L);
+                    break;
+                case NPTypeCode.Single:
+                    il.Emit(OpCodes.Ldc_R4, 0f);
+                    break;
+                case NPTypeCode.Double:
+                    il.Emit(OpCodes.Ldc_R8, 0d);
+                    break;
+                case NPTypeCode.Decimal:
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalZero);
+                    break;
+                case NPTypeCode.Half:
+                    // Load Half.Zero via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfZero, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.Zero via static field
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexZero);
+                    break;
+                default:
+                    throw new NotSupportedException($"Type {type} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Load one for a type.
+        /// </summary>
+        private static void EmitLoadOne(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    il.Emit(OpCodes.Ldc_I8, 1L);
+                    break;
+                case NPTypeCode.Single:
+                    il.Emit(OpCodes.Ldc_R4, 1f);
+                    break;
+                case NPTypeCode.Double:
+                    il.Emit(OpCodes.Ldc_R8, 1d);
+                    break;
+                case NPTypeCode.Decimal:
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalOne);
+                    break;
+                case NPTypeCode.Half:
+                    // Load Half.One via double conversion
+                    il.Emit(OpCodes.Ldc_R8, 1.0);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.One via static field
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
+                    break;
+                default:
+                    throw new NotSupportedException($"Type {type} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Load minimum value for a type.
+        /// </summary>
+        private static void EmitLoadMinValue(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean:
+                    // For boolean, min is false (0)
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    break;
+                case NPTypeCode.Byte:
+                    il.Emit(OpCodes.Ldc_I4, (int)byte.MinValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MinValue);
+                    break;
+                case NPTypeCode.Int16:
+                    il.Emit(OpCodes.Ldc_I4, (int)short.MinValue);
+                    break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                    il.Emit(OpCodes.Ldc_I4, (int)ushort.MinValue);
+                    break;
+                case NPTypeCode.Int32:
+                    il.Emit(OpCodes.Ldc_I4, int.MinValue);
+                    break;
+                case NPTypeCode.UInt32:
+                    il.Emit(OpCodes.Ldc_I4, unchecked((int)uint.MinValue));
+                    break;
+                case NPTypeCode.Int64:
+                    il.Emit(OpCodes.Ldc_I8, long.MinValue);
+                    break;
+                case NPTypeCode.UInt64:
+                    il.Emit(OpCodes.Ldc_I8, unchecked((long)ulong.MinValue));
+                    break;
+                case NPTypeCode.Single:
+                    il.Emit(OpCodes.Ldc_R4, float.NegativeInfinity);
+                    break;
+                case NPTypeCode.Double:
+                    il.Emit(OpCodes.Ldc_R8, double.NegativeInfinity);
+                    break;
+                case NPTypeCode.Half:
+                    // Half.NegativeInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfNegativeInfinity, null);
+                    break;
+                case NPTypeCode.Decimal:
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMinValue);
+                    break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
+                default:
+                    throw new NotSupportedException($"Type {type} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Load maximum value for a type.
+        /// </summary>
+        private static void EmitLoadMaxValue(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean:
+                    // For boolean, max is true (1)
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
+                case NPTypeCode.Byte:
+                    il.Emit(OpCodes.Ldc_I4, (int)byte.MaxValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MaxValue);
+                    break;
+                case NPTypeCode.Int16:
+                    il.Emit(OpCodes.Ldc_I4, (int)short.MaxValue);
+                    break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                    il.Emit(OpCodes.Ldc_I4, (int)ushort.MaxValue);
+                    break;
+                case NPTypeCode.Int32:
+                    il.Emit(OpCodes.Ldc_I4, int.MaxValue);
+                    break;
+                case NPTypeCode.UInt32:
+                    il.Emit(OpCodes.Ldc_I4, unchecked((int)uint.MaxValue));
+                    break;
+                case NPTypeCode.Int64:
+                    il.Emit(OpCodes.Ldc_I8, long.MaxValue);
+                    break;
+                case NPTypeCode.UInt64:
+                    il.Emit(OpCodes.Ldc_I8, unchecked((long)ulong.MaxValue));
+                    break;
+                case NPTypeCode.Single:
+                    il.Emit(OpCodes.Ldc_R4, float.PositiveInfinity);
+                    break;
+                case NPTypeCode.Double:
+                    il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
+                    break;
+                case NPTypeCode.Half:
+                    // Half.PositiveInfinity via static property getter
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfPositiveInfinity, null);
+                    break;
+                case NPTypeCode.Decimal:
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMaxValue);
+                    break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
+                default:
+                    throw new NotSupportedException($"Type {type} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit horizontal reduction of a Vector (adapts to V128/V256/V512).
+        /// Stack has Vector, result is scalar reduction.
+        /// </summary>
+        private static void EmitVectorHorizontalReduction(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            var clrType = GetClrType(type);
+
+            switch (op)
+            {
+                case ReductionOp.Sum:
+                    // Try Vector.Sum<T>(V<T>) -> T (BCL horizontal-sum intrinsic, where available).
+                    // Falls back to manual horizontal add if the type doesn't have it.
+                    MethodInfo sumMethod = null;
+                    try { sumMethod = VectorMethodCache.Generic(VectorBits, "Sum", clrType, paramCount: 1); }
+                    catch (MissingMethodException) { }
+
+                    if (sumMethod != null)
+                        il.EmitCall(OpCodes.Call, sumMethod, null);
+                    else
+                        EmitManualHorizontalSum(il, type);
+                    break;
+
+                case ReductionOp.Max:
+                case ReductionOp.Min:
+                    // No built-in horizontal max/min, need to reduce manually
+                    EmitManualHorizontalMinMax(il, op, type);
+                    break;
+
+                case ReductionOp.Prod:
+                    // Manual horizontal multiply
+                    EmitManualHorizontalProd(il, type);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"SIMD horizontal reduction for {op} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit manual horizontal sum using tree reduction (O(log N) instead of O(N)).
+        /// Uses GetLower/GetUpper + Add to reduce vector width by half each step.
+        /// </summary>
+        private static void EmitManualHorizontalSum(ILGenerator il, NPTypeCode type)
+        {
+            var clrType = GetClrType(type);
+
+            // Tree reduction: reduce vector width by half each iteration
+            // Vector512 -> Vector256 -> Vector128 -> scalar
+            EmitTreeReduction(il, type, ReductionOp.Sum);
+        }
+
+        /// <summary>
+        /// Emit manual horizontal min/max using tree reduction (O(log N) instead of O(N)).
+        /// Uses GetLower/GetUpper + Min/Max to reduce vector width by half each step.
+        /// </summary>
+        private static void EmitManualHorizontalMinMax(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            // Tree reduction: reduce vector width by half each iteration
+            EmitTreeReduction(il, type, op);
+        }
+
+        /// <summary>
+        /// Emit manual horizontal product using tree reduction (O(log N) instead of O(N)).
+        /// Uses GetLower/GetUpper + Multiply to reduce vector width by half each step.
+        /// </summary>
+        private static void EmitManualHorizontalProd(ILGenerator il, NPTypeCode type)
+        {
+            // Tree reduction: reduce vector width by half each iteration
+            EmitTreeReduction(il, type, ReductionOp.Prod);
+        }
+
+        /// <summary>
+        /// Get the Math.Max or Math.Min method for a type. <c>Math</c> has overloads for every
+        /// numeric primitive (byte, sbyte, short, ushort, int, uint, long, ulong, float, double),
+        /// so a single <c>typeof(Math).GetMethod(name, [T, T])</c> lookup works for all of them.
+        /// </summary>
+        private static MethodInfo GetMathMinMaxMethod(ReductionOp op, Type clrType)
+        {
+            string name = op == ReductionOp.Max ? "Max" : "Min";
+            return ScalarMethodCache.Get(typeof(Math), name, clrType, clrType);
+        }
+
+        /// <summary>
+        /// Emit tree reduction for horizontal operations (Sum, Min, Max, Prod).
+        /// Uses GetLower/GetUpper to halve vector width each step: O(log N) vs O(N).
+        /// Stack has vector on entry, scalar result on exit.
+        /// </summary>
+        private static void EmitTreeReduction(ILGenerator il, NPTypeCode type, ReductionOp op)
+        {
+            var clrType = GetClrType(type);
+            int currentBits = VectorBits;
+
+            // Step 1: Reduce from current width down to 128-bit using GetLower/GetUpper + op.
+            while (currentBits > 128)
+            {
+                int nextBits = currentBits / 2;
+                var currentVecType = VectorMethodCache.V(currentBits, clrType);
+
+                // Store current vector
+                var locVec = il.DeclareLocal(currentVecType);
+                il.Emit(OpCodes.Stloc, locVec);
+
+                // GetLower → V<nextBits>
+                il.Emit(OpCodes.Ldloc, locVec);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.GetLower(currentBits, clrType), null);
+
+                // GetUpper → V<nextBits>
+                il.Emit(OpCodes.Ldloc, locVec);
+                il.EmitCall(OpCodes.Call, VectorMethodCache.GetUpper(currentBits, clrType), null);
+
+                // Apply reduction operation on the two half-vectors at the smaller width.
+                EmitVectorReductionOp(il, op, nextBits, clrType);
+
+                currentBits = nextBits;
+            }
+
+            // Step 2: Now we have Vector128. Reduce to scalar.
+            // Vector128 has 2-16 elements depending on type. Use GetElement for final few.
+            var vec128Type = VectorMethodCache.V(128, clrType);
+            int elemCount = 16 / GetTypeSize(type); // Vector128 is 16 bytes
+
+            var locFinal = il.DeclareLocal(vec128Type);
+            il.Emit(OpCodes.Stloc, locFinal);
+
+            // Get first element as accumulator
+            var getElementMethod = VectorMethodCache.GetElement(128, clrType);
+
+            il.Emit(OpCodes.Ldloc, locFinal);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.EmitCall(OpCodes.Call, getElementMethod, null);
+
+            // Reduce remaining elements (only 1-3 more for most types)
+            for (int i = 1; i < elemCount; i++)
+            {
+                il.Emit(OpCodes.Ldloc, locFinal);
+                il.Emit(OpCodes.Ldc_I4, i);
+                il.EmitCall(OpCodes.Call, getElementMethod, null);
+                EmitScalarReductionOp(il, op, type);
+            }
+        }
+
+        /// <summary>
+        /// Emit vector reduction operation (Add, Min, Max, Multiply).
+        /// Stack has [vec1, vec2], result is combined vector.
+        /// </summary>
+        private static void EmitVectorReductionOp(ILGenerator il, ReductionOp op,
+            int simdBits, Type clrType)
+        {
+            string methodName = op switch
+            {
+                ReductionOp.Sum => "Add",
+                ReductionOp.Min => "Min",
+                ReductionOp.Max => "Max",
+                ReductionOp.Prod => "Multiply",
+                _ => throw new NotSupportedException($"Reduction {op} not supported for tree reduction")
+            };
+
+            // Multiply at the V/V form (distinct from V/T scalar overload).
+            var method = methodName == "Multiply"
+                ? VectorMethodCache.MultiplyVectorVector(simdBits, clrType)
+                : VectorMethodCache.Generic(simdBits, methodName, clrType, paramCount: 2);
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit scalar reduction operation.
+        /// Stack has [accum, value], result is combined scalar.
+        /// </summary>
+        private static void EmitScalarReductionOp(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:
+                    il.Emit(OpCodes.Add);
+                    break;
+                case ReductionOp.Prod:
+                    il.Emit(OpCodes.Mul);
+                    break;
+                case ReductionOp.Min:
+                case ReductionOp.Max:
+                    var mathMethod = GetMathMinMaxMethod(op, GetClrType(type));
+                    if (mathMethod != null)
+                    {
+                        il.EmitCall(OpCodes.Call, mathMethod, null);
+                    }
+                    else
+                    {
+                        EmitScalarMinMax(il, op, type);
+                    }
+                    break;
+                default:
+                    throw new NotSupportedException($"Scalar reduction {op} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit Half binary operation: convert both operands to double, perform op, convert back.
+        /// Stack has [half1, half2], result is half.
+        /// </summary>
+        private static void EmitHalfBinaryOp(ILGenerator il, OpCode scalarOp)
+        {
+            var locRight = il.DeclareLocal(typeof(Half));
+            il.Emit(OpCodes.Stloc, locRight);
+
+            // Convert left to double
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Convert right to double
+            il.Emit(OpCodes.Ldloc, locRight);
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Perform operation in double
+            il.Emit(scalarOp);
+
+            // Convert result back to Half
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+        }
+
+        /// <summary>
+        /// Emit scalar min/max comparison.
+        /// Stack has [value1, value2], result is min or max.
+        /// </summary>
+        private static void EmitScalarMinMax(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            // Use comparison: (a > b) ? a : b for Max, (a < b) ? a : b for Min
+            var locA = il.DeclareLocal(GetClrType(type));
+            var locB = il.DeclareLocal(GetClrType(type));
+            var lblFalse = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            il.Emit(OpCodes.Stloc, locB);
+            il.Emit(OpCodes.Stloc, locA);
+
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+
+            if (op == ReductionOp.Max)
+            {
+                if (IsUnsigned(type))
+                    il.Emit(OpCodes.Bgt_Un, lblFalse);
+                else
+                    il.Emit(OpCodes.Bgt, lblFalse);
+
+                // a <= b, return b
+                il.Emit(OpCodes.Ldloc, locB);
+                il.Emit(OpCodes.Br, lblEnd);
+
+                il.MarkLabel(lblFalse);
+                // a > b, return a
+                il.Emit(OpCodes.Ldloc, locA);
+            }
+            else
+            {
+                if (IsUnsigned(type))
+                    il.Emit(OpCodes.Blt_Un, lblFalse);
+                else
+                    il.Emit(OpCodes.Blt, lblFalse);
+
+                // a >= b, return b
+                il.Emit(OpCodes.Ldloc, locB);
+                il.Emit(OpCodes.Br, lblEnd);
+
+                il.MarkLabel(lblFalse);
+                // a < b, return a
+                il.Emit(OpCodes.Ldloc, locA);
+            }
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        /// Emit reduction combine operation.
+        /// Stack has [newValue, accumulator], result is combined value.
+        /// </summary>
+        private static void EmitReductionCombine(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:
+                case ReductionOp.Mean:
+                case ReductionOp.CumSum:
+                    // Add
+                    if (type == NPTypeCode.Decimal)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpAddition, null);
+                    }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpAddition, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, add, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Add);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Add);
+                    }
+                    break;
+
+                case ReductionOp.Prod:
+                    // Multiply
+                    if (type == NPTypeCode.Decimal)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, multiply, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Mul);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Mul);
+                    }
+                    break;
+
+                case ReductionOp.Max:
+                    {
+                        var clrType = GetClrType(type);
+                        var mathMethod = GetMathMinMaxMethod(op, clrType);
+                        if (mathMethod != null)
+                        {
+                            il.EmitCall(OpCodes.Call, mathMethod, null);
+                        }
+                        else
+                        {
+                            EmitScalarMinMax(il, op, type);
+                        }
+                    }
+                    break;
+
+                case ReductionOp.Min:
+                    {
+                        var clrType = GetClrType(type);
+                        var mathMethod = GetMathMinMaxMethod(op, clrType);
+                        if (mathMethod != null)
+                        {
+                            il.EmitCall(OpCodes.Call, mathMethod, null);
+                        }
+                        else
+                        {
+                            EmitScalarMinMax(il, op, type);
+                        }
+                    }
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Reduction combine for {op} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit ArgMax/ArgMin step - compare new value with accumulator, update index if better.
+        /// Stack has [newValue]. Updates locAccum and locIdx.
+        /// For float/double, handles NaN correctly: first NaN always wins (NumPy behavior).
+        /// For boolean, handles True > False (ArgMax) and False < True (ArgMin).
+        /// </summary>
+        private static void EmitArgReductionStep(ILGenerator il, ReductionOp op, NPTypeCode type,
+            LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
+        {
+            // For float/double, need NaN-aware comparison
+            // NumPy: first NaN always wins
+            // Condition: (newValue > accum) || (IsNaN(newValue) && !IsNaN(accum))  [ArgMax]
+            //           (newValue < accum) || (IsNaN(newValue) && !IsNaN(accum))  [ArgMin]
+            if (type == NPTypeCode.Single || type == NPTypeCode.Double)
+            {
+                EmitArgReductionStepNaN(il, op, type, locAccum, locIdx, locI);
+                return;
+            }
+
+            // For Boolean, special handling: True > False for ArgMax, False < True for ArgMin
+            if (type == NPTypeCode.Boolean)
+            {
+                EmitArgReductionStepBool(il, op, locAccum, locIdx, locI);
+                return;
+            }
+
+            // For non-floating, non-boolean types, simple comparison
+            var lblSkip = il.DefineLabel();
+
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+            il.Emit(OpCodes.Ldloc, locAccum); // [newValue, newValue, accum]
+
+            // Compare: newValue > accum (for ArgMax) or newValue < accum (for ArgMin)
+            if (op == ReductionOp.ArgMax)
+            {
+                if (IsUnsigned(type))
+                    il.Emit(OpCodes.Ble_Un, lblSkip);
+                else
+                    il.Emit(OpCodes.Ble, lblSkip);
+            }
+            else // ArgMin
+            {
+                if (IsUnsigned(type))
+                    il.Emit(OpCodes.Bge_Un, lblSkip);
+                else
+                    il.Emit(OpCodes.Bge, lblSkip);
+            }
+
+            // Update: newValue is better
+            // Stack has [newValue]
+            il.Emit(OpCodes.Stloc, locAccum); // accum = newValue
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx); // idx = i
+            var lblEnd = il.DefineLabel();
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblSkip);
+            // Not better, pop newValue
+            il.Emit(OpCodes.Pop);
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        /// Emit Boolean ArgMax/ArgMin step.
+        /// For ArgMax: True > False, so update if newValue is True and accum is False.
+        /// For ArgMin: False < True, so update if newValue is False and accum is True.
+        /// </summary>
+        private static void EmitArgReductionStepBool(ILGenerator il, ReductionOp op,
+            LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
+        {
+            var lblSkip = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Stack: [newValue]
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+
+            if (op == ReductionOp.ArgMax)
+            {
+                // ArgMax: update if newValue=True && accum=False
+                // i.e., if newValue && !accum
+                il.Emit(OpCodes.Brfalse, lblSkip); // if newValue is False, skip
+
+                // newValue is True, check if accum is False
+                il.Emit(OpCodes.Ldloc, locAccum);
+                il.Emit(OpCodes.Brtrue, lblSkip); // if accum is True, skip (already have True)
+            }
+            else // ArgMin
+            {
+                // ArgMin: update if newValue=False && accum=True
+                // i.e., if !newValue && accum
+                il.Emit(OpCodes.Brtrue, lblSkip); // if newValue is True, skip
+
+                // newValue is False, check if accum is True
+                il.Emit(OpCodes.Ldloc, locAccum);
+                il.Emit(OpCodes.Brfalse, lblSkip); // if accum is False, skip (already have False)
+            }
+
+            // Update: newValue is better
+            // Stack: [newValue]
+            il.Emit(OpCodes.Stloc, locAccum);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblSkip);
+            il.Emit(OpCodes.Pop); // discard newValue
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        /// Emit NaN-aware ArgMax/ArgMin step for float/double.
+        /// Condition: (newValue > accum) || (IsNaN(newValue) && !IsNaN(accum))
+        /// </summary>
+        private static void EmitArgReductionStepNaN(ILGenerator il, ReductionOp op, NPTypeCode type,
+            LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
+        {
+            var isNaNMethod = type == NPTypeCode.Single ? CachedMethods.FloatIsNaN : CachedMethods.DoubleIsNaN;
+
+            var lblUpdate = il.DefineLabel();
+            var lblSkip = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Stack: [newValue]
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+
+            // First check: newValue > accum (ArgMax) or newValue < accum (ArgMin)
+            il.Emit(OpCodes.Ldloc, locAccum); // [newValue, newValue, accum]
+            if (op == ReductionOp.ArgMax)
+                il.Emit(OpCodes.Bgt_Un, lblUpdate); // NaN comparisons: Bgt_Un branches if unordered or greater
+            else
+                il.Emit(OpCodes.Blt_Un, lblUpdate); // NaN comparisons: Blt_Un branches if unordered or less
+
+            // Stack: [newValue]
+            // Second check: IsNaN(newValue) && !IsNaN(accum)
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+            il.EmitCall(OpCodes.Call, isNaNMethod, null); // [newValue, isNaN(newValue)]
+            il.Emit(OpCodes.Brfalse, lblSkip); // if !IsNaN(newValue), skip
+
+            // IsNaN(newValue) is true, check !IsNaN(accum)
+            il.Emit(OpCodes.Ldloc, locAccum);
+            il.EmitCall(OpCodes.Call, isNaNMethod, null);
+            il.Emit(OpCodes.Brtrue, lblSkip); // if IsNaN(accum), skip (accum already has NaN)
+
+            // Fall through: IsNaN(newValue) && !IsNaN(accum) -> update
+            il.MarkLabel(lblUpdate);
+            // Stack: [newValue]
+            il.Emit(OpCodes.Stloc, locAccum);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblSkip);
+            il.Emit(OpCodes.Pop); // discard newValue
+
+            il.MarkLabel(lblEnd);
+        }
+
+        #endregion
+
+        #endregion
+    }
+}

@@ -164,7 +164,7 @@ namespace NumSharp
             int ndim = casts.Length;
             long count = result.size;
 
-            var kernel = ILKernelGenerator.GetRavelMultiIndexKernel();
+            var kernel = DirectILKernelGenerator.GetRavelMultiIndexKernel();
             if (kernel == null)
                 throw new NotSupportedException("np.ravel_multi_index: IL kernel unavailable");
 

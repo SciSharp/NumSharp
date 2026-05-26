@@ -3141,8 +3141,8 @@ namespace NumSharp.Backends.Iteration
                 {
                     var input = (void*)state.GetDataPointer(0);
                     return TKernel.Identity
-                        ? ILKernelGenerator.AllSimdHelper<T>(input, state.Size)
-                        : ILKernelGenerator.AnySimdHelper<T>(input, state.Size);
+                        ? DirectILKernelGenerator.AllSimdHelper<T>(input, state.Size)
+                        : DirectILKernelGenerator.AnySimdHelper<T>(input, state.Size);
                 }
 
                 return ReduceBoolGeneral<T, TKernel>(ref state);
@@ -3175,7 +3175,7 @@ namespace NumSharp.Backends.Iteration
                 // minimal overhead. Cross-platform memcpy is the cheapest possible.
                 if (state.IsContiguousCopy)
                 {
-                    var copyKernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.Contiguous));
+                    var copyKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.Contiguous));
                     if (copyKernel != null)
                     {
                         copyKernel(
@@ -3194,7 +3194,7 @@ namespace NumSharp.Backends.Iteration
                 // detects unit-stride innermost axis and uses Buffer.MemoryCopy per row; falls
                 // back to scalar incremental-coord inner loop when inner is also strided.
                 // This replaces the old CopyGeneralSameType (mod/div per element per axis).
-                var stridedKernel = ILKernelGenerator.TryGetStridedCastKernel(dst.TypeCode, dst.TypeCode);
+                var stridedKernel = DirectILKernelGenerator.TryGetStridedCastKernel(dst.TypeCode, dst.TypeCode);
                 if (stridedKernel != null)
                 {
                     stridedKernel(
@@ -3208,7 +3208,7 @@ namespace NumSharp.Backends.Iteration
                 }
 
                 // Final fallback: legacy IL copy kernel (still used for unsupported types like Decimal/Complex).
-                var fallbackKernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.General));
+                var fallbackKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.General));
                 if (fallbackKernel == null)
                     return false;
 
@@ -3279,7 +3279,7 @@ namespace NumSharp.Backends.Iteration
                 // IL-generated contig cast kernel — minimal overhead for the common case.
                 if (state.IsContiguousCopy && state.Size > 0)
                 {
-                    var castKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+                    var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
                         .TryGetCastKernel(src.TypeCode, dst.TypeCode);
                     if (castKernel != null)
                     {
@@ -3294,7 +3294,7 @@ namespace NumSharp.Backends.Iteration
                 // loop when the innermost axis has non-unit stride for either side.
                 if (state.Size > 0)
                 {
-                    var stridedKernel = NumSharp.Backends.Kernels.ILKernelGenerator
+                    var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
                         .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
                     if (stridedKernel != null)
                     {

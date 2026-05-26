@@ -111,7 +111,7 @@ namespace NumSharp
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(total));
 
             // Degenerate 3-loop: n_outer=1, n=size, chunk=elsize.
-            var kernel = ILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
+            var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
             kernel(
                 src: (byte*)src.Address,
                 dst: (byte*)ret.Address,
@@ -147,7 +147,7 @@ namespace NumSharp
 
             if (broadcast)
             {
-                var kernel = ILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
+                var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
                 kernel(
                     src: (byte*)src.Address,
                     dst: (byte*)ret.Address,
@@ -157,7 +157,7 @@ namespace NumSharp
             }
             else
             {
-                var kernel = ILKernelGenerator.GetRepeatPerJKernel(a.dtypesize);
+                var kernel = DirectILKernelGenerator.GetRepeatPerJKernel(a.dtypesize);
                 fixed (long* pCounts = counts)
                 {
                     kernel(
@@ -207,7 +207,7 @@ namespace NumSharp
             ComputeAxisGeometry(inDims, normalizedAxis, out long n_outer, out long nel);
             int chunkBytes = checked((int)(nel * a.dtypesize));
 
-            var kernel = ILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
+            var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
             kernel(
                 src: (byte*)src.Address,
                 dst: (byte*)ret.Address,
@@ -260,7 +260,7 @@ namespace NumSharp
 
             if (broadcast)
             {
-                var kernel = ILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
+                var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
                 kernel(
                     src: (byte*)src.Address,
                     dst: (byte*)ret.Address,
@@ -270,7 +270,7 @@ namespace NumSharp
             }
             else
             {
-                var kernel = ILKernelGenerator.GetRepeatPerJKernel(chunkBytes);
+                var kernel = DirectILKernelGenerator.GetRepeatPerJKernel(chunkBytes);
                 fixed (long* pCounts = counts)
                 {
                     kernel(

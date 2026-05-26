@@ -113,7 +113,7 @@ namespace NumSharp
             // dtype we'd still need shape validation, so just defer to generic path.
             if (!(@out is null)) return false;
 
-            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(typeof(bool));
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(typeof(bool));
             // innerSize bucketing is decided once we know the axis factorisation.
             // For axis=k with innerCount>1 the slab spans multiple elements; we
             // pass innerCount*elemBytes — typically large, lands in the bulk
@@ -204,7 +204,7 @@ namespace NumSharp
 
             // Pick the typed-or-bulk variant by innerBytes — single-element
             // slabs (innerCount==1) lift to the typed Ldind/Stind path.
-            var filterKernel = ILKernelGenerator.GetFilterAxisKernel(innerBytes);
+            var filterKernel = DirectILKernelGenerator.GetFilterAxisKernel(innerBytes);
             if (filterKernel == null) return false;
 
             long written = filterKernel(

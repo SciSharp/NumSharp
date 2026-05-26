@@ -101,8 +101,8 @@ namespace NumSharp
             // IndexError. Cheap check: popcount the tail. If it's >0, raise.
             long effectiveScan = Math.Min(maskSize, arrSize);
 
-            var countKernel = ILKernelGenerator.GetArgwhereCountKernel(typeof(bool));
-            var filterKernel = ILKernelGenerator.GetFilterAxisKernel(arr.dtypesize);
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(typeof(bool));
+            var filterKernel = DirectILKernelGenerator.GetFilterAxisKernel(arr.dtypesize);
             if (countKernel == null || filterKernel == null) return false;
 
             byte* maskPtr = (byte*)condition.Storage.Address + condition.Shape.offset;

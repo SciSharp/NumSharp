@@ -9,7 +9,7 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         private static unsafe void CopyMaskedDispatch<T>(nint arr, nint mask, nint result, long size) where T : unmanaged
-            => ILKernelGenerator.CopyMaskedElementsHelper((T*)arr, (bool*)mask, (T*)result, size);
+            => DirectILKernelGenerator.CopyMaskedElementsHelper((T*)arr, (bool*)mask, (T*)result, size);
 
         /// <summary>
         /// Apply a boolean mask to select elements from an array.
@@ -23,7 +23,7 @@ namespace NumSharp.Backends
                 throw new ArgumentException("Mask must be boolean array", nameof(mask));
 
             // SIMD fast path: contiguous arrays of same size
-            if (ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0 &&
+            if (DirectILKernelGenerator.Enabled && DirectILKernelGenerator.VectorBits > 0 &&
                 mask.Shape.IsContiguous && arr.Shape.IsContiguous)
             {
                 return BooleanMaskSimd(arr, mask.MakeGeneric<bool>());
@@ -41,7 +41,7 @@ namespace NumSharp.Backends
             long size = arr.size;
 
             // Count true values using SIMD
-            long trueCount = ILKernelGenerator.CountTrueSimdHelper((bool*)mask.Address, size);
+            long trueCount = DirectILKernelGenerator.CountTrueSimdHelper((bool*)mask.Address, size);
 
             if (trueCount == 0)
                 return new NDArray(arr.dtype, Shape.Empty(1)); // Empty 1D result
