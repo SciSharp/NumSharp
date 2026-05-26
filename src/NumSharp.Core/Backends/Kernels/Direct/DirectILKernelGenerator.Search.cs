@@ -82,6 +82,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Try to get or generate a kernel. Returns null on failure (caller falls back).
         /// </summary>
+        [Obsolete("Unused. Callers use GetSearchSortedKernel directly. Marked obsolete pending removal.", error: true)]
         public static SearchSortedKernel TryGetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter, bool contiguousA)
         {
             if (!Enabled) return null;

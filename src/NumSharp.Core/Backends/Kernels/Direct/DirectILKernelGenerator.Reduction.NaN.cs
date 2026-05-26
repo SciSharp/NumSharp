@@ -44,6 +44,7 @@ namespace NumSharp.Backends.Kernels
         /// Try to get an IL-generated NaN element reduction kernel.
         /// Only supports float and double types (NaN is only defined for floating-point).
         /// </summary>
+        [Obsolete("Unused. np.nan* paths route through Masking.NaN / Reduction.NaN-specific helpers, not this Try wrapper.", error: true)]
         public static TypedElementReductionKernel<TResult>? TryGetNanElementReductionKernel<TResult>(ElementReductionKernelKey key)
             where TResult : unmanaged
         {

@@ -120,6 +120,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Try to get or generate a comparison kernel. Returns null if generation fails.
         /// </summary>
+        [Obsolete("Unused. Callers use GetComparisonKernel directly. Marked obsolete pending removal.", error: true)]
         public static ComparisonKernel? TryGetComparisonKernel(ComparisonKernelKey key)
         {
             if (!Enabled)
