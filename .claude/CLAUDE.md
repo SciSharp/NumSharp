@@ -88,25 +88,77 @@ np                Static API class (like `import numpy as np`)
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator | Runtime IL emission (~21K lines) with SIMD V128/V256/V512; replaces Regen templates |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Split into two classes: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — target model) and `DirectILKernelGenerator` (legacy whole-array kernels, 50 partials in `Direct/`, being migrated). Replaces Regen templates. |
 
-## ILKernelGenerator
+## ILKernelGenerator + DirectILKernelGenerator (Split)
 
-Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels.
+Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels. **Two physically distinct classes**, each encoding its kernel-driving contract in the type name:
 
-**Partial Class Structure (27 files):**
+### `DirectILKernelGenerator` — legacy whole-array kernels (50 partials)
+
+**Location:** `src/NumSharp.Core/Backends/Kernels/Direct/DirectILKernelGenerator.*.cs`
+
+**Contract:** A single kernel call processes the **whole array**. The kernel itself walks dimensions/strides; the iterator (if any) is only a setup helper. Signature shape varies per kernel family but typically:
+
+```csharp
+delegate void DirectKernel(
+    void* input, void* output,
+    long* strides, long* shape, int ndim,
+    long iterSize);
+```
+
+**Status: LEGACY** but functional. ~95% of hot paths today go through this class. Being incrementally ported to the new `ILKernelGenerator`. **Do NOT add new kernels here unless fixing/extending an existing family** — new code goes to `ILKernelGenerator` (below).
+
+**Partial files in `Direct/` (50):**
 | Category | Files |
 |----------|-------|
-| Core | `ILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
+| Core | `DirectILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
 | Binary | `.Binary.cs`, `.MixedType.cs`, `.Shift.cs` |
 | Unary | `.Unary.cs`, `.Unary.Math.cs`, `.Unary.Decimal.cs`, `.Unary.Vector.cs`, `.Unary.Predicate.cs` |
 | Comparison | `.Comparison.cs` |
-| Reduction | `.Reduction.cs`, `.Reduction.Arg.cs`, `.Reduction.Boolean.cs`, `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs` |
+| Reduction (flat) | `.Reduction.cs`, `.Reduction.Arg.cs`, `.Reduction.Boolean.cs`, `.Reduction.NaN.cs` |
+| Reduction (axis) | `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Boolean.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs`, `.Reduction.Axis.Widening.cs` |
 | Scan | `.Scan.cs` (CumSum, CumProd) |
-| Masking | `.Masking.cs`, `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
-| Other | `.Clip.cs`, `.Modf.cs`, `.MatMul.cs` |
+| Masking | `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
+| Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Copy.cs` |
+| Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
+| Linear algebra | `.MatMul.cs`, `.Trace.cs` |
+| Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs`, `.StorageAlias.cs` |
 
-**Execution Paths:**
+### `ILKernelGenerator` — NpyIter-driven per-chunk kernels (TARGET)
+
+**Location:** `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator*.cs` (root, not in `Direct/`)
+
+**Contract:** Kernel processes **one inner-loop chunk** per call. The iterator (`NpyIterRef`) drives the loop and advances pointers between calls. Matches NumPy's `PyUFuncGenericFunction` model:
+
+```csharp
+unsafe delegate void NpyInnerLoopFunc(
+    void** dataptrs,   // [nop] current operand pointers
+    long*  strides,    // [nop] per-operand byte stride for inner loop
+    long   count,      // number of elements this chunk
+    void*  auxdata);   // op-specific extras (e.g. axis index)
+```
+
+**Status: TARGET** for all new kernels. Currently minimal (placeholder only). Populated incrementally as np.* functions migrate from `DirectILKernelGenerator`. Driven via `NpyIterRef.Execute(kernelKey)`.
+
+### Migration path (per kernel family)
+
+1. Port `DirectILKernelGenerator.<X>.cs` → `ILKernelGenerator.<X>.cs` with the per-chunk signature.
+2. Route the np.* call site through `NpyIterRef.Execute(key)` instead of calling the direct kernel.
+3. Delete `Direct/DirectILKernelGenerator.<X>.cs`.
+
+**Priority order:** reductions → binary arith → comparison → unary → scan → copy → multi-output (Modf) → selection (Where/Place — enables VIRTUAL/WRITEMASKED operand flags).
+
+### Shared infrastructure
+
+Both classes use these helpers at `src/NumSharp.Core/Backends/Kernels/` (root, outside `Direct/`):
+- `VectorMethodCache.cs`, `ScalarMethodCache.cs` — reflection caches (Vector{128,256,512}, Math/MathF)
+- `KernelOp.cs` — `BinaryOp`, `UnaryOp`, `ReductionOp`, `ComparisonOp`, `ExecutionPath` enums
+- `BinaryKernel.cs`, `CopyKernel.cs`, `ReductionKernel.cs`, `ScalarKernel.cs` — kernel key structs and delegate types
+- `StrideDetector.cs` — layout classification (Contiguous / Strided / Broadcast)
+- `SimdMatMul.*.cs` — matmul SIMD primitives
+
+**Execution Paths (DirectILKernelGenerator):**
 1. **SimdFull** - Both operands contiguous, SIMD-capable dtype → Vector loop + scalar tail
 2. **ScalarFull** - Both contiguous, non-SIMD dtype (Decimal) → Scalar loop
 3. **General** - Strided/broadcast → Coordinate-based iteration
@@ -276,6 +328,9 @@ Tested against NumPy 2.x.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs`, `NpyExpr.cs` |
+| ILKernelGenerator (target) | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
+| DirectILKernelGenerator (legacy) | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 50 partials) |
+| Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 
@@ -539,7 +594,13 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed memory allocation optimized for performance.
 
 **Q: Why Regen templating instead of T4 or source generators?**
-A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator which uses runtime IL emission.
+A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator/DirectILKernelGenerator which use runtime IL emission.
+
+**Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
+A: They encode two different kernel-driving contracts that were silently mixed in the original codebase. `DirectILKernelGenerator` (50 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. `DirectILKernelGenerator` is **legacy** and being migrated; `ILKernelGenerator` is the **target** for all new kernels. New work goes through `ILKernelGenerator`. Existing kernel families stay in `Direct/` until they're ported one at a time.
+
+**Q: When should I write kernels in `ILKernelGenerator` vs `DirectILKernelGenerator`?**
+A: Always `ILKernelGenerator` for new code. The only reason to touch `DirectILKernelGenerator` is fixing a bug or extending an existing kernel family that hasn't been migrated yet. When you finish migrating a family, delete its `Direct/DirectILKernelGenerator.<X>.cs` partial.
 
 **Q: Why is TensorEngine abstracted?**
 A: To support potential future backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS). Not implemented yet, but the architecture allows it.
