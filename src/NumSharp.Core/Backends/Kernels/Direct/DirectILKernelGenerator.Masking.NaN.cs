@@ -691,6 +691,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns NaN if all values are NaN.
         /// Uses SIMD with NaN mask: Equals(vec, vec) is true for non-NaN.
         /// </summary>
+        [Obsolete("Unused. np.nanmean(float) routes through different helpers — never wired up.", error: true)]
         internal static unsafe float NanMeanSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
@@ -790,6 +791,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns NaN if all values are NaN.
         /// Uses SIMD with NaN mask: Equals(vec, vec) is true for non-NaN.
         /// </summary>
+        [Obsolete("Unused. np.nanmean(double) routes through different helpers — never wired up.", error: true)]
         internal static unsafe double NanMeanSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
@@ -1226,6 +1228,7 @@ namespace NumSharp.Backends.Kernels
         /// Helper for NaN-aware standard deviation of a contiguous float array.
         /// Returns NaN if all values are NaN or count <= ddof.
         /// </summary>
+        [Obsolete("Unused. np.nanstd(float) routes through different helpers — never wired up.", error: true)]
         internal static unsafe float NanStdSimdHelperFloat(float* src, long size, int ddof = 0)
         {
             float variance = NanVarSimdHelperFloat(src, size, ddof);
@@ -1236,6 +1239,7 @@ namespace NumSharp.Backends.Kernels
         /// Helper for NaN-aware standard deviation of a contiguous double array.
         /// Returns NaN if all values are NaN or count <= ddof.
         /// </summary>
+        [Obsolete("Unused. np.nanstd(double) routes through different helpers — never wired up.", error: true)]
         internal static unsafe double NanStdSimdHelperDouble(double* src, long size, int ddof = 0)
         {
             double variance = NanVarSimdHelperDouble(src, size, ddof);

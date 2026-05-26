@@ -1655,6 +1655,7 @@ namespace NumSharp.Backends.Kernels
         // behavior.
         // =====================================================================
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by type-specialized AddOpFloat/AddOpDouble structs (commit 435a07e2) which JIT-fold cleanly; the typeof(T) chain here lost 21-30% perf.", error: true)]
         private static Vector256<T> Add256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
@@ -1677,6 +1678,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by type-specialized AddOpFloat/AddOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector128<T> Add128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
@@ -1697,6 +1699,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by type-specialized MulOpFloat/MulOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector256<T> Mul256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
@@ -1717,6 +1720,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by type-specialized MulOpFloat/MulOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector128<T> Mul128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
@@ -1736,6 +1740,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by direct Vector256.Min usage (NaN-correct for float/double per NumPy semantics).", error: true)]
         private static Vector256<T> Min256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
@@ -1757,6 +1762,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by direct Vector128.Min usage.", error: true)]
         private static Vector128<T> Min128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))
@@ -1778,6 +1784,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by direct Vector256.Max usage (NaN-correct for float/double per NumPy semantics).", error: true)]
         private static Vector256<T> Max256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Avx.IsSupported)
@@ -1798,6 +1805,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [Obsolete("Unused. Superseded by direct Vector128.Max usage.", error: true)]
         private static Vector128<T> Max128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
             if (System.Runtime.Intrinsics.X86.Sse.IsSupported && typeof(T) == typeof(float))

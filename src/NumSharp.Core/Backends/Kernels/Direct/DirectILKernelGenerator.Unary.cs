@@ -141,6 +141,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Try to get or generate a unary kernel. Returns null if generation fails.
         /// </summary>
+        [Obsolete("Unused. Callers use GetUnaryKernel directly. Marked obsolete pending removal.", error: true)]
         public static UnaryKernel? TryGetUnaryKernel(UnaryKernelKey key)
         {
             if (!Enabled)

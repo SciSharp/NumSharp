@@ -116,6 +116,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Try to get or generate a mixed-type kernel. Returns null if generation fails.
         /// </summary>
+        [Obsolete("Unused. Callers use GetMixedTypeKernel directly. Marked obsolete pending removal.", error: true)]
         public static MixedTypeKernel? TryGetMixedTypeKernel(MixedTypeKernelKey key)
         {
             if (!Enabled)

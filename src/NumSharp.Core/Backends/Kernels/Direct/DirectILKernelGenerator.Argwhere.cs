@@ -192,6 +192,7 @@ namespace NumSharp.Backends.Kernels
         /// IL opcode that loads a value of type <paramref name="t"/> from a native
         /// pointer that's already on the eval stack. Used in the scalar tail.
         /// </summary>
+        [Obsolete("Unused. Argwhere IL emission resolves load opcodes inline, never calls this dispatcher.", error: true)]
         private static OpCode ArgwhereScalarLoadOpcode(Type t)
         {
             if (t == typeof(bool) || t == typeof(byte)) return OpCodes.Ldind_U1;

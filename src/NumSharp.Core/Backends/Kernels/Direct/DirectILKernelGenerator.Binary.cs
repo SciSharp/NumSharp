@@ -116,6 +116,7 @@ namespace NumSharp.Backends.Kernels
         /// Get or generate an IL-based kernel for contiguous (SimdFull) operations.
         /// Returns null if IL generation is not supported for this type/operation.
         /// </summary>
+        [Obsolete("Unused. Superseded by GetMixedTypeKernel(ExecutionPath.SimdFull) for same-type contig kernels.", error: true)]
         public static ContiguousKernel<T>? GetContiguousKernel<T>(BinaryOp op) where T : unmanaged
         {
             if (!Enabled)

@@ -62,6 +62,7 @@ namespace NumSharp.Backends.Kernels
         /// Get or generate an IL-based high-performance MatMul kernel.
         /// Returns null if the type is not supported for SIMD optimization.
         /// </summary>
+        [Obsolete("Unused. Matmul callers invoke SimdMatMul.* directly instead.", error: true)]
         public static unsafe MatMul2DKernel<T>? GetMatMulKernel<T>() where T : unmanaged
         {
             if (!Enabled)

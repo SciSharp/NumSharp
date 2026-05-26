@@ -463,6 +463,7 @@ namespace NumSharp.Backends.Kernels
         /// Get or generate a cumulative axis (scan along axis) kernel.
         /// Returns a delegate that computes running accumulation along a specific axis.
         /// </summary>
+        [Obsolete("Unused. Callers use TryGetCumulativeAxisKernel (the non-throwing twin) instead.", error: true)]
         public static CumulativeAxisKernel GetCumulativeAxisKernel(CumulativeAxisKernelKey key)
         {
             if (!Enabled)
@@ -604,6 +605,7 @@ namespace NumSharp.Backends.Kernels
         /// Axis cumulative product helper. Computes cumprod along a specific axis.
         /// Uses optimized iteration pattern based on axis position.
         /// </summary>
+        [Obsolete("Unused. Superseded by IL-emitted axis cumprod kernels via TryGetCumulativeAxisKernel.", error: true)]
         internal static unsafe void AxisCumProdHelper<TIn, TOut>(
             void* input, void* output, long* inputStrides, long* shape,
             int axis, int ndim, long totalSize)
@@ -2203,6 +2205,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="input">Pointer to input data</param>
         /// <param name="output">Pointer to output data</param>
         /// <param name="totalSize">Number of elements</param>
+        [Obsolete("Unused. Superseded by IL-emitted flat cumsum kernels via TryGetCumulativeKernel.", error: true)]
         public static unsafe void CumSumHelper<TIn, TOut>(void* input, void* output, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
