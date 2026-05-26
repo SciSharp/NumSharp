@@ -24,7 +24,7 @@ dotnet run --no-build --framework net8.0      # or --framework net10.0
 The csproj is an **Exe** (not a library) with `OutputType=Exe`,
 `AllowUnsafeBlocks=true`, multi-targets `net8.0;net10.0`. It has
 `InternalsVisibleTo("NeuralNetwork.NumSharp")` in `src/NumSharp.Core/Assembly/
-Properties.cs`, so `NpyIterRef`, `NpyExpr`, `ILKernelGenerator.InnerLoopCachedCount`,
+Properties.cs`, so `NpyIterRef`, `NpyExpr`, `DirectILKernelGenerator.InnerLoopCachedCount`,
 and `DelegateSlots.RegisteredCount` are all accessible.
 
 Current demo defaults (in `MnistMlp/Program.cs`):
