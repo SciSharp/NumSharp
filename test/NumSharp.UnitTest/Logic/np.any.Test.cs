@@ -81,9 +81,9 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void AnyInvalidAxisTest()
         {
-            // Test invalid axis - should throw ArgumentOutOfRangeException
+            // NumPy 2.x: invalid axis raises AxisError
             var arr = np.array(new int[,] { { 0, 1 }, { 2, 3 } });
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 5, keepdims: false));
+            Assert.ThrowsException<AxisError>(() => np.any(arr, axis: 5, keepdims: false));
         }
 
         [TestMethod]
@@ -126,9 +126,9 @@ namespace NumSharp.UnitTest.Logic
         {
             // NumPy 2.x: np.any(0D_array, axis=1) raises AxisError
             var arr = np.array(5);
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 1));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 2));
-            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: -2));
+            Assert.ThrowsException<AxisError>(() => np.any(arr, axis: 1));
+            Assert.ThrowsException<AxisError>(() => np.any(arr, axis: 2));
+            Assert.ThrowsException<AxisError>(() => np.any(arr, axis: -2));
         }
 
         [TestMethod]

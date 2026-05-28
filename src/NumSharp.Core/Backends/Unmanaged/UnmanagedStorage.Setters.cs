@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -177,6 +178,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                     *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
                     return;
+                case NPTypeCode.SByte:
+                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
+                    return;
                 case NPTypeCode.Byte:
                     *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
                     return;
@@ -201,6 +205,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     *((char*)Address + _shape.GetOffset(indices)) = (char)value;
                     return;
+                case NPTypeCode.Half:
+                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
+                    return;
                 case NPTypeCode.Double:
                     *((double*)Address + _shape.GetOffset(indices)) = (double)value;
                     return;
@@ -209,6 +216,9 @@ namespace NumSharp.Backends
                     return;
                 case NPTypeCode.Decimal:
                     *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
+                    return;
+                case NPTypeCode.Complex:
+                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -233,6 +243,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                     *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
                     return;
+                case NPTypeCode.SByte:
+                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
+                    return;
                 case NPTypeCode.Byte:
                     *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
                     return;
@@ -257,6 +270,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     *((char*)Address + _shape.GetOffset(indices)) = (char)value;
                     return;
+                case NPTypeCode.Half:
+                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
+                    return;
                 case NPTypeCode.Double:
                     *((double*)Address + _shape.GetOffset(indices)) = (double)value;
                     return;
@@ -265,6 +281,9 @@ namespace NumSharp.Backends
                     return;
                 case NPTypeCode.Decimal:
                     *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
+                    return;
+                case NPTypeCode.Complex:
+                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -322,7 +341,7 @@ namespace NumSharp.Backends
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -333,7 +352,7 @@ namespace NumSharp.Backends
             if (valueIsScalary && indices.Length != _shape.NDim)
             {
                 GetData(indices).InternalArray.Fill(Converts.ChangeType(value.GetAtIndex(0), _typecode));
-                //MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                //NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -388,7 +407,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
@@ -438,7 +457,7 @@ namespace NumSharp.Backends
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -452,6 +471,7 @@ namespace NumSharp.Backends
                 switch (_typecode)
                 {
                     case NPTypeCode.Boolean: *(bool*)lhs.Address = *(bool*)rhs.Address; break;
+                    case NPTypeCode.SByte: *(sbyte*)lhs.Address = *(sbyte*)rhs.Address; break;
                     case NPTypeCode.Byte: *(byte*)lhs.Address = *(byte*)rhs.Address; break;
                     case NPTypeCode.Int16: *(short*)lhs.Address = *(short*)rhs.Address; break;
                     case NPTypeCode.UInt16: *(ushort*)lhs.Address = *(ushort*)rhs.Address; break;
@@ -460,9 +480,11 @@ namespace NumSharp.Backends
                     case NPTypeCode.Int64: *(long*)lhs.Address = *(long*)rhs.Address; break;
                     case NPTypeCode.UInt64: *(ulong*)lhs.Address = *(ulong*)rhs.Address; break;
                     case NPTypeCode.Char: *(char*)lhs.Address = *(char*)rhs.Address; break;
+                    case NPTypeCode.Half: *(Half*)lhs.Address = *(Half*)rhs.Address; break;
                     case NPTypeCode.Double: *(double*)lhs.Address = *(double*)rhs.Address; break;
                     case NPTypeCode.Single: *(float*)lhs.Address = *(float*)rhs.Address; break;
                     case NPTypeCode.Decimal: *(decimal*)lhs.Address = *(decimal*)rhs.Address; break;
+                    case NPTypeCode.Complex: *(System.Numerics.Complex*)lhs.Address = *(System.Numerics.Complex*)rhs.Address; break;
                     default: throw new NotSupportedException();
                 }
                 return;
@@ -489,7 +511,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 

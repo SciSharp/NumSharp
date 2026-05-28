@@ -750,7 +750,7 @@ namespace NumSharp.UnitTest.NewDtypes
         public void B29_Asarray_NDArray_NullDtype_ReturnsAsIs()
         {
             var src = np.arange(0.0, 6.0, 1.0, NPTypeCode.Complex);
-            var a = np.asarray(src, null);
+            var a = np.asarray(src, (Type)null);
             ReferenceEquals(a, src).Should().BeTrue();
         }
 

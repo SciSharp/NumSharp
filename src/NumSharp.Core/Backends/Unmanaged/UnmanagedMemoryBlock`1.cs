@@ -7,6 +7,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
+using NumSharp.Backends.Unmanaged.Pooling;
 using NumSharp.Unmanaged.Memory;
 using NumSharp.Utilities;
 
@@ -20,15 +22,23 @@ namespace NumSharp.Backends.Unmanaged
         public readonly long BytesCount;
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <remarks>Does claim ownership since allocation is publicly.</remarks>
+        /// <remarks>
+        ///     Does claim ownership since allocation is publicly. Routes through
+        ///     <see cref="SizeBucketedBufferPool.Take"/> so recently-freed
+        ///     buffers of matching size are reused — eliminates the
+        ///     ~500 µs first-touch / kernel-mode page-fault cost for the
+        ///     dominant element-wise binary-op output allocation pattern,
+        ///     which lets routed binary ops cross from NumPy-parity into
+        ///     NumPy-better territory.
+        /// </remarks>
         [MethodImpl(Optimize)]
         public UnmanagedMemoryBlock(long count)
         {
             var bytes = BytesCount = count * InfoOf<T>.Size;
-            var ptr = (IntPtr)NativeMemory.Alloc((nuint)bytes);
+            var ptr = SizeBucketedBufferPool.Take(bytes);
             _disposer = new Disposer(ptr, bytes);
             Address = (T*)ptr;
             Count = count;
@@ -784,8 +794,23 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(Optimize)]
         public void Free()
         {
+            // Backwards-compatible "force free, ignore refcount" — used by
+            // legacy callers (ArraySlice.DangerousFree). New ARC-aware code
+            // should call Release instead.
             _disposer.Dispose();
         }
+
+        // ---------------------------------------------------------------
+        // ARC plumbing — forwards to the inner Disposer.
+        // ---------------------------------------------------------------
+
+        [MethodImpl(OptimizeAndInline)]
+        public bool TryAddRef() => _disposer.TryAddRef();
+
+        [MethodImpl(OptimizeAndInline)]
+        public void Release() => _disposer.Release();
+
+        public bool IsReleased => _disposer.IsReleased;
 
         [MethodImpl(OptimizeAndInline)]
         public IEnumerator<T> GetEnumerator()
@@ -825,7 +850,12 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(UnmanagedMemoryBlock<T> memoryBlock, long arrayIndex)
         {
             //TODO! at netcore 3, AsSpan.CopyTo might be faster.
-            Buffer.MemoryCopy(Address + arrayIndex, memoryBlock.Address, InfoOf<T>.Size * memoryBlock.Count, InfoOf<T>.Size * (Count - arrayIndex));
+            if (memoryBlock == null)
+                throw new ArgumentNullException(nameof(memoryBlock));
+            if ((ulong)arrayIndex > (ulong)memoryBlock.Count || Count > memoryBlock.Count - arrayIndex)
+                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+
+            Buffer.MemoryCopy(Address, memoryBlock.Address + arrayIndex, InfoOf<T>.Size * (memoryBlock.Count - arrayIndex), InfoOf<T>.Size * Count);
         }
 
         [MethodImpl(Optimize)]
@@ -981,7 +1011,36 @@ namespace NumSharp.Backends.Unmanaged
                 Wrap
             }
 
-            private bool Disposed;
+            // -----------------------------------------------------------------
+            // Atomic reference counting (ARC).
+            //
+            // Encoding:
+            //   _refCount >= 0  → live, with N live references
+            //   _refCount == -1 → released (NativeMemory.Free called)
+            //
+            // The state transition from 0 → -1 is the "claim free" step;
+            // performed by Release via CompareExchange. Concurrent TryAddRef
+            // observing _refCount == 0 may race with that CAS:
+            //   - If the AddRef CAS (0 → 1) wins, the Release CAS (0 → -1)
+            //     fails and no free happens. The new owner is responsible.
+            //   - If the Release CAS wins, the AddRef CAS fails because it
+            //     observes -1 (or because its own CAS sees the new value);
+            //     TryAddRef returns false.
+            // Either ordering preserves the invariant "free happens iff the
+            // final transition into 0 references is observed as final".
+            //
+            // Wrap allocations (Disposer.Null and any AllocationType.Wrap)
+            // bypass refcount entirely — they are non-owning markers that
+            // never free.
+            // -----------------------------------------------------------------
+            private long _refCount;
+
+            // Guard against the race where a Release wins the 0→-1 CAS at
+            // the same instant the finalizer runs. Both call sites must
+            // pass through this exchange to ensure the native free happens
+            // exactly once.
+            private int _freed;
+
             private readonly AllocationType _type;
 
             private readonly IntPtr Address;
@@ -1048,16 +1107,20 @@ namespace NumSharp.Backends.Unmanaged
             [MethodImpl(OptimizeAndInline), SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
             private void ReleaseUnmanagedResources()
             {
-                if (Disposed)
+                // Single-shot guard: only the first thread through here
+                // performs the native free. All other races (concurrent
+                // Release + finalizer + explicit Dispose) short-circuit.
+                if (Interlocked.Exchange(ref _freed, 1) != 0)
                     return;
-
-                Disposed = true;
 
                 switch (_type)
                 {
                     case AllocationType.Native:
-                        NativeMemory.Free((void*)Address);
-                        // Remove GC memory pressure that was added during allocation
+                        // Route back through the size-bucketed pool so the
+                        // next same-size allocation can reuse this buffer
+                        // warm (matches the NativeMemory.Alloc call the
+                        // owning constructor made via SizeBucketedBufferPool.Take).
+                        Pooling.SizeBucketedBufferPool.Return(Address, _bytesCount);
                         if (_bytesCount > 0)
                             GC.RemoveMemoryPressure(_bytesCount);
                         return;
@@ -1065,7 +1128,6 @@ namespace NumSharp.Backends.Unmanaged
                         return;
                     case AllocationType.External:
                         _dispose();
-                        // Remove GC memory pressure if it was added for external unmanaged memory
                         if (_bytesCount > 0)
                             GC.RemoveMemoryPressure(_bytesCount);
                         return;
@@ -1077,17 +1139,77 @@ namespace NumSharp.Backends.Unmanaged
                 }
             }
 
-            /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</summary>
+            // ---------------------------------------------------------------
+            // ARC public surface.
+            // ---------------------------------------------------------------
+
+            /// <summary>
+            /// Add a logical reference. Returns false if the buffer is already released.
+            /// </summary>
+            public bool TryAddRef()
+            {
+                // Non-owning wraps are immortal — refcount is meaningless.
+                if (_type == AllocationType.Wrap) return true;
+
+                long c;
+                do
+                {
+                    c = Interlocked.Read(ref _refCount);
+                    if (c < 0) return false;          // already released
+                } while (Interlocked.CompareExchange(ref _refCount, c + 1, c) != c);
+                return true;
+            }
+
+            /// <summary>
+            /// Drop a logical reference. Frees the buffer when the final reference is released.
+            /// </summary>
+            public void Release()
+            {
+                if (_type == AllocationType.Wrap) return;
+
+                long n = Interlocked.Decrement(ref _refCount);
+                if (n == 0)
+                {
+                    // Claim the free transition 0 → -1 atomically. If the
+                    // CAS fails it means another thread either AddRef'd
+                    // (made it 1) or already claimed the free — either way
+                    // we step back. ReleaseUnmanagedResources is internally
+                    // idempotent via _freed so a lost race is still safe.
+                    if (Interlocked.CompareExchange(ref _refCount, -1, 0) == 0)
+                        ReleaseUnmanagedResources();
+                }
+                else if (n < 0)
+                {
+                    // Stray Release on already-released block. Restore the
+                    // sentinel back to -1 so future TryAddRef still rejects.
+                    // Each thread's Decrement is paired with this Increment,
+                    // so concurrent strays self-balance one-for-one.
+                    Interlocked.Increment(ref _refCount);
+                }
+            }
+
+            /// <summary>Diagnostic: true once the buffer has been freed.</summary>
+            public bool IsReleased => Volatile.Read(ref _freed) != 0;
+
+            /// <summary>
+            /// Backwards-compatible "force free" entry point. Maps to the
+            /// finalizer's behavior: drops any remaining refs and frees.
+            /// Prefer <see cref="Release"/> for ARC-aware code paths.
+            /// </summary>
             public void Dispose()
             {
                 ReleaseUnmanagedResources();
                 GC.SuppressFinalize(this);
             }
 
-            /// <summary>Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage collection.</summary>
+            /// <summary>Finalizer is the safety net: runs only if the user forgot to Release all refs.</summary>
             ~Disposer()
             {
-                ReleaseUnmanagedResources();
+                // The Disposer is unreachable, so no other thread can call
+                // AddRef/Release on it concurrently. If _freed wasn't set,
+                // free now — covers the "user forgot" path.
+                if (Volatile.Read(ref _freed) == 0)
+                    ReleaseUnmanagedResources();
             }
         }
     }

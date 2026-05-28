@@ -12,13 +12,16 @@ namespace NumSharp.Backends
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
 
+            var engine = nd.TensorEngine;
+
             //incase its an empty array
             if (nd.Shape.IsEmpty)
             {
                 if (copy)
-                    return new NDArray(dtype);
+                    return new NDArray(dtype) { TensorEngine = engine };
 
-                nd.Storage = new UnmanagedStorage(dtype);
+                nd.Storage = new UnmanagedStorage(dtype) { Engine = engine };
+                nd.TensorEngine = engine;
                 return nd;
             }
 
@@ -26,21 +29,24 @@ namespace NumSharp.Backends
             if (nd.Shape.IsScalar)
             {
                 var ret = NDArray.Scalar(nd.GetAtIndex(0), dtype);
+                ret.TensorEngine = engine;
                 if (copy)
                     return ret;
 
                 nd.Storage = ret.Storage;
+                nd.TensorEngine = engine;
                 return nd;
             }
 
             //incase its a (1,) shaped
             if (nd.Shape.size == 1 && nd.Shape.NDim == 1)
             {
-                var ret = new NDArray(ArraySlice.Scalar(nd.GetAtIndex(0), dtype), Shape.Vector(1));
+                var ret = new NDArray(ArraySlice.Scalar(nd.GetAtIndex(0), dtype), Shape.Vector(1)) { TensorEngine = engine };
                 if (copy)
                     return ret;
 
                 nd.Storage = ret.Storage;
+                nd.TensorEngine = engine;
                 return nd;
             }
 
@@ -58,12 +64,13 @@ namespace NumSharp.Backends
                     if (nd.Shape.IsSliced)
                         nd = clone();
 
-                    return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.CastTo(dtype), false), nd.Shape));
+                    return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.CastTo(dtype), false), nd.Shape)) { TensorEngine = engine };
                 }
                 else
                 {
                     var storage = nd.Shape.IsSliced ? nd.Storage.Clone() : nd.Storage;
-                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(storage.InternalArray.CastTo(dtype), false), storage.Shape);
+                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(storage.InternalArray.CastTo(dtype), false), storage.Shape) { Engine = engine };
+                    nd.TensorEngine = engine;
                     return nd;
                 }
             }

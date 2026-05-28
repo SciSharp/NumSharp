@@ -52,7 +52,7 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
             var key = new AxisReductionKernelKey(inputType, outputType, op, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
             if (kernel == null)
                 throw new NotSupportedException($"Axis reduction kernel not available for {op}({inputType}) -> {outputType}.");
 

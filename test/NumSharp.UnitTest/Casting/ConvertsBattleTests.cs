@@ -1211,7 +1211,7 @@ namespace NumSharp.UnitTest.Casting
 
         #region Round 5C: cumsum / cumprod scalar accumulator (Half/Complex)
 
-        // H7: ILKernelGenerator.Scan scalar fallback (CumSum/CumProd) used Convert.ToXxx on TIn* deref.
+        // H7: DirectILKernelGenerator.Scan scalar fallback (CumSum/CumProd) used Convert.ToXxx on TIn* deref.
         // NumPy: cumsum(half[1,2,3,4]) = [1,3,6,10]. cumprod = [1,2,6,24].
 
         [TestMethod]

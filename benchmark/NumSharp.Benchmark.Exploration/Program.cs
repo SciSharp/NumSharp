@@ -393,7 +393,7 @@ Examples:
             Dtypes = Dtypes,
             Sizes = Sizes,
             OutputPath = OutputPath,
-            RemainingArgs = RemainingArgs
+            RemainingArgs = (string[])RemainingArgs.Clone()
         };
     }
 }

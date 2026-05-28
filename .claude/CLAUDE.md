@@ -27,8 +27,8 @@ Every np.* function and DefaultEngine operation MUST satisfy these criteria:
 - **Sliced views**: Correctly handles Shape.offset for base address calculation
 
 ### Dtype Support
-All 12 NumSharp types must be handled (or explicitly documented as unsupported):
-Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal
+All 15 NumSharp types must be handled (or explicitly documented as unsupported):
+Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, Single, Double, Decimal, Complex
 
 ### NumPy API Parity
 - Function signature matches NumPy (parameter names, order, defaults)
@@ -43,18 +43,26 @@ Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double
 
 **Full audit tracking:** See `docs/KERNEL_API_AUDIT.md`
 
-## Supported Types (12)
+## Supported Types (15)
 
 | NPTypeCode | C# Type | NPTypeCode | C# Type |
 |------------|---------|------------|---------|
-| Boolean | bool | Int64 | long |
-| Byte | byte | UInt64 | ulong |
-| Int16 | short | Char | char |
-| UInt16 | ushort | Single | float |
-| Int32 | int | Double | double |
-| UInt32 | uint | Decimal | decimal |
+| Boolean | bool | UInt64 | ulong |
+| Byte | byte | Char | char |
+| SByte | sbyte | Half | System.Half |
+| Int16 | short | Single | float |
+| UInt16 | ushort | Double | double |
+| Int32 | int | Decimal | decimal |
+| UInt32 | uint | Complex | System.Numerics.Complex |
+| Int64 | long |  |  |
 
-All operations must handle all 12 types via type switch pattern.
+All operations must handle all 15 types via type switch pattern.
+
+**Perf notes:**
+- SByte / Byte / Int*/UInt* / Single / Double — full SIMD via `MixedTypeKernel.SimdFull` (V128/V256/V512 detected at startup).
+- Half — scalar path (no `Vector<Half>` arithmetic in .NET BCL). Routes through `Half→double→Math.Pow→Half` for `np.power`; ~2× slower than NumPy.
+- Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy.
+- Decimal — scalar path via `DecimalMath.Pow`. Highest precision, slowest.
 
 ## Architecture
 
@@ -74,31 +82,83 @@ np                Static API class (like `import numpy as np`)
 | Decision | Rationale |
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest; optimized for performance |
-| C-order only | Only row-major (C-order) memory layout. Uses `ArrayFlags.C_CONTIGUOUS` flag. No F-order/column-major support. The `order` parameter on `ravel`, `flatten`, `copy`, `reshape` is accepted but ignored. |
+| Order-aware layout | Row-major (C-order) remains the default. `Shape` also tracks F-contiguity, and APIs with an `order` parameter resolve NumPy `C`/`F`/`A`/`K` modes through `OrderResolver`. |
 | Regen templating | Type-specific code generation (legacy, mostly replaced by ILKernel) |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator | Runtime IL emission (~21K lines) with SIMD V128/V256/V512; replaces Regen templates |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Split into two classes: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — target model) and `DirectILKernelGenerator` (legacy whole-array kernels, 50 partials in `Direct/`, being migrated). Replaces Regen templates. |
 
-## ILKernelGenerator
+## ILKernelGenerator + DirectILKernelGenerator (Split)
 
-Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels.
+Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels. **Two physically distinct classes**, each encoding its kernel-driving contract in the type name:
 
-**Partial Class Structure (27 files):**
+### `DirectILKernelGenerator` — legacy whole-array kernels (50 partials)
+
+**Location:** `src/NumSharp.Core/Backends/Kernels/Direct/DirectILKernelGenerator.*.cs`
+
+**Contract:** A single kernel call processes the **whole array**. The kernel itself walks dimensions/strides; the iterator (if any) is only a setup helper. Signature shape varies per kernel family but typically:
+
+```csharp
+delegate void DirectKernel(
+    void* input, void* output,
+    long* strides, long* shape, int ndim,
+    long iterSize);
+```
+
+**Status: LEGACY** but functional. ~95% of hot paths today go through this class. Being incrementally ported to the new `ILKernelGenerator`. **Do NOT add new kernels here unless fixing/extending an existing family** — new code goes to `ILKernelGenerator` (below).
+
+**Partial files in `Direct/` (50):**
 | Category | Files |
 |----------|-------|
-| Core | `ILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
+| Core | `DirectILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
 | Binary | `.Binary.cs`, `.MixedType.cs`, `.Shift.cs` |
 | Unary | `.Unary.cs`, `.Unary.Math.cs`, `.Unary.Decimal.cs`, `.Unary.Vector.cs`, `.Unary.Predicate.cs` |
 | Comparison | `.Comparison.cs` |
-| Reduction | `.Reduction.cs`, `.Reduction.Arg.cs`, `.Reduction.Boolean.cs`, `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs` |
+| Reduction (flat) | `.Reduction.cs`, `.Reduction.Arg.cs`, `.Reduction.Boolean.cs`, `.Reduction.NaN.cs` |
+| Reduction (axis) | `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Boolean.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs`, `.Reduction.Axis.Widening.cs` |
 | Scan | `.Scan.cs` (CumSum, CumProd) |
-| Masking | `.Masking.cs`, `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
-| Other | `.Clip.cs`, `.Modf.cs`, `.MatMul.cs` |
+| Masking | `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
+| Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Copy.cs` |
+| Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
+| Linear algebra | `.MatMul.cs`, `.Trace.cs` |
+| Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs`, `.StorageAlias.cs` |
 
-**Execution Paths:**
+### `ILKernelGenerator` — NpyIter-driven per-chunk kernels (TARGET)
+
+**Location:** `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator*.cs` (root, not in `Direct/`)
+
+**Contract:** Kernel processes **one inner-loop chunk** per call. The iterator (`NpyIterRef`) drives the loop and advances pointers between calls. Matches NumPy's `PyUFuncGenericFunction` model:
+
+```csharp
+unsafe delegate void NpyInnerLoopFunc(
+    void** dataptrs,   // [nop] current operand pointers
+    long*  strides,    // [nop] per-operand byte stride for inner loop
+    long   count,      // number of elements this chunk
+    void*  auxdata);   // op-specific extras (e.g. axis index)
+```
+
+**Status: TARGET** for all new kernels. Currently minimal (placeholder only). Populated incrementally as np.* functions migrate from `DirectILKernelGenerator`. Driven via `NpyIterRef.Execute(kernelKey)`.
+
+### Migration path (per kernel family)
+
+1. Port `DirectILKernelGenerator.<X>.cs` → `ILKernelGenerator.<X>.cs` with the per-chunk signature.
+2. Route the np.* call site through `NpyIterRef.Execute(key)` instead of calling the direct kernel.
+3. Delete `Direct/DirectILKernelGenerator.<X>.cs`.
+
+**Priority order:** reductions → binary arith → comparison → unary → scan → copy → multi-output (Modf) → selection (Where/Place — enables VIRTUAL/WRITEMASKED operand flags).
+
+### Shared infrastructure
+
+Both classes use these helpers at `src/NumSharp.Core/Backends/Kernels/` (root, outside `Direct/`):
+- `VectorMethodCache.cs`, `ScalarMethodCache.cs` — reflection caches (Vector{128,256,512}, Math/MathF)
+- `KernelOp.cs` — `BinaryOp`, `UnaryOp`, `ReductionOp`, `ComparisonOp`, `ExecutionPath` enums
+- `BinaryKernel.cs`, `CopyKernel.cs`, `ReductionKernel.cs`, `ScalarKernel.cs` — kernel key structs and delegate types
+- `StrideDetector.cs` — layout classification (Contiguous / Strided / Broadcast)
+- `SimdMatMul.*.cs` — matmul SIMD primitives
+
+**Execution Paths (DirectILKernelGenerator):**
 1. **SimdFull** - Both operands contiguous, SIMD-capable dtype → Vector loop + scalar tail
 2. **ScalarFull** - Both contiguous, non-SIMD dtype (Decimal) → Scalar loop
 3. **General** - Strided/broadcast → Coordinate-based iteration
@@ -146,7 +206,7 @@ public readonly partial struct Shape
 | Flag | Value | Meaning |
 |------|-------|---------|
 | `C_CONTIGUOUS` | 0x0001 | Data is row-major contiguous |
-| `F_CONTIGUOUS` | 0x0002 | Reserved (always false for NumSharp) |
+| `F_CONTIGUOUS` | 0x0002 | Data is column-major contiguous |
 | `OWNDATA` | 0x0004 | Array owns its data buffer |
 | `ALIGNED` | 0x0100 | Always true for managed allocations |
 | `WRITEABLE` | 0x0400 | False for broadcast views |
@@ -154,6 +214,7 @@ public readonly partial struct Shape
 
 **Key Shape properties:**
 - `IsContiguous` — O(1) check via `C_CONTIGUOUS` flag
+- `IsFContiguous` — O(1) check via `F_CONTIGUOUS` flag
 - `IsBroadcasted` — O(1) check via `BROADCASTED` flag
 - `IsWriteable` — False for broadcast views (prevents corruption)
 - `IsSliced` — True if offset != 0, different size, or non-contiguous
@@ -182,15 +243,14 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ---
 
-## Missing Functions (20)
+## Missing Functions (18)
 
 These NumPy functions are **not implemented**:
 
 | Category | Functions |
 |----------|-----------|
 | Sorting | `np.sort` |
-| Selection | `np.where` |
-| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.tile`, `np.pad` |
+| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90` |
 | Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
 | Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
 | Cumulative | `np.diff`, `np.gradient`, `np.ediff1d` |
@@ -206,7 +266,7 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `dstack`, `expand_dims`, `flatten`, `hstack`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `transpose`, `unique`, `vstack`
+`append`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dstack`, `expand_dims`, `flatten`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vstack`
 
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
@@ -215,7 +275,7 @@ Tested against NumPy 2.x.
 `abs`, `absolute`, `add`, `cbrt`, `ceil`, `clip`, `convolve`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `reciprocal`, `sign`, `sin`, `cos`, `tan`, `sqrt`, `square`, `subtract`, `true_divide`, `trunc`
 
 ### Math — Reductions
-`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `min`, `prod`, `std`, `sum`, `var`
+`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 
 ### Math — NaN-Aware
 `nanmax`, `nanmean`, `nanmin`, `nanprod`, `nanstd`, `nansum`, `nanvar`
@@ -225,6 +285,9 @@ Tested against NumPy 2.x.
 
 ### Comparison & Logic
 `all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`
+
+### Selection
+`where`
 
 ### Sorting & Searching
 `argmax`, `argmin`, `argsort`, `nonzero`, `searchsorted`
@@ -264,7 +327,10 @@ Tested against NumPy 2.x.
 | TensorEngine | `Backends/TensorEngine.cs` |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `MultiIterator.cs` |
+| Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs`, `NpyExpr.cs` |
+| ILKernelGenerator (target) | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
+| DirectILKernelGenerator (legacy) | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 50 partials) |
+| Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 
@@ -528,7 +594,13 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed memory allocation optimized for performance.
 
 **Q: Why Regen templating instead of T4 or source generators?**
-A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator which uses runtime IL emission.
+A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator/DirectILKernelGenerator which use runtime IL emission.
+
+**Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
+A: They encode two different kernel-driving contracts that were silently mixed in the original codebase. `DirectILKernelGenerator` (50 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. `DirectILKernelGenerator` is **legacy** and being migrated; `ILKernelGenerator` is the **target** for all new kernels. New work goes through `ILKernelGenerator`. Existing kernel families stay in `Direct/` until they're ported one at a time.
+
+**Q: When should I write kernels in `ILKernelGenerator` vs `DirectILKernelGenerator`?**
+A: Always `ILKernelGenerator` for new code. The only reason to touch `DirectILKernelGenerator` is fixing a bug or extending an existing kernel family that hasn't been migrated yet. When you finish migrating a family, delete its `Direct/DirectILKernelGenerator.<X>.cs` partial.
 
 **Q: Why is TensorEngine abstracted?**
 A: To support potential future backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS). Not implemented yet, but the architecture allows it.
@@ -574,10 +646,10 @@ A: The `Slice` class parses Python notation (e.g., "1:5:2") into `Start`, `Stop`
 A: `Slice.All` (`:` - all elements), `Slice.Ellipsis` (`...` - fill dimensions), `Slice.NewAxis` (insert dimension), `Slice.Index(n)` (single element, reduces dimensionality).
 
 **Q: What is NDIterator used for?**
-A: Traversing arrays with different memory layouts. Handles contiguous (fast pointer increment) and sliced (uses GetOffset) arrays. Has `MoveNext()`, `HasNext()`, `Reset()`. AutoReset mode for broadcasting smaller arrays.
+A: Legacy typed traversal surface over `NpyIter`. It keeps the existing `MoveNext()`, `HasNext()`, and `Reset()` API while delegating stride, broadcast, and view traversal to the NpyIter state machinery.
 
-**Q: What is MultiIterator?**
-A: Handles paired iteration for broadcasting. `MultiIterator.Assign(lhs, rhs)` copies with broadcasting. `GetIterators(lhs, rhs, broadcast)` creates synchronized iterators.
+**Q: What is NpyIter?**
+A: The NumPy-aligned multi-operand iterator. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. `MultiIterator` was removed in favor of `NpyIter.Copy` and multi-operand iterator execution.
 
 **Q: How does broadcasting work?**
 A: Shapes align from the right. Dimensions must be equal OR one must be 1. Dimension of 1 "stretches" to match. Implemented via `DefaultEngine.Broadcast()` which resolves compatible shapes.

@@ -1,32 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
 using NumSharp;
 
 namespace NeuralNetwork.NumSharp.Cost
 {
+    /// <summary>
+    /// Binary cross-entropy loss. Expects probabilities (post-sigmoid) as
+    /// preds and 0/1 labels, both the same shape. Works for single-label
+    /// binary (batch,) and for multi-label (batch, features) tensors —
+    /// the loss is mean-over-all-elements, matching Keras convention.
+    ///
+    /// Forward:
+    ///   clipped = clip(preds, eps, 1-eps)
+    ///   L = mean(-(labels * log(clipped) + (1 - labels) * log(1 - clipped)))
+    ///
+    /// Backward:
+    ///   dL/dpreds = (clipped - labels) / (clipped * (1 - clipped)) / N
+    /// where N = total number of elements in preds (so the /N cancels
+    /// against the mean reduction in forward).
+    /// </summary>
     public class BinaryCrossEntropy : BaseCost
     {
-        public BinaryCrossEntropy() : base("binary_crossentropy")
-        {
-            
-        }
+        public BinaryCrossEntropy() : base("binary_crossentropy") { }
 
         public override NDArray Forward(NDArray preds, NDArray labels)
         {
-            //ToDo: np.clip
-            //var output = Clip(preds, Epsilon, 1 - Epsilon);
-            var output = preds;
-            output = np.mean(-(labels * np.log(output) + (1 - labels) * np.log(1 - output)));
-            return output;
+            NDArray clipped = np.clip(preds, (NDArray)Epsilon, (NDArray)(1f - Epsilon));
+            NDArray one     = (NDArray)1f;
+            return np.mean(-(labels * np.log(clipped) + (one - labels) * np.log(one - clipped)));
         }
 
         public override NDArray Backward(NDArray preds, NDArray labels)
         {
-            //ToDo: np.clip
-            //var output = Clip(preds, Epsilon, 1 - Epsilon);
-            var output = preds;
-            return (output - labels) / (output * (1 - output));
+            NDArray clipped = np.clip(preds, (NDArray)Epsilon, (NDArray)(1f - Epsilon));
+            NDArray one     = (NDArray)1f;
+            float invSize   = 1f / preds.size;
+            return (clipped - labels) / (clipped * (one - clipped)) * invSize;
         }
     }
 }

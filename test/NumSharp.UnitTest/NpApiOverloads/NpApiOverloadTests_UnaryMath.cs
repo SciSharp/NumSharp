@@ -380,7 +380,7 @@ public class NpApiOverloadTests_UnaryMath
     }
 
     [TestMethod]
-    [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [OpenBugs] // DirectILKernelGenerator Exp2 type conversion bug - InvalidProgramException
     public void Exp2_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -390,7 +390,7 @@ public class NpApiOverloadTests_UnaryMath
     }
 
     [TestMethod]
-    [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [OpenBugs] // DirectILKernelGenerator Exp2 type conversion bug - InvalidProgramException
     public void Exp2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });

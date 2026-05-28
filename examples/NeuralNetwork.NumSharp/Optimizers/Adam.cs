@@ -67,21 +67,13 @@ namespace NeuralNetwork.NumSharp.Optimizers
                 //Get the gradient/partial derivative values
                 NDArray grad = layer.Grads[paramName];
 
-                //If this is first time, initlalise all the moving average values with 0
+                //If this is first time, initialise all the moving average values with 0
                 if (!ms.ContainsKey(varName))
-                {
-                    //ToDo: np.full
-                    //var ms_new = Constant(0, param.shape);
-                    //ms[varName] = ms_new;
-                }
+                    ms[varName] = np.zeros(param.Shape, param.dtype);
 
-                //If this is first time, initlalise all the moving average values with 0
+                //If this is first time, initialise all the squared moving average values with 0
                 if (!vs.ContainsKey(varName))
-                {
-                    //ToDo: np.full
-                    //var vs_new = Constant(0, param.Shape);
-                    //vs[varName] = vs_new;
-                }
+                    vs[varName] = np.zeros(param.Shape, param.dtype);
 
                 // Calculate the exponential moving average for Beta 1 against the gradient
                 ms[varName] = (Beta1 * ms[varName]) + (1 - Beta1) * grad;

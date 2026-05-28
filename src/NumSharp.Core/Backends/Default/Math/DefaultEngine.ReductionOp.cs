@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -41,11 +42,35 @@ namespace NumSharp.Backends
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
 
+            // ─── NpyIter routing for non-contig flat reduction ─────────────
+            // The direct ElementReductionKernel walks non-contig inputs via
+            // coordinate math per element, which made strided/transposed
+            // reductions 20-54× slower than NumPy. NpyIter coalesces dims,
+            // permutes axes by stride magnitude (NPY_KEEPORDER-style), and
+            // normalizes negative strides — so the kernel is called with a
+            // layout it can handle as contig in the inner loop.
+            //
+            // Contig stays on the direct path: zero dispatch overhead, and
+            // the existing kernel is already at parity / faster than NumPy
+            // there.
+            //
+            // ArgMax/ArgMin opt out: the returned index must be the C-order
+            // flat position of the extreme element, but NpyIter permutes axes
+            // by stride magnitude which can re-order the traversal and break
+            // that contract. (e.g. argmax(arr.T) on a 2D F-contig view: C-order
+            // expects [1,9,2,4]→idx 1; NpyIter's F-walk gives [1,2,9,4]→idx 2.)
+            // Direct path's coordinate walk preserves the C-order contract.
+            if (!isContiguous && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
+            {
+                var routed = TryExecuteElementReductionViaNpyIter<TResult>(arr, op, inputType, accumType);
+                if (routed.HasValue) return routed.Value;
+            }
+
             // Get kernel key
             var key = new ElementReductionKernelKey(inputType, accumType, op, isContiguous);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.TryGetTypedElementReductionKernel<TResult>(key);
+            var kernel = DirectILKernelGenerator.TryGetTypedElementReductionKernel<TResult>(key);
 
             if (kernel != null)
             {
@@ -57,6 +82,41 @@ namespace NumSharp.Backends
                 throw new NotSupportedException(
                     $"IL kernel not available for {op}({inputType}) -> {accumType}. " +
                     "Please report this as a bug.");
+            }
+        }
+
+        /// <summary>
+        ///     NpyIter routing for non-contig flat reductions.
+        ///
+        ///     The iterator does the heavy lifting before the kernel runs:
+        ///     dimension coalescing, axis permutation by stride magnitude,
+        ///     negative-stride normalization. After that, the existing
+        ///     ElementReductionKernel handles the per-element loop.
+        ///
+        ///     Returns the reduction result on success, null when the iterator
+        ///     can't be set up (e.g. dim > int.MaxValue) so the caller falls
+        ///     back to the direct path.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private unsafe TResult? TryExecuteElementReductionViaNpyIter<TResult>(
+            NDArray arr, ReductionOp op, NPTypeCode inputType, NPTypeCode accumType)
+            where TResult : unmanaged
+        {
+            var shape = arr.Shape;
+            if (shape.size < 0) return null;
+            for (int i = 0; i < shape.NDim; i++)
+                if (shape.dimensions[i] > int.MaxValue) return null;
+
+            try
+            {
+                using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.None);
+                return iter.ExecuteReduction<TResult>(op);
+            }
+            catch (Exception)
+            {
+                // Catch broadly: iterator setup or kernel resolution may fail
+                // for combos that the direct path still handles via fallback.
+                return null;
             }
         }
 
@@ -222,6 +282,10 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Max, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MaxElementwiseComplexFallback(arr),
+                // Boolean: max == "any true" (logical OR). NumPy: np.max([T,F,T]) → True.
+                NPTypeCode.Boolean => MaxElementwiseBooleanFallback(arr),
+                // Char: scalar comparison via char's natural ordering.
+                NPTypeCode.Char => MaxElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Max not supported for type {retType}")
             };
         }
@@ -254,6 +318,9 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Min, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MinElementwiseComplexFallback(arr),
+                // Boolean: min == "all true" (logical AND). NumPy: np.min([T,F,T]) → False.
+                NPTypeCode.Boolean => MinElementwiseBooleanFallback(arr),
+                NPTypeCode.Char => MinElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Min not supported for type {retType}")
             };
         }
@@ -333,6 +400,57 @@ namespace NumSharp.Backends
                     best = v;
                     seenAny = true;
                 }
+            }
+            return best;
+        }
+
+        /// <summary>
+        ///     Boolean max == "any true" (logical OR). NumPy parity:
+        ///     <c>np.max([T,F,T])</c> → <c>True</c>. Short-circuits on first true.
+        /// </summary>
+        private object MaxElementwiseBooleanFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<bool>();
+            while (iter.HasNext())
+                if (iter.MoveNext()) return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Boolean min == "all true" (logical AND). NumPy parity:
+        ///     <c>np.min([T,F,T])</c> → <c>False</c>. Short-circuits on first false.
+        /// </summary>
+        private object MinElementwiseBooleanFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<bool>();
+            while (iter.HasNext())
+                if (!iter.MoveNext()) return false;
+            return true;
+        }
+
+        /// <summary>Char max/min via natural <c>char</c> ordering (UTF-16 code unit).</summary>
+        private object MaxElementwiseCharFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<char>();
+            char best = '\0';
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                char v = iter.MoveNext();
+                if (!seenAny || v > best) { best = v; seenAny = true; }
+            }
+            return best;
+        }
+
+        private object MinElementwiseCharFallback(NDArray arr)
+        {
+            var iter = arr.AsIterator<char>();
+            char best = char.MaxValue;
+            bool seenAny = false;
+            while (iter.HasNext())
+            {
+                char v = iter.MoveNext();
+                if (!seenAny || v < best) { best = v; seenAny = true; }
             }
             return best;
         }
@@ -606,7 +724,7 @@ namespace NumSharp.Backends
             );
 
             // Try to get SIMD kernel
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
             if (kernel == null)
                 return null;
 

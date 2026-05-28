@@ -81,5 +81,23 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <returns></returns>
         Array ToArray();
+
+        /// <summary>
+        ///     Atomically increment the reference count on the underlying
+        ///     <see cref="MemoryBlock"/>. Returns <c>false</c> if the block
+        ///     has already been released and must not be referenced further.
+        /// </summary>
+        bool TryAddRef();
+
+        /// <summary>
+        ///     Atomically decrement the reference count. Frees the underlying
+        ///     buffer immediately on the final release.
+        /// </summary>
+        void Release();
+
+        /// <summary>
+        ///     Diagnostic: <c>true</c> once the underlying buffer has been freed.
+        /// </summary>
+        bool IsReleased { get; }
     }
 }

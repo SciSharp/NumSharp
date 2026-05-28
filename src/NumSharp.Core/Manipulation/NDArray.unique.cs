@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -81,7 +81,7 @@ namespace NumSharp
     {
         /// <summary>
         ///     Find the unique elements of an array.<br></br>
-        ///     
+        ///
         ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
         ///     * the indices of the input array that give the unique values<br></br>
         ///     * the indices of the unique array that reconstruct the input array<br></br>
@@ -91,32 +91,49 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
         public NDArray unique()
         {
-            switch (typecode)
+            // Route through the kwargs path with all return flags false. The kwargs path uses
+            // the optimized sort+mask algorithm (NaN-partition for floats, plain Array.Sort for
+            // integers, IL-vectorizable mask scan) — substantially faster than the legacy
+            // Hashset+LongIntroSort path for arrays larger than ~1K elements.
+            return uniqueFlatKwargs(return_index: false, return_inverse: false,
+                                     return_counts: false, equal_nan: true)[0];
+        }
+
+        /// <summary>
+        ///     Find the unique elements of an array with full NumPy keyword argument support.
+        ///
+        ///     Returns sorted unique elements; optionally returns first-occurrence indices,
+        ///     reconstruction indices, and counts. Supports axis-aware uniqueness.
+        /// </summary>
+        /// <param name="return_index">Also return indices of <c>ar</c> (along axis, if specified)
+        ///   that give the unique values.</param>
+        /// <param name="return_inverse">Also return indices of the unique array
+        ///   that can be used to reconstruct <c>ar</c>.</param>
+        /// <param name="return_counts">Also return the number of times each unique value comes up.</param>
+        /// <param name="axis">Axis to operate on. If <c>null</c> (default), the array is flattened.</param>
+        /// <param name="equal_nan">If <c>true</c> (default), all NaN values are treated as equal
+        ///   so only one appears in the output. If <c>false</c>, each NaN is treated as unique.</param>
+        /// <returns>An array of NDArrays in order: [values, index?, inverse?, counts?].</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
+        public NDArray[] unique(
+            bool return_index,
+            bool return_inverse = false,
+            bool return_counts = false,
+            int? axis = null,
+            bool equal_nan = true)
+        {
+            if (axis == null)
             {
-#if _REGEN
-	        %foreach supported_dtypes,supported_dtypes_lowercase%
-	        case NPTypeCode.#1: return unique<#2>();
-            %
-            default: throw new NotSupportedException();
-#else
-                case NPTypeCode.Boolean: return unique<bool>();
-                case NPTypeCode.Byte: return unique<byte>();
-                case NPTypeCode.SByte: return unique<sbyte>();
-                case NPTypeCode.Int16: return unique<short>();
-                case NPTypeCode.UInt16: return unique<ushort>();
-                case NPTypeCode.Int32: return unique<int>();
-                case NPTypeCode.UInt32: return unique<uint>();
-                case NPTypeCode.Int64: return unique<long>();
-                case NPTypeCode.UInt64: return unique<ulong>();
-                case NPTypeCode.Char: return unique<char>();
-                case NPTypeCode.Half: return unique<Half>();
-                case NPTypeCode.Double: return unique<double>();
-                case NPTypeCode.Single: return unique<float>();
-                case NPTypeCode.Decimal: return unique<decimal>();
-                case NPTypeCode.Complex: return uniqueComplex();
-                default: throw new NotSupportedException();
-#endif
+                return uniqueFlatKwargs(return_index, return_inverse, return_counts, equal_nan);
             }
+
+            int resolved = axis.Value;
+            if (resolved < 0) resolved += ndim;
+            if (resolved < 0 || resolved >= ndim)
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis.Value} is out of bounds for array of dimension {ndim}");
+
+            return uniqueAxisKwargs(resolved, return_index, return_inverse, return_counts, equal_nan);
         }
 
         /// <summary>

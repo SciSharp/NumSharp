@@ -1305,7 +1305,7 @@ namespace NumSharp.UnitTest.NewDtypes
         // Additional passing edge cases — lock in current NumPy-parity behavior
         // These tests capture subtle Complex edge cases that Rounds 6+7 happen to
         // handle correctly via .NET BCL's Complex.Log/Exp semantics. Keeping them
-        // as regression guards so any future refactor of ILKernelGenerator's
+        // as regression guards so any future refactor of DirectILKernelGenerator's
         // unary Complex branch is caught if it diverges.
         // ======================================================================
 

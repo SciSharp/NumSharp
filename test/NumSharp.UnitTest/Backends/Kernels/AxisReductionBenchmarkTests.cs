@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.Intrinsics.X86;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
@@ -180,11 +181,13 @@ public class AxisReductionBenchmarkTests
 
         result.Should().BeShaped(cols);
 
-        // Mean of 0, 1, 2, ..., 99 = 49.5
+        // Mean of 0, 1, 2, ..., 99 = 49.5.
+        // NumPy parity: mean(float32) preserves Single dtype (was previously forced to Double).
         float expected = (float)(rows - 1) / 2;
+        Assert.AreEqual(NPTypeCode.Single, result.GetTypeCode);
         for (int j = 0; j < cols; j++)
         {
-            Assert.AreEqual(expected, result.GetDouble(j), 1e-3, $"Column {j} mismatch");
+            Assert.AreEqual(expected, result.GetSingle(j), 1e-3f, $"Column {j} mismatch");
         }
     }
 

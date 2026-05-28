@@ -1,0 +1,1 @@
+../../../.claude/skills/np-tests/SKILL.md

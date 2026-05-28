@@ -98,5 +98,21 @@ namespace NumSharp
         {
             return new NDArray(NPTypeCode.Double, shape, false);
         }
+
+        /// <summary>
+        ///     Return a new array of given shape and type with a specified memory layout.
+        /// </summary>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <param name="order">Memory layout: 'C' (row-major), 'F' (column-major), 'A' (any), 'K' (keep).
+        /// With no source array, 'A' and 'K' default to 'C'.</param>
+        /// <param name="dtype">Desired output data-type. Default is numpy.float64.</param>
+        /// <returns>Array of uninitialized data with the requested memory layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty(Shape shape, char order, Type dtype = null)
+        {
+            char physical = OrderResolver.Resolve(order);
+            var orderedShape = new Shape(shape.dimensions, physical);
+            return new NDArray((dtype ?? typeof(double)).GetTypeCode(), orderedShape, false);
+        }
     }
 }

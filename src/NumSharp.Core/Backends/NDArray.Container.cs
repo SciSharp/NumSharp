@@ -50,10 +50,15 @@ namespace NumSharp
             // NumPy: (self == el).any()
             // If shapes are incompatible for broadcasting, let the exception propagate
             // (matches NumPy behavior: ValueError for shape mismatch)
+            // `scalar` is NOT `using`-bound — np.asanyarray may return `value` itself
+            // when it was already an NDArray (would dispose caller's array, Rule 1).
             var scalar = np.asanyarray(value);
 
-            // Use element-wise comparison and check if any match
-            var comparison = this == scalar;
+            // `comparison` IS using-bound: operator== always allocates a fresh bool
+            // NDArray sized broadcast(this, scalar); after np.any reads it, the buffer
+            // is dead. This is the hot path for `value in arr` so atomic release
+            // matters in tight loops.
+            using var comparison = this == scalar;
             return np.any(comparison);
         }
 

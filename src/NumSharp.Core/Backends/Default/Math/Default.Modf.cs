@@ -48,11 +48,11 @@ namespace NumSharp.Backends
                 switch (resolvedType)
                 {
                     case NPTypeCode.Double:
-                        ILKernelGenerator.ModfHelper((double*)fractional.Address, (double*)integral.Address, len);
+                        DirectILKernelGenerator.ModfHelper((double*)fractional.Address, (double*)integral.Address, len);
                         return (fractional, integral);
 
                     case NPTypeCode.Single:
-                        ILKernelGenerator.ModfHelper((float*)fractional.Address, (float*)integral.Address, len);
+                        DirectILKernelGenerator.ModfHelper((float*)fractional.Address, (float*)integral.Address, len);
                         return (fractional, integral);
 
                     case NPTypeCode.Decimal:

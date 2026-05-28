@@ -1,75 +1,170 @@
 using System;
-using NumSharp.Generic;
 using System.Collections.Generic;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
-using NumSharp.Backends.Unmanaged;
+using NumSharp.Generic;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
+        private static long CountNonZeroDispatch<T>(NDArray nd) where T : unmanaged
+            => count_nonzero<T>(nd.MakeGeneric<T>());
+
+        private static void CountNonZeroAxisDispatch<T>(NDArray nd, NDArray result, int axis) where T : unmanaged
+            => count_nonzero_axis<T>(nd.MakeGeneric<T>(), result, axis);
+
         /// <summary>
-        /// Return the indices of non-zero elements.
+        ///     <c>np.nonzero</c> — returns a tuple of <c>ndim</c> int64 arrays of length
+        ///     <c>N</c>, containing the per-dim coordinates of non-zero elements in C-order.
+        ///
+        ///     <para>
+        ///     <b>Implementation:</b> three IL-emitted kernels keyed off the element type
+        ///     (<see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetArgwhereFlatKernel"/>,
+        ///     <see cref="DirectILKernelGenerator.GetNonZeroPerDimKernel"/>). The runtime call
+        ///     site has zero <c>typeof(T)</c> branches: it looks the kernels up in the
+        ///     per-dtype <see cref="System.Collections.Concurrent.ConcurrentDictionary{Type,Object}"/>
+        ///     cache and invokes them. Every loop (SIMD popcount, SIMD bit-scan, coord
+        ///     expand + carry chain) lives inside the emitted IL.
+        ///     </para>
+        ///
+        ///     <para>
+        ///     <b>Two-pass pre-size-then-fill:</b> the SIMD popcount sizes the result
+        ///     exactly, the SIMD bit-scan writes flat indices either straight into the
+        ///     ndim==1 result buffer or into a temp <c>long[]</c> which the IL per-dim
+        ///     expand kernel walks once to emit the per-axis columns. Mirrors the design
+        ///     of <see cref="DefaultEngine.Argwhere"/>.
+        ///     </para>
+        ///
+        ///     <para>
+        ///     Routing:
+        ///     <list type="bullet">
+        ///       <item>0-d → promote via <c>atleast_1d</c>, recurse
+        ///             (truthy→<c>([0],)</c>, falsy→<c>([],)</c>).</item>
+        ///       <item>size == 0 → tuple of <c>ndim</c> empty int64 arrays.</item>
+        ///       <item>Contiguous → IL count + IL flat-scan + (ndim==1 ? direct write : IL per-dim expand).</item>
+        ///       <item>Non-contiguous → materialize via <c>ascontiguousarray</c> then
+        ///             same path as contig.</item>
+        ///     </list>
+        ///     </para>
         /// </summary>
-        /// <remarks>
-        /// NumPy-aligned behavior:
-        /// - Returns tuple of arrays, one per dimension
-        /// - For empty arrays, returns empty arrays with correct dtype (int)
-        /// - Iterates in C-order (row-major)
-        /// - Handles contiguous and strided arrays efficiently
-        /// </remarks>
-        /// <param name="nd">Input array</param>
-        /// <returns>Array of NDArray&lt;long&gt;, one per dimension containing indices of non-zero elements</returns>
-        public override NDArray<long>[] NonZero(NDArray nd)
+        public override unsafe NDArray<long>[] NonZero(NDArray nd)
         {
-            // Type dispatch to generic implementation
-            switch (nd.typecode)
+            // 0-d: NumPy 2.4 raises ValueError, but its own error message suggests
+            // `np.atleast_1d(scalar).nonzero()`, which is exactly the result our
+            // historical implementation has always produced. Preserve that semantic
+            // (otherwise this becomes a breaking-change PR for downstream callers).
+            if (nd.ndim == 0)
+                return NonZero(np.atleast_1d(nd));
+
+            int ndim = nd.ndim;
+            long size = nd.size;
+
+            // Empty input → tuple of `ndim` empty int64 arrays.
+            // Covers shape (0,), (0, 3), (2, 0, 4), ….
+            if (size == 0)
+                return MakeEmptyNonZeroResult(ndim);
+
+            // Materialize non-contig to C-contig. For contig inputs we read from `nd`
+            // directly (no copy); the local `materialized` is only set on the non-contig
+            // branch and disposed in `finally` — see the ARC note at the bottom of the
+            // method for why the explicit Dispose matters here.
+            NDArray materialized = null;
+            NDArray source = nd;
+            if (!nd.Shape.IsContiguous)
             {
-                case NPTypeCode.Boolean: return nonzeros<bool>(nd.MakeGeneric<bool>());
-                case NPTypeCode.Byte: return nonzeros<byte>(nd.MakeGeneric<byte>());
-                case NPTypeCode.SByte: return nonzeros<sbyte>(nd.MakeGeneric<sbyte>());
-                case NPTypeCode.Int16: return nonzeros<short>(nd.MakeGeneric<short>());
-                case NPTypeCode.UInt16: return nonzeros<ushort>(nd.MakeGeneric<ushort>());
-                case NPTypeCode.Int32: return nonzeros<int>(nd.MakeGeneric<int>());
-                case NPTypeCode.UInt32: return nonzeros<uint>(nd.MakeGeneric<uint>());
-                case NPTypeCode.Int64: return nonzeros<long>(nd.MakeGeneric<long>());
-                case NPTypeCode.UInt64: return nonzeros<ulong>(nd.MakeGeneric<ulong>());
-                case NPTypeCode.Char: return nonzeros<char>(nd.MakeGeneric<char>());
-                case NPTypeCode.Half: return nonzeros<Half>(nd.MakeGeneric<Half>());
-                case NPTypeCode.Double: return nonzeros<double>(nd.MakeGeneric<double>());
-                case NPTypeCode.Single: return nonzeros<float>(nd.MakeGeneric<float>());
-                case NPTypeCode.Decimal: return nonzeros<decimal>(nd.MakeGeneric<decimal>());
-                case NPTypeCode.Complex: return nonzeros<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>());
-                default:
-                    throw new NotSupportedException($"NonZero not supported for type {nd.typecode}");
+                materialized = np.ascontiguousarray(nd);
+                source = materialized;
+            }
+            var sourceShape = source.Shape;
+
+            byte* basePtr = (byte*)source.Storage.Address + sourceShape.offset * nd.dtypesize;
+
+            var countKernel = DirectILKernelGenerator.GetArgwhereCountKernel(nd.dtype);
+            var flatKernel = DirectILKernelGenerator.GetArgwhereFlatKernel(nd.dtype);
+            if (countKernel == null || flatKernel == null)
+                throw new NotSupportedException($"np.nonzero: no IL kernel available for {nd.dtype.Name}");
+
+            try
+            {
+                long count = countKernel(basePtr, size);
+                if (count == 0)
+                    return MakeEmptyNonZeroResult(ndim);
+
+                // ndim == 1: flat index IS the coord — scan straight into result[0].
+                if (ndim == 1)
+                {
+                    var result1d = new NDArray<long>[1] { new NDArray<long>(count) };
+                    flatKernel(basePtr, size, (long*)result1d[0].Address);
+                    return result1d;
+                }
+
+                // ndim > 1: scan into a temp flat buffer then expand into ndim per-dim columns.
+                var perDim = new NDArray<long>[ndim];
+                for (int d = 0; d < ndim; d++)
+                    perDim[d] = new NDArray<long>(count);
+
+                // Pack the per-dim column pointers into a stack-local long** buffer the
+                // kernel can index into. .Address returns the raw unmanaged storage pointer
+                // for each NDArray<long> — no pinning needed.
+                long** colPtrs = stackalloc long*[ndim];
+                for (int d = 0; d < ndim; d++)
+                    colPtrs[d] = (long*)perDim[d].Address;
+
+                var flatBuffer = new long[count];
+                fixed (long* flatPtr = flatBuffer)
+                fixed (long* dimsPtr = sourceShape.dimensions)
+                {
+                    flatKernel(basePtr, size, flatPtr);
+
+                    // Pre-compute dim strides for the expand kernel:
+                    //   dimStrides[ndim-1] = 1
+                    //   dimStrides[d]      = dimStrides[d+1] * dims[d+1]
+                    // Cheap O(ndim) prologue. Mirrors the argwhere expand-kernel prologue.
+                    Span<long> dimStrides = stackalloc long[ndim];
+                    dimStrides[ndim - 1] = 1;
+                    for (int d = ndim - 2; d >= 0; d--)
+                        dimStrides[d] = dimStrides[d + 1] * sourceShape.dimensions[d + 1];
+
+                    fixed (long* dimStridesPtr = dimStrides)
+                    {
+                        var perDimKernel = DirectILKernelGenerator.GetNonZeroPerDimKernel();
+                        if (perDimKernel == null)
+                            throw new NotSupportedException("np.nonzero: per-dim IL kernel unavailable");
+
+                        perDimKernel(flatPtr, count, dimsPtr, dimStridesPtr, ndim, colPtrs);
+                    }
+                }
+
+                return perDim;
+            }
+            finally
+            {
+                // ARC: source.Storage.Address is an unmanaged pointer that does NOT
+                // keep `materialized` GC-alive. Under repeated nonzero() calls on a
+                // non-contig input, the JIT can decide `materialized` is dead after
+                // basePtr is computed — then the result-NDArray allocations below
+                // trigger GC, the freshly materialized array's UnmanagedStorage gets
+                // its refcount finalized to zero, and the buffer behind basePtr is
+                // freed mid-IL-scan (the bench harness reproduces this as a Release-
+                // mode AccessViolationException in IL_ArgwhereFlat_*).
+                //
+                // Explicit Dispose() is the established ARC-release pattern in this
+                // codebase (see commits 392529f2, 294d4329) — it forces the JIT to
+                // keep `materialized` rooted until the call site here. For the contig
+                // fast path materialized is null and Dispose is skipped.
+                materialized?.Dispose();
             }
         }
 
-        /// <summary>
-        /// Generic implementation of nonzero using ILKernelGenerator.
-        /// Uses coordinate-based iteration via ILKernelGenerator for all cases.
-        /// </summary>
-        private static unsafe NDArray<long>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
+        private static NDArray<long>[] MakeEmptyNonZeroResult(int ndim)
         {
-            // Ensure at least 1D (NumPy behavior)
-            x = np.atleast_1d(x).MakeGeneric<T>();
-            var shape = x.Shape;
-            var size = x.size;
-            var ndim = x.ndim;
-
-            // Handle empty arrays: return tuple of empty arrays (one per dimension)
-            // NumPy: np.nonzero(np.array([])) -> (array([], dtype=int64),)
-            if (size == 0)
-            {
-                var emptyResult = new NDArray<long>[ndim];
-                for (int i = 0; i < ndim; i++)
-                    emptyResult[i] = new NDArray<long>(0);
-                return emptyResult;
-            }
-
-            // Use strided helper for all cases (handles both contiguous and non-contiguous)
-            // The ILKernelGenerator.FindNonZeroStridedHelper uses coordinate-based iteration
-            return ILKernelGenerator.FindNonZeroStridedHelper((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
+            var result = new NDArray<long>[ndim];
+            for (int i = 0; i < ndim; i++)
+                result[i] = new NDArray<long>(0);
+            return result;
         }
 
         /// <summary>
@@ -83,27 +178,7 @@ namespace NumSharp.Backends
             if (nd.size == 0)
                 return 0;
 
-            // Type dispatch to generic implementation
-            switch (nd.typecode)
-            {
-                case NPTypeCode.Boolean: return count_nonzero<bool>(nd.MakeGeneric<bool>());
-                case NPTypeCode.Byte: return count_nonzero<byte>(nd.MakeGeneric<byte>());
-                case NPTypeCode.SByte: return count_nonzero<sbyte>(nd.MakeGeneric<sbyte>());
-                case NPTypeCode.Int16: return count_nonzero<short>(nd.MakeGeneric<short>());
-                case NPTypeCode.UInt16: return count_nonzero<ushort>(nd.MakeGeneric<ushort>());
-                case NPTypeCode.Int32: return count_nonzero<int>(nd.MakeGeneric<int>());
-                case NPTypeCode.UInt32: return count_nonzero<uint>(nd.MakeGeneric<uint>());
-                case NPTypeCode.Int64: return count_nonzero<long>(nd.MakeGeneric<long>());
-                case NPTypeCode.UInt64: return count_nonzero<ulong>(nd.MakeGeneric<ulong>());
-                case NPTypeCode.Char: return count_nonzero<char>(nd.MakeGeneric<char>());
-                case NPTypeCode.Half: return count_nonzero<Half>(nd.MakeGeneric<Half>());
-                case NPTypeCode.Double: return count_nonzero<double>(nd.MakeGeneric<double>());
-                case NPTypeCode.Single: return count_nonzero<float>(nd.MakeGeneric<float>());
-                case NPTypeCode.Decimal: return count_nonzero<decimal>(nd.MakeGeneric<decimal>());
-                case NPTypeCode.Complex: return count_nonzero<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>());
-                default:
-                    throw new NotSupportedException($"CountNonZero not supported for type {nd.typecode}");
-            }
+            return NpFunc.Invoke(nd.typecode, CountNonZeroDispatch<int>, nd);
         }
 
         /// <summary>
@@ -140,27 +215,7 @@ namespace NumSharp.Backends
                 return result;
             }
 
-            // Type dispatch
-            switch (nd.typecode)
-            {
-                case NPTypeCode.Boolean: count_nonzero_axis<bool>(nd.MakeGeneric<bool>(), result, axis); break;
-                case NPTypeCode.Byte: count_nonzero_axis<byte>(nd.MakeGeneric<byte>(), result, axis); break;
-                case NPTypeCode.SByte: count_nonzero_axis<sbyte>(nd.MakeGeneric<sbyte>(), result, axis); break;
-                case NPTypeCode.Int16: count_nonzero_axis<short>(nd.MakeGeneric<short>(), result, axis); break;
-                case NPTypeCode.UInt16: count_nonzero_axis<ushort>(nd.MakeGeneric<ushort>(), result, axis); break;
-                case NPTypeCode.Int32: count_nonzero_axis<int>(nd.MakeGeneric<int>(), result, axis); break;
-                case NPTypeCode.UInt32: count_nonzero_axis<uint>(nd.MakeGeneric<uint>(), result, axis); break;
-                case NPTypeCode.Int64: count_nonzero_axis<long>(nd.MakeGeneric<long>(), result, axis); break;
-                case NPTypeCode.UInt64: count_nonzero_axis<ulong>(nd.MakeGeneric<ulong>(), result, axis); break;
-                case NPTypeCode.Char: count_nonzero_axis<char>(nd.MakeGeneric<char>(), result, axis); break;
-                case NPTypeCode.Half: count_nonzero_axis<Half>(nd.MakeGeneric<Half>(), result, axis); break;
-                case NPTypeCode.Double: count_nonzero_axis<double>(nd.MakeGeneric<double>(), result, axis); break;
-                case NPTypeCode.Single: count_nonzero_axis<float>(nd.MakeGeneric<float>(), result, axis); break;
-                case NPTypeCode.Decimal: count_nonzero_axis<decimal>(nd.MakeGeneric<decimal>(), result, axis); break;
-                case NPTypeCode.Complex: count_nonzero_axis<System.Numerics.Complex>(nd.MakeGeneric<System.Numerics.Complex>(), result, axis); break;
-                default:
-                    throw new NotSupportedException($"CountNonZero not supported for type {nd.typecode}");
-            }
+            NpFunc.Invoke(nd.typecode, CountNonZeroAxisDispatch<int>, nd, result, axis);
 
             if (keepdims)
             {
@@ -175,39 +230,45 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Generic implementation of count_nonzero (element-wise).
+        ///
+        /// Contig fast path reuses <see cref="DirectILKernelGenerator.GetArgwhereCountKernel"/>
+        /// which is the SAME SIMD popcount kernel used by <c>np.nonzero</c>'s pre-size
+        /// pass: load a Vector&lt;T&gt;, compare-ne-zero, ExtractMostSignificantBits,
+        /// PopCount the inverted mask. The earlier scalar
+        /// <see cref="EqualityComparer{T}.Default.Equals"/> per-element loop was a
+        /// 109× regression vs NumPy (2.1 ms vs 19 µs on 1 M bool).
         /// </summary>
         private static unsafe long count_nonzero<T>(NDArray<T> x) where T : unmanaged
         {
             var shape = x.Shape;
             var size = x.size;
-            long count = 0;
 
             if (shape.IsContiguous)
             {
-                // Fast path for contiguous arrays
-                T* ptr = (T*)x.Address;
+                var ilKernel = DirectILKernelGenerator.GetArgwhereCountKernel(typeof(T));
+                if (ilKernel != null)
+                {
+                    // Sliced views: Address ignores shape.offset; advance manually so
+                    // the kernel sees the live element window.
+                    byte* basePtr = (byte*)x.Address + shape.offset * sizeof(T);
+                    return ilKernel(basePtr, size);
+                }
+
+                // Fallback (only if IL kernel generation is disabled).
+                T* ptr = (T*)x.Address + shape.offset;
                 T zero = default;
+                long count = 0;
                 for (long i = 0; i < size; i++)
                 {
                     if (!EqualityComparer<T>.Default.Equals(ptr[i], zero))
                         count++;
                 }
-            }
-            else
-            {
-                // Strided path
-                var iter = x.AsIterator<T>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                T zero = default;
-                while (hasNext())
-                {
-                    if (!EqualityComparer<T>.Default.Equals(moveNext(), zero))
-                        count++;
-                }
+                return count;
             }
 
-            return count;
+            // Strided path: use NpyIter for layout-aware traversal.
+            using var iter = NpyIterRef.New(x, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            return iter.ExecuteReducing<CountNonZeroKernel<T>, long>(default, 0L);
         }
 
         /// <summary>

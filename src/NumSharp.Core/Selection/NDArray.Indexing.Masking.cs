@@ -264,9 +264,12 @@ namespace NumSharp
             {
                 if (mask.GetBoolean(srcIdx))
                 {
-                    // Get slice at index srcIdx and copy to result at destIdx
-                    var srcSlice = this[srcIdx];
-                    var destSlice = result[destIdx];
+                    // srcSlice and destSlice are owning view wrappers — each
+                    // iteration would otherwise leak two NDArray instances
+                    // to the finalizer queue. Storage stays alive through
+                    // `this` and `result`.
+                    using var srcSlice = this[srcIdx];
+                    using var destSlice = result[destIdx];
                     np.copyto(destSlice, srcSlice);
                     destIdx++;
                 }
@@ -289,7 +292,10 @@ namespace NumSharp
             {
                 if (mask.GetBoolean(i))
                 {
-                    var destSlice = this[i];
+                    // destSlice is an owning view wrapper into `this`'s storage.
+                    // Per-iteration release keeps the wrapper churn off the
+                    // finalizer queue (storage stays alive via `this`).
+                    using var destSlice = this[i];
                     if (isScalarValue)
                     {
                         // Scalar broadcast - value.size == 1
@@ -303,8 +309,16 @@ namespace NumSharp
                     }
                     else
                     {
-                        // Broadcast value to destination
-                        np.copyto(destSlice, value);
+                        // Broadcast value to destination. NumPy's mask-assign computes the
+                        // target shape (selected rows) and broadcasts value to that whole
+                        // target before writing. Iterating row-by-row, we must drop value's
+                        // leading singleton axes that exist only because of the outer mask
+                        // dimension — otherwise (1,4) → (4) fails the strict np.copyto rule.
+                        // `v` reassigns through caller-owned `value`, so we DON'T `using` it.
+                        var v = value;
+                        while (v.ndim > destSlice.ndim && v.shape[0] == 1)
+                            v = v[0];
+                        np.copyto(destSlice, v);
                     }
                 }
             }

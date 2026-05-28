@@ -1,4 +1,6 @@
 ﻿using System;
+using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -40,6 +42,7 @@ namespace NumSharp.Backends
                 r.SetInternalArray(InternalArray);
             r.Count = _shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.Engine = Engine;
             return r;
         }
 
@@ -66,19 +69,32 @@ namespace NumSharp.Backends
         /// </para>
         /// </remarks>
         /// <seealso cref="Clone"/>
-        public UnmanagedStorage Alias(Shape shape)
+        public unsafe UnmanagedStorage Alias(Shape shape)
         {
             var r = new UnmanagedStorage();
             r._typecode = _typecode;
             r._dtype = _dtype;
+            // Hot path: when this storage is already wired (InternalArray + Address
+            // set), copy the IArraySlice surface and the *single* live type-specific
+            // field directly instead of routing through SetInternalArray's full
+            // 15-case typecode dispatch. The aliased storage exposes the same
+            // backing buffer; the type-specific field is still needed for typed
+            // accessors elsewhere in UnmanagedStorage, so we mirror parent's slot
+            // via an IL-emitted delegate cached per dtype (no switch in hot path).
             if (InternalArray != null)
-                r.SetInternalArray(InternalArray);
+            {
+                r.InternalArray = InternalArray;
+                r.Address = Address;
+                DirectILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
+            }
 
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.Engine = Engine;
             return r;
         }
+
 
         /// <summary>
         /// Creates an alias (view) of this storage with a different shape (by reference).
@@ -113,6 +129,7 @@ namespace NumSharp.Backends
                 r.SetInternalArray(InternalArray);
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
+            r.Engine = Engine;
             return r;
         }
 
@@ -208,6 +225,7 @@ namespace NumSharp.Backends
             r.SetInternalArray(newSlice);
             r.Count = newCount;
             r._baseStorage = _baseStorage ?? this;
+            r.Engine = Engine;
             return r;
         }
 
@@ -271,13 +289,14 @@ namespace NumSharp.Backends
         public UnmanagedStorage Cast<T>() where T : unmanaged
         {
             if (_shape.IsEmpty)
-                return new UnmanagedStorage(typeof(T));
+                return new UnmanagedStorage(typeof(T)) { Engine = Engine };
 
             if (_dtype == typeof(T))
                 return Clone();
 
-            //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true, true));
+            // CloneData materializes logical element order for strided/F-contiguous views
+            // before the dtype conversion. Casting the raw backing buffer would reorder data.
+            return new UnmanagedStorage((ArraySlice<T>)CloneData().CastTo<T>(), _shape.Clone(true, true, true)) { Engine = Engine };
         }
 
         /// <summary>
@@ -289,13 +308,14 @@ namespace NumSharp.Backends
         public UnmanagedStorage Cast(NPTypeCode typeCode)
         {
             if (_shape.IsEmpty)
-                return new UnmanagedStorage(typeCode);
+                return new UnmanagedStorage(typeCode) { Engine = Engine };
 
             if (_typecode == typeCode)
                 return Clone();
 
-            //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
+            // CloneData materializes logical element order for strided/F-contiguous views
+            // before the dtype conversion. Casting the raw backing buffer would reorder data.
+            return new UnmanagedStorage((IArraySlice)CloneData().CastTo(typeCode), _shape.Clone(true, true, true)) { Engine = Engine };
         }
 
         /// <summary>
@@ -317,11 +337,15 @@ namespace NumSharp.Backends
         /// <remarks>Copies only if dtypes does not match <typeparamref name="T"/></remarks>
         public UnmanagedStorage CastIfNecessary<T>() where T : unmanaged
         {
-            if (_shape.IsEmpty || _dtype == typeof(T))
+            if (_dtype == typeof(T))
                 return this;
 
-            //this also handles slices
-            return new UnmanagedStorage((ArraySlice<T>)InternalArray.CastTo<T>(), _shape.Clone(true, true, true));
+            if (_shape.IsEmpty)
+                return new UnmanagedStorage(typeof(T)) { Engine = Engine };
+
+            // CloneData materializes logical element order for strided/F-contiguous views
+            // before the dtype conversion. Casting the raw backing buffer would reorder data.
+            return new UnmanagedStorage((ArraySlice<T>)CloneData().CastTo<T>(), _shape.Clone(true, true, true)) { Engine = Engine };
         }
 
         /// <summary>
@@ -332,11 +356,15 @@ namespace NumSharp.Backends
         /// <remarks>Copies only if dtypes does not match <paramref name="typeCode"/></remarks>
         public UnmanagedStorage CastIfNecessary(NPTypeCode typeCode)
         {
-            if (_shape.IsEmpty || _typecode == typeCode)
+            if (_typecode == typeCode)
                 return this;
 
-            //this also handles slices
-            return new UnmanagedStorage((IArraySlice)InternalArray.CastTo(typeCode), _shape.Clone(true, true, true));
+            if (_shape.IsEmpty)
+                return new UnmanagedStorage(typeCode) { Engine = Engine };
+
+            // CloneData materializes logical element order for strided/F-contiguous views
+            // before the dtype conversion. Casting the raw backing buffer would reorder data.
+            return new UnmanagedStorage((IArraySlice)CloneData().CastTo(typeCode), _shape.Clone(true, true, true)) { Engine = Engine };
         }
 
         /// <summary>
@@ -355,19 +383,38 @@ namespace NumSharp.Backends
         #region Cloning
 
         /// <summary>
-        ///     Clone internal storage and get reference to it
+        ///     Clone internal storage and return an owning <see cref="IArraySlice"/>
+        ///     sized to <c>_shape.size</c> (NOT <c>InternalArray.Count</c>).
         /// </summary>
-        /// <returns>reference to cloned storage as System.Array</returns>
+        /// <returns>
+        ///     A freshly-allocated <see cref="IArraySlice"/> whose
+        ///     <c>Count == _shape.size</c>. For contiguous shapes the
+        ///     elements come from <c>InternalArray[_shape.offset.._shape.offset + _shape.size)</c>
+        ///     via <see cref="IArraySlice.Slice(int, int)"/> + Clone; for strided /
+        ///     broadcast / transposed shapes they are materialised via <see cref="NpyIter.Copy"/>.
+        /// </returns>
+        /// <remarks>
+        ///     Subtle: the C-contig branch must <b>always</b> slice to
+        ///     <c>_shape.size</c> when <c>_shape.bufferSize &gt; _shape.size</c>,
+        ///     even when <c>offset == 0</c>. A 1-D slice like
+        ///     <c>arr[0:4]</c> on a 5-element source has offset 0 yet covers
+        ///     only the first 4 elements; a previous version unconditionally
+        ///     cloned the entire <c>InternalArray</c> in the <c>offset == 0</c>
+        ///     branch, then handed the 5-element clone to <see cref="UnmanagedStorage(IArraySlice, Shape)"/>
+        ///     paired with a (4,) shape, tripping
+        ///     <see cref="IncorrectShapeException"/>.
+        /// </remarks>
         public IArraySlice CloneData()
         {
             // Contiguous shapes can copy directly from memory.
-            // Must account for offset - slice the internal array at the correct position.
+            // Must account for offset AND the size-vs-buffer mismatch — slice
+            // to exactly _shape.size starting at _shape.offset so the cloned
+            // IArraySlice matches the shape we'll pair it with downstream.
             if (_shape.IsContiguous)
             {
-                if (_shape.offset == 0)
+                if (_shape.offset == 0 && _shape.size == InternalArray.Count)
                     return InternalArray.Clone();
-                else
-                    return InternalArray.Slice(_shape.offset, _shape.size).Clone();
+                return InternalArray.Slice(_shape.offset, _shape.size).Clone();
             }
 
             if (_shape.IsScalar)
@@ -375,7 +422,8 @@ namespace NumSharp.Backends
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
-            MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);
+            var dst = new UnmanagedStorage(ret, _shape.Clean());
+            NpyIter.Copy(dst, this);
 
             return ret;
         }
@@ -398,7 +446,27 @@ namespace NumSharp.Backends
         ///     Perform a complete copy of this <see cref="UnmanagedStorage"/> and <see cref="InternalArray"/>.
         /// </summary>
         /// <remarks>If shape is sliced, discards any slicing properties but copies only the sliced data</remarks>
-        public UnmanagedStorage Clone() => new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true));
+        public UnmanagedStorage Clone()
+        {
+            if (InternalArray == null)
+                return new UnmanagedStorage(_typecode) { Engine = Engine };
+
+            if (CanCloneRawLayout())
+                return new UnmanagedStorage(InternalArray.Clone(), new Shape(_shape)) { Engine = Engine };
+
+            return new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true)) { Engine = Engine };
+        }
+
+        private bool CanCloneRawLayout()
+        {
+            if (_shape.IsEmpty || _shape.IsBroadcasted || _shape.offset != 0)
+                return false;
+
+            if (_shape.bufferSize > 0 && _shape.bufferSize != _shape.size)
+                return false;
+
+            return _shape.IsContiguous || _shape.IsFContiguous;
+        }
 
         object ICloneable.Clone() => Clone();
 
