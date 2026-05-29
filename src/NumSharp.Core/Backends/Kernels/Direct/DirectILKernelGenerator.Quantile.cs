@@ -51,20 +51,22 @@ namespace NumSharp.Backends.Kernels
             long outer, int n,
             int* kSorted, int nKs,
             double* q, int nQs,
-            void* dstBase, long dstOuterStride);
+            void* dstBase, long dstOuterStride,
+            int ignoreNaN, int* rowKScratch);
 
         private readonly struct QuantileKey : IEquatable<QuantileKey>
         {
             public readonly NPTypeCode SrcType;
             public readonly NPTypeCode OutType;
             public readonly QuantileMethod Method;
+            public readonly bool IgnoreNaN;
 
-            public QuantileKey(NPTypeCode srcType, NPTypeCode outType, QuantileMethod method)
-            { SrcType = srcType; OutType = outType; Method = method; }
+            public QuantileKey(NPTypeCode srcType, NPTypeCode outType, QuantileMethod method, bool ignoreNaN)
+            { SrcType = srcType; OutType = outType; Method = method; IgnoreNaN = ignoreNaN; }
 
-            public bool Equals(QuantileKey o) => SrcType == o.SrcType && OutType == o.OutType && Method == o.Method;
+            public bool Equals(QuantileKey o) => SrcType == o.SrcType && OutType == o.OutType && Method == o.Method && IgnoreNaN == o.IgnoreNaN;
             public override bool Equals(object obj) => obj is QuantileKey o && Equals(o);
-            public override int GetHashCode() => ((int)SrcType << 16) | ((int)OutType << 8) | (int)Method;
+            public override int GetHashCode() => ((int)SrcType << 17) | ((int)OutType << 9) | ((int)Method << 1) | (IgnoreNaN ? 1 : 0);
         }
 
         private static readonly ConcurrentDictionary<QuantileKey, QuantileKernel> _quantileKernelCache = new();
@@ -79,11 +81,13 @@ namespace NumSharp.Backends.Kernels
             void* srcBase, void* scratchBase, long outer, int n,
             int* kSorted, int nKs,
             double* q, int nQs,
-            void* dstBase, long dstOuterStride)
+            void* dstBase, long dstOuterStride,
+            bool ignoreNaN = false, int* rowKScratch = null)
         {
-            var key = new QuantileKey(srcType, outType, method);
+            var key = new QuantileKey(srcType, outType, method, ignoreNaN);
             var kernel = _quantileKernelCache.GetOrAdd(key, k => EmitQuantileKernel(k));
-            kernel(srcBase, scratchBase, outer, n, kSorted, nKs, q, nQs, dstBase, dstOuterStride);
+            kernel(srcBase, scratchBase, outer, n, kSorted, nKs, q, nQs, dstBase, dstOuterStride,
+                ignoreNaN ? 1 : 0, rowKScratch);
         }
 
         #endregion
@@ -127,6 +131,8 @@ namespace NumSharp.Backends.Kernels
                     typeof(int),     // 7 nQs
                     typeof(void*),   // 8 dstBase
                     typeof(long),    // 9 dstOuterStride
+                    typeof(int),     // 10 ignoreNaN
+                    typeof(int*),    // 11 rowKScratch
                 },
                 owner: typeof(DirectILKernelGenerator),
                 skipVisibility: true);
@@ -177,9 +183,11 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);                      // dstBase + offset → void*
 
-            //   dstOuterStride, methodInt
-            il.Emit(OpCodes.Ldarg_S, (byte)9);         // dstOuterStride
-            il.Emit(OpCodes.Ldc_I4, (int)key.Method);  // method baked in
+            //   dstOuterStride, methodInt, ignoreNaN (baked), rowKScratch
+            il.Emit(OpCodes.Ldarg_S, (byte)9);              // dstOuterStride
+            il.Emit(OpCodes.Ldc_I4, (int)key.Method);       // method baked in
+            il.Emit(OpCodes.Ldc_I4, key.IgnoreNaN ? 1 : 0); // ignoreNaN baked in
+            il.Emit(OpCodes.Ldarg_S, (byte)11);             // rowKScratch
 
             il.Emit(OpCodes.Call, helperSpecialized);
 
@@ -217,7 +225,7 @@ namespace NumSharp.Backends.Kernels
             int* kSorted, int nKs,
             double* q, int nQs,
             void* dstCell, long dstOuterStride,
-            int methodInt)
+            int methodInt, int ignoreNaN, int* rowKScratch)
             where T : unmanaged, IComparable<T>
             where TOut : unmanaged
         {
@@ -228,6 +236,19 @@ namespace NumSharp.Backends.Kernels
 
             // 1. memcpy
             Buffer.MemoryCopy(src, scratch, (long)n * sizeof(T), (long)n * sizeof(T));
+
+            // ── NaN-ignoring path (np.nanmedian / np.nanquantile / np.nanpercentile) ──
+            // The engine only routes float dtypes here (ints carry no NaN), so the
+            // compaction guards below collapse to a single typed loop per
+            // specialization. Each row is independently compacted (NaNs dropped to a
+            // local valid-count m), then the partition/interpolate runs against the
+            // first m elements with per-row indices — m varies per row, so kSorted
+            // (sized for n) cannot be reused; indices are recomputed into rowKScratch.
+            if (ignoreNaN != 0)
+            {
+                ProcessQuantileRowNaN<T, TOut>(scratch, n, q, nQs, dst, dstOuterStride, method, rowKScratch);
+                return;
+            }
 
             // 2. NaN prescan — only floats can carry NaN. JIT folds the guards away
             //    for non-float specializations.
@@ -261,6 +282,70 @@ namespace NumSharp.Backends.Kernels
 
                 ComputeIndex(n, q[j], method, out int prevIdx, out int nextIdx, out double gamma);
                 WriteCell(scratch, prevIdx, nextIdx, gamma, method, outCell);
+            }
+        }
+
+        /// <summary>
+        ///     Per-row NaN-ignoring quantile. <paramref name="scratch"/> already holds a
+        ///     copy of the row (length n). NaNs are compacted to the front (valid count
+        ///     m); an all-NaN row writes NaN for every q (matches NumPy's "All-NaN slice").
+        ///     Partition indices are derived from m per row and sorted/deduped into
+        ///     <paramref name="rowKScratch"/> (capacity >= 2*nQs).
+        /// </summary>
+        private static unsafe void ProcessQuantileRowNaN<T, TOut>(
+            T* scratch, int n, double* q, int nQs,
+            TOut* dst, long dstOuterStride, QuantileMethod method, int* rowKScratch)
+            where T : unmanaged, IComparable<T>
+            where TOut : unmanaged
+        {
+            // Compact NaNs out (floats only — JIT folds the guard for int specializations).
+            int m = n;
+            if (typeof(T) == typeof(double))
+            {
+                var p = (double*)scratch; int w = 0;
+                for (int i = 0; i < n; i++) { double v = p[i]; if (!double.IsNaN(v)) p[w++] = v; }
+                m = w;
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                var p = (float*)scratch; int w = 0;
+                for (int i = 0; i < n; i++) { float v = p[i]; if (!float.IsNaN(v)) p[w++] = v; }
+                m = w;
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                var p = (Half*)scratch; int w = 0;
+                for (int i = 0; i < n; i++) { Half v = p[i]; if (!Half.IsNaN(v)) p[w++] = v; }
+                m = w;
+            }
+
+            if (m == 0)
+            {
+                for (int j = 0; j < nQs; j++) WriteNaNCell(dst + (long)j * dstOuterStride);
+                return;
+            }
+
+            // Collect (prev,next) indices for every q against this row's valid count m.
+            int cnt = 0;
+            for (int j = 0; j < nQs; j++)
+            {
+                ComputeIndex(m, q[j], method, out int pi, out int ni, out _);
+                rowKScratch[cnt++] = pi;
+                rowKScratch[cnt++] = ni;
+            }
+            // Sort + dedup so PartitionAtMany places every needed index in one pass.
+            new Span<int>(rowKScratch, cnt).Sort();
+            int u = 0;
+            for (int i = 0; i < cnt; i++)
+                if (u == 0 || rowKScratch[u - 1] != rowKScratch[i]) rowKScratch[u++] = rowKScratch[i];
+
+            if (m > 1)
+                QuickSelect.PartitionAtMany(scratch, m, rowKScratch, u);
+
+            for (int j = 0; j < nQs; j++)
+            {
+                ComputeIndex(m, q[j], method, out int prevIdx, out int nextIdx, out double gamma);
+                WriteCell(scratch, prevIdx, nextIdx, gamma, method, dst + (long)j * dstOuterStride);
             }
         }
 
@@ -431,13 +516,12 @@ namespace NumSharp.Backends.Kernels
             // (T, TOut) specialization, so each instantiation is a single
             // arithmetic body with no dispatch.
 
-            if (typeof(T) == typeof(float))
+            if (typeof(T) == typeof(float) && typeof(TOut) == typeof(float))
             {
+                // Weak (scalar-q) float32 → float32: NumPy keeps the whole lerp in float32.
                 float prev = ((float*)scratch)[prevIdx];
                 float next = ((float*)scratch)[nextIdx];
-                float r = prev + (next - prev) * (float)gamma;
-                if (typeof(TOut) == typeof(float)) *(float*)dst = r;
-                else WriteAsTOut(r, dst);
+                *(float*)dst = prev + (next - prev) * (float)gamma;
                 return;
             }
             if (typeof(T) == typeof(decimal))
@@ -449,17 +533,18 @@ namespace NumSharp.Backends.Kernels
                 else WriteAsTOut((double)r, dst);
                 return;
             }
-            if (typeof(T) == typeof(Half))
+            if (typeof(T) == typeof(Half) && typeof(TOut) == typeof(Half))
             {
+                // Weak (scalar-q) float16 → float16.
                 float prev = (float)((Half*)scratch)[prevIdx];
                 float next = (float)((Half*)scratch)[nextIdx];
-                float r = prev + (next - prev) * (float)gamma;
-                if (typeof(TOut) == typeof(Half)) *(Half*)dst = (Half)r;
-                else WriteAsTOut(r, dst);
+                *(Half*)dst = (Half)(prev + (next - prev) * (float)gamma);
                 return;
             }
 
-            // Default: lerp in double for int / bool / char / double.
+            // Default: lerp in double. Covers int / bool / char / double inputs and the
+            // strong-q (array-q) float16/float32 → float64 promotion, where NumPy widens
+            // to float64 before interpolating.
             double dprev = ToDouble(scratch[prevIdx]);
             double dnext = ToDouble(scratch[nextIdx]);
             double dr = dprev + (dnext - dprev) * gamma;

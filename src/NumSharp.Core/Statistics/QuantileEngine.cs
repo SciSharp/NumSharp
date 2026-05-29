@@ -78,12 +78,36 @@ namespace NumSharp.Statistics
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
-            bool emptyReturnsNaN = false)
+            bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
 
-            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method);
+            // np.nan* short-circuit a totally-empty input (some dimension is 0) to
+            // np.nanmean(a, axis, keepdims) BEFORE any method/q dispatch. NumPy does this
+            // in _nanquantile_unchecked / nanmedian, so the q dimension is dropped and the
+            // dtype follows nanmean (float widths preserved, everything else -> float64).
+            // This runs before the boolean-continuous guard so that, like NumPy, an empty
+            // boolean nanquantile returns nan instead of raising.
+            if (ignoreNaN && a.size == 0)
+                return BuildEmptyNanResult(a, axisArr, keepdims, @out);
+
+            // NumPy raises TypeError for boolean input with a continuous (interpolating)
+            // method: the underlying lerp performs `b - a` and boolean subtraction is
+            // unsupported. Discrete methods only index (never subtract), so they are fine;
+            // np.median / np.nanmedian coerce through mean() and pass
+            // allowBooleanContinuous: true to keep computing a float64 result.
+            if (!allowBooleanContinuous && a.typecode == NPTypeCode.Boolean && !IsDiscrete(method))
+                throw new NotSupportedException(
+                    "numpy boolean subtract, the `-` operator, is not supported, use the "
+                    + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
+
+            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method, qIsScalar);
+
+            // NaN-ignoring (np.nan*) is only meaningful for dtypes that can hold a NaN.
+            // Integer / bool / char rows never contain NaN, so the regular kernel (with
+            // its precomputed partition indices) is both correct and faster there.
+            bool nanAware = ignoreNaN && IsFloatTc(a.typecode);
 
             // ── Stage the data so the reduction axis is innermost (stride-1 rows). ──
             // The IL kernel below walks rows by adding (n * sizeof(T)) per iteration.
@@ -190,6 +214,9 @@ namespace NumSharp.Statistics
             int srcSize = TypeSize(a.typecode);
             byte[] scratchBytes = ArrayPool<byte>.Shared.Rent(checked(srcSize * n));
             double[] qCopy = q;   // q is already a flat array we own; no need to copy
+            // Per-row partition-index scratch for the NaN path (capacity 2*nQs, reused
+            // across rows so the per-row index recomputation allocates nothing).
+            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(Math.Max(1, 2 * qCopy.Length)) : null;
 
             try
             {
@@ -198,6 +225,7 @@ namespace NumSharp.Statistics
                     fixed (byte* scratchPtr = scratchBytes)
                     fixed (int* kPtr = kSortedManaged)
                     fixed (double* qPtr = qCopy)
+                    fixed (int* rowKPtr = rowKManaged)
                     {
                         long dstOuterStride = qIsScalar ? 0L : outerSize;
                         // Complex has no IL quantile kernel — values have no natural
@@ -231,7 +259,9 @@ namespace NumSharp.Statistics
                                 q: qPtr,
                                 nQs: qCopy.Length,
                                 dstBase: resultRaw.Address,
-                                dstOuterStride: dstOuterStride);
+                                dstOuterStride: dstOuterStride,
+                                ignoreNaN: nanAware,
+                                rowKScratch: rowKPtr);
                         }
                     }
                 }
@@ -239,6 +269,7 @@ namespace NumSharp.Statistics
             finally
             {
                 ArrayPool<byte>.Shared.Return(scratchBytes);
+                if (rowKManaged != null) ArrayPool<int>.Shared.Return(rowKManaged);
             }
 
             return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
@@ -282,12 +313,87 @@ namespace NumSharp.Statistics
             result.Storage.InternalArray.Fill(nan);
         }
 
+        /// <summary>
+        ///     Result for np.nan* on a totally-empty input: the reduced shape (axes removed,
+        ///     or set to 1 under keepdims), filled with NaN, dtype following nanmean (float
+        ///     widths preserved, everything else → float64). The q dimension is dropped to
+        ///     match NumPy's <c>return np.nanmean(a, axis, out, keepdims)</c> short-circuit.
+        /// </summary>
+        private static NDArray BuildEmptyNanResult(NDArray a, int[] axisArr, bool keepdims, NDArray @out)
+        {
+            NPTypeCode tc =
+                IsFloatTc(a.typecode)            ? a.typecode :
+                a.typecode == NPTypeCode.Complex ? NPTypeCode.Complex :
+                a.typecode == NPTypeCode.Decimal ? NPTypeCode.Decimal :
+                                                   NPTypeCode.Double;
+
+            int nd = a.ndim;
+            bool reduceAll = axisArr == null || axisArr.Length == 0;
+            HashSet<int> axes = reduceAll ? null : new HashSet<int>(NormalizeAxes(axisArr, nd));
+
+            long[] shapeArr;
+            if (keepdims)
+            {
+                shapeArr = new long[nd];
+                for (int i = 0; i < nd; i++)
+                    shapeArr[i] = (reduceAll || axes.Contains(i)) ? 1L : a.shape[i];
+            }
+            else
+            {
+                var dims = new List<long>();
+                if (!reduceAll)
+                    for (int i = 0; i < nd; i++)
+                        if (!axes.Contains(i)) dims.Add(a.shape[i]);
+                shapeArr = dims.ToArray();   // length 0 → 0-D scalar
+            }
+
+            NDArray result = shapeArr.Length == 0
+                ? new NDArray(tc, new Shape())
+                : new NDArray(tc, new Shape(shapeArr));
+            FillWithNaN(result, tc);
+
+            if (@out is not null)
+            {
+                if (!result.shape.SequenceEqual(@out.shape))
+                    throw new ArgumentException(
+                        $"Wrong shape of argument 'out', shape={string.Join(",", result.shape)} is required; " +
+                        $"got shape={string.Join(",", @out.shape)}.");
+                np.copyto(@out, result);
+                return @out;
+            }
+            return result;
+        }
+
         // ── helpers ─────────────────────────────────────────────────────────────────
 
-        /// <summary>Output-dtype rule: int/bool → float64 for continuous methods, preserved for discrete.</summary>
-        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method)
+        /// <summary>True for the three dtypes that can carry a NaN (drives the np.nan* row path).</summary>
+        internal static bool IsFloatTc(NPTypeCode tc) =>
+            tc == NPTypeCode.Double || tc == NPTypeCode.Single || tc == NPTypeCode.Half;
+
+        /// <summary>
+        ///     Output-dtype rule, matching NumPy 2.x exactly (verified against 2.4.2):
+        ///     <list type="bullet">
+        ///       <item>Discrete methods index via <c>take</c> → preserve the input dtype
+        ///             (bool→bool, int→int, float32→float32).</item>
+        ///       <item>Continuous methods interpolate via <c>_lerp</c>:
+        ///         <list type="bullet">
+        ///           <item>integer / bool / char → float64.</item>
+        ///           <item>float64 → float64.</item>
+        ///           <item>float16 / float32 → float64 when <paramref name="qIsScalar"/> is
+        ///                 false (array q makes gamma a strong float64 that upcasts), but
+        ///                 the input width is preserved when q is a scalar (NEP50 weak
+        ///                 promotion). This is also why np.median(float32)→float32.</item>
+        ///         </list>
+        ///       </item>
+        ///     </list>
+        ///     Decimal and Complex are NumSharp-only and always preserved.
+        /// </summary>
+        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method, bool qIsScalar)
         {
-            bool discrete = IsDiscrete(method);
+            if (IsDiscrete(method))
+                return inTc;   // take() preserves the input dtype for every dtype
+
+            // Continuous (interpolating) methods.
             switch (inTc)
             {
                 case NPTypeCode.Boolean:
@@ -300,12 +406,14 @@ namespace NumSharp.Statistics
                 case NPTypeCode.Int64:
                 case NPTypeCode.UInt64:
                 case NPTypeCode.Char:
-                    return discrete ? inTc : NPTypeCode.Double;
+                    return NPTypeCode.Double;
                 case NPTypeCode.Half:
                 case NPTypeCode.Single:
+                    return qIsScalar ? inTc : NPTypeCode.Double;
                 case NPTypeCode.Double:
+                    return NPTypeCode.Double;
                 case NPTypeCode.Decimal:
-                    return inTc;
+                    return NPTypeCode.Decimal;
                 case NPTypeCode.Complex:
                     return NPTypeCode.Complex;
                 default:

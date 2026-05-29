@@ -118,8 +118,8 @@ namespace NumSharp.Utilities
             int right = hi - 1;
             while (left < right)
             {
-                while (buf[++left].CompareTo(pivot) < 0) { }
-                while (pivot.CompareTo(buf[--right]) < 0) { }
+                while (LtV(buf[++left], pivot)) { }
+                while (LtV(pivot, buf[--right])) { }
                 if (left >= right) break;
                 Swap(buf, left, right);
             }
@@ -133,7 +133,7 @@ namespace NumSharp.Utilities
             {
                 int j = i;
                 T t = buf[i + 1];
-                while (j >= lo && t.CompareTo(buf[j]) < 0)
+                while (j >= lo && LtV(t, buf[j]))
                 {
                     buf[j + 1] = buf[j];
                     j--;
@@ -145,7 +145,7 @@ namespace NumSharp.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void SwapIfGreater<T>(T* buf, int i, int j) where T : unmanaged, IComparable<T>
         {
-            if (buf[i].CompareTo(buf[j]) > 0) Swap(buf, i, j);
+            if (LtV(buf[j], buf[i])) Swap(buf, i, j);
         }
 
         // ── Comparison<T> internals ───────────────────────────────────────────────
@@ -234,8 +234,8 @@ namespace NumSharp.Utilities
             while (i <= n >> 1)
             {
                 int child = 2 * i;
-                if (child < n && buf[lo + child - 1].CompareTo(buf[lo + child]) < 0) child++;
-                if (d.CompareTo(buf[lo + child - 1]) >= 0) break;
+                if (child < n && LtV(buf[lo + child - 1], buf[lo + child])) child++;
+                if (!LtV(d, buf[lo + child - 1])) break;
                 buf[lo + i - 1] = buf[lo + child - 1];
                 i = child;
             }
@@ -279,6 +279,35 @@ namespace NumSharp.Utilities
             int r = 0;
             while (v > 0) { r++; v >>= 1; }
             return r;
+        }
+
+        /// <summary>
+        ///     Direct typed "a &lt; b" for the IComparable&lt;T&gt; partition path. The
+        ///     <c>typeof(T) == typeof(X)</c> chain is JIT-folded per specialization, so each
+        ///     instantiation compiles to a single native comparison — far cheaper than
+        ///     <see cref="IComparable{T}.CompareTo"/>, which returns a tri-state int the
+        ///     caller must then re-test. The quantile kernel strips NaNs before partitioning
+        ///     (prescan on the plain path, compaction on the nan path), so IEEE NaN ordering
+        ///     never reaches here and a raw <c>&lt;</c> is safe for floats.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe bool LtV<T>(T a, T b) where T : unmanaged, IComparable<T>
+        {
+            if (typeof(T) == typeof(byte))    return *(byte*)&a    < *(byte*)&b;
+            if (typeof(T) == typeof(sbyte))   return *(sbyte*)&a   < *(sbyte*)&b;
+            if (typeof(T) == typeof(short))   return *(short*)&a   < *(short*)&b;
+            if (typeof(T) == typeof(ushort))  return *(ushort*)&a  < *(ushort*)&b;
+            if (typeof(T) == typeof(int))     return *(int*)&a     < *(int*)&b;
+            if (typeof(T) == typeof(uint))    return *(uint*)&a    < *(uint*)&b;
+            if (typeof(T) == typeof(long))    return *(long*)&a    < *(long*)&b;
+            if (typeof(T) == typeof(ulong))   return *(ulong*)&a   < *(ulong*)&b;
+            if (typeof(T) == typeof(char))    return *(char*)&a    < *(char*)&b;
+            if (typeof(T) == typeof(float))   return *(float*)&a   < *(float*)&b;
+            if (typeof(T) == typeof(double))  return *(double*)&a  < *(double*)&b;
+            if (typeof(T) == typeof(Half))    return *(Half*)&a    < *(Half*)&b;
+            if (typeof(T) == typeof(decimal)) return *(decimal*)&a < *(decimal*)&b;
+            if (typeof(T) == typeof(bool))    return !*(bool*)&a && *(bool*)&b;  // false < true
+            return a.CompareTo(b) < 0;   // fallback for any other IComparable type
         }
     }
 }
