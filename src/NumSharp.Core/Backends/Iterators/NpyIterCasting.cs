@@ -385,12 +385,49 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            // Read source value as double (intermediate)
-            double value = ReadAsDouble(src, srcType);
-
-            // Write to destination
-            WriteFromDouble(dst, value, dstType);
+            // Read the source through a LOSSLESS intermediate. The previous code read every
+            // source as double, which (a) dropped the low bits of Int64/UInt64 and (b) wrote
+            // integer destinations with C# saturating float->int / int->int casts. Both diverge
+            // from NumPy, which uses MODULAR WRAPPING for integer narrowing and C truncation
+            // (int.MinValue sentinel on NaN/overflow) for float->int. Routing through the
+            // Converts.* table — proven bit-exact with NumPy across the full 15x15 cast matrix —
+            // restores parity.
+            switch (srcType)
+            {
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                    WriteFromDouble(dst, ReadAsDouble(src, srcType), dstType);
+                    return;
+                case NPTypeCode.UInt64:
+                    WriteFromUInt64(dst, *(ulong*)src, dstType);
+                    return;
+                case NPTypeCode.Decimal:
+                    WriteFromDecimal(dst, *(decimal*)src, dstType);
+                    return;
+                default:
+                    // Boolean/Byte/SByte/Int16/UInt16/Int32/UInt32/Int64/Char all fit in long.
+                    WriteFromInt64(dst, ReadAsInt64(src, srcType), dstType);
+                    return;
+            }
         }
+
+        /// <summary>Read an integer-category source (everything except UInt64/Decimal/floats/Complex) losslessly as long.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long ReadAsInt64(void* ptr, NPTypeCode type)
+            => type switch
+            {
+                NPTypeCode.Boolean => *(bool*)ptr ? 1L : 0L,
+                NPTypeCode.Byte => *(byte*)ptr,
+                NPTypeCode.SByte => *(sbyte*)ptr,
+                NPTypeCode.Int16 => *(short*)ptr,
+                NPTypeCode.UInt16 => *(ushort*)ptr,
+                NPTypeCode.Int32 => *(int*)ptr,
+                NPTypeCode.UInt32 => *(uint*)ptr,
+                NPTypeCode.Int64 => *(long*)ptr,
+                NPTypeCode.Char => *(char*)ptr,
+                _ => throw new NotSupportedException($"ReadAsInt64: unsupported source {type}")
+            };
 
         /// <summary>
         /// Read any numeric type (except Complex) as double.
@@ -420,9 +457,58 @@ namespace NumSharp.Backends.Iteration
             };
         }
 
+        /// <summary>Integer source (fits in long): integer-&gt;integer wraps (NumPy modular); integer-&gt;float/decimal is a plain conversion.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteFromInt64(void* ptr, long v, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean: *(bool*)ptr = v != 0; break;
+                case NPTypeCode.Byte: *(byte*)ptr = unchecked((byte)v); break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = unchecked((sbyte)v); break;
+                case NPTypeCode.Int16: *(short*)ptr = unchecked((short)v); break;
+                case NPTypeCode.UInt16: *(ushort*)ptr = unchecked((ushort)v); break;
+                case NPTypeCode.Int32: *(int*)ptr = unchecked((int)v); break;
+                case NPTypeCode.UInt32: *(uint*)ptr = unchecked((uint)v); break;
+                case NPTypeCode.Int64: *(long*)ptr = v; break;
+                case NPTypeCode.UInt64: *(ulong*)ptr = unchecked((ulong)v); break;
+                case NPTypeCode.Char: *(char*)ptr = unchecked((char)v); break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)(double)v; break;
+                case NPTypeCode.Single: *(float*)ptr = v; break;
+                case NPTypeCode.Double: *(double*)ptr = v; break;
+                case NPTypeCode.Decimal: *(decimal*)ptr = v; break;
+                default: throw new NotSupportedException($"Unsupported type: {type}");
+            }
+        }
+
+        /// <summary>UInt64 source: same wrapping rules, but the value can exceed long range.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteFromUInt64(void* ptr, ulong v, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean: *(bool*)ptr = v != 0; break;
+                case NPTypeCode.Byte: *(byte*)ptr = unchecked((byte)v); break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = unchecked((sbyte)v); break;
+                case NPTypeCode.Int16: *(short*)ptr = unchecked((short)v); break;
+                case NPTypeCode.UInt16: *(ushort*)ptr = unchecked((ushort)v); break;
+                case NPTypeCode.Int32: *(int*)ptr = unchecked((int)v); break;
+                case NPTypeCode.UInt32: *(uint*)ptr = unchecked((uint)v); break;
+                case NPTypeCode.Int64: *(long*)ptr = unchecked((long)v); break;
+                case NPTypeCode.UInt64: *(ulong*)ptr = v; break;
+                case NPTypeCode.Char: *(char*)ptr = unchecked((char)v); break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)(double)v; break;
+                case NPTypeCode.Single: *(float*)ptr = v; break;
+                case NPTypeCode.Double: *(double*)ptr = v; break;
+                case NPTypeCode.Decimal: *(decimal*)ptr = v; break;
+                default: throw new NotSupportedException($"Unsupported type: {type}");
+            }
+        }
+
         /// <summary>
-        /// Write double value to any numeric type (except Complex). Complex destinations
-        /// must be handled by the caller.
+        /// Float source (and Complex-&gt;real): NumPy float-&gt;int truncates toward zero with an
+        /// int.MinValue/overflow sentinel — delegated to Converts.* for exact parity; float-&gt;float
+        /// is plain rounding.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteFromDouble(void* ptr, double value, NPTypeCode type)
@@ -430,19 +516,43 @@ namespace NumSharp.Backends.Iteration
             switch (type)
             {
                 case NPTypeCode.Boolean: *(bool*)ptr = value != 0; break;
-                case NPTypeCode.Byte: *(byte*)ptr = (byte)value; break;
-                case NPTypeCode.SByte: *(sbyte*)ptr = (sbyte)value; break;
-                case NPTypeCode.Int16: *(short*)ptr = (short)value; break;
-                case NPTypeCode.UInt16: *(ushort*)ptr = (ushort)value; break;
-                case NPTypeCode.Int32: *(int*)ptr = (int)value; break;
-                case NPTypeCode.UInt32: *(uint*)ptr = (uint)value; break;
-                case NPTypeCode.Int64: *(long*)ptr = (long)value; break;
-                case NPTypeCode.UInt64: *(ulong*)ptr = (ulong)value; break;
+                case NPTypeCode.Byte: *(byte*)ptr = Converts.ToByte(value); break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = Converts.ToSByte(value); break;
+                case NPTypeCode.Int16: *(short*)ptr = Converts.ToInt16(value); break;
+                case NPTypeCode.UInt16: *(ushort*)ptr = Converts.ToUInt16(value); break;
+                case NPTypeCode.Int32: *(int*)ptr = Converts.ToInt32(value); break;
+                case NPTypeCode.UInt32: *(uint*)ptr = Converts.ToUInt32(value); break;
+                case NPTypeCode.Int64: *(long*)ptr = Converts.ToInt64(value); break;
+                case NPTypeCode.UInt64: *(ulong*)ptr = Converts.ToUInt64(value); break;
+                case NPTypeCode.Char: *(char*)ptr = Converts.ToChar(value); break;
                 case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
-                case NPTypeCode.Decimal: *(decimal*)ptr = (decimal)value; break;
-                case NPTypeCode.Char: *(char*)ptr = (char)value; break;
+                case NPTypeCode.Decimal: *(decimal*)ptr = Converts.ToDecimal(value); break;
+                default: throw new NotSupportedException($"Unsupported type: {type}");
+            }
+        }
+
+        /// <summary>Decimal source: integer destinations truncate via Converts (NumPy parity); float/decimal are plain.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void WriteFromDecimal(void* ptr, decimal value, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Boolean: *(bool*)ptr = value != 0; break;
+                case NPTypeCode.Byte: *(byte*)ptr = Converts.ToByte(value); break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = Converts.ToSByte(value); break;
+                case NPTypeCode.Int16: *(short*)ptr = Converts.ToInt16(value); break;
+                case NPTypeCode.UInt16: *(ushort*)ptr = Converts.ToUInt16(value); break;
+                case NPTypeCode.Int32: *(int*)ptr = Converts.ToInt32(value); break;
+                case NPTypeCode.UInt32: *(uint*)ptr = Converts.ToUInt32(value); break;
+                case NPTypeCode.Int64: *(long*)ptr = Converts.ToInt64(value); break;
+                case NPTypeCode.UInt64: *(ulong*)ptr = Converts.ToUInt64(value); break;
+                case NPTypeCode.Char: *(char*)ptr = Converts.ToChar(value); break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)(double)value; break;
+                case NPTypeCode.Single: *(float*)ptr = (float)value; break;
+                case NPTypeCode.Double: *(double*)ptr = (double)value; break;
+                case NPTypeCode.Decimal: *(decimal*)ptr = value; break;
                 default: throw new NotSupportedException($"Unsupported type: {type}");
             }
         }

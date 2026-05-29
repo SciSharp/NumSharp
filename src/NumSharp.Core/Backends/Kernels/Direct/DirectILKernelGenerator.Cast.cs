@@ -103,6 +103,7 @@ namespace NumSharp.Backends.Kernels
         public static CastKernel TryGetCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
             if (_castCache.TryGetValue(key, out var existing)) return existing;
@@ -133,6 +134,7 @@ namespace NumSharp.Backends.Kernels
         public static StridedCastKernel TryGetStridedCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
             if (_stridedCastCache.TryGetValue(key, out var existing)) return existing;
@@ -174,6 +176,33 @@ namespace NumSharp.Backends.Kernels
             SmallIntToSingle,
             SingleToDouble,
             DoubleToSingle,
+        }
+
+        /// <summary>
+        /// True for (src,dst) pairs whose emitted IL kernel diverges from NumPy on out-of-range
+        /// or NaN inputs, so the caller must decline the SIMD kernel and fall back to the
+        /// Converts-backed scalar path (<see cref="Iteration.NpyIterCasting.ConvertValue"/>),
+        /// which is bit-exact with NumPy across the full cast matrix.
+        ///
+        /// Two families diverge (verified against NumPy 2.x via the cast_spec matrix):
+        ///   1. float -> integer: the kernel SATURATES (clamps to dst min/max); NumPy truncates
+        ///      toward zero and yields int.MinValue (the type-min sentinel) on NaN/overflow.
+        ///   2. signed-narrow -> UInt64 (SByte/Int16/Int32): the widening kernel sign-extends to
+        ///      32 bits then zero-fills the top 32, instead of full 64-bit sign extension.
+        ///
+        /// All other pairs (int widening/narrowing wrap, int->float, float->float) already match
+        /// NumPy and keep their SIMD kernels. Re-enabling SIMD for these families with NumPy-exact
+        /// emission (raw cvtt truncation, full sign-extend) is a perf follow-up.
+        /// </summary>
+        internal static bool DivergesFromNumpyCast(NPTypeCode src, NPTypeCode dst)
+        {
+            bool srcFloat = src == NPTypeCode.Single || src == NPTypeCode.Double;
+            if (srcFloat && IsIntegerCast(dst))
+                return true;
+            if (dst == NPTypeCode.UInt64 &&
+                (src == NPTypeCode.SByte || src == NPTypeCode.Int16 || src == NPTypeCode.Int32))
+                return true;
+            return false;
         }
 
         private static bool IsIntegerCast(NPTypeCode t) =>
