@@ -345,18 +345,15 @@ public class np_ptp_BattleTests
     }
 
     [TestMethod]
-    [Misaligned]
-    public void Ptp_Bool_DivergesFromNumPy()
+    public void Ptp_Bool_ThrowsLikeNumPy()
     {
-        // NumPy raises TypeError on bool subtract:
+        // np.ptp computes max - min, so np.ptp(bool) performs a boolean subtract,
+        // which NumPy rejects with TypeError:
         //   "numpy boolean subtract, the `-` operator, is not supported, use
         //    the bitwise_xor, the `^` operator, or the logical_xor function instead."
-        // NumSharp now computes max([F,T,F,T]) - min([F,T,F,T]) = True - False = True
-        // (Boolean max/min works since the engine fallbacks were added; bool
-        // subtract is permitted in NumSharp via byte promotion).  Documented
-        // divergence — fixing would require np.ptp to explicitly reject bool input.
+        // NumSharp now matches NumPy: the bool-subtract guard in
+        // DefaultEngine.Subtract propagates up through ptp's max - min.
         var a = np.array(new bool[] { false, true, false, true });
-        var r = np.ptp(a);
-        r.GetBoolean(0).Should().BeTrue();
+        Assert.ThrowsException<System.NotSupportedException>(() => np.ptp(a));
     }
 }

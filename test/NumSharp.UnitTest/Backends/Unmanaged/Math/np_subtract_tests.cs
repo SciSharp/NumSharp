@@ -28,7 +28,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         %foreach a
         [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
 #else
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Boolean)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
@@ -54,6 +53,20 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Convert.ToInt32(val).Should().Be(rtc == NPTypeCode.Char ? '1'-1 : 0);
                 Console.WriteLine(val);
             }
+        }
+
+        [TestMethod]
+        public void SubtractBoolBool_ThrowsLikeNumPy()
+        {
+            // NumPy has no subtract loop for the bool dtype: `bool - bool` raises
+            // TypeError. NumSharp mirrors this (DefaultEngine.Subtract guard).
+            // Mixed bool + numeric promotes and is fine (covered above).
+            var a = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
+            var b = np.ones(new Shape(5, 5), NPTypeCode.Boolean);
+            Assert.ThrowsException<NotSupportedException>(() => a - b);
+            Assert.ThrowsException<NotSupportedException>(() => np.subtract(a, b));
+            // scalar bool - scalar bool also raises
+            Assert.ThrowsException<NotSupportedException>(() => np.asarray(true) - np.asarray(false));
         }
 
         [TestMethod]
