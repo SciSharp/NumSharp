@@ -42,11 +42,13 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html</remarks>
         public static NDArray<bool> logical_not(NDArray x)
         {
-            // For boolean arrays, use LogicalNot (via Negate which routes to LogicalNot for bool)
-            // For other types, nonzero becomes False, zero becomes True
+            // For boolean arrays, logical_not == bitwise invert (~True == False).
+            // Route through np.invert rather than Negate: NumPy rejects boolean
+            // negation (np.negative(bool) raises a TypeError), so Negate(bool)
+            // now throws to match. For other types, nonzero -> False, zero -> True.
             if (x.typecode == NPTypeCode.Boolean)
             {
-                return x.TensorEngine.Negate(x).MakeGeneric<bool>();
+                return np.invert(x).MakeGeneric<bool>();
             }
             return (x == 0).MakeGeneric<bool>();
         }

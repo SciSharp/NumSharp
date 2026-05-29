@@ -9,12 +9,13 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Negate(NDArray nd)
         {
-            // Boolean negation is logical NOT, not arithmetic negation
-            // Use LogicalNot which properly handles non-contiguous arrays
+            // NumPy rejects boolean negative (unary `-` / np.negative): there is
+            // no negative ufunc loop for the bool dtype. Callers that want a
+            // boolean flip use the `~` operator (np.invert) or np.logical_not.
             if (nd.GetTypeCode == NPTypeCode.Boolean)
-            {
-                return ExecuteUnaryOp(nd, UnaryOp.LogicalNot);
-            }
+                throw new System.NotSupportedException(
+                    "The numpy boolean negative, the `-` operator, is not supported, " +
+                    "use the `~` operator or the logical_not function instead.");
 
             return ExecuteUnaryOp(nd, UnaryOp.Negate);
         }
