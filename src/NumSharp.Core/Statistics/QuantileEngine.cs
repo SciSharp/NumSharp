@@ -77,7 +77,8 @@ namespace NumSharp.Statistics
 
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
-            bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar)
+            bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
+            bool emptyReturnsNaN = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -160,6 +161,25 @@ namespace NumSharp.Statistics
 
             NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : new Shape(outShape));
 
+            // ── Empty reduction axis ──
+            // The IL/Complex row kernels assume at least one element per row and index
+            // relative to (n-1); invoking them with n == 0 reads out of bounds and
+            // crashes the process. Match NumPy instead:
+            //   * np.median([])               -> nan          (emptyReturnsNaN == true)
+            //   * np.quantile/percentile([])  -> raises IndexError
+            // When n != 0 but there are no rows (outerSize == 0, e.g. a 0-length
+            // non-reduced axis) the result is already an empty array — skip the kernel.
+            if (n == 0)
+            {
+                if (!emptyReturnsNaN)
+                    throw new IndexOutOfRangeException(
+                        "index -1 is out of bounds for axis 0 with size 0");
+                FillWithNaN(resultRaw, outTypeCode);
+                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+            }
+            if (outerSize == 0)
+                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+
             // ── Pre-compute the sorted list of buffer indices the partition needs to touch. ──
             // For continuous methods that's (floor, ceil) per q; discrete methods touch one
             // index per q. Deduplicating shrinks the number of QuickSelect passes when q
@@ -221,7 +241,13 @@ namespace NumSharp.Statistics
                 ArrayPool<byte>.Shared.Return(scratchBytes);
             }
 
-            // ── keepdims / out= plumbing ──
+            return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+        }
+
+        /// <summary>keepdims / out= plumbing shared by the normal and empty-axis paths.</summary>
+        private static NDArray FinalizeResult(
+            NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, bool qIsScalar, NDArray @out)
+        {
             NDArray result = ApplyKeepdims(resultRaw, a, axisArr, keepdims, qIsScalar);
 
             if (@out is not null)
@@ -234,6 +260,26 @@ namespace NumSharp.Statistics
                 return @out;
             }
             return result;
+        }
+
+        /// <summary>
+        ///     Fills <paramref name="result"/> with the dtype's NaN — used for the empty-axis
+        ///     median path (NumPy returns nan for the median of an empty slice). Decimal has
+        ///     no NaN and no NumPy analogue here, so it falls back to 0.
+        /// </summary>
+        private static void FillWithNaN(NDArray result, NPTypeCode tc)
+        {
+            if (result.size == 0) return;
+            object nan = tc switch
+            {
+                NPTypeCode.Double  => double.NaN,
+                NPTypeCode.Single  => float.NaN,
+                NPTypeCode.Half    => Half.NaN,
+                NPTypeCode.Complex => new System.Numerics.Complex(double.NaN, double.NaN),
+                NPTypeCode.Decimal => (object)0m,
+                _                  => double.NaN,
+            };
+            result.Storage.InternalArray.Fill(nan);
         }
 
         // ── helpers ─────────────────────────────────────────────────────────────────

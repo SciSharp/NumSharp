@@ -369,6 +369,13 @@ namespace NumSharp.Backends
             //regular case
             var (subShape, offset) = _shape.GetSubshape(indices);
 
+            // Empty source: nothing to copy. Guards the modulo below against a zero divisor
+            // when value has a zero-size dimension (e.g. np.pad on an array with an empty
+            // axis does `padded[originalSlice] = array` where array.size == 0). Matches
+            // NumPy, which treats assigning an empty array into an empty region as a no-op.
+            if (valueshape.size == 0)
+                return;
+
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
 

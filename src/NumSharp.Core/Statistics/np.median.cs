@@ -15,15 +15,17 @@ namespace NumSharp
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // NumPy's np.median returns nan for an empty slice (np.quantile/percentile raise);
+            // emptyReturnsNaN routes the empty-axis case to a nan fill instead.
             return QuantileEngine.Compute(a, new[] { 0.5 }, axisArr, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true);
+                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true);
         }
 
         public static NDArray median(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             return QuantileEngine.Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true);
+                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true);
         }
     }
 }

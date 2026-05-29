@@ -734,12 +734,22 @@ namespace NumSharp
                 coef.Dispose();
                 if (!ReferenceEquals(edgeWork, edge)) edgeWork.Dispose();
 
-                // NumPy linear_ramp uses np.linspace(..., dtype=padded.dtype) which
-                // truncates float→int (no rounding), unlike stat modes which round.
+                // NumPy linear_ramp uses np.linspace(..., dtype=padded.dtype).  For an
+                // INTEGER destination dtype np.linspace floors toward -inf before casting
+                // — NOT C-style truncation toward zero.  e.g. linspace(0, -3, 2, F) has
+                // samples [0, -1.5] and yields [0, -2] (floor), not [0, -1] (truncate).
+                // Float / complex destinations keep the fractional value (no floor).
                 if (ramp.GetTypeCode != dtype)
                 {
-                    var cast = ramp.astype(NumSharp.NPTypeCodeExtensions.AsType(dtype));
-                    ramp.Dispose();
+                    NDArray toCast = ramp;
+                    if (isInteger)
+                    {
+                        var floored = np.floor(ramp);
+                        ramp.Dispose();
+                        toCast = floored;
+                    }
+                    var cast = toCast.astype(NumSharp.NPTypeCodeExtensions.AsType(dtype));
+                    if (!ReferenceEquals(toCast, cast)) toCast.Dispose();
                     return cast;
                 }
                 return ramp;

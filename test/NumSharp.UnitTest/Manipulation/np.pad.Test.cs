@@ -423,5 +423,96 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetSingle(0).Should().Be(1f);
             r.GetSingle(6).Should().Be(5f);
         }
+
+        // ============================== linear_ramp integer floor (regression) ==============================
+        // NumPy's np.linspace(..., dtype=<integer>) floors toward -inf before casting (NOT
+        // truncation toward zero). NumSharp previously truncated, producing off-by-one for
+        // negative ramp values. e.g. linspace(0,-3,2) samples [0,-1.5] -> [0,-2] (floor).
+
+        [TestMethod]
+        public void LinearRamp_Int32_NegativeRamp_FloorsTowardNegInf()
+        {
+            var arr = np.array(new int[] { -3, -2, -1, 0, 1 });
+            var r = np.pad(arr, 2, mode: "linear_ramp");
+            // NumPy 2.4.2: [0, -2, -3, -2, -1, 0, 1, 0, 0]
+            r.array_equal(np.array(new int[] { 0, -2, -3, -2, -1, 0, 1, 0, 0 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void LinearRamp_Int32_DescendingRamp_Floors()
+        {
+            var arr = np.array(new int[] { 10 });
+            var r = np.pad(arr, (0, 4), mode: "linear_ramp", end_values: 0);
+            // NumPy 2.4.2: [10, 7, 5, 2, 0]  (floor of 10,7.5,5,2.5,0)
+            r.array_equal(np.array(new int[] { 10, 7, 5, 2, 0 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void LinearRamp_Int64_NegativeEdge_Floors()
+        {
+            var arr = np.array(new long[] { -5, 5 });
+            var r = np.pad(arr, (3, 0), mode: "linear_ramp");
+            // NumPy 2.4.2: [0, -2, -4, -5, 5]
+            r.array_equal(np.array(new long[] { 0, -2, -4, -5, 5 })).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void LinearRamp_Int_gh14191_UnsignedNegativeDifference()
+        {
+            var arr = np.array(new int[] { 3 });
+            var r = np.pad(arr, 3, mode: "linear_ramp", end_values: 0);
+            // NumPy 2.4.2: [0, 1, 2, 3, 2, 1, 0]
+            r.array_equal(np.array(new int[] { 0, 1, 2, 3, 2, 1, 0 })).Should().BeTrue();
+        }
+
+        // ============================== empty-dimension arrays (regression) ==============================
+        // Padding the NON-empty axis of an array that has a zero-size dimension is legal in
+        // every mode (the empty axis is not extended). NumPy returns the correctly-shaped
+        // empty result. NumSharp previously crashed (divide-by-zero / cast / broadcast on 0-size).
+
+        [TestMethod]
+        public void EmptyDimension_AllModes_ProduceCorrectShape()
+        {
+            string[] modes = { "constant", "edge", "empty", "wrap", "reflect", "symmetric",
+                               "maximum", "minimum", "mean", "median", "linear_ramp" };
+            foreach (var mode in modes)
+            {
+                var arr = np.zeros(new Shape(2, 0, 2), typeof(double));
+                var r = np.pad(arr, new int[,] { { 3, 3 }, { 0, 0 }, { 1, 1 } }, mode: mode);
+                r.shape.Should().BeEquivalentTo(new int[] { 8, 0, 4 }, $"mode '{mode}' on (2,0,2)");
+            }
+        }
+
+        [TestMethod]
+        public void EmptyDimension_TrailingZeroDim_LinearRamp_Int()
+        {
+            // Trailing zero dim + integer linear_ramp exercises the edge-cast + broadcast paths.
+            var arr = np.zeros(new Shape(2, 0), typeof(int));
+            var r = np.pad(arr, new int[,] { { 3, 3 }, { 0, 0 } }, mode: "linear_ramp");
+            r.shape.Should().BeEquivalentTo(new int[] { 8, 0 });
+        }
+
+        [TestMethod]
+        public void EmptyDimension_LeadingZeroDim_Edge()
+        {
+            var arr = np.zeros(new Shape(0, 2), typeof(double));
+            var r = np.pad(arr, new int[,] { { 0, 0 }, { 1, 1 } }, mode: "edge");
+            r.shape.Should().BeEquivalentTo(new int[] { 0, 4 });
+        }
+
+        [TestMethod]
+        public void Median_StatLength0_ProducesNaN()
+        {
+            // NumPy: np.pad([1.,2.],(1,2),'median',stat_length=0) -> [nan,1,2,nan,nan]
+            // (median of an empty slice is nan). NumSharp previously segfaulted.
+            var arr = np.array(new double[] { 1.0, 2.0 });
+            var r = np.pad(arr, (1, 2), mode: "median", stat_length: 0);
+            r.shape.Should().BeEquivalentTo(new int[] { 5 });
+            double.IsNaN(r.GetDouble(0)).Should().BeTrue();
+            r.GetDouble(1).Should().Be(1.0);
+            r.GetDouble(2).Should().Be(2.0);
+            double.IsNaN(r.GetDouble(3)).Should().BeTrue();
+            double.IsNaN(r.GetDouble(4)).Should().BeTrue();
+        }
     }
 }

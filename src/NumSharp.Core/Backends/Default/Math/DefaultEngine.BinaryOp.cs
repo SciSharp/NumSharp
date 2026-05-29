@@ -117,6 +117,13 @@ namespace NumSharp.Backends
             // Allocate result
             var result = new NDArray(resultType, resultShape, false);
 
+            // Empty broadcast result: no elements to compute. The kernels below assume
+            // >= 1 element and walk stride-0 broadcast dims as if non-empty, corrupting
+            // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
+            // (The NpyIter fast path above returns early for the same reason.)
+            if (result.size == 0)
+                return result;
+
             // L3-a: pre-coalesce adjacent dims with compatible strides for BOTH operands
             // (and the result). This collapses F-contig N-D to 1-D contig, so the path
             // classifier promotes from `General` (≈13× slower) to `SimdFull`. Broadcast
@@ -226,6 +233,14 @@ namespace NumSharp.Backends
                 : cleanShape;
 
             var result = new NDArray(resultType, resultShape, false);
+
+            // Empty broadcast result (a stride-0 broadcast dim alongside a zero-size
+            // dim, e.g. (3,1,1) op (1,0,2) -> (3,0,2)): there is nothing to compute.
+            // Returning here is REQUIRED — the NpyIter element-wise path corrupts the
+            // heap when driven over a 0-element broadcast (the direct kernel path below
+            // is guarded the same way). Matches NumPy: empty op -> empty result.
+            if (result.size == 0)
+                return result;
 
             // Order selection — see method-summary comment.
             var order = allStrictFContig

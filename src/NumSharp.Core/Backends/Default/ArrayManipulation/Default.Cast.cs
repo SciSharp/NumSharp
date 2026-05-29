@@ -14,13 +14,28 @@ namespace NumSharp.Backends
 
             var engine = nd.TensorEngine;
 
-            //incase its an empty array
+            //incase its an empty array (the uninitialized-shape sentinel)
             if (nd.Shape.IsEmpty)
             {
                 if (copy)
                     return new NDArray(dtype) { TensorEngine = engine };
 
                 nd.Storage = new UnmanagedStorage(dtype) { Engine = engine };
+                nd.TensorEngine = engine;
+                return nd;
+            }
+
+            //incase it has a zero-size dimension (e.g. (1,0), (2,0,2)) — a real shape
+            //carrying no elements. There is nothing to cast; just retype while preserving
+            //the shape. (Shape.IsEmpty above only catches the uninitialized sentinel, so
+            //this guard is required or the regular CastTo path below faults on length 0.)
+            if (nd.size == 0)
+            {
+                var retyped = new NDArray(dtype, nd.Shape) { TensorEngine = engine };
+                if (copy)
+                    return retyped;
+
+                nd.Storage = retyped.Storage;
                 nd.TensorEngine = engine;
                 return nd;
             }
