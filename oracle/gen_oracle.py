@@ -83,6 +83,16 @@ DIVMOD_POWER_OPS = {
     "power": lambda a, b: a ** b,
 }
 
+# Comparison ops -> bool result. (NumPy raises TypeError for ordering complex; gen_binary skips those.)
+COMPARISON_OPS = {
+    "equal": lambda a, b: a == b,
+    "not_equal": lambda a, b: a != b,
+    "less": lambda a, b: a < b,
+    "greater": lambda a, b: a > b,
+    "less_equal": lambda a, b: a <= b,
+    "greater_equal": lambda a, b: a >= b,
+}
+
 # Curated dtype pairs covering NEP50 promotion: same-type, int-width mixing, signed/unsigned,
 # int->float, float widths, bool promotion, complex absorption.
 DT_PAIRS = [
@@ -156,8 +166,11 @@ def main():
     elif mode == "divmod_power":
         cases = gen_binary(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "binary_divmod_power.jsonl"), cases)
+    elif mode == "comparison":
+        cases = gen_binary(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "comparison.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison)")
         sys.exit(2)
 
 

@@ -28,6 +28,14 @@ namespace NumSharp.UnitTest.Fuzz
                 case "mod": return np.mod(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
 
+                // Comparison -> bool result.
+                case "equal": return ops[0] == ops[1];
+                case "not_equal": return ops[0] != ops[1];
+                case "less": return ops[0] < ops[1];
+                case "greater": return ops[0] > ops[1];
+                case "less_equal": return ops[0] <= ops[1];
+                case "greater_equal": return ops[0] >= ops[1];
+
                 default:
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
             }

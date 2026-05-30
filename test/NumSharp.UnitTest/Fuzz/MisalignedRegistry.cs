@@ -39,6 +39,14 @@ namespace NumSharp.UnitTest.Fuzz
                 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
 
+            // (3) NaN ordering bug: NumSharp's <= and >= return True for a NaN operand; IEEE/NumPy
+            //     return False (only != is True against NaN). Tight signature: bool result where every
+            //     diff is NumPy-false -> NumSharp-true. KNOWN BUG, documented pending fix (task #8).
+            if (kind == DivergenceKind.Value && (c.Op == "less_equal" || c.Op == "greater_equal")
+                && tc == NPTypeCode.Boolean
+                && diffs.All(d => d.Expected == "00" && d.Actual == "01"))
+                return "NaN ordering: <=/>= return True for NaN (NumSharp) vs False (NumPy/IEEE) [known bug]";
+
             return null;
         }
     }
