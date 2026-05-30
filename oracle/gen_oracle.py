@@ -236,6 +236,22 @@ def gen_reduce(ops, dtypes, layout_names):
     return cases
 
 
+# T10 — NaN-aware reductions. The float pools front-load NaN/±inf, so every slice contains NaNs:
+# these ops must IGNORE them (NumPy contract). NumPy is the oracle for value, accumulator dtype,
+# and the all-NaN-slice -> NaN behaviour.
+NAN_REDUCE_OPS = {
+    "nansum": lambda a, ax, kd: np.nansum(a, axis=ax, keepdims=kd),
+    "nanprod": lambda a, ax, kd: np.nanprod(a, axis=ax, keepdims=kd),
+    "nanmax": lambda a, ax, kd: np.nanmax(a, axis=ax, keepdims=kd),
+    "nanmin": lambda a, ax, kd: np.nanmin(a, axis=ax, keepdims=kd),
+    "nanmean": lambda a, ax, kd: np.nanmean(a, axis=ax, keepdims=kd),
+    "nanstd": lambda a, ax, kd: np.nanstd(a, axis=ax, keepdims=kd),
+    "nanvar": lambda a, ax, kd: np.nanvar(a, axis=ax, keepdims=kd),
+    "nanmedian": lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd),
+}
+NAN_REDUCE_DTYPES = ["float16", "float32", "float64", "int32", "complex128"]
+
+
 def gen_binary(ops, dt_pairs, pair_layout_names):
     cases = []
     n = 0
@@ -542,8 +558,11 @@ def main():
     elif mode == "unary_extra":
         cases = gen_unary(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "unary_extra.jsonl"), cases)
+    elif mode == "nanreduce":
+        cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "nanreduce.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)
 
 

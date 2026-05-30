@@ -89,6 +89,9 @@ namespace NumSharp.UnitTest.Fuzz
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
                 case "std": case "var": case "argmax": case "argmin": case "all": case "any":
+                // NaN-aware reductions (T10).
+                case "nansum": case "nanprod": case "nanmax": case "nanmin": case "nanmean":
+                case "nanstd": case "nanvar": case "nanmedian":
                     return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
 
                 default:
@@ -117,6 +120,14 @@ namespace NumSharp.UnitTest.Fuzz
                 case "argmin": return np.argmin(a, axis.Value, keepdims);
                 case "all": return np.all(a, axis, null, keepdims);
                 case "any": return np.any(a, axis, null, keepdims);
+                case "nansum": return np.nansum(a, axis, keepdims);
+                case "nanprod": return np.nanprod(a, axis, keepdims);
+                case "nanmax": return np.nanmax(a, axis, keepdims);
+                case "nanmin": return np.nanmin(a, axis, keepdims);
+                case "nanmean": return np.nanmean(a, axis, keepdims);
+                case "nanstd": return np.nanstd(a, axis, keepdims);
+                case "nanvar": return np.nanvar(a, axis, keepdims);
+                case "nanmedian": return np.nanmedian(a, axis, keepdims: keepdims);
                 default: throw new NotSupportedException(op);
             }
         }

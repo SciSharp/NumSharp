@@ -64,6 +64,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
 
+        // W4 NaN-aware reductions (T10): nansum/nanprod/nanmax/nanmin/nanmean/nanstd/nanvar/
+        // nanmedian over NaN-laced float operands — must IGNORE NaN per NumPy contract.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void NanReduce() => RunCorpus("nanreduce.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

@@ -29,6 +29,11 @@ namespace NumSharp.UnitTest.Fuzz
             "sum", "prod", "min", "max", "mean", "std", "var", "argmax", "argmin", "all", "any"
         };
 
+        private static readonly System.Collections.Generic.HashSet<string> NanReduceOps = new()
+        {
+            "nansum", "nanprod", "nanmax", "nanmin", "nanmean", "nanstd", "nanvar", "nanmedian"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
@@ -114,6 +119,31 @@ namespace NumSharp.UnitTest.Fuzz
             // (3) NaN ordering in <= / >= was FIXED in Phase 1 F2 (the unordered Cgt_Un/Clt_Un
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
             //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
+
+            // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
+            if (NanReduceOps.Contains(c.Op))
+            {
+                // (W4-E) nanmean/nanstd/nanvar over an EMPTY float16 array (axis=None) throw
+                // "Can't construct NDIterator with an empty shape" instead of returning NaN.
+                if (kind == DivergenceKind.Threw && c.Operands[0].Shape.Any(d => d == 0))
+                    return "nan-reduction(empty): throws 'NDIterator empty shape' instead of NaN [known bug]";
+                // (W4-D) complex 1-D axis reduction throws (shared NDCoordinatesAxisIncrementor bug).
+                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
+                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
+                // (W4-A) shape: nanmean/nanstd/nanvar collapse a 1-D axis reduction to [1] instead of
+                // a scalar [], and drop keepdims entirely on the integer input path.
+                if (kind == DivergenceKind.Shape)
+                    return "nan-reduction shape: nanmean/nanstd/nanvar give [1] not scalar on 1-D axis, and ignore keepdims on int input [known bug]";
+                // result dtype (NEP50 accumulator width / complex->real for nanstd/nanvar).
+                if (kind == DivergenceKind.Dtype)
+                    return "nan-reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
+                // (W4-C) nanmedian propagates NaN instead of ignoring it.
+                if (kind == DivergenceKind.Value && c.Op == "nanmedian")
+                    return "nanmedian: propagates NaN instead of ignoring it [known bug]";
+                // (W4-B) nansum/nanmean/nanstd/nanvar: wrong NaN masking / count, or summation order.
+                if (kind == DivergenceKind.Value)
+                    return "nan-reduction value: NaN masking / count / summation-order divergence [known bug]";
+            }
 
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))

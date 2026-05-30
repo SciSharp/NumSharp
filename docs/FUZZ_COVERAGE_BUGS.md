@@ -44,3 +44,18 @@ NumPy across all integer+bool dtypes, including the overflow-shift semantics (sh
 | W3-A | 🟡 | `sinh/cosh/tanh/arcsin/arccos/arctan/deg2rad/rad2deg` on Half-promoting input (bool/int8/uint8/float16) | float16 result | `NotSupportedException "… not supported for Half"` | No Half kernel emitted for these 8 ufuncs. |
 | W3-B | 🟡 | `sinh/cosh/tanh/arcsin/arccos/arctan` on complex128 | complex result | `NotSupportedException "… not supported for Complex"` | No Complex kernel (NumPy computes complex hyperbolic/inverse-trig). |
 | W3-C | 🔴 | `exp2(int16\|uint16\|float32)` | float32 result | **`InvalidProgramException` (CLR rejected the emitted IL)** | The float32-output `exp2` kernel emits a malformed IL method body. `exp2(float64)`/Half are fine — isolated to the Single emitter. |
+
+---
+
+## W4 — NaN-aware reductions (`nanreduce.jsonl`, 2040 cases)
+
+The nan* family is **broadly broken** — 526/2040 cells diverge. `nanmax/nanmin/nanprod` are
+clean; `nansum/nanmean/nanstd/nanvar/nanmedian` are not.
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W4-A | 🟠 | `nanmean/nanstd/nanvar` (Shape) | scalar `[]`; `keepdims` honored | `[1]` on 1-D axis-0; `keepdims` **ignored on int input** | reduction collapses/keepdims logic in the QuantileEngine/mean path is wrong for these shapes. |
+| W4-B | 🟠 | `nansum/nanmean` on strided axis | all-NaN slice → `0`; correct count | garbage (`2³¹`) / wrong mean (32.0625 vs 32.0) | NaN masking & divisor-count wrong on the strided/axis path. |
+| W4-C | 🟠 | `nanmedian` with NaNs | ignores NaN → non-NaN median (±inf etc.) | **`NaN`** | nanmedian does not strip NaN before the median — propagates it. |
+| W4-D | 🟡 | `nansum(complex128, axis)` 1-D | complex sum | `InvalidOperationException "NDCoordinatesAxisIncrementor … vector shape"` | shared complex-1D-axis-reduction defect (same class as #12). |
+| W4-E | 🟡 | `nanmean/nanstd/nanvar` empty float16, axis=None | `NaN` + warning | `InvalidOperationException "NDIterator … empty shape"` | empty-array path not handled for the float16 nan-reduce. |
