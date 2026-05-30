@@ -104,6 +104,19 @@ namespace NumSharp.UnitTest.Fuzz
                 && c.Operands.Length == 2 && c.Operands.All(o => o.Dtype == "int8"))
                 return "dot(int8): Sum(int8)->int8 IL reduction kernel missing [known bug]";
 
+            // (W9-A/C) np.expand_dims and np.atleast_3d on an EMPTY (size-0) array drop the
+            // inserted/appended axis: NumSharp returns [0,3] where NumPy returns [1,0,3] / [0,3,1].
+            // Non-empty inputs are correct. Scoped to a shape mismatch on a zero-size operand.
+            if ((c.Op == "expand_dims" || c.Op == "atleast_3d")
+                && kind == DivergenceKind.Shape && c.Operands[0].Shape.Any(d => d == 0))
+                return "expand_dims/atleast_3d(empty): inserted/appended axis dropped on a zero-size array [known bug]";
+
+            // (W9-B) np.repeat ignores Shape.offset: on an offset slice (b[2:7]) or a 0-D view at a
+            // non-zero offset it reads from the base buffer start, returning the wrong elements.
+            // Contiguous/offset-0 repeat is bit-exact. Scoped to a repeat on a non-zero-offset operand.
+            if (c.Op == "repeat" && kind == DivergenceKind.Value && c.Operands[0].Offset != 0)
+                return "repeat: ignores Shape.offset (reads base start) on offset / 0-D views [known bug]";
+
             // (W8-A) np.modf only supports Single/Double/Decimal: float16 and integer inputs throw
             // "modf only supports floating-point types". NumPy returns (float16,float16) for Half and
             // promotes integer input to (float64,float64). float32/float64 modf is bit-exact incl. the

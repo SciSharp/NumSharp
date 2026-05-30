@@ -716,6 +716,142 @@ def gen_shift(ops, dtypes):
     return cases
 
 
+# T7 — shape manipulation. These ops only move bytes, so dtype coverage is light but stride/shape
+# coverage is heavy. NumPy is the oracle for the output shape, dtype, and C-contiguous bytes.
+MANIP_DTYPES = ["int32", "float64", "uint8", "complex128"]
+
+
+def gen_manip(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            sz = int(view.size)
+            nd = view.ndim
+            jobs = [
+                ("ravel", {}, lambda v: np.ravel(v)),
+                ("transpose", {}, lambda v: np.transpose(v)),
+                ("expand_dims", {"axis": 0}, lambda v: np.expand_dims(v, 0)),
+                ("squeeze", {}, lambda v: np.squeeze(v)),
+                ("roll", {"shift": 1}, lambda v: np.roll(v, 1)),
+                ("repeat", {"repeats": 2}, lambda v: np.repeat(v, 2)),
+                ("tile", {"reps": 2}, lambda v: np.tile(v, 2)),
+                ("atleast_1d", {}, lambda v: np.atleast_1d(v)),
+                ("atleast_2d", {}, lambda v: np.atleast_2d(v)),
+                ("atleast_3d", {}, lambda v: np.atleast_3d(v)),
+            ]
+            if sz > 0:
+                jobs.append(("reshape", {"shape": [sz]}, lambda v, sz=sz: v.reshape(sz)))
+            if nd >= 2:
+                jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
+                jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
+                jobs.append(("delete", {"obj": 0, "axis": 0}, lambda v: np.delete(v, 0, axis=0)))
+            for (opname, params, f) in jobs:
+                try:
+                    r = np.asarray(f(view))
+                except Exception:
+                    skipped += 1
+                    continue
+                cases.append({
+                    "id": f"{opname}/{ln}/{s}/{n}",
+                    "op": opname,
+                    "params": params,
+                    "operands": [operand],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": ln,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_concat_stack(dtypes):
+    """Two-operand join ops (concatenate/stack/hstack/vstack/dstack). The second operand is a
+    rolled copy so the two halves are distinguishable; one strided case exercises non-contig joins."""
+    cases = []
+    n = 0
+    skipped = 0
+    pairs = []  # (label, a_base, a_view, b_base, b_view, shape ndim)
+    for sh in [(3,), (2, 3), (2, 3, 4)]:
+        for s in dtypes:
+            a = _cbase(sh, np.dtype(s))
+            b = np.ascontiguousarray(np.roll(a, 1))
+            pairs.append((f"contig{len(sh)}d", s, a, a, b, b))
+    # one strided pair: (4,6)[:, ::2] -> (4,3)
+    for s in dtypes:
+        a = _cbase((4, 6), np.dtype(s))
+        b = _cbase((4, 6), np.dtype(s))
+        pairs.append(("strided2d", s, a, a[:, ::2], b, b[:, ::2]))
+
+    for (label, s, ab, av, bb, bv) in pairs:
+        opnd = [describe(ab, av), describe(bb, bv)]
+        nd = av.ndim
+        jobs = [("hstack", {}, lambda x, y: np.hstack([x, y])),
+                ("vstack", {}, lambda x, y: np.vstack([x, y])),
+                ("dstack", {}, lambda x, y: np.dstack([x, y]))]
+        for axis in range(nd):
+            jobs.append((f"concatenate", {"axis": axis}, lambda x, y, axis=axis: np.concatenate([x, y], axis=axis)))
+        for axis in range(nd + 1):
+            jobs.append((f"stack", {"axis": axis}, lambda x, y, axis=axis: np.stack([x, y], axis=axis)))
+        for (opname, params, f) in jobs:
+            try:
+                r = np.asarray(f(av, bv))
+            except Exception:
+                skipped += 1
+                continue
+            cases.append({
+                "id": f"{opname}/{label}/{s}/axis={params.get('axis')}/{n}",
+                "op": opname,
+                "params": params,
+                "operands": opnd,
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": label,
+                "valueclass": "mixed",
+            })
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_pad(dtypes):
+    cases = []
+    n = 0
+    skipped = 0
+    modes = ["constant", "edge", "reflect", "wrap"]
+    for sh in [(5,), (3, 4)]:
+        for s in dtypes:
+            base = _cbase(sh, np.dtype(s))
+            for mode in modes:
+                try:
+                    r = np.asarray(np.pad(base, 1, mode=mode))
+                except Exception:
+                    skipped += 1
+                    continue
+                cases.append({
+                    "id": f"pad/{mode}/{'x'.join(map(str, sh))}/{s}/{n}",
+                    "op": "pad",
+                    "params": {"pad_width": 1, "mode": mode},
+                    "operands": [describe(base, base)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "pad",
+                    "valueclass": "mixed",
+                })
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 # T15 — multi-output. np.modf(x) -> (fractional, integral). Split into two corpus ops so the
 # harness bit-compares EACH output buffer. NumPy is the oracle for value, dtype, and the C-standard
 # sign rules (modf(-0.0)=(-0.0,-0.0), modf(inf)=(0.0,inf), modf(nan)=(nan,nan)).
@@ -830,6 +966,11 @@ def main():
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "modf.jsonl"), cases)
+    elif mode == "manip":
+        cases = gen_manip(MANIP_DTYPES, list(LAYOUTS.keys()))
+        cases += gen_concat_stack(MANIP_DTYPES)
+        cases += gen_pad(MANIP_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

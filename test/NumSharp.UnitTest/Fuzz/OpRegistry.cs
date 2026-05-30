@@ -77,6 +77,28 @@ namespace NumSharp.UnitTest.Fuzz
                 case "less_equal": return ops[0] <= ops[1];
                 case "greater_equal": return ops[0] >= ops[1];
 
+                // Shape manipulation (T7).
+                case "ravel": return np.ravel(ops[0]);
+                case "transpose": return np.transpose(ops[0]);
+                case "expand_dims": return np.expand_dims(ops[0], p["axis"].GetInt32());
+                case "squeeze": return np.squeeze(ops[0]);
+                case "roll": return np.roll(ops[0], p["shift"].GetInt32());
+                case "repeat": return np.repeat(ops[0], p["repeats"].GetInt32());
+                case "tile": return np.tile(ops[0], p["reps"].GetInt32());
+                case "reshape": return np.reshape(ops[0], ParseIntArray(p["shape"]));
+                case "swapaxes": return np.swapaxes(ops[0], p["a1"].GetInt32(), p["a2"].GetInt32());
+                case "moveaxis": return np.moveaxis(ops[0], p["src"].GetInt32(), p["dst"].GetInt32());
+                case "delete": return np.delete(ops[0], p["obj"].GetInt32(), p["axis"].GetInt32());
+                case "atleast_1d": return np.atleast_1d(ops[0]);
+                case "atleast_2d": return np.atleast_2d(ops[0]);
+                case "atleast_3d": return np.atleast_3d(ops[0]);
+                case "concatenate": return np.concatenate((ops[0], ops[1]), p["axis"].GetInt32());
+                case "stack": return np.stack(new[] { ops[0], ops[1] }, p["axis"].GetInt32());
+                case "hstack": return np.hstack(ops[0], ops[1]);
+                case "vstack": return np.vstack(ops[0], ops[1]);
+                case "dstack": return np.dstack(ops[0], ops[1]);
+                case "pad": return np.pad(ops[0], p["pad_width"].GetInt32(), p["mode"].GetString());
+
                 // Multi-output (T15): modf split into its two outputs (fractional / integral).
                 case "modf_frac": return np.modf(ops[0]).Item1;
                 case "modf_int": return np.modf(ops[0]).Item2;
@@ -127,6 +149,14 @@ namespace NumSharp.UnitTest.Fuzz
                 default:
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
             }
+        }
+
+        private static int[] ParseIntArray(JsonElement arr)
+        {
+            var list = new List<int>();
+            foreach (var e in arr.EnumerateArray())
+                list.Add(e.GetInt32());
+            return list.ToArray();
         }
 
         private static int? ParseAxis(IReadOnlyDictionary<string, JsonElement> p)

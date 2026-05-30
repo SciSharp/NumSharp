@@ -94,6 +94,13 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Modf() => RunCorpus("modf.jsonl");
 
+        // W9 manipulation (T7): ravel/transpose/expand_dims/squeeze/roll/repeat/tile/reshape/
+        // swapaxes/moveaxis/delete/atleast_* (single-array, all layouts) + concatenate/stack/
+        // hstack/vstack/dstack (two-array) + pad (constant/edge/reflect/wrap).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Manip() => RunCorpus("manip.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
