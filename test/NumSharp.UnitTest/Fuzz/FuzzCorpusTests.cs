@@ -88,6 +88,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Logic() => RunCorpus("logic.jsonl");
 
+        // W8 multi-output (T15): np.modf -> (fractional, integral), each output bit-compared,
+        // with C-standard signed-zero/inf edges from the float pools.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Modf() => RunCorpus("modf.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

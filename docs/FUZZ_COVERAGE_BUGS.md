@@ -95,3 +95,14 @@ clean; `nansum/nanmean/nanstd/nanvar/nanmedian` are not.
 | W7-A | 🟠 | `maximum/minimum/fmax/fmin` with an **F-contiguous/strided** operand | element-wise logical pairing | **scrambled** (reads memory order) | the extrema kernel ignores the operand's strides and walks it C-contiguously. C-contig is bit-exact; add/sub/mul handle the same F-contig operand correctly, so it's extrema-specific. |
 | W7-B | 🟠 | `fmax/fmin(x, NaN)` | `x` (ignore NaN) | `NaN` | fmax/fmin propagate NaN — they behave identically to maximum/minimum instead of skipping NaN. |
 | W7-C | 🟡 | `isclose` on F-contiguous complex | element-wise bool | wrong bool | same strided-pairing family as W7-A on the complex path. |
+
+---
+
+## W8 — multi-output (`modf.jsonl`, 64 cases)
+
+`modf(float32)`/`modf(float64)` are **clean** on both outputs (incl. C-standard signed-zero/inf
+edges: `modf(-0.0)=(-0.0,-0.0)`, `modf(inf)=(0.0,inf)`). One bug:
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W8-A | 🟡 | `modf(float16)`, `modf(int32)` | `(float16,float16)` / `(float64,float64)` | `NotSupportedException "modf only supports Single, Double, Decimal"` | no Half kernel and no integer→float64 promotion. |

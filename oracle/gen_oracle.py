@@ -716,6 +716,46 @@ def gen_shift(ops, dtypes):
     return cases
 
 
+# T15 — multi-output. np.modf(x) -> (fractional, integral). Split into two corpus ops so the
+# harness bit-compares EACH output buffer. NumPy is the oracle for value, dtype, and the C-standard
+# sign rules (modf(-0.0)=(-0.0,-0.0), modf(inf)=(0.0,inf), modf(nan)=(nan,nan)).
+MODF_DTYPES = ["float16", "float32", "float64", "int32"]
+MODF_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                "transposed_3d", "strided_2d_cols", "negstride_1d", "one_element_1d"]
+
+
+def gen_modf(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            try:
+                frac, integ = np.modf(view)
+            except Exception:
+                skipped += 1
+                continue
+            for part_name, part in (("modf_frac", frac), ("modf_int", integ)):
+                r = np.asarray(part)
+                cases.append({
+                    "id": f"{part_name}/{ln}/{s}/{n}",
+                    "op": part_name,
+                    "params": {},
+                    "operands": [operand],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": ln,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -787,6 +827,9 @@ def main():
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
         cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
+    elif mode == "modf":
+        cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "modf.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

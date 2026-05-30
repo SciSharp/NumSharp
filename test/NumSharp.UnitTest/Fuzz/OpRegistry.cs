@@ -77,6 +77,10 @@ namespace NumSharp.UnitTest.Fuzz
                 case "less_equal": return ops[0] <= ops[1];
                 case "greater_equal": return ops[0] >= ops[1];
 
+                // Multi-output (T15): modf split into its two outputs (fractional / integral).
+                case "modf_frac": return np.modf(ops[0]).Item1;
+                case "modf_int": return np.modf(ops[0]).Item2;
+
                 // Cumulative scans + finite differences (T11).
                 case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
                 case "cumprod": return np.cumprod(ops[0], ParseAxis(p));

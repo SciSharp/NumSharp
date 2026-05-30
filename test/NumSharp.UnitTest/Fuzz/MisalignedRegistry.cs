@@ -104,6 +104,13 @@ namespace NumSharp.UnitTest.Fuzz
                 && c.Operands.Length == 2 && c.Operands.All(o => o.Dtype == "int8"))
                 return "dot(int8): Sum(int8)->int8 IL reduction kernel missing [known bug]";
 
+            // (W8-A) np.modf only supports Single/Double/Decimal: float16 and integer inputs throw
+            // "modf only supports floating-point types". NumPy returns (float16,float16) for Half and
+            // promotes integer input to (float64,float64). float32/float64 modf is bit-exact incl. the
+            // signed-zero/inf edges. Scoped to the two modf outputs that threw.
+            if ((c.Op == "modf_frac" || c.Op == "modf_int") && kind == DivergenceKind.Threw)
+                return "modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]";
+
             // (W1-E) np.where on the scalar-broadcast path with a narrow-int operand throws
             // "Zero-push unsupported for SByte" — NpyExpr.EmitPushZero gained Complex/Half (F4) but
             // not the sub-32-bit integers. Scoped to a where that threw with such an operand.
