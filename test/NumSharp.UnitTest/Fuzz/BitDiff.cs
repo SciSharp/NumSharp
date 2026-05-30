@@ -91,6 +91,8 @@ namespace NumSharp.UnitTest.Fuzz
                     return UlpDouble(BitConverter.ToDouble(exp, index * 8), BitConverter.ToDouble(act, index * 8)) <= maxUlp;
                 case NPTypeCode.Single:
                     return UlpSingle(BitConverter.ToSingle(exp, index * 4), BitConverter.ToSingle(act, index * 4)) <= maxUlp;
+                case NPTypeCode.Half:
+                    return UlpHalf(BitConverter.ToHalf(exp, index * 2), BitConverter.ToHalf(act, index * 2)) <= maxUlp;
                 case NPTypeCode.Complex:
                 {
                     int o = index * 16;
@@ -116,6 +118,15 @@ namespace NumSharp.UnitTest.Fuzz
             if (float.IsNaN(a) && float.IsNaN(b)) return 0;
             if (a == b) return 0;
             int la = BitConverter.SingleToInt32Bits(a), lb = BitConverter.SingleToInt32Bits(b);
+            if ((la < 0) != (lb < 0)) return long.MaxValue;
+            return Math.Abs((long)la - lb);
+        }
+
+        private static long UlpHalf(Half a, Half b)
+        {
+            if (Half.IsNaN(a) && Half.IsNaN(b)) return 0;
+            if (a == b) return 0;
+            short la = BitConverter.HalfToInt16Bits(a), lb = BitConverter.HalfToInt16Bits(b);
             if ((la < 0) != (lb < 0)) return long.MaxValue;
             return Math.Abs((long)la - lb);
         }

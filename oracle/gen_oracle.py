@@ -106,6 +106,49 @@ DT_PAIRS = [
 ]
 
 
+# Unary ops. NumPy is the oracle for result dtype (e.g. sqrt(int)->float64, abs(complex)->float64).
+UNARY_OPS = {
+    "negative": np.negative, "abs": np.abs, "sign": np.sign,
+    "sqrt": np.sqrt, "cbrt": np.cbrt, "square": np.square, "reciprocal": np.reciprocal,
+    "floor": np.floor, "ceil": np.ceil, "trunc": np.trunc,
+    "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
+}
+UNARY_DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128"]
+
+
+def gen_unary(ops, dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, f in ops.items():
+                try:
+                    r = f(view)
+                except Exception:
+                    skipped += 1  # NumPy raises (e.g. floor(complex)); error-parity tested separately
+                    continue
+                # Read the shape BEFORE ascontiguousarray (which forces ndim>=1, corrupting 0-D results).
+                exp_shape = [int(d) for d in r.shape]
+                exp_buf = np.ascontiguousarray(r).tobytes().hex()
+                cases.append({
+                    "id": f"{opname}/{ln}/{s}/{n}",
+                    "op": opname,
+                    "params": {},
+                    "operands": [operand],
+                    "expected": {"dtype": r.dtype.name, "shape": exp_shape, "buffer": exp_buf},
+                    "layout": ln,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def gen_binary(ops, dt_pairs, pair_layout_names):
     cases = []
     n = 0
@@ -118,17 +161,19 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
             op_b = describe(bb, vb)
             for opname, f in ops.items():
                 try:
-                    res = np.ascontiguousarray(f(va, vb))
+                    r = f(va, vb)
                 except Exception:
                     skipped += 1  # NumPy raises (e.g. int**neg); error-parity is tested separately
                     continue
+                # Read the shape BEFORE ascontiguousarray (which forces ndim>=1, corrupting 0-D results).
+                exp_shape = [int(d) for d in r.shape]
+                exp_buf = np.ascontiguousarray(r).tobytes().hex()
                 cases.append({
                     "id": f"{opname}/{ln}/{sa},{sb}/{n}",
                     "op": opname,
                     "params": {},
                     "operands": [op_a, op_b],
-                    "expected": {"dtype": res.dtype.name, "shape": [int(d) for d in res.shape],
-                                 "buffer": res.tobytes().hex()},
+                    "expected": {"dtype": r.dtype.name, "shape": exp_shape, "buffer": exp_buf},
                     "layout": ln,
                     "valueclass": "mixed",
                 })
@@ -169,8 +214,11 @@ def main():
     elif mode == "comparison":
         cases = gen_binary(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "comparison.jsonl"), cases)
+    elif mode == "unary":
+        cases = gen_unary(UNARY_OPS, UNARY_DTYPES, list(LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "unary.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary)")
         sys.exit(2)
 
 

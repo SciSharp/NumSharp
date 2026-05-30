@@ -28,6 +28,23 @@ namespace NumSharp.UnitTest.Fuzz
                 case "mod": return np.mod(ops[0], ops[1]);
                 case "power": return np.power(ops[0], ops[1]);
 
+                // Unary.
+                case "negative": return np.negative(ops[0]);
+                case "abs": return np.abs(ops[0]);
+                case "sign": return np.sign(ops[0]);
+                case "sqrt": return np.sqrt(ops[0]);
+                case "cbrt": return np.cbrt(ops[0]);
+                case "square": return np.square(ops[0]);
+                case "reciprocal": return np.reciprocal(ops[0]);
+                case "floor": return np.floor(ops[0]);
+                case "ceil": return np.ceil(ops[0]);
+                case "trunc": return np.trunc(ops[0]);
+                case "sin": return np.sin(ops[0]);
+                case "cos": return np.cos(ops[0]);
+                case "tan": return np.tan(ops[0]);
+                case "exp": return np.exp(ops[0]);
+                case "log": return np.log(ops[0]);
+
                 // Comparison -> bool result.
                 case "equal": return ops[0] == ops[1];
                 case "not_equal": return ops[0] != ops[1];

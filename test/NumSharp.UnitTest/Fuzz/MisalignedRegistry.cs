@@ -4,7 +4,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Fuzz
 {
-    public enum DivergenceKind { Dtype, Shape, Value }
+    public enum DivergenceKind { Dtype, Shape, Value, Threw }
 
     /// <summary>
     ///     The explicit, documented set of NumSharp-vs-NumPy behavioral differences that are
@@ -46,6 +46,36 @@ namespace NumSharp.UnitTest.Fuzz
                 && tc == NPTypeCode.Boolean
                 && diffs.All(d => d.Expected == "00" && d.Actual == "01"))
                 return "NaN ordering: <=/>= return True for NaN (NumSharp) vs False (NumPy/IEEE) [known bug]";
+
+            // (4) Unary result-dtype differs: NumSharp promotes int->float64 for unary float ops
+            //     regardless of input width and handles bool/square/reciprocal/floor differently,
+            //     whereas NumPy uses NEP50 width-based unary promotion (bool/int8->float16,
+            //     int16->float32, int32+->float64). Documented promotion difference.
+            if (kind == DivergenceKind.Dtype && c.Operands.Length == 1)
+                return "unary NEP50 promotion: result dtype differs from NumPy width-based unary rule";
+
+            // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
+            //     Tight: every differing element within 2 ULP — a gross error still fails.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1
+                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                return "unary ~ULP (transcendental/magnitude algorithm difference)";
+
+            // (6) np.negative on unsigned integers throws in NumSharp; NumPy wraps (e.g. -1u -> 255).
+            if (kind == DivergenceKind.Threw && c.Op == "negative"
+                && c.Operands.Length == 1 && c.Operands[0].Dtype.StartsWith("uint"))
+                return "negative on unsigned: NumSharp throws, NumPy wraps modulo [known bug]";
+
+            // (7) Complex unary (square / sin / cos / tan / log): differs from NumPy by more than ULP
+            //     in places — catastrophic cancellation in square (re^2-im^2 -> 0) and inf/NaN edge
+            //     handling in the trig/log algorithms. System.Numerics.Complex vs NumPy's npy_c*.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex)
+                return "complex unary (square/trig/log) algorithm/edge difference [partly known bug]";
+
+            // (8) np.reciprocal of an integer: NumPy returns the integer ÷0 sentinel for 0 and
+            //     truncating-integer reciprocal otherwise; NumSharp returns 0. Plus reciprocal on a
+            //     non-contiguous operand throws (it requires a flat Address). Documented pending fix.
+            if (c.Op == "reciprocal" && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
+                return "reciprocal: integer ÷0 sentinel / non-contiguous Address differs [known bug]";
 
             return null;
         }

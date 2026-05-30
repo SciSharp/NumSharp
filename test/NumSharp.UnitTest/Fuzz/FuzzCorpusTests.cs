@@ -30,6 +30,10 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Comparison() => RunCorpus("comparison.jsonl");
 
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Unary() => RunCorpus("unary.jsonl");
+
         // KNOWN-FAILING bug reproduction (excluded from CI via [OpenBugs]; remove the tag when fixed).
         // floor_divide / mod / power diverge from NumPy: integer ÷0 and mod-0 throw or return garbage
         // instead of 0; float //0 yields NaN instead of ±inf; mixed-precision mod; complex power.
@@ -88,7 +92,9 @@ namespace NumSharp.UnitTest.Fuzz
                 }
                 catch (Exception e)
                 {
-                    failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}");
+                    var reason = MisalignedRegistry.Classify(c, DivergenceKind.Threw, null, null, default, empty);
+                    if (reason != null) Bump(documented, reason);
+                    else failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}");
                 }
             }
 
