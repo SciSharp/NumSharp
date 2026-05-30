@@ -1,4 +1,6 @@
 ﻿using System;
+using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
@@ -73,24 +75,60 @@ namespace NumSharp.Backends
             }
             else
             {
-                //casting needed
+                //casting needed — SIMD copy-with-cast via NpyIter. The output layout mirrors
+                //the source's contiguity (NumPy astype order='K'/KEEPORDER, methods.c:769): an
+                //F-contiguous or transposed source casts in a single flat pass instead of the
+                //cache-hostile reorder the legacy scalar CastTo loop incurred. NpyIter.Copy
+                //already dispatches the same-type SIMD copy, the contiguous IL cast kernel, and
+                //the strided/broadcast cast kernel, so every layout takes its best path.
+                var result = CastCrossType(nd, dtype, engine);
                 if (copy)
-                {
-                    if (nd.Shape.IsSliced)
-                        nd = clone();
+                    return result;
 
-                    return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(nd.Array.CastTo(dtype), false), nd.Shape)) { TensorEngine = engine };
-                }
-                else
-                {
-                    var storage = nd.Shape.IsSliced ? nd.Storage.Clone() : nd.Storage;
-                    nd.Storage = new UnmanagedStorage(ArraySlice.FromMemoryBlock(storage.InternalArray.CastTo(dtype), false), storage.Shape) { Engine = engine };
-                    nd.TensorEngine = engine;
-                    return nd;
-                }
+                nd.Storage = result.Storage;
+                nd.TensorEngine = engine;
+                return nd;
             }
 
             NDArray clone() => nd.Clone();
+        }
+
+        /// <summary>
+        ///     Allocates a fresh array of <paramref name="dtype"/> whose memory order mirrors
+        ///     the source's contiguity (KEEPORDER) and fills it from <paramref name="nd"/> via
+        ///     <see cref="Iteration.NpyIter.Copy(NDArray, NDArray)"/>, which performs a
+        ///     stride/broadcast-aware SIMD copy-with-cast.
+        /// </summary>
+        /// <remarks>
+        ///     Mirroring contiguity is what lets a transposed (F-contiguous) source cast as a
+        ///     flat both-F copy rather than a strided reorder. NumPy does the same: array_astype
+        ///     defaults to NPY_KEEPORDER and allocates via PyArray_NewLikeArray
+        ///     (numpy/_core/src/multiarray/methods.c). Strided / broadcast / negative-stride
+        ///     sources are neither C- nor F-contiguous, so they land in a C-order output and take
+        ///     NpyIter's stride-sorted cast kernel.
+        /// </remarks>
+        private static NDArray CastCrossType(NDArray nd, NPTypeCode dtype, TensorEngine engine)
+        {
+            // float->int and signed-narrow->UInt64 have no NumPy-faithful SIMD cast kernel yet
+            // (DirectILKernelGenerator.DivergesFromNumpyCast declines them — the hardware
+            // truncate/saturate emission diverges from NumPy's wrapping semantics). Routing them
+            // through NpyIter.Copy would fall to its scalar strided cast, which is SLOWER than the
+            // legacy contiguous Converts loop. Keep those families on the legacy path (correct,
+            // and no slower than before) until the wrapping SIMD kernel lands.
+            if (DirectILKernelGenerator.DivergesFromNumpyCast(nd.GetTypeCode, dtype))
+            {
+                var legacySrc = nd.Shape.IsSliced ? nd.Clone() : nd;
+                return new NDArray(new UnmanagedStorage(ArraySlice.FromMemoryBlock(legacySrc.Array.CastTo(dtype), false), legacySrc.Shape)) { TensorEngine = engine };
+            }
+
+            // All other pairs: SIMD copy-with-cast into a KEEPORDER output (F-contiguous source
+            // mirrors to F output, so a transpose casts as a flat both-F copy, not a reorder).
+            var srcShape = nd.Shape;
+            char order = (srcShape.IsFContiguous && !srcShape.IsContiguous) ? 'F' : 'C';
+            var outShape = new Shape((long[])srcShape.dimensions.Clone(), order);
+            var result = new NDArray(dtype, outShape, false) { TensorEngine = engine };
+            NpyIter.Copy(result, nd);
+            return result;
         }
     }
 }
