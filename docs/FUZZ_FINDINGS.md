@@ -25,10 +25,10 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | **FIXED** | F2 |
 | 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | **FIXED (transcendental, F3a)** / square·floor·ceil·trunc·reciprocal pending F3b | F3 |
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | **FIXED** | F4 |
-| 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
+| 9 | unary | `reciprocal(int)` wrong; non-contig throws (**float non-contig FIXED**; int value/non-contig pending F3b) | BUG | F3b |
 | 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
 | 11 | reduction | `min/max` skip NaN (NumPy propagates) | **FIXED (flat)** / axis SIMD pending | F2-red |
-| 12 | reduction | complex axis reduction throws (`NDCoordinatesAxisIncrementor`) | BUG | #10 |
+| 12 | reduction | complex axis reduction throws (**2-D+ FIXED**; 1-D vector-shape pending) | BUG | #10 |
 | 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | BUG | #10 |
 | 14 | reduction | `sum/mean/std/var` accumulation order (vs NumPy pairwise/two-pass) | BUG | #10 |
 | 15 | reduction | result dtype (NEP50 accumulator width / complex→real) | BUG | #10 |
@@ -173,12 +173,14 @@ on contiguous and strided uint8/uint16/uint32; the unary matrix no longer excuse
 np.negative(np.array([1], np.uint8))    # [255]  (wraps modulo)
 ```
 
-### 9. `reciprocal` — integer result wrong; non-contiguous throws
+### 9. `reciprocal` — integer result wrong; non-contiguous throws — **partially resolved**
 
-`np.reciprocal(int)` returns 0 where NumPy returns the integer `÷0` sentinel (for 0) /
-truncating-integer reciprocal. `reciprocal` on a non-contiguous (e.g. transposed) operand throws
-`InvalidOperationException: Can't return a memory address when NDArray is sliced or broadcasted`.
-Task **#9**.
+`reciprocal` on a non-contiguous **float** operand (transposed / strided) now works (resolved).
+**Still pending (F3b):** `reciprocal(int)` returns `0` (float64) where NumPy returns the integer
+reciprocal with the `÷0` sentinel, *and* `reciprocal(int)` on a non-contiguous operand still throws
+`InvalidOperationException: Can't return a memory address...` because the int→float reciprocal path
+needs a flat Address — both fixed once F3b gives reciprocal an integer-preserving strided kernel.
+The classifier now excuses only the integer-input cases (float non-contig is gate-verified).
 
 ### 10. Complex unary — `square` cancellation; `sin/cos/tan/log` edge
 
@@ -206,11 +208,13 @@ np.min(np.array([np.nan, -np.inf, 1.0]))   # nan  (NumSharp now: nan ✓)
 ```
 Found by T5 `Reduce`. Task **#10** / F2-reductions.
 
-### 12. Complex axis reduction throws
+### 12. Complex axis reduction throws — **partially resolved (2-D+ FIXED)**
 
-`mean/std/var/sum` of a complex array **along an axis** throws
-`InvalidOperationException: Can't construct NDCoordinatesAxisIncrementor with a vector shape`.
-Task **#10**.
+`sum/mean/prod/std/var/min/max` of a complex **2-D+** array along an axis now works bit-exact
+(`std(complex2d, axis=0)` → real float64, verified). **Still pending:** reducing a **1-D** complex
+array along its only axis still throws `InvalidOperationException: Can't construct
+NDCoordinatesAxisIncrementor with a vector shape`. The classifier excuses only the 1-D Threw case;
+the 2-D matrix cases are gate-verified (value diffs fall to the summation-precision branch).
 
 ### 13. bool `min`/`max` along an axis is wrong
 

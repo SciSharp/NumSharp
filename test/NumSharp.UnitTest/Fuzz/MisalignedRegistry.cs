@@ -69,9 +69,13 @@ namespace NumSharp.UnitTest.Fuzz
                 // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
                 if (kind == DivergenceKind.Dtype)
                     return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
-                // Complex axis reduction throws (NDCoordinatesAxisIncrementor vector-shape path).
+                // Complex axis reduction on a 2-D+ array now works (resolved); but reducing a 1-D
+                // complex array along its only axis still throws "NDCoordinatesAxisIncrementor with a
+                // vector shape". Excuse only that residual Threw case — the 2-D cases are verified
+                // (value diffs fall to the summation / ~ULP branches).
                 if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
-                    return "complex axis reduction throws (NDCoordinatesAxisIncrementor) [known bug]";
+                    return "complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor vector shape) [known bug]";
+
                 // NaN propagation: the FLAT (axis=null) min/max reduction now propagates NaN
                 // (Phase 1 F2-reductions: NaN-propagating SIMD min/max in the IL flat kernel +
                 // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
@@ -121,11 +125,17 @@ namespace NumSharp.UnitTest.Fuzz
             // unsupported for Complex"); it now selects complex operands bit-exact. Classifier
             // branch removed so the where matrix verifies it.
 
-            // (8) np.reciprocal of an integer: NumPy returns the integer ÷0 sentinel for 0 and
-            //     truncating-integer reciprocal otherwise; NumSharp returns 0. Plus reciprocal on a
-            //     non-contiguous operand throws (it requires a flat Address). Documented pending fix.
-            if (c.Op == "reciprocal" && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
-                return "reciprocal: integer ÷0 sentinel / non-contiguous Address differs [known bug]";
+            // (8) np.reciprocal of an integer still returns the float64 reciprocal (0 for |x|>1)
+            //     instead of NumPy's integer reciprocal with the ÷0 sentinel, and on a non-contiguous
+            //     integer operand it still throws (the int->float reciprocal path needs a flat
+            //     Address) — both pending F3b (preserve-int-dtype + a strided integer-reciprocal
+            //     kernel). reciprocal on non-contiguous FLOAT operands is resolved. Scoped to integer
+            //     input (value diff or the non-contig throw).
+            if (c.Op == "reciprocal" && c.Operands.Length == 1
+                && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw)
+                && (c.Operands[0].Dtype.StartsWith("int") || c.Operands[0].Dtype.StartsWith("uint")
+                    || c.Operands[0].Dtype == "bool"))
+                return "reciprocal(int): float64 reciprocal / non-contig Address vs NumPy integer ÷0 sentinel [F3b]";
 
             return null;
         }
