@@ -45,10 +45,9 @@ namespace NumSharp.UnitTest.Fuzz
                 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
 
-            // Size-1 result shape: NumSharp collapses an all-size-1 result to 0-D where NumPy keeps it
-            // (e.g. [1] op scalar -> NumPy [1], NumSharp []). All expected dims are 1 (product 1).
-            if (kind == DivergenceKind.Shape && c.Expected.Shape != null && c.Expected.Shape.All(d => d == 1))
-                return "size-1 result shape differs (NumSharp collapses to 0-D) [known bug]";
+            // Size-1 result shape was FIXED in Phase 1 F7: Shape.Broadcast no longer collapses a
+            // 1-D [1] against a lower-rank operand (e.g. [1] + 0-D scalar -> [1], not []). The NDim
+            // guard keeps result ndim == max(ndims). Classifier branch removed so the matrix verifies it.
 
             // Bool arithmetic was FIXED in Phase 1 F6: `+` now emits logical OR and `*` logical AND
             // for the bool dtype (True + True -> True / byte 1, not 2), matching NumPy's bool ufunc

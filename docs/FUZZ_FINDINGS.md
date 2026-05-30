@@ -34,7 +34,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 15 | reduction | result dtype (NEP50 accumulator width / complex→real) | BUG | #10 |
 | 16 | where | complex `np.where` throws ("Zero-push unsupported for Complex") | **FIXED** | F4 |
 | 17 | binary | bool arithmetic: `True + True → 2` (NumPy → bool True) | **FIXED** | F6 |
-| 18 | binary | size-1 result collapses to 0-D (NumPy keeps `[1]`) | BUG | #12 |
+| 18 | binary | size-1 result collapses to 0-D (NumPy keeps `[1]`) | **FIXED** | F7 |
 | 19 | binary | complex `multiply`/`divide` cancellation + ~1 ULP | BUG | #12 |
 | 20 | promotion | 0-D array operand promoted weakly (NEP50: full participant) | INTENDED | — |
 | 21 | divide | complex division ~1 ULP (`npy_cdivide` vs `System.Numerics.Complex`) | INTENDED | — |
@@ -249,10 +249,15 @@ throws on both sides. Verified bit-exact scalar + SIMD (32-wide).
 np.array([True]) + np.array([True])    # [ True]  (bool, byte 1)
 ```
 
-### 18. size-1 result collapses to 0-D
+### 18. size-1 result collapses to 0-D — **FIXED (F7)**
 
-A binary op whose broadcast result is all-size-1 (e.g. `[1] op scalar`) returns 0-D `[]` in
-NumSharp where NumPy keeps `[1]`. Found by the A2 random fuzzer. Task **#12**.
+`Shape.Broadcast`'s size-1 fast path treated a 1-D `[1]` like a 0-D scalar and broadcast it to the
+*other* operand's dimensions — so `[1] + 0-D scalar` adopted the scalar's `[]` shape, dropping a
+rank (`[1] → []`). The path was asymmetric: `scalar + [1]` was already correct. **Fixed** by guarding
+the size-1 collapse on `rightShape.NDim >= leftShape.NDim` (and the symmetric `leftShape.NDim >=
+rightShape.NDim`), so the result keeps `ndim == max(ndims)`. Verified across `[1]+scalar`, `[1]+[2,3]`,
+`[3]+[1]`, `[2,1]+[3]`, `[[1]]+scalar`, etc.; full suite green (the broadcast change is core).
+Found by the A2 random fuzzer.
 
 ### 19. Complex binary `multiply`/`divide` cancellation
 
