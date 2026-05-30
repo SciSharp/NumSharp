@@ -822,6 +822,17 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // float -> integer / char: the IL conv.* opcodes SATURATE on overflow and yield 0
+            // for NaN, but NumPy truncates toward zero and yields the type-min sentinel
+            // (int.MinValue & co.) on NaN/overflow, then wraps to narrower widths. Route through
+            // the Converts.* table, which is bit-exact with NumPy across the full cast matrix.
+            if ((from == NPTypeCode.Single || from == NPTypeCode.Double)
+                && to != NPTypeCode.Boolean && to != NPTypeCode.Single && to != NPTypeCode.Double)
+            {
+                il.EmitCall(OpCodes.Call, ConvertsFloatToIntMethod(from, to), null);
+                return;
+            }
+
             // For numeric types, use conv.* opcodes
             switch (to)
             {
@@ -856,7 +867,10 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Conv_I8);
                     break;
                 case NPTypeCode.UInt64:
-                    il.Emit(OpCodes.Conv_U8);
+                    // signed source must SIGN-extend to 64 bits (NumPy: int16(-1)->uint64 =
+                    // 0xFFFF...FFFF). Conv_U8 zero-extends, truncating the sign. (float->uint64
+                    // was already routed through Converts above.)
+                    il.Emit(IsUnsigned(from) ? OpCodes.Conv_U8 : OpCodes.Conv_I8);
                     break;
                 case NPTypeCode.Single:
                     if (IsUnsigned(from))
@@ -872,6 +886,22 @@ namespace NumSharp.Backends.Kernels
                     throw new NotSupportedException($"Conversion to {to} not supported");
             }
         }
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<(NPTypeCode from, NPTypeCode to), MethodInfo> _convertsFloatToInt = new();
+
+        /// <summary>
+        /// Resolves the NumPy-faithful Converts.To{Int}({float|double}) method used to convert a
+        /// float source to an integer/char destination (truncate toward zero, type-min sentinel on
+        /// NaN/overflow, wrap to narrower widths). Cached per (from,to).
+        /// </summary>
+        private static MethodInfo ConvertsFloatToIntMethod(NPTypeCode from, NPTypeCode to)
+            => _convertsFloatToInt.GetOrAdd((from, to), static k =>
+            {
+                Type srcType = k.from == NPTypeCode.Single ? typeof(float) : typeof(double);
+                string name = "To" + k.to.ToString(); // ToByte, ToInt32, ..., ToChar
+                return typeof(Converts).GetMethod(name, BindingFlags.Public | BindingFlags.Static, null, new[] { srcType }, null)
+                    ?? throw new InvalidOperationException($"Converts.{name}({srcType.Name}) not found for {k.from}->{k.to}");
+            });
 
         /// <summary>
         /// Emit decimal-specific conversions.

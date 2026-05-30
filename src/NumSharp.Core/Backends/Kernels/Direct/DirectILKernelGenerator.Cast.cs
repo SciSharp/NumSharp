@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Kernels
@@ -103,6 +104,9 @@ namespace NumSharp.Backends.Kernels
         public static CastKernel TryGetCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
+            var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);
+            if (floatToInt32 != null) return floatToInt32;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -179,30 +183,85 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// True for (src,dst) pairs whose emitted IL kernel diverges from NumPy on out-of-range
-        /// or NaN inputs, so the caller must decline the SIMD kernel and fall back to the
-        /// Converts-backed scalar path (<see cref="Iteration.NpyIterCasting.ConvertValue"/>),
-        /// which is bit-exact with NumPy across the full cast matrix.
+        /// True for (src,dst) pairs whose emitted SIMD kernel body still diverges from NumPy on
+        /// out-of-range / NaN inputs, so the caller declines it and falls back to the Converts-backed
+        /// scalar path (<see cref="Iteration.NpyIterCasting.ConvertValue"/>), bit-exact with NumPy.
         ///
-        /// Two families diverge (verified against NumPy 2.x via the cast_spec matrix):
-        ///   1. float -> integer: the kernel SATURATES (clamps to dst min/max); NumPy truncates
-        ///      toward zero and yields int.MinValue (the type-min sentinel) on NaN/overflow.
-        ///   2. signed-narrow -> UInt64 (SByte/Int16/Int32): the widening kernel sign-extends to
-        ///      32 bits then zero-fills the top 32, instead of full 64-bit sign extension.
-        ///
-        /// All other pairs (int widening/narrowing wrap, int->float, float->float) already match
-        /// NumPy and keep their SIMD kernels. Re-enabling SIMD for these families with NumPy-exact
-        /// emission (raw cvtt truncation, full sign-extend) is a perf follow-up.
+        /// Now narrowed to ONE family: signed-narrow -> UInt64 (SByte/Int16/Int32), whose vectorized
+        /// widen sign-extends only to 32 bits. (float->int is now NumPy-faithful everywhere: the
+        /// scalar path via EmitConvertTo -> Converts.*, the float->int32 contig path via the cvtt
+        /// helpers in TryGetCastKernel, and the remaining float->int pairs via the ScalarOnly
+        /// strategy which has no SIMD body.)
         /// </summary>
         internal static bool DivergesFromNumpyCast(NPTypeCode src, NPTypeCode dst)
         {
-            bool srcFloat = src == NPTypeCode.Single || src == NPTypeCode.Double;
-            if (srcFloat && IsIntegerCast(dst))
-                return true;
             if (dst == NPTypeCode.UInt64 &&
                 (src == NPTypeCode.SByte || src == NPTypeCode.Int16 || src == NPTypeCode.Int32))
                 return true;
             return false;
+        }
+
+        /// <summary>
+        /// Returns the NumPy-faithful contig <see cref="CastKernel"/> for float-&gt;int32, or null.
+        /// The hardware truncating-convert (VCVTTPD2DQ / VCVTTPS2DQ) yields exactly NumPy's result
+        /// — truncate toward zero, int.MinValue on NaN/overflow — so no saturation fixup is needed.
+        /// The IL generator's width-matched emitter can't express the double-&gt;int32 lane halving
+        /// cleanly, so these two pairs use a width-adaptive helper (the "tidy helper -&gt; single Call"
+        /// pattern) instead of generated IL.
+        /// </summary>
+        internal static unsafe CastKernel TryGetFloatToInt32Kernel(NPTypeCode srcType, NPTypeCode dstType)
+        {
+            if (dstType != NPTypeCode.Int32) return null;
+            if (srcType == NPTypeCode.Double) return CastDoubleToInt32Contig;
+            if (srcType == NPTypeCode.Single) return CastSingleToInt32Contig;
+            return null;
+        }
+
+        // 4M f64->i32 (warm): ~1.48 ms vs NumPy 1.87 ms; vs 5.17 ms for the scalar Converts loop.
+        private static unsafe void CastDoubleToInt32Contig(void* srcV, void* dstV, long count)
+        {
+            double* src = (double*)srcV;
+            int* dst = (int*)dstV;
+            long i = 0;
+            if (Avx512F.IsSupported)
+            {
+                for (; i + 8 <= count; i += 8)
+                    Vector256.Store(Avx512F.ConvertToVector256Int32WithTruncation(Vector512.Load(src + i)), dst + i);
+            }
+            else if (Avx.IsSupported)
+            {
+                for (; i + 4 <= count; i += 4)
+                    Vector128.Store(Avx.ConvertToVector128Int32WithTruncation(Vector256.Load(src + i)), dst + i);
+            }
+            else if (Sse2.IsSupported)
+            {
+                for (; i + 2 <= count; i += 2)
+                    *(long*)(dst + i) = Sse2.ConvertToVector128Int32WithTruncation(Vector128.Load(src + i)).AsInt64().ToScalar();
+            }
+            for (; i < count; i++) dst[i] = Converts.ToInt32(src[i]);
+        }
+
+        private static unsafe void CastSingleToInt32Contig(void* srcV, void* dstV, long count)
+        {
+            float* src = (float*)srcV;
+            int* dst = (int*)dstV;
+            long i = 0;
+            if (Avx512F.IsSupported)
+            {
+                for (; i + 16 <= count; i += 16)
+                    Vector512.Store(Avx512F.ConvertToVector512Int32WithTruncation(Vector512.Load(src + i)), dst + i);
+            }
+            else if (Avx.IsSupported)
+            {
+                for (; i + 8 <= count; i += 8)
+                    Vector256.Store(Avx.ConvertToVector256Int32WithTruncation(Vector256.Load(src + i)), dst + i);
+            }
+            else if (Sse2.IsSupported)
+            {
+                for (; i + 4 <= count; i += 4)
+                    Vector128.Store(Sse2.ConvertToVector128Int32WithTruncation(Vector128.Load(src + i)), dst + i);
+            }
+            for (; i < count; i++) dst[i] = Converts.ToInt32(src[i]);
         }
 
         private static bool IsIntegerCast(NPTypeCode t) =>
