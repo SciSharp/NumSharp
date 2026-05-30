@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Fuzz;
@@ -89,6 +91,52 @@ namespace NumSharp.UnitTest.Fuzz
                 }
             }
             Assert.IsTrue(edgeChecks > 0, "expected the corpus to contain overflow/NaN edge values");
+        }
+
+        /// <summary>
+        ///     Proves the Shrinker produces a minimal 1-element case that REPRODUCES the divergence.
+        ///     Uses the bool-add divergence (True+True -> NumSharp 2 vs NumPy True) constructed in-memory.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Shrinker_MinimalCaseReproducesDivergence()
+        {
+            var json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var c = new FuzzCorpus.Case
+            {
+                Id = "selftest/booladd",
+                Op = "add",
+                Params = new Dictionary<string, JsonElement>(),
+                Operands = new[]
+                {
+                    new FuzzCorpus.Operand { Dtype = "bool", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "01" },
+                    new FuzzCorpus.Operand { Dtype = "bool", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "01" },
+                },
+                Expected = new FuzzCorpus.Expected { Dtype = "bool", Shape = new long[] { 1 }, Buffer = "01" },
+                Layout = "selftest",
+                Valueclass = "selftest",
+            };
+
+            // The full case must diverge (NumSharp True+True == 2).
+            var diffs = RunAndDiff(c);
+            Assert.IsTrue(diffs.Count > 0, "bool add True+True should diverge (NumSharp 2 vs NumPy True)");
+
+            // Shrink, then replay the minimal case — it must reproduce the divergence.
+            var shrunkJson = Shrinker.ShrinkElementwise(c, diffs[0].Index);
+            Assert.IsNotNull(shrunkJson, "shrinker should produce a minimal repro for an element-wise op");
+            var shrunk = JsonSerializer.Deserialize<FuzzCorpus.Case>(shrunkJson, json);
+            Assert.AreEqual(0, shrunk.Expected.Shape.Length, "minimal case should be a single 0-D element");
+            Assert.IsTrue(RunAndDiff(shrunk).Count > 0, "shrunk minimal case must reproduce the divergence");
+        }
+
+        private static List<BitDiff.Diff> RunAndDiff(FuzzCorpus.Case c)
+        {
+            var ops = c.Operands.Select(FuzzCorpus.Reconstruct).ToArray();
+            var result = OpRegistry.Apply(c.Op, c.Params, ops);
+            var tc = FuzzCorpus.DtypeToTC(c.Expected.Dtype);
+            if (result.typecode != tc)
+                return new List<BitDiff.Diff> { new BitDiff.Diff(-1, c.Expected.Dtype, result.typecode.ToString()) };
+            return BitDiff.Compare(FuzzCorpus.FromHex(c.Expected.Buffer), FuzzCorpus.ResultBytes(result), tc);
         }
     }
 }

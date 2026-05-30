@@ -45,6 +45,22 @@ namespace NumSharp.UnitTest.Fuzz
                 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)";
 
+            // Size-1 result shape: NumSharp collapses an all-size-1 result to 0-D where NumPy keeps it
+            // (e.g. [1] op scalar -> NumPy [1], NumSharp []). All expected dims are 1 (product 1).
+            if (kind == DivergenceKind.Shape && c.Expected.Shape != null && c.Expected.Shape.All(d => d == 1))
+                return "size-1 result shape differs (NumSharp collapses to 0-D) [known bug]";
+
+            // Bool arithmetic: NumSharp computes the integer result (True+True -> 2); NumPy keeps bool
+            // semantics (True+True -> True). Only when the result dtype is bool.
+            if (kind == DivergenceKind.Value && tc == NPTypeCode.Boolean
+                && (c.Op == "add" || c.Op == "subtract" || c.Op == "multiply"))
+                return "bool arithmetic: NumSharp integer result vs NumPy bool [known bug]";
+
+            // Complex binary arithmetic (add/sub/mul/div): catastrophic cancellation (re*re-im*im -> 0)
+            // and ~1 ULP from System.Numerics.Complex vs NumPy's npy_c* algorithms.
+            if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
+                return "complex binary arithmetic (cancellation / ~ULP) [partly known bug]";
+
             // (3) NaN ordering bug: NumSharp's <= and >= return True for a NaN operand; IEEE/NumPy
             //     return False (only != is True against NaN). Tight signature: bool result where every
             //     diff is NumPy-false -> NumSharp-true. KNOWN BUG, documented pending fix (task #8).

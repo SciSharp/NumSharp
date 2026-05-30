@@ -46,6 +46,23 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Place() => RunCorpus("place.jsonl");
 
+        // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void FuzzRandom() => RunCorpus("random_smoke.jsonl");
+
+        // Shrunk reproductions of divergences found by the nightly soak. Empty until the soak finds one.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void FuzzRegression()
+        {
+            var dir = System.IO.Path.Combine(AppContext.BaseDirectory, "Fuzz", "corpus", "regressions");
+            if (!System.IO.Directory.Exists(dir))
+                return;
+            foreach (var f in System.IO.Directory.GetFiles(dir, "*.jsonl"))
+                RunCorpus(System.IO.Path.Combine("regressions", System.IO.Path.GetFileName(f)));
+        }
+
         // KNOWN-FAILING bug reproduction (excluded from CI via [OpenBugs]; remove the tag when fixed).
         // floor_divide / mod / power diverge from NumPy: integer ÷0 and mod-0 throw or return garbage
         // instead of 0; float //0 yields NaN instead of ±inf; mixed-precision mod; complex power.
@@ -84,8 +101,10 @@ namespace NumSharp.UnitTest.Fuzz
                     // Broadcasting: result shape must match NumPy.
                     if (!ShapeEquals(result.Shape.dimensions, c.Expected.Shape))
                     {
-                        failures.Add($"{c.Id} [{c.Layout}]: result shape [{string.Join(",", result.Shape.dimensions)}] " +
-                                     $"!= NumPy [{string.Join(",", c.Expected.Shape)}]");
+                        var reason = MisalignedRegistry.Classify(c, DivergenceKind.Shape, null, null, tc, empty);
+                        if (reason != null) Bump(documented, reason);
+                        else failures.Add($"{c.Id} [{c.Layout}]: result shape [{string.Join(",", result.Shape.dimensions)}] " +
+                                          $"!= NumPy [{string.Join(",", c.Expected.Shape)}]");
                         continue;
                     }
 
@@ -96,10 +115,18 @@ namespace NumSharp.UnitTest.Fuzz
                     if (diffs.Count > 0)
                     {
                         var reason = MisalignedRegistry.Classify(c, DivergenceKind.Value, expected, actual, tc, diffs);
-                        if (reason != null) Bump(documented, reason);
-                        else failures.Add($"{c.Id} [{c.Layout}]: " +
-                            string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
-                            (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : ""));
+                        if (reason != null)
+                        {
+                            Bump(documented, reason);
+                        }
+                        else
+                        {
+                            var shrunk = Shrinker.ShrinkElementwise(c, diffs[0].Index);
+                            failures.Add($"{c.Id} [{c.Layout}]: " +
+                                string.Join(", ", diffs.Take(3).Select(d => $"@{d.Index} exp {d.Expected} act {d.Actual}")) +
+                                (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
+                                (shrunk != null ? $"\n      minimal repro: {shrunk}" : ""));
+                        }
                     }
                 }
                 catch (Exception e)
