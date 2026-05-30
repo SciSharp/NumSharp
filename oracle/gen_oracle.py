@@ -103,6 +103,14 @@ DT_PAIRS = [
     ("int16", "int32"), ("uint32", "int32"), ("int32", "uint32"),
     ("bool", "int32"), ("bool", "float64"),
     ("complex128", "float64"), ("float64", "complex128"), ("complex128", "int32"),
+    # W1: float16 as an operand (same-width, mixed-width-up, int->float16) and the narrow
+    # integers (signed/unsigned width-mixing, the uint64+int64 -> float64 NEP50 special case).
+    ("float16", "float16"), ("float16", "float32"), ("float16", "float64"),
+    ("int8", "float16"), ("uint8", "float16"), ("float16", "int32"),
+    ("int8", "int8"), ("int16", "int16"), ("uint16", "uint16"),
+    ("uint32", "uint32"), ("uint64", "uint64"), ("int64", "uint64"),
+    ("uint64", "int64"), ("int8", "int16"), ("uint8", "uint16"),
+    ("int16", "uint16"), ("uint16", "int32"), ("complex128", "complex128"),
 ]
 
 
@@ -113,7 +121,9 @@ UNARY_OPS = {
     "floor": np.floor, "ceil": np.ceil, "trunc": np.trunc,
     "sin": np.sin, "cos": np.cos, "tan": np.tan, "exp": np.exp, "log": np.log,
 }
-UNARY_DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128"]
+# All 13 NumPy-representable dtypes (W1: was a 7-dtype subset — now exercises float16 as an
+# INPUT and the narrow integers int8/int16/uint16/uint32/uint64 through every unary kernel).
+UNARY_DTYPES = list(ALL_DTYPES)
 
 
 def gen_unary(ops, dtypes, layout_names):
@@ -163,7 +173,8 @@ REDUCE_OPS = {
     "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
     "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd),
 }
-REDUCE_DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128"]
+# All 13 dtypes (W1): exercises float16 + narrow-int accumulator promotion in every reduction.
+REDUCE_DTYPES = list(ALL_DTYPES)
 REDUCE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                   "transposed_3d", "strided_2d_cols", "broadcast_1d_to_2d", "scalar_0d",
                   "empty_2d", "one_element_1d"]
@@ -250,6 +261,9 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
 WHERE_DT_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
     ("bool", "int32"), ("float64", "float64"), ("complex128", "float64"), ("uint8", "int8"),
+    # W1: float16 + narrow-int select results.
+    ("float16", "float16"), ("float16", "float32"), ("int8", "int16"), ("uint16", "uint16"),
+    ("uint32", "int32"), ("int64", "uint64"),
 ]
 
 
@@ -323,7 +337,11 @@ def gen_place(dtypes, layout_names):
 # and the gufunc/broadcast output shape. Operands carry deterministic non-trivial values; the C/F
 # layout variants exercise the stride-aware GEMM packers (an F-contiguous operand is a transposed
 # view into a C-contiguous base, mirroring layout_catalog's f_contiguous pattern).
-MATMUL_DTYPES = ["int32", "int64", "uint8", "float32", "float64", "complex128"]
+# W1: added float16 + the narrow integers (int8/int16/uint16/uint32/uint64) — exercises the
+# stride-aware GEMM accumulator at every width (NumPy matmul preserves the input dtype, so e.g.
+# int8@int8 -> int8 with modular overflow; float16@float16 -> float16).
+MATMUL_DTYPES = ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
+                 "float16", "float32", "float64", "complex128"]
 
 # (op, shapeA, shapeB) — spans the matmul gufunc shape space + dot/outer specifics.
 MATMUL_SHAPE_CASES = [
