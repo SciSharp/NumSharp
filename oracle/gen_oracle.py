@@ -149,6 +149,69 @@ def gen_unary(ops, dtypes, layout_names):
     return cases
 
 
+# Reductions. NumPy is the oracle for value, NEP50 accumulator dtype, and keepdims shape.
+REDUCE_OPS = {
+    "sum": lambda a, ax, kd: np.sum(a, axis=ax, keepdims=kd),
+    "prod": lambda a, ax, kd: np.prod(a, axis=ax, keepdims=kd),
+    "min": lambda a, ax, kd: np.min(a, axis=ax, keepdims=kd),
+    "max": lambda a, ax, kd: np.max(a, axis=ax, keepdims=kd),
+    "mean": lambda a, ax, kd: np.mean(a, axis=ax, keepdims=kd),
+    "std": lambda a, ax, kd: np.std(a, axis=ax, keepdims=kd),
+    "var": lambda a, ax, kd: np.var(a, axis=ax, keepdims=kd),
+    "argmax": lambda a, ax, kd: np.argmax(a, axis=ax, keepdims=kd),
+    "argmin": lambda a, ax, kd: np.argmin(a, axis=ax, keepdims=kd),
+    "all": lambda a, ax, kd: np.all(a, axis=ax, keepdims=kd),
+    "any": lambda a, ax, kd: np.any(a, axis=ax, keepdims=kd),
+}
+REDUCE_DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128"]
+REDUCE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                  "transposed_3d", "strided_2d_cols", "broadcast_1d_to_2d", "scalar_0d",
+                  "empty_2d", "one_element_1d"]
+
+
+def _axes(ndim):
+    if ndim == 0:
+        return [None]
+    if ndim == 1:
+        return [None, 0]
+    return [None, 0, ndim - 1]
+
+
+def gen_reduce(ops, dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, f in ops.items():
+                for axis in _axes(view.ndim):
+                    if opname in ("argmax", "argmin") and axis is None:
+                        continue  # NumSharp has no flatten-argmax overload
+                    for keepdims in (False, True):
+                        try:
+                            r = np.asarray(f(view, axis, keepdims))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        cases.append({
+                            "id": f"{opname}/{ln}/{s}/axis={axis}/kd={int(keepdims)}/{n}",
+                            "op": opname,
+                            "params": {"axis": axis, "keepdims": keepdims},
+                            "operands": [operand],
+                            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                            "layout": ln,
+                            "valueclass": "mixed",
+                        })
+                        n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def gen_binary(ops, dt_pairs, pair_layout_names):
     cases = []
     n = 0
@@ -217,8 +280,11 @@ def main():
     elif mode == "unary":
         cases = gen_unary(UNARY_OPS, UNARY_DTYPES, list(LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "unary.jsonl"), cases)
+    elif mode == "reduce":
+        cases = gen_reduce(REDUCE_OPS, REDUCE_DTYPES, REDUCE_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "reduce.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce)")
         sys.exit(2)
 
 

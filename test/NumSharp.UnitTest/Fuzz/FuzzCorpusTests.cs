@@ -34,6 +34,10 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Unary() => RunCorpus("unary.jsonl");
 
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Reduce() => RunCorpus("reduce.jsonl");
+
         // KNOWN-FAILING bug reproduction (excluded from CI via [OpenBugs]; remove the tag when fixed).
         // floor_divide / mod / power diverge from NumPy: integer ÷0 and mod-0 throw or return garbage
         // instead of 0; float //0 yields NaN instead of ±inf; mixed-precision mod; complex power.

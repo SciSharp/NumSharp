@@ -53,8 +53,38 @@ namespace NumSharp.UnitTest.Fuzz
                 case "less_equal": return ops[0] <= ops[1];
                 case "greater_equal": return ops[0] >= ops[1];
 
+                // Reductions (axis/keepdims params).
+                case "sum": case "prod": case "min": case "max": case "mean":
+                case "std": case "var": case "argmax": case "argmin": case "all": case "any":
+                    return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), ops[0]);
+
                 default:
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
+            }
+        }
+
+        private static int? ParseAxis(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null ? ax.GetInt32() : (int?)null;
+
+        private static bool ParseKeepdims(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("keepdims", out var kd) && kd.GetBoolean();
+
+        private static NDArray ApplyReduce(string op, int? axis, bool keepdims, NDArray a)
+        {
+            switch (op)
+            {
+                case "sum": return np.sum(a, axis, keepdims);
+                case "prod": return np.prod(a, axis, (Type)null, keepdims);
+                case "min": return np.min(a, axis, keepdims);
+                case "max": return np.max(a, axis, keepdims);
+                case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims) : np.mean(a, keepdims);
+                case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims) : np.std(a, keepdims);
+                case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims) : np.var(a, keepdims);
+                case "argmax": return np.argmax(a, axis.Value, keepdims);
+                case "argmin": return np.argmin(a, axis.Value, keepdims);
+                case "all": return np.all(a, axis, null, keepdims);
+                case "any": return np.any(a, axis, null, keepdims);
+                default: throw new NotSupportedException(op);
             }
         }
     }

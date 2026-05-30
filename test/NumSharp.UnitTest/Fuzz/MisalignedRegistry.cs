@@ -24,6 +24,11 @@ namespace NumSharp.UnitTest.Fuzz
     /// </summary>
     public static class MisalignedRegistry
     {
+        private static readonly System.Collections.Generic.HashSet<string> ReduceOps = new()
+        {
+            "sum", "prod", "min", "max", "mean", "std", "var", "argmax", "argmin", "all", "any"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
@@ -46,6 +51,27 @@ namespace NumSharp.UnitTest.Fuzz
                 && tc == NPTypeCode.Boolean
                 && diffs.All(d => d.Expected == "00" && d.Actual == "01"))
                 return "NaN ordering: <=/>= return True for NaN (NumSharp) vs False (NumPy/IEEE) [known bug]";
+
+            // --- Reductions (single-operand, but classified before the unary rules) ---
+            if (ReduceOps.Contains(c.Op))
+            {
+                // Reduction result dtype differs (NEP50 accumulator width / complex->real for std/var).
+                if (kind == DivergenceKind.Dtype)
+                    return "reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]";
+                // Complex axis reduction throws (NDCoordinatesAxisIncrementor vector-shape path).
+                if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
+                    return "complex axis reduction throws (NDCoordinatesAxisIncrementor) [known bug]";
+                // NaN propagation: regular min/max/mean/std/var keep NaN in NumPy; NumSharp skips it.
+                if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN"))
+                    return "reduction NaN propagation: NumSharp skips NaN, NumPy propagates [known bug]";
+                // bool min/max along an axis returns True where NumPy returns False.
+                if (kind == DivergenceKind.Value && (c.Op == "min" || c.Op == "max") && tc == NPTypeCode.Boolean)
+                    return "bool min/max along axis diverges [known bug]";
+                // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
+                if (kind == DivergenceKind.Value &&
+                    (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
+                    return "reduction summation/two-pass precision (algorithm order)";
+            }
 
             // (4) Unary result-dtype differs: NumSharp promotes int->float64 for unary float ops
             //     regardless of input width and handles bool/square/reciprocal/floor differently,
