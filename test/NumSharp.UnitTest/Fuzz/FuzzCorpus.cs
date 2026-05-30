@@ -30,6 +30,10 @@ namespace NumSharp.UnitTest.Fuzz
             public Expected Expected { get; set; }
             public string Layout { get; set; }
             public string Valueclass { get; set; }
+
+            /// <summary>W11: when true, a single stored operand is passed to a binary op as BOTH
+            /// arguments via the SAME reference (true input aliasing: a op a).</summary>
+            public bool Alias { get; set; }
         }
 
         public sealed class Operand

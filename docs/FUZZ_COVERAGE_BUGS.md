@@ -143,3 +143,17 @@ tail) has no off-by-one at any seam.
 **No bugs.** Middle axis + every negative axis (−1/−2/−3) for all 11 reductions, ddof=1 sample
 std/var, and order='F' ravel (C-contig / transposed / F-contig sources) are 288/288 bit-exact.
 Negative-axis resolution, ddof, and order handling are fully NumPy-aligned.
+
+---
+
+## W11 — operand-relationship flags / section C (`aliasing.jsonl`, 40 cases)
+
+**The aliasing + in-place `out=` mechanism is sound:** input aliasing (`a op a`, same buffer
+both sides) for add/sub/mul/maximum/minimum is bit-exact, and the `out=` write path
+(`maximum/minimum/clip(…, out=a)`) writes every non-NaN element correctly. The only divergences
+are NaN-semantics bugs at element 0 (independent of aliasing):
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W11-A | 🟠 | `maximum/minimum(NaN, finite)` | `NaN` (propagate) | the **finite** operand | maximum/minimum do not propagate NaN — they behave like fmax/fmin. **NaN semantics are swapped with W7-B** (fmax/fmin propagate; maximum/minimum don't — exactly backwards). W7 missed this because its operands had NaN aligned with NaN; `b=roll(a)` exposes it. |
+| (W6-D) | 🟠 | `clip(NaN,…, out=a)` | `NaN` | `a_min` | same clip-NaN bug as W6-D, confirmed on the `out=` path. |

@@ -119,6 +119,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Params() => RunCorpus("params.jsonl");
 
+        // W11 operand-relationship flags (section C): input aliasing (a op a, same buffer) and
+        // in-place out= (maximum/minimum/clip writing into an input operand).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Aliasing() => RunCorpus("aliasing.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -161,6 +167,11 @@ namespace NumSharp.UnitTest.Fuzz
                     var operands = new NumSharp.NDArray[c.Operands.Length];
                     for (int i = 0; i < operands.Length; i++)
                         operands[i] = FuzzCorpus.Reconstruct(c.Operands[i]);
+
+                    // W11 input aliasing: pass the single stored operand as BOTH binary arguments
+                    // through the SAME reference (true a-op-a aliasing, not two equal copies).
+                    if (c.Alias && operands.Length == 1)
+                        operands = new[] { operands[0], operands[0] };
 
                     var result = OpRegistry.Apply(c.Op, c.Params, operands);
                     var tc = FuzzCorpus.DtypeToTC(c.Expected.Dtype);

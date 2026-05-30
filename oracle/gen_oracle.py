@@ -1079,6 +1079,56 @@ def gen_params(dtypes):
     return cases
 
 
+# W11 — operand-relationship flags (section C): input aliasing (a op a, SAME buffer both sides)
+# and in-place out= (the output buffer IS an input). Exercises read-before-write within the kernel.
+ALIAS_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+
+
+def gen_aliasing(dtypes):
+    cases = []
+    n = 0
+    skipped = 0
+    bin_ops = [("add", np.add), ("subtract", np.subtract), ("multiply", np.multiply),
+               ("maximum", np.maximum), ("minimum", np.minimum)]
+    for s in dtypes:
+        dt = np.dtype(s)
+        a = _cbase((4, 5), dt)
+        # (1) input aliasing: a op a — one stored operand, harness passes it as both args.
+        for opname, f in bin_ops:
+            r = np.asarray(f(a, a))
+            cases.append({"id": f"{opname}/alias/{s}/{n}", "op": opname, "params": {}, "alias": True,
+                          "operands": [describe(a, a)],
+                          "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                       "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                          "layout": "alias", "valueclass": "alias"})
+            n += 1
+        # (2) in-place out=: maximum(a,b,out=a), minimum(a,b,out=a), clip(a,lo,hi,out=a).
+        b = np.ascontiguousarray(np.roll(a, 1))
+        for opname, f in (("maximum_out", np.maximum), ("minimum_out", np.minimum)):
+            acc = a.copy()
+            f(acc, b, out=acc)
+            cases.append({"id": f"{opname}/{s}/{n}", "op": opname, "params": {},
+                          "operands": [describe(a, a), describe(b, b)],
+                          "expected": {"dtype": acc.dtype.name, "shape": [int(d) for d in acc.shape],
+                                       "buffer": np.ascontiguousarray(acc).tobytes().hex()},
+                          "layout": "out", "valueclass": "alias"})
+            n += 1
+        lo_v, hi_v = (1, 100) if dt.kind == "u" else (-10, 10)
+        lo = np.array(lo_v, dtype=dt).reshape(())
+        hi = np.array(hi_v, dtype=dt).reshape(())
+        acc = a.copy()
+        np.clip(acc, lo, hi, out=acc)
+        cases.append({"id": f"clip_out/{s}/{n}", "op": "clip_out", "params": {},
+                      "operands": [describe(a, a), describe(lo, lo), describe(hi, hi)],
+                      "expected": {"dtype": acc.dtype.name, "shape": [int(d) for d in acc.shape],
+                                   "buffer": np.ascontiguousarray(acc).tobytes().hex()},
+                      "layout": "out", "valueclass": "alias"})
+        n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1169,6 +1219,9 @@ def main():
     elif mode == "params":
         cases = gen_params(PARAM_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "params.jsonl"), cases)
+    elif mode == "aliasing":
+        cases = gen_aliasing(ALIAS_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "aliasing.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

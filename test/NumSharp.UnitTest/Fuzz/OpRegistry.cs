@@ -108,6 +108,11 @@ namespace NumSharp.UnitTest.Fuzz
                 case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
 
+                // In-place out= aliasing (W11): the output buffer IS an input operand.
+                case "maximum_out": np.maximum(ops[0], ops[1], ops[0]); return ops[0];
+                case "minimum_out": np.minimum(ops[0], ops[1], ops[0]); return ops[0];
+                case "clip_out": np.clip(ops[0], ops[1], ops[2], ops[0]); return ops[0];
+
                 // Parameter sweep (W12): ddof=1 std/var, order='F' ravel.
                 case "std_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
                     return ax.HasValue ? np.std(ops[0], ax.Value, false, dd) : np.std(ops[0], false, dd); }

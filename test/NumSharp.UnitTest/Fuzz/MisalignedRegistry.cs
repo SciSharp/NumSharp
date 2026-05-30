@@ -173,6 +173,17 @@ namespace NumSharp.UnitTest.Fuzz
             if (c.Op == "isclose" && kind == DivergenceKind.Value)
                 return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
+            // (W11-A) maximum/minimum must PROPAGATE NaN (NumPy: maximum(NaN,x)=NaN) but NumSharp
+            // returns the non-NaN operand — it behaves like fmax/fmin (the NaN semantics are swapped
+            // with W7-B). Surfaced by the out= test where b=roll(a) places a finite opposite the NaN;
+            // the out= write mechanism itself is sound (only the NaN element diverges).
+            if ((c.Op == "maximum_out" || c.Op == "minimum_out") && kind == DivergenceKind.Value
+                && diffs.All(d => d.Expected == "NaN"))
+                return "maximum/minimum: do not propagate NaN (return the non-NaN operand; swapped with fmax/fmin) [known bug]";
+            // clip(NaN) clamps to a_min on the out= path too (same as W6-D).
+            if (c.Op == "clip_out" && kind == DivergenceKind.Value && diffs.All(d => d.Expected == "NaN"))
+                return "clip(NaN): clamps NaN to a_min instead of preserving it (out= path) [known bug]";
+
             // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
             //     non-finite slices and on the integer axis path; average has summation-order drift.
             //     ptp / count_nonzero / clip are bit-exact. ---
