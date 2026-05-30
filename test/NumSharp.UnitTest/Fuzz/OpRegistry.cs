@@ -45,6 +45,14 @@ namespace NumSharp.UnitTest.Fuzz
                 case "exp": return np.exp(ops[0]);
                 case "log": return np.log(ops[0]);
 
+                // Bitwise & shift (T9). Integer + bool dtypes; NumPy is the oracle.
+                case "bitwise_and": return ops[0] & ops[1];
+                case "bitwise_or": return ops[0] | ops[1];
+                case "bitwise_xor": return ops[0] ^ ops[1];
+                case "invert": return np.invert(ops[0]);
+                case "left_shift": return np.left_shift(ops[0], ops[1]);
+                case "right_shift": return np.right_shift(ops[0], ops[1]);
+
                 // Comparison -> bool result.
                 case "equal": return ops[0] == ops[1];
                 case "not_equal": return ops[0] != ops[1];

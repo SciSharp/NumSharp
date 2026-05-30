@@ -52,6 +52,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Matmul() => RunCorpus("matmul.jsonl");
 
+        // T9 bitwise & shift: bitwise_and/or/xor (& | ^), invert (~), left/right_shift across
+        // integer + bool dtypes, pairwise layouts, and shift-count edges that straddle the bit width.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Bitwise() => RunCorpus("bitwise.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

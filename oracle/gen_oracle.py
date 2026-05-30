@@ -29,7 +29,7 @@ np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from layout_catalog import LAYOUTS, PAIR_LAYOUTS, WHERE_LAYOUTS, describe  # noqa: E402
+from layout_catalog import LAYOUTS, PAIR_LAYOUTS, WHERE_LAYOUTS, describe, _fill, _cbase  # noqa: E402
 
 # 13 NumPy-representable dtypes (Char + Decimal have no NumPy analog -> covered by
 # NumSharp's Converts-oracle tests, not by this differential corpus).
@@ -428,6 +428,53 @@ def gen_matmul(shape_cases, dtypes, layouts):
     return cases
 
 
+# T9 — bitwise & shift. NumPy defines bitwise_and/or/xor & invert for integer + bool; the shifts
+# for integers. Float/complex raise TypeError (gen_binary/gen_unary skip those automatically).
+BITWISE_BIN_OPS = {
+    "bitwise_and": np.bitwise_and,
+    "bitwise_or": np.bitwise_or,
+    "bitwise_xor": np.bitwise_xor,
+}
+INVERT_OP = {"invert": np.invert}
+INT_BOOL_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
+BITWISE_DT_PAIRS = [
+    ("int32", "int32"), ("uint8", "uint8"), ("int8", "int8"), ("int16", "int16"),
+    ("uint16", "uint16"), ("uint32", "uint32"), ("int64", "int64"), ("uint64", "uint64"),
+    ("bool", "bool"), ("int32", "int64"), ("uint8", "int8"), ("int32", "uint32"),
+    ("bool", "int32"), ("int8", "int16"), ("uint16", "uint32"), ("int64", "uint64"),
+]
+
+SHIFT_OPS = {"left_shift": np.left_shift, "right_shift": np.right_shift}
+SHIFT_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]
+
+
+def gen_shift(ops, dtypes):
+    """Shift kernels with shift-count edges that straddle the bit width — tests NumPy's
+    overflow-shift semantics (shift >= width -> 0, or -1 for signed-negative right shift).
+    Contiguous 1-D operands; counts are in the operand dtype so result dtype == operand dtype."""
+    cases = []
+    n = 0
+    for s in dtypes:
+        w = np.dtype(s).itemsize * 8
+        counts = [0, 1, 2, 3, 5, 7, w - 1, w, w + 1, 2 * w]
+        left = _fill(len(counts), np.dtype(s))
+        cnt = np.array([c % (2 ** w) if np.dtype(s).kind == "u" else c for c in counts], dtype=np.dtype(s))
+        for opname, f in ops.items():
+            r = np.asarray(f(left, cnt))
+            cases.append({
+                "id": f"{opname}/shift_edges/{s}/{n}",
+                "op": opname,
+                "params": {},
+                "operands": [describe(left, left), describe(cnt, cnt)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": "shift_edges",
+                "valueclass": "shift",
+            })
+            n += 1
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -474,8 +521,13 @@ def main():
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
+    elif mode == "bitwise":
+        cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
+        cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "bitwise.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise)")
         sys.exit(2)
 
 
