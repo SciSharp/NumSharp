@@ -170,3 +170,41 @@ are NaN-semantics bugs at element 0 (independent of aliasing):
 | # | Severity | Op · cell | NumPy | NumSharp | Root cause |
 |---|----------|-----------|-------|----------|------------|
 | **W14-A** | 🔴🔴 | `np.invert(float64)` | `TypeError` | **`System.ExecutionEngineException: Illegal instruction` — hard PROCESS CRASH** | the bitwise-NOT IL kernel runs on float registers, emitting a CPU instruction that's illegal for the operand type. The JIT accepts the IL; the CPU rejects it at runtime → uncatchable crash (worse than the catchable `InvalidProgramException` that `bitwise_and(float)` throws). **Excluded from the gated corpus** because it kills the test host (can't be caught/excused). |
+
+---
+
+## W15 — metamorphic invariants (`MetamorphicTests.cs`, 11 properties, oracle-free)
+
+**No bugs.** All 11 internal-consistency properties hold across int/uint/float dtypes:
+`-(-a)==a`, `(a+b)-b==a`, `(aᵀ)ᵀ==a`, reshape round-trip, widening-cast round-trip
+(int32→int64→int32 etc.), `a*1==a` / `a+0==a`, `abs(abs(a))==abs(a)`, `sum(a)==sum(ravel(a))`,
+concatenate split-free, `argsort(sorted)==0..n−1`, and `(a==a).all()`. NumSharp's core
+algebraic consistency is solid.
+
+---
+
+## Summary
+
+| Wave | Tier | Cases | Bug classes |
+|------|------|-------|-------------|
+| W1 | dtype expansion (float16 + narrow ints) | +9.8k | 6 |
+| W2 | bitwise + shift | 655 | 0 |
+| W3 | unary stragglers | 4654 | 3 |
+| W4 | nan-aware reductions | 2040 | 5 |
+| W5 | cumulative | 544 | 1 |
+| W6 | statistics | 2304 | 4 |
+| W7 | logic + extrema | 828 | 3 |
+| W8 | multi-output (modf) | 64 | 1 |
+| W9 | manipulation | 1516 | 3 |
+| W10 | sorting/searching | 35 | 0 |
+| W11 | section C (aliasing/out=) | 40 | 1 |
+| W12 | parameters (axis/ddof/order) | 288 | 0 |
+| W13 | SIMD-tail boundaries | 900 | 0 |
+| W14 | error parity | 10 (+1 excluded) | 1 (🔴 crash) |
+| W15 | metamorphic | 11 props | 0 |
+
+**~27k new differential cases · 28 distinct bug classes** (1 🔴🔴 crash, 1 🔴 IL, the rest
+🟠/🟡), all documented + excused so the bit-exact gate stays green. Clean tiers (bitwise, shift,
+sorting, SIMD-tails, parameter sweep, metamorphic, and the aliasing/out= *mechanism*) confirm the
+kernel core is sound; the bugs cluster in Half/narrow-int coverage, the nan-reduce + QuantileEngine
+families, extrema NaN semantics, and a handful of empty/offset/IL edge cases.
