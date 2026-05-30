@@ -24,7 +24,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7→F5 |
 | 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | **FIXED** | F2 |
 | 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | BUG | #9 |
-| 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | BUG | #9 |
+| 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | **FIXED** | F4 |
 | 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
 | 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
 | 11 | reduction | `min/max/mean/std/var` skip NaN (NumPy propagates) | BUG | #10 |
@@ -152,15 +152,18 @@ dtype also differs.
 
 Found by T4 `Unary` (494 cases). Task **#9**.
 
-### 8. `negative` on unsigned integers throws
+### 8. `negative` on unsigned integers throws — **FIXED (F4)**
+
+**Fixed** — `np.negative(nd)` called the legacy hand-written `NDArray.negative()` which threw
+`NotSupportedException` for every unsigned dtype and required a flat `Address` (so non-contiguous
+also failed). It now routes through `nd.TensorEngine.Negate(nd)` — the same engine path the unary
+`-` operator and `nd.negate()` already used — whose IL kernel negates unsigned via two's-complement
+wrap (`-1u -> 255`) and handles strided/non-contiguous operands through NpyIter. Verified bit-exact
+on contiguous and strided uint8/uint16/uint32; the unary matrix no longer excuses it.
 
 ```python
 np.negative(np.array([1], np.uint8))    # [255]  (wraps modulo)
 ```
-```csharp
-np.negative(np.array(new byte[]{1}))    // THROWS NotSupportedException
-```
-Task **#9**.
 
 ### 9. `reciprocal` — integer result wrong; non-contiguous throws
 

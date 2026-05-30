@@ -99,10 +99,9 @@ namespace NumSharp.UnitTest.Fuzz
                 && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
                 return "unary ~ULP (transcendental/magnitude algorithm difference)";
 
-            // (6) np.negative on unsigned integers throws in NumSharp; NumPy wraps (e.g. -1u -> 255).
-            if (kind == DivergenceKind.Threw && c.Op == "negative"
-                && c.Operands.Length == 1 && c.Operands[0].Dtype.StartsWith("uint"))
-                return "negative on unsigned: NumSharp throws, NumPy wraps modulo [known bug]";
+            // (6) np.negative on unsigned integers was FIXED in Phase 1 F4: np.negative now routes
+            //     through the engine kernel (two's-complement wrap, e.g. -1u -> 255), matching NumPy.
+            //     Classifier branch removed so the unary matrix verifies it bit-exact.
 
             // (7) Complex unary (square / sin / cos / tan / log): differs from NumPy by more than ULP
             //     in places — catastrophic cancellation in square (re^2-im^2 -> 0) and inf/NaN edge

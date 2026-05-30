@@ -71,7 +71,11 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
         public static NDArray negative(NDArray nd)
         {
-            var result = nd.negative();
+            // Route through the engine (same path as the unary `-` operator and nd.negate()):
+            // the IL kernel negates unsigned integers by two's-complement wrap (NumPy: -1u -> 255)
+            // and handles non-contiguous operands via NpyIter. The legacy hand-written nd.negative()
+            // threw NotSupportedException for unsigned dtypes and required a flat Address.
+            var result = nd.TensorEngine.Negate(nd);
             // NumPy-aligned layout preservation: negative preserves F-contig input.
             if (nd.Shape.NDim > 1 && nd.size > 1
                 && nd.Shape.IsFContiguous && !nd.Shape.IsContiguous
