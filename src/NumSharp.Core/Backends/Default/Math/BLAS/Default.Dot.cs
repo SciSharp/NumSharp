@@ -53,11 +53,13 @@ namespace NumSharp.Backends
             }
 
             //If a is an N-D array and b is a 1-D array, it is a sum product over the last axis of a and b.
+            // This is exactly matmul's contraction (a's last axis with the promoted column vector), so
+            // route through Matmul — it preserves the input dtype (NumPy: dot(int32, int32) -> int32)
+            // and contracts the correct (last) axis, where np.sum used the wider accumulator (int64)
+            // and a hard-coded axis=1 (wrong for N-D).
             if (leftshape.NDim >= 2 && rightshape.NDim == 1)
             {
-                //TODO! this doesn't seem right, read desc
-                //var right_broadcasted = new NDArray(right.Storage.Alias(np.broadcast_to(rightshape, leftshape)));
-                return np.sum(left * right, axis: 1);
+                return Matmul(left, right);
             }
             // If a is 1-D and b is 2-D, treat a as row vector and do matrix multiply, then squeeze
             // (n,) dot (n, m) -> (m,)

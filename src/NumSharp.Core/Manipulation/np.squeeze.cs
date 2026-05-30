@@ -78,7 +78,11 @@ namespace NumSharp
         internal static Shape squeeze_fast(Shape a, int axis)
         {
             var r = a.dimensions.RemoveAt(axis);
-            if (r.Length == 0 || r.Length == 1 && r[0] == 1)
+            // NumPy squeeze(axis) removes ONLY the named axis. Only collapse to 0-D when that was the
+            // last remaining axis (r.Length == 0); a remaining length-1 dimension must be kept (e.g.
+            // squeeze([1,1], axis=0) -> [1], not scalar) — over-collapsing it diverges from NumPy and
+            // breaks the matmul 1-D-promotion squeeze.
+            if (r.Length == 0)
                 return Shape.Scalar;
 
             return new Shape(r);

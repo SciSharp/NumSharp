@@ -319,6 +319,97 @@ def gen_place(dtypes, layout_names):
     return cases
 
 
+# T8 — linear algebra: matmul / dot / outer. NumPy is the oracle for value, NEP50 result dtype,
+# and the gufunc/broadcast output shape. Operands carry deterministic non-trivial values; the C/F
+# layout variants exercise the stride-aware GEMM packers (an F-contiguous operand is a transposed
+# view into a C-contiguous base, mirroring layout_catalog's f_contiguous pattern).
+MATMUL_DTYPES = ["int32", "int64", "uint8", "float32", "float64", "complex128"]
+
+# (op, shapeA, shapeB) — spans the matmul gufunc shape space + dot/outer specifics.
+MATMUL_SHAPE_CASES = [
+    ("matmul", (2, 3), (3, 2)),               # 2-D x 2-D
+    ("matmul", (4,), (4,)),                    # 1-D x 1-D -> 0-D (inner product)
+    ("matmul", (2, 3), (3,)),                  # 2-D x 1-D -> 1-D
+    ("matmul", (3,), (3, 2)),                  # 1-D x 2-D -> 1-D
+    ("matmul", (2, 2, 3), (2, 3, 2)),          # batched 3-D
+    ("matmul", (1, 2, 3), (4, 3, 2)),          # stack-broadcast batch
+    ("matmul", (2, 3), (4, 3, 2)),             # 2-D x 3-D (lhs stack-broadcast)
+    ("matmul", (2, 2, 3), (3,)),               # 3-D x 1-D
+    ("matmul", (3,), (2, 3, 2)),               # 1-D x 3-D
+    ("matmul", (2, 1, 3, 4), (1, 2, 4, 3)),    # 4-D batched broadcast
+    ("dot", (2, 3), (3, 2)),                   # 2-D dot == matmul
+    ("dot", (4,), (4,)),                       # 1-D dot -> scalar
+    ("dot", (2, 3), (3,)),                     # matrix . vector
+    ("dot", (3,), (3, 2)),                     # vector . matrix
+    ("outer", (3,), (4,)),                     # outer product
+    ("outer", (2, 3), (4,)),                   # outer flattens inputs
+    ("outer", (5,), (2, 2)),
+]
+MATMUL_LAYOUTS = ["C", "F"]
+_MATMUL_FNS = {"matmul": np.matmul, "dot": np.dot, "outer": np.outer}
+
+
+def _mm_fill(shape, dt):
+    """Deterministic, non-trivial operand values; kept small for ints so overflow stays legible."""
+    n = int(np.prod(shape)) if shape else 1
+    dtype = np.dtype(dt)
+    if dtype.kind == "c":
+        a = (((np.arange(n) % 7) - 3) + 1j * ((np.arange(n) % 5) - 2)).astype(dtype)
+    elif dtype.kind in "iu":
+        a = ((np.arange(n) % 7) + 1).astype(dtype)          # 1..7 (uint-safe, positive)
+    else:
+        a = (((np.arange(n) % 11) - 5) * 0.5).astype(dtype)  # -2.5 .. 2.5
+    return a.reshape(shape)
+
+
+def _mm_layout(arr, layout):
+    """(base, view) for the requested memory layout — base is ALWAYS C-contiguous (so base.tobytes()
+    is its raw memory); an F-contiguous view is the C-contig transpose viewed back through .T."""
+    if layout == "F" and arr.ndim >= 2:
+        base = np.ascontiguousarray(arr.T)   # transposed data, C-contiguous
+        view = base.T                        # logical `arr`, F-strided into base
+        assert np.array_equal(view, arr)
+        return base, view
+    base = np.ascontiguousarray(arr)
+    return base, base
+
+
+def gen_matmul(shape_cases, dtypes, layouts):
+    cases = []
+    n = 0
+    skipped = 0
+    for (op, shA, shB) in shape_cases:
+        f = _MATMUL_FNS[op]
+        for dt in dtypes:
+            A = _mm_fill(shA, dt)
+            B = _mm_fill(shB, dt)
+            for la in layouts:
+                for lb in layouts:
+                    baseA, viewA = _mm_layout(A, la)
+                    baseB, viewB = _mm_layout(B, lb)
+                    try:
+                        r = np.asarray(f(viewA, viewB))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    sa = "x".join(map(str, shA))
+                    sb = "x".join(map(str, shB))
+                    cases.append({
+                        "id": f"{op}/{la}{lb}/{dt}/{sa}@{sb}/{n}",
+                        "op": op,
+                        "params": {},
+                        "operands": [describe(baseA, viewA), describe(baseB, viewB)],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"{la}{lb}",
+                        "valueclass": "mixed",
+                    })
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -362,8 +453,11 @@ def main():
     elif mode == "place":
         cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
+    elif mode == "matmul":
+        cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul)")
         sys.exit(2)
 
 

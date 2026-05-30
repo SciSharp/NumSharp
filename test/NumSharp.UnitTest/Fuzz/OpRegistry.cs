@@ -57,6 +57,11 @@ namespace NumSharp.UnitTest.Fuzz
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
+                // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
+                case "matmul": return np.matmul(ops[0], ops[1]);
+                case "dot": return np.dot(ops[0], ops[1]);
+                case "outer": return np.outer(ops[0], ops[1]);
+
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
                 case "std": case "var": case "argmax": case "argmin": case "all": case "any":

@@ -46,6 +46,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Place() => RunCorpus("place.jsonl");
 
+        // T8 linear algebra: matmul / dot / outer across the gufunc shape space (2-D, 1-D promotion,
+        // batched/broadcast stacks), 6 dtypes, and C/F operand layouts.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Matmul() => RunCorpus("matmul.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

@@ -38,6 +38,7 @@ python oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
 python oracle/gen_oracle.py where            # np.where(cond,x,y)
 python oracle/gen_oracle.py place            # np.place(arr,mask,vals)
+python oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 ```
 
