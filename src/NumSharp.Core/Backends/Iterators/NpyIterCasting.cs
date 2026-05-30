@@ -375,6 +375,13 @@ namespace NumSharp.Backends.Iteration
                     *(Complex*)dst = c;
                     return;
                 }
+                // Complex -> bool is truthy when EITHER part is non-zero (NumPy: bool(z) == (z != 0)).
+                // Every other Complex -> real/int target takes the real part (NumPy ComplexWarning).
+                if (dstType == NPTypeCode.Boolean)
+                {
+                    *(bool*)dst = c.Real != 0.0 || c.Imaginary != 0.0;
+                    return;
+                }
                 WriteFromDouble(dst, c.Real, dstType);
                 return;
             }

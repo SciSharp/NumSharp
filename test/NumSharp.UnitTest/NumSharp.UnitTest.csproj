@@ -47,6 +47,13 @@
     </None>
   </ItemGroup>
 
+  <!-- Differential-fuzzer oracle corpus: committed JSONL replayed by MSTest (no Python in CI). -->
+  <ItemGroup>
+    <None Update="Fuzz\corpus\**\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 
   <ItemGroup>
     <None Remove="NumSharp.Bitmap\resources\captcha-a.png" />
