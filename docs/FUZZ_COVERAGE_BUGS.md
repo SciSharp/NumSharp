@@ -23,3 +23,24 @@ Severity: 🔴 memory-safety / crash · 🟠 wrong value · 🟡 wrong dtype / t
 **Coverage added (W1):** unary 2574→4914, reduce 3640→6760, binary_arith 720→1368,
 binary_divmod_power 430→866, comparison 1080→2052, where 40→70, matmul 408→816 cases — all 13
 NumPy-representable dtypes now gated through every existing tier.
+
+---
+
+## W2 — T9 bitwise + shift (`bitwise.jsonl`, 655 cases)
+
+**No bugs.** bitwise_and/or/xor, invert, left_shift/right_shift are 655/655 bit-exact with
+NumPy across all integer+bool dtypes, including the overflow-shift semantics (shift ≥ width →
+0 / −1) and arithmetic-vs-logical right shift on negative operands.
+
+---
+
+## W3 — unary stragglers (`unary_extra.jsonl`, 4654 cases)
+
+14 transcendental/hyperbolic/inverse-trig/angle ufuncs that had no differential coverage.
+`expm1/log2/log10/log1p/positive` are clean (bit-exact or ≤2 ULP). Three bug classes:
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W3-A | 🟡 | `sinh/cosh/tanh/arcsin/arccos/arctan/deg2rad/rad2deg` on Half-promoting input (bool/int8/uint8/float16) | float16 result | `NotSupportedException "… not supported for Half"` | No Half kernel emitted for these 8 ufuncs. |
+| W3-B | 🟡 | `sinh/cosh/tanh/arcsin/arccos/arctan` on complex128 | complex result | `NotSupportedException "… not supported for Complex"` | No Complex kernel (NumPy computes complex hyperbolic/inverse-trig). |
+| W3-C | 🔴 | `exp2(int16\|uint16\|float32)` | float32 result | **`InvalidProgramException` (CLR rejected the emitted IL)** | The float32-output `exp2` kernel emits a malformed IL method body. `exp2(float64)`/Half are fine — isolated to the Single emitter. |

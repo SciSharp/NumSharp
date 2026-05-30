@@ -126,6 +126,19 @@ UNARY_OPS = {
 UNARY_DTYPES = list(ALL_DTYPES)
 
 
+# W3 — unary "stragglers": the transcendental / hyperbolic / inverse-trig / angle-conversion
+# ufuncs that were absent from the unary tier. NumPy is the oracle for value AND width-based
+# float result dtype (bool/int8/uint8 -> float16, int16/uint16 -> float32, int32+ -> float64).
+UNARY_EXTRA_OPS = {
+    "exp2": np.exp2, "expm1": np.expm1,
+    "log2": np.log2, "log10": np.log10, "log1p": np.log1p,
+    "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
+    "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
+    "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
+    "positive": np.positive,
+}
+
+
 def gen_unary(ops, dtypes, layout_names):
     cases = []
     n = 0
@@ -526,8 +539,11 @@ def main():
         cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
         cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "bitwise.jsonl"), cases)
+    elif mode == "unary_extra":
+        cases = gen_unary(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "unary_extra.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra)")
         sys.exit(2)
 
 

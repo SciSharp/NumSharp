@@ -58,6 +58,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Bitwise() => RunCorpus("bitwise.jsonl");
 
+        // W3 unary stragglers: exp2/expm1/log2/log10/log1p/sinh/cosh/tanh/arcsin/arccos/arctan/
+        // deg2rad/rad2deg/positive across all 13 dtypes and all 25 single-array layouts.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

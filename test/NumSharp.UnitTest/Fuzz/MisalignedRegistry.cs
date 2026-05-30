@@ -157,6 +157,23 @@ namespace NumSharp.UnitTest.Fuzz
                 && (c.Op == "square" || c.Op == "floor" || c.Op == "ceil" || c.Op == "trunc" || c.Op == "reciprocal"))
                 return "unary preserve-dtype pending: square/floor/ceil/trunc/reciprocal widen int->float64 [F3b]";
 
+            // (W3-A/B) The hyperbolic / inverse-trig / angle-conversion ufuncs have no Half kernel
+            // (throw "Unary operation X not supported for Half" whenever the input promotes to
+            // float16: bool/int8/uint8/float16) and the trig/hyperbolic ones additionally have no
+            // Complex kernel (NumPy computes complex sinh/cosh/tanh/asin/acos/atan; NumSharp throws).
+            // Scoped to a single-operand THREW on these op names so value/dtype cells stay gated.
+            if (kind == DivergenceKind.Threw && c.Operands.Length == 1
+                && (c.Op == "sinh" || c.Op == "cosh" || c.Op == "tanh"
+                    || c.Op == "arcsin" || c.Op == "arccos" || c.Op == "arctan"
+                    || c.Op == "deg2rad" || c.Op == "rad2deg"))
+                return "unary hyperbolic/inverse-trig/angle: no Half or Complex kernel (throws NotSupportedException) [known bug]";
+
+            // (W3-C) np.exp2 emits a MALFORMED IL method for its float32-output kernel: int16/uint16/
+            // float32 inputs throw InvalidProgramException ("the CLR detected an invalid program").
+            // exp2(float64) and the Half path are fine, so this is isolated to the Single emitter.
+            if (kind == DivergenceKind.Threw && c.Op == "exp2")
+                return "exp2: malformed IL (InvalidProgramException) on the Single/float32-output kernel [known bug]";
+
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1

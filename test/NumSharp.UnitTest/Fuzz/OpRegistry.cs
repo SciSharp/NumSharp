@@ -45,6 +45,22 @@ namespace NumSharp.UnitTest.Fuzz
                 case "exp": return np.exp(ops[0]);
                 case "log": return np.log(ops[0]);
 
+                // Unary stragglers (W3): transcendental / hyperbolic / inverse-trig / angle conv.
+                case "exp2": return np.exp2(ops[0]);
+                case "expm1": return np.expm1(ops[0]);
+                case "log2": return np.log2(ops[0]);
+                case "log10": return np.log10(ops[0]);
+                case "log1p": return np.log1p(ops[0]);
+                case "sinh": return np.sinh(ops[0]);
+                case "cosh": return np.cosh(ops[0]);
+                case "tanh": return np.tanh(ops[0]);
+                case "arcsin": return np.arcsin(ops[0]);
+                case "arccos": return np.arccos(ops[0]);
+                case "arctan": return np.arctan(ops[0]);
+                case "deg2rad": return np.deg2rad(ops[0]);
+                case "rad2deg": return np.rad2deg(ops[0]);
+                case "positive": return np.positive(ops[0]);
+
                 // Bitwise & shift (T9). Integer + bool dtypes; NumPy is the oracle.
                 case "bitwise_and": return ops[0] & ops[1];
                 case "bitwise_or": return ops[0] | ops[1];
