@@ -969,6 +969,58 @@ def gen_nonzero(dtypes):
     return cases
 
 
+# W13 — SIMD-tail boundary sizes. 1-D arrays straddling the V128/V256/V512 lane counts so the
+# unrolled-SIMD body, 1-vector remainder, and scalar tail are all exercised at their seams.
+TAIL_SIZES = [1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129]
+TAIL_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+
+
+def gen_tail(dtypes):
+    cases = []
+    n = 0
+    skipped = 0
+    BIN = [("add", np.add), ("subtract", np.subtract), ("multiply", np.multiply)]
+    UN = [("negative", np.negative), ("abs", np.abs), ("sqrt", np.sqrt)]
+    RED = [("sum", np.sum), ("prod", np.prod), ("max", np.max), ("min", np.min)]
+    for sz in TAIL_SIZES:
+        for s in dtypes:
+            dt = np.dtype(s)
+            a = _fill(sz, dt)
+            b = np.ascontiguousarray(np.roll(a, 1))
+            for opname, f in BIN:
+                r = np.asarray(f(a, b))
+                cases.append({"id": f"{opname}/tail{sz}/{s}/{n}", "op": opname, "params": {},
+                              "operands": [describe(a, a), describe(b, b)],
+                              "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                           "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                              "layout": f"tail{sz}", "valueclass": "tail"})
+                n += 1
+            for opname, f in UN:
+                try:
+                    r = np.asarray(f(a))
+                except Exception:
+                    skipped += 1
+                    continue
+                cases.append({"id": f"{opname}/tail{sz}/{s}/{n}", "op": opname, "params": {},
+                              "operands": [describe(a, a)],
+                              "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                           "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                              "layout": f"tail{sz}", "valueclass": "tail"})
+                n += 1
+            for opname, f in RED:
+                r = np.asarray(f(a))
+                cases.append({"id": f"{opname}/tail{sz}/{s}/{n}", "op": opname,
+                              "params": {"axis": None, "keepdims": False},
+                              "operands": [describe(a, a)],
+                              "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                           "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                              "layout": f"tail{sz}", "valueclass": "tail"})
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1053,6 +1105,9 @@ def main():
         cases += gen_searchsorted(SORT_DTYPES)
         cases += gen_nonzero(SORT_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
+    elif mode == "tail":
+        cases = gen_tail(TAIL_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "tail.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

@@ -126,3 +126,12 @@ roll/tile/delete/pad{constant,edge,reflect,wrap}/ravel) is **bit-exact**. Three 
 
 **No bugs.** argsort (1-D/2-D, axis 0/1/−1), searchsorted (side left/right), and nonzero are
 35/35 bit-exact with NumPy, including the int64 index result dtype.
+
+---
+
+## W13 — SIMD-tail boundaries (`tail.jsonl`, 900 cases)
+
+**No bugs.** add/subtract/multiply/negative/abs/sqrt/sum/prod/max/min over 1-D arrays sized
+1,2,3,7,8,9,15,16,17,31,32,33,63,64,65,127,128,129 (straddling the V128/V256/V512 lane counts)
+are 900/900 bit-exact. The three-stage loop (unrolled SIMD body + 1-vector remainder + scalar
+tail) has no off-by-one at any seam.
