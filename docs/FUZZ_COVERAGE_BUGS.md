@@ -83,3 +83,15 @@ clean; `nansum/nanmean/nanstd/nanvar/nanmedian` are not.
 | W6-B | 🟠 | `percentile/quantile(int…, axis)` | interpolated float64 | **gross** wrong value (sign flips: +8192 vs −8191) | genuine QuantileEngine defect on the integer axis interpolation path. |
 | W6-C | 🟡 | `average` over large-magnitude slice | pairwise sum | naive-sum drift | summation order differs from NumPy. |
 | W6-D | 🟠 | `clip(NaN, lo, hi)` | `NaN` (passthrough) | `lo` (−10) | clip's min/max comparisons sort NaN below the lower bound → clamps NaN to a_min instead of preserving it. |
+
+---
+
+## W7 — logic + element-wise extrema (`logic.jsonl`, 828 cases)
+
+`isnan/isinf/isfinite` are **clean**. `maximum/minimum/fmax/fmin/isclose` have bugs:
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W7-A | 🟠 | `maximum/minimum/fmax/fmin` with an **F-contiguous/strided** operand | element-wise logical pairing | **scrambled** (reads memory order) | the extrema kernel ignores the operand's strides and walks it C-contiguously. C-contig is bit-exact; add/sub/mul handle the same F-contig operand correctly, so it's extrema-specific. |
+| W7-B | 🟠 | `fmax/fmin(x, NaN)` | `x` (ignore NaN) | `NaN` | fmax/fmin propagate NaN — they behave identically to maximum/minimum instead of skipping NaN. |
+| W7-C | 🟡 | `isclose` on F-contiguous complex | element-wise bool | wrong bool | same strided-pairing family as W7-A on the complex path. |

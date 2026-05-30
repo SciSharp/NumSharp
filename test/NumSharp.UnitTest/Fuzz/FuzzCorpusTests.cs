@@ -82,6 +82,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Stat() => RunCorpus("stat.jsonl");
 
+        // W7 logic (T13): isnan/isinf/isfinite (unary->bool), maximum/minimum (NaN-propagating),
+        // fmax/fmin (NaN-ignoring), isclose (binary->bool) — NaN/inf-laced operands.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Logic() => RunCorpus("logic.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

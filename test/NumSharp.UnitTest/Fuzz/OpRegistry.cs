@@ -93,6 +93,16 @@ namespace NumSharp.UnitTest.Fuzz
                     keepdims: ParseKeepdims(p));
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
 
+                // Logic & element-wise extrema (T13).
+                case "isnan": return np.isnan(ops[0]);
+                case "isinf": return np.isinf(ops[0]);
+                case "isfinite": return np.isfinite(ops[0]);
+                case "maximum": return np.maximum(ops[0], ops[1]);
+                case "minimum": return np.minimum(ops[0], ops[1]);
+                case "fmax": return np.fmax(ops[0], ops[1]);
+                case "fmin": return np.fmin(ops[0], ops[1]);
+                case "isclose": return np.isclose(ops[0], ops[1]);
+
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr

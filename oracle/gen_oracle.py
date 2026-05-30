@@ -522,6 +522,21 @@ def gen_where(dt_pairs, layout_names):
     return cases
 
 
+# T13 — logic & element-wise extrema. isnan/isinf/isfinite (unary -> bool); maximum/minimum
+# (NaN-propagating), fmax/fmin (NaN-ignoring), isclose (binary -> bool). NumPy is the oracle.
+LOGIC_UNARY_OPS = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite}
+LOGIC_UNARY_DTYPES = ["int32", "uint8", "float16", "float32", "float64", "complex128"]
+LOGIC_BIN_OPS = {
+    "maximum": np.maximum, "minimum": np.minimum,
+    "fmax": np.fmax, "fmin": np.fmin, "isclose": np.isclose,
+}
+LOGIC_BIN_PAIRS = [
+    ("float32", "float32"), ("float64", "float64"), ("float16", "float16"),
+    ("int32", "int32"), ("int32", "float64"), ("uint8", "int8"), ("int32", "int64"),
+    ("complex128", "complex128"),
+]
+
+
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
 # The operand is the ORIGINAL arr; the expected is arr AFTER place.
 PLACE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d"]
@@ -768,6 +783,10 @@ def main():
         cases += gen_quantile(QUANTILE_SPECS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_clip(CLIP_DTYPES, STAT_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
+    elif mode == "logic":
+        cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
+        cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

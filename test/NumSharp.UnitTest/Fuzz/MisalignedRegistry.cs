@@ -39,6 +39,11 @@ namespace NumSharp.UnitTest.Fuzz
             "median", "percentile", "quantile"
         };
 
+        private static readonly System.Collections.Generic.HashSet<string> ExtremaOps = new()
+        {
+            "maximum", "minimum", "fmax", "fmin"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
@@ -131,6 +136,22 @@ namespace NumSharp.UnitTest.Fuzz
             // dtype. Scoped to a cumsum/cumprod dtype mismatch.
             if ((c.Op == "cumsum" || c.Op == "cumprod") && kind == DivergenceKind.Dtype)
                 return "cumsum/cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+
+            // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
+            if (ExtremaOps.Contains(c.Op) && kind == DivergenceKind.Value)
+            {
+                // (W7-B) fmax/fmin must IGNORE NaN (return the finite operand); NumSharp propagates
+                // it, so it behaves like maximum/minimum. Scoped to a NaN appearing in NumSharp's out.
+                if ((c.Op == "fmax" || c.Op == "fmin") && diffs.Any(d => d.Actual == "NaN"))
+                    return "fmax/fmin: propagate NaN instead of ignoring it [known bug]";
+                // (W7-A) on an F-contiguous / strided operand the extrema kernel pairs elements by
+                // memory order, not logical order -> scrambled result. (C-contiguous is bit-exact;
+                // add/sub/mul handle the same F-contig operand correctly, so this is extrema-specific.)
+                return "maximum/minimum/fmax/fmin: wrong element pairing on F-contiguous/strided operand [known bug]";
+            }
+            // isclose on an F-contiguous complex operand diverges (same strided-pairing family).
+            if (c.Op == "isclose" && kind == DivergenceKind.Value)
+                return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
             // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
             //     non-finite slices and on the integer axis path; average has summation-order drift.
