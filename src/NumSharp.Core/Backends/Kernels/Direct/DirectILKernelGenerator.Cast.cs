@@ -138,6 +138,9 @@ namespace NumSharp.Backends.Kernels
         public static StridedCastKernel TryGetStridedCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
+            var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
+            if (d2iStrided != null) return d2iStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -262,6 +265,81 @@ namespace NumSharp.Backends.Kernels
                     Vector128.Store(Sse2.ConvertToVector128Int32WithTruncation(Vector128.Load(src + i)), dst + i);
             }
             for (; i < count; i++) dst[i] = Converts.ToInt32(src[i]);
+        }
+
+        /// <summary>NumPy-faithful cvtt strided <see cref="StridedCastKernel"/> for double-&gt;int32, or null.</summary>
+        internal static unsafe StridedCastKernel TryGetDoubleToInt32StridedKernel(NPTypeCode srcType, NPTypeCode dstType)
+            => (srcType == NPTypeCode.Double && dstType == NPTypeCode.Int32) ? CastDoubleToInt32Strided : null;
+
+        // Strided/broadcast double->int32 cast. The innermost axis is vectorized with VCVTTPD2DQ
+        // for the three common dst-contiguous run shapes — unit-stride source, reversed source
+        // ([::-1]), and positive-strided source (a[:,::2] etc., via AVX2 gather) — and falls back
+        // to the NumPy-faithful scalar Converts path for everything else. Outer dims are walked
+        // with an incremental-offset odometer (element strides, matching the IL strided kernel).
+        private static unsafe void CastDoubleToInt32Strided(
+            void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            double* src = (double*)srcV;
+            int* dst = (int*)dstV;
+            if (ndim == 0) { dst[0] = Converts.ToInt32(src[0]); return; }
+
+            int outer = ndim - 1;
+            long innerN = shape[outer];
+            long ss = srcStrides[outer];
+            long ds = dstStrides[outer];
+
+            long outerCount = 1;
+            for (int a = 0; a < outer; a++) outerCount *= shape[a];
+
+            long* coord = stackalloc long[ndim];
+            for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                InnerCastDoubleToInt32(src + srcOff, dst + dstOff, innerN, ss, ds);
+
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
+
+        private static unsafe void InnerCastDoubleToInt32(double* s, int* d, long n, long ss, long ds)
+        {
+            long i = 0;
+            if (ds == 1)
+            {
+                if (ss == 1)
+                {
+                    if (Avx.IsSupported)
+                        for (; i + 4 <= n; i += 4)
+                            Vector128.Store(Avx.ConvertToVector128Int32WithTruncation(Vector256.Load(s + i)), d + i);
+                    else if (Sse2.IsSupported)
+                        for (; i + 2 <= n; i += 2)
+                            *(long*)(d + i) = Sse2.ConvertToVector128Int32WithTruncation(Vector128.Load(s + i)).AsInt64().ToScalar();
+                }
+                else if (ss == -1 && Avx.IsSupported)
+                {
+                    // logical s[i..i+3] live at memory [s-i-3 .. s-i]; load forward, cvtt, reverse lanes.
+                    var rev = Vector128.Create(3, 2, 1, 0);
+                    for (; i + 4 <= n; i += 4)
+                    {
+                        var iv = Avx.ConvertToVector128Int32WithTruncation(Vector256.Load(s - i - 3));
+                        Vector128.Store(Vector128.Shuffle(iv, rev), d + i);
+                    }
+                }
+                else if (ss > 1 && ss <= int.MaxValue / 4 && Avx2.IsSupported)
+                {
+                    var idx = Vector128.Create(0, (int)ss, (int)(2 * ss), (int)(3 * ss));
+                    for (; i + 4 <= n; i += 4)
+                        Vector128.Store(Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(s + i * ss, idx, 8)), d + i);
+                }
+            }
+            for (; i < n; i++) d[i * ds] = Converts.ToInt32(s[i * ss]);
         }
 
         private static bool IsIntegerCast(NPTypeCode t) =>
