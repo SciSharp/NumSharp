@@ -76,6 +76,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Scan() => RunCorpus("scan.jsonl");
 
+        // W6 statistics (T12): median/average/ptp (axis+keepdims), count_nonzero, percentile/
+        // quantile (q in {0,25,50,75,100}/{0,.25,.5,.75,1}, axis None/0/last), clip (a,min,max).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Stat() => RunCorpus("stat.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

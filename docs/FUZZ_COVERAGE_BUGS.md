@@ -69,3 +69,17 @@ clean; `nansum/nanmean/nanstd/nanvar/nanmedian` are not.
 | # | Severity | Op · cell | NumPy | NumSharp | Root cause |
 |---|----------|-----------|-------|----------|------------|
 | W5-A | 🟡 | `cumsum`/`cumprod` on a **size-1** int16/int32/uint8/uint16 array | int64 / uint64 (NEP50 accumulator) | input dtype preserved | the one-element fast path skips the accumulator widening that the size>1 path applies correctly. |
+
+---
+
+## W6 — statistics (`stat.jsonl`, 2304 cases)
+
+`ptp` and `count_nonzero` are **clean**. `median/percentile/quantile` (shared QuantileEngine),
+`average`, and `clip` have bugs:
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W6-A | 🟠 | `median/percentile/quantile` on a slice with ±inf/NaN | clean value or NaN per IEEE | NaN where NumPy isn't (and vice-versa) | partition + linear interpolation `(a+b)/2` / `a+(b−a)·f` mishandles non-finite operands (e.g. `(+inf+−inf)/2`). |
+| W6-B | 🟠 | `percentile/quantile(int…, axis)` | interpolated float64 | **gross** wrong value (sign flips: +8192 vs −8191) | genuine QuantileEngine defect on the integer axis interpolation path. |
+| W6-C | 🟡 | `average` over large-magnitude slice | pairwise sum | naive-sum drift | summation order differs from NumPy. |
+| W6-D | 🟠 | `clip(NaN, lo, hi)` | `NaN` (passthrough) | `lo` (−10) | clip's min/max comparisons sort NaN below the lower bound → clamps NaN to a_min instead of preserving it. |

@@ -82,6 +82,17 @@ namespace NumSharp.UnitTest.Fuzz
                 case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
 
+                // Statistics (T12).
+                case "median": return np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "average": return np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                case "ptp": return np.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                case "count_nonzero": return np.count_nonzero(ops[0], ParseAxis(p).Value, ParseKeepdims(p));
+                case "percentile": return np.percentile(ops[0], p["q"].GetDouble(), ParseAxis(p),
+                    keepdims: ParseKeepdims(p));
+                case "quantile": return np.quantile(ops[0], p["q"].GetDouble(), ParseAxis(p),
+                    keepdims: ParseKeepdims(p));
+                case "clip": return np.clip(ops[0], ops[1], ops[2]);
+
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr

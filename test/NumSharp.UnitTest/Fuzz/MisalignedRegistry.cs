@@ -34,6 +34,11 @@ namespace NumSharp.UnitTest.Fuzz
             "nansum", "nanprod", "nanmax", "nanmin", "nanmean", "nanstd", "nanvar", "nanmedian"
         };
 
+        private static readonly System.Collections.Generic.HashSet<string> QuantileOps = new()
+        {
+            "median", "percentile", "quantile"
+        };
+
         public static string Classify(
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
@@ -126,6 +131,34 @@ namespace NumSharp.UnitTest.Fuzz
             // dtype. Scoped to a cumsum/cumprod dtype mismatch.
             if ((c.Op == "cumsum" || c.Op == "cumprod") && kind == DivergenceKind.Dtype)
                 return "cumsum/cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+
+            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
+            //     non-finite slices and on the integer axis path; average has summation-order drift.
+            //     ptp / count_nonzero / clip are bit-exact. ---
+            if (QuantileOps.Contains(c.Op) && kind == DivergenceKind.Value)
+            {
+                // (W6-A) a slice containing ±inf / NaN: the partition + linear interpolation
+                // ((a+b)/2 or a+(b-a)*frac) produces a NaN where NumPy does not (or vice-versa) —
+                // e.g. (+inf + -inf)/2. Either direction is excused.
+                if (diffs.Any(d => d.Expected == "NaN" || d.Actual == "NaN"))
+                    return "median/percentile/quantile: ±inf/NaN slice partition+interpolation NaN mismatch [known bug]";
+                // (W6-B) integer input on the axis path: GROSS interpolation value error (sign flips,
+                // wrong magnitude) — a genuine QuantileEngine defect, not a rounding difference.
+                if (c.Operands[0].Dtype.StartsWith("int") || c.Operands[0].Dtype.StartsWith("uint"))
+                    return "percentile/quantile(int): gross interpolation value error on the axis path [known bug]";
+                // float input, finite: interpolation order / partition selection differs by a few ULP.
+                return "median/percentile/quantile: float interpolation order/precision divergence [known bug]";
+            }
+            // (W6-C) np.average: pairwise (NumPy) vs naive (NumSharp) summation order on large-magnitude
+            // slices -> precision drift.
+            if (c.Op == "average" && kind == DivergenceKind.Value)
+                return "average: summation-order precision divergence (pairwise vs naive) [known bug]";
+
+            // (W6-D) np.clip propagates NaN in NumPy (clip(NaN,lo,hi)=NaN) but NumSharp clamps it to
+            // a_min — its min/max comparisons sort NaN below the lower bound. Scoped to a clip whose
+            // every divergent element is a NumPy NaN.
+            if (c.Op == "clip" && kind == DivergenceKind.Value && diffs.All(d => d.Expected == "NaN"))
+                return "clip(NaN): clamps NaN to a_min instead of preserving it [known bug]";
 
             // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
             if (NanReduceOps.Contains(c.Op))

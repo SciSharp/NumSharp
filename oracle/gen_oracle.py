@@ -286,6 +286,125 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
     return cases
 
 
+# T12 — statistics. NumPy is the oracle for value, dtype (median/average/percentile/quantile ->
+# float64; ptp preserves; count_nonzero -> int64), and keepdims shape.
+STAT_REDUCE_OPS = {
+    "median": lambda a, ax, kd: np.median(a, axis=ax, keepdims=kd),
+    "average": lambda a, ax, kd: np.average(a, axis=ax, keepdims=kd),
+    "ptp": lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd),
+}
+STAT_DTYPES = ["int16", "int32", "int64", "uint8", "float16", "float32", "float64"]
+STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                "transposed_3d", "strided_2d_cols", "one_element_1d"]
+CNZ_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
+CLIP_DTYPES = ["int8", "uint8", "int16", "int32", "int64", "float16", "float32", "float64"]
+QUANTILE_SPECS = [
+    ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
+    ("quantile", lambda a, q, ax: np.quantile(a, q, axis=ax), [0.0, 0.25, 0.5, 0.75, 1.0]),
+]
+
+
+def gen_count_nonzero(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            if view.ndim == 0:
+                continue
+            operand = describe(base, view)
+            axes = [0] if view.ndim == 1 else [0, view.ndim - 1]
+            for axis in axes:
+                for kd in (False, True):
+                    try:
+                        r = np.asarray(np.count_nonzero(view, axis=axis, keepdims=kd))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    cases.append({
+                        "id": f"count_nonzero/{ln}/{s}/axis={axis}/kd={int(kd)}/{n}",
+                        "op": "count_nonzero",
+                        "params": {"axis": axis, "keepdims": kd},
+                        "operands": [operand],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": ln,
+                        "valueclass": "mixed",
+                    })
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_quantile(specs, dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for (opname, f, qs) in specs:
+                for q in qs:
+                    for axis in _axes(view.ndim):
+                        try:
+                            r = np.asarray(f(view, q, axis))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        cases.append({
+                            "id": f"{opname}/{ln}/{s}/q={q}/axis={axis}/{n}",
+                            "op": opname,
+                            "params": {"q": q, "axis": axis},
+                            "operands": [operand],
+                            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                            "layout": ln,
+                            "valueclass": "mixed",
+                        })
+                        n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_clip(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            dt = np.dtype(s)
+            base, view = fn(dt)
+            lo_v, hi_v = (1, 100) if dt.kind == "u" else (-10, 10)
+            lo = np.array(lo_v, dtype=dt).reshape(())
+            hi = np.array(hi_v, dtype=dt).reshape(())
+            try:
+                r = np.asarray(np.clip(view, lo, hi))
+            except Exception:
+                skipped += 1
+                continue
+            cases.append({
+                "id": f"clip/{ln}/{s}/{n}",
+                "op": "clip",
+                "params": {},
+                "operands": [describe(base, view), describe(lo, lo), describe(hi, hi)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": ln,
+                "valueclass": "mixed",
+            })
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 # np.where(cond, x, y) -> select. Result dtype = result_type(x, y); NumPy is the oracle.
 WHERE_DT_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
@@ -643,6 +762,12 @@ def main():
         cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
+    elif mode == "stat":
+        cases = gen_reduce(STAT_REDUCE_OPS, STAT_DTYPES, STAT_LAYOUTS)
+        cases += gen_count_nonzero(CNZ_DTYPES, STAT_LAYOUTS)
+        cases += gen_quantile(QUANTILE_SPECS, STAT_DTYPES, STAT_LAYOUTS)
+        cases += gen_clip(CLIP_DTYPES, STAT_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)
