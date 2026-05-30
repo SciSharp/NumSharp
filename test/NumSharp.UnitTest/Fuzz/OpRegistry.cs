@@ -77,6 +77,11 @@ namespace NumSharp.UnitTest.Fuzz
                 case "less_equal": return ops[0] <= ops[1];
                 case "greater_equal": return ops[0] >= ops[1];
 
+                // Cumulative scans + finite differences (T11).
+                case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
+                case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
+                case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
+
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr

@@ -59,3 +59,13 @@ clean; `nansum/nanmean/nanstd/nanvar/nanmedian` are not.
 | W4-C | 🟠 | `nanmedian` with NaNs | ignores NaN → non-NaN median (±inf etc.) | **`NaN`** | nanmedian does not strip NaN before the median — propagates it. |
 | W4-D | 🟡 | `nansum(complex128, axis)` 1-D | complex sum | `InvalidOperationException "NDCoordinatesAxisIncrementor … vector shape"` | shared complex-1D-axis-reduction defect (same class as #12). |
 | W4-E | 🟡 | `nanmean/nanstd/nanvar` empty float16, axis=None | `NaN` + warning | `InvalidOperationException "NDIterator … empty shape"` | empty-array path not handled for the float16 nan-reduce. |
+
+---
+
+## W5 — cumulative (`scan.jsonl`, 544 cases)
+
+`diff` is **fully clean** (bit-exact across n=1,2 / axis 0,last / all dtypes). One cumsum/cumprod bug:
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| W5-A | 🟡 | `cumsum`/`cumprod` on a **size-1** int16/int32/uint8/uint16 array | int64 / uint64 (NEP50 accumulator) | input dtype preserved | the one-element fast path skips the accumulator widening that the size>1 path applies correctly. |

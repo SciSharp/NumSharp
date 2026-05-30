@@ -70,6 +70,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void NanReduce() => RunCorpus("nanreduce.jsonl");
 
+        // W5 cumulative (T11): cumsum/cumprod (axis None + per-axis, NEP50 accumulator) and diff
+        // (n=1,2; axis 0/last; output shrinks by n) across int/uint/float/complex dtypes.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Scan() => RunCorpus("scan.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

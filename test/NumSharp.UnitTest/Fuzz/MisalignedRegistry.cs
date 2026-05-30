@@ -120,6 +120,13 @@ namespace NumSharp.UnitTest.Fuzz
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
             //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
 
+            // (W5-A) cumsum/cumprod on a SIZE-1 array skip the NEP50 accumulator widening — they
+            // preserve the narrow integer input (int16/int32 -> int64, uint8/uint16 -> uint64 is
+            // what NumPy does) only on the size>1 path; the one-element fast path returns the input
+            // dtype. Scoped to a cumsum/cumprod dtype mismatch.
+            if ((c.Op == "cumsum" || c.Op == "cumprod") && kind == DivergenceKind.Dtype)
+                return "cumsum/cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+
             // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
             if (NanReduceOps.Contains(c.Op))
             {

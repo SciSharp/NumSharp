@@ -296,6 +296,84 @@ WHERE_DT_PAIRS = [
 ]
 
 
+# T11 — cumulative scans (cumsum/cumprod) and finite differences (diff). NumPy is the oracle for
+# value, NEP50 accumulator dtype (cumsum(int32)->int64), and the diff output shape (shrinks by n).
+SCAN_OPS = {
+    "cumsum": lambda a, ax: np.cumsum(a, axis=ax),
+    "cumprod": lambda a, ax: np.cumprod(a, axis=ax),
+}
+SCAN_DTYPES = ["int16", "int32", "int64", "uint8", "uint16", "float32", "float64", "complex128"]
+SCAN_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
+                "transposed_3d", "strided_2d_cols", "one_element_1d", "negstride_1d"]
+
+
+def gen_scan(ops, dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, f in ops.items():
+                for axis in _axes(view.ndim):
+                    try:
+                        r = np.asarray(f(view, axis))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    cases.append({
+                        "id": f"{opname}/{ln}/{s}/axis={axis}/{n}",
+                        "op": opname,
+                        "params": {"axis": axis},
+                        "operands": [operand],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": ln,
+                        "valueclass": "mixed",
+                    })
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_diff(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            if view.ndim == 0:
+                continue
+            operand = describe(base, view)
+            axes = [0] if view.ndim == 1 else [0, view.ndim - 1]
+            for order in (1, 2):
+                for axis in axes:
+                    try:
+                        r = np.asarray(np.diff(view, n=order, axis=axis))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    cases.append({
+                        "id": f"diff/{ln}/{s}/n={order}/axis={axis}/{n}",
+                        "op": "diff",
+                        "params": {"n": order, "axis": axis},
+                        "operands": [operand],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": ln,
+                        "valueclass": "mixed",
+                    })
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def gen_where(dt_pairs, layout_names):
     cases = []
     n = 0
@@ -561,6 +639,10 @@ def main():
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "nanreduce.jsonl"), cases)
+    elif mode == "scan":
+        cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
+        cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)
