@@ -47,6 +47,10 @@ jobs:
     #   - OpenBugs: excluded (known-failing bug reproductions)
     #   - HighMemory: excluded (requires 8GB+ RAM, too much for CI runners)
     #   - WindowsOnly: excluded on non-Windows runners
+    #   - FuzzMatrix: INCLUDED — the NumPy differential gate (cast/binary/comparison/unary/reduce/
+    #     where/place matrices + the seeded FuzzRandom corpus + FuzzRegression). These replay the
+    #     committed offline corpora under test/.../Fuzz/corpus/ and need no Python. The "millions of
+    #     cases" tail (Python-generated) runs nightly in fuzz-soak.yml.
     - name: Test (net8.0)
       shell: bash
       timeout-minutes: 10

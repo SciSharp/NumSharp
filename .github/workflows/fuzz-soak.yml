@@ -1,0 +1,79 @@
+name: Fuzz Soak
+
+# Nightly differential-fuzz soak: sweeps seeds through oracle/fuzz_random.py (NumPy 2.4.2 oracle),
+# generating hundreds of thousands of fresh random cases per seed and replaying them through the
+# C# harness. The FuzzMatrix gate on every push/PR replays the small COMMITTED corpora (no Python);
+# this job is the "millions of cases" tail that needs Python and runs on a schedule only.
+#
+# On a divergence the harness prints a shrunk single-element repro (Shrinker) in the log and the
+# offending corpus is uploaded as an artifact — copy the minimal line into
+# test/NumSharp.UnitTest/Fuzz/corpus/regressions/ so FuzzRegression pins it on every CI thereafter.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 04:00 UTC nightly
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: 'Space-separated seeds to sweep'
+        default: '1 2 3 4 5'
+      count:
+        description: 'Random cases per seed'
+        default: '200000'
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install NumPy 2.4.2 (the oracle)
+      run: pip install "numpy==2.4.2"
+
+    - name: Soak — sweep seeds
+      shell: bash
+      run: |
+        SEEDS="${{ github.event.inputs.seeds || '1 2 3 4 5' }}"
+        COUNT="${{ github.event.inputs.count || '200000' }}"
+        STATUS=0
+        for seed in $SEEDS; do
+          echo "::group::seed=$seed count=$COUNT"
+          python oracle/fuzz_random.py "$seed" "$COUNT" random_smoke.jsonl
+          # Incremental build copies the regenerated corpus to the test output, then replay it.
+          dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+            --configuration Release -p:NoWarn=CS1591 >/dev/null
+          if ! dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+              --configuration Release --no-build --framework net10.0 \
+              --filter "ClassName~FuzzCorpusTests&Name~FuzzRandom" --logger "trx"; then
+            echo "::error::Fuzz soak found a divergence at seed=$seed (see the 'minimal repro' line above)"
+            cp test/NumSharp.UnitTest/Fuzz/corpus/random_smoke.jsonl "failing-seed-$seed.jsonl"
+            STATUS=1
+          fi
+          echo "::endgroup::"
+        done
+        exit $STATUS
+
+    - name: Upload failing corpora
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-soak-failures
+        path: failing-seed-*.jsonl
+        retention-days: 14
