@@ -33,9 +33,10 @@ namespace NumSharp.UnitTest.Fuzz
             FuzzCorpus.Case c, DivergenceKind kind,
             byte[] expected, byte[] actual, NPTypeCode tc, IReadOnlyList<BitDiff.Diff> diffs)
         {
-            // (1) NEP50 weak-scalar promotion. The pp_scalar_* layouts are constructed with exactly
-            //     one 0-D operand, so a result-dtype divergence there IS the documented weak-scalar rule.
-            if (kind == DivergenceKind.Dtype && (c.Layout == "pp_scalar_left" || c.Layout == "pp_scalar_right"))
+            // (1) NEP50 weak-scalar promotion. Any multi-operand op with a 0-D operand: NumSharp
+            //     promotes it weakly (the array operand's dtype drives the result), where NumPy makes
+            //     0-D arrays full participants. Covers binary pp_scalar_* and np.where wh_bcast_xy.
+            if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";
 
             // (2) Complex true-division ~1 ULP. Excuse only divide, only complex result, only when every
@@ -96,6 +97,10 @@ namespace NumSharp.UnitTest.Fuzz
             //     handling in the trig/log algorithms. System.Numerics.Complex vs NumPy's npy_c*.
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex)
                 return "complex unary (square/trig/log) algorithm/edge difference [partly known bug]";
+
+            // np.where with complex operands throws ("Zero-push unsupported for Complex").
+            if (kind == DivergenceKind.Threw && c.Op == "where" && c.Operands.Any(o => o.Dtype == "complex128"))
+                return "complex np.where throws (Zero-push unsupported for Complex) [known bug]";
 
             // (8) np.reciprocal of an integer: NumPy returns the integer ÷0 sentinel for 0 and
             //     truncating-integer reciprocal otherwise; NumSharp returns 0. Plus reciprocal on a

@@ -332,3 +332,48 @@ def _(da, db):
 def _(da, db):
     a = _cbase((8,), da); b = _cbase((8,), db)
     return a, a[::-1], b, b[::-1]
+
+
+# ---------------------------------------------------------------------------
+# Triple-operand layouts for np.where(cond, x, y). Each builder takes (dtx, dty) and returns
+# (cond_base, cond_view, x_base, x_view, y_base, y_view). cond is always bool; x/y carry the
+# data dtypes (result = result_type(x, y)). Operands at natural shapes; where() broadcasts.
+# ---------------------------------------------------------------------------
+WHERE_LAYOUTS = {}
+
+
+def _where(name):
+    def deco(fn):
+        WHERE_LAYOUTS[name] = fn
+        return fn
+    return deco
+
+
+@_where("wh_contig")
+def _(dx, dy):
+    c = _cbase((4, 5), np.bool_); x = _cbase((4, 5), dx); y = _cbase((4, 5), dy)
+    return c, c, x, x, y, y
+
+
+@_where("wh_bcast_xy")          # cond (4,5), x (5,) broadcast, y 0-D scalar
+def _(dx, dy):
+    c = _cbase((4, 5), np.bool_); x = _cbase((5,), dx); y = _fill(1, dy).reshape(())
+    return c, c, x, x, y, y
+
+
+@_where("wh_strided")           # all three strided
+def _(dx, dy):
+    c = _cbase((4, 10), np.bool_); x = _cbase((4, 10), dx); y = _cbase((4, 10), dy)
+    return c, c[:, ::2], x, x[:, ::2], y, y[:, ::2]
+
+
+@_where("wh_scalar_cond")       # 0-D bool cond, array x/y
+def _(dx, dy):
+    c = _fill(1, np.bool_).reshape(()); x = _cbase((4, 5), dx); y = _cbase((4, 5), dy)
+    return c, c, x, x, y, y
+
+
+@_where("wh_bcast_cond")        # cond (5,) broadcast against (4,5) x/y
+def _(dx, dy):
+    c = _cbase((5,), np.bool_); x = _cbase((4, 5), dx); y = _cbase((4, 5), dy)
+    return c, c, x, x, y, y

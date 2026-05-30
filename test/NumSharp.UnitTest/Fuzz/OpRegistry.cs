@@ -53,6 +53,10 @@ namespace NumSharp.UnitTest.Fuzz
                 case "less_equal": return ops[0] <= ops[1];
                 case "greater_equal": return ops[0] >= ops[1];
 
+                // Selection.
+                case "where": return np.where(ops[0], ops[1], ops[2]);
+                case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
+
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
                 case "std": case "var": case "argmax": case "argmin": case "all": case "any":

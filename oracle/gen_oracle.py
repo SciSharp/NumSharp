@@ -29,7 +29,7 @@ np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from layout_catalog import LAYOUTS, PAIR_LAYOUTS, describe  # noqa: E402
+from layout_catalog import LAYOUTS, PAIR_LAYOUTS, WHERE_LAYOUTS, describe  # noqa: E402
 
 # 13 NumPy-representable dtypes (Char + Decimal have no NumPy analog -> covered by
 # NumSharp's Converts-oracle tests, not by this differential corpus).
@@ -246,6 +246,79 @@ def gen_binary(ops, dt_pairs, pair_layout_names):
     return cases
 
 
+# np.where(cond, x, y) -> select. Result dtype = result_type(x, y); NumPy is the oracle.
+WHERE_DT_PAIRS = [
+    ("int32", "int32"), ("int32", "float64"), ("float32", "float64"), ("int32", "int64"),
+    ("bool", "int32"), ("float64", "float64"), ("complex128", "float64"), ("uint8", "int8"),
+]
+
+
+def gen_where(dt_pairs, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = WHERE_LAYOUTS[ln]
+        for (sx, sy) in dt_pairs:
+            cb, cv, xb, xv, yb, yv = fn(np.dtype(sx), np.dtype(sy))
+            try:
+                r = np.where(cv, xv, yv)
+            except Exception:
+                skipped += 1
+                continue
+            cases.append({
+                "id": f"where/{ln}/{sx},{sy}/{n}",
+                "op": "where",
+                "params": {},
+                "operands": [describe(cb, cv), describe(xb, xv), describe(yb, yv)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": ln,
+                "valueclass": "mixed",
+            })
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
+# The operand is the ORIGINAL arr; the expected is arr AFTER place.
+PLACE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d"]
+PLACE_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
+
+
+def gen_place(dtypes, layout_names):
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        for s in dtypes:
+            arr_b, arr_v = LAYOUTS[ln](np.dtype(s))
+            mask = (np.arange(arr_v.size).reshape(arr_v.shape) % 2 == 0)
+            vals = np.arange(1, 4).astype(np.dtype(s))
+            arr_after = np.array(arr_v, copy=True)
+            try:
+                np.place(arr_after, mask, vals)
+            except Exception:
+                skipped += 1
+                continue
+            cases.append({
+                "id": f"place/{ln}/{s}/{n}",
+                "op": "place",
+                "params": {},
+                "operands": [describe(arr_b, arr_v), describe(mask, mask), describe(vals, vals)],
+                "expected": {"dtype": arr_after.dtype.name, "shape": [int(d) for d in arr_after.shape],
+                             "buffer": np.ascontiguousarray(arr_after).tobytes().hex()},
+                "layout": ln,
+                "valueclass": "mixed",
+            })
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -283,8 +356,14 @@ def main():
     elif mode == "reduce":
         cases = gen_reduce(REDUCE_OPS, REDUCE_DTYPES, REDUCE_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "reduce.jsonl"), cases)
+    elif mode == "where":
+        cases = gen_where(WHERE_DT_PAIRS, list(WHERE_LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "where.jsonl"), cases)
+    elif mode == "place":
+        cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
+        write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place)")
         sys.exit(2)
 
 
