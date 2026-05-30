@@ -1,0 +1,267 @@
+# NumPy Differential-Fuzzer Findings
+
+Every NumSharp-vs-NumPy-2.4.2 divergence surfaced by the differential fuzzer
+(`test/NumSharp.UnitTest/Fuzz/`, Plan A). Each is **bit-exact verified** against NumPy as the
+oracle. Dispositions:
+
+- **FIXED** — corrected in-tree.
+- **BUG** — confirmed correctness/parity defect, documented in `MisalignedRegistry` so the gate stays
+  green, tracked for fix. Remove the classifier branch (or `[OpenBugs]` tag) when fixed.
+- **INTENDED** — accepted NumSharp-vs-NumPy difference (maintainer decision); stays `[Misaligned]`.
+- **SCOPING** — divergence only reachable by feeding NumSharp a representation its own API never
+  produces; the fuzzer is scoped around it.
+
+Char and Decimal are excluded from the differential corpus (no NumPy analog).
+
+## Summary
+
+| # | Area | Issue | Disposition | Task |
+|---|------|-------|-------------|------|
+| 1 | cast | `complex → bool` drops the imaginary part | **FIXED** | — |
+| 2 | floor_divide/mod | integer `÷0` / `mod 0` throws or returns garbage (NumPy → 0) | BUG | #7 |
+| 3 | floor_divide | float `//0` → NaN (NumPy → ±inf) | BUG | #7 |
+| 4 | mod | `mod(float32, float64)` computed in float32 then widened | BUG | #7 |
+| 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7 |
+| 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | BUG | #8 |
+| 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | BUG | #9 |
+| 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | BUG | #9 |
+| 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
+| 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
+| 11 | reduction | `min/max/mean/std/var` skip NaN (NumPy propagates) | BUG | #10 |
+| 12 | reduction | complex axis reduction throws (`NDCoordinatesAxisIncrementor`) | BUG | #10 |
+| 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | BUG | #10 |
+| 14 | reduction | `sum/mean/std/var` accumulation order (vs NumPy pairwise/two-pass) | BUG | #10 |
+| 15 | reduction | result dtype (NEP50 accumulator width / complex→real) | BUG | #10 |
+| 16 | where | complex `np.where` throws ("Zero-push unsupported for Complex") | BUG | — |
+| 17 | binary | bool arithmetic: `True + True → 2` (NumPy → bool True) | BUG | #12 |
+| 18 | binary | size-1 result collapses to 0-D (NumPy keeps `[1]`) | BUG | #12 |
+| 19 | binary | complex `multiply`/`divide` cancellation + ~1 ULP | BUG | #12 |
+| 20 | promotion | 0-D array operand promoted weakly (NEP50: full participant) | INTENDED | — |
+| 21 | divide | complex division ~1 ULP (`npy_cdivide` vs `System.Numerics.Complex`) | INTENDED | — |
+| 22 | views | ops ignore raw NumPy `offset!=0` / junk size-1 strides | SCOPING | #11 |
+
+---
+
+## FIXED
+
+### 1. `complex → bool` dropped the imaginary part
+
+`NpyIterCasting.ConvertValue` read `c.Real` for every complex→real/bool cast, so a complex number
+with zero real part but non-zero imaginary part converted to `False`. NumPy: `bool(z) == (z != 0)` —
+truthy if **either** part is non-zero. Latent in `astype`, `np.where`, `np.copyto`, `np.concatenate`.
+
+```python
+np.array([complex(0, 1), complex(-0.0, -2147483649.0)]).astype(bool)   # [ True,  True]
+```
+```csharp
+np.array(new[]{ new Complex(0,1), new Complex(-0.0,-2147483649.0) }).astype(NPTypeCode.Boolean)
+// before fix: [False, False]   after fix: [True, True]
+```
+
+**Fix:** special-case complex→bool to `c.Real != 0 || c.Imaginary != 0` (matches the correct
+`Converts.ToBoolean(Complex)`). Commit `908ee7f9`. Found by T1 cast matrix (15 cells).
+
+---
+
+## BUGS (confirmed parity defects, tracked for fix)
+
+### 2. Integer `÷0` / `mod 0` — throws or returns garbage
+
+NumPy integer division/modulo by zero returns **0** (with a RuntimeWarning). NumSharp throws or
+returns a sentinel.
+
+```python
+np.array([1,-7,5], np.int32) // np.array([0,0,0], np.int32)   # [0, 0, 0]
+np.array([1,-7,5], np.int32) %  np.array([0,0,0], np.int32)   # [0, 0, 0]
+np.array([5,9], np.uint8)    // np.array([0,0], np.uint8)     # [0, 0]
+```
+```csharp
+np.floor_divide(i32, zeros)  // [2147483647, -2147483648, 2147483647]  (saturated sentinel)
+np.mod(i32, zeros)           // [1, -7, 5]                              (returns the dividend)
+np.floor_divide(u8, zeros)   // THROWS DivideByZeroException
+```
+Found by T2 `Binary_DivModPower` (`[OpenBugs]`). Task **#7**.
+
+### 3. Float `//0` → NaN instead of ±inf
+
+```python
+np.array([1.0,-1.0,0.0]) // np.array([0.0,0.0,0.0])   # [ inf, -inf,  nan]
+```
+```csharp
+np.floor_divide(f, zeros)   // [NaN, NaN, NaN]   (loses the ±inf sign result)
+```
+Float `%0` is correctly `nan` on both sides; mod sign convention is correctly floored
+(`mod(-7,3) == 2`). Task **#7**.
+
+### 4. Mixed-precision `mod` loses precision
+
+`mod(float32_array, float64_array)` should promote to float64 and compute there (NEP50). NumSharp
+computes in float32 then widens (low mantissa zeroed). `add/sub/mul/div` promote correctly; only
+`mod` regresses. Task **#7**.
+
+### 5. Complex `power` — ~1 ULP + gross edge
+
+`complex ** {float,complex,int}` differs from NumPy by ~1 ULP in places, plus gross edge
+divergences (NumPy NaN where NumSharp returns 0) for inf/zero bases. Task **#7**.
+
+### 6. `<=` / `>=` return True for NaN
+
+IEEE/NumPy: every ordered comparison with NaN is False (only `!=` is True). `<`, `>`, `==`, `!=`
+handle NaN correctly; `<=` and `>=` return **True**.
+
+```python
+np.array([np.nan]) <= np.array([1.0])    # [False]
+np.array([np.nan]) >= np.array([1.0])    # [False]
+```
+```csharp
+(np.array(new[]{double.NaN}) <= np.array(new[]{1.0}))   // [True]
+```
+Found by T3 `Comparison` (122 cases, all the NaN element). Likely `a <= b` implemented as
+`!(a > b)` / `a < b || a == b`. Task **#8**.
+
+### 7. NEP50 unary float promotion
+
+NumSharp promotes integer input to **float64** for `sqrt/cbrt/sin/cos/tan/exp/log` regardless of
+input width; NumPy uses width-based float promotion. `square/reciprocal/floor/ceil/trunc` result
+dtype also differs.
+
+| op(input) | NumPy | NumSharp |
+|-----------|-------|----------|
+| `sqrt(bool)` / `sqrt(int8)` | float16 | float64 |
+| `sqrt(int16)` | float32 | float64 |
+| `square(bool)` | int8 | bool |
+| `floor(bool)` | bool | float64 |
+
+Found by T4 `Unary` (494 cases). Task **#9**.
+
+### 8. `negative` on unsigned integers throws
+
+```python
+np.negative(np.array([1], np.uint8))    # [255]  (wraps modulo)
+```
+```csharp
+np.negative(np.array(new byte[]{1}))    // THROWS NotSupportedException
+```
+Task **#9**.
+
+### 9. `reciprocal` — integer result wrong; non-contiguous throws
+
+`np.reciprocal(int)` returns 0 where NumPy returns the integer `÷0` sentinel (for 0) /
+truncating-integer reciprocal. `reciprocal` on a non-contiguous (e.g. transposed) operand throws
+`InvalidOperationException: Can't return a memory address when NDArray is sliced or broadcasted`.
+Task **#9**.
+
+### 10. Complex unary — `square` cancellation; `sin/cos/tan/log` edge
+
+`square(complex)` suffers catastrophic cancellation in `re² − im²` (NumSharp → exactly 0 where
+NumPy retains precision). `sin/cos/tan/log` of complex differ on inf/NaN-involving inputs
+(NumPy `(NaN, +inf)` vs NumSharp `(NaN, NaN)`). `System.Numerics.Complex` vs NumPy's `npy_c*`.
+Task **#9**.
+
+### 11. Reductions skip NaN (NumPy propagates)
+
+Regular `min/max/mean/std/var` propagate NaN in NumPy (only the `nan*` variants skip it). NumSharp
+returns the non-NaN result.
+
+```python
+np.min(np.array([np.nan, -np.inf, 1.0]))   # nan
+```
+```csharp
+np.min(np.array(new[]{double.NaN, double.NegativeInfinity, 1.0}))   // -inf
+```
+Found by T5 `Reduce`. Task **#10**.
+
+### 12. Complex axis reduction throws
+
+`mean/std/var/sum` of a complex array **along an axis** throws
+`InvalidOperationException: Can't construct NDCoordinatesAxisIncrementor with a vector shape`.
+Task **#10**.
+
+### 13. bool `min`/`max` along an axis is wrong
+
+`max`/`min` of a bool array reduced along an axis returns `True` at positions where NumPy returns
+`False`. Task **#10**.
+
+### 14. Reduction accumulation order
+
+`sum/mean/std/var` floating results differ from NumPy's pairwise summation / two-pass variance
+(rounding from accumulation order). Magnitude is data-dependent (ill-conditioned sums diverge more).
+Task **#10**.
+
+### 15. Reduction result dtype
+
+Some reduction result dtypes differ from NumPy (NEP50 accumulator width; complex→real for
+`std/var`). Task **#10**.
+
+### 16. Complex `np.where` throws
+
+`np.where(cond, x, y)` with any complex operand throws
+`NotSupportedException: Zero-push unsupported for Complex`. Found by T6 `Where` (4 cases).
+
+### 17. bool arithmetic computes the integer result
+
+```python
+np.array([True]) + np.array([True])    # [ True]  (bool)
+```
+```csharp
+np.array(new[]{true}) + np.array(new[]{true})    // 2  (integer in a bool slot)
+```
+Found by the A2 random fuzzer. Task **#12**.
+
+### 18. size-1 result collapses to 0-D
+
+A binary op whose broadcast result is all-size-1 (e.g. `[1] op scalar`) returns 0-D `[]` in
+NumSharp where NumPy keeps `[1]`. Found by the A2 random fuzzer. Task **#12**.
+
+### 19. Complex binary `multiply`/`divide` cancellation
+
+Random complex data triggered catastrophic cancellation and >1 ULP differences in `multiply`
+(and `divide`) that the fixed pool missed — same `System.Numerics.Complex` vs `npy_c*` root as the
+unary/divide complex issues. Found by the A2 random fuzzer. Task **#12**.
+
+---
+
+## INTENDED (accepted divergences — `[Misaligned]`)
+
+### 20. NEP50 weak-scalar promotion
+
+NumSharp treats **any 0-D array operand** as a weak scalar (the array operand's dtype drives the
+result). NEP50 makes 0-D arrays full promotion participants; only Python scalar literals are weak.
+NumSharp cannot distinguish the two (both are 0-D `NDArray`), and `arr + 5` ergonomics were chosen
+over strict parity. Array+array promotion is correct across all layouts.
+
+```python
+np.arange(5, dtype=np.int32) + np.array(7, np.int64)   # int64
+np.arange(5, dtype=np.uint8) + np.array(3, np.int8)    # int16
+```
+```csharp
+arrI32 + zerodI64    // Int32   (NumPy: Int64)
+arrU8  + zerodI8     // Byte    (NumPy: Int16)
+```
+Maintainer decision: keep as Misaligned.
+
+### 21. Complex division ~1 ULP
+
+`complex / {float,complex,int}` differs from NumPy's `npy_cdivide` by one ULP
+(`System.Numerics.Complex` uses different scaling). Complex add/sub/mul are bit-exact (modulo
+cancellation, #19). Maintainer decision: keep as Misaligned (bit-exact complex division is
+impractical and platform-sensitive).
+
+---
+
+## SCOPING (unreachable via NumSharp's API)
+
+### 22. Ops vs raw NumPy stride/offset representation
+
+When fed a byte-reconstructed view carrying NumPy's **raw** representation — `Shape.offset != 0`, or
+a size-1 dimension with NumPy's arbitrary "junk" stride — some ops read the wrong element:
+
+- `np.where(cond, int64[1]@offset1, scalar)` reads offset 0.
+- `subtract` on a `[5,1,3,1]` view with transposed size-1 strides yields wrong values.
+
+But NumSharp's own slicing **normalizes** the offset into the storage base (`x["1:2"].Shape.offset
+== 0`) and keeps consistent size-1 strides, so these representations never arise through the API —
+native `where`/`subtract` on the same logical views are correct. The fuzzer is therefore scoped to
+NumSharp-producible layouts. Per the DOD ("ops must handle `Shape.offset`"), the open question is
+whether to harden the `where`/binary kernels to honor arbitrary `Shape.offset` + size-1 strides, or
+document that NumSharp normalizes offset and never produces these states. Task **#11**.
