@@ -1021,6 +1021,64 @@ def gen_tail(dtypes):
     return cases
 
 
+# W12 — parameter sweep. The reduce tier only covered axis in {None, 0, last}; here we exercise
+# the MIDDLE axis and NEGATIVE axes (-1/-2/-3), ddof=1 (sample std/var), and order='F' ravel.
+PARAM_DTYPES = ["int32", "float32", "float64"]
+
+
+def gen_params(dtypes):
+    cases = []
+    n = 0
+    skipped = 0
+    reduce_names = ["sum", "prod", "max", "min", "mean", "std", "var", "argmax", "argmin", "all", "any"]
+    for s in dtypes:
+        base, view = LAYOUTS["c_contiguous_3d"](np.dtype(s))      # (2,3,4)
+        operand = describe(base, view)
+        for opname in reduce_names:
+            for axis in [1, -1, -2, -3]:                          # middle + every negative axis
+                for kd in (False, True):
+                    try:
+                        r = np.asarray(REDUCE_OPS[opname](view, axis, kd))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    cases.append({"id": f"{opname}/negaxis/{s}/axis={axis}/kd={int(kd)}/{n}",
+                                  "op": opname, "params": {"axis": axis, "keepdims": kd},
+                                  "operands": [operand],
+                                  "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                               "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                                  "layout": "negaxis", "valueclass": "param"})
+                    n += 1
+    # ddof=1 (sample) std/var on a 2-D array, axis None/0/1.
+    for s in ["float32", "float64"]:
+        base, view = LAYOUTS["c_contiguous_2d"](np.dtype(s))
+        operand = describe(base, view)
+        for opname, npf in (("std_ddof", np.std), ("var_ddof", np.var)):
+            for axis in [None, 0, 1]:
+                r = np.asarray(npf(view, axis=axis, ddof=1))
+                cases.append({"id": f"{opname}/ddof1/{s}/axis={axis}/{n}",
+                              "op": opname, "params": {"axis": axis, "ddof": 1},
+                              "operands": [operand],
+                              "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                           "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                              "layout": "ddof1", "valueclass": "param"})
+                n += 1
+    # order='F' ravel across C-contig, transposed, and F-contig sources.
+    for s in dtypes:
+        for ln in ["c_contiguous_2d", "transposed_2d", "f_contiguous_2d", "c_contiguous_3d"]:
+            base, view = LAYOUTS[ln](np.dtype(s))
+            r = np.asarray(np.ravel(view, order="F"))
+            cases.append({"id": f"ravel_f/{ln}/{s}/{n}", "op": "ravel_f", "params": {},
+                          "operands": [describe(base, view)],
+                          "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                       "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                          "layout": ln, "valueclass": "param"})
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1108,6 +1166,9 @@ def main():
     elif mode == "tail":
         cases = gen_tail(TAIL_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "tail.jsonl"), cases)
+    elif mode == "params":
+        cases = gen_params(PARAM_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "params.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

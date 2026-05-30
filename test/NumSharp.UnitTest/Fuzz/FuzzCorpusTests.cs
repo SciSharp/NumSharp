@@ -113,6 +113,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Tail() => RunCorpus("tail.jsonl");
 
+        // W12 parameter sweep: middle + negative axes (-1/-2/-3) for all reductions, ddof=1
+        // sample std/var, and order='F' ravel across C/transposed/F-contiguous sources.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Params() => RunCorpus("params.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

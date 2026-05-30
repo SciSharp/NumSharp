@@ -108,6 +108,13 @@ namespace NumSharp.UnitTest.Fuzz
                 case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
                 case "diff": return np.diff(ops[0], p["n"].GetInt32(), p["axis"].GetInt32());
 
+                // Parameter sweep (W12): ddof=1 std/var, order='F' ravel.
+                case "std_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
+                    return ax.HasValue ? np.std(ops[0], ax.Value, false, dd) : np.std(ops[0], false, dd); }
+                case "var_ddof": { var ax = ParseAxis(p); int dd = p["ddof"].GetInt32();
+                    return ax.HasValue ? np.var(ops[0], ax.Value, false, dd) : np.var(ops[0], false, dd); }
+                case "ravel_f": return np.ravel(ops[0], 'F');
+
                 // Statistics (T12).
                 case "median": return np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "average": return np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));

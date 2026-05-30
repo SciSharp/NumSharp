@@ -135,3 +135,11 @@ roll/tile/delete/pad{constant,edge,reflect,wrap}/ravel) is **bit-exact**. Three 
 1,2,3,7,8,9,15,16,17,31,32,33,63,64,65,127,128,129 (straddling the V128/V256/V512 lane counts)
 are 900/900 bit-exact. The three-stage loop (unrolled SIMD body + 1-vector remainder + scalar
 tail) has no off-by-one at any seam.
+
+---
+
+## W12 — parameter sweep (`params.jsonl`, 288 cases)
+
+**No bugs.** Middle axis + every negative axis (−1/−2/−3) for all 11 reductions, ddof=1 sample
+std/var, and order='F' ravel (C-contig / transposed / F-contig sources) are 288/288 bit-exact.
+Negative-axis resolution, ddof, and order handling are fully NumPy-aligned.
