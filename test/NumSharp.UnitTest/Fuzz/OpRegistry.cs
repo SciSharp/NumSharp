@@ -18,6 +18,13 @@ namespace NumSharp.UnitTest.Fuzz
             {
                 case "astype":
                     return ops[0].astype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+
+                // Binary arithmetic (NEP50 promotion). NumPy is the oracle for the result dtype.
+                case "add": return ops[0] + ops[1];
+                case "subtract": return ops[0] - ops[1];
+                case "multiply": return ops[0] * ops[1];
+                case "divide": return ops[0] / ops[1];
+
                 default:
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
             }

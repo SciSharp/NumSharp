@@ -77,5 +77,47 @@ namespace NumSharp.UnitTest.Fuzz
                 sb.Append(b[off + i].ToString("x2"));
             return sb.ToString();
         }
+
+        /// <summary>
+        ///     ULP distance between the expected and actual values at <paramref name="index"/>.
+        ///     Used only to classify DOCUMENTED near-misses (e.g. complex division) as intended
+        ///     divergences — never to relax the default bit-exact gate.
+        /// </summary>
+        public static bool WithinUlp(byte[] exp, byte[] act, int index, NPTypeCode tc, int maxUlp)
+        {
+            switch (tc)
+            {
+                case NPTypeCode.Double:
+                    return UlpDouble(BitConverter.ToDouble(exp, index * 8), BitConverter.ToDouble(act, index * 8)) <= maxUlp;
+                case NPTypeCode.Single:
+                    return UlpSingle(BitConverter.ToSingle(exp, index * 4), BitConverter.ToSingle(act, index * 4)) <= maxUlp;
+                case NPTypeCode.Complex:
+                {
+                    int o = index * 16;
+                    return UlpDouble(BitConverter.ToDouble(exp, o), BitConverter.ToDouble(act, o)) <= maxUlp
+                        && UlpDouble(BitConverter.ToDouble(exp, o + 8), BitConverter.ToDouble(act, o + 8)) <= maxUlp;
+                }
+                default:
+                    return false;
+            }
+        }
+
+        private static long UlpDouble(double a, double b)
+        {
+            if (double.IsNaN(a) && double.IsNaN(b)) return 0;
+            if (a == b) return 0;
+            long la = BitConverter.DoubleToInt64Bits(a), lb = BitConverter.DoubleToInt64Bits(b);
+            if ((la < 0) != (lb < 0)) return long.MaxValue; // opposite signs: not "close" for our purpose
+            return Math.Abs(la - lb);
+        }
+
+        private static long UlpSingle(float a, float b)
+        {
+            if (float.IsNaN(a) && float.IsNaN(b)) return 0;
+            if (a == b) return 0;
+            int la = BitConverter.SingleToInt32Bits(a), lb = BitConverter.SingleToInt32Bits(b);
+            if ((la < 0) != (lb < 0)) return long.MaxValue;
+            return Math.Abs((long)la - lb);
+        }
     }
 }

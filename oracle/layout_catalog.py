@@ -263,3 +263,72 @@ def describe(base, view):
         "bufferSize": int(base.size),
         "buffer": base.tobytes().hex(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Pairwise layouts for binary-op cases. Each builder takes (dtA, dtB) and returns
+# (baseA, viewA, baseB, viewB). Operands are emitted at their NATURAL shapes; the op
+# performs any broadcasting (mirroring how NumPy and NumSharp broadcast at runtime).
+# ---------------------------------------------------------------------------
+PAIR_LAYOUTS = {}
+
+
+def _pair(name):
+    def deco(fn):
+        PAIR_LAYOUTS[name] = fn
+        return fn
+    return deco
+
+
+@_pair("pp_contig_contig")        # SimdFull
+def _(da, db):
+    a = _cbase((4, 5), da); b = _cbase((4, 5), db)
+    return a, a, b, b
+
+
+@_pair("pp_contig_fortran")       # one F-contiguous operand
+def _(da, db):
+    a = _cbase((4, 5), da); b = _cbase((5, 4), db)
+    return a, a, b, b.T
+
+
+@_pair("pp_contig_strided")       # SimdChunk: inner contig, outer strided on B
+def _(da, db):
+    a = _cbase((4, 5), da); b = _cbase((4, 10), db)
+    return a, a, b, b[:, ::2]
+
+
+@_pair("pp_strided_strided")      # General: both strided
+def _(da, db):
+    a = _cbase((4, 10), da); b = _cbase((4, 10), db)
+    return a, a[:, ::2], b, b[:, ::2]
+
+
+@_pair("pp_scalar_right")         # SimdScalarRight: RHS 0-D
+def _(da, db):
+    a = _cbase((4, 5), da); b = _fill(1, db).reshape(())
+    return a, a, b, b
+
+
+@_pair("pp_scalar_left")          # SimdScalarLeft: LHS 0-D
+def _(da, db):
+    a = _fill(1, da).reshape(()); b = _cbase((4, 5), db)
+    return a, a, b, b
+
+
+@_pair("pp_broadcast_row")        # (4,5) op (5,) -> (4,5)
+def _(da, db):
+    a = _cbase((4, 5), da); b = _cbase((5,), db)
+    return a, a, b, b
+
+
+@_pair("pp_broadcast_col")        # (4,1) op (1,5) -> (4,5)
+def _(da, db):
+    a = _cbase((4, 1), da); b = _cbase((1, 5), db)
+    return a, a, b, b
+
+
+@_pair("pp_negstride_both")       # both reversed views
+def _(da, db):
+    a = _cbase((8,), da); b = _cbase((8,), db)
+    return a, a[::-1], b, b[::-1]
