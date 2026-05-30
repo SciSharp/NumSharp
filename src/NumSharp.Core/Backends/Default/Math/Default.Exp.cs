@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Exp(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Exp, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Exp, ResolveUnaryFloatReturnType(nd, typeCode));
         }
     }
 }

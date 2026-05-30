@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Deg2Rad(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Deg2Rad, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Deg2Rad, ResolveUnaryFloatReturnType(nd, typeCode));
         }
     }
 }

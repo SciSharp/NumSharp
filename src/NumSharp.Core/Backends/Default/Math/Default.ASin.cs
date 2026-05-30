@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray ASin(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.ASin, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.ASin, ResolveUnaryFloatReturnType(nd, typeCode));
         }
     }
 }

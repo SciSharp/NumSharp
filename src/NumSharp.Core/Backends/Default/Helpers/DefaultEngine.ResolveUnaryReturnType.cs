@@ -20,5 +20,50 @@ namespace NumSharp.Backends
 
             return over;
         }
+
+        /// <summary>
+        ///     Resolve the result dtype for a float-producing unary ufunc (sqrt/cbrt/exp/log/trig/…)
+        ///     using NumPy's <b>width-based</b> promotion (NEP50), rather than always widening to
+        ///     float64. NumPy picks the narrowest float that fits the input's integer width:
+        ///     <list type="bullet">
+        ///       <item>bool / int8 / uint8 → float16</item>
+        ///       <item>int16 / uint16 / char → float32</item>
+        ///       <item>int32 / uint32 / int64 / uint64 → float64</item>
+        ///       <item>float16/float32/float64/decimal/complex → preserved</item>
+        ///     </list>
+        ///     An explicit <paramref name="override"/> dtype is honored (must be a float/complex
+        ///     loop, matching NumPy's "no loop matching signature" error for integer targets).
+        /// </summary>
+        [MethodImpl(OptimizeAndInline)]
+        public NPTypeCode ResolveUnaryFloatReturnType(NDArray nd, NPTypeCode? @override)
+        {
+            if (@override.HasValue)
+            {
+                var over = @override.Value;
+                if (over < NPTypeCode.Single)
+                    throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {nameof(Sin)}");
+                return over;
+            }
+
+            switch (nd.GetTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                    return NPTypeCode.Half;       // float16
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                    return NPTypeCode.Single;     // float32
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    return NPTypeCode.Double;     // float64
+                default:
+                    // Half/Single/Double/Decimal/Complex preserve their dtype.
+                    return nd.GetTypeCode;
+            }
+        }
     }
 }

@@ -86,12 +86,15 @@ namespace NumSharp.UnitTest.Fuzz
                     return "reduction summation/two-pass precision (algorithm order)";
             }
 
-            // (4) Unary result-dtype differs: NumSharp promotes int->float64 for unary float ops
-            //     regardless of input width and handles bool/square/reciprocal/floor differently,
-            //     whereas NumPy uses NEP50 width-based unary promotion (bool/int8->float16,
-            //     int16->float32, int32+->float64). Documented promotion difference.
-            if (kind == DivergenceKind.Dtype && c.Operands.Length == 1)
-                return "unary NEP50 promotion: result dtype differs from NumPy width-based unary rule";
+            // (4) Unary result-dtype: the transcendental ufuncs (sqrt/cbrt/exp/log/sin/cos/tan) now
+            //     follow NumPy's width-based float promotion (Phase 1 F3a) and are verified bit-exact,
+            //     so they are NOT excused here. The dtype-preserving ufuncs (square/floor/ceil/trunc/
+            //     reciprocal) still widen integer input to float64 instead of preserving it — pending
+            //     Phase 1 F3b (needs integer identity / x*x / int-reciprocal kernels). Scoped to that
+            //     set so a transcendental promotion regression fails the gate.
+            if (kind == DivergenceKind.Dtype && c.Operands.Length == 1
+                && (c.Op == "square" || c.Op == "floor" || c.Op == "ceil" || c.Op == "trunc" || c.Op == "reciprocal"))
+                return "unary preserve-dtype pending: square/floor/ceil/trunc/reciprocal widen int->float64 [F3b]";
 
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.

@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Cbrt(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Cbrt, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Cbrt, ResolveUnaryFloatReturnType(nd, typeCode));
         }
     }
 }

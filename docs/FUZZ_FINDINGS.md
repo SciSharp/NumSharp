@@ -23,7 +23,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 4 | mod | `mod(float32, float64)` computed in float32 then widened | **FIXED** | F1 |
 | 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7→F5 |
 | 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | **FIXED** | F2 |
-| 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | BUG | #9 |
+| 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | **FIXED (transcendental, F3a)** / square·floor·ceil·trunc·reciprocal pending F3b | F3 |
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | **FIXED** | F4 |
 | 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
 | 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
@@ -137,20 +137,28 @@ np.array([np.nan]) >= np.array([1.0])    # [False]
 Found by T3 `Comparison` (122 cases, all the NaN element). Likely `a <= b` implemented as
 `!(a > b)` / `a < b || a == b`. Task **#8**.
 
-### 7. NEP50 unary float promotion
+### 7. NEP50 unary float promotion — **FIXED (transcendental, F3a)** / rest pending F3b
 
-NumSharp promotes integer input to **float64** for `sqrt/cbrt/sin/cos/tan/exp/log` regardless of
-input width; NumPy uses width-based float promotion. `square/reciprocal/floor/ceil/trunc` result
-dtype also differs.
+The **transcendental** ufuncs (`sqrt/cbrt/exp/exp2/expm1/log/log10/log1p/log2/sin/cos/tan/sinh/cosh/
+tanh/arcsin/arccos/arctan/deg2rad/rad2deg`) now use NumPy's width-based float promotion via the new
+`ResolveUnaryFloatReturnType`: bool/int8/uint8 → float16, int16/uint16 → float32, int32+ → float64,
+float/complex preserved. 364 of the 494 unary dtype divergences cleared bit-exact; the transcendental
+branch of `MisalignedRegistry` is removed so a regression now fails the gate. Half/Single value
+diffs vs NumPy's float16/float32 libm remain within 2 ULP (excused as algorithm difference).
 
-| op(input) | NumPy | NumSharp |
-|-----------|-------|----------|
-| `sqrt(bool)` / `sqrt(int8)` | float16 | float64 |
-| `sqrt(int16)` | float32 | float64 |
-| `square(bool)` | int8 | bool |
-| `floor(bool)` | bool | float64 |
+**Still pending (F3b):** the dtype-**preserving** ufuncs `square/floor/ceil/trunc/round/reciprocal`
+still widen integer input to float64 instead of preserving the integer dtype (needs integer
+identity / `x*x` / int-reciprocal kernels — 130 dtype divergences, scoped in the classifier).
 
-Found by T4 `Unary` (494 cases). Task **#9**.
+| op(input) | NumPy | NumSharp (now) |
+|-----------|-------|----------------|
+| `sqrt(bool)` / `sqrt(uint8)` | float16 | **float16** ✓ |
+| `sqrt(int16)` | float32 | **float32** ✓ |
+| `sqrt(int32)` | float64 | float64 ✓ |
+| `square(uint8)` | uint8 | float64 (F3b) |
+| `floor(int32)` | int32 | float64 (F3b) |
+
+Found by T4 `Unary` (494 → 130 dtype divergences). Task **#9** / F3.
 
 ### 8. `negative` on unsigned integers throws — **FIXED (F4)**
 

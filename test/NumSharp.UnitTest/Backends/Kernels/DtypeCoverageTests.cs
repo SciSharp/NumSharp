@@ -111,13 +111,19 @@ namespace NumSharp.UnitTest.Backends.Kernels
         [DataRow(NPTypeCode.UInt64)]
         public void Sqrt_IntegerDtypes(NPTypeCode dtype)
         {
-            // sqrt on integers works (result is float64)
+            // sqrt on integers works; NumPy uses NEP50 width-based unary float promotion
+            // (uint8 -> float16, int16/uint16 -> float32, int32+ -> float64), not always float64.
             var arr = np.array(new[] { 1, 4, 9 }).astype(dtype);
             var result = np.sqrt(arr);
 
             Assert.AreEqual(3, result.size);
-            // Result dtype should be Double (float64)
-            Assert.AreEqual(NPTypeCode.Double, result.typecode);
+            var expected = dtype switch
+            {
+                NPTypeCode.Byte => NPTypeCode.Half,
+                NPTypeCode.Int16 or NPTypeCode.UInt16 => NPTypeCode.Single,
+                _ => NPTypeCode.Double,   // int32/uint32/int64/uint64
+            };
+            Assert.AreEqual(expected, result.typecode);
         }
 
         [TestMethod]
