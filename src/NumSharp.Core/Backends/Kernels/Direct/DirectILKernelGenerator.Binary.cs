@@ -617,69 +617,41 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit FloorDivide operation for generic type T.
-        /// NumPy floor_divide always floors toward negative infinity.
-        /// For floats: divide then Math.Floor.
-        /// For unsigned integers: regular division (same as floor for positive).
-        /// For signed integers: correct floor division toward negative infinity.
-        /// Stack: [dividend, divisor] -> [result]
+        /// Emit FloorDivide for generic type T via the <see cref="Utilities.NpyDivision"/> helpers,
+        /// matching NumPy's <c>floor_div_@TYPE@</c> (integer ÷0 -> 0, signed floor toward -inf,
+        /// MIN/-1 wrap) and <c>npy_floor_divide</c> (CPython divmod port for floats: ÷0 -> ±inf/nan,
+        /// snap-to-nearest). Stack: [dividend, divisor] -> [result]
         /// </summary>
         private static void EmitFloorDivideOperation<T>(ILGenerator il) where T : unmanaged
         {
-            // For floating-point types, divide then floor.
-            // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
-            if (typeof(T) == typeof(float))
+            var m = GetFloorDivideMethod(typeof(T));
+            if (m != null)
             {
-                il.Emit(OpCodes.Div);
-                il.Emit(OpCodes.Conv_R8);
-                EmitFloorWithInfToNaN(il);
-                il.Emit(OpCodes.Conv_R4);
+                il.EmitCall(OpCodes.Call, m, null);
+                return;
             }
-            else if (typeof(T) == typeof(double))
-            {
-                il.Emit(OpCodes.Div);
-                EmitFloorWithInfToNaN(il);
-            }
-            else if (typeof(T) == typeof(byte) || typeof(T) == typeof(ushort) ||
-                     typeof(T) == typeof(uint) || typeof(T) == typeof(ulong))
-            {
-                // Unsigned integers: floor = regular division
-                il.Emit(OpCodes.Div_Un);
-            }
-            else
-            {
-                // Signed integers: need true floor division (toward negative infinity)
-                // NumPy: floor_divide(-7, 3) = -3, not -2
-                // C# division truncates toward zero, so we need adjustment
-                // Approach: convert to double, divide, floor, convert back
-                // Stack on entry: [dividend, divisor]
+            // Non-numeric T should not reach this path; fall back to plain division.
+            il.Emit(OpCodes.Div);
+        }
 
-                // Store divisor first (it's on top)
-                var locDivisor = il.DeclareLocal(typeof(T));
-                il.Emit(OpCodes.Stloc, locDivisor);
-
-                // Convert dividend to double
-                EmitConvertToDouble<T>(il);
-                var locDividendDouble = il.DeclareLocal(typeof(double));
-                il.Emit(OpCodes.Stloc, locDividendDouble);
-
-                // Convert divisor to double
-                il.Emit(OpCodes.Ldloc, locDivisor);
-                EmitConvertToDouble<T>(il);
-
-                // Load dividend and divisor as doubles
-                var locDivisorDouble = il.DeclareLocal(typeof(double));
-                il.Emit(OpCodes.Stloc, locDivisorDouble);
-                il.Emit(OpCodes.Ldloc, locDividendDouble);
-                il.Emit(OpCodes.Ldloc, locDivisorDouble);
-
-                // Divide and floor
-                il.Emit(OpCodes.Div);
-                il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(typeof(double), "Floor"), null);
-
-                // Convert back to T
-                EmitConvertFromDouble<T>(il);
-            }
+        /// <summary>
+        /// Return the <see cref="Utilities.NpyDivision"/> floor-division helper for the CLR type
+        /// <paramref name="t"/>, or null if it routes elsewhere.
+        /// </summary>
+        private static MethodInfo? GetFloorDivideMethod(Type t)
+        {
+            if (t == typeof(sbyte)) return CachedMethods.FloorDivSByte;
+            if (t == typeof(byte)) return CachedMethods.FloorDivByte;
+            if (t == typeof(short)) return CachedMethods.FloorDivInt16;
+            if (t == typeof(ushort)) return CachedMethods.FloorDivUInt16;
+            if (t == typeof(char)) return CachedMethods.FloorDivChar;
+            if (t == typeof(int)) return CachedMethods.FloorDivInt32;
+            if (t == typeof(uint)) return CachedMethods.FloorDivUInt32;
+            if (t == typeof(long)) return CachedMethods.FloorDivInt64;
+            if (t == typeof(ulong)) return CachedMethods.FloorDivUInt64;
+            if (t == typeof(float)) return CachedMethods.FloorDivSingle;
+            if (t == typeof(double)) return CachedMethods.FloorDivDouble;
+            return null;
         }
 
         /// <summary>

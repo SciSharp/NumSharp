@@ -18,10 +18,10 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | # | Area | Issue | Disposition | Task |
 |---|------|-------|-------------|------|
 | 1 | cast | `complex → bool` drops the imaginary part | **FIXED** | — |
-| 2 | floor_divide/mod | integer `÷0` / `mod 0` throws or returns garbage (NumPy → 0) | BUG | #7 |
-| 3 | floor_divide | float `//0` → NaN (NumPy → ±inf) | BUG | #7 |
-| 4 | mod | `mod(float32, float64)` computed in float32 then widened | BUG | #7 |
-| 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7 |
+| 2 | floor_divide/mod | integer `÷0` / `mod 0` throws or returns garbage (NumPy → 0) | **FIXED** | F1 |
+| 3 | floor_divide | float `//0` → NaN (NumPy → ±inf) | **FIXED** | F1 |
+| 4 | mod | `mod(float32, float64)` computed in float32 then widened | **FIXED** | F1 |
+| 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7→F5 |
 | 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | BUG | #8 |
 | 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | BUG | #9 |
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | BUG | #9 |
@@ -65,10 +65,16 @@ np.array(new[]{ new Complex(0,1), new Complex(-0.0,-2147483649.0) }).astype(NPTy
 
 ## BUGS (confirmed parity defects, tracked for fix)
 
-### 2. Integer `÷0` / `mod 0` — throws or returns garbage
+### 2. Integer `÷0` / `mod 0` — throws or returns garbage — **FIXED (F1)**
 
-NumPy integer division/modulo by zero returns **0** (with a RuntimeWarning). NumSharp throws or
-returns a sentinel.
+**Fixed** by the `NpyDivision` helper (ports NumPy `floor_div_@TYPE@` / integer remainder):
+integer ÷0 and mod-0 now return **0**, signed floor rounds toward −∞, and `MIN // -1` wraps to
+`MIN`. Routed through both IL emission paths (`EmitFloorDivideOperation` / `EmitModOperation`,
+same-type and mixed). The `binary_divmod_power` corpus is now bit-exact for floor_divide/mod and
+runs CI-gated (`[FuzzMatrix]`).
+
+NumPy integer division/modulo by zero returns **0** (with a RuntimeWarning). NumSharp threw or
+returned a sentinel.
 
 ```python
 np.array([1,-7,5], np.int32) // np.array([0,0,0], np.int32)   # [0, 0, 0]
@@ -82,7 +88,12 @@ np.floor_divide(u8, zeros)   // THROWS DivideByZeroException
 ```
 Found by T2 `Binary_DivModPower` (`[OpenBugs]`). Task **#7**.
 
-### 3. Float `//0` → NaN instead of ±inf
+### 3. Float `//0` → NaN instead of ±inf — **FIXED (F1)**
+
+**Fixed** — the float helper ports CPython's `npy_divmod` (fmod → sign-fixup → snap-to-nearest):
+`b == 0` returns `a / b` (±inf, or nan for 0/0), never a forced NaN. Edge cases verified bit-exact:
+`0.7 // 0.1 == 6.0`, `-2.0 // inf == -1.0`, `inf // 2.0 == nan`, `1e308 // 1e-300 == inf`.
+
 
 ```python
 np.array([1.0,-1.0,0.0]) // np.array([0.0,0.0,0.0])   # [ inf, -inf,  nan]
@@ -93,11 +104,12 @@ np.floor_divide(f, zeros)   // [NaN, NaN, NaN]   (loses the ±inf sign result)
 Float `%0` is correctly `nan` on both sides; mod sign convention is correctly floored
 (`mod(-7,3) == 2`). Task **#7**.
 
-### 4. Mixed-precision `mod` loses precision
+### 4. Mixed-precision `mod` loses precision — **FIXED (F1)**
 
-`mod(float32_array, float64_array)` should promote to float64 and compute there (NEP50). NumSharp
-computes in float32 then widens (low mantissa zeroed). `add/sub/mul/div` promote correctly; only
-`mod` regresses. Task **#7**.
+**Fixed** — once `mod`/`floor_divide` route through the `NpyDivision` helpers, the promoted
+result dtype (float64) drives the computation: `mod(f32, f64)` now yields `float64` bit-exact with
+NumPy (e.g. `[0.10000000000000009, 0.600000047683716, 0.3000003814697272]`). `add/sub/mul/div`
+already promoted correctly.
 
 ### 5. Complex `power` — ~1 ULP + gross edge
 

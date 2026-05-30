@@ -63,12 +63,14 @@ namespace NumSharp.UnitTest.Fuzz
                 RunCorpus(System.IO.Path.Combine("regressions", System.IO.Path.GetFileName(f)));
         }
 
-        // KNOWN-FAILING bug reproduction (excluded from CI via [OpenBugs]; remove the tag when fixed).
-        // floor_divide / mod / power diverge from NumPy: integer ÷0 and mod-0 throw or return garbage
-        // instead of 0; float //0 yields NaN instead of ±inf; mixed-precision mod; complex power.
+        // floor_divide / mod are bit-exact with NumPy as of Phase 1 F1 (integer ÷0 -> 0, float //0 ->
+        // ±inf/nan, signed floor toward -inf, MIN/-1 wrap, mixed-precision promotion). The only
+        // remaining divergence in this corpus is complex `power` (~ULP + inf/NaN edge), excused by the
+        // registry's complex-binary branch pending Phase 1 F5. CI-gated so a floor_divide/mod
+        // regression fails immediately.
         [TestMethod]
-        [TestCategory("OpenBugs")]
-        public void Binary_DivModPower_KnownDivergences() => RunCorpus("binary_divmod_power.jsonl");
+        [TestCategory("FuzzMatrix")]
+        public void Binary_DivModPower() => RunCorpus("binary_divmod_power.jsonl");
 
         private static void RunCorpus(string file)
         {

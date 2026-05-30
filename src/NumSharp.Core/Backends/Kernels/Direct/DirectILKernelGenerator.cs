@@ -333,6 +333,37 @@ namespace NumSharp.Backends.Kernels
                 nameof(Utilities.NpyIntegerPower.PowUInt64), new[] { typeof(ulong), typeof(ulong) })
                 ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt64));
 
+            // floor-division / remainder helpers (NpyDivision) — NumPy-exact divide-by-zero (-> 0
+            // for integers, ±inf/nan for floats) and floored-sign semantics. Used by
+            // EmitFloorDivideOperation / EmitModOperation in place of the old double round-trip.
+            private static MethodInfo NpyDiv(string name, Type t) =>
+                typeof(Utilities.NpyDivision).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyDivision).FullName, name);
+
+            public static readonly MethodInfo FloorDivSByte = NpyDiv(nameof(Utilities.NpyDivision.FloorDivSByte), typeof(sbyte));
+            public static readonly MethodInfo FloorDivByte = NpyDiv(nameof(Utilities.NpyDivision.FloorDivByte), typeof(byte));
+            public static readonly MethodInfo FloorDivInt16 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt16), typeof(short));
+            public static readonly MethodInfo FloorDivUInt16 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt16), typeof(ushort));
+            public static readonly MethodInfo FloorDivChar = NpyDiv(nameof(Utilities.NpyDivision.FloorDivChar), typeof(char));
+            public static readonly MethodInfo FloorDivInt32 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt32), typeof(int));
+            public static readonly MethodInfo FloorDivUInt32 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt32), typeof(uint));
+            public static readonly MethodInfo FloorDivInt64 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt64), typeof(long));
+            public static readonly MethodInfo FloorDivUInt64 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt64), typeof(ulong));
+            public static readonly MethodInfo FloorDivSingle = NpyDiv(nameof(Utilities.NpyDivision.FloorDivSingle), typeof(float));
+            public static readonly MethodInfo FloorDivDouble = NpyDiv(nameof(Utilities.NpyDivision.FloorDivDouble), typeof(double));
+
+            public static readonly MethodInfo RemSByte = NpyDiv(nameof(Utilities.NpyDivision.RemSByte), typeof(sbyte));
+            public static readonly MethodInfo RemByte = NpyDiv(nameof(Utilities.NpyDivision.RemByte), typeof(byte));
+            public static readonly MethodInfo RemInt16 = NpyDiv(nameof(Utilities.NpyDivision.RemInt16), typeof(short));
+            public static readonly MethodInfo RemUInt16 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt16), typeof(ushort));
+            public static readonly MethodInfo RemChar = NpyDiv(nameof(Utilities.NpyDivision.RemChar), typeof(char));
+            public static readonly MethodInfo RemInt32 = NpyDiv(nameof(Utilities.NpyDivision.RemInt32), typeof(int));
+            public static readonly MethodInfo RemUInt32 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt32), typeof(uint));
+            public static readonly MethodInfo RemInt64 = NpyDiv(nameof(Utilities.NpyDivision.RemInt64), typeof(long));
+            public static readonly MethodInfo RemUInt64 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt64), typeof(ulong));
+            public static readonly MethodInfo RemSingle = NpyDiv(nameof(Utilities.NpyDivision.RemSingle), typeof(float));
+            public static readonly MethodInfo RemDouble = NpyDiv(nameof(Utilities.NpyDivision.RemDouble), typeof(double));
+
             // Decimal conversion methods (to decimal)
             public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
                 ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(int)");
@@ -1246,176 +1277,85 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit FloorDivide operation.
-        /// NumPy floor_divide always floors toward negative infinity.
-        /// For floats: divide then Math.Floor.
-        /// For unsigned integers: regular division (same as floor for positive).
-        /// For signed integers: correct floor division toward negative infinity.
+        /// Return the <see cref="Utilities.NpyDivision"/> floor-division helper for
+        /// <paramref name="resultType"/>, or null if the dtype routes elsewhere
+        /// (Decimal/Half/Complex are handled before this is reached).
+        /// </summary>
+        private static MethodInfo? GetFloorDivideMethod(NPTypeCode resultType)
+        {
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.FloorDivSByte,
+                NPTypeCode.Byte => CachedMethods.FloorDivByte,
+                NPTypeCode.Int16 => CachedMethods.FloorDivInt16,
+                NPTypeCode.UInt16 => CachedMethods.FloorDivUInt16,
+                NPTypeCode.Char => CachedMethods.FloorDivChar,
+                NPTypeCode.Int32 => CachedMethods.FloorDivInt32,
+                NPTypeCode.UInt32 => CachedMethods.FloorDivUInt32,
+                NPTypeCode.Int64 => CachedMethods.FloorDivInt64,
+                NPTypeCode.UInt64 => CachedMethods.FloorDivUInt64,
+                NPTypeCode.Single => CachedMethods.FloorDivSingle,
+                NPTypeCode.Double => CachedMethods.FloorDivDouble,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Return the <see cref="Utilities.NpyDivision"/> remainder helper for
+        /// <paramref name="resultType"/>, or null if the dtype routes elsewhere.
+        /// </summary>
+        private static MethodInfo? GetRemainderMethod(NPTypeCode resultType)
+        {
+            return resultType switch
+            {
+                NPTypeCode.SByte => CachedMethods.RemSByte,
+                NPTypeCode.Byte => CachedMethods.RemByte,
+                NPTypeCode.Int16 => CachedMethods.RemInt16,
+                NPTypeCode.UInt16 => CachedMethods.RemUInt16,
+                NPTypeCode.Char => CachedMethods.RemChar,
+                NPTypeCode.Int32 => CachedMethods.RemInt32,
+                NPTypeCode.UInt32 => CachedMethods.RemUInt32,
+                NPTypeCode.Int64 => CachedMethods.RemInt64,
+                NPTypeCode.UInt64 => CachedMethods.RemUInt64,
+                NPTypeCode.Single => CachedMethods.RemSingle,
+                NPTypeCode.Double => CachedMethods.RemDouble,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Emit FloorDivide via the <see cref="Utilities.NpyDivision"/> helpers, matching NumPy's
+        /// <c>floor_div_@TYPE@</c> (integer ÷0 -> 0, signed floor toward -inf, MIN/-1 wrap) and
+        /// <c>npy_floor_divide</c> (CPython divmod port: float ÷0 -> ±inf/nan, snap-to-nearest).
         /// Stack: [dividend, divisor] -> [result]
         /// </summary>
         private static void EmitFloorDivideOperation(ILGenerator il, NPTypeCode resultType)
         {
-            // For floating-point types, divide then floor.
-            // NumPy rule: floor_divide returns NaN when a/b is non-finite (inf or -inf).
-            if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
+            var m = GetFloorDivideMethod(resultType);
+            if (m != null)
             {
-                il.Emit(OpCodes.Div);
-
-                if (resultType == NPTypeCode.Single)
-                {
-                    il.Emit(OpCodes.Conv_R8);
-                    EmitFloorWithInfToNaN(il);
-                    il.Emit(OpCodes.Conv_R4);
-                }
-                else
-                {
-                    EmitFloorWithInfToNaN(il);
-                }
+                il.EmitCall(OpCodes.Call, m, null);
+                return;
             }
-            else if (IsUnsigned(resultType))
-            {
-                // Unsigned integers: floor = regular division
-                il.Emit(OpCodes.Div_Un);
-            }
-            else
-            {
-                // Signed integers: need true floor division (toward negative infinity)
-                // NumPy: floor_divide(-7, 3) = -3, not -2
-                // Approach: convert to double, divide, floor, convert back
-                // Stack on entry: [dividend, divisor]
-
-                // Store divisor first (it's on top)
-                var locDivisor = il.DeclareLocal(typeof(long));
-                il.Emit(OpCodes.Conv_I8);  // Convert to long for storage
-                il.Emit(OpCodes.Stloc, locDivisor);
-
-                // Convert dividend to double
-                il.Emit(OpCodes.Conv_R8);
-                var locDividendDouble = il.DeclareLocal(typeof(double));
-                il.Emit(OpCodes.Stloc, locDividendDouble);
-
-                // Convert divisor to double
-                il.Emit(OpCodes.Ldloc, locDivisor);
-                il.Emit(OpCodes.Conv_R8);
-
-                // Load dividend and divisor as doubles
-                var locDivisorDouble = il.DeclareLocal(typeof(double));
-                il.Emit(OpCodes.Stloc, locDivisorDouble);
-                il.Emit(OpCodes.Ldloc, locDividendDouble);
-                il.Emit(OpCodes.Ldloc, locDivisorDouble);
-
-                // Divide and floor
-                il.Emit(OpCodes.Div);
-                il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-
-                // Convert back to result type
-                EmitConvertFromDouble(il, resultType);
-            }
+            // Boolean (or any other) result reaching here: fall back to plain integer division.
+            il.Emit(IsUnsigned(resultType) ? OpCodes.Div_Un : OpCodes.Div);
         }
 
         /// <summary>
-        /// Emit Mod operation using NumPy/Python floored division semantics.
-        /// NumPy: result = a - floor(a / b) * b  (result sign matches divisor sign)
-        /// C#:    result = a - trunc(a / b) * b  (result sign matches dividend sign)
+        /// Emit Mod via the <see cref="Utilities.NpyDivision"/> helpers, matching NumPy's integer
+        /// remainder (÷0 -> 0, floored sign) and <c>npy_remainder</c> (fmod-based CPython divmod).
         /// Stack: [dividend, divisor] -> [result]
         /// </summary>
         private static void EmitModOperation(ILGenerator il, NPTypeCode resultType)
         {
-            // For unsigned types, C# remainder is equivalent to floored modulo
-            if (IsUnsigned(resultType))
+            var m = GetRemainderMethod(resultType);
+            if (m != null)
             {
-                il.Emit(OpCodes.Rem_Un);
+                il.EmitCall(OpCodes.Call, m, null);
                 return;
             }
-
-            // For floating-point types: result = a - floor(a / b) * b
-            if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
-            {
-                // Stack: [a, b]
-                // We need to compute: a - floor(a / b) * b
-
-                var locDivisor = il.DeclareLocal(resultType == NPTypeCode.Single ? typeof(float) : typeof(double));
-                var locDividend = il.DeclareLocal(resultType == NPTypeCode.Single ? typeof(float) : typeof(double));
-
-                // Store divisor (b)
-                il.Emit(OpCodes.Stloc, locDivisor);
-                // Store dividend (a)
-                il.Emit(OpCodes.Stloc, locDividend);
-
-                // Load a for final subtraction
-                il.Emit(OpCodes.Ldloc, locDividend);
-
-                // Compute floor(a / b) * b
-                il.Emit(OpCodes.Ldloc, locDividend);
-                il.Emit(OpCodes.Ldloc, locDivisor);
-                il.Emit(OpCodes.Div);
-
-                // Call Math.Floor
-                if (resultType == NPTypeCode.Single)
-                {
-                    il.Emit(OpCodes.Conv_R8);  // Math.Floor takes double
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-                    il.Emit(OpCodes.Conv_R4);  // Convert back to float
-                }
-                else
-                {
-                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-                }
-
-                // Multiply by b
-                il.Emit(OpCodes.Ldloc, locDivisor);
-                il.Emit(OpCodes.Mul);
-
-                // Subtract: a - floor(a/b)*b
-                il.Emit(OpCodes.Sub);
-                return;
-            }
-
-            // For signed integer types, compute: a - floor(a / b) * b
-            // Using double arithmetic for correctness
-
-            // Stack: [a, b]
-            var locDivisorInt = il.DeclareLocal(typeof(long));
-            var locDividendInt = il.DeclareLocal(typeof(long));
-
-            // Widen to long for consistency
-            il.Emit(OpCodes.Conv_I8);  // Convert b to long
-            il.Emit(OpCodes.Stloc, locDivisorInt);
-            il.Emit(OpCodes.Conv_I8);  // Convert a to long
-            il.Emit(OpCodes.Stloc, locDividendInt);
-
-            // Load a for final subtraction
-            il.Emit(OpCodes.Ldloc, locDividendInt);
-
-            // Compute floor(a / b) * b using double arithmetic
-            il.Emit(OpCodes.Ldloc, locDividendInt);
-            il.Emit(OpCodes.Conv_R8);  // Convert a to double
-            il.Emit(OpCodes.Ldloc, locDivisorInt);
-            il.Emit(OpCodes.Conv_R8);  // Convert b to double
-            il.Emit(OpCodes.Div);
-
-            // Floor
-            il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
-
-            // Convert back to long and multiply by b
-            il.Emit(OpCodes.Conv_I8);
-            il.Emit(OpCodes.Ldloc, locDivisorInt);
-            il.Emit(OpCodes.Mul);
-
-            // Subtract: a - floor(a/b)*b (result is long)
-            il.Emit(OpCodes.Sub);
-
-            // Convert to result type
-            switch (resultType)
-            {
-                case NPTypeCode.Int16:
-                    il.Emit(OpCodes.Conv_I2);
-                    break;
-                case NPTypeCode.Int32:
-                    il.Emit(OpCodes.Conv_I4);
-                    break;
-                // Int64 needs no conversion
-            }
+            // Boolean (or any other) result reaching here: fall back to plain remainder.
+            il.Emit(IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem);
         }
 
         /// <summary>

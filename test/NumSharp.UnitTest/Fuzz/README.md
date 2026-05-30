@@ -32,7 +32,7 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
 ```bash
 python oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts
 python oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
-python oracle/gen_oracle.py divmod_power     # floor_divide/mod/power  ([OpenBugs] repro)
+python oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (Misaligned)
 python oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
@@ -60,9 +60,10 @@ for fix (remove the classifier branch + corpus tag when fixed).
 | Class | Disposition | Task |
 |-------|-------------|------|
 | `complex -> bool` dropped imaginary part | **FIXED** | — |
+| `floor_divide`/`mod`: int ÷0→0, float `//0`→±inf, signed floor, MIN/-1, mixed-precision | **FIXED (F1)** | — |
 | NEP50 weak-scalar (0-D operand promoted weakly) | intended (Misaligned) | — |
 | complex division / multiply ~1 ULP + cancellation | intended (algorithm) | #12 |
-| `floor_divide`/`mod`/`power`: int ÷0, float `//0`, mixed mod, complex power | [OpenBugs] | #7 |
+| `power`: complex power ~1 ULP + gross inf/NaN edge | [Misaligned] (complex-binary) | F5 |
 | `<=`/`>=` return True for NaN | known bug | #8 |
 | unary NEP50 promotion (int->float64 vs width-based); `negative(uint)` throws; `reciprocal` | known bug | #9 |
 | reductions: NaN propagation, complex-axis throw, bool min/max, summation precision | known bug | #10 |
