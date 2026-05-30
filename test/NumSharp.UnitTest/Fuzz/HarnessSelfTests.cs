@@ -95,31 +95,38 @@ namespace NumSharp.UnitTest.Fuzz
 
         /// <summary>
         ///     Proves the Shrinker produces a minimal 1-element case that REPRODUCES the divergence.
-        ///     Uses the bool-add divergence (True+True -> NumSharp 2 vs NumPy True) constructed in-memory.
+        ///     Uses a synthetic int32-add case with a planted-wrong expected buffer, constructed
+        ///     in-memory (so the test does not depend on any live, fixable bug).
         /// </summary>
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Shrinker_MinimalCaseReproducesDivergence()
         {
             var json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            // SYNTHETIC divergence: int32 [5] + [3] with a deliberately WRONG expected buffer (99,
+            // not 8). This exercises the shrinker MECHANISM without depending on a live bug — earlier
+            // this test used `bool True + True` (a real bug, now fixed in Phase 1 F6, so it no longer
+            // diverges). RunAndDiff compares NumSharp's bytes to Expected.Buffer directly (no
+            // registry), so a planted-wrong expected reliably produces a divergence to chase.
             var c = new FuzzCorpus.Case
             {
-                Id = "selftest/booladd",
+                Id = "selftest/add-synthetic",
                 Op = "add",
                 Params = new Dictionary<string, JsonElement>(),
                 Operands = new[]
                 {
-                    new FuzzCorpus.Operand { Dtype = "bool", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "01" },
-                    new FuzzCorpus.Operand { Dtype = "bool", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "01" },
+                    new FuzzCorpus.Operand { Dtype = "int32", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "05000000" },
+                    new FuzzCorpus.Operand { Dtype = "int32", Shape = new long[] { 1 }, Strides = new long[] { 1 }, Offset = 0, BufferSize = 1, Buffer = "03000000" },
                 },
-                Expected = new FuzzCorpus.Expected { Dtype = "bool", Shape = new long[] { 1 }, Buffer = "01" },
+                // 5 + 3 == 8 (08000000); the expected buffer says 99 (63000000) on purpose.
+                Expected = new FuzzCorpus.Expected { Dtype = "int32", Shape = new long[] { 1 }, Buffer = "63000000" },
                 Layout = "selftest",
                 Valueclass = "selftest",
             };
 
-            // The full case must diverge (NumSharp True+True == 2).
+            // The full case must diverge (NumSharp 8 vs the planted expected 99).
             var diffs = RunAndDiff(c);
-            Assert.IsTrue(diffs.Count > 0, "bool add True+True should diverge (NumSharp 2 vs NumPy True)");
+            Assert.IsTrue(diffs.Count > 0, "synthetic add case should diverge (NumSharp 8 vs planted expected 99)");
 
             // Shrink, then replay the minimal case — it must reproduce the divergence.
             var shrunkJson = Shrinker.ShrinkElementwise(c, diffs[0].Index);

@@ -50,11 +50,10 @@ namespace NumSharp.UnitTest.Fuzz
             if (kind == DivergenceKind.Shape && c.Expected.Shape != null && c.Expected.Shape.All(d => d == 1))
                 return "size-1 result shape differs (NumSharp collapses to 0-D) [known bug]";
 
-            // Bool arithmetic: NumSharp computes the integer result (True+True -> 2); NumPy keeps bool
-            // semantics (True+True -> True). Only when the result dtype is bool.
-            if (kind == DivergenceKind.Value && tc == NPTypeCode.Boolean
-                && (c.Op == "add" || c.Op == "subtract" || c.Op == "multiply"))
-                return "bool arithmetic: NumSharp integer result vs NumPy bool [known bug]";
+            // Bool arithmetic was FIXED in Phase 1 F6: `+` now emits logical OR and `*` logical AND
+            // for the bool dtype (True + True -> True / byte 1, not 2), matching NumPy's bool ufunc
+            // loops. `-` has no bool loop and throws on both sides. Classifier branch removed so the
+            // matrix verifies bool add/multiply bit-exact.
 
             // Complex binary arithmetic (add/sub/mul/div): catastrophic cancellation (re*re-im*im -> 0)
             // and ~1 ULP from System.Numerics.Complex vs NumPy's npy_c* algorithms.
@@ -119,9 +118,9 @@ namespace NumSharp.UnitTest.Fuzz
             if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex)
                 return "complex unary (square/trig/log) algorithm/edge difference [partly known bug]";
 
-            // np.where with complex operands throws ("Zero-push unsupported for Complex").
-            if (kind == DivergenceKind.Threw && c.Op == "where" && c.Operands.Any(o => o.Dtype == "complex128"))
-                return "complex np.where throws (Zero-push unsupported for Complex) [known bug]";
+            // Complex np.where was resolved in committed code (no longer throws "Zero-push
+            // unsupported for Complex"); it now selects complex operands bit-exact. Classifier
+            // branch removed so the where matrix verifies it.
 
             // (8) np.reciprocal of an integer: NumPy returns the integer ÷0 sentinel for 0 and
             //     truncating-integer reciprocal otherwise; NumSharp returns 0. Plus reciprocal on a

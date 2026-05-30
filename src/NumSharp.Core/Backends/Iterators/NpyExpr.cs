@@ -785,6 +785,18 @@ namespace NumSharp.Backends.Iteration
                     var fld = typeof(decimal).GetField(nameof(decimal.Zero));
                     il.Emit(OpCodes.Ldsfld, fld!);
                     break;
+                case NPTypeCode.Complex:
+                    // System.Numerics.Complex.Zero is a static readonly field (0 + 0i). Needed when
+                    // a mixed where(cond, complex, real) promotes the real operand to complex.
+                    var cZero = typeof(System.Numerics.Complex).GetField(nameof(System.Numerics.Complex.Zero));
+                    il.Emit(OpCodes.Ldsfld, cZero!);
+                    break;
+                case NPTypeCode.Half:
+                    // Half has no Zero constant; push float 0 and convert via the explicit operator.
+                    il.Emit(OpCodes.Ldc_R4, 0f);
+                    il.Emit(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(float) })
+                        ?? throw new MissingMethodException(typeof(Half).FullName, "op_Explicit(float)"));
+                    break;
                 default:
                     throw new NotSupportedException($"Zero-push unsupported for {type}");
             }

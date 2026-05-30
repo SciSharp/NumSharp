@@ -32,8 +32,8 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | BUG | #10 |
 | 14 | reduction | `sum/mean/std/var` accumulation order (vs NumPy pairwise/two-pass) | BUG | #10 |
 | 15 | reduction | result dtype (NEP50 accumulator width / complex→real) | BUG | #10 |
-| 16 | where | complex `np.where` throws ("Zero-push unsupported for Complex") | BUG | — |
-| 17 | binary | bool arithmetic: `True + True → 2` (NumPy → bool True) | BUG | #12 |
+| 16 | where | complex `np.where` throws ("Zero-push unsupported for Complex") | **FIXED** | F4 |
+| 17 | binary | bool arithmetic: `True + True → 2` (NumPy → bool True) | **FIXED** | F6 |
 | 18 | binary | size-1 result collapses to 0-D (NumPy keeps `[1]`) | BUG | #12 |
 | 19 | binary | complex `multiply`/`divide` cancellation + ~1 ULP | BUG | #12 |
 | 20 | promotion | 0-D array operand promoted weakly (NEP50: full participant) | INTENDED | — |
@@ -228,20 +228,26 @@ Task **#10**.
 Some reduction result dtypes differ from NumPy (NEP50 accumulator width; complex→real for
 `std/var`). Task **#10**.
 
-### 16. Complex `np.where` throws
+### 16. Complex `np.where` throws — **FIXED (F4)**
 
-`np.where(cond, x, y)` with any complex operand throws
-`NotSupportedException: Zero-push unsupported for Complex`. Found by T6 `Where` (4 cases).
+`np.where(cond, x, y)` threw `NotSupportedException: Zero-push unsupported for Complex` whenever the
+promoted result was complex — `NpyExpr.EmitPushZeroPublic` had no `Complex` case (the WhereNode pushes
+a typed zero for the unselected branch). **Fixed** by adding `Complex` (`Complex.Zero` static field)
+and `Half` cases. Both-complex `where` already worked; the throw only hit the *mixed* promotion
+(`where(cond, complex, float)`). Now bit-exact: `where([T,F,T], complex, float) == [(1+2j),(8+0j),(5+6j)]`.
 
-### 17. bool arithmetic computes the integer result
+### 17. bool arithmetic computes the integer result — **FIXED (F6)**
+
+NumPy's bool dtype has no integer add/multiply ufunc loop: `+` is logical **OR**, `*` is logical
+**AND** (`True + True == True`, raw byte 1). NumSharp computed byte arithmetic, so `True + True`
+stored **2** in a bool slot. **Fixed** in `ExecuteBinaryOp`: when both operands are bool
+(`resultType == Boolean`), `Add` is remapped to `BitwiseOr` and `Multiply` to `BitwiseAnd` before
+kernel dispatch, so every SIMD/scalar path writes a normalized 0/1 byte. `-` has no bool loop and
+throws on both sides. Verified bit-exact scalar + SIMD (32-wide).
 
 ```python
-np.array([True]) + np.array([True])    # [ True]  (bool)
+np.array([True]) + np.array([True])    # [ True]  (bool, byte 1)
 ```
-```csharp
-np.array(new[]{true}) + np.array(new[]{true})    // 2  (integer in a bool slot)
-```
-Found by the A2 random fuzzer. Task **#12**.
 
 ### 18. size-1 result collapses to 0-D
 

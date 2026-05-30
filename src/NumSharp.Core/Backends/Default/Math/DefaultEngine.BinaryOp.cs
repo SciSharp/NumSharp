@@ -29,6 +29,17 @@ namespace NumSharp.Backends
             // Determine result type using NumPy type promotion rules
             var resultType = np._FindCommonType(lhs, rhs);
 
+            // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`
+            // is logical OR and `*` is logical AND (so True + True == True, raw byte 1, not 2).
+            // resultType is Boolean only when both operands are bool; remap the op so every
+            // downstream kernel path (SIMD/scalar, same-type/mixed) emits the bitwise op and writes
+            // a normalized 0/1 byte. (`-` has no bool loop and already throws like NumPy.)
+            if (resultType == NPTypeCode.Boolean)
+            {
+                if (op == BinaryOp.Add) op = BinaryOp.BitwiseOr;
+                else if (op == BinaryOp.Multiply) op = BinaryOp.BitwiseAnd;
+            }
+
             // NumPy: true division (/) always returns float64 for integer types
             // This matches Python 3 / NumPy 2.x semantics where / is "true division"
             // Group 3 = float (Single, Double), Group 4 = Decimal
