@@ -24,6 +24,9 @@ namespace NumSharp.UnitTest.Fuzz
                 case "subtract": return ops[0] - ops[1];
                 case "multiply": return ops[0] * ops[1];
                 case "divide": return ops[0] / ops[1];
+                case "floor_divide": return np.floor_divide(ops[0], ops[1]);
+                case "mod": return np.mod(ops[0], ops[1]);
+                case "power": return np.power(ops[0], ops[1]);
 
                 default:
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");

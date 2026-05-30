@@ -67,11 +67,20 @@ def gen_astype(srcs, dsts, layout_names):
 
 
 # Binary ops: NumPy computes the result (value AND NEP50 result dtype) — it is the oracle.
+# Bit-exact today (committed green matrix).
 BINARY_OPS = {
     "add": lambda a, b: a + b,
     "subtract": lambda a, b: a - b,
     "multiply": lambda a, b: a * b,
-    "divide": lambda a, b: a / b,  # true_divide
+    "divide": lambda a, b: a / b,          # true_divide
+}
+
+# Known-divergent today (cataloged as [OpenBugs]): integer ÷0/mod0 throws-or-garbage vs NumPy 0,
+# float //0 -> NaN vs NumPy ±inf, mixed-precision mod, complex power ~ULP/edge.
+DIVMOD_POWER_OPS = {
+    "floor_divide": lambda a, b: a // b,
+    "mod": lambda a, b: a % b,             # NumPy: floored remainder (sign of divisor)
+    "power": lambda a, b: a ** b,
 }
 
 # Curated dtype pairs covering NEP50 promotion: same-type, int-width mixing, signed/unsigned,
@@ -144,8 +153,11 @@ def main():
     elif mode == "binary":
         cases = gen_binary(BINARY_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         write_jsonl(os.path.join(corpus_dir, "binary_arith.jsonl"), cases)
+    elif mode == "divmod_power":
+        cases = gen_binary(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        write_jsonl(os.path.join(corpus_dir, "binary_divmod_power.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power)")
         sys.exit(2)
 
 
