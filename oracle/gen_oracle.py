@@ -1129,6 +1129,78 @@ def gen_aliasing(dtypes):
     return cases
 
 
+# W14 — error parity. The other generators SKIP every case where NumPy raises, so "NumPy raises =>
+# NumSharp raises the same" was never asserted. These cases carry expects_throw=True (no expected
+# buffer); the harness asserts the op throws SOMETHING rather than silently producing a result.
+def _numpy_raises(opname, arrs, params):
+    try:
+        if opname == "power":
+            _ = arrs[0] ** arrs[1]
+        elif opname == "add":
+            _ = arrs[0] + arrs[1]
+        elif opname == "matmul":
+            _ = np.matmul(arrs[0], arrs[1])
+        elif opname == "bitwise_and":
+            _ = arrs[0] & arrs[1]
+        elif opname == "left_shift":
+            _ = np.left_shift(arrs[0], arrs[1])
+        elif opname == "concatenate":
+            _ = np.concatenate(list(arrs), axis=params["axis"])
+        elif opname == "reshape":
+            _ = arrs[0].reshape(params["shape"])
+        elif opname == "sum":
+            _ = np.sum(arrs[0], axis=params["axis"])
+        elif opname == "invert":
+            _ = np.invert(arrs[0])
+        elif opname == "stack":
+            _ = np.stack(list(arrs), axis=params["axis"])
+        elif opname == "subtract":
+            _ = arrs[0] - arrs[1]
+        return False
+    except Exception:
+        return True
+
+
+def gen_errors():
+    cases = []
+    n = 0
+    i32 = np.dtype("int32")
+    f64 = np.dtype("float64")
+    b = np.dtype("bool")
+    specs = [
+        ("power", [np.array([2, 3, 4], dtype=i32), np.array([-1, -2, -1], dtype=i32)], {}),       # int ** neg
+        ("add", [_cbase((3,), i32), _cbase((4,), i32)], {}),                                        # broadcast mismatch
+        ("subtract", [_cbase((2,), b), _cbase((2,), b)], {}),                                       # bool subtract
+        ("matmul", [_cbase((2, 3), f64), _cbase((2, 2), f64)], {}),                                 # core-dim mismatch
+        ("bitwise_and", [_cbase((4,), f64), _cbase((4,), f64)], {}),                                # bitwise on float
+        ("left_shift", [_cbase((4,), f64), _cbase((4,), f64)], {}),                                 # shift on float
+        ("concatenate", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                   # dim mismatch
+        ("reshape", [_cbase((6,), i32)], {"shape": [4]}),                                           # incompatible size
+        ("sum", [_cbase((3,), i32)], {"axis": 5, "keepdims": False}),                               # axis out of range
+        # NOTE: ("invert", [float]) is DELIBERATELY EXCLUDED — it does not raise a catchable
+        # exception, it executes an ILLEGAL CPU INSTRUCTION (ExecutionEngineException) and crashes
+        # the whole test host. Tracked as W14-A in docs/FUZZ_COVERAGE_BUGS.md (a 🔴 crash bug) and
+        # cannot be gated here until the kernel is fixed to reject float input cleanly.
+        ("stack", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                          # mismatched shapes
+    ]
+    for (opname, arrs, params) in specs:
+        if not _numpy_raises(opname, arrs, params):
+            print(f"  WARN: NumPy did NOT raise for {opname}; skipping")
+            continue
+        cases.append({
+            "id": f"{opname}/error/{n}",
+            "op": opname,
+            "params": params,
+            "operands": [describe(x, x) for x in arrs],
+            "expected": {"dtype": "bool", "shape": [], "buffer": ""},
+            "expects_throw": True,
+            "layout": "error",
+            "valueclass": "error",
+        })
+        n += 1
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1222,6 +1294,9 @@ def main():
     elif mode == "aliasing":
         cases = gen_aliasing(ALIAS_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "aliasing.jsonl"), cases)
+    elif mode == "errors":
+        cases = gen_errors()
+        write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

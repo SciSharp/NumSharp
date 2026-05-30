@@ -157,3 +157,16 @@ are NaN-semantics bugs at element 0 (independent of aliasing):
 |---|----------|-----------|-------|----------|------------|
 | W11-A | 🟠 | `maximum/minimum(NaN, finite)` | `NaN` (propagate) | the **finite** operand | maximum/minimum do not propagate NaN — they behave like fmax/fmin. **NaN semantics are swapped with W7-B** (fmax/fmin propagate; maximum/minimum don't — exactly backwards). W7 missed this because its operands had NaN aligned with NaN; `b=roll(a)` exposes it. |
 | (W6-D) | 🟠 | `clip(NaN,…, out=a)` | `NaN` | `a_min` | same clip-NaN bug as W6-D, confirmed on the `out=` path. |
+
+---
+
+## W14 — error parity (`errors.jsonl`, 10 gated cases + 1 excluded crasher)
+
+**Good news:** 10/10 NumPy-raising cases also throw in NumSharp — int**neg, broadcast mismatch
+(`add`), bool `subtract`, matmul core-dim mismatch, `bitwise_and`/`left_shift` on float
+(InvalidProgram/TypeError), `concatenate`/`stack` dim mismatch, bad `reshape`, axis-out-of-range
+`sum`. No silent-wrong-result parity gaps among them.
+
+| # | Severity | Op · cell | NumPy | NumSharp | Root cause |
+|---|----------|-----------|-------|----------|------------|
+| **W14-A** | 🔴🔴 | `np.invert(float64)` | `TypeError` | **`System.ExecutionEngineException: Illegal instruction` — hard PROCESS CRASH** | the bitwise-NOT IL kernel runs on float registers, emitting a CPU instruction that's illegal for the operand type. The JIT accepts the IL; the CPU rejects it at runtime → uncatchable crash (worse than the catchable `InvalidProgramException` that `bitwise_and(float)` throws). **Excluded from the gated corpus** because it kills the test host (can't be caught/excused). |

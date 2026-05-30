@@ -125,6 +125,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Aliasing() => RunCorpus("aliasing.jsonl");
 
+        // W14 error parity: cases where NumPy raises (int**neg, broadcast/core-dim mismatch,
+        // bitwise/shift on float, bad reshape, axis-out-of-range, ...) must also throw in NumSharp.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Errors() => RunCorpus("errors.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -172,6 +178,22 @@ namespace NumSharp.UnitTest.Fuzz
                     // through the SAME reference (true a-op-a aliasing, not two equal copies).
                     if (c.Alias && operands.Length == 1)
                         operands = new[] { operands[0], operands[0] };
+
+                    // W14 error parity: NumPy raised here; NumSharp must throw too (not silently
+                    // produce a result). A throw of ANY kind passes; a normal return is the divergence.
+                    if (c.Expects_Throw)
+                    {
+                        bool threw = false;
+                        try { _ = OpRegistry.Apply(c.Op, c.Params, operands); }
+                        catch { threw = true; }
+                        if (!threw)
+                        {
+                            var reason = MisalignedRegistry.Classify(c, DivergenceKind.Value, null, null, default, empty);
+                            if (reason != null) Bump(documented, reason);
+                            else failures.Add($"{c.Id} [{c.Layout}]: NumPy raises but NumSharp produced a result (error-parity gap)");
+                        }
+                        continue;
+                    }
 
                     var result = OpRegistry.Apply(c.Op, c.Params, operands);
                     var tc = FuzzCorpus.DtypeToTC(c.Expected.Dtype);

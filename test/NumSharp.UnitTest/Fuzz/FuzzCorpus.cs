@@ -34,6 +34,10 @@ namespace NumSharp.UnitTest.Fuzz
             /// <summary>W11: when true, a single stored operand is passed to a binary op as BOTH
             /// arguments via the SAME reference (true input aliasing: a op a).</summary>
             public bool Alias { get; set; }
+
+            /// <summary>W14: when true, NumPy raised on this op+operands; the harness asserts
+            /// NumSharp ALSO throws (error parity) rather than silently producing a result.</summary>
+            public bool Expects_Throw { get; set; }
         }
 
         public sealed class Operand
