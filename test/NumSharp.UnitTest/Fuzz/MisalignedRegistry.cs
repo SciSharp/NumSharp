@@ -61,13 +61,9 @@ namespace NumSharp.UnitTest.Fuzz
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
                 return "complex binary arithmetic (cancellation / ~ULP) [partly known bug]";
 
-            // (3) NaN ordering bug: NumSharp's <= and >= return True for a NaN operand; IEEE/NumPy
-            //     return False (only != is True against NaN). Tight signature: bool result where every
-            //     diff is NumPy-false -> NumSharp-true. KNOWN BUG, documented pending fix (task #8).
-            if (kind == DivergenceKind.Value && (c.Op == "less_equal" || c.Op == "greater_equal")
-                && tc == NPTypeCode.Boolean
-                && diffs.All(d => d.Expected == "00" && d.Actual == "01"))
-                return "NaN ordering: <=/>= return True for NaN (NumSharp) vs False (NumPy/IEEE) [known bug]";
+            // (3) NaN ordering in <= / >= was FIXED in Phase 1 F2 (the unordered Cgt_Un/Clt_Un
+            //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
+            //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
 
             // --- Reductions (single-operand, but classified before the unary rules) ---
             if (ReduceOps.Contains(c.Op))

@@ -1070,8 +1070,12 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case ComparisonOp.LessEqual:
-                    // a <= b is !(a > b)
-                    if (isUnsigned)
+                    // a <= b is !(a > b). For floats the ">" must be the UNORDERED compare
+                    // (Cgt_Un): with NaN it yields true, so the negation is false — matching
+                    // IEEE/NumPy where every ordered comparison with NaN is false. Signed Cgt
+                    // would yield false for NaN, negating to true (the bug). Cgt_Un also serves
+                    // unsigned integer comparison (its original use here).
+                    if (isUnsigned || isFloat)
                         il.Emit(OpCodes.Cgt_Un);
                     else
                         il.Emit(OpCodes.Cgt);
@@ -1088,8 +1092,10 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case ComparisonOp.GreaterEqual:
-                    // a >= b is !(a < b)
-                    if (isUnsigned)
+                    // a >= b is !(a < b). For floats the "<" must be the UNORDERED compare
+                    // (Clt_Un) so a NaN operand yields true and the negation is false (IEEE/NumPy).
+                    // Clt_Un also serves unsigned integer comparison.
+                    if (isUnsigned || isFloat)
                         il.Emit(OpCodes.Clt_Un);
                     else
                         il.Emit(OpCodes.Clt);

@@ -22,7 +22,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 3 | floor_divide | float `//0` → NaN (NumPy → ±inf) | **FIXED** | F1 |
 | 4 | mod | `mod(float32, float64)` computed in float32 then widened | **FIXED** | F1 |
 | 5 | power | complex power ~1 ULP + gross inf/NaN edge | BUG | #7→F5 |
-| 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | BUG | #8 |
+| 6 | comparison | `<=` / `>=` return True for a NaN operand (NumPy → False) | **FIXED** | F2 |
 | 7 | unary | NEP50 unary float promotion: int → float64 (NumPy: width-based) | BUG | #9 |
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | BUG | #9 |
 | 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
@@ -116,10 +116,16 @@ already promoted correctly.
 `complex ** {float,complex,int}` differs from NumPy by ~1 ULP in places, plus gross edge
 divergences (NumPy NaN where NumSharp returns 0) for inf/zero bases. Task **#7**.
 
-### 6. `<=` / `>=` return True for NaN
+### 6. `<=` / `>=` return True for NaN — **FIXED (F2)**
+
+**Fixed** — the scalar comparison emitted `a <= b` as `!(a > b)` using the *ordered* `Cgt`
+(`Clt` for `>=`), which yields false for a NaN operand and negates to **true**. Switching to the
+*unordered* `Cgt_Un` / `Clt_Un` for float operands makes a NaN compare yield true, so the negation
+is false — matching IEEE/NumPy. Verified bit-exact across scalar, SIMD (NaN mid-vector), strided,
+and float32 paths; the comparison matrix runs CI-gated with no excused divergence.
 
 IEEE/NumPy: every ordered comparison with NaN is False (only `!=` is True). `<`, `>`, `==`, `!=`
-handle NaN correctly; `<=` and `>=` return **True**.
+handled NaN correctly; `<=` and `>=` returned **True**.
 
 ```python
 np.array([np.nan]) <= np.array([1.0])    # [False]
