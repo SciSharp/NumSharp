@@ -101,6 +101,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Manip() => RunCorpus("manip.jsonl");
 
+        // W10 sorting/searching (T14): argsort (1-D/2-D, axis 0/1/-1, distinct values),
+        // searchsorted (side left/right), nonzero (1-D int64 indices).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Sort() => RunCorpus("sort.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

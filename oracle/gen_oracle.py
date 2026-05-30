@@ -892,6 +892,83 @@ def gen_modf(dtypes, layout_names):
     return cases
 
 
+# T14 — sorting / searching. Distinct values avoid tie-break ambiguity (quicksort is unstable),
+# so argsort is deterministic both sides. NumPy is the oracle for the int64 index results.
+SORT_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+
+
+def _distinct(n, dt):
+    """A deterministic permutation of 0..n-1 (distinct -> no ties), cast to dt. gcd(7,n)==1 for our n."""
+    return np.array([(i * 7 + 3) % n for i in range(n)], dtype=np.dtype(dt))
+
+
+def gen_argsort(dtypes):
+    cases = []
+    n = 0
+    for dt in dtypes:
+        a1 = _distinct(8, dt)
+        a2 = _distinct(12, dt).reshape(3, 4)
+        jobs = [(a1, -1)]
+        for axis in (0, 1, -1):
+            jobs.append((a2, axis))
+        for (a, axis) in jobs:
+            r = np.asarray(np.argsort(a, axis=axis))
+            cases.append({
+                "id": f"argsort/{a.ndim}d/{dt}/axis={axis}/{n}",
+                "op": "argsort",
+                "params": {"axis": axis},
+                "operands": [describe(a, a)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": f"{a.ndim}d",
+                "valueclass": "distinct",
+            })
+            n += 1
+    return cases
+
+
+def gen_searchsorted(dtypes):
+    cases = []
+    n = 0
+    for dt in dtypes:
+        a = np.sort(_distinct(8, dt))
+        v = _distinct(6, dt)
+        for side in ("left", "right"):
+            r = np.asarray(np.searchsorted(a, v, side=side))
+            cases.append({
+                "id": f"searchsorted/{side}/{dt}/{n}",
+                "op": "searchsorted",
+                "params": {"side": side},
+                "operands": [describe(a, a), describe(v, v)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": "searchsorted",
+                "valueclass": "distinct",
+            })
+            n += 1
+    return cases
+
+
+def gen_nonzero(dtypes):
+    cases = []
+    n = 0
+    for dt in dtypes:
+        a = np.array([0, 1, 0, 2, 3, 0, 4, 0, 5, 0], dtype=np.dtype(dt))
+        r = np.nonzero(a)[0].astype(np.int64)
+        cases.append({
+            "id": f"nonzero/1d/{dt}/{n}",
+            "op": "nonzero",
+            "params": {},
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "nonzero",
+            "valueclass": "mixed",
+        })
+        n += 1
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -971,6 +1048,11 @@ def main():
         cases += gen_concat_stack(MANIP_DTYPES)
         cases += gen_pad(MANIP_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
+    elif mode == "sort":
+        cases = gen_argsort(SORT_DTYPES)
+        cases += gen_searchsorted(SORT_DTYPES)
+        cases += gen_nonzero(SORT_DTYPES)
+        write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
         sys.exit(2)

@@ -119,3 +119,10 @@ roll/tile/delete/pad{constant,edge,reflect,wrap}/ravel) is **bit-exact**. Three 
 | W9-A | 🟡 | `expand_dims` on empty `(0,3)`, axis=0 | `[1,0,3]` | `[0,3]` | inserted axis dropped on a zero-size array. |
 | W9-B | 🟠 | `repeat` on an offset slice (`b[2:7]`) / 0-D view at offset | repeats the view's elements | repeats from **base buffer start** (wrong elements) | repeat ignores `Shape.offset`. Contiguous/offset-0 repeat is bit-exact. |
 | W9-C | 🟡 | `atleast_3d` on empty `(0,3)` | `[0,3,1]` | `[0,3]` | appended axis dropped on a zero-size array (same family as W9-A). |
+
+---
+
+## W10 — sorting / searching (`sort.jsonl`, 35 cases)
+
+**No bugs.** argsort (1-D/2-D, axis 0/1/−1), searchsorted (side left/right), and nonzero are
+35/35 bit-exact with NumPy, including the int64 index result dtype.

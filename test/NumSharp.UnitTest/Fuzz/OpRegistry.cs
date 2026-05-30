@@ -133,6 +133,11 @@ namespace NumSharp.UnitTest.Fuzz
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
+                // Sorting / searching (T14).
+                case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
+                case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
+                case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
+
                 // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
@@ -150,6 +155,22 @@ namespace NumSharp.UnitTest.Fuzz
                     throw new NotSupportedException($"op '{op}' is not registered in OpRegistry");
             }
         }
+
+        private static NDArray ApplyArgsort(NDArray a, int axis) => a.typecode switch
+        {
+            NPTypeCode.Byte => np.argsort<byte>(a, axis),
+            NPTypeCode.SByte => np.argsort<sbyte>(a, axis),
+            NPTypeCode.Int16 => np.argsort<short>(a, axis),
+            NPTypeCode.UInt16 => np.argsort<ushort>(a, axis),
+            NPTypeCode.Int32 => np.argsort<int>(a, axis),
+            NPTypeCode.UInt32 => np.argsort<uint>(a, axis),
+            NPTypeCode.Int64 => np.argsort<long>(a, axis),
+            NPTypeCode.UInt64 => np.argsort<ulong>(a, axis),
+            NPTypeCode.Single => np.argsort<float>(a, axis),
+            NPTypeCode.Double => np.argsort<double>(a, axis),
+            NPTypeCode.Half => np.argsort<Half>(a, axis),
+            _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
+        };
 
         private static int[] ParseIntArray(JsonElement arr)
         {
