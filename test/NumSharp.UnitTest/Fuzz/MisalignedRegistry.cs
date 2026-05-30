@@ -74,9 +74,16 @@ namespace NumSharp.UnitTest.Fuzz
                 // Complex axis reduction throws (NDCoordinatesAxisIncrementor vector-shape path).
                 if (kind == DivergenceKind.Threw && c.Operands.Length == 1 && c.Operands[0].Dtype == "complex128")
                     return "complex axis reduction throws (NDCoordinatesAxisIncrementor) [known bug]";
-                // NaN propagation: regular min/max/mean/std/var keep NaN in NumPy; NumSharp skips it.
-                if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN"))
-                    return "reduction NaN propagation: NumSharp skips NaN, NumPy propagates [known bug]";
+                // NaN propagation: the FLAT (axis=null) min/max reduction now propagates NaN
+                // (Phase 1 F2-reductions: NaN-propagating SIMD min/max in the IL flat kernel +
+                // CombineVectors), so it is NOT excused — a flat regression fails the gate. The
+                // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
+                // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
+                if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
+                    && c.Params != null
+                    && c.Params.TryGetValue("axis", out var axEl)
+                    && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    return "axis-reduction NaN propagation: axis SIMD min/max skips NaN [known bug; flat fixed]";
                 // bool min/max along an axis returns True where NumPy returns False.
                 if (kind == DivergenceKind.Value && (c.Op == "min" || c.Op == "max") && tc == NPTypeCode.Boolean)
                     return "bool min/max along axis diverges [known bug]";

@@ -391,6 +391,19 @@ namespace NumSharp.Backends.Kernels
         {
             var clrType = GetClrType(type);
 
+            // NaN-propagating Min/Max for floating point. Hardware MIN/MAX (Vector.Min/Max, MINPS/
+            // MAXPS) drop a NaN operand and return the other lane — but NumPy's (non-nan*) min/max
+            // PROPAGATE NaN. Emit ConditionalSelect(Equals(acc,acc) & Equals(v,v), Min(acc,v), acc+v):
+            // where both lanes are ordered (non-NaN) keep the hardware min/max; where either is NaN
+            // fall back to acc+v, which is NaN. The self-equality mask is the standard SIMD NaN test
+            // (NaN != NaN). Integer Min/Max have no NaN domain and keep the single-instruction path.
+            if ((op == ReductionOp.Min || op == ReductionOp.Max)
+                && (type == NPTypeCode.Single || type == NPTypeCode.Double))
+            {
+                EmitVectorNaNPropagatingMinMax(il, op, VectorBits, clrType);
+                return;
+            }
+
             string methodName = op switch
             {
                 ReductionOp.Sum => "Add",
@@ -418,6 +431,46 @@ namespace NumSharp.Backends.Kernels
                 : VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2);
 
             il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit a NaN-propagating vector Min/Max for floating point (NumPy's non-nan* semantics).
+        /// Stack on entry: [acc, v] (two Vector{N}). Computes
+        /// <c>ConditionalSelect(Equals(acc,acc) &amp; Equals(v,v), MinMax(acc,v), acc + v)</c> — the
+        /// hardware min/max where both lanes are ordered, and <c>acc + v</c> (which is NaN) where
+        /// either lane is NaN. Used by every reduction stage (unrolled body and horizontal merge),
+        /// so a NaN anywhere in the array propagates to the scalar result.
+        /// </summary>
+        private static void EmitVectorNaNPropagatingMinMax(ILGenerator il, ReductionOp op, int simdBits, Type clrType)
+        {
+            var vecType = VectorMethodCache.V(simdBits, clrType);
+            var locV = il.DeclareLocal(vecType);
+            var locAcc = il.DeclareLocal(vecType);
+            il.Emit(OpCodes.Stloc, locV);    // pop v
+            il.Emit(OpCodes.Stloc, locAcc);  // pop acc
+
+            // ordered = Equals(acc, acc) & Equals(v, v)  (AllBitsSet lanes where both are non-NaN)
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, clrType), null);
+            il.Emit(OpCodes.Ldloc, locV);
+            il.Emit(OpCodes.Ldloc, locV);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(simdBits, clrType), null);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(simdBits, "BitwiseAnd", clrType, paramCount: 2), null);
+
+            // MinMax(acc, v) — the ordered-lane result
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.Emit(OpCodes.Ldloc, locV);
+            il.EmitCall(OpCodes.Call,
+                VectorMethodCache.Generic(simdBits, op == ReductionOp.Min ? "Min" : "Max", clrType, paramCount: 2), null);
+
+            // acc + v — the NaN-propagating fallback for lanes where either operand is NaN
+            il.Emit(OpCodes.Ldloc, locAcc);
+            il.Emit(OpCodes.Ldloc, locV);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Generic(simdBits, "Add", clrType, paramCount: 2), null);
+
+            // ConditionalSelect(ordered, MinMax, acc+v)
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(simdBits, clrType), null);
         }
 
         /// <summary>
@@ -1063,6 +1116,17 @@ namespace NumSharp.Backends.Kernels
         private static void EmitVectorReductionOp(ILGenerator il, ReductionOp op,
             int simdBits, Type clrType)
         {
+            // NaN-propagating Min/Max for floating point (see EmitVectorBinaryReductionOp). The
+            // horizontal tree-reduce halves the vector width with GetLower/GetUpper, so this runs at
+            // simdBits = 256 -> 128 etc.; without it a NaN that reached an accumulator lane would be
+            // dropped by the hardware Min/Max during the final fold.
+            if ((op == ReductionOp.Min || op == ReductionOp.Max)
+                && (clrType == typeof(float) || clrType == typeof(double)))
+            {
+                EmitVectorNaNPropagatingMinMax(il, op, simdBits, clrType);
+                return;
+            }
+
             string methodName = op switch
             {
                 ReductionOp.Sum => "Add",

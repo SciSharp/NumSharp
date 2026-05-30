@@ -769,10 +769,30 @@ namespace NumSharp.Backends.Kernels
             {
                 ReductionOp.Sum => Vector256.Add(a, b),
                 ReductionOp.Prod => Vector256.Multiply(a, b),
-                ReductionOp.Min => Vector256.Min(a, b),
-                ReductionOp.Max => Vector256.Max(a, b),
+                ReductionOp.Min => NaNAwareMinMax256(a, b, isMax: false),
+                ReductionOp.Max => NaNAwareMinMax256(a, b, isMax: true),
                 _ => throw new NotSupportedException()
             };
+        }
+
+        /// <summary>
+        /// NaN-propagating Vector256 Min/Max for floating point. Hardware MIN/MAX drop a NaN operand;
+        /// NumPy's (non-nan*) min/max propagate it. Where both lanes are ordered keep the hardware
+        /// result, else fall back to <c>a + b</c> (= NaN). The <c>typeof(T)</c> checks are JIT-time
+        /// constants for value types, so integer instantiations keep the single-instruction path with
+        /// no branch and the float path's <c>a + b</c> is never emitted for them.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector256<T> NaNAwareMinMax256<T>(Vector256<T> a, Vector256<T> b, bool isMax)
+            where T : unmanaged
+        {
+            var mm = isMax ? Vector256.Max(a, b) : Vector256.Min(a, b);
+            if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            {
+                var ordered = Vector256.Equals(a, a) & Vector256.Equals(b, b);
+                return Vector256.ConditionalSelect(ordered, mm, a + b);
+            }
+            return mm;
         }
 
         /// <summary>
@@ -786,10 +806,24 @@ namespace NumSharp.Backends.Kernels
             {
                 ReductionOp.Sum => Vector128.Add(a, b),
                 ReductionOp.Prod => Vector128.Multiply(a, b),
-                ReductionOp.Min => Vector128.Min(a, b),
-                ReductionOp.Max => Vector128.Max(a, b),
+                ReductionOp.Min => NaNAwareMinMax128(a, b, isMax: false),
+                ReductionOp.Max => NaNAwareMinMax128(a, b, isMax: true),
                 _ => throw new NotSupportedException()
             };
+        }
+
+        /// <summary>NaN-propagating Vector128 Min/Max for floating point (see NaNAwareMinMax256).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector128<T> NaNAwareMinMax128<T>(Vector128<T> a, Vector128<T> b, bool isMax)
+            where T : unmanaged
+        {
+            var mm = isMax ? Vector128.Max(a, b) : Vector128.Min(a, b);
+            if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            {
+                var ordered = Vector128.Equals(a, a) & Vector128.Equals(b, b);
+                return Vector128.ConditionalSelect(ordered, mm, a + b);
+            }
+            return mm;
         }
 
         /// <summary>

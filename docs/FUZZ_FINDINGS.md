@@ -27,7 +27,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | **FIXED** | F4 |
 | 9 | unary | `reciprocal(int)` wrong; `reciprocal` on non-contiguous throws | BUG | #9 |
 | 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
-| 11 | reduction | `min/max/mean/std/var` skip NaN (NumPy propagates) | BUG | #10 |
+| 11 | reduction | `min/max` skip NaN (NumPy propagates) | **FIXED (flat)** / axis SIMD pending | F2-red |
 | 12 | reduction | complex axis reduction throws (`NDCoordinatesAxisIncrementor`) | BUG | #10 |
 | 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | BUG | #10 |
 | 14 | reduction | `sum/mean/std/var` accumulation order (vs NumPy pairwise/two-pass) | BUG | #10 |
@@ -187,18 +187,24 @@ NumPy retains precision). `sin/cos/tan/log` of complex differ on inf/NaN-involvi
 (NumPy `(NaN, +inf)` vs NumSharp `(NaN, NaN)`). `System.Numerics.Complex` vs NumPy's `npy_c*`.
 Task **#9**.
 
-### 11. Reductions skip NaN (NumPy propagates)
+### 11. Reductions skip NaN (NumPy propagates) — **FIXED (flat min/max)** / axis SIMD pending
 
-Regular `min/max/mean/std/var` propagate NaN in NumPy (only the `nan*` variants skip it). NumSharp
-returns the non-NaN result.
+`sum/mean/std/var` already propagated NaN (arithmetic: `NaN op x == NaN`). Only `min/max` skipped it,
+because the SIMD path used hardware `Vector.Min/Max` (MINPS/MAXPS drop a NaN operand). The **flat**
+(`axis=null`) min/max reduction is now **fixed**: `EmitVectorBinaryReductionOp`, the horizontal
+tree-reduce (`EmitVectorReductionOp`), and the C# `CombineVectors256/128` all emit the
+NaN-propagating form `ConditionalSelect(Equals(a,a) & Equals(b,b), MinMax(a,b), a+b)` for float/
+double — verified across every size (3..257) and NaN position, double + float32. The scalar tail
+already used `Math.Min/Max` (propagates).
+
+**Still pending:** the **axis** (vertical/strided) SIMD min/max kernel in `CreateAxisReductionKernelTyped`
+has an additional combine site that still drops NaN (e.g. `np.min(arr2d, axis=0)`); the classifier now
+excuses only `axis != null` NaN-propagation so a flat regression fails the gate.
 
 ```python
-np.min(np.array([np.nan, -np.inf, 1.0]))   # nan
+np.min(np.array([np.nan, -np.inf, 1.0]))   # nan  (NumSharp now: nan ✓)
 ```
-```csharp
-np.min(np.array(new[]{double.NaN, double.NegativeInfinity, 1.0}))   // -inf
-```
-Found by T5 `Reduce`. Task **#10**.
+Found by T5 `Reduce`. Task **#10** / F2-reductions.
 
 ### 12. Complex axis reduction throws
 
