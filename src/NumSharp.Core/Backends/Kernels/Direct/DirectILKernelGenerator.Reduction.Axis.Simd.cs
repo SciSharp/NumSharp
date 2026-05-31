@@ -174,70 +174,290 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // Check if the reduction axis is contiguous (stride == 1)
-            bool axisContiguous = axisStride == 1;
+            // ─────────────────────────────────────────────────────────────────
+            // GENERAL PATH — strided / transposed / non-contiguous inputs.
+            //
+            // REUSE_REDUCE_LOOPS (NumPy NPY_ITFLAG_REUSE_REDUCE_LOOPS shape).
+            //
+            // The previous shape re-derived each output's input base via a div/mod
+            // coordinate decode PER output element, then did a cache-hostile strided
+            // gather down the reduce axis PER output — O(outputs × stridedGather),
+            // which measured 9–24× slower than NumPy on strided / transposed axis
+            // reductions (e.g. a[:, ::2] sum axis 0, or transpose(2,0,1) sum axis 2).
+            //
+            // Instead we walk the reduce axis as the OUTER loop and FOLD each slab
+            // into the output buffer with an incremental odometer over the
+            // non-reduced dims: the input/output base pointers advance by their
+            // strides each step (no div/mod re-derivation — the "reduce loop" is
+            // reused across successive output positions), and the smallest-input-
+            // stride non-reduced dim is iterated innermost so the (cold, largest)
+            // input operand streams sequentially instead of being gathered. The
+            // output accumulator stays hot. This is NumPy's reduce-loop shape and
+            // turns the access pattern from O(outputs × stridedGather) into
+            // O(in_bytes) streaming.
+            // ─────────────────────────────────────────────────────────────────
+            ReductionOp innerGenOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+            bool isMeanGen = op == ReductionOp.Mean;
 
-            // Compute output shape strides for coordinate calculation
-            // Output has ndim-1 dimensions (axis removed)
+            // Strategy selection (NumPy iterates the smallest-stride axis innermost):
+            //   • Reduction axis is NOT the innermost memory axis (some non-reduced
+            //     dim has a smaller |stride|) → slab-accumulate: reduce axis OUTER,
+            //     smallest-stride non-reduced dim streams innermost. Turns the access
+            //     pattern from O(outputs × stridedGather) into O(in_bytes) streaming
+            //     (e.g. a[:, ::2] sum axis 0, transpose(2,0,1) sum axis 2).
+            //   • Otherwise the reduction axis IS the innermost (smallest |stride|)
+            //     run → reduce it per-output (each run is near-local / SIMD-friendly;
+            //     slab-accumulation would read cache-hostile columns). This path is
+            //     kept INLINE / verbatim from the original general loop: extracting it
+            //     to a separate method regressed the typeof(T) gather/scalar inner-
+            //     reducer codegen for double/int64 (~3–5× on strided innermost sum).
+            long minNonReduced = long.MaxValue;
+            for (int d = 0; d < ndim; d++)
+            {
+                if (d == axis) continue;
+                long s = inputStrides[d]; if (s < 0) s = -s;
+                if (s < minNonReduced) minNonReduced = s;
+            }
+            long axisAbsStride = axisStride < 0 ? -axisStride : axisStride;
+
+            if (axisAbsStride > minNonReduced)
+            {
+                DispatchSlabAccumulate<T>(
+                    input, output, inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize, innerGenOp, isMeanGen);
+                return;
+            }
+
+            // ── Per-output reduction (reduction axis is the innermost run). ──
+            bool axisContiguous = axisStride == 1;
             int outputNdim = ndim - 1;
 
-            // Store output dimension strides in a fixed array for parallel access
             long[] outputDimStridesArray = new long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStridesArray[outputNdim - 1] = 1;
                 for (int d = outputNdim - 2; d >= 0; d--)
                 {
-                    // Map output dimension d to input dimension (d if d < axis, d+1 if d >= axis)
                     int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
                     outputDimStridesArray[d] = outputDimStridesArray[d + 1] * inputShape[nextInputDim];
                 }
             }
 
-            // For Mean, use Sum operation then divide
-            ReductionOp actualOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
-            bool isMean = op == ReductionOp.Mean;
+            ReductionOp actualOp = innerGenOp;
+            bool isMean = isMeanGen;
 
-            // Sequential loop over output elements
             for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
-                // Convert linear output index to coordinates and compute input base offset
                 long remaining = outIdx;
                 long inputBaseOffset = 0;
                 long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
-                    // Map output dimension d to input dimension
                     int inputDim = d >= axis ? d + 1 : d;
-
                     long coord = remaining / outputDimStridesArray[d];
                     remaining = remaining % outputDimStridesArray[d];
-
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
                 }
 
-                // Now reduce along the axis
                 T* axisStart = input + inputBaseOffset;
+                T result = axisContiguous
+                    ? ReduceContiguousAxis(axisStart, axisSize, actualOp)
+                    : ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
 
-                T result;
-                if (axisContiguous)
-                {
-                    // Fast path: axis is contiguous, use SIMD
-                    result = ReduceContiguousAxis(axisStart, axisSize, actualOp);
-                }
-                else
-                {
-                    // Strided path: axis is not contiguous, use SIMD gather if beneficial
-                    result = ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
-                }
-
-                // For Mean, divide by count
                 if (isMean)
                     result = DivideByCountTyped(result, axisSize);
 
                 output[outputOffset] = result;
+            }
+        }
+
+        // Per-op dispatch into the slab-accumulation general reduction. The runtime
+        // branch on `op` happens ONCE here, routing to a kernel with the op
+        // hard-coded via the zero-sized ITypedReductionOp struct (JIT inlines the
+        // combine with no per-element switch).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void DispatchSlabAccumulate<T>(
+            T* input, T* output, long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize, ReductionOp op, bool isMean)
+            where T : unmanaged
+        {
+            switch (op)
+            {
+                case ReductionOp.Sum:  AxisReductionSlabAccumulate<T, AddOp<T>>(input, output, inputStrides, inputShape, outputStrides, axis, axisSize, ndim, outputSize, isMean); return;
+                case ReductionOp.Prod: AxisReductionSlabAccumulate<T, MulOp<T>>(input, output, inputStrides, inputShape, outputStrides, axis, axisSize, ndim, outputSize, isMean); return;
+                case ReductionOp.Min:  AxisReductionSlabAccumulate<T, MinOp<T>>(input, output, inputStrides, inputShape, outputStrides, axis, axisSize, ndim, outputSize, isMean); return;
+                case ReductionOp.Max:  AxisReductionSlabAccumulate<T, MaxOp<T>>(input, output, inputStrides, inputShape, outputStrides, axis, axisSize, ndim, outputSize, isMean); return;
+                default: throw new NotSupportedException($"DispatchSlabAccumulate: {op}");
+            }
+        }
+
+        // REUSE_REDUCE_LOOPS slab-accumulation reduction for the general
+        // (strided / transposed / non-contiguous) axis-reduction path.
+        //
+        // Reduces along `axis` by iterating the reduce axis as the outer loop and
+        // folding slab k into the output: slab 0 initializes the output, slabs
+        // 1..axisSize-1 combine into it (op-struct → JIT-inlined add/mul/min/max,
+        // NaN-propagating for float min/max via Math.Min/Max). The non-reduced dims
+        // are walked with an incremental odometer (base offsets advance by their
+        // strides — no per-output div/mod), ordered so the smallest-input-stride
+        // dim is innermost so input reads stream sequentially.
+        //
+        // Combination order along the axis is sequential (slab 0,1,2,…), matching
+        // the per-output ordering this path replaces for integer/min/max (exact)
+        // and NumPy's buffered strided reduce inner loop for float sum/prod.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void AxisReductionSlabAccumulate<T, TOp>(
+            T* input, T* output,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize, bool isMean)
+            where T : unmanaged
+            where TOp : struct, ITypedReductionOp<T>
+        {
+            TOp op = default;
+            long axisStride = inputStrides[axis];
+            int K = ndim - 1; // number of non-reduced (output) dims
+
+            // ── Scalar output (ndim==1, reduce the only axis) ──
+            if (K <= 0)
+            {
+                T acc0 = op.Identity();
+                if (axisSize > 0)
+                {
+                    acc0 = input[0];
+                    for (long k = 1; k < axisSize; k++)
+                        acc0 = op.CombineScalar(acc0, input[k * axisStride]);
+                }
+                output[0] = isMean ? DivideByCountTyped(acc0, axisSize) : acc0;
+                return;
+            }
+
+            // ── Gather non-reduced dims (size, input stride, output stride) ──
+            long* dSize = stackalloc long[K];
+            long* dIn = stackalloc long[K];
+            long* dOut = stackalloc long[K];
+            int m = 0;
+            for (int d = 0; d < ndim; d++)
+            {
+                if (d == axis) continue;
+                dSize[m] = inputShape[d];
+                dIn[m] = inputStrides[d];
+                dOut[m] = outputStrides[d < axis ? d : d - 1];
+                m++;
+            }
+
+            // ── Order dims so the smallest |input stride| is innermost (sequential
+            //    input streaming). Insertion sort by input stride DESC. ──
+            for (int i = 1; i < K; i++)
+            {
+                long s = dSize[i], a = dIn[i], o = dOut[i];
+                int j = i - 1;
+                while (j >= 0 && dIn[j] < a)
+                {
+                    dSize[j + 1] = dSize[j]; dIn[j + 1] = dIn[j]; dOut[j + 1] = dOut[j];
+                    j--;
+                }
+                dSize[j + 1] = s; dIn[j + 1] = a; dOut[j + 1] = o;
+            }
+
+            long* idx = stackalloc long[K];
+            int inner = K - 1;
+            long innerSize = dSize[inner];
+            long innerIn = dIn[inner];
+            long innerOut = dOut[inner];
+
+            // ── Empty reduce axis: every output is the identity element. ──
+            if (axisSize == 0)
+            {
+                T ident = op.Identity();
+                for (int d = 0; d < K; d++) idx[d] = 0;
+                long off0 = 0;
+                for (long o = 0; o < outputSize; o++)
+                {
+                    output[off0] = isMean ? DivideByCountTyped(ident, axisSize) : ident;
+                    AdvanceOdometer(idx, dSize, dOut, K, ref off0);
+                }
+                return;
+            }
+
+            // ── Fold slabs: k==0 initializes, k>=1 combines. ──
+            for (long k = 0; k < axisSize; k++)
+            {
+                T* slab = input + k * axisStride;
+                for (int d = 0; d < K; d++) idx[d] = 0;
+                long inOff = 0, outOff = 0;
+
+                if (k == 0)
+                {
+                    for (long o = 0; o < outputSize; )
+                    {
+                        // Innermost run: contiguous-output init.
+                        long count = innerSize - idx[inner];
+                        if (innerOut == 1)
+                            for (long e = 0; e < count; e++) output[outOff + e] = slab[inOff + e * innerIn];
+                        else
+                            for (long e = 0; e < count; e++) output[outOff + e * innerOut] = slab[inOff + e * innerIn];
+                        o += count; idx[inner] = innerSize;
+                        inOff += count * innerIn; outOff += count * innerOut;
+                        CarryOdometer(idx, dSize, dIn, dOut, K, ref inOff, ref outOff);
+                    }
+                }
+                else
+                {
+                    for (long o = 0; o < outputSize; )
+                    {
+                        long count = innerSize - idx[inner];
+                        if (innerOut == 1)
+                            for (long e = 0; e < count; e++) output[outOff + e] = op.CombineScalar(output[outOff + e], slab[inOff + e * innerIn]);
+                        else
+                            for (long e = 0; e < count; e++) output[outOff + e * innerOut] = op.CombineScalar(output[outOff + e * innerOut], slab[inOff + e * innerIn]);
+                        o += count; idx[inner] = innerSize;
+                        inOff += count * innerIn; outOff += count * innerOut;
+                        CarryOdometer(idx, dSize, dIn, dOut, K, ref inOff, ref outOff);
+                    }
+                }
+            }
+
+            // ── Mean: divide each output by the reduce count (respects output stride). ──
+            if (isMean)
+            {
+                for (int d = 0; d < K; d++) idx[d] = 0;
+                long off = 0;
+                for (long o = 0; o < outputSize; o++)
+                {
+                    output[off] = DivideByCountTyped(output[off], axisSize);
+                    AdvanceOdometer(idx, dSize, dOut, K, ref off);
+                }
+            }
+        }
+
+        // Advance a single-offset odometer (innermost dim K-1) by one step.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void AdvanceOdometer(long* idx, long* dSize, long* dStride, int K, ref long off)
+        {
+            for (int d = K - 1; d >= 0; d--)
+            {
+                idx[d]++; off += dStride[d];
+                if (idx[d] < dSize[d]) return;
+                idx[d] = 0; off -= dSize[d] * dStride[d];
+            }
+        }
+
+        // After consuming a full innermost run (idx[K-1] == dSize[K-1]), carry into
+        // the outer dims, advancing both input and output offsets incrementally.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void CarryOdometer(long* idx, long* dSize, long* dIn, long* dOut, int K, ref long inOff, ref long outOff)
+        {
+            // innermost just wrapped: reset it and carry.
+            idx[K - 1] = 0;
+            inOff -= dSize[K - 1] * dIn[K - 1];
+            outOff -= dSize[K - 1] * dOut[K - 1];
+            for (int d = K - 2; d >= 0; d--)
+            {
+                idx[d]++; inOff += dIn[d]; outOff += dOut[d];
+                if (idx[d] < dSize[d]) return;
+                idx[d] = 0; inOff -= dSize[d] * dIn[d]; outOff -= dSize[d] * dOut[d];
             }
         }
 
