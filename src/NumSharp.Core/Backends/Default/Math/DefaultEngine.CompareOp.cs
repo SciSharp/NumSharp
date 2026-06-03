@@ -34,6 +34,19 @@ namespace NumSharp.Backends
                 return ExecuteComparisonScalarScalar(lhs, rhs, op);
             }
 
+            // -------- O(1) trivial-loop bypass -----------------------------
+            // Same rationale as the binary route (NumPy check_for_trivial_loop):
+            // equal-shape contiguous (both C or both F) and array-vs-scalar cases
+            // route straight to the DirectIL SimdFull / SimdScalar comparison
+            // kernel, skipping NpyIter construction. Unlike the binary bypass this
+            // allows mixed dtypes — comparison promotes per element inside the
+            // kernel with no cast temp, and the result is always bool. Returns null
+            // for broadcast/mixed-C-F/strided/unsupported → NpyIter route below.
+            {
+                var trivial = TryTrivialContiguousComparisonOp(lhs, rhs, op, lhsType, rhsType);
+                if (trivial is not null) return trivial;
+            }
+
             // -------- NpyIter Tier 3B fast path (all comparison ops) -----------
             // Mirrors the binary-op routing pattern. The iterator coalesces
             // dimensions, normalizes negative strides, and resolves stride=0
@@ -88,6 +101,83 @@ namespace NumSharp.Backends
             if (ShouldProduceFContigOutput(lhs, rhs, result.Shape))
                 return result.copy('F').MakeGeneric<bool>();
 
+            return result;
+        }
+
+        /// <summary>
+        ///     Comparison arm of the trivial-loop bypass (see the binary
+        ///     <c>TryTrivialContiguousBinaryOp</c>). Handles two trivially
+        ///     iterable shapes — equal-shape contiguous (both C or both F → one
+        ///     linear SimdFull walk) and array-vs-scalar (scalar read once, array
+        ///     walked linearly via SimdScalarLeft/Right) — and routes to the
+        ///     existing DirectIL comparison kernel, skipping NpyIter construction.
+        ///     Dtypes may differ (the kernel promotes per element; result is always
+        ///     bool). The bool result takes the array operand's layout (C, or
+        ///     strictly-F) so the linear write matches the linear read, matching the
+        ///     post-kernel <see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>
+        ///     branch. Returns null (→ NpyIter) for broadcast, mixed C/F, strided,
+        ///     or unsupported emit.
+        /// </summary>
+        private unsafe NDArray<bool>? TryTrivialContiguousComparisonOp(
+            NDArray lhs, NDArray rhs, ComparisonOp op, NPTypeCode lhsType, NPTypeCode rhsType)
+        {
+            var ls = lhs.Shape;
+            var rs = rhs.Shape;
+
+            bool lhsScalarLike = ls.IsScalar || ls.size == 1;
+            bool rhsScalarLike = rs.IsScalar || rs.size == 1;
+
+            ExecutionPath path;
+            Shape arrShape;   // operand whose shape+layout the result follows
+            if (lhsScalarLike ^ rhsScalarLike)
+            {
+                // Scalar-broadcast: the array operand drives the result.
+                var array = rhsScalarLike ? lhs : rhs;
+                arrShape = array.Shape;
+                if (arrShape.IsBroadcasted)
+                    return null;
+                if (!arrShape.IsContiguous && !arrShape.IsFContiguous)
+                    return null;   // strided/transposed array operand → NpyIter
+                path = rhsScalarLike ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
+            }
+            else
+            {
+                // Equal-shape (both arrays, or both size-1). Same dims, one shared
+                // contiguous layout.
+                if (!ls.Equals(rs))
+                    return null;
+                if (ls.IsBroadcasted || rs.IsBroadcasted)
+                    return null;
+                bool bothC = ls.IsContiguous && rs.IsContiguous;
+                bool bothF = !bothC && ls.IsFContiguous && rs.IsFContiguous;
+                if (!bothC && !bothF)
+                    return null;
+                path = ExecutionPath.SimdFull;
+                arrShape = bothF ? rs : ls;
+            }
+
+            var key = new ComparisonKernelKey(lhsType, rhsType, op, path);
+            ComparisonKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetComparisonKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            // Strictly-F (ndim > 1 column-major) → F result; C or 1-D → C result.
+            bool isF = arrShape.IsFContiguous && !arrShape.IsContiguous;
+            var dims = (long[])arrShape.dimensions.Clone();
+            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
+            var result = new NDArray<bool>(resultShape, true);
+            if (result.size == 0)
+                return result;
+
+            ExecuteComparisonKernel(kernel, lhs, rhs, result, lhs.Shape, rhs.Shape);
             return result;
         }
 

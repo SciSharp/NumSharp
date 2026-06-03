@@ -61,6 +61,19 @@ namespace NumSharp.Backends
                 return ExecuteScalarUnary(nd, op, outputType);
             }
 
+            // -------- O(1) trivial-loop bypass -----------------------------
+            // Same rationale as the binary/comparison routes (NumPy
+            // check_for_trivial_loop): a single contiguous operand (C or F, not
+            // broadcast) routes straight to the existing DirectIL whole-array unary
+            // kernel, skipping NpyIter construction. The result takes the input's
+            // layout so the linear read/write align; in/out dtypes may differ
+            // (predicate ops -> bool, Abs(complex) -> double). Returns null for
+            // strided/broadcast/unsupported -> NpyIter route below.
+            {
+                var trivial = TryTrivialContiguousUnaryOp(nd, op, inputType, outputType);
+                if (trivial is not null) return trivial;
+            }
+
             // -------- NpyIter Tier 3B fast path (all unary ops) ------------
             // Funnels through the NpyIter inner-loop kernel factory for the
             // same architectural reasons as the binary route: unified driver,
@@ -104,6 +117,58 @@ namespace NumSharp.Backends
             if (ShouldProduceFContigOutput(nd, result.Shape))
                 return result.copy('F');
 
+            return result;
+        }
+
+        /// <summary>
+        ///     Unary arm of the trivial-loop bypass (see the binary
+        ///     <c>TryTrivialContiguousBinaryOp</c>). When the single operand is
+        ///     contiguous (C or F, not broadcast), routes straight to the existing
+        ///     DirectIL whole-array unary kernel (the contiguous <see cref="UnaryKernelKey"/>
+        ///     variant walks input/output linearly), skipping NpyIter construction.
+        ///
+        ///     For an F-contig input we force the contiguous kernel AND allocate an
+        ///     F result: both buffers are then walked in the same physical-linear =
+        ///     F-logical order, so element k of input maps to element k of output.
+        ///     This matches — and pre-empts — the post-kernel
+        ///     <see cref="ShouldProduceFContigOutput(NDArray, Shape)"/> copy('F').
+        ///     In/out dtypes may differ (predicate ops -> bool, Abs(complex) ->
+        ///     double); the kernel emits the conversion. Returns null (→ NpyIter)
+        ///     for strided/broadcast inputs or unsupported emit.
+        /// </summary>
+        private unsafe NDArray? TryTrivialContiguousUnaryOp(
+            NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var s = nd.Shape;
+            if (s.IsBroadcasted)
+                return null;
+
+            bool isC = s.IsContiguous;
+            bool isF = !isC && s.IsFContiguous;
+            if (!isC && !isF)
+                return null;   // strided/transposed → NpyIter
+
+            // Contiguous kernel variant (4th arg = isContiguous): linear input[i] -> output[i].
+            var key = new UnaryKernelKey(inputType, outputType, op, true);
+            UnaryKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetUnaryKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            var dims = (long[])s.dimensions.Clone();
+            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
+            var result = new NDArray(outputType, resultShape, false);
+            if (result.size == 0)
+                return result;
+
+            ExecuteUnaryKernel(kernel, nd, result);
             return result;
         }
 

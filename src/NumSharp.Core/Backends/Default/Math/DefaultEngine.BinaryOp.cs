@@ -84,6 +84,25 @@ namespace NumSharp.Backends
                 return ExecuteScalarScalar(lhs, rhs, op, resultType);
             }
 
+            // -------- O(1) trivial-loop bypass -----------------------------
+            // NumSharp analogue of NumPy's check_for_trivial_loop +
+            // try_trivial_single_output_loop (ufunc_object.c), which handle a
+            // single strided inner loop "without using the (heavy) iterator."
+            // When both operands share ONE contiguous layout (both C, or both F),
+            // have identical shape (no broadcast) and the same dtype as the result
+            // (no cast), a single linear walk over all three buffers visits the
+            // same logical element — so we route straight to the existing DirectIL
+            // SimdFull whole-array kernel and skip the NpyIter MultiNew/Initialize
+            // construction (measured ~600-2000 ns/call: 22-24% of a small
+            // contiguous op, <=3% once n>=64K). Returns null for anything that is
+            // not trivially contiguous (broadcast/mixed-C-F/strided/cast/scalar-
+            // broadcast/unsupported emit) → falls through to the NpyIter route
+            // below with behaviour unchanged.
+            {
+                var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
+                if (trivial is not null) return trivial;
+            }
+
             // -------- NpyIter Tier 3B fast path (all binary ops) -----------
             // Routes through the NpyIter inner-loop kernel factory, which
             // collapses coalesce + SIMD dispatch (contig, SimdScalarLeft,
@@ -324,6 +343,160 @@ namespace NumSharp.Backends
             if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
                 return result.copy('F');
 
+            return result;
+        }
+
+        /// <summary>
+        ///     O(1)-gated trivial-loop bypass — the NumSharp analogue of NumPy's
+        ///     <c>check_for_trivial_loop</c> + <c>try_trivial_single_output_loop</c>
+        ///     (ufunc_object.c), which handle a single strided inner loop "without
+        ///     using the (heavy) iterator."
+        ///
+        ///     Fires only when the op needs neither broadcasting nor casting and
+        ///     both operands share ONE contiguous layout, so element k of each
+        ///     operand's buffer (from its own offset) is the same logical element:
+        ///       • dtypes identical (lhs == rhs == result) — no cast;
+        ///       • shapes identical (<see cref="Shape.Equals(Shape)"/>, which
+        ///         compares size + dimensions and ignores strides) — no broadcast;
+        ///       • neither operand broadcasted (stride-0 dim with extent > 1);
+        ///       • both C-contiguous (→ C result) or both F-contiguous (→ F result).
+        ///     1-D arrays are both C and F; the C branch is tested first (C result
+        ///     == F result there), so the F branch implies ndim > 1 strictly-F,
+        ///     matching <see cref="AreAllOperandsStrictFContig"/>'s F-alloc rule.
+        ///     Contiguous slices (offset != 0) qualify because
+        ///     <see cref="ExecuteKernel"/> applies each operand's offset.
+        ///
+        ///     Routes to the SAME <see cref="ExecutionPath.SimdFull"/> DirectIL
+        ///     kernel the post-NpyIter fallback uses, so results are identical for
+        ///     every dtype/op (the generator emits a SIMD or scalar loop per dtype).
+        ///     Unsupported emits (e.g. bool subtract) throw inside the generator;
+        ///     we catch and return null so the existing path raises/handles the
+        ///     case exactly as before. Any non-trivial case returns null →
+        ///     caller proceeds to the NpyIter route.
+        /// </summary>
+        private unsafe NDArray? TryTrivialContiguousBinaryOp(
+            NDArray lhs, NDArray rhs, BinaryOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType)
+        {
+            // No cast: all three dtypes identical. Promotion cases (/ -> f64,
+            // int-base ** float -> f64, mixed dtypes) have resultType != input and
+            // are excluded here, deferring to the NpyIter route that does the cast.
+            if (lhsType != rhsType || lhsType != resultType)
+                return null;
+
+            var ls = lhs.Shape;
+            var rs = rhs.Shape;
+
+            // Scalar-broadcast: exactly one operand is scalar/size-1 and the other
+            // is a contiguous array (size > 1). NumPy's trivial loop broadcasts 0-D
+            // operands this way. The scalar is read once, the array walked linearly,
+            // and the result takes the array operand's shape+layout. (Both size-1, or
+            // both size > 1, fall through to the equal-shape branch below.)
+            bool lhsScalarLike = ls.IsScalar || ls.size == 1;
+            bool rhsScalarLike = rs.IsScalar || rs.size == 1;
+            if (lhsScalarLike ^ rhsScalarLike)
+            {
+                return TryScalarBroadcastBinaryOp(
+                    lhs, rhs, op, resultType,
+                    array: rhsScalarLike ? lhs : rhs,
+                    scalarIsRhs: rhsScalarLike);
+            }
+
+            // Identical logical shape (no broadcast). Shape.Equals compares size +
+            // dimensions and ignores strides/offset — exactly the "same shape,
+            // either layout" test we want.
+            if (!ls.Equals(rs))
+                return null;
+
+            // A stride-0 dim with extent > 1 breaks the linear-walk assumption even
+            // if the contiguity flags happen to look set; exclude explicitly.
+            if (ls.IsBroadcasted || rs.IsBroadcasted)
+                return null;
+
+            // One shared contiguous layout (C checked first; see summary).
+            bool bothC = ls.IsContiguous && rs.IsContiguous;
+            bool bothF = !bothC && ls.IsFContiguous && rs.IsFContiguous;
+            if (!bothC && !bothF)
+                return null;
+
+            // SimdFull kernel: ignores strides, walks result.size linearly. Emit may
+            // be unsupported for some op/dtype (e.g. bool '-') — fall through to the
+            // existing path so it raises (or handles) the case identically.
+            var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, ExecutionPath.SimdFull);
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            var dims = (long[])ls.dimensions.Clone();
+            Shape resultShape = bothF ? new Shape(dims, 'F') : new Shape(dims);
+            var result = new NDArray(resultType, resultShape, false);
+
+            // Empty result: nothing to compute (the kernel assumes >= 1 element).
+            if (result.size == 0)
+                return result;
+
+            ExecuteKernel(kernel, lhs, rhs, result, ls, rs);
+            return result;
+        }
+
+        /// <summary>
+        ///     Scalar-broadcast arm of the trivial-loop bypass: <c>array op scalar</c>
+        ///     or <c>scalar op array</c> where the array operand is contiguous. Routes
+        ///     to the existing <see cref="ExecutionPath.SimdScalarRight"/> /
+        ///     <see cref="ExecutionPath.SimdScalarLeft"/> DirectIL kernel (scalar read
+        ///     once, array walked linearly), skipping NpyIter construction. The result
+        ///     takes the array operand's shape and layout (C, or strictly-F) so the
+        ///     linear write aligns with the linear array read. Returns null (→ NpyIter)
+        ///     when the array operand is non-contiguous or the emit is unsupported.
+        ///
+        ///     Callers guarantee identical dtypes (same-dtype gate in
+        ///     <see cref="TryTrivialContiguousBinaryOp"/>), so the kernel key uses
+        ///     <paramref name="resultType"/> for all three operand slots.
+        /// </summary>
+        private unsafe NDArray? TryScalarBroadcastBinaryOp(
+            NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode resultType,
+            NDArray array, bool scalarIsRhs)
+        {
+            var arrShape = array.Shape;
+            if (arrShape.IsBroadcasted)
+                return null;
+
+            bool isC = arrShape.IsContiguous;
+            bool isF = !isC && arrShape.IsFContiguous;
+            if (!isC && !isF)
+                return null;   // strided/transposed array operand → NpyIter
+
+            var path = scalarIsRhs ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
+            var key = new MixedTypeKernelKey(resultType, resultType, resultType, op, path);
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            var dims = (long[])arrShape.dimensions.Clone();
+            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
+            var result = new NDArray(resultType, resultShape, false);
+            if (result.size == 0)
+                return result;
+
+            // lhs/rhs keep their original operand positions; the SimdScalarRight/Left
+            // kernel reads the scalar side once and walks the array side linearly.
+            ExecuteKernel(kernel, lhs, rhs, result, lhs.Shape, rhs.Shape);
             return result;
         }
 
