@@ -74,6 +74,20 @@ namespace NumSharp.Backends
                 if (trivial is not null) return trivial;
             }
 
+            // -------- Buffered-SIMD path for 1-D strided inputs ------------
+            // A non-contiguous (stepped/reversed/strided) 1-D input can't feed
+            // the SIMD inner loop directly — the elementwise NpyIter route falls
+            // to a scalar per-element walk. NumPy's answer is buffering: copy a
+            // cache-sized chunk of the strided source into a contiguous tile,
+            // run the SIMD kernel on the tile, repeat. We do exactly that here,
+            // reusing the proven contiguous unary kernel, for ops whose contig
+            // kernel is actually SIMD-accelerated (CanUseUnarySimd) — otherwise
+            // the extra gather would just add cost over the scalar path.
+            {
+                var buffered = TryBufferedStridedUnaryOp(nd, op, inputType, outputType);
+                if (buffered is not null) return buffered;
+            }
+
             // -------- NpyIter Tier 3B fast path (all unary ops) ------------
             // Funnels through the NpyIter inner-loop kernel factory for the
             // same architectural reasons as the binary route: unified driver,
@@ -172,6 +186,101 @@ namespace NumSharp.Backends
 
             ExecuteUnaryKernel(kernel, nd, result);
             return result;
+        }
+
+        /// <summary>
+        ///     Buffered-SIMD execution for a 1-D non-contiguous (strided / reversed)
+        ///     unary input. Gathers the strided source into a contiguous stack tile
+        ///     and runs the SIMD contiguous unary kernel on the tile, chunk by chunk —
+        ///     NumPy's buffering strategy. Returns null (→ NpyIter scalar route) when
+        ///     the input isn't 1-D strided, is broadcast, or the op's contiguous kernel
+        ///     isn't SIMD-accelerated (in which case the gather would be pure overhead
+        ///     over the scalar walk). The result is a fresh contiguous 1-D array — the
+        ///     same shape/layout NumPy returns for a unary over a strided 1-D view.
+        /// </summary>
+        private unsafe NDArray? TryBufferedStridedUnaryOp(
+            NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            var s = nd.Shape;
+            // Only genuinely strided 1-D. (Contiguous — including an offset slice with
+            // stride 1 — reports IsContiguous and is handled by the trivial bypass.)
+            if (s.NDim != 1 || s.IsContiguous || s.IsBroadcasted)
+                return null;
+
+            // Gate to ops whose contiguous kernel vectorizes: the point is to convert a
+            // scalar strided walk into a SIMD contiguous one. For scalar-only ops
+            // (exp/sin/... — no Vector intrinsic) the gather would only add cost.
+            var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
+            if (!DirectILKernelGenerator.CanUseUnarySimd(key))
+                return null;
+
+            UnaryKernel kernel;
+            try { kernel = DirectILKernelGenerator.GetUnaryKernel(key); }
+            catch (NotSupportedException) { return null; }
+            if (kernel == null)
+                return null;
+
+            long n = s.size;
+            var result = new NDArray(outputType, new Shape(n), false);
+            if (n == 0)
+                return result;
+
+            // In-memory element sizes via NPTypeCode.SizeOf() — NOT dtypesize, which is
+            // Marshal-based and reports 4 for bool. strides[0] is an element stride.
+            int inElem = inputType.SizeOf();
+            int outElem = outputType.SizeOf();
+            long inByteStride = s.strides[0] * inElem;
+            byte* inBase = (byte*)nd.Address + s.offset * (long)inElem;
+            byte* outBase = (byte*)result.Address;
+
+            // Cache-resident tile reused across chunks (16B covers Complex/Decimal).
+            const int TILE = 2048;
+            byte* scratch = stackalloc byte[TILE * 16];
+            long* dShape = stackalloc long[1];
+            long* dStrides = stackalloc long[1];
+            dStrides[0] = 1;
+
+            for (long pos = 0; pos < n; pos += TILE)
+            {
+                int chunk = (int)Math.Min((long)TILE, n - pos);
+                GatherStrided(inBase + pos * inByteStride, inByteStride, scratch, chunk, inElem);
+                dShape[0] = chunk;
+                // Contiguous kernel: ignores strides/shape, walks `chunk` linearly with SIMD.
+                kernel((void*)scratch, (void*)(outBase + pos * outElem), dStrides, dShape, 1, chunk);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Copy <paramref name="count"/> elements of <paramref name="elemSize"/> bytes
+        ///     from a strided source (byte stride <paramref name="byteStride"/>, may be
+        ///     negative for reversed views) into a contiguous destination. Typed per common
+        ///     element width so the JIT emits a tight incremental load/store loop.
+        /// </summary>
+        private static unsafe void GatherStrided(byte* src, long byteStride, byte* dst, int count, int elemSize)
+        {
+            switch (elemSize)
+            {
+                case 1:
+                    for (int k = 0; k < count; k++) { dst[k] = *src; src += byteStride; }
+                    break;
+                case 2:
+                    { var d = (short*)dst; for (int k = 0; k < count; k++) { d[k] = *(short*)src; src += byteStride; } }
+                    break;
+                case 4:
+                    { var d = (int*)dst; for (int k = 0; k < count; k++) { d[k] = *(int*)src; src += byteStride; } }
+                    break;
+                case 8:
+                    { var d = (long*)dst; for (int k = 0; k < count; k++) { d[k] = *(long*)src; src += byteStride; } }
+                    break;
+                case 16:
+                    { var d = (decimal*)dst; for (int k = 0; k < count; k++) { d[k] = *(decimal*)src; src += byteStride; } }
+                    break;
+                default:
+                    for (int k = 0; k < count; k++) { Buffer.MemoryCopy(src, dst + (long)k * elemSize, elemSize, elemSize); src += byteStride; }
+                    break;
+            }
         }
 
         /// <summary>
