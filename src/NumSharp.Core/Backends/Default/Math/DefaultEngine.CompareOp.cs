@@ -171,9 +171,11 @@ namespace NumSharp.Backends
 
             // Strictly-F (ndim > 1 column-major) → F result; C or 1-D → C result.
             bool isF = arrShape.IsFContiguous && !arrShape.IsContiguous;
-            var dims = (long[])arrShape.dimensions.Clone();
-            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
-            var result = new NDArray<bool>(resultShape, true);
+            Shape resultShape = CanonicalResultShape(arrShape, isF);
+            // The SimdFull / SimdScalar comparison kernels write every output byte
+            // (4×-unrolled SIMD + remainder + scalar tail span [0, size)), so the
+            // zero-fill is dead work for the bypass — allocate without it.
+            var result = new NDArray<bool>(resultShape, false);
             if (result.size == 0)
                 return result;
 

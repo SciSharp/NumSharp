@@ -435,8 +435,10 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            var dims = (long[])ls.dimensions.Clone();
-            Shape resultShape = bothF ? new Shape(dims, 'F') : new Shape(dims);
+            // Reuse a canonical input shape (offset 0, owns its buffer, right order)
+            // instead of cloning dims + reconstructing strides/flags. bothF implies
+            // strictly column-major ls (1-D would have satisfied bothC first).
+            Shape resultShape = CanonicalResultShape(ls, bothF);
             var result = new NDArray(resultType, resultShape, false);
 
             // Empty result: nothing to compute (the kernel assumes >= 1 element).
@@ -488,8 +490,7 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            var dims = (long[])arrShape.dimensions.Clone();
-            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
+            Shape resultShape = CanonicalResultShape(arrShape, isF);
             var result = new NDArray(resultType, resultShape, false);
             if (result.size == 0)
                 return result;
@@ -604,6 +605,51 @@ namespace NumSharp.Backends
 
             // At least one non-scalar operand must be strictly F-contig to trigger F output.
             return lhsPureF || rhsPureF;
+        }
+
+        /// <summary>
+        ///     Build the result <see cref="Shape"/> for a trivial-loop bypass without the
+        ///     redundant dims-clone + strides-alloc + flag/size/stride walks that
+        ///     <c>new Shape(dims[, 'F'])</c> performs.
+        ///
+        ///     The bypass result must be a clean, offset-0, owns-its-buffer layout whose
+        ///     dimensions match <paramref name="src"/> in the requested order. When
+        ///     <paramref name="src"/> is ALREADY canonical — <c>offset == 0</c>, the backing
+        ///     buffer is exactly <c>size</c> elements (<c>bufferSize == size</c>, i.e. not a
+        ///     window into a larger parent) and it is contiguous in the target order — it is
+        ///     byte-for-byte what the constructor would produce. Because <see cref="Shape"/>
+        ///     is an immutable readonly struct whose <c>dimensions</c>/<c>strides</c> arrays
+        ///     are never mutated after construction, the result can share it verbatim, and we
+        ///     skip: the <c>dimensions.Clone()</c>, the <c>ComputeContiguousStrides</c>
+        ///     allocation, and the four array walks (strides + size/hash +
+        ///     <c>ComputeFlagsStatic</c>'s C/F/broadcast passes).
+        ///
+        ///     A sliced source (<c>offset != 0</c>) or a view into a larger buffer
+        ///     (<c>bufferSize &gt; size</c>) must NOT be reused — the freshly-allocated result
+        ///     starts at 0 and owns exactly <c>size</c> elements, so inheriting the source's
+        ///     offset/bufferSize would mis-describe it. Those fall back to building a fresh
+        ///     canonical Shape exactly as before.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Shape CanonicalResultShape(Shape src, bool wantF)
+        {
+            if (src.offset == 0 && src.bufferSize == src.size)
+            {
+                // 1-D arrays are both C- and F-contiguous; the C check (taken first for
+                // wantF==false) returns them, so the F branch only fires for strictly
+                // column-major (ndim > 1) sources — matching new Shape(dims, 'F').
+                if (!wantF)
+                {
+                    if (src.IsContiguous) return src;
+                }
+                else if (src.IsFContiguous && !src.IsContiguous)
+                {
+                    return src;
+                }
+            }
+
+            var dims = (long[])src.dimensions.Clone();
+            return wantF ? new Shape(dims, 'F') : new Shape(dims);
         }
 
         /// <summary>

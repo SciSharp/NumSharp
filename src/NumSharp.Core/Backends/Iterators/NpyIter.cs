@@ -756,9 +756,12 @@ namespace NumSharp.Backends.Iteration
                 }
                 if (allSame && commonDims != null)
                 {
-                    var fast = new long[commonDims.Length];
-                    Array.Copy(commonDims, fast, commonDims.Length);
-                    return fast;
+                    // commonDims aliases the first non-null operand's immutable dimensions
+                    // array. The returned broadcastShape is consumed strictly read-only by
+                    // Initialize — copied element-wise into _state->Shape and (only for
+                    // ALLOCATE outputs) cloned, never mutated in place — so hand back the
+                    // shared reference and skip the defensive new long[] + Array.Copy.
+                    return commonDims;
                 }
             }
 

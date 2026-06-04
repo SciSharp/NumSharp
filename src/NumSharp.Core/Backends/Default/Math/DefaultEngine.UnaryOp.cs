@@ -162,8 +162,10 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            var dims = (long[])s.dimensions.Clone();
-            Shape resultShape = isF ? new Shape(dims, 'F') : new Shape(dims);
+            // Reuse the input's canonical shape (offset 0, owns its buffer, right order)
+            // rather than cloning dims + recomputing strides/flags. isF implies a strictly
+            // column-major input (ndim > 1).
+            Shape resultShape = CanonicalResultShape(s, isF);
             var result = new NDArray(outputType, resultShape, false);
             if (result.size == 0)
                 return result;
