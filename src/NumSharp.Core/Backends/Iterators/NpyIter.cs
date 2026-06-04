@@ -122,6 +122,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private void Initialize(
             int nop,
             NDArray[] op,
@@ -143,17 +144,15 @@ namespace NumSharp.Backends.Iteration
             if (opFlags != null)
                 PreCheckMaskOpPairing(nop, opFlags);
 
-            // Calculate broadcast shape, optionally overridden by iterShape
-            int[] broadcastShape;
+            // Calculate broadcast shape, optionally overridden by iterShape.
+            // Dimensions are long (NumPy npy_intp parity) so large axes (> int.MaxValue
+            // elements) survive iterator construction without narrowing.
+            long[] broadcastShape;
             if (iterShape != null && iterShape.Length > 0)
             {
                 // Use explicit iterShape - allows specifying iteration shape different from broadcast
                 // NumPy's NpyIter_AdvancedNew() uses this for reductions and custom iteration patterns
-                broadcastShape = new int[iterShape.Length];
-                for (int i = 0; i < iterShape.Length; i++)
-                {
-                    broadcastShape[i] = checked((int)iterShape[i]);
-                }
+                broadcastShape = (long[])iterShape.Clone();
                 // Validate that operands are compatible with the specified shape
                 // Pass opAxes so validation accounts for -1 entries (broadcast/reduce axes)
                 ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
@@ -178,7 +177,7 @@ namespace NumSharp.Backends.Iteration
                             $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
 
                     // Determine output shape: for op_axes, filter out -1 entries
-                    int[] outputShape;
+                    long[] outputShape;
                     if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)
                     {
                         var axisMap = opAxes[opIdx];
@@ -187,7 +186,7 @@ namespace NumSharp.Backends.Iteration
                         for (int i = 0; i < axisMap.Length; i++)
                             if (axisMap[i] >= 0) realNDim++;
 
-                        outputShape = new int[realNDim];
+                        outputShape = new long[realNDim];
                         int outIdx = 0;
                         for (int iterAxis = 0; iterAxis < axisMap.Length && iterAxis < broadcastShape.Length; iterAxis++)
                         {
@@ -200,7 +199,7 @@ namespace NumSharp.Backends.Iteration
                     else
                     {
                         // No op_axes: output has full broadcast shape
-                        outputShape = (int[])broadcastShape.Clone();
+                        outputShape = (long[])broadcastShape.Clone();
                     }
 
                     // Allocate the NDArray with specified dtype and shape
@@ -343,13 +342,39 @@ namespace NumSharp.Backends.Iteration
                     // marshaled as win32 BOOL. In-memory layout uses 1 byte
                     // per bool element, so Marshal-based sizing produces
                     // pointer offsets 4x too large.
-                    var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
                     int elemBytes = arr.GetTypeCode.SizeOf();
-                    basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
 
-                    for (int d = 0; d < _state->NDim; d++)
+                    // Fast path (per-call construction cost): when the operand's
+                    // shape already equals the iteration shape, np.broadcast_to is
+                    // an identity transform — same offset, same strides, no stride-0
+                    // insertion. Detect that and copy the operand's own offset/strides
+                    // directly, skipping the broadcast_to call and its Shape allocation.
+                    // This is the dominant elementwise case (a OP b, both same shape)
+                    // and was ~25% of the iterator's setup overhead.
+                    bool sameAsIter = arrShape.NDim == _state->NDim;
+                    if (sameAsIter)
                     {
-                        stridePtr[d] = broadcastArr.strides[d];
+                        var adims = arrShape.dimensions;
+                        for (int d = 0; d < _state->NDim; d++)
+                            if (adims[d] != _state->Shape[d]) { sameAsIter = false; break; }
+                    }
+
+                    if (sameAsIter)
+                    {
+                        basePtr = (byte*)arr.Address + (arrShape.offset * elemBytes);
+                        var astrides = arrShape.strides;
+                        for (int d = 0; d < _state->NDim; d++)
+                            stridePtr[d] = astrides[d];
+                    }
+                    else
+                    {
+                        var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
+                        basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
+
+                        for (int d = 0; d < _state->NDim; d++)
+                        {
+                            stridePtr[d] = broadcastArr.strides[d];
+                        }
                     }
                 }
 
@@ -614,7 +639,8 @@ namespace NumSharp.Backends.Iteration
         /// For op_axes, constructs a virtual shape per operand reflecting the mapping,
         /// then broadcasts those virtual shapes together.
         /// </summary>
-        private static int[] CalculateBroadcastShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static long[] CalculateBroadcastShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
             int opAxesNDim = -1, int[][]? opAxes = null)
         {
             // Validate null operands have ALLOCATE flag
@@ -699,14 +725,41 @@ namespace NumSharp.Backends.Iteration
                 }
 
                 if (virtualShapes.Count == 0)
-                    return Array.Empty<int>();
+                    return Array.Empty<long>();
 
                 var resolved = NumSharp.Shape.ResolveReturnShape(virtualShapes.ToArray());
                 var dims = resolved.dimensions;
-                var result = new int[dims.Length];
+                var result = new long[dims.Length];
                 for (int i = 0; i < dims.Length; i++)
-                    result[i] = checked((int)dims[i]);
+                    result[i] = dims[i];
                 return result;
+            }
+
+            // Fast path (per-call construction cost): when every non-null operand
+            // shares identical dimensions — the dominant elementwise case
+            // (a OP b, out all same shape) — broadcasting is an identity, so the
+            // result shape is just those shared dims. Skip the List + ToArray +
+            // ResolveReturnShape + Shape allocations and return the dims directly.
+            // Dimensions stay long (NumPy npy_intp parity) — no int narrowing.
+            {
+                long[] commonDims = null;
+                bool allSame = true;
+                for (int i = 0; i < nop; i++)
+                {
+                    if (op[i] is null) continue;
+                    var d = op[i].Shape.dimensions;
+                    if (commonDims is null) { commonDims = d; continue; }
+                    if (d.Length != commonDims.Length) { allSame = false; break; }
+                    for (int k = 0; k < d.Length; k++)
+                        if (d[k] != commonDims[k]) { allSame = false; break; }
+                    if (!allSame) break;
+                }
+                if (allSame && commonDims != null)
+                {
+                    var fast = new long[commonDims.Length];
+                    Array.Copy(commonDims, fast, commonDims.Length);
+                    return fast;
+                }
             }
 
             // Standard broadcasting: use production NumSharp.Shape.ResolveReturnShape
@@ -719,13 +772,13 @@ namespace NumSharp.Backends.Iteration
             }
 
             if (shapes.Count == 0)
-                return Array.Empty<int>();
+                return Array.Empty<long>();
 
             var resolvedShape = NumSharp.Shape.ResolveReturnShape(shapes.ToArray());
             var resultDims = resolvedShape.dimensions;
-            var finalResult = new int[resultDims.Length];
+            var finalResult = new long[resultDims.Length];
             for (int i = 0; i < resultDims.Length; i++)
-                finalResult[i] = checked((int)resultDims[i]);
+                finalResult[i] = resultDims[i];
             return finalResult;
         }
 
@@ -734,8 +787,9 @@ namespace NumSharp.Backends.Iteration
         /// Each operand dimension must either equal the iterShape or be 1 (broadcastable).
         /// When opAxes is provided, -1 entries indicate dimensions that don't need validation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void ValidateIterShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
-            int[] iterShape, int opAxesNDim, int[][]? opAxes)
+            long[] iterShape, int opAxesNDim, int[][]? opAxes)
         {
             for (int opIdx = 0; opIdx < nop; opIdx++)
             {
@@ -770,8 +824,8 @@ namespace NumSharp.Backends.Iteration
                             throw new IncorrectShapeException(
                                 $"Operand {opIdx} explicit reduction axis {opAxis} has length {opShape[opAxis]}, must be 1.");
 
-                        int opDim = (int)opShape[opAxis];
-                        int iterDim = iterShape[iterAxis];
+                        long opDim = opShape[opAxis];
+                        long iterDim = iterShape[iterAxis];
 
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
@@ -801,8 +855,8 @@ namespace NumSharp.Backends.Iteration
 
                     for (int d = 0; d < opShape.Length; d++)
                     {
-                        int opDim = (int)opShape[d];
-                        int iterDim = iterShape[offset + d];
+                        long opDim = opShape[d];
+                        long iterDim = iterShape[offset + d];
 
                         // opDim must equal iterDim or be 1 (broadcastable)
                         if (opDim != iterDim && opDim != 1)
@@ -818,6 +872,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static NpyIterOpFlags TranslateOpFlags(NpyIterPerOpFlags flags)
         {
             var result = NpyIterOpFlags.None;
