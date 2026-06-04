@@ -573,11 +573,14 @@ namespace NumSharp.Backends.Kernels
             var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation (long for int64 shapes)
             var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
             var locArgIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
+            var locStride0 = il.DeclareLocal(typeof(long)); // cached strides[0] for the ndim==1 fast path
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
             var lblDimLoop = il.DefineLabel();
             var lblDimLoopEnd = il.DefineLabel();
+            var lblGeneralPath = il.DefineLabel(); // ndim>1 coordinate-decode loop
+            var lblFastHead = il.DefineLabel();    // ndim==1 incremental loop head
 
             // Initialize accumulator
             EmitLoadIdentity(il, key.Op, key.AccumulatorType);
@@ -593,6 +596,71 @@ namespace NumSharp.Backends.Kernels
             // i = 0
             il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
+
+            // ===== ndim == 1 incremental fast path =====
+            // A single strided dimension needs no flat->coordinate decode: the offset of
+            // element i+1 is just offset(i) + strides[0]. This replaces a per-element
+            // div + mod + mul (the general loop below) with a single add — numpy's
+            // incremental-advance. 1-D sliced/strided views are the dominant non-contig
+            // reduction case and were ~14x slower than NumPy purely from that div/mod.
+            // The accumulate/compare logic is identical to the general path; only the
+            // address walk differs.
+            il.Emit(OpCodes.Ldarg_3);          // ndim
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Bne_Un, lblGeneralPath);
+            {
+                // offset = 0
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Stloc, locOffset);
+                // stride0 = strides[0]   (element stride; multiplied by inputSize at load)
+                il.Emit(OpCodes.Ldarg_1);      // strides
+                il.Emit(OpCodes.Ldind_I8);
+                il.Emit(OpCodes.Stloc, locStride0);
+
+                il.MarkLabel(lblFastHead);
+                // if (i >= totalSize) goto end
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+                il.Emit(OpCodes.Bge, lblLoopEnd);
+
+                // load input[offset * inputSize]
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, locOffset);
+                il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect(il, key.InputType);
+                EmitConvertTo(il, key.InputType, key.AccumulatorType);
+
+                // combine into accumulator (or arg-step using the linear index locI)
+                if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+                {
+                    EmitArgReductionStep(il, key.Op, key.AccumulatorType, locAccum, locArgIdx, locI);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldloc, locAccum);
+                    EmitReductionCombine(il, key.Op, key.AccumulatorType);
+                    il.Emit(OpCodes.Stloc, locAccum);
+                }
+
+                // offset += stride0
+                il.Emit(OpCodes.Ldloc, locOffset);
+                il.Emit(OpCodes.Ldloc, locStride0);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locOffset);
+
+                // i++
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I8, 1L);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+                il.Emit(OpCodes.Br, lblFastHead);
+            }
+
+            // ===== general ndim>1 coordinate-decode path =====
+            il.MarkLabel(lblGeneralPath);
 
             // Main loop
             il.MarkLabel(lblLoop);
