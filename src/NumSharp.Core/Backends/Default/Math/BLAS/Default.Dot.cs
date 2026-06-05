@@ -44,12 +44,10 @@ namespace NumSharp.Backends
             }
 
             //If both a and b are 1-D arrays, it is inner product of vectors (without complex conjugation).
+            // Fused single-pass kernel (no temp product array) — see Default.Dot.Fused.cs.
             if (leftshape.NDim == 1 && rightshape.NDim == 1)
             {
-                Debug.Assert(leftshape[0] == rightshape[0]);
-                // Preserve dtype - dot product should return same type as inputs
-                var product = left * right;
-                return ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
+                return DotInner1D(left, right);
             }
 
             //If a is an N-D array and b is a 1-D array, it is a sum product over the last axis of a and b.
