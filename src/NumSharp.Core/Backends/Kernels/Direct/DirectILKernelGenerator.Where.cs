@@ -479,7 +479,7 @@ namespace NumSharp.Backends.Kernels
         ///   <c>V&lt;simdBits&gt;&lt;unsignedT&gt;</c> for the GreaterThan compare.</item>
         /// </list>
         /// </summary>
-        private static void EmitInlineMaskCreation(ILGenerator il, int simdBits, int elementSize)
+        internal static void EmitInlineMaskCreation(ILGenerator il, int simdBits, int elementSize)
         {
             if (elementSize == 1)
             {

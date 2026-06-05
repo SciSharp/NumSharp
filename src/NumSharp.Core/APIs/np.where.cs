@@ -184,13 +184,19 @@ namespace NumSharp
             return result;
         }
 
-        private static void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
+        private static unsafe void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
         {
-            // Drive cond + x + y + result in lockstep via a 4-operand NpyIter
-            // compiling Where(cond, x, y) → out as a single IL expression kernel.
-            // C-order traversal matches NumPy element semantics; WRITEONLY on
-            // the output lets the iterator allocate per-inner-loop buffer space
-            // when casting is needed.
+            // Drive cond + x + y + result in lockstep via a 4-operand NpyIter and a
+            // dedicated per-chunk multi-operand kernel (ILKernelGenerator.Where).
+            // C-order traversal matches NumPy element semantics; WRITEONLY on the
+            // output. Operands already share dtypes by here (cond is Boolean, x/y/
+            // result are the resolved output dtype), so no casting/buffering occurs.
+            //
+            // The kernel SIMD-selects (Vector.ConditionalSelect over an expanded
+            // bool mask) whenever the inner loop is contiguous for all four operands
+            // — e.g. a row-mask broadcast over a matrix — and scalar-walks per byte
+            // stride otherwise. Both beat the previous NpyExpr.Where path, which was
+            // scalar-only AND cast cond to the output dtype on every element.
             var dtype = result.GetTypeCode;
             using var iter = NpyIterRef.MultiNew(
                 4, new[] { cond, x, y, result },
@@ -205,12 +211,7 @@ namespace NumSharp
                     NpyIterPerOpFlags.WRITEONLY,
                 });
 
-            var expr = NpyExpr.Where(NpyExpr.Input(0), NpyExpr.Input(1), NpyExpr.Input(2));
-            iter.ExecuteExpression(
-                expr,
-                new[] { NPTypeCode.Boolean, dtype, dtype },
-                dtype,
-                cacheKey: $"np.where.{dtype}");
+            iter.ForEach(ILKernelGenerator.GetWhereInnerLoop(dtype));
         }
 
         private static char ResolveWhereOrder(params NDArray[] operands)
