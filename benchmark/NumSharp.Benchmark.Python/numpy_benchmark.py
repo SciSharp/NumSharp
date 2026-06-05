@@ -809,13 +809,268 @@ def print_summary(results: List[BenchmarkResult]):
     except ImportError:
         print("\n(Install 'tabulate' for formatted table output: pip install tabulate)")
 
+# =============================================================================
+# Extended coverage suites (mirror the new C# benchmark classes 1:1 by op name)
+# =============================================================================
+
+# dtype sets that mirror the C# TypeParameterSource collections.
+BITWISE_DTYPES = ['bool', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64']
+FLOAT_DTYPES = ['float32', 'float64']
+
+
+def _b(func, n, iterations, name, suite, dtype, category=""):
+    """Run one benchmark and tag it. name MUST equal the C# [Benchmark(Description=...)]."""
+    r = benchmark(func, n, iterations=iterations)
+    r.name = f"{name} ({dtype})"
+    r.suite = suite
+    r.dtype = dtype
+    r.category = category or suite
+    return r
+
+
+def run_comparison_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    b = create_random_array(n, dtype_name, seed=43)
+    return [
+        _b(lambda: a == b, n, iterations, "a == b", "Comparison", dtype_name),
+        _b(lambda: a != b, n, iterations, "a != b", "Comparison", dtype_name),
+        _b(lambda: a < b,  n, iterations, "a < b",  "Comparison", dtype_name),
+        _b(lambda: a > b,  n, iterations, "a > b",  "Comparison", dtype_name),
+        _b(lambda: a <= b, n, iterations, "a <= b", "Comparison", dtype_name),
+        _b(lambda: a >= b, n, iterations, "a >= b", "Comparison", dtype_name),
+    ]
+
+
+def run_bitwise_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    b = create_random_array(n, dtype_name, seed=43)
+    return [
+        _b(lambda: a & b, n, iterations, "a & b", "Bitwise", dtype_name),
+        _b(lambda: a | b, n, iterations, "a | b", "Bitwise", dtype_name),
+        _b(lambda: a ^ b, n, iterations, "a ^ b", "Bitwise", dtype_name),
+        _b(lambda: np.invert(a), n, iterations, "np.invert(a)", "Bitwise", dtype_name),
+        _b(lambda: np.left_shift(a, 2), n, iterations, "np.left_shift(a, 2)", "Bitwise", dtype_name),
+        _b(lambda: np.right_shift(a, 2), n, iterations, "np.right_shift(a, 2)", "Bitwise", dtype_name),
+    ]
+
+
+def run_unary_extra_benchmarks(n, dtype_name, iterations):
+    a = create_positive_array(n, dtype_name, seed=42)
+    return [
+        _b(lambda: np.cbrt(a), n, iterations, "np.cbrt(a)", "Unary", dtype_name),
+        _b(lambda: np.reciprocal(a), n, iterations, "np.reciprocal(a)", "Unary", dtype_name),
+        _b(lambda: np.square(a), n, iterations, "np.square(a)", "Unary", dtype_name),
+        _b(lambda: np.negative(a), n, iterations, "np.negative(a)", "Unary", dtype_name),
+        _b(lambda: np.positive(a), n, iterations, "np.positive(a)", "Unary", dtype_name),
+        _b(lambda: np.trunc(a), n, iterations, "np.trunc(a)", "Unary", dtype_name),
+    ]
+
+
+def run_logic_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    b = create_random_array(n, dtype_name, seed=43)
+    return [
+        _b(lambda: np.isnan(a), n, iterations, "np.isnan(a)", "Logic", dtype_name),
+        _b(lambda: np.isinf(a), n, iterations, "np.isinf(a)", "Logic", dtype_name),
+        _b(lambda: np.isfinite(a), n, iterations, "np.isfinite(a)", "Logic", dtype_name),
+        _b(lambda: np.maximum(a, b), n, iterations, "np.maximum(a, b)", "Logic", dtype_name),
+        _b(lambda: np.minimum(a, b), n, iterations, "np.minimum(a, b)", "Logic", dtype_name),
+        _b(lambda: np.isclose(a, b), n, iterations, "np.isclose(a, b)", "Logic", dtype_name),
+        _b(lambda: np.allclose(a, b), n, iterations, "np.allclose(a, b)", "Logic", dtype_name),
+        _b(lambda: np.array_equal(a, b), n, iterations, "np.array_equal(a, b)", "Logic", dtype_name),
+    ]
+
+
+def run_bool_logic_benchmarks(n, iterations):
+    np.random.seed(42)
+    mask = np.random.random(n) > 0.5
+    return [
+        _b(lambda: bool(np.all(mask)), n, iterations, "np.all(a)", "Logic", "bool"),
+        _b(lambda: bool(np.any(mask)), n, iterations, "np.any(a)", "Logic", "bool"),
+    ]
+
+
+def run_nan_reduction_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    return [
+        _b(lambda: np.nansum(a), n, iterations, "np.nansum(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanmean(a), n, iterations, "np.nanmean(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanmax(a), n, iterations, "np.nanmax(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanmin(a), n, iterations, "np.nanmin(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanstd(a), n, iterations, "np.nanstd(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanvar(a), n, iterations, "np.nanvar(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanprod(a), n, iterations, "np.nanprod(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanmedian(a), n, iterations, "np.nanmedian(a)", "Reduction", dtype_name),
+        _b(lambda: np.nanpercentile(a, 50), n, iterations, "np.nanpercentile(a, 50)", "Reduction", dtype_name),
+        _b(lambda: np.nanquantile(a, 0.5), n, iterations, "np.nanquantile(a, 0.5)", "Reduction", dtype_name),
+    ]
+
+
+def run_statistics_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    return [
+        _b(lambda: np.median(a), n, iterations, "np.median(a)", "Statistics", dtype_name),
+        _b(lambda: np.percentile(a, 50), n, iterations, "np.percentile(a, 50)", "Statistics", dtype_name),
+        _b(lambda: np.quantile(a, 0.5), n, iterations, "np.quantile(a, 0.5)", "Statistics", dtype_name),
+        _b(lambda: np.average(a), n, iterations, "np.average(a)", "Statistics", dtype_name),
+        _b(lambda: np.ptp(a), n, iterations, "np.ptp(a)", "Statistics", dtype_name),
+        _b(lambda: np.count_nonzero(a), n, iterations, "np.count_nonzero(a)", "Statistics", dtype_name),
+    ]
+
+
+def run_sorting_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    srt = np.arange(n, dtype=DTYPES[dtype_name])
+    return [
+        _b(lambda: np.argsort(a), n, iterations, "np.argsort(a)", "Sorting", dtype_name),
+        _b(lambda: np.nonzero(a), n, iterations, "np.nonzero(a)", "Sorting", dtype_name),
+        _b(lambda: np.searchsorted(srt, n // 2), n, iterations, "np.searchsorted(a, v)", "Sorting", dtype_name),
+    ]
+
+
+def run_linalg_benchmarks(n, iterations):
+    np.random.seed(42)
+    m = int(n ** 0.5)
+    mc = min(m, 384)
+    v = np.random.random(n)
+    vM = np.random.random(m)
+    matA = np.random.random((mc, mc))
+    matB = np.random.random((mc, mc))
+    return [
+        _b(lambda: np.dot(v, v), n, iterations, "np.dot(a, b)", "LinearAlgebra", "float64"),
+        _b(lambda: np.outer(vM, vM), n, iterations, "np.outer(a, b)", "LinearAlgebra", "float64"),
+        _b(lambda: np.matmul(matA, matB), n, iterations, "np.matmul(A, B)", "LinearAlgebra", "float64"),
+    ]
+
+
+def run_where_benchmarks(n, iterations):
+    np.random.seed(42)
+    a = np.random.random(n) * 100 - 50
+    b = np.random.random(n) * 100 - 50
+    cond = a > 0
+    return [
+        _b(lambda: np.where(cond, a, b), n, iterations, "np.where(cond, a, b)", "Selection", "float64"),
+        _b(lambda: np.where(cond), n, iterations, "np.where(cond)", "Selection", "float64"),
+    ]
+
+
+def run_cumulative_benchmarks(n, dtype_name, iterations):
+    a = create_random_array(n, dtype_name, seed=42)
+    return [
+        _b(lambda: np.cumprod(a), n, iterations, "np.cumprod(a)", "Reduction", dtype_name),
+    ]
+
+
+def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) -> List[BenchmarkResult]:
+    """Run all selected suites at a single array size N and return the results.
+
+    Extracted from main() so the official run can sweep multiple sizes in one invocation
+    (each result carries its own n, which the merge keys on)."""
+    results_all: List[BenchmarkResult] = []
+
+    if suite in ["dispatch", "all"]:
+        results_all.extend(run_dispatch_benchmarks(n, iterations))
+
+    if suite in ["fusion", "all"]:
+        results_all.extend(run_fusion_benchmarks(n, iterations))
+
+    if suite in ["arithmetic", "all"]:
+        print(f"\n{'='*60}\n  Arithmetic Benchmarks (N={n:,})\n{'='*60}")
+        for dtype in dtypes_to_run:
+            if dtype in ARITHMETIC_DTYPES:
+                print(f"\n  --- {dtype} ---")
+                results = run_arithmetic_benchmarks(n, dtype, iterations)
+                results_all.extend(results)
+                for r in results:
+                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+
+    if suite in ["unary", "all"]:
+        print(f"\n{'='*60}\n  Unary Benchmarks (N={n:,})\n{'='*60}")
+        for dtype in dtypes_to_run:
+            if dtype in TRANSCENDENTAL_DTYPES:
+                print(f"\n  --- {dtype} ---")
+                results = run_unary_benchmarks(n, dtype, iterations)
+                results_all.extend(results)
+                for r in results:
+                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+        # Extra unary math (cbrt/reciprocal/square/negative/positive/trunc) — mirrors
+        # the C# UnaryExtraBenchmarks class (also under the Unary namespace).
+        for dtype in FLOAT_DTYPES:
+            results_all.extend(run_unary_extra_benchmarks(n, dtype, iterations))
+
+    if suite in ["reduction", "all"]:
+        print(f"\n{'='*60}\n  Reduction Benchmarks (N={n:,})\n{'='*60}")
+        for dtype in dtypes_to_run:
+            print(f"\n  --- {dtype} ---")
+            results = run_reduction_benchmarks(n, dtype, iterations)
+            results_all.extend(results)
+            for r in results:
+                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+        # NaN-aware reductions + cumprod — mirror C# NanReductionBenchmarks / CumulativeBenchmarks.
+        for dtype in FLOAT_DTYPES:
+            results_all.extend(run_nan_reduction_benchmarks(n, dtype, iterations))
+            results_all.extend(run_cumulative_benchmarks(n, dtype, iterations))
+
+    if suite in ["broadcast", "all"]:
+        results_all.extend(run_broadcast_benchmarks(n, iterations))
+
+    if suite in ["creation", "all"]:
+        print(f"\n{'='*60}\n  Creation Benchmarks (N={n:,})\n{'='*60}")
+        for dtype in COMMON_DTYPES:
+            print(f"\n  --- {dtype} ---")
+            results = run_creation_benchmarks(n, dtype, iterations)
+            results_all.extend(results)
+            for r in results:
+                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
+
+    if suite in ["manipulation", "all"]:
+        results_all.extend(run_manipulation_benchmarks(n, iterations))
+
+    if suite in ["slicing", "all"]:
+        results_all.extend(run_slicing_benchmarks(n, iterations))
+
+    if suite in ["comparison", "all"]:
+        for dtype in COMMON_DTYPES:
+            results_all.extend(run_comparison_benchmarks(n, dtype, iterations))
+
+    if suite in ["bitwise", "all"]:
+        for dtype in BITWISE_DTYPES:
+            results_all.extend(run_bitwise_benchmarks(n, dtype, iterations))
+
+    if suite in ["logic", "all"]:
+        for dtype in FLOAT_DTYPES:
+            results_all.extend(run_logic_benchmarks(n, dtype, iterations))
+        results_all.extend(run_bool_logic_benchmarks(n, iterations))
+
+    if suite in ["statistics", "all"]:
+        for dtype in FLOAT_DTYPES:
+            results_all.extend(run_statistics_benchmarks(n, dtype, iterations))
+
+    if suite in ["sorting", "all"]:
+        for dtype in COMMON_DTYPES:
+            results_all.extend(run_sorting_benchmarks(n, dtype, iterations))
+
+    if suite in ["linalg", "all"]:
+        results_all.extend(run_linalg_benchmarks(n, iterations))
+
+    if suite in ["selection", "all"]:
+        results_all.extend(run_where_benchmarks(n, iterations))
+
+    return results_all
+
+
 def main():
     parser = argparse.ArgumentParser(description="NumPy Performance Benchmarks")
     parser.add_argument("--suite", choices=["dispatch", "fusion", "arithmetic", "unary", "reduction",
-                                            "broadcast", "creation", "manipulation", "slicing", "all"],
+                                            "broadcast", "creation", "manipulation", "slicing",
+                                            "comparison", "bitwise", "logic", "statistics", "sorting",
+                                            "linalg", "selection", "all"],
                         default="all", help="Benchmark suite to run")
     parser.add_argument("--n", type=int, default=10_000_000, help="Array size")
-    parser.add_argument("--size", choices=["small", "medium", "large"], default=None, help="Array size preset")
+    parser.add_argument("--size", choices=["small", "medium", "large", "all"], default=None,
+                        help="Array size preset ('all' sweeps small+medium+large in one run)")
+    parser.add_argument("--cache-sizes", action="store_true",
+                        help="Sweep all three cache-tier sizes (small, medium, large) in one invocation")
     parser.add_argument("--type", type=str, default=None, help="Specific dtype (e.g., int32, float64)")
     parser.add_argument("--iterations", type=int, default=50, help="Benchmark iterations")
     parser.add_argument("--quick", action="store_true", help="Quick run (10 iterations, common types only)")
@@ -826,7 +1081,7 @@ def main():
     if args.quick:
         args.iterations = 10
 
-    if args.size:
+    if args.size and args.size != "all":
         args.n = ARRAY_SIZES[args.size]
 
     # Determine which dtypes to run
@@ -840,70 +1095,19 @@ def main():
     print(f"Iterations: {args.iterations}")
     print(f"Types: {dtypes_to_run}")
 
+    # Sizes to sweep: --size all (or --cache-sizes) runs the three cache-tier sizes in one
+    # invocation so a single JSON carries all three; otherwise the single resolved args.n.
+    if args.cache_sizes or args.size == "all":
+        sizes_to_run = [ARRAY_SIZES["small"], ARRAY_SIZES["medium"], ARRAY_SIZES["large"]]
+    else:
+        sizes_to_run = [args.n]
+
+    print(f"Sizes to run: {[f'{n:,}' for n in sizes_to_run]}")
+
     all_results = []
-
-    # Dispatch and Fusion benchmarks (original)
-    if args.suite in ["dispatch", "all"]:
-        all_results.extend(run_dispatch_benchmarks(args.n, args.iterations))
-
-    if args.suite in ["fusion", "all"]:
-        all_results.extend(run_fusion_benchmarks(args.n, args.iterations))
-
-    # Comprehensive benchmarks with type iteration
-    if args.suite in ["arithmetic", "all"]:
-        print(f"\n{'='*60}")
-        print(f"  Arithmetic Benchmarks (N={args.n:,})")
-        print(f"{'='*60}")
-        for dtype in dtypes_to_run:
-            if dtype in ARITHMETIC_DTYPES:
-                print(f"\n  --- {dtype} ---")
-                results = run_arithmetic_benchmarks(args.n, dtype, args.iterations)
-                all_results.extend(results)
-                for r in results:
-                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
-
-    if args.suite in ["unary", "all"]:
-        print(f"\n{'='*60}")
-        print(f"  Unary Benchmarks (N={args.n:,})")
-        print(f"{'='*60}")
-        for dtype in dtypes_to_run:
-            if dtype in TRANSCENDENTAL_DTYPES:
-                print(f"\n  --- {dtype} ---")
-                results = run_unary_benchmarks(args.n, dtype, args.iterations)
-                all_results.extend(results)
-                for r in results:
-                    print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
-
-    if args.suite in ["reduction", "all"]:
-        print(f"\n{'='*60}")
-        print(f"  Reduction Benchmarks (N={args.n:,})")
-        print(f"{'='*60}")
-        for dtype in dtypes_to_run:
-            print(f"\n  --- {dtype} ---")
-            results = run_reduction_benchmarks(args.n, dtype, args.iterations)
-            all_results.extend(results)
-            for r in results:
-                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
-
-    if args.suite in ["broadcast", "all"]:
-        all_results.extend(run_broadcast_benchmarks(args.n, args.iterations))
-
-    if args.suite in ["creation", "all"]:
-        print(f"\n{'='*60}")
-        print(f"  Creation Benchmarks (N={args.n:,})")
-        print(f"{'='*60}")
-        for dtype in COMMON_DTYPES:
-            print(f"\n  --- {dtype} ---")
-            results = run_creation_benchmarks(args.n, dtype, args.iterations)
-            all_results.extend(results)
-            for r in results:
-                print(f"  {r.name:<40} {r.mean_ms:>8.3f} ms")
-
-    if args.suite in ["manipulation", "all"]:
-        all_results.extend(run_manipulation_benchmarks(args.n, args.iterations))
-
-    if args.suite in ["slicing", "all"]:
-        all_results.extend(run_slicing_benchmarks(args.n, args.iterations))
+    for n in sizes_to_run:
+        print(f"\n{'#'*64}\n#  ARRAY SIZE  N = {n:,}\n{'#'*64}")
+        all_results.extend(run_suites(n, args.suite, dtypes_to_run, args.iterations))
 
     # Output
     if args.json or args.output:

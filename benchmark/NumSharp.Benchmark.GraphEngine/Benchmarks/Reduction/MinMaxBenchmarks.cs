@@ -77,9 +77,9 @@ public class MinMaxBenchmarks : TypedBenchmarkBase
 
     [Benchmark(Description = "np.argmin(a)")]
     [BenchmarkCategory("ArgMin")]
-    public int ArgMin() => np.argmin(_a1D);
+    public long ArgMin() => np.argmin(_a1D);
 
     [Benchmark(Description = "np.argmax(a)")]
     [BenchmarkCategory("ArgMax")]
-    public int ArgMax() => np.argmax(_a1D);
+    public long ArgMax() => np.argmax(_a1D);
 }

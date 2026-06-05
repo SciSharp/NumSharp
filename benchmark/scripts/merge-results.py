@@ -97,9 +97,9 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
                 elif part.startswith('DType='):
                     dtype = part[6:].lower()
 
-        # Only use Large array size (10M) for comparison
-        if n != 10_000_000:
-            return None
+        # Keep ALL sizes (Small/Medium/Large) — the comparison is per-(op, dtype, N).
+        # (Historically this dropped everything but N=10M, collapsing the report to a
+        # single size; the 3-size matrix requires every parameterized N to flow through.)
 
         # Convert nanoseconds to milliseconds
         mean_ns = stats.get('Mean', 0)
@@ -262,7 +262,7 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
     csharp_index: Dict[tuple, dict] = {}
     for r in csharp_results:
         norm_name = normalize_op_name(r['name'])
-        key = (norm_name, r['dtype'].lower())
+        key = (norm_name, r['dtype'].lower(), r['n'])
         csharp_index[key] = r
         # Debug
         # print(f"C# key: {key}")
@@ -276,9 +276,9 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
         category = np_result.get('category', '')
         numpy_ms = np_result.get('mean_ms', 0)
 
-        # Look for matching C# result
+        # Look for matching C# result at the SAME size (op, dtype, N)
         norm_name = normalize_op_name(name)
-        key = (norm_name, dtype.lower())
+        key = (norm_name, dtype.lower(), n)
         cs_result = csharp_index.get(key)
 
         numsharp_ms = cs_result['mean_ms'] if cs_result else None
@@ -337,7 +337,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     lines = [
         "# NumSharp vs NumPy Performance",
         "",
-        "**Baseline:** NumPy (N=10M elements)",
+        "**Baseline:** NumPy · measured across all array sizes (per-(op, dtype, N))",
         "",
         "**Ratio** = NumSharp ÷ NumPy → Lower is better for NumSharp",
         "",
@@ -366,22 +366,22 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         best_15 = sorted_by_ratio[:15]
         lines.append("### 🏆 Top 15 Best (NumSharp closest to NumPy)")
         lines.append("")
-        lines.append("| | Operation | Type | NumPy | NumSharp | Ratio |")
-        lines.append("|:-:|-----------|:----:|------:|---------:|------:|")
+        lines.append("| | Operation | Type | N | NumPy | NumSharp | Ratio |")
+        lines.append("|:-:|-----------|:----:|----:|------:|---------:|------:|")
         for r in best_15:
             icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
         lines.append("")
 
         # Top 15 worst (NumPy much faster)
         worst_15 = sorted_by_ratio[-15:][::-1]  # Reverse to show worst first
         lines.append("### 🔻 Top 15 Worst (Optimization priorities)")
         lines.append("")
-        lines.append("| | Operation | Type | NumPy | NumSharp | Ratio |")
-        lines.append("|:-:|-----------|:----:|------:|---------:|------:|")
+        lines.append("| | Operation | Type | N | NumPy | NumSharp | Ratio |")
+        lines.append("|:-:|-----------|:----:|----:|------:|---------:|------:|")
         for r in worst_15:
             icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
         lines.append("")
 
         lines.append("---")
@@ -395,18 +395,20 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
             suites[suite] = []
         suites[suite].append(r)
 
-    # Generate compact table for each suite
+    # Generate per-suite table: one row per (operation, dtype, N). The N column makes the
+    # 3-size comparison explicit. Sorted by op, then dtype, then size so the three sizes of
+    # each op sit together.
     for suite_name, suite_results in suites.items():
         lines.append(f"### {suite_name}")
         lines.append("")
-        lines.append("| | Operation | Type | NumPy | NumSharp | Ratio |")
-        lines.append("|:-:|-----------|:----:|------:|---------:|------:|")
+        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
+        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
 
-        for r in suite_results:
+        for r in sorted(suite_results, key=lambda x: (x.operation, x.dtype, x.n)):
             icon = get_status_icon(r.status)
-            numsharp_str = f"{r.numsharp_ms:.1f}" if r.numsharp_ms else "-"
-            ratio_str = f"{r.ratio:.1f}x" if r.ratio else "-"
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.numpy_ms:.1f} | {numsharp_str} | {ratio_str} |")
+            numsharp_str = f"{r.numsharp_ms:.4f}" if r.numsharp_ms is not None else "-"
+            ratio_str = f"{r.ratio:.2f}x" if r.ratio is not None else "-"
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.4f} | {numsharp_str} | {ratio_str} |")
 
         lines.append("")
 
@@ -438,6 +440,19 @@ def main():
     print("Merging results...")
     unified = merge_results(numpy_results, csharp_results)
     print(f"  Generated {len(unified)} unified results")
+
+    # Coverage check (P3): C# benchmarks that found NO NumPy counterpart at the same
+    # (op, dtype, N). Expected for NumSharp-only dtypes (char/decimal) and experimental
+    # suites; anything else is a join mismatch worth fixing.
+    np_keys = {(normalize_op_name(r.get('name', '')), r.get('dtype', '').lower(), r.get('n'))
+               for r in numpy_results}
+    cs_only = [r for r in csharp_results
+               if (normalize_op_name(r['name']), r['dtype'].lower(), r['n']) not in np_keys]
+    if cs_only:
+        distinct = sorted({f"{normalize_op_name(r['name'])} ({r['dtype']})" for r in cs_only})
+        print(f"  C#-only (no NumPy match): {len(cs_only)} cases, {len(distinct)} distinct op×dtype:")
+        for nm in distinct[:50]:
+            print(f"    - {nm}")
 
     # Generate outputs
     if args.format in ('all', 'json'):

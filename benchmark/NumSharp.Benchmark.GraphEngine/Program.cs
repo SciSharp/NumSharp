@@ -5,6 +5,7 @@ using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Reports;
 using NumSharp.Benchmark.GraphEngine;
+using NumSharp.Benchmark.GraphEngine.Infrastructure;
 
 // Run all benchmarks or specific ones based on command line args
 if (args.Length == 0)
@@ -60,4 +61,7 @@ if (args.Length == 0)
     };
 }
 
-BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+// Apply the official config (InProcessEmitToolchain + Full rigor) as the base so the
+// out-of-process CsProj toolchain — which fails here due to duplicate project names in
+// sibling .claude/worktrees/ checkouts — is never used. CLI args (e.g. --filter) extend it.
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, new OfficialBenchmarkConfig());

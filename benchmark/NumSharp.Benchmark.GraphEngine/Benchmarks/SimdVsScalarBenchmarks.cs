@@ -44,7 +44,7 @@ public class SimdVsScalarBenchmarks : BenchmarkBase
     public void Setup()
     {
         // Ensure SIMD is enabled
-        ILKernelGenerator.Enabled = true;
+        DirectILKernelGenerator.Enabled = true;
 
         // Create test arrays with float64 (best SIMD support)
         np.random.seed(Seed);
@@ -116,11 +116,11 @@ public class SimdVsScalarBenchmarks : BenchmarkBase
 
     [Benchmark(Description = "ArgMax (SIMD)")]
     [BenchmarkCategory("Reduction_Full")]
-    public int ArgMax() => np.argmax(_a1D);
+    public long ArgMax() => np.argmax(_a1D);
 
     [Benchmark(Description = "ArgMin (SIMD)")]
     [BenchmarkCategory("Reduction_Full")]
-    public int ArgMin() => np.argmin(_a1D);
+    public long ArgMin() => np.argmin(_a1D);
 
     [Benchmark(Description = "All (SIMD)")]
     [BenchmarkCategory("Reduction_Full")]
@@ -203,7 +203,7 @@ public class SimdReductionTypeBenchmarks : BenchmarkBase
     [GlobalSetup]
     public void Setup()
     {
-        ILKernelGenerator.Enabled = true;
+        DirectILKernelGenerator.Enabled = true;
         np.random.seed(Seed);
 
         _array = Type switch
@@ -236,11 +236,11 @@ public class SimdReductionTypeBenchmarks : BenchmarkBase
 
     [Benchmark(Description = "ArgMax")]
     [BenchmarkCategory("ArgMax")]
-    public int ArgMax() => np.argmax(_array);
+    public long ArgMax() => np.argmax(_array);
 
     [Benchmark(Description = "ArgMin")]
     [BenchmarkCategory("ArgMin")]
-    public int ArgMin() => np.argmin(_array);
+    public long ArgMin() => np.argmin(_array);
 }
 
 /// <summary>
@@ -270,7 +270,7 @@ public class SimdContiguousVsSlicedBenchmarks : BenchmarkBase
     [GlobalSetup]
     public void Setup()
     {
-        ILKernelGenerator.Enabled = true;
+        DirectILKernelGenerator.Enabled = true;
         np.random.seed(Seed);
 
         // Contiguous array
