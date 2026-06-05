@@ -340,6 +340,31 @@ namespace NumSharp.Backends.Kernels
                                 m.GetParameters()[0].ParameterType == halfV);
             });
 
+        /// <summary>
+        /// The <c>Vector{N}.Create(T e0, …, T e_{lanes-1})</c> overload that packs one scalar
+        /// per lane (lane count = N/8/sizeof(T) parameters, every one of type
+        /// <paramref name="elem"/>). The fused strided-gather unary kernel uses this to
+        /// assemble a vector directly from <em>lanes</em> strided scalar loads — no contiguous
+        /// load, no scratch buffer. Discriminated from the single-arg broadcast
+        /// <c>Create(T)</c> and the two-half concat <c>Create(V{N/2}, V{N/2})</c> by
+        /// "non-generic, more than one parameter, all parameters of type T" — which uniquely
+        /// identifies the all-lanes overload for every current Vector{128,256,512} element type.
+        /// </summary>
+        public static MethodInfo CreateElements(int simdBits, Type elem)
+            => _methods.GetOrAdd(new Key(simdBits, "Create", elem, /*elements*/ 6000), static k =>
+            {
+                var c = Container(k.SimdBits);
+                foreach (var m in c.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                {
+                    if (m.Name != "Create" || m.IsGenericMethod)
+                        continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length > 1 && ps.All(p => p.ParameterType == k.Elem))
+                        return m;
+                }
+                throw new MissingMethodException(c.FullName, $"Create({k.Elem.Name} x lanes)");
+            });
+
         // =================================================================
         // As<from>() -> V<to>
         // =================================================================
