@@ -200,58 +200,35 @@ def get_status_icon(status: str) -> str:
 
 
 def normalize_op_name(name: str) -> str:
-    """Normalize operation name for matching.
+    """Canonicalize an op name so the C# [Benchmark(Description)] and the Python suite name
+    collapse to the same string. Applied identically to both sides.
 
-    Maps C# BDN method titles to Python benchmark names.
-    Both sides include dtype suffix like " (int32)" which is stripped.
+    C# descriptions are verbose ("np.sum(a) [full]", "np.sum(a, axis=0) [columns]",
+    "np.sqrt(a)") while the original Python suites use short names ("np.sum", "np.sum axis=0",
+    "np.sqrt"). Rather than maintain a per-op mapping table, normalize structurally:
+      * strip the trailing dtype tag and any "[...]" annotation,
+      * fold "(a, axis=k)" / "(axis=k)" into " axis=k",
+      * strip identifier-only argument lists ("(a)", "(a, b)", "(cond, a, b)") but KEEP
+        numeric args ("(a, 50)", "(a, 2)") that distinguish percentile / shift / etc.
+    The two np.where forms are disambiguated up front so arg-stripping doesn't collide them.
     """
     import re
-    # Remove dtype suffix like " (int32)" or " (float64)"
-    # Only remove parentheses that contain dtype names, not descriptive text like "(element-wise)"
-    dtype_pattern = r'\s*\((int32|int64|float32|float64|uint8|int16|uint16|uint32|uint64|bool|decimal)\)\s*$'
-    name = re.sub(dtype_pattern, '', name)
-    # Remove quotes
+    name = re.sub(r'\s*\((int32|int64|float32|float64|uint8|int16|uint16|uint32|uint64|bool|decimal)\)\s*$', '', name)
     name = name.strip("'\"")
-    # Normalize whitespace
-    name = re.sub(r'\s+', ' ', name)
-    # Lowercase for comparison
-    name = name.lower()
+    name = re.sub(r'\s+', ' ', name).lower()
 
-    # Map C# BDN method titles to Python benchmark names
-    # C# uses titles like "a + b (element-wise)" while Python uses same format
-    mappings = {
-        # Arithmetic - Add
-        'a + b (element-wise)': 'a + b (element-wise)',
-        'np.add(a, b)': 'np.add(a, b)',
-        'a + scalar': 'a + scalar',
-        'a + 5 (literal)': 'a + 5 (literal)',
-
-        # Arithmetic - Subtract
-        'a - b (element-wise)': 'a - b (element-wise)',
-        'a - scalar': 'a - scalar',
-        'scalar - a': 'scalar - a',
-
-        # Arithmetic - Multiply
-        'a * b (element-wise)': 'a * b (element-wise)',
-        'a * a (square)': 'a * a (square)',
-        'a * scalar': 'a * scalar',
-        'a * 2 (literal)': 'a * 2 (literal)',
-
-        # Arithmetic - Divide
-        'a / b (element-wise)': 'a / b (element-wise)',
-        'a / scalar': 'a / scalar',
-        'scalar / a': 'scalar / a',
-
-        # Arithmetic - Modulo
-        'a % b (element-wise)': 'a % b (element-wise)',
-        'a % 7 (literal)': 'a % 7 (literal)',
-
-        # Reduction
-        'np.sum(a) [full]': 'np.sum',
-        'np.sum(a, axis=0)': 'np.sum axis=0',
-        'np.sum(a, axis=1)': 'np.sum axis=1',
+    # Disambiguate the two where ops before arg-stripping would collapse both to "np.where".
+    pre = {
+        'np.where(cond, a, b)': 'np.where ternary',
+        'np.where(cond)': 'np.where nonzero',
     }
-    return mappings.get(name, name)
+    name = pre.get(name, name)
+
+    name = re.sub(r'\s*\[[^\]]*\]', '', name)                                  # drop [full]/[method]/[columns]/...
+    name = re.sub(r'\(\s*(?:[a-z_][a-z0-9_]*\s*,\s*)?axis\s*=\s*(\d+)\s*\)', r' axis=\1', name)  # (a, axis=0) -> axis=0
+    name = re.sub(r'\(\s*[a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*\s*\)', '', name)           # strip ident-only arg lists
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
 
 
 def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List[UnifiedResult]:

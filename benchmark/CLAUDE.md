@@ -458,7 +458,43 @@ class BenchmarkResult:
 
 ## Running Benchmarks
 
-### Quick Start
+### Official run — `run_benchmark.py` (cross-platform, recommended)
+
+`run_benchmark.py` is the single reusable entry point for the official NumSharp-vs-NumPy
+comparison. It builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON,
+so it is resumable), sweeps NumPy across the three cache-tier sizes (1K / 100K / 10M), merges,
+and archives everything to `results/<timestamp>/`.
+
+```bash
+python run_benchmark.py                      # full official run, all comparison suites
+python run_benchmark.py --suites arithmetic unary
+python run_benchmark.py --skip-build         # reuse the existing Release build
+python run_benchmark.py --skip-csharp        # NumPy only
+python run_benchmark.py --quick              # dev: fewer NumPy iterations
+```
+
+The C# side runs under `OfficialBenchmarkConfig` (Infrastructure/BenchmarkConfig.cs):
+
+- **InProcessEmit toolchain** — avoids BenchmarkDotNet's out-of-process project search, which
+  fails here ("project names need to be unique") because sibling git worktrees under
+  `.claude/worktrees/` contain same-named copies of the benchmark project. In-process also
+  matches the warm long-lived Python/NumPy process, so the cross-language ratio is fair.
+- **Iteration time capped at 25 ms** with 50 measured iterations. BDN's default Throughput
+  strategy ramps to ~8192 invocations/iteration for nanosecond microbenchmarks; for µs–ms
+  array ops that made a single 10M case take ~25 s and the full matrix take days. Capping the
+  iteration time lets the pilot pick a per-op invocation count that fits 25 ms — fast ops
+  still get hundreds–thousands of invocations, slow ops drop to 1/iteration. (~15× faster,
+  all 50 iterations preserved.)
+
+The merge keys the join on `(op, dtype, N)` and emits a per-size geomean summary plus the full
+per-(op, dtype, N) ratio matrix in `benchmark-report.md`.
+
+**Op coverage** spans comparison, bitwise, logic, NaN-aware reductions, statistics,
+sorting/searching, linear algebra, selection (`where`), and unary extras (cbrt/reciprocal/
+square/negative/positive/trunc) in addition to the original arithmetic/unary/reduction/
+broadcast/creation/manipulation/slicing suites.
+
+### Quick Start (PowerShell, Windows)
 
 ```powershell
 # Full suite with report
