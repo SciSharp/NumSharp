@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -73,14 +74,14 @@ namespace NumSharp.Backends
                 {
                     double* a = (double*)left.Address + left.Shape.offset;
                     double* b = (double*)right.Address + right.Shape.offset;
-                    double r = contig ? SimdDot.DotDouble(a, b, n) : DotStridedF64(a, sa, b, sb, n);
+                    double r = contig ? DotContiguousF64(a, b, n) : DotStridedF64(a, sa, b, sb, n);
                     return NDArray.Scalar(r);
                 }
                 case NPTypeCode.Single:
                 {
                     float* a = (float*)left.Address + left.Shape.offset;
                     float* b = (float*)right.Address + right.Shape.offset;
-                    float r = contig ? SimdDot.DotFloat(a, b, n) : DotStridedF32(a, sa, b, sb, n);
+                    float r = contig ? DotContiguousF32(a, b, n) : DotStridedF32(a, sa, b, sb, n);
                     return NDArray.Scalar(r);
                 }
                 case NPTypeCode.Boolean: return NDArray.Scalar(DotBool(left, right, sa, sb, n));
@@ -100,6 +101,62 @@ namespace NumSharp.Backends
                     var product = left * right;
                     return ReduceAdd(product, null, false, typeCode: product.GetTypeCode);
             }
+        }
+
+        // Contiguous double dot: parallel multiply-accumulate when np.multithreading is on
+        // AND the vector is large enough (MultiThread.DegreeOfParallelism gates it), else the
+        // single-threaded SIMD kernel.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe double DotContiguousF64(double* a, double* b, long n)
+        {
+            int p = MultiThread.DegreeOfParallelism(n);
+            return p <= 1 ? SimdDot.DotDouble(a, b, n) : DotParallelF64(a, b, n, p);
+        }
+
+        // Split [0,n) into p contiguous chunks, SimdDot each on its own thread, sum the partials
+        // in chunk order (deterministic). Partials are padded to a cache line to avoid false sharing.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe double DotParallelF64(double* a, double* b, long n, int p)
+        {
+            nint na = (nint)a, nb = (nint)b;
+            var partials = new double[p * 8]; // 8 doubles = 64B per slot
+            long chunk = (n + p - 1) / p;
+            Parallel.For(0, p, t =>
+            {
+                long start = (long)t * chunk;
+                long len = Math.Min(chunk, n - start);
+                if (len > 0)
+                    unsafe { partials[t * 8] = SimdDot.DotDouble((double*)na + start, (double*)nb + start, len); }
+            });
+            double s = 0;
+            for (int t = 0; t < p; t++) s += partials[t * 8];
+            return s;
+        }
+
+        // Contiguous float dot: parallel when enabled+large, else single-threaded SIMD.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe float DotContiguousF32(float* a, float* b, long n)
+        {
+            int p = MultiThread.DegreeOfParallelism(n);
+            return p <= 1 ? SimdDot.DotFloat(a, b, n) : DotParallelF32(a, b, n, p);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe float DotParallelF32(float* a, float* b, long n, int p)
+        {
+            nint na = (nint)a, nb = (nint)b;
+            var partials = new float[p * 16]; // 16 floats = 64B per slot
+            long chunk = (n + p - 1) / p;
+            Parallel.For(0, p, t =>
+            {
+                long start = (long)t * chunk;
+                long len = Math.Min(chunk, n - start);
+                if (len > 0)
+                    unsafe { partials[t * 16] = SimdDot.DotFloat((float*)na + start, (float*)nb + start, len); }
+            });
+            float s = 0;
+            for (int t = 0; t < p; t++) s += partials[t * 16];
+            return s;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
