@@ -1,0 +1,1234 @@
+Operation,Suite,Category,DType,N,NumPy (ms),NumSharp (ms),Ratio,Status
+a + b (element-wise) (uint8),Arithmetic,Add,uint8,1000,0.001,0.002,2.11,slower
+"np.add(a, b) (uint8)",Arithmetic,Add,uint8,1000,0.001,0.002,2.81,slower
+a + scalar (uint8),Arithmetic,Add,uint8,1000,0.001,0.002,2.0,slower
+a + 5 (literal) (uint8),Arithmetic,Add,uint8,1000,0.001,0.005,5.58,much_slower
+a - b (element-wise) (uint8),Arithmetic,Subtract,uint8,1000,0.001,0.002,2.64,slower
+a - scalar (uint8),Arithmetic,Subtract,uint8,1000,0.001,0.002,2.12,slower
+scalar - a (uint8),Arithmetic,Subtract,uint8,1000,0.001,0.002,2.26,slower
+a * b (element-wise) (uint8),Arithmetic,Multiply,uint8,1000,0.001,0.002,2.63,slower
+a * a (square) (uint8),Arithmetic,Multiply,uint8,1000,0.001,0.001,2.24,slower
+a * scalar (uint8),Arithmetic,Multiply,uint8,1000,0.001,0.002,2.44,slower
+a * 2 (literal) (uint8),Arithmetic,Multiply,uint8,1000,0.001,0.004,4.99,slower
+a + b (element-wise) (int16),Arithmetic,Add,int16,1000,0.001,0.002,2.81,slower
+"np.add(a, b) (int16)",Arithmetic,Add,int16,1000,0.001,0.002,2.47,slower
+a + scalar (int16),Arithmetic,Add,int16,1000,0.001,0.002,2.2,slower
+a + 5 (literal) (int16),Arithmetic,Add,int16,1000,0.001,0.007,6.1,much_slower
+a - b (element-wise) (int16),Arithmetic,Subtract,int16,1000,0.001,0.002,2.54,slower
+a - scalar (int16),Arithmetic,Subtract,int16,1000,0.001,0.002,2.24,slower
+scalar - a (int16),Arithmetic,Subtract,int16,1000,0.001,0.002,1.78,close
+a * b (element-wise) (int16),Arithmetic,Multiply,int16,1000,0.001,0.002,2.43,slower
+a * a (square) (int16),Arithmetic,Multiply,int16,1000,0.001,0.002,2.11,slower
+a * scalar (int16),Arithmetic,Multiply,int16,1000,0.001,0.002,2.23,slower
+a * 2 (literal) (int16),Arithmetic,Multiply,int16,1000,0.001,0.006,5.38,much_slower
+a + b (element-wise) (uint16),Arithmetic,Add,uint16,1000,0.001,0.002,2.61,slower
+"np.add(a, b) (uint16)",Arithmetic,Add,uint16,1000,0.001,0.002,2.07,slower
+a + scalar (uint16),Arithmetic,Add,uint16,1000,0.001,0.002,1.86,close
+a + 5 (literal) (uint16),Arithmetic,Add,uint16,1000,0.001,0.007,6.42,much_slower
+a - b (element-wise) (uint16),Arithmetic,Subtract,uint16,1000,0.001,0.002,2.33,slower
+a - scalar (uint16),Arithmetic,Subtract,uint16,1000,0.001,0.002,2.38,slower
+scalar - a (uint16),Arithmetic,Subtract,uint16,1000,0.001,0.002,2.12,slower
+a * b (element-wise) (uint16),Arithmetic,Multiply,uint16,1000,0.002,0.002,0.9,faster
+a * a (square) (uint16),Arithmetic,Multiply,uint16,1000,0.001,0.002,2.1,slower
+a * scalar (uint16),Arithmetic,Multiply,uint16,1000,0.001,0.002,2.17,slower
+a * 2 (literal) (uint16),Arithmetic,Multiply,uint16,1000,0.001,0.006,6.43,much_slower
+a + b (element-wise) (int32),Arithmetic,Add,int32,1000,0.001,0.001,1.02,close
+"np.add(a, b) (int32)",Arithmetic,Add,int32,1000,0.001,0.002,2.28,slower
+a + scalar (int32),Arithmetic,Add,int32,1000,0.001,0.002,1.54,close
+a + 5 (literal) (int32),Arithmetic,Add,int32,1000,0.001,0.003,3.19,slower
+a - b (element-wise) (int32),Arithmetic,Subtract,int32,1000,0.001,0.002,2.99,slower
+a - scalar (int32),Arithmetic,Subtract,int32,1000,0.001,0.002,2.41,slower
+scalar - a (int32),Arithmetic,Subtract,int32,1000,0.001,0.002,2.16,slower
+a * b (element-wise) (int32),Arithmetic,Multiply,int32,1000,0.001,0.002,2.18,slower
+a * a (square) (int32),Arithmetic,Multiply,int32,1000,0.001,0.002,2.18,slower
+a * scalar (int32),Arithmetic,Multiply,int32,1000,0.001,0.002,2.14,slower
+a * 2 (literal) (int32),Arithmetic,Multiply,int32,1000,0.001,0.004,3.81,slower
+a / b (element-wise) (int32),Arithmetic,Divide,int32,1000,0.002,0.006,3.05,slower
+a / scalar (int32),Arithmetic,Divide,int32,1000,0.002,0.008,4.63,slower
+scalar / a (int32),Arithmetic,Divide,int32,1000,0.002,0.007,4.14,slower
+a % b (element-wise) (int32),Arithmetic,Modulo,int32,1000,0.002,0.004,1.89,close
+a % 7 (literal) (int32),Arithmetic,Modulo,int32,1000,0.002,0.004,1.92,close
+a + b (element-wise) (uint32),Arithmetic,Add,uint32,1000,0.001,0.002,2.53,slower
+"np.add(a, b) (uint32)",Arithmetic,Add,uint32,1000,0.001,0.002,2.31,slower
+a + scalar (uint32),Arithmetic,Add,uint32,1000,0.001,0.002,1.98,close
+a + 5 (literal) (uint32),Arithmetic,Add,uint32,1000,0.001,0.006,6.27,much_slower
+a - b (element-wise) (uint32),Arithmetic,Subtract,uint32,1000,0.001,0.002,2.24,slower
+a - scalar (uint32),Arithmetic,Subtract,uint32,1000,0.001,0.002,2.3,slower
+scalar - a (uint32),Arithmetic,Subtract,uint32,1000,0.001,0.002,2.07,slower
+a * b (element-wise) (uint32),Arithmetic,Multiply,uint32,1000,0.001,0.002,2.75,slower
+a * a (square) (uint32),Arithmetic,Multiply,uint32,1000,0.001,0.002,2.28,slower
+a * scalar (uint32),Arithmetic,Multiply,uint32,1000,0.001,0.002,2.46,slower
+a * 2 (literal) (uint32),Arithmetic,Multiply,uint32,1000,0.001,0.006,5.97,much_slower
+a + b (element-wise) (int64),Arithmetic,Add,int64,1000,0.001,0.003,4.08,slower
+"np.add(a, b) (int64)",Arithmetic,Add,int64,1000,0.001,0.003,4.05,slower
+a + scalar (int64),Arithmetic,Add,int64,1000,0.001,0.003,3.8,slower
+a + 5 (literal) (int64),Arithmetic,Add,int64,1000,0.001,0.004,4.08,slower
+a - b (element-wise) (int64),Arithmetic,Subtract,int64,1000,0.001,0.003,4.2,slower
+a - scalar (int64),Arithmetic,Subtract,int64,1000,0.001,0.003,3.38,slower
+scalar - a (int64),Arithmetic,Subtract,int64,1000,0.001,0.003,3.64,slower
+a * b (element-wise) (int64),Arithmetic,Multiply,int64,1000,0.001,0.003,3.6,slower
+a * a (square) (int64),Arithmetic,Multiply,int64,1000,0.001,0.003,3.93,slower
+a * scalar (int64),Arithmetic,Multiply,int64,1000,0.001,0.003,3.37,slower
+a * 2 (literal) (int64),Arithmetic,Multiply,int64,1000,0.001,0.007,7.66,much_slower
+a / b (element-wise) (int64),Arithmetic,Divide,int64,1000,0.002,0.006,3.43,slower
+a / scalar (int64),Arithmetic,Divide,int64,1000,0.002,0.007,4.15,slower
+scalar / a (int64),Arithmetic,Divide,int64,1000,0.002,0.008,4.45,slower
+a % b (element-wise) (int64),Arithmetic,Modulo,int64,1000,0.004,0.004,1.05,close
+a % 7 (literal) (int64),Arithmetic,Modulo,int64,1000,0.004,0.006,1.35,close
+a + b (element-wise) (uint64),Arithmetic,Add,uint64,1000,0.001,0.003,4.49,slower
+"np.add(a, b) (uint64)",Arithmetic,Add,uint64,1000,0.001,0.003,4.16,slower
+a + scalar (uint64),Arithmetic,Add,uint64,1000,0.001,0.003,3.43,slower
+a + 5 (literal) (uint64),Arithmetic,Add,uint64,1000,0.001,0.008,7.45,much_slower
+a - b (element-wise) (uint64),Arithmetic,Subtract,uint64,1000,0.001,0.003,3.87,slower
+a - scalar (uint64),Arithmetic,Subtract,uint64,1000,0.001,0.003,3.22,slower
+scalar - a (uint64),Arithmetic,Subtract,uint64,1000,0.001,0.003,3.23,slower
+a * b (element-wise) (uint64),Arithmetic,Multiply,uint64,1000,0.001,0.003,3.98,slower
+a * a (square) (uint64),Arithmetic,Multiply,uint64,1000,0.001,0.003,3.94,slower
+a * scalar (uint64),Arithmetic,Multiply,uint64,1000,0.001,0.003,3.49,slower
+a * 2 (literal) (uint64),Arithmetic,Multiply,uint64,1000,0.001,0.007,8.17,much_slower
+a + b (element-wise) (float32),Arithmetic,Add,float32,1000,0.001,0.002,3.69,slower
+"np.add(a, b) (float32)",Arithmetic,Add,float32,1000,0.001,0.002,3.1,slower
+a + scalar (float32),Arithmetic,Add,float32,1000,0.001,0.002,3.09,slower
+a + 5 (literal) (float32),Arithmetic,Add,float32,1000,0.001,0.006,7.01,much_slower
+a - b (element-wise) (float32),Arithmetic,Subtract,float32,1000,0.001,0.002,3.55,slower
+a - scalar (float32),Arithmetic,Subtract,float32,1000,0.001,0.002,2.53,slower
+scalar - a (float32),Arithmetic,Subtract,float32,1000,0.001,0.002,2.72,slower
+a * b (element-wise) (float32),Arithmetic,Multiply,float32,1000,0.001,0.002,3.52,slower
+a * a (square) (float32),Arithmetic,Multiply,float32,1000,0.001,0.002,3.41,slower
+a * scalar (float32),Arithmetic,Multiply,float32,1000,0.001,0.002,2.59,slower
+a * 2 (literal) (float32),Arithmetic,Multiply,float32,1000,0.001,0.006,8.21,much_slower
+a / b (element-wise) (float32),Arithmetic,Divide,float32,1000,0.001,0.002,4.52,slower
+a / scalar (float32),Arithmetic,Divide,float32,1000,0.001,0.002,2.69,slower
+scalar / a (float32),Arithmetic,Divide,float32,1000,0.001,0.002,2.72,slower
+a % b (element-wise) (float32),Arithmetic,Modulo,float32,1000,0.013,0.012,0.98,faster
+a % 7 (literal) (float32),Arithmetic,Modulo,float32,1000,0.014,0.019,1.34,close
+a + b (element-wise) (float64),Arithmetic,Add,float64,1000,0.001,0.003,4.68,slower
+"np.add(a, b) (float64)",Arithmetic,Add,float64,1000,0.001,0.003,5.18,much_slower
+a + scalar (float64),Arithmetic,Add,float64,1000,0.001,0.003,4.89,slower
+a + 5 (literal) (float64),Arithmetic,Add,float64,1000,0.001,0.007,9.16,much_slower
+a - b (element-wise) (float64),Arithmetic,Subtract,float64,1000,0.001,0.003,6.16,much_slower
+a - scalar (float64),Arithmetic,Subtract,float64,1000,0.001,0.003,4.45,slower
+scalar - a (float64),Arithmetic,Subtract,float64,1000,0.001,0.003,4.26,slower
+a * b (element-wise) (float64),Arithmetic,Multiply,float64,1000,0.001,0.003,5.81,much_slower
+a * a (square) (float64),Arithmetic,Multiply,float64,1000,0.0,0.003,5.33,much_slower
+a * scalar (float64),Arithmetic,Multiply,float64,1000,0.001,0.002,2.51,slower
+a * 2 (literal) (float64),Arithmetic,Multiply,float64,1000,0.001,0.007,9.02,much_slower
+a / b (element-wise) (float64),Arithmetic,Divide,float64,1000,0.001,0.004,5.16,much_slower
+a / scalar (float64),Arithmetic,Divide,float64,1000,0.001,0.005,4.99,slower
+scalar / a (float64),Arithmetic,Divide,float64,1000,0.001,0.004,4.47,slower
+a % b (element-wise) (float64),Arithmetic,Modulo,float64,1000,0.01,0.01,0.99,faster
+a % 7 (literal) (float64),Arithmetic,Modulo,float64,1000,0.011,0.024,2.09,slower
+a + b (element-wise) (uint8),Arithmetic,Add,uint8,100000,0.029,0.018,0.63,faster
+"np.add(a, b) (uint8)",Arithmetic,Add,uint8,100000,0.029,0.016,0.55,faster
+a + scalar (uint8),Arithmetic,Add,uint8,100000,0.025,0.014,0.56,faster
+a + 5 (literal) (uint8),Arithmetic,Add,uint8,100000,0.026,0.089,3.46,slower
+a - b (element-wise) (uint8),Arithmetic,Subtract,uint8,100000,0.029,0.016,0.54,faster
+a - scalar (uint8),Arithmetic,Subtract,uint8,100000,0.025,0.015,0.61,faster
+scalar - a (uint8),Arithmetic,Subtract,uint8,100000,0.024,0.015,0.63,faster
+a * b (element-wise) (uint8),Arithmetic,Multiply,uint8,100000,0.028,0.015,0.55,faster
+a * a (square) (uint8),Arithmetic,Multiply,uint8,100000,0.028,0.016,0.57,faster
+a * scalar (uint8),Arithmetic,Multiply,uint8,100000,0.024,0.016,0.65,faster
+a * 2 (literal) (uint8),Arithmetic,Multiply,uint8,100000,0.024,0.104,4.4,slower
+a + b (element-wise) (int16),Arithmetic,Add,int16,100000,0.03,0.029,0.97,faster
+"np.add(a, b) (int16)",Arithmetic,Add,int16,100000,0.031,0.029,0.92,faster
+a + scalar (int16),Arithmetic,Add,int16,100000,0.025,0.029,1.15,close
+a + 5 (literal) (int16),Arithmetic,Add,int16,100000,0.025,0.088,3.58,slower
+a - b (element-wise) (int16),Arithmetic,Subtract,int16,100000,0.029,0.03,1.01,close
+a - scalar (int16),Arithmetic,Subtract,int16,100000,0.025,0.028,1.11,close
+scalar - a (int16),Arithmetic,Subtract,int16,100000,0.025,0.029,1.18,close
+a * b (element-wise) (int16),Arithmetic,Multiply,int16,100000,0.028,0.028,0.99,faster
+a * a (square) (int16),Arithmetic,Multiply,int16,100000,0.03,0.028,0.93,faster
+a * scalar (int16),Arithmetic,Multiply,int16,100000,0.024,0.027,1.15,close
+a * 2 (literal) (int16),Arithmetic,Multiply,int16,100000,0.023,0.094,4.07,slower
+a + b (element-wise) (uint16),Arithmetic,Add,uint16,100000,0.03,0.029,0.96,faster
+"np.add(a, b) (uint16)",Arithmetic,Add,uint16,100000,0.03,0.026,0.86,faster
+a + scalar (uint16),Arithmetic,Add,uint16,100000,0.025,0.026,1.06,close
+a + 5 (literal) (uint16),Arithmetic,Add,uint16,100000,0.026,0.09,3.45,slower
+a - b (element-wise) (uint16),Arithmetic,Subtract,uint16,100000,0.032,0.03,0.93,faster
+a - scalar (uint16),Arithmetic,Subtract,uint16,100000,0.025,0.03,1.2,close
+scalar - a (uint16),Arithmetic,Subtract,uint16,100000,0.026,0.028,1.07,close
+a * b (element-wise) (uint16),Arithmetic,Multiply,uint16,100000,0.028,0.029,1.04,close
+a * a (square) (uint16),Arithmetic,Multiply,uint16,100000,0.028,0.027,0.97,faster
+a * scalar (uint16),Arithmetic,Multiply,uint16,100000,0.023,0.028,1.25,close
+a * 2 (literal) (uint16),Arithmetic,Multiply,uint16,100000,0.022,0.119,5.29,much_slower
+a + b (element-wise) (int32),Arithmetic,Add,int32,100000,0.03,0.058,1.95,close
+"np.add(a, b) (int32)",Arithmetic,Add,int32,100000,0.032,0.061,1.93,close
+a + scalar (int32),Arithmetic,Add,int32,100000,0.024,0.053,2.16,slower
+a + 5 (literal) (int32),Arithmetic,Add,int32,100000,0.024,0.053,2.18,slower
+a - b (element-wise) (int32),Arithmetic,Subtract,int32,100000,0.03,0.062,2.07,slower
+a - scalar (int32),Arithmetic,Subtract,int32,100000,0.025,0.056,2.22,slower
+scalar - a (int32),Arithmetic,Subtract,int32,100000,0.026,0.056,2.17,slower
+a * b (element-wise) (int32),Arithmetic,Multiply,int32,100000,0.03,0.058,1.9,close
+a * a (square) (int32),Arithmetic,Multiply,int32,100000,0.029,0.058,2.02,slower
+a * scalar (int32),Arithmetic,Multiply,int32,100000,0.023,0.055,2.35,slower
+a * 2 (literal) (int32),Arithmetic,Multiply,int32,100000,0.023,0.055,2.42,slower
+a / b (element-wise) (int32),Arithmetic,Divide,int32,100000,0.088,0.204,2.31,slower
+a / scalar (int32),Arithmetic,Divide,int32,100000,0.071,0.207,2.91,slower
+scalar / a (int32),Arithmetic,Divide,int32,100000,0.065,0.206,3.2,slower
+a % b (element-wise) (int32),Arithmetic,Modulo,int32,100000,0.376,0.616,1.64,close
+a % 7 (literal) (int32),Arithmetic,Modulo,int32,100000,0.412,0.692,1.68,close
+a + b (element-wise) (uint32),Arithmetic,Add,uint32,100000,0.032,0.052,1.62,close
+"np.add(a, b) (uint32)",Arithmetic,Add,uint32,100000,0.037,0.054,1.45,close
+a + scalar (uint32),Arithmetic,Add,uint32,100000,0.024,0.058,2.38,slower
+a + 5 (literal) (uint32),Arithmetic,Add,uint32,100000,0.025,0.095,3.83,slower
+a - b (element-wise) (uint32),Arithmetic,Subtract,uint32,100000,0.032,0.056,1.77,close
+a - scalar (uint32),Arithmetic,Subtract,uint32,100000,0.026,0.057,2.22,slower
+scalar - a (uint32),Arithmetic,Subtract,uint32,100000,0.026,0.054,2.09,slower
+a * b (element-wise) (uint32),Arithmetic,Multiply,uint32,100000,0.03,0.055,1.86,close
+a * a (square) (uint32),Arithmetic,Multiply,uint32,100000,0.03,0.055,1.8,close
+a * scalar (uint32),Arithmetic,Multiply,uint32,100000,0.023,0.053,2.24,slower
+a * 2 (literal) (uint32),Arithmetic,Multiply,uint32,100000,0.025,0.11,4.47,slower
+a + b (element-wise) (int64),Arithmetic,Add,int64,100000,0.034,0.119,3.55,slower
+"np.add(a, b) (int64)",Arithmetic,Add,int64,100000,0.033,0.108,3.26,slower
+a + scalar (int64),Arithmetic,Add,int64,100000,0.024,0.111,4.67,slower
+a + 5 (literal) (int64),Arithmetic,Add,int64,100000,0.024,0.134,5.63,much_slower
+a - b (element-wise) (int64),Arithmetic,Subtract,int64,100000,0.034,0.116,3.37,slower
+a - scalar (int64),Arithmetic,Subtract,int64,100000,0.026,0.118,4.61,slower
+scalar - a (int64),Arithmetic,Subtract,int64,100000,0.027,0.11,4.07,slower
+a * b (element-wise) (int64),Arithmetic,Multiply,int64,100000,0.033,0.118,3.62,slower
+a * a (square) (int64),Arithmetic,Multiply,int64,100000,0.029,0.11,3.77,slower
+a * scalar (int64),Arithmetic,Multiply,int64,100000,0.025,0.109,4.3,slower
+a * 2 (literal) (int64),Arithmetic,Multiply,int64,100000,0.022,0.121,5.41,much_slower
+a / b (element-wise) (int64),Arithmetic,Divide,int64,100000,0.084,0.205,2.44,slower
+a / scalar (int64),Arithmetic,Divide,int64,100000,0.06,0.209,3.47,slower
+scalar / a (int64),Arithmetic,Divide,int64,100000,0.059,0.207,3.51,slower
+a % b (element-wise) (int64),Arithmetic,Modulo,int64,100000,0.416,0.63,1.51,close
+a % 7 (literal) (int64),Arithmetic,Modulo,int64,100000,0.422,0.912,2.16,slower
+a + b (element-wise) (uint64),Arithmetic,Add,uint64,100000,0.035,0.105,3.01,slower
+"np.add(a, b) (uint64)",Arithmetic,Add,uint64,100000,0.033,0.115,3.47,slower
+a + scalar (uint64),Arithmetic,Add,uint64,100000,0.025,0.105,4.23,slower
+a + 5 (literal) (uint64),Arithmetic,Add,uint64,100000,0.026,0.124,4.75,slower
+a - b (element-wise) (uint64),Arithmetic,Subtract,uint64,100000,0.033,0.109,3.26,slower
+a - scalar (uint64),Arithmetic,Subtract,uint64,100000,0.025,0.112,4.44,slower
+scalar - a (uint64),Arithmetic,Subtract,uint64,100000,0.025,0.111,4.47,slower
+a * b (element-wise) (uint64),Arithmetic,Multiply,uint64,100000,0.031,0.113,3.63,slower
+a * a (square) (uint64),Arithmetic,Multiply,uint64,100000,0.03,0.115,3.89,slower
+a * scalar (uint64),Arithmetic,Multiply,uint64,100000,0.023,0.111,4.92,slower
+a * 2 (literal) (uint64),Arithmetic,Multiply,uint64,100000,0.023,0.158,6.77,much_slower
+a + b (element-wise) (float32),Arithmetic,Add,float32,100000,0.007,0.05,7.25,much_slower
+"np.add(a, b) (float32)",Arithmetic,Add,float32,100000,0.007,0.051,7.28,much_slower
+a + scalar (float32),Arithmetic,Add,float32,100000,0.006,0.054,8.51,much_slower
+a + 5 (literal) (float32),Arithmetic,Add,float32,100000,0.007,0.097,14.66,much_slower
+a - b (element-wise) (float32),Arithmetic,Subtract,float32,100000,0.007,0.058,7.91,much_slower
+a - scalar (float32),Arithmetic,Subtract,float32,100000,0.006,0.056,8.84,much_slower
+scalar - a (float32),Arithmetic,Subtract,float32,100000,0.007,0.054,7.94,much_slower
+a * b (element-wise) (float32),Arithmetic,Multiply,float32,100000,0.007,0.054,7.67,much_slower
+a * a (square) (float32),Arithmetic,Multiply,float32,100000,0.008,0.054,6.9,much_slower
+a * scalar (float32),Arithmetic,Multiply,float32,100000,0.006,0.057,9.26,much_slower
+a * 2 (literal) (float32),Arithmetic,Multiply,float32,100000,0.007,0.129,19.37,much_slower
+a / b (element-wise) (float32),Arithmetic,Divide,float32,100000,0.012,0.066,5.38,much_slower
+a / scalar (float32),Arithmetic,Divide,float32,100000,0.013,0.066,5.16,much_slower
+scalar / a (float32),Arithmetic,Divide,float32,100000,0.012,0.066,5.33,much_slower
+a % b (element-wise) (float32),Arithmetic,Modulo,float32,100000,1.507,1.664,1.1,close
+a % 7 (literal) (float32),Arithmetic,Modulo,float32,100000,1.655,1.968,1.19,close
+a + b (element-wise) (float64),Arithmetic,Add,float64,100000,0.03,0.117,3.88,slower
+"np.add(a, b) (float64)",Arithmetic,Add,float64,100000,0.03,0.113,3.76,slower
+a + scalar (float64),Arithmetic,Add,float64,100000,0.013,0.11,8.3,much_slower
+a + 5 (literal) (float64),Arithmetic,Add,float64,100000,0.014,0.121,8.87,much_slower
+a - b (element-wise) (float64),Arithmetic,Subtract,float64,100000,0.03,0.112,3.79,slower
+a - scalar (float64),Arithmetic,Subtract,float64,100000,0.016,0.106,6.47,much_slower
+scalar - a (float64),Arithmetic,Subtract,float64,100000,0.014,0.106,7.76,much_slower
+a * b (element-wise) (float64),Arithmetic,Multiply,float64,100000,0.031,0.114,3.66,slower
+a * a (square) (float64),Arithmetic,Multiply,float64,100000,0.016,0.104,6.48,much_slower
+a * scalar (float64),Arithmetic,Multiply,float64,100000,0.015,0.115,7.69,much_slower
+a * 2 (literal) (float64),Arithmetic,Multiply,float64,100000,0.013,0.047,3.55,slower
+a / b (element-wise) (float64),Arithmetic,Divide,float64,100000,0.038,0.201,5.29,much_slower
+a / scalar (float64),Arithmetic,Divide,float64,100000,0.038,0.187,4.92,slower
+scalar / a (float64),Arithmetic,Divide,float64,100000,0.038,0.202,5.36,much_slower
+a % b (element-wise) (float64),Arithmetic,Modulo,float64,100000,1.323,1.472,1.11,close
+a % 7 (literal) (float64),Arithmetic,Modulo,float64,100000,1.479,1.796,1.21,close
+a + b (element-wise) (uint8),Arithmetic,Add,uint8,10000000,4.051,3.603,0.89,faster
+"np.add(a, b) (uint8)",Arithmetic,Add,uint8,10000000,4.024,3.02,0.75,faster
+a + scalar (uint8),Arithmetic,Add,uint8,10000000,3.61,2.404,0.67,faster
+a + 5 (literal) (uint8),Arithmetic,Add,uint8,10000000,3.486,8.882,2.55,slower
+a - b (element-wise) (uint8),Arithmetic,Subtract,uint8,10000000,4.051,3.361,0.83,faster
+a - scalar (uint8),Arithmetic,Subtract,uint8,10000000,3.589,2.235,0.62,faster
+scalar - a (uint8),Arithmetic,Subtract,uint8,10000000,3.732,2.371,0.64,faster
+a * b (element-wise) (uint8),Arithmetic,Multiply,uint8,10000000,4.014,3.371,0.84,faster
+a * a (square) (uint8),Arithmetic,Multiply,uint8,10000000,3.87,2.271,0.59,faster
+a * scalar (uint8),Arithmetic,Multiply,uint8,10000000,3.719,2.471,0.66,faster
+a * 2 (literal) (uint8),Arithmetic,Multiply,uint8,10000000,3.647,8.493,2.33,slower
+a + b (element-wise) (int16),Arithmetic,Add,int16,10000000,6.692,7.202,1.08,close
+"np.add(a, b) (int16)",Arithmetic,Add,int16,10000000,7.331,7.19,0.98,faster
+a + scalar (int16),Arithmetic,Add,int16,10000000,6.944,5.068,0.73,faster
+a + 5 (literal) (int16),Arithmetic,Add,int16,10000000,7.79,9.685,1.24,close
+a - b (element-wise) (int16),Arithmetic,Subtract,int16,10000000,7.168,7.313,1.02,close
+a - scalar (int16),Arithmetic,Subtract,int16,10000000,5.493,5.487,1.0,faster
+scalar - a (int16),Arithmetic,Subtract,int16,10000000,4.671,5.113,1.09,close
+a * b (element-wise) (int16),Arithmetic,Multiply,int16,10000000,5.115,7.027,1.37,close
+a * a (square) (int16),Arithmetic,Multiply,int16,10000000,5.005,5.591,1.12,close
+a * scalar (int16),Arithmetic,Multiply,int16,10000000,4.62,5.407,1.17,close
+a * 2 (literal) (int16),Arithmetic,Multiply,int16,10000000,4.663,9.733,2.09,slower
+a + b (element-wise) (uint16),Arithmetic,Add,uint16,10000000,5.326,7.165,1.35,close
+"np.add(a, b) (uint16)",Arithmetic,Add,uint16,10000000,5.364,7.158,1.33,close
+a + scalar (uint16),Arithmetic,Add,uint16,10000000,5.128,5.437,1.06,close
+a + 5 (literal) (uint16),Arithmetic,Add,uint16,10000000,4.812,9.284,1.93,close
+a - b (element-wise) (uint16),Arithmetic,Subtract,uint16,10000000,5.255,6.909,1.31,close
+a - scalar (uint16),Arithmetic,Subtract,uint16,10000000,5.174,5.31,1.03,close
+scalar - a (uint16),Arithmetic,Subtract,uint16,10000000,4.903,5.481,1.12,close
+a * b (element-wise) (uint16),Arithmetic,Multiply,uint16,10000000,5.396,6.926,1.28,close
+a * a (square) (uint16),Arithmetic,Multiply,uint16,10000000,4.979,5.412,1.09,close
+a * scalar (uint16),Arithmetic,Multiply,uint16,10000000,4.461,5.35,1.2,close
+a * 2 (literal) (uint16),Arithmetic,Multiply,uint16,10000000,4.433,9.058,2.04,slower
+a + b (element-wise) (int32),Arithmetic,Add,int32,10000000,9.092,13.815,1.52,close
+"np.add(a, b) (int32)",Arithmetic,Add,int32,10000000,9.957,14.094,1.42,close
+a + scalar (int32),Arithmetic,Add,int32,10000000,9.298,10.171,1.09,close
+a + 5 (literal) (int32),Arithmetic,Add,int32,10000000,9.434,10.111,1.07,close
+a - b (element-wise) (int32),Arithmetic,Subtract,int32,10000000,10.259,14.126,1.38,close
+a - scalar (int32),Arithmetic,Subtract,int32,10000000,9.24,10.002,1.08,close
+scalar - a (int32),Arithmetic,Subtract,int32,10000000,9.33,10.16,1.09,close
+a * b (element-wise) (int32),Arithmetic,Multiply,int32,10000000,10.058,14.301,1.42,close
+a * a (square) (int32),Arithmetic,Multiply,int32,10000000,8.744,10.034,1.15,close
+a * scalar (int32),Arithmetic,Multiply,int32,10000000,8.351,10.146,1.21,close
+a * 2 (literal) (int32),Arithmetic,Multiply,int32,10000000,8.762,10.174,1.16,close
+a / b (element-wise) (int32),Arithmetic,Divide,int32,10000000,20.675,25.026,1.21,close
+a / scalar (int32),Arithmetic,Divide,int32,10000000,17.192,24.326,1.41,close
+scalar / a (int32),Arithmetic,Divide,int32,10000000,17.339,23.735,1.37,close
+a % b (element-wise) (int32),Arithmetic,Modulo,int32,10000000,43.228,64.945,1.5,close
+a % 7 (literal) (int32),Arithmetic,Modulo,int32,10000000,45.831,70.802,1.54,close
+a + b (element-wise) (uint32),Arithmetic,Add,uint32,10000000,9.01,14.347,1.59,close
+"np.add(a, b) (uint32)",Arithmetic,Add,uint32,10000000,9.571,14.247,1.49,close
+a + scalar (uint32),Arithmetic,Add,uint32,10000000,8.124,10.364,1.28,close
+a + 5 (literal) (uint32),Arithmetic,Add,uint32,10000000,8.22,12.383,1.51,close
+a - b (element-wise) (uint32),Arithmetic,Subtract,uint32,10000000,8.878,14.328,1.61,close
+a - scalar (uint32),Arithmetic,Subtract,uint32,10000000,7.959,10.544,1.32,close
+scalar - a (uint32),Arithmetic,Subtract,uint32,10000000,8.214,10.442,1.27,close
+a * b (element-wise) (uint32),Arithmetic,Multiply,uint32,10000000,8.865,13.557,1.53,close
+a * a (square) (uint32),Arithmetic,Multiply,uint32,10000000,8.4,10.811,1.29,close
+a * scalar (uint32),Arithmetic,Multiply,uint32,10000000,8.141,10.301,1.27,close
+a * 2 (literal) (uint32),Arithmetic,Multiply,uint32,10000000,8.511,12.067,1.42,close
+a + b (element-wise) (int64),Arithmetic,Add,int64,10000000,19.821,26.286,1.33,close
+"np.add(a, b) (int64)",Arithmetic,Add,int64,10000000,20.629,27.631,1.34,close
+a + scalar (int64),Arithmetic,Add,int64,10000000,15.796,19.695,1.25,close
+a + 5 (literal) (int64),Arithmetic,Add,int64,10000000,16.035,22.119,1.38,close
+a - b (element-wise) (int64),Arithmetic,Subtract,int64,10000000,18.047,27.648,1.53,close
+a - scalar (int64),Arithmetic,Subtract,int64,10000000,15.543,20.387,1.31,close
+scalar - a (int64),Arithmetic,Subtract,int64,10000000,16.08,20.501,1.27,close
+a * b (element-wise) (int64),Arithmetic,Multiply,int64,10000000,18.723,28.762,1.54,close
+a * a (square) (int64),Arithmetic,Multiply,int64,10000000,17.143,21.032,1.23,close
+a * scalar (int64),Arithmetic,Multiply,int64,10000000,19.42,21.969,1.13,close
+a * 2 (literal) (int64),Arithmetic,Multiply,int64,10000000,18.588,22.763,1.22,close
+a / b (element-wise) (int64),Arithmetic,Divide,int64,10000000,26.556,31.164,1.17,close
+a / scalar (int64),Arithmetic,Divide,int64,10000000,19.64,24.95,1.27,close
+scalar / a (int64),Arithmetic,Divide,int64,10000000,19.694,24.924,1.27,close
+a % b (element-wise) (int64),Arithmetic,Modulo,int64,10000000,48.607,67.401,1.39,close
+a % 7 (literal) (int64),Arithmetic,Modulo,int64,10000000,51.681,93.837,1.82,close
+a + b (element-wise) (uint64),Arithmetic,Add,uint64,10000000,18.685,26.587,1.42,close
+"np.add(a, b) (uint64)",Arithmetic,Add,uint64,10000000,18.702,26.509,1.42,close
+a + scalar (uint64),Arithmetic,Add,uint64,10000000,16.22,20.39,1.26,close
+a + 5 (literal) (uint64),Arithmetic,Add,uint64,10000000,15.747,22.752,1.44,close
+a - b (element-wise) (uint64),Arithmetic,Subtract,uint64,10000000,18.69,27.279,1.46,close
+a - scalar (uint64),Arithmetic,Subtract,uint64,10000000,16.404,20.411,1.24,close
+scalar - a (uint64),Arithmetic,Subtract,uint64,10000000,16.005,19.788,1.24,close
+a * b (element-wise) (uint64),Arithmetic,Multiply,uint64,10000000,19.02,31.903,1.68,close
+a * a (square) (uint64),Arithmetic,Multiply,uint64,10000000,16.341,21.505,1.32,close
+a * scalar (uint64),Arithmetic,Multiply,uint64,10000000,16.977,21.137,1.25,close
+a * 2 (literal) (uint64),Arithmetic,Multiply,uint64,10000000,15.84,22.149,1.4,close
+a + b (element-wise) (float32),Arithmetic,Add,float32,10000000,9.51,13.892,1.46,close
+"np.add(a, b) (float32)",Arithmetic,Add,float32,10000000,8.912,13.295,1.49,close
+a + scalar (float32),Arithmetic,Add,float32,10000000,8.174,10.512,1.29,close
+a + 5 (literal) (float32),Arithmetic,Add,float32,10000000,8.602,12.963,1.51,close
+a - b (element-wise) (float32),Arithmetic,Subtract,float32,10000000,9.062,14.184,1.57,close
+a - scalar (float32),Arithmetic,Subtract,float32,10000000,8.299,10.215,1.23,close
+scalar - a (float32),Arithmetic,Subtract,float32,10000000,8.41,10.33,1.23,close
+a * b (element-wise) (float32),Arithmetic,Multiply,float32,10000000,8.954,14.077,1.57,close
+a * a (square) (float32),Arithmetic,Multiply,float32,10000000,8.093,11.112,1.37,close
+a * scalar (float32),Arithmetic,Multiply,float32,10000000,8.065,10.266,1.27,close
+a * 2 (literal) (float32),Arithmetic,Multiply,float32,10000000,8.316,12.213,1.47,close
+a / b (element-wise) (float32),Arithmetic,Divide,float32,10000000,9.149,13.792,1.51,close
+a / scalar (float32),Arithmetic,Divide,float32,10000000,8.486,10.524,1.24,close
+scalar / a (float32),Arithmetic,Divide,float32,10000000,8.359,10.197,1.22,close
+a % b (element-wise) (float32),Arithmetic,Modulo,float32,10000000,156.331,166.931,1.07,close
+a % 7 (literal) (float32),Arithmetic,Modulo,float32,10000000,167.311,194.695,1.16,close
+a + b (element-wise) (float64),Arithmetic,Add,float64,10000000,18.976,26.601,1.4,close
+"np.add(a, b) (float64)",Arithmetic,Add,float64,10000000,17.959,27.055,1.51,close
+a + scalar (float64),Arithmetic,Add,float64,10000000,16.109,19.699,1.22,close
+a + 5 (literal) (float64),Arithmetic,Add,float64,10000000,16.31,21.859,1.34,close
+a - b (element-wise) (float64),Arithmetic,Subtract,float64,10000000,17.61,26.59,1.51,close
+a - scalar (float64),Arithmetic,Subtract,float64,10000000,16.145,20.116,1.25,close
+scalar - a (float64),Arithmetic,Subtract,float64,10000000,16.603,19.754,1.19,close
+a * b (element-wise) (float64),Arithmetic,Multiply,float64,10000000,17.685,26.509,1.5,close
+a * a (square) (float64),Arithmetic,Multiply,float64,10000000,16.969,20.362,1.2,close
+a * scalar (float64),Arithmetic,Multiply,float64,10000000,18.564,20.131,1.08,close
+a * 2 (literal) (float64),Arithmetic,Multiply,float64,10000000,17.376,8.915,0.51,faster
+a / b (element-wise) (float64),Arithmetic,Divide,float64,10000000,19.161,27.372,1.43,close
+a / scalar (float64),Arithmetic,Divide,float64,10000000,16.49,23.705,1.44,close
+scalar / a (float64),Arithmetic,Divide,float64,10000000,16.377,24.157,1.48,close
+a % b (element-wise) (float64),Arithmetic,Modulo,float64,10000000,143.256,151.614,1.06,close
+a % 7 (literal) (float64),Arithmetic,Modulo,float64,10000000,155.583,178.775,1.15,close
+np.sqrt (float32),Unary,Math,float32,1000,0.001,0.002,1.85,close
+np.abs (float32),Unary,Math,float32,1000,0.001,0.002,3.49,slower
+np.sign (float32),Unary,Math,float32,1000,0.001,0.004,3.62,slower
+np.floor (float32),Unary,Rounding,float32,1000,0.001,0.002,4.13,slower
+np.ceil (float32),Unary,Rounding,float32,1000,0.001,0.002,4.04,slower
+np.round (float32),Unary,Rounding,float32,1000,0.001,,,no_data
+np.exp (float32),Unary,ExpLog,float32,1000,0.001,0.006,4.56,slower
+np.log (float32),Unary,ExpLog,float32,1000,0.001,0.006,4.39,slower
+np.log10 (float32),Unary,ExpLog,float32,1000,0.002,0.006,2.29,slower
+np.sin (float32),Unary,Trig,float32,1000,0.005,0.009,1.89,close
+np.cos (float32),Unary,Trig,float32,1000,0.005,0.008,1.61,close
+np.sqrt (float64),Unary,Math,float64,1000,0.001,0.005,5.2,much_slower
+np.abs (float64),Unary,Math,float64,1000,0.001,0.004,7.45,much_slower
+np.sign (float64),Unary,Math,float64,1000,0.001,0.004,3.96,slower
+np.floor (float64),Unary,Rounding,float64,1000,0.001,0.003,5.69,much_slower
+np.ceil (float64),Unary,Rounding,float64,1000,0.001,0.003,5.43,much_slower
+np.round (float64),Unary,Rounding,float64,1000,0.001,,,no_data
+np.exp (float64),Unary,ExpLog,float64,1000,0.003,0.007,2.5,slower
+np.log (float64),Unary,ExpLog,float64,1000,0.003,0.007,2.65,slower
+np.log10 (float64),Unary,ExpLog,float64,1000,0.003,0.008,2.65,slower
+np.sin (float64),Unary,Trig,float64,1000,0.005,0.012,2.47,slower
+np.cos (float64),Unary,Trig,float64,1000,0.005,0.012,2.45,slower
+np.cbrt(a) (float32),Unary,Unary,float32,1000,0.006,0.014,2.31,slower
+np.reciprocal(a) (float32),Unary,Unary,float32,1000,0.001,0.002,3.43,slower
+np.square(a) (float32),Unary,Unary,float32,1000,0.0,0.002,3.45,slower
+np.negative(a) (float32),Unary,Unary,float32,1000,0.001,0.002,3.82,slower
+np.positive(a) (float32),Unary,Unary,float32,1000,0.001,0.002,2.74,slower
+np.trunc(a) (float32),Unary,Unary,float32,1000,0.001,0.002,3.97,slower
+np.cbrt(a) (float64),Unary,Unary,float64,1000,0.01,0.02,2.11,slower
+np.reciprocal(a) (float64),Unary,Unary,float64,1000,0.001,0.005,5.81,much_slower
+np.square(a) (float64),Unary,Unary,float64,1000,0.001,0.003,6.09,much_slower
+np.negative(a) (float64),Unary,Unary,float64,1000,0.001,0.003,4.97,slower
+np.positive(a) (float64),Unary,Unary,float64,1000,0.001,0.003,4.12,slower
+np.trunc(a) (float64),Unary,Unary,float64,1000,0.001,0.003,5.52,much_slower
+np.sqrt (float32),Unary,Math,float32,100000,0.014,0.078,5.42,much_slower
+np.abs (float32),Unary,Math,float32,100000,0.006,0.064,10.14,much_slower
+np.sign (float32),Unary,Math,float32,100000,0.3,0.56,1.87,close
+np.floor (float32),Unary,Rounding,float32,100000,0.006,0.058,8.91,much_slower
+np.ceil (float32),Unary,Rounding,float32,100000,0.006,0.054,8.55,much_slower
+np.round (float32),Unary,Rounding,float32,100000,0.007,,,no_data
+np.exp (float32),Unary,ExpLog,float32,100000,0.057,0.4,6.96,much_slower
+np.log (float32),Unary,ExpLog,float32,100000,0.088,0.49,5.59,much_slower
+np.log10 (float32),Unary,ExpLog,float32,100000,0.19,0.487,2.56,slower
+np.sin (float32),Unary,Trig,float32,100000,0.715,1.222,1.71,close
+np.cos (float32),Unary,Trig,float32,100000,0.704,1.159,1.65,close
+np.sqrt (float64),Unary,Math,float64,100000,0.058,0.306,5.27,much_slower
+np.abs (float64),Unary,Math,float64,100000,0.012,0.12,10.16,much_slower
+np.sign (float64),Unary,Math,float64,100000,0.292,0.586,2.01,slower
+np.floor (float64),Unary,Rounding,float64,100000,0.011,0.126,11.21,much_slower
+np.ceil (float64),Unary,Rounding,float64,100000,0.011,0.107,9.79,much_slower
+np.round (float64),Unary,Rounding,float64,100000,0.012,,,no_data
+np.exp (float64),Unary,ExpLog,float64,100000,0.252,0.514,2.04,slower
+np.log (float64),Unary,ExpLog,float64,100000,0.25,0.6,2.4,slower
+np.log10 (float64),Unary,ExpLog,float64,100000,0.246,0.671,2.73,slower
+np.sin (float64),Unary,Trig,float64,100000,0.707,1.255,1.78,close
+np.cos (float64),Unary,Trig,float64,100000,0.702,1.253,1.79,close
+np.cbrt(a) (float32),Unary,Unary,float32,100000,0.879,1.54,1.75,close
+np.reciprocal(a) (float32),Unary,Unary,float32,100000,0.014,0.065,4.48,slower
+np.square(a) (float32),Unary,Unary,float32,100000,0.007,0.056,8.36,much_slower
+np.negative(a) (float32),Unary,Unary,float32,100000,0.006,0.053,8.44,much_slower
+np.positive(a) (float32),Unary,Unary,float32,100000,0.019,0.051,2.64,slower
+np.trunc(a) (float32),Unary,Unary,float32,100000,0.006,0.054,9.28,much_slower
+np.cbrt(a) (float64),Unary,Unary,float64,100000,1.061,2.133,2.01,slower
+np.reciprocal(a) (float64),Unary,Unary,float64,100000,0.038,0.205,5.4,much_slower
+np.square(a) (float64),Unary,Unary,float64,100000,0.011,0.102,9.33,much_slower
+np.negative(a) (float64),Unary,Unary,float64,100000,0.013,0.098,7.29,much_slower
+np.positive(a) (float64),Unary,Unary,float64,100000,0.02,0.104,5.09,much_slower
+np.trunc(a) (float64),Unary,Unary,float64,100000,0.011,0.104,9.5,much_slower
+np.sqrt (float32),Unary,Math,float32,10000000,7.322,11.076,1.51,close
+np.abs (float32),Unary,Math,float32,10000000,7.22,10.982,1.52,close
+np.sign (float32),Unary,Math,float32,10000000,36.479,60.943,1.67,close
+np.floor (float32),Unary,Rounding,float32,10000000,8.035,10.841,1.35,close
+np.ceil (float32),Unary,Rounding,float32,10000000,7.946,10.831,1.36,close
+np.round (float32),Unary,Rounding,float32,10000000,8.986,,,no_data
+np.exp (float32),Unary,ExpLog,float32,10000000,14.065,42.519,3.02,slower
+np.log (float32),Unary,ExpLog,float32,10000000,16.011,46.648,2.91,slower
+np.log10 (float32),Unary,ExpLog,float32,10000000,23.316,46.331,1.99,close
+np.sin (float32),Unary,Trig,float32,10000000,79.871,123.547,1.55,close
+np.cos (float32),Unary,Trig,float32,10000000,80.226,121.522,1.51,close
+np.sqrt (float64),Unary,Math,float64,10000000,15.861,33.078,2.09,slower
+np.abs (float64),Unary,Math,float64,10000000,16.138,20.945,1.3,close
+np.sign (float64),Unary,Math,float64,10000000,45.034,63.78,1.42,close
+np.floor (float64),Unary,Rounding,float64,10000000,16.585,21.364,1.29,close
+np.ceil (float64),Unary,Rounding,float64,10000000,15.883,21.546,1.36,close
+np.round (float64),Unary,Rounding,float64,10000000,16.672,,,no_data
+np.exp (float64),Unary,ExpLog,float64,10000000,33.86,53.097,1.57,close
+np.log (float64),Unary,ExpLog,float64,10000000,31.759,61.585,1.94,close
+np.log10 (float64),Unary,ExpLog,float64,10000000,33.493,64.17,1.92,close
+np.sin (float64),Unary,Trig,float64,10000000,79.576,127.274,1.6,close
+np.cos (float64),Unary,Trig,float64,10000000,79.276,128.113,1.62,close
+np.cbrt(a) (float32),Unary,Unary,float32,10000000,94.667,150.887,1.59,close
+np.reciprocal(a) (float32),Unary,Unary,float32,10000000,7.315,10.486,1.43,close
+np.square(a) (float32),Unary,Unary,float32,10000000,7.61,10.422,1.37,close
+np.negative(a) (float32),Unary,Unary,float32,10000000,8.219,10.447,1.27,close
+np.positive(a) (float32),Unary,Unary,float32,10000000,8.173,7.417,0.91,faster
+np.trunc(a) (float32),Unary,Unary,float32,10000000,7.633,10.566,1.38,close
+np.cbrt(a) (float64),Unary,Unary,float64,10000000,116.244,210.733,1.81,close
+np.reciprocal(a) (float64),Unary,Unary,float64,10000000,15.69,23.301,1.49,close
+np.square(a) (float64),Unary,Unary,float64,10000000,15.614,19.955,1.28,close
+np.negative(a) (float64),Unary,Unary,float64,10000000,16.837,20.215,1.2,close
+np.positive(a) (float64),Unary,Unary,float64,10000000,14.974,15.063,1.01,close
+np.trunc(a) (float64),Unary,Unary,float64,10000000,14.654,20.011,1.37,close
+np.sum (uint8),Reduction,Sum,uint8,1000,0.002,0.001,0.36,faster
+np.sum axis=0 (uint8),Reduction,Sum,uint8,1000,0.003,0.005,1.89,close
+np.sum axis=1 (uint8),Reduction,Sum,uint8,1000,0.002,0.005,1.92,close
+np.mean (uint8),Reduction,Mean,uint8,1000,0.003,,,no_data
+np.amin (uint8),Reduction,MinMax,uint8,1000,0.002,0.001,0.44,faster
+np.amax (uint8),Reduction,MinMax,uint8,1000,0.002,0.001,0.4,faster
+np.argmin (uint8),Reduction,ArgMinMax,uint8,1000,0.001,0.001,0.83,faster
+np.argmax (uint8),Reduction,ArgMinMax,uint8,1000,0.001,0.001,0.68,faster
+np.sum (int16),Reduction,Sum,int16,1000,0.002,0.001,0.37,faster
+np.sum axis=0 (int16),Reduction,Sum,int16,1000,0.002,0.003,1.38,close
+np.sum axis=1 (int16),Reduction,Sum,int16,1000,0.002,0.003,1.44,close
+np.mean (int16),Reduction,Mean,int16,1000,0.003,,,no_data
+np.amin (int16),Reduction,MinMax,int16,1000,0.002,0.001,0.4,faster
+np.amax (int16),Reduction,MinMax,int16,1000,0.002,0.001,0.49,faster
+np.argmin (int16),Reduction,ArgMinMax,int16,1000,0.001,0.001,0.72,faster
+np.argmax (int16),Reduction,ArgMinMax,int16,1000,0.001,0.001,0.83,faster
+np.sum (uint16),Reduction,Sum,uint16,1000,0.002,0.001,0.39,faster
+np.sum axis=0 (uint16),Reduction,Sum,uint16,1000,0.002,0.005,1.98,close
+np.sum axis=1 (uint16),Reduction,Sum,uint16,1000,0.002,0.005,2.05,slower
+np.mean (uint16),Reduction,Mean,uint16,1000,0.003,,,no_data
+np.amin (uint16),Reduction,MinMax,uint16,1000,0.002,0.001,0.52,faster
+np.amax (uint16),Reduction,MinMax,uint16,1000,0.002,0.001,0.49,faster
+np.argmin (uint16),Reduction,ArgMinMax,uint16,1000,0.001,0.001,0.85,faster
+np.argmax (uint16),Reduction,ArgMinMax,uint16,1000,0.001,0.001,0.82,faster
+np.sum (int32),Reduction,Sum,int32,1000,0.002,0.001,0.33,faster
+np.sum axis=0 (int32),Reduction,Sum,int32,1000,0.003,0.001,0.31,faster
+np.sum axis=1 (int32),Reduction,Sum,int32,1000,0.002,0.001,0.37,faster
+np.mean (int32),Reduction,Mean,int32,1000,0.003,0.001,0.4,faster
+np.amin (int32),Reduction,MinMax,int32,1000,0.002,0.001,0.49,faster
+np.amax (int32),Reduction,MinMax,int32,1000,0.002,0.001,0.27,faster
+np.argmin (int32),Reduction,ArgMinMax,int32,1000,0.001,0.001,0.88,faster
+np.argmax (int32),Reduction,ArgMinMax,int32,1000,0.001,0.001,0.84,faster
+np.sum (uint32),Reduction,Sum,uint32,1000,0.002,0.001,0.38,faster
+np.sum axis=0 (uint32),Reduction,Sum,uint32,1000,0.002,0.001,0.34,faster
+np.sum axis=1 (uint32),Reduction,Sum,uint32,1000,0.002,0.001,0.46,faster
+np.mean (uint32),Reduction,Mean,uint32,1000,0.003,,,no_data
+np.amin (uint32),Reduction,MinMax,uint32,1000,0.002,0.001,0.49,faster
+np.amax (uint32),Reduction,MinMax,uint32,1000,0.002,0.001,0.48,faster
+np.argmin (uint32),Reduction,ArgMinMax,uint32,1000,0.001,0.001,0.72,faster
+np.argmax (uint32),Reduction,ArgMinMax,uint32,1000,0.001,0.001,0.87,faster
+np.sum (int64),Reduction,Sum,int64,1000,0.002,0.001,0.44,faster
+np.sum axis=0 (int64),Reduction,Sum,int64,1000,0.002,0.001,0.37,faster
+np.sum axis=1 (int64),Reduction,Sum,int64,1000,0.002,0.001,0.43,faster
+np.mean (int64),Reduction,Mean,int64,1000,0.003,0.001,0.48,faster
+np.amin (int64),Reduction,MinMax,int64,1000,0.002,0.001,0.62,faster
+np.amax (int64),Reduction,MinMax,int64,1000,0.002,0.001,0.47,faster
+np.argmin (int64),Reduction,ArgMinMax,int64,1000,0.001,0.001,0.9,faster
+np.argmax (int64),Reduction,ArgMinMax,int64,1000,0.001,0.001,0.98,faster
+np.sum (uint64),Reduction,Sum,uint64,1000,0.002,0.001,0.43,faster
+np.sum axis=0 (uint64),Reduction,Sum,uint64,1000,0.002,0.001,0.39,faster
+np.sum axis=1 (uint64),Reduction,Sum,uint64,1000,0.002,0.001,0.37,faster
+np.mean (uint64),Reduction,Mean,uint64,1000,0.003,,,no_data
+np.amin (uint64),Reduction,MinMax,uint64,1000,0.002,0.001,0.7,faster
+np.amax (uint64),Reduction,MinMax,uint64,1000,0.002,0.001,0.45,faster
+np.argmin (uint64),Reduction,ArgMinMax,uint64,1000,0.001,0.001,0.98,faster
+np.argmax (uint64),Reduction,ArgMinMax,uint64,1000,0.001,0.001,0.94,faster
+np.sum (float32),Reduction,Sum,float32,1000,0.002,0.001,0.42,faster
+np.sum axis=0 (float32),Reduction,Sum,float32,1000,0.002,0.001,0.36,faster
+np.sum axis=1 (float32),Reduction,Sum,float32,1000,0.002,0.001,0.42,faster
+np.mean (float32),Reduction,Mean,float32,1000,0.004,0.001,0.21,faster
+np.var (float32),Reduction,VarStd,float32,1000,0.008,0.001,0.1,faster
+np.std (float32),Reduction,VarStd,float32,1000,0.008,0.001,0.13,faster
+np.amin (float32),Reduction,MinMax,float32,1000,0.002,0.001,0.81,faster
+np.amax (float32),Reduction,MinMax,float32,1000,0.002,0.001,0.47,faster
+np.argmin (float32),Reduction,ArgMinMax,float32,1000,0.001,0.001,1.39,close
+np.argmax (float32),Reduction,ArgMinMax,float32,1000,0.001,0.001,1.38,close
+np.sum (float64),Reduction,Sum,float64,1000,0.002,0.001,0.44,faster
+np.sum axis=0 (float64),Reduction,Sum,float64,1000,0.002,0.001,0.37,faster
+np.sum axis=1 (float64),Reduction,Sum,float64,1000,0.002,0.001,0.41,faster
+np.mean (float64),Reduction,Mean,float64,1000,0.002,0.001,0.34,faster
+np.var (float64),Reduction,VarStd,float64,1000,0.006,0.001,0.12,faster
+np.std (float64),Reduction,VarStd,float64,1000,0.007,0.001,0.13,faster
+np.amin (float64),Reduction,MinMax,float64,1000,0.002,0.002,1.26,close
+np.amax (float64),Reduction,MinMax,float64,1000,0.002,0.001,0.6,faster
+np.argmin (float64),Reduction,ArgMinMax,float64,1000,0.001,0.001,1.0,faster
+np.argmax (float64),Reduction,ArgMinMax,float64,1000,0.001,0.001,1.25,close
+np.nansum(a) (float32),Reduction,Reduction,float32,1000,0.004,0.001,0.34,faster
+np.nanmean(a) (float32),Reduction,Reduction,float32,1000,0.01,0.002,0.18,faster
+np.nanmax(a) (float32),Reduction,Reduction,float32,1000,0.003,0.001,0.43,faster
+np.nanmin(a) (float32),Reduction,Reduction,float32,1000,0.003,0.001,0.42,faster
+np.nanstd(a) (float32),Reduction,Reduction,float32,1000,0.02,0.003,0.12,faster
+np.nanvar(a) (float32),Reduction,Reduction,float32,1000,0.02,0.003,0.13,faster
+np.nanprod(a) (float32),Reduction,Reduction,float32,1000,0.005,0.001,0.28,faster
+np.nanmedian(a) (float32),Reduction,Reduction,float32,1000,0.013,0.004,0.28,faster
+"np.nanpercentile(a, 50) (float32)",Reduction,Reduction,float32,1000,0.026,0.004,0.14,faster
+"np.nanquantile(a, 0.5) (float32)",Reduction,Reduction,float32,1000,0.025,0.004,0.15,faster
+np.cumprod(a) (float32),Reduction,Reduction,float32,1000,0.004,0.019,5.17,much_slower
+np.nansum(a) (float64),Reduction,Reduction,float64,1000,0.004,0.001,0.37,faster
+np.nanmean(a) (float64),Reduction,Reduction,float64,1000,0.008,0.002,0.22,faster
+np.nanmax(a) (float64),Reduction,Reduction,float64,1000,0.003,0.002,0.65,faster
+np.nanmin(a) (float64),Reduction,Reduction,float64,1000,0.003,0.002,0.66,faster
+np.nanstd(a) (float64),Reduction,Reduction,float64,1000,0.018,0.002,0.13,faster
+np.nanvar(a) (float64),Reduction,Reduction,float64,1000,0.018,0.002,0.14,faster
+np.nanprod(a) (float64),Reduction,Reduction,float64,1000,0.005,0.001,0.2,faster
+np.nanmedian(a) (float64),Reduction,Reduction,float64,1000,0.012,0.004,0.33,faster
+"np.nanpercentile(a, 50) (float64)",Reduction,Reduction,float64,1000,0.028,0.004,0.14,faster
+"np.nanquantile(a, 0.5) (float64)",Reduction,Reduction,float64,1000,0.028,0.004,0.13,faster
+np.cumprod(a) (float64),Reduction,Reduction,float64,1000,0.004,0.017,3.94,slower
+np.sum (uint8),Reduction,Sum,uint8,100000,0.036,0.019,0.52,faster
+np.sum axis=0 (uint8),Reduction,Sum,uint8,100000,0.049,0.496,10.03,much_slower
+np.sum axis=1 (uint8),Reduction,Sum,uint8,100000,0.037,0.501,13.45,much_slower
+np.mean (uint8),Reduction,Mean,uint8,100000,0.054,,,no_data
+np.amin (uint8),Reduction,MinMax,uint8,100000,0.003,0.002,0.76,faster
+np.amax (uint8),Reduction,MinMax,uint8,100000,0.002,0.001,0.49,faster
+np.argmin (uint8),Reduction,ArgMinMax,uint8,100000,0.003,0.001,0.4,faster
+np.argmax (uint8),Reduction,ArgMinMax,uint8,100000,0.003,0.001,0.4,faster
+np.sum (int16),Reduction,Sum,int16,100000,0.033,0.019,0.57,faster
+np.sum axis=0 (int16),Reduction,Sum,int16,100000,0.047,0.403,8.62,much_slower
+np.sum axis=1 (int16),Reduction,Sum,int16,100000,0.037,0.407,10.95,much_slower
+np.mean (int16),Reduction,Mean,int16,100000,0.052,,,no_data
+np.amin (int16),Reduction,MinMax,int16,100000,0.004,0.003,0.77,faster
+np.amax (int16),Reduction,MinMax,int16,100000,0.003,0.002,0.66,faster
+np.argmin (int16),Reduction,ArgMinMax,int16,100000,0.004,0.002,0.58,faster
+np.argmax (int16),Reduction,ArgMinMax,int16,100000,0.003,0.002,0.58,faster
+np.sum (uint16),Reduction,Sum,uint16,100000,0.034,0.019,0.55,faster
+np.sum axis=0 (uint16),Reduction,Sum,uint16,100000,0.047,0.505,10.7,much_slower
+np.sum axis=1 (uint16),Reduction,Sum,uint16,100000,0.04,0.497,12.38,much_slower
+np.mean (uint16),Reduction,Mean,uint16,100000,0.055,,,no_data
+np.amin (uint16),Reduction,MinMax,uint16,100000,0.003,0.003,0.83,faster
+np.amax (uint16),Reduction,MinMax,uint16,100000,0.003,0.002,0.64,faster
+np.argmin (uint16),Reduction,ArgMinMax,uint16,100000,0.005,0.002,0.43,faster
+np.argmax (uint16),Reduction,ArgMinMax,uint16,100000,0.005,0.002,0.4,faster
+np.sum (int32),Reduction,Sum,int32,100000,0.035,0.019,0.54,faster
+np.sum axis=0 (int32),Reduction,Sum,int32,100000,0.05,0.012,0.24,faster
+np.sum axis=1 (int32),Reduction,Sum,int32,100000,0.04,0.016,0.4,faster
+np.mean (int32),Reduction,Mean,int32,100000,0.047,0.019,0.41,faster
+np.amin (int32),Reduction,MinMax,int32,100000,0.005,0.005,1.04,close
+np.amax (int32),Reduction,MinMax,int32,100000,0.004,0.003,0.77,faster
+np.argmin (int32),Reduction,ArgMinMax,int32,100000,0.005,0.004,0.66,faster
+np.argmax (int32),Reduction,ArgMinMax,int32,100000,0.006,0.004,0.66,faster
+np.sum (uint32),Reduction,Sum,uint32,100000,0.033,0.019,0.58,faster
+np.sum axis=0 (uint32),Reduction,Sum,uint32,100000,0.051,0.012,0.24,faster
+np.sum axis=1 (uint32),Reduction,Sum,uint32,100000,0.038,0.04,1.05,close
+np.mean (uint32),Reduction,Mean,uint32,100000,0.04,,,no_data
+np.amin (uint32),Reduction,MinMax,uint32,100000,0.005,0.006,1.17,close
+np.amax (uint32),Reduction,MinMax,uint32,100000,0.004,0.003,0.77,faster
+np.argmin (uint32),Reduction,ArgMinMax,uint32,100000,0.009,0.004,0.41,faster
+np.argmax (uint32),Reduction,ArgMinMax,uint32,100000,0.009,0.004,0.42,faster
+np.sum (int64),Reduction,Sum,int64,100000,0.02,0.007,0.33,faster
+np.sum axis=0 (int64),Reduction,Sum,int64,100000,0.027,0.01,0.38,faster
+np.sum axis=1 (int64),Reduction,Sum,int64,100000,0.017,0.007,0.43,faster
+np.mean (int64),Reduction,Mean,int64,100000,0.034,0.005,0.13,faster
+np.amin (int64),Reduction,MinMax,int64,100000,0.012,0.028,2.27,slower
+np.amax (int64),Reduction,MinMax,int64,100000,0.009,0.007,0.82,faster
+np.argmin (int64),Reduction,ArgMinMax,int64,100000,0.014,0.028,2.01,slower
+np.argmax (int64),Reduction,ArgMinMax,int64,100000,0.014,0.028,1.95,close
+np.sum (uint64),Reduction,Sum,uint64,100000,0.019,0.006,0.33,faster
+np.sum axis=0 (uint64),Reduction,Sum,uint64,100000,0.027,0.01,0.38,faster
+np.sum axis=1 (uint64),Reduction,Sum,uint64,100000,0.018,0.007,0.41,faster
+np.mean (uint64),Reduction,Mean,uint64,100000,0.052,,,no_data
+np.amin (uint64),Reduction,MinMax,uint64,100000,0.012,0.036,2.98,slower
+np.amax (uint64),Reduction,MinMax,uint64,100000,0.012,0.01,0.81,faster
+np.argmin (uint64),Reduction,ArgMinMax,uint64,100000,0.017,0.033,1.95,close
+np.argmax (uint64),Reduction,ArgMinMax,uint64,100000,0.021,0.033,1.57,close
+np.sum (float32),Reduction,Sum,float32,100000,0.016,0.003,0.2,faster
+np.sum axis=0 (float32),Reduction,Sum,float32,100000,0.008,0.005,0.59,faster
+np.sum axis=1 (float32),Reduction,Sum,float32,100000,0.016,0.003,0.21,faster
+np.mean (float32),Reduction,Mean,float32,100000,0.019,0.003,0.17,faster
+np.var (float32),Reduction,VarStd,float32,100000,0.048,0.01,0.2,faster
+np.std (float32),Reduction,VarStd,float32,100000,0.048,0.01,0.2,faster
+np.amin (float32),Reduction,MinMax,float32,100000,0.007,0.051,7.78,much_slower
+np.amax (float32),Reduction,MinMax,float32,100000,0.006,0.014,2.3,slower
+np.argmin (float32),Reduction,ArgMinMax,float32,100000,0.009,0.057,6.4,much_slower
+np.argmax (float32),Reduction,ArgMinMax,float32,100000,0.009,0.056,6.42,much_slower
+np.sum (float64),Reduction,Sum,float64,100000,0.018,0.209,11.83,much_slower
+np.sum axis=0 (float64),Reduction,Sum,float64,100000,0.014,0.01,0.71,faster
+np.sum axis=1 (float64),Reduction,Sum,float64,100000,0.018,0.007,0.38,faster
+np.mean (float64),Reduction,Mean,float64,100000,0.018,0.004,0.23,faster
+np.var (float64),Reduction,VarStd,float64,100000,0.056,0.019,0.34,faster
+np.std (float64),Reduction,VarStd,float64,100000,0.058,0.019,0.33,faster
+np.amin (float64),Reduction,MinMax,float64,100000,0.01,0.092,9.06,much_slower
+np.amax (float64),Reduction,MinMax,float64,100000,0.01,0.027,2.66,slower
+np.argmin (float64),Reduction,ArgMinMax,float64,100000,0.017,0.057,3.45,slower
+np.argmax (float64),Reduction,ArgMinMax,float64,100000,0.017,0.057,3.42,slower
+np.nansum(a) (float32),Reduction,Reduction,float32,100000,0.032,0.01,0.3,faster
+np.nanmean(a) (float32),Reduction,Reduction,float32,100000,0.073,0.072,0.99,faster
+np.nanmax(a) (float32),Reduction,Reduction,float32,100000,0.008,0.052,6.6,much_slower
+np.nanmin(a) (float32),Reduction,Reduction,float32,100000,0.007,0.052,7.38,much_slower
+np.nanstd(a) (float32),Reduction,Reduction,float32,100000,0.163,0.152,0.93,faster
+np.nanvar(a) (float32),Reduction,Reduction,float32,100000,0.173,0.155,0.9,faster
+np.nanprod(a) (float32),Reduction,Reduction,float32,100000,0.096,0.016,0.17,faster
+np.nanmedian(a) (float32),Reduction,Reduction,float32,100000,0.498,0.964,1.94,close
+"np.nanpercentile(a, 50) (float32)",Reduction,Reduction,float32,100000,0.709,0.967,1.36,close
+"np.nanquantile(a, 0.5) (float32)",Reduction,Reduction,float32,100000,0.737,0.964,1.31,close
+np.cumprod(a) (float32),Reduction,Reduction,float32,100000,0.171,0.277,1.62,close
+np.nansum(a) (float64),Reduction,Reduction,float64,100000,0.243,0.019,0.08,faster
+np.nanmean(a) (float64),Reduction,Reduction,float64,100000,0.322,0.075,0.23,faster
+np.nanmax(a) (float64),Reduction,Reduction,float64,100000,0.011,0.102,8.93,much_slower
+np.nanmin(a) (float64),Reduction,Reduction,float64,100000,0.012,0.102,8.85,much_slower
+np.nanstd(a) (float64),Reduction,Reduction,float64,100000,0.457,0.148,0.32,faster
+np.nanvar(a) (float64),Reduction,Reduction,float64,100000,0.437,0.153,0.35,faster
+np.nanprod(a) (float64),Reduction,Reduction,float64,100000,0.287,0.032,0.11,faster
+np.nanmedian(a) (float64),Reduction,Reduction,float64,100000,0.484,0.995,2.06,slower
+"np.nanpercentile(a, 50) (float64)",Reduction,Reduction,float64,100000,0.782,1.027,1.31,close
+"np.nanquantile(a, 0.5) (float64)",Reduction,Reduction,float64,100000,0.75,0.985,1.31,close
+np.cumprod(a) (float64),Reduction,Reduction,float64,100000,0.172,0.422,2.45,slower
+np.sum (uint8),Reduction,Sum,uint8,10000000,3.214,1.839,0.57,faster
+np.sum axis=0 (uint8),Reduction,Sum,uint8,10000000,4.407,55.351,12.56,much_slower
+np.sum axis=1 (uint8),Reduction,Sum,uint8,10000000,3.115,49.741,15.97,much_slower
+np.mean (uint8),Reduction,Mean,uint8,10000000,5.008,,,no_data
+np.amin (uint8),Reduction,MinMax,uint8,10000000,0.15,0.239,1.6,close
+np.amax (uint8),Reduction,MinMax,uint8,10000000,0.148,0.147,0.99,faster
+np.argmin (uint8),Reduction,ArgMinMax,uint8,10000000,0.217,0.148,0.68,faster
+np.argmax (uint8),Reduction,ArgMinMax,uint8,10000000,0.223,0.149,0.67,faster
+np.sum (int16),Reduction,Sum,int16,10000000,3.372,1.953,0.58,faster
+np.sum axis=0 (int16),Reduction,Sum,int16,10000000,4.635,58.135,12.54,much_slower
+np.sum axis=1 (int16),Reduction,Sum,int16,10000000,3.382,40.846,12.08,much_slower
+np.mean (int16),Reduction,Mean,int16,10000000,5.128,,,no_data
+np.amin (int16),Reduction,MinMax,int16,10000000,0.325,0.756,2.33,slower
+np.amax (int16),Reduction,MinMax,int16,10000000,0.301,0.34,1.13,close
+np.argmin (int16),Reduction,ArgMinMax,int16,10000000,0.564,0.363,0.64,faster
+np.argmax (int16),Reduction,ArgMinMax,int16,10000000,0.415,0.365,0.88,faster
+np.sum (uint16),Reduction,Sum,uint16,10000000,3.316,1.941,0.59,faster
+np.sum axis=0 (uint16),Reduction,Sum,uint16,10000000,4.62,71.694,15.52,much_slower
+np.sum axis=1 (uint16),Reduction,Sum,uint16,10000000,3.365,49.896,14.83,much_slower
+np.mean (uint16),Reduction,Mean,uint16,10000000,5.082,,,no_data
+np.amin (uint16),Reduction,MinMax,uint16,10000000,0.312,0.713,2.29,slower
+np.amax (uint16),Reduction,MinMax,uint16,10000000,0.334,0.33,0.99,faster
+np.argmin (uint16),Reduction,ArgMinMax,uint16,10000000,0.55,0.375,0.68,faster
+np.argmax (uint16),Reduction,ArgMinMax,uint16,10000000,0.67,0.382,0.57,faster
+np.sum (int32),Reduction,Sum,int32,10000000,4.48,2.722,0.61,faster
+np.sum axis=0 (int32),Reduction,Sum,int32,10000000,5.49,6.202,1.13,close
+np.sum axis=1 (int32),Reduction,Sum,int32,10000000,4.2,1.899,0.45,faster
+np.mean (int32),Reduction,Mean,int32,10000000,4.594,2.823,0.61,faster
+np.amin (int32),Reduction,MinMax,int32,10000000,1.231,3.599,2.92,slower
+np.amax (int32),Reduction,MinMax,int32,10000000,1.202,1.22,1.01,close
+np.argmin (int32),Reduction,ArgMinMax,int32,10000000,2.052,1.373,0.67,faster
+np.argmax (int32),Reduction,ArgMinMax,int32,10000000,1.977,1.431,0.72,faster
+np.sum (uint32),Reduction,Sum,uint32,10000000,4.266,2.658,0.62,faster
+np.sum axis=0 (uint32),Reduction,Sum,uint32,10000000,5.594,5.981,1.07,close
+np.sum axis=1 (uint32),Reduction,Sum,uint32,10000000,4.336,4.086,0.94,faster
+np.mean (uint32),Reduction,Mean,uint32,10000000,4.757,,,no_data
+np.amin (uint32),Reduction,MinMax,uint32,10000000,1.307,3.732,2.86,slower
+np.amax (uint32),Reduction,MinMax,uint32,10000000,1.265,1.217,0.96,faster
+np.argmin (uint32),Reduction,ArgMinMax,uint32,10000000,2.028,1.26,0.62,faster
+np.argmax (uint32),Reduction,ArgMinMax,uint32,10000000,2.035,1.399,0.69,faster
+np.sum (int64),Reduction,Sum,int64,10000000,4.59,2.789,0.61,faster
+np.sum axis=0 (int64),Reduction,Sum,int64,10000000,5.357,3.269,0.61,faster
+np.sum axis=1 (int64),Reduction,Sum,int64,10000000,4.577,2.908,0.64,faster
+np.mean (int64),Reduction,Mean,int64,10000000,6.317,2.991,0.47,faster
+np.amin (int64),Reduction,MinMax,int64,10000000,3.669,8.46,2.31,slower
+np.amax (int64),Reduction,MinMax,int64,10000000,3.72,3.874,1.04,close
+np.argmin (int64),Reduction,ArgMinMax,int64,10000000,4.967,4.692,0.94,faster
+np.argmax (int64),Reduction,ArgMinMax,int64,10000000,4.66,4.798,1.03,close
+np.sum (uint64),Reduction,Sum,uint64,10000000,4.913,2.803,0.57,faster
+np.sum axis=0 (uint64),Reduction,Sum,uint64,10000000,5.636,3.259,0.58,faster
+np.sum axis=1 (uint64),Reduction,Sum,uint64,10000000,5.047,2.971,0.59,faster
+np.mean (uint64),Reduction,Mean,uint64,10000000,7.805,,,no_data
+np.amin (uint64),Reduction,MinMax,uint64,10000000,3.787,8.957,2.37,slower
+np.amax (uint64),Reduction,MinMax,uint64,10000000,4.073,4.094,1.01,close
+np.argmin (uint64),Reduction,ArgMinMax,uint64,10000000,4.494,5.146,1.15,close
+np.argmax (uint64),Reduction,ArgMinMax,uint64,10000000,4.59,5.193,1.13,close
+np.sum (float32),Reduction,Sum,float32,10000000,2.967,1.055,0.36,faster
+np.sum axis=0 (float32),Reduction,Sum,float32,10000000,1.56,1.352,0.87,faster
+np.sum axis=1 (float32),Reduction,Sum,float32,10000000,3.195,1.078,0.34,faster
+np.mean (float32),Reduction,Mean,float32,10000000,3.06,1.1,0.36,faster
+np.var (float32),Reduction,VarStd,float32,10000000,16.957,2.603,0.15,faster
+np.std (float32),Reduction,VarStd,float32,10000000,16.754,2.597,0.16,faster
+np.amin (float32),Reduction,MinMax,float32,10000000,1.483,5.26,3.55,slower
+np.amax (float32),Reduction,MinMax,float32,10000000,1.496,2.033,1.36,close
+np.argmin (float32),Reduction,ArgMinMax,float32,10000000,1.984,5.776,2.91,slower
+np.argmax (float32),Reduction,ArgMinMax,float32,10000000,2.061,5.812,2.82,slower
+np.sum (float64),Reduction,Sum,float64,10000000,5.043,3.496,0.69,faster
+np.sum axis=0 (float64),Reduction,Sum,float64,10000000,3.882,3.251,0.84,faster
+np.sum axis=1 (float64),Reduction,Sum,float64,10000000,5.394,2.94,0.54,faster
+np.mean (float64),Reduction,Mean,float64,10000000,5.023,2.918,0.58,faster
+np.var (float64),Reduction,VarStd,float64,10000000,31.748,6.714,0.21,faster
+np.std (float64),Reduction,VarStd,float64,10000000,32.848,6.759,0.21,faster
+np.amin (float64),Reduction,MinMax,float64,10000000,3.937,10.329,2.62,slower
+np.amax (float64),Reduction,MinMax,float64,10000000,3.766,4.296,1.14,close
+np.argmin (float64),Reduction,ArgMinMax,float64,10000000,4.95,6.867,1.39,close
+np.argmax (float64),Reduction,ArgMinMax,float64,10000000,4.98,6.966,1.4,close
+np.nansum(a) (float32),Reduction,Reduction,float32,10000000,14.349,1.488,0.1,faster
+np.nanmean(a) (float32),Reduction,Reduction,float32,10000000,19.828,4.194,0.21,faster
+np.nanmax(a) (float32),Reduction,Reduction,float32,10000000,1.463,3.314,2.27,slower
+np.nanmin(a) (float32),Reduction,Reduction,float32,10000000,1.613,3.361,2.08,slower
+np.nanstd(a) (float32),Reduction,Reduction,float32,10000000,32.755,9.284,0.28,faster
+np.nanvar(a) (float32),Reduction,Reduction,float32,10000000,33.395,9.288,0.28,faster
+np.nanprod(a) (float32),Reduction,Reduction,float32,10000000,18.515,1.904,0.1,faster
+np.nanmedian(a) (float32),Reduction,Reduction,float32,10000000,77.831,80.567,1.04,close
+"np.nanpercentile(a, 50) (float32)",Reduction,Reduction,float32,10000000,52.516,80.76,1.54,close
+"np.nanquantile(a, 0.5) (float32)",Reduction,Reduction,float32,10000000,66.804,80.449,1.2,close
+np.cumprod(a) (float32),Reduction,Reduction,float32,10000000,22.704,23.923,1.05,close
+np.nansum(a) (float64),Reduction,Reduction,float64,10000000,25.54,3.653,0.14,faster
+np.nanmean(a) (float64),Reduction,Reduction,float64,10000000,33.466,5.687,0.17,faster
+np.nanmax(a) (float64),Reduction,Reduction,float64,10000000,4.056,6.962,1.72,close
+np.nanmin(a) (float64),Reduction,Reduction,float64,10000000,4.249,6.981,1.64,close
+np.nanstd(a) (float64),Reduction,Reduction,float64,10000000,52.916,11.437,0.22,faster
+np.nanvar(a) (float64),Reduction,Reduction,float64,10000000,56.916,11.784,0.21,faster
+np.nanprod(a) (float64),Reduction,Reduction,float64,10000000,27.178,4.526,0.17,faster
+np.nanmedian(a) (float64),Reduction,Reduction,float64,10000000,93.115,92.301,0.99,faster
+"np.nanpercentile(a, 50) (float64)",Reduction,Reduction,float64,10000000,66.26,90.881,1.37,close
+"np.nanquantile(a, 0.5) (float64)",Reduction,Reduction,float64,10000000,64.794,90.981,1.4,close
+np.cumprod(a) (float64),Reduction,Reduction,float64,10000000,25.361,39.289,1.55,close
+matrix + scalar,Broadcasting,Scalar,float64,1000,0.001,,,no_data
+"matrix + row_vector (N,M)+(M,)",Broadcasting,Row,float64,1000,0.001,,,no_data
+"matrix + col_vector (N,M)+(N,1)",Broadcasting,Column,float64,1000,0.001,,,no_data
+"np.broadcast_to(row, (N,M))",Broadcasting,BroadcastTo,float64,1000,0.002,,,no_data
+matrix + scalar,Broadcasting,Scalar,float64,100000,0.013,,,no_data
+"matrix + row_vector (N,M)+(M,)",Broadcasting,Row,float64,100000,0.029,,,no_data
+"matrix + col_vector (N,M)+(N,1)",Broadcasting,Column,float64,100000,0.03,,,no_data
+"np.broadcast_to(row, (N,M))",Broadcasting,BroadcastTo,float64,100000,0.002,,,no_data
+matrix + scalar,Broadcasting,Scalar,float64,10000000,17.043,13.634,0.8,faster
+"matrix + row_vector (N,M)+(M,)",Broadcasting,Row,float64,10000000,16.973,13.484,0.79,faster
+"matrix + col_vector (N,M)+(N,1)",Broadcasting,Column,float64,10000000,16.742,14.453,0.86,faster
+"np.broadcast_to(row, (N,M))",Broadcasting,BroadcastTo,float64,10000000,0.002,0.001,0.31,faster
+np.zeros (int32),Creation,Initialized,int32,1000,0.0,0.008,20.6,much_slower
+np.ones (int32),Creation,Initialized,int32,1000,0.001,0.009,10.05,much_slower
+np.full (int32),Creation,Initialized,int32,1000,0.001,0.008,9.27,much_slower
+np.empty (int32),Creation,Uninitialized,int32,1000,0.0,0.008,23.08,much_slower
+np.copy (int32),Creation,Copy,int32,1000,0.001,0.009,14.88,much_slower
+np.zeros_like (int32),Creation,Like,int32,1000,0.001,0.006,4.55,slower
+np.zeros (int64),Creation,Initialized,int64,1000,0.0,0.009,24.68,much_slower
+np.ones (int64),Creation,Initialized,int64,1000,0.001,0.015,17.96,much_slower
+np.full (int64),Creation,Initialized,int64,1000,0.001,0.013,14.83,much_slower
+np.empty (int64),Creation,Uninitialized,int64,1000,0.0,0.01,30.74,much_slower
+np.copy (int64),Creation,Copy,int64,1000,0.001,0.019,31.76,much_slower
+np.zeros_like (int64),Creation,Like,int64,1000,0.001,0.009,8.19,much_slower
+np.zeros (float32),Creation,Initialized,float32,1000,0.0,0.008,19.65,much_slower
+np.ones (float32),Creation,Initialized,float32,1000,0.001,0.009,8.99,much_slower
+np.full (float32),Creation,Initialized,float32,1000,0.001,0.007,6.91,much_slower
+np.empty (float32),Creation,Uninitialized,float32,1000,0.0,0.008,23.03,much_slower
+np.copy (float32),Creation,Copy,float32,1000,0.001,0.01,16.27,much_slower
+np.zeros_like (float32),Creation,Like,float32,1000,0.001,0.009,8.88,much_slower
+np.zeros (float64),Creation,Initialized,float64,1000,0.0,0.01,26.85,much_slower
+np.ones (float64),Creation,Initialized,float64,1000,0.001,0.014,16.33,much_slower
+np.full (float64),Creation,Initialized,float64,1000,0.001,0.012,13.84,much_slower
+np.empty (float64),Creation,Uninitialized,float64,1000,0.0,0.008,27.82,much_slower
+np.copy (float64),Creation,Copy,float64,1000,0.001,0.02,33.78,much_slower
+np.zeros_like (float64),Creation,Like,float64,1000,0.001,0.009,8.66,much_slower
+np.zeros (int32),Creation,Initialized,int32,100000,0.005,0.019,3.67,slower
+np.ones (int32),Creation,Initialized,int32,100000,0.005,0.019,3.42,slower
+np.full (int32),Creation,Initialized,int32,100000,0.005,0.02,3.77,slower
+np.empty (int32),Creation,Uninitialized,int32,100000,0.0,0.013,40.73,much_slower
+np.copy (int32),Creation,Copy,int32,100000,0.006,0.023,3.83,slower
+np.zeros_like (int32),Creation,Like,int32,100000,0.005,0.018,3.29,slower
+np.zeros (int64),Creation,Initialized,int64,100000,0.009,0.03,3.25,slower
+np.ones (int64),Creation,Initialized,int64,100000,0.01,0.03,3.04,slower
+np.full (int64),Creation,Initialized,int64,100000,0.01,0.03,3.05,slower
+np.empty (int64),Creation,Uninitialized,int64,100000,0.0,0.009,28.37,much_slower
+np.copy (int64),Creation,Copy,int64,100000,0.011,0.036,3.14,slower
+np.zeros_like (int64),Creation,Like,int64,100000,0.01,0.032,3.11,slower
+np.zeros (float32),Creation,Initialized,float32,100000,0.005,0.018,3.63,slower
+np.ones (float32),Creation,Initialized,float32,100000,0.005,0.017,3.31,slower
+np.full (float32),Creation,Initialized,float32,100000,0.005,0.018,3.27,slower
+np.empty (float32),Creation,Uninitialized,float32,100000,0.0,0.005,14.79,much_slower
+np.copy (float32),Creation,Copy,float32,100000,0.006,0.018,2.99,slower
+np.zeros_like (float32),Creation,Like,float32,100000,0.005,0.017,3.2,slower
+np.zeros (float64),Creation,Initialized,float64,100000,0.009,0.03,3.25,slower
+np.ones (float64),Creation,Initialized,float64,100000,0.01,0.029,2.99,slower
+np.full (float64),Creation,Initialized,float64,100000,0.01,0.03,3.09,slower
+np.empty (float64),Creation,Uninitialized,float64,100000,0.0,0.006,21.2,much_slower
+np.copy (float64),Creation,Copy,float64,100000,0.011,0.004,0.33,faster
+np.zeros_like (float64),Creation,Like,float64,100000,0.01,0.031,3.15,slower
+np.zeros (int32),Creation,Initialized,int32,10000000,0.011,5.622,518.2,much_slower
+np.ones (int32),Creation,Initialized,int32,10000000,7.407,5.658,0.76,faster
+np.full (int32),Creation,Initialized,int32,10000000,7.584,5.605,0.74,faster
+np.empty (int32),Creation,Uninitialized,int32,10000000,0.011,0.007,0.62,faster
+np.copy (int32),Creation,Copy,int32,10000000,6.628,5.429,0.82,faster
+np.zeros_like (int32),Creation,Like,int32,10000000,7.66,5.619,0.73,faster
+np.zeros (int64),Creation,Initialized,int64,10000000,0.012,10.747,879.57,much_slower
+np.ones (int64),Creation,Initialized,int64,10000000,15.181,10.632,0.7,faster
+np.full (int64),Creation,Initialized,int64,10000000,18.631,10.674,0.57,faster
+np.empty (int64),Creation,Uninitialized,int64,10000000,0.021,,,no_data
+np.copy (int64),Creation,Copy,int64,10000000,18.522,11.176,0.6,faster
+np.zeros_like (int64),Creation,Like,int64,10000000,19.351,10.745,0.56,faster
+np.zeros (float32),Creation,Initialized,float32,10000000,0.017,5.673,334.03,much_slower
+np.ones (float32),Creation,Initialized,float32,10000000,9.34,5.811,0.62,faster
+np.full (float32),Creation,Initialized,float32,10000000,9.628,5.79,0.6,faster
+np.empty (float32),Creation,Uninitialized,float32,10000000,0.02,0.008,0.39,faster
+np.copy (float32),Creation,Copy,float32,10000000,9.318,5.443,0.58,faster
+np.zeros_like (float32),Creation,Like,float32,10000000,9.381,5.611,0.6,faster
+np.zeros (float64),Creation,Initialized,float64,10000000,0.021,10.755,507.65,much_slower
+np.ones (float64),Creation,Initialized,float64,10000000,18.387,10.912,0.59,faster
+np.full (float64),Creation,Initialized,float64,10000000,18.771,10.959,0.58,faster
+np.empty (float64),Creation,Uninitialized,float64,10000000,0.01,,,no_data
+np.copy (float64),Creation,Copy,float64,10000000,18.51,0.004,,faster
+np.zeros_like (float64),Creation,Like,float64,10000000,18.449,10.707,0.58,faster
+reshape 1D->2D,Manipulation,Reshape,float64,1000,0.0,,,no_data
+reshape 2D->1D,Manipulation,Reshape,float64,1000,0.0,,,no_data
+a.T (2D),Manipulation,Transpose,float64,1000,0.0,,,no_data
+np.transpose (2D),Manipulation,Transpose,float64,1000,0.0,,,no_data
+np.ravel,Manipulation,Flatten,float64,1000,0.0,,,no_data
+a.flatten,Manipulation,Flatten,float64,1000,0.001,,,no_data
+np.concatenate,Manipulation,Stack,float64,1000,0.001,,,no_data
+np.stack,Manipulation,Stack,float64,1000,0.002,,,no_data
+reshape 1D->2D,Manipulation,Reshape,float64,100000,0.0,,,no_data
+reshape 2D->1D,Manipulation,Reshape,float64,100000,0.0,,,no_data
+a.T (2D),Manipulation,Transpose,float64,100000,0.0,,,no_data
+np.transpose (2D),Manipulation,Transpose,float64,100000,0.0,,,no_data
+np.ravel,Manipulation,Flatten,float64,100000,0.0,0.001,1.63,close
+a.flatten,Manipulation,Flatten,float64,100000,0.011,,,no_data
+np.concatenate,Manipulation,Stack,float64,100000,0.307,,,no_data
+np.stack,Manipulation,Stack,float64,100000,0.33,,,no_data
+reshape 1D->2D,Manipulation,Reshape,float64,10000000,0.0,,,no_data
+reshape 2D->1D,Manipulation,Reshape,float64,10000000,0.0,,,no_data
+a.T (2D),Manipulation,Transpose,float64,10000000,0.0,,,no_data
+np.transpose (2D),Manipulation,Transpose,float64,10000000,0.0,,,no_data
+np.ravel,Manipulation,Flatten,float64,10000000,0.0,,1.44,close
+a.flatten,Manipulation,Flatten,float64,10000000,13.503,,,no_data
+np.concatenate,Manipulation,Stack,float64,10000000,39.304,,,no_data
+np.stack,Manipulation,Stack,float64,10000000,44.954,,,no_data
+a[100:1000] (contiguous),Slicing,Create,float64,1000,0.0,,,no_data
+a[::2] (strided),Slicing,Create,float64,1000,0.0,,,no_data
+a[::-1] (reversed),Slicing,Create,float64,1000,0.0,,,no_data
+np.sum(contiguous_slice),Slicing,SumSlice,float64,900,0.002,,,no_data
+np.sum(strided_slice),Slicing,SumSlice,float64,500,0.002,,,no_data
+a[100:1000] (contiguous),Slicing,Create,float64,100000,0.0,0.001,7.33,much_slower
+a[::2] (strided),Slicing,Create,float64,100000,0.0,0.001,8.64,much_slower
+a[::-1] (reversed),Slicing,Create,float64,100000,0.0,0.001,7.72,much_slower
+np.sum(contiguous_slice),Slicing,SumSlice,float64,900,0.002,,,no_data
+np.sum(strided_slice),Slicing,SumSlice,float64,50000,0.01,,,no_data
+a[100:1000] (contiguous),Slicing,Create,float64,10000000,0.0,0.001,8.96,much_slower
+a[::2] (strided),Slicing,Create,float64,10000000,0.0,0.001,8.61,much_slower
+a[::-1] (reversed),Slicing,Create,float64,10000000,0.0,0.001,9.76,much_slower
+np.sum(contiguous_slice),Slicing,SumSlice,float64,900,0.002,,,no_data
+np.sum(strided_slice),Slicing,SumSlice,float64,5000000,4.933,,,no_data
+a == b (int32),Comparison,Comparison,int32,1000,0.0,0.001,1.72,close
+a != b (int32),Comparison,Comparison,int32,1000,0.001,0.001,1.3,close
+a < b (int32),Comparison,Comparison,int32,1000,0.0,0.001,1.62,close
+a > b (int32),Comparison,Comparison,int32,1000,0.0,0.001,1.57,close
+a <= b (int32),Comparison,Comparison,int32,1000,0.0,0.001,1.52,close
+a >= b (int32),Comparison,Comparison,int32,1000,0.0,0.001,1.58,close
+a == b (int64),Comparison,Comparison,int64,1000,0.0,0.001,1.47,close
+a != b (int64),Comparison,Comparison,int64,1000,0.0,0.001,1.56,close
+a < b (int64),Comparison,Comparison,int64,1000,0.001,0.001,1.28,close
+a > b (int64),Comparison,Comparison,int64,1000,0.001,0.001,1.29,close
+a <= b (int64),Comparison,Comparison,int64,1000,0.001,0.001,1.23,close
+a >= b (int64),Comparison,Comparison,int64,1000,0.001,0.001,1.25,close
+a == b (float32),Comparison,Comparison,float32,1000,0.0,0.001,1.57,close
+a != b (float32),Comparison,Comparison,float32,1000,0.0,0.001,1.38,close
+a < b (float32),Comparison,Comparison,float32,1000,0.0,0.001,1.69,close
+a > b (float32),Comparison,Comparison,float32,1000,0.0,0.001,1.65,close
+a <= b (float32),Comparison,Comparison,float32,1000,0.0,0.001,1.94,close
+a >= b (float32),Comparison,Comparison,float32,1000,0.001,0.001,1.3,close
+a == b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.6,close
+a != b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.51,close
+a < b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.65,close
+a > b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.53,close
+a <= b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.6,close
+a >= b (float64),Comparison,Comparison,float64,1000,0.0,0.001,1.56,close
+a == b (int32),Comparison,Comparison,int32,100000,0.007,0.016,2.28,slower
+a != b (int32),Comparison,Comparison,int32,100000,0.007,0.018,2.58,slower
+a < b (int32),Comparison,Comparison,int32,100000,0.007,0.017,2.41,slower
+a > b (int32),Comparison,Comparison,int32,100000,0.007,0.017,2.46,slower
+a <= b (int32),Comparison,Comparison,int32,100000,0.007,0.017,2.39,slower
+a >= b (int32),Comparison,Comparison,int32,100000,0.007,0.016,2.34,slower
+a == b (int64),Comparison,Comparison,int64,100000,0.013,0.026,2.1,slower
+a != b (int64),Comparison,Comparison,int64,100000,0.013,0.028,2.2,slower
+a < b (int64),Comparison,Comparison,int64,100000,0.018,0.026,1.46,close
+a > b (int64),Comparison,Comparison,int64,100000,0.018,0.027,1.47,close
+a <= b (int64),Comparison,Comparison,int64,100000,0.018,0.028,1.53,close
+a >= b (int64),Comparison,Comparison,int64,100000,0.018,0.027,1.48,close
+a == b (float32),Comparison,Comparison,float32,100000,0.005,0.016,2.98,slower
+a != b (float32),Comparison,Comparison,float32,100000,0.005,0.016,2.95,slower
+a < b (float32),Comparison,Comparison,float32,100000,0.006,0.014,2.56,slower
+a > b (float32),Comparison,Comparison,float32,100000,0.006,0.014,2.53,slower
+a <= b (float32),Comparison,Comparison,float32,100000,0.006,0.014,2.38,slower
+a >= b (float32),Comparison,Comparison,float32,100000,0.006,0.014,2.47,slower
+a == b (float64),Comparison,Comparison,float64,100000,0.01,0.025,2.46,slower
+a != b (float64),Comparison,Comparison,float64,100000,0.01,0.023,2.24,slower
+a < b (float64),Comparison,Comparison,float64,100000,0.011,0.023,2.13,slower
+a > b (float64),Comparison,Comparison,float64,100000,0.01,0.025,2.42,slower
+a <= b (float64),Comparison,Comparison,float64,100000,0.01,0.02,1.95,close
+a >= b (float64),Comparison,Comparison,float64,100000,0.01,0.025,2.45,slower
+a == b (int32),Comparison,Comparison,int32,10000000,4.582,3.985,0.87,faster
+a != b (int32),Comparison,Comparison,int32,10000000,4.631,4.059,0.88,faster
+a < b (int32),Comparison,Comparison,int32,10000000,4.583,3.964,0.86,faster
+a > b (int32),Comparison,Comparison,int32,10000000,4.201,3.966,0.94,faster
+a <= b (int32),Comparison,Comparison,int32,10000000,4.435,4.113,0.93,faster
+a >= b (int32),Comparison,Comparison,int32,10000000,4.406,4.036,0.92,faster
+a == b (int64),Comparison,Comparison,int64,10000000,6.98,6.48,0.93,faster
+a != b (int64),Comparison,Comparison,int64,10000000,7.208,6.591,0.91,faster
+a < b (int64),Comparison,Comparison,int64,10000000,13.437,6.669,0.5,faster
+a > b (int64),Comparison,Comparison,int64,10000000,19.073,6.629,0.35,faster
+a <= b (int64),Comparison,Comparison,int64,10000000,18.95,6.839,0.36,faster
+a >= b (int64),Comparison,Comparison,int64,10000000,20.954,6.694,0.32,faster
+a == b (float32),Comparison,Comparison,float32,10000000,10.46,3.962,0.38,faster
+a != b (float32),Comparison,Comparison,float32,10000000,9.786,4.048,0.41,faster
+a < b (float32),Comparison,Comparison,float32,10000000,10.352,3.958,0.38,faster
+a > b (float32),Comparison,Comparison,float32,10000000,10.155,3.955,0.39,faster
+a <= b (float32),Comparison,Comparison,float32,10000000,10.56,3.935,0.37,faster
+a >= b (float32),Comparison,Comparison,float32,10000000,9.941,3.978,0.4,faster
+a == b (float64),Comparison,Comparison,float64,10000000,18.036,6.566,0.36,faster
+a != b (float64),Comparison,Comparison,float64,10000000,18.455,6.607,0.36,faster
+a < b (float64),Comparison,Comparison,float64,10000000,18.68,6.487,0.35,faster
+a > b (float64),Comparison,Comparison,float64,10000000,19.351,6.469,0.33,faster
+a <= b (float64),Comparison,Comparison,float64,10000000,18.166,6.496,0.36,faster
+a >= b (float64),Comparison,Comparison,float64,10000000,19.013,6.544,0.34,faster
+a & b (bool),Bitwise,Bitwise,bool,1000,0.0,0.001,3.22,slower
+a | b (bool),Bitwise,Bitwise,bool,1000,0.0,0.002,4.21,slower
+a ^ b (bool),Bitwise,Bitwise,bool,1000,0.0,0.001,3.46,slower
+np.invert(a) (bool),Bitwise,Bitwise,bool,1000,0.0,0.002,4.55,slower
+"np.left_shift(a, 2) (bool)",Bitwise,Bitwise,bool,1000,0.001,,,no_data
+"np.right_shift(a, 2) (bool)",Bitwise,Bitwise,bool,1000,0.002,,,no_data
+a & b (uint8),Bitwise,Bitwise,uint8,1000,0.001,0.002,1.88,close
+a | b (uint8),Bitwise,Bitwise,uint8,1000,0.001,0.001,1.65,close
+a ^ b (uint8),Bitwise,Bitwise,uint8,1000,0.001,0.001,1.98,close
+np.invert(a) (uint8),Bitwise,Bitwise,uint8,1000,0.001,0.001,2.18,slower
+"np.left_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,1000,0.001,0.006,6.22,much_slower
+"np.right_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,1000,0.001,0.008,8.66,much_slower
+a & b (int16),Bitwise,Bitwise,int16,1000,0.001,0.005,5.96,much_slower
+a | b (int16),Bitwise,Bitwise,int16,1000,0.001,0.003,3.8,slower
+a ^ b (int16),Bitwise,Bitwise,int16,1000,0.001,0.003,3.49,slower
+np.invert(a) (int16),Bitwise,Bitwise,int16,1000,0.001,0.003,4.73,slower
+"np.left_shift(a, 2) (int16)",Bitwise,Bitwise,int16,1000,0.001,0.01,9.55,much_slower
+"np.right_shift(a, 2) (int16)",Bitwise,Bitwise,int16,1000,0.001,0.009,7.54,much_slower
+a & b (uint16),Bitwise,Bitwise,uint16,1000,0.001,0.004,5.08,much_slower
+a | b (uint16),Bitwise,Bitwise,uint16,1000,0.001,0.003,4.07,slower
+a ^ b (uint16),Bitwise,Bitwise,uint16,1000,0.001,0.003,4.11,slower
+np.invert(a) (uint16),Bitwise,Bitwise,uint16,1000,0.001,0.003,4.09,slower
+"np.left_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,1000,0.001,0.01,9.67,much_slower
+"np.right_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,1000,0.001,0.009,7.74,much_slower
+a & b (int32),Bitwise,Bitwise,int32,1000,0.001,0.005,6.84,much_slower
+a | b (int32),Bitwise,Bitwise,int32,1000,0.001,0.008,10.5,much_slower
+a ^ b (int32),Bitwise,Bitwise,int32,1000,0.001,0.008,10.44,much_slower
+np.invert(a) (int32),Bitwise,Bitwise,int32,1000,0.001,0.007,9.64,much_slower
+"np.left_shift(a, 2) (int32)",Bitwise,Bitwise,int32,1000,0.001,0.014,14.48,much_slower
+"np.right_shift(a, 2) (int32)",Bitwise,Bitwise,int32,1000,0.001,0.017,15.61,much_slower
+a & b (uint32),Bitwise,Bitwise,uint32,1000,0.001,0.008,10.36,much_slower
+a | b (uint32),Bitwise,Bitwise,uint32,1000,0.001,0.007,8.2,much_slower
+a ^ b (uint32),Bitwise,Bitwise,uint32,1000,0.001,0.006,7.68,much_slower
+np.invert(a) (uint32),Bitwise,Bitwise,uint32,1000,0.001,0.01,12.92,much_slower
+"np.left_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,1000,0.001,0.009,8.93,much_slower
+"np.right_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,1000,0.001,0.015,15.13,much_slower
+a & b (int64),Bitwise,Bitwise,int64,1000,0.001,0.012,15.18,much_slower
+a | b (int64),Bitwise,Bitwise,int64,1000,0.001,0.013,16.47,much_slower
+a ^ b (int64),Bitwise,Bitwise,int64,1000,0.001,0.009,12.04,much_slower
+np.invert(a) (int64),Bitwise,Bitwise,int64,1000,0.001,0.009,12.04,much_slower
+"np.left_shift(a, 2) (int64)",Bitwise,Bitwise,int64,1000,0.001,0.02,19.11,much_slower
+"np.right_shift(a, 2) (int64)",Bitwise,Bitwise,int64,1000,0.001,0.02,19.2,much_slower
+a & b (uint64),Bitwise,Bitwise,uint64,1000,0.001,0.009,11.97,much_slower
+a | b (uint64),Bitwise,Bitwise,uint64,1000,0.001,0.013,15.71,much_slower
+a ^ b (uint64),Bitwise,Bitwise,uint64,1000,0.001,0.012,15.8,much_slower
+np.invert(a) (uint64),Bitwise,Bitwise,uint64,1000,0.001,0.01,13.45,much_slower
+"np.left_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,1000,0.001,0.024,24.86,much_slower
+"np.right_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,1000,0.001,0.016,15.71,much_slower
+a & b (bool),Bitwise,Bitwise,bool,100000,0.003,0.023,6.88,much_slower
+a | b (bool),Bitwise,Bitwise,bool,100000,0.003,0.024,8.41,much_slower
+a ^ b (bool),Bitwise,Bitwise,bool,100000,0.003,0.022,7.2,much_slower
+np.invert(a) (bool),Bitwise,Bitwise,bool,100000,0.003,0.024,9.32,much_slower
+"np.left_shift(a, 2) (bool)",Bitwise,Bitwise,bool,100000,0.193,,,no_data
+"np.right_shift(a, 2) (bool)",Bitwise,Bitwise,bool,100000,0.188,,,no_data
+a & b (uint8),Bitwise,Bitwise,uint8,100000,0.029,0.006,0.21,faster
+a | b (uint8),Bitwise,Bitwise,uint8,100000,0.03,0.006,0.21,faster
+a ^ b (uint8),Bitwise,Bitwise,uint8,100000,0.029,0.007,0.24,faster
+np.invert(a) (uint8),Bitwise,Bitwise,uint8,100000,0.026,0.007,0.27,faster
+"np.left_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,100000,0.028,0.063,2.24,slower
+"np.right_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,100000,0.028,0.064,2.27,slower
+a & b (int16),Bitwise,Bitwise,int16,100000,0.029,0.01,0.34,faster
+a | b (int16),Bitwise,Bitwise,int16,100000,0.028,0.011,0.39,faster
+a ^ b (int16),Bitwise,Bitwise,int16,100000,0.028,0.01,0.33,faster
+np.invert(a) (int16),Bitwise,Bitwise,int16,100000,0.026,0.01,0.39,faster
+"np.left_shift(a, 2) (int16)",Bitwise,Bitwise,int16,100000,0.029,0.064,2.21,slower
+"np.right_shift(a, 2) (int16)",Bitwise,Bitwise,int16,100000,0.038,0.066,1.76,close
+a & b (uint16),Bitwise,Bitwise,uint16,100000,0.031,0.011,0.34,faster
+a | b (uint16),Bitwise,Bitwise,uint16,100000,0.029,0.011,0.39,faster
+a ^ b (uint16),Bitwise,Bitwise,uint16,100000,0.029,0.011,0.37,faster
+np.invert(a) (uint16),Bitwise,Bitwise,uint16,100000,0.036,0.01,0.29,faster
+"np.left_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,100000,0.029,0.063,2.15,slower
+"np.right_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,100000,0.029,0.064,2.19,slower
+a & b (int32),Bitwise,Bitwise,int32,100000,0.032,0.021,0.65,faster
+a | b (int32),Bitwise,Bitwise,int32,100000,0.03,0.022,0.73,faster
+a ^ b (int32),Bitwise,Bitwise,int32,100000,0.029,0.022,0.76,faster
+np.invert(a) (int32),Bitwise,Bitwise,int32,100000,0.035,0.02,0.58,faster
+"np.left_shift(a, 2) (int32)",Bitwise,Bitwise,int32,100000,0.019,0.066,3.42,slower
+"np.right_shift(a, 2) (int32)",Bitwise,Bitwise,int32,100000,0.028,0.066,2.34,slower
+a & b (uint32),Bitwise,Bitwise,uint32,100000,0.033,0.021,0.63,faster
+a | b (uint32),Bitwise,Bitwise,uint32,100000,0.029,0.019,0.68,faster
+a ^ b (uint32),Bitwise,Bitwise,uint32,100000,0.029,0.021,0.74,faster
+np.invert(a) (uint32),Bitwise,Bitwise,uint32,100000,0.034,0.02,0.59,faster
+"np.left_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,100000,0.02,0.065,3.3,slower
+"np.right_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,100000,0.019,0.066,3.41,slower
+a & b (int64),Bitwise,Bitwise,int64,100000,0.035,0.045,1.28,close
+a | b (int64),Bitwise,Bitwise,int64,100000,0.037,0.043,1.17,close
+a ^ b (int64),Bitwise,Bitwise,int64,100000,0.036,0.045,1.25,close
+np.invert(a) (int64),Bitwise,Bitwise,int64,100000,0.026,0.046,1.76,close
+"np.left_shift(a, 2) (int64)",Bitwise,Bitwise,int64,100000,0.02,0.081,4.04,slower
+"np.right_shift(a, 2) (int64)",Bitwise,Bitwise,int64,100000,0.03,0.077,2.62,slower
+a & b (uint64),Bitwise,Bitwise,uint64,100000,0.036,0.044,1.23,close
+a | b (uint64),Bitwise,Bitwise,uint64,100000,0.035,0.045,1.28,close
+a ^ b (uint64),Bitwise,Bitwise,uint64,100000,0.036,0.043,1.21,close
+np.invert(a) (uint64),Bitwise,Bitwise,uint64,100000,0.026,0.039,1.48,close
+"np.left_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,100000,0.019,0.073,3.83,slower
+"np.right_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,100000,0.031,0.072,2.35,slower
+a & b (bool),Bitwise,Bitwise,bool,10000000,2.003,2.789,1.39,close
+a | b (bool),Bitwise,Bitwise,bool,10000000,1.863,3.231,1.73,close
+a ^ b (bool),Bitwise,Bitwise,bool,10000000,1.849,2.819,1.52,close
+np.invert(a) (bool),Bitwise,Bitwise,bool,10000000,1.692,3.019,1.78,close
+"np.left_shift(a, 2) (bool)",Bitwise,Bitwise,bool,10000000,15.128,,,no_data
+"np.right_shift(a, 2) (bool)",Bitwise,Bitwise,bool,10000000,15.291,,,no_data
+a & b (uint8),Bitwise,Bitwise,uint8,10000000,3.897,1.861,0.48,faster
+a | b (uint8),Bitwise,Bitwise,uint8,10000000,4.323,1.838,0.43,faster
+a ^ b (uint8),Bitwise,Bitwise,uint8,10000000,6.536,1.819,0.28,faster
+np.invert(a) (uint8),Bitwise,Bitwise,uint8,10000000,5.739,1.69,0.29,faster
+"np.left_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,10000000,6.209,10.301,1.66,close
+"np.right_shift(a, 2) (uint8)",Bitwise,Bitwise,uint8,10000000,6.331,10.385,1.64,close
+a & b (int16),Bitwise,Bitwise,int16,10000000,9.263,3.795,0.41,faster
+a | b (int16),Bitwise,Bitwise,int16,10000000,9.417,3.761,0.4,faster
+a ^ b (int16),Bitwise,Bitwise,int16,10000000,9.727,3.754,0.39,faster
+np.invert(a) (int16),Bitwise,Bitwise,int16,10000000,7.903,3.396,0.43,faster
+"np.left_shift(a, 2) (int16)",Bitwise,Bitwise,int16,10000000,7.546,11.172,1.48,close
+"np.right_shift(a, 2) (int16)",Bitwise,Bitwise,int16,10000000,9.359,11.188,1.2,close
+a & b (uint16),Bitwise,Bitwise,uint16,10000000,9.508,3.795,0.4,faster
+a | b (uint16),Bitwise,Bitwise,uint16,10000000,9.458,3.79,0.4,faster
+a ^ b (uint16),Bitwise,Bitwise,uint16,10000000,9.302,3.774,0.41,faster
+np.invert(a) (uint16),Bitwise,Bitwise,uint16,10000000,6.718,3.401,0.51,faster
+"np.left_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,10000000,7.683,11.192,1.46,close
+"np.right_shift(a, 2) (uint16)",Bitwise,Bitwise,uint16,10000000,7.167,11.378,1.59,close
+a & b (int32),Bitwise,Bitwise,int32,10000000,16.846,7.604,0.45,faster
+a | b (int32),Bitwise,Bitwise,int32,10000000,16.589,7.521,0.45,faster
+a ^ b (int32),Bitwise,Bitwise,int32,10000000,17.419,7.525,0.43,faster
+np.invert(a) (int32),Bitwise,Bitwise,int32,10000000,14.146,7.142,0.5,faster
+"np.left_shift(a, 2) (int32)",Bitwise,Bitwise,int32,10000000,14.761,13.805,0.94,faster
+"np.right_shift(a, 2) (int32)",Bitwise,Bitwise,int32,10000000,15.318,13.488,0.88,faster
+a & b (uint32),Bitwise,Bitwise,uint32,10000000,18.733,7.604,0.41,faster
+a | b (uint32),Bitwise,Bitwise,uint32,10000000,19.763,7.586,0.38,faster
+a ^ b (uint32),Bitwise,Bitwise,uint32,10000000,18.951,7.565,0.4,faster
+np.invert(a) (uint32),Bitwise,Bitwise,uint32,10000000,13.94,6.97,0.5,faster
+"np.left_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,10000000,15.225,13.598,0.89,faster
+"np.right_shift(a, 2) (uint32)",Bitwise,Bitwise,uint32,10000000,14.949,13.54,0.91,faster
+a & b (int64),Bitwise,Bitwise,int64,10000000,37.942,14.928,0.39,faster
+a | b (int64),Bitwise,Bitwise,int64,10000000,36.176,14.825,0.41,faster
+a ^ b (int64),Bitwise,Bitwise,int64,10000000,33.173,14.814,0.45,faster
+np.invert(a) (int64),Bitwise,Bitwise,int64,10000000,26.153,13.561,0.52,faster
+"np.left_shift(a, 2) (int64)",Bitwise,Bitwise,int64,10000000,25.676,19.087,0.74,faster
+"np.right_shift(a, 2) (int64)",Bitwise,Bitwise,int64,10000000,31.627,19.164,0.61,faster
+a & b (uint64),Bitwise,Bitwise,uint64,10000000,39.569,15.047,0.38,faster
+a | b (uint64),Bitwise,Bitwise,uint64,10000000,38.889,15.079,0.39,faster
+a ^ b (uint64),Bitwise,Bitwise,uint64,10000000,42.512,15.294,0.36,faster
+np.invert(a) (uint64),Bitwise,Bitwise,uint64,10000000,33.503,13.643,0.41,faster
+"np.left_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,10000000,34.397,19.09,0.55,faster
+"np.right_shift(a, 2) (uint64)",Bitwise,Bitwise,uint64,10000000,32.627,19.104,0.59,faster
+np.isnan(a) (float32),Logic,Logic,float32,1000,0.001,,,no_data
+np.isinf(a) (float32),Logic,Logic,float32,1000,0.0,,,no_data
+np.isfinite(a) (float32),Logic,Logic,float32,1000,0.0,,,no_data
+"np.maximum(a, b) (float32)",Logic,Logic,float32,1000,0.001,,,no_data
+"np.minimum(a, b) (float32)",Logic,Logic,float32,1000,0.001,,,no_data
+"np.isclose(a, b) (float32)",Logic,Logic,float32,1000,0.012,,,no_data
+"np.allclose(a, b) (float32)",Logic,Logic,float32,1000,0.013,,,no_data
+"np.array_equal(a, b) (float32)",Logic,Logic,float32,1000,0.002,,,no_data
+np.isnan(a) (float64),Logic,Logic,float64,1000,0.0,,,no_data
+np.isinf(a) (float64),Logic,Logic,float64,1000,0.001,,,no_data
+np.isfinite(a) (float64),Logic,Logic,float64,1000,0.0,,,no_data
+"np.maximum(a, b) (float64)",Logic,Logic,float64,1000,0.001,,,no_data
+"np.minimum(a, b) (float64)",Logic,Logic,float64,1000,0.001,,,no_data
+"np.isclose(a, b) (float64)",Logic,Logic,float64,1000,0.012,,,no_data
+"np.allclose(a, b) (float64)",Logic,Logic,float64,1000,0.014,,,no_data
+"np.array_equal(a, b) (float64)",Logic,Logic,float64,1000,0.002,,,no_data
+np.all(a) (bool),Logic,Logic,bool,1000,0.001,,,no_data
+np.any(a) (bool),Logic,Logic,bool,1000,0.001,,,no_data
+np.isnan(a) (float32),Logic,Logic,float32,100000,0.004,,,no_data
+np.isinf(a) (float32),Logic,Logic,float32,100000,0.005,,,no_data
+np.isfinite(a) (float32),Logic,Logic,float32,100000,0.005,,,no_data
+"np.maximum(a, b) (float32)",Logic,Logic,float32,100000,0.007,,,no_data
+"np.minimum(a, b) (float32)",Logic,Logic,float32,100000,0.007,,,no_data
+"np.isclose(a, b) (float32)",Logic,Logic,float32,100000,0.078,,,no_data
+"np.allclose(a, b) (float32)",Logic,Logic,float32,100000,0.079,,,no_data
+"np.array_equal(a, b) (float32)",Logic,Logic,float32,100000,0.007,,,no_data
+np.isnan(a) (float64),Logic,Logic,float64,100000,0.009,,,no_data
+np.isinf(a) (float64),Logic,Logic,float64,100000,0.01,,,no_data
+np.isfinite(a) (float64),Logic,Logic,float64,100000,0.01,,,no_data
+"np.maximum(a, b) (float64)",Logic,Logic,float64,100000,0.03,,,no_data
+"np.minimum(a, b) (float64)",Logic,Logic,float64,100000,0.029,,,no_data
+"np.isclose(a, b) (float64)",Logic,Logic,float64,100000,0.713,,,no_data
+"np.allclose(a, b) (float64)",Logic,Logic,float64,100000,0.709,,,no_data
+"np.array_equal(a, b) (float64)",Logic,Logic,float64,100000,0.013,,,no_data
+np.all(a) (bool),Logic,Logic,bool,100000,0.001,,,no_data
+np.any(a) (bool),Logic,Logic,bool,100000,0.001,,,no_data
+np.isnan(a) (float32),Logic,Logic,float32,10000000,3.865,,,no_data
+np.isinf(a) (float32),Logic,Logic,float32,10000000,3.79,,,no_data
+np.isfinite(a) (float32),Logic,Logic,float32,10000000,3.666,,,no_data
+"np.maximum(a, b) (float32)",Logic,Logic,float32,10000000,8.975,,,no_data
+"np.minimum(a, b) (float32)",Logic,Logic,float32,10000000,9.084,,,no_data
+"np.isclose(a, b) (float32)",Logic,Logic,float32,10000000,98.476,,,no_data
+"np.allclose(a, b) (float32)",Logic,Logic,float32,10000000,103.437,,,no_data
+"np.array_equal(a, b) (float32)",Logic,Logic,float32,10000000,10.864,,,no_data
+np.isnan(a) (float64),Logic,Logic,float64,10000000,11.154,,,no_data
+np.isinf(a) (float64),Logic,Logic,float64,10000000,12.242,,,no_data
+np.isfinite(a) (float64),Logic,Logic,float64,10000000,10.993,,,no_data
+"np.maximum(a, b) (float64)",Logic,Logic,float64,10000000,33.19,,,no_data
+"np.minimum(a, b) (float64)",Logic,Logic,float64,10000000,32.318,,,no_data
+"np.isclose(a, b) (float64)",Logic,Logic,float64,10000000,187.428,,,no_data
+"np.allclose(a, b) (float64)",Logic,Logic,float64,10000000,186.012,,,no_data
+"np.array_equal(a, b) (float64)",Logic,Logic,float64,10000000,19.8,,,no_data
+np.all(a) (bool),Logic,Logic,bool,10000000,0.004,,,no_data
+np.any(a) (bool),Logic,Logic,bool,10000000,0.004,,,no_data
+np.median(a) (float32),Statistics,Statistics,float32,1000,0.011,0.002,0.22,faster
+"np.percentile(a, 50) (float32)",Statistics,Statistics,float32,1000,0.025,0.002,0.1,faster
+"np.quantile(a, 0.5) (float32)",Statistics,Statistics,float32,1000,0.024,0.002,0.1,faster
+np.average(a) (float32),Statistics,Statistics,float32,1000,0.004,0.001,0.15,faster
+np.ptp(a) (float32),Statistics,Statistics,float32,1000,0.003,0.002,0.63,faster
+np.count_nonzero(a) (float32),Statistics,Statistics,float32,1000,0.001,,0.1,faster
+np.median(a) (float64),Statistics,Statistics,float64,1000,0.01,0.002,0.24,faster
+"np.percentile(a, 50) (float64)",Statistics,Statistics,float64,1000,0.024,0.002,0.1,faster
+"np.quantile(a, 0.5) (float64)",Statistics,Statistics,float64,1000,0.023,0.002,0.1,faster
+np.average(a) (float64),Statistics,Statistics,float64,1000,0.003,0.001,0.23,faster
+np.ptp(a) (float64),Statistics,Statistics,float64,1000,0.003,0.003,0.77,faster
+np.count_nonzero(a) (float64),Statistics,Statistics,float64,1000,0.001,,0.19,faster
+np.median(a) (float32),Statistics,Statistics,float32,100000,0.472,0.742,1.57,close
+"np.percentile(a, 50) (float32)",Statistics,Statistics,float32,100000,0.732,0.743,1.01,close
+"np.quantile(a, 0.5) (float32)",Statistics,Statistics,float32,100000,0.688,0.744,1.08,close
+np.average(a) (float32),Statistics,Statistics,float32,100000,0.018,0.002,0.12,faster
+np.ptp(a) (float32),Statistics,Statistics,float32,100000,0.014,0.028,1.97,close
+np.count_nonzero(a) (float32),Statistics,Statistics,float32,100000,0.038,0.005,0.12,faster
+np.median(a) (float64),Statistics,Statistics,float64,100000,0.47,0.707,1.5,close
+"np.percentile(a, 50) (float64)",Statistics,Statistics,float64,100000,0.712,0.708,0.99,faster
+"np.quantile(a, 0.5) (float64)",Statistics,Statistics,float64,100000,0.704,0.707,1.0,close
+np.average(a) (float64),Statistics,Statistics,float64,100000,0.018,0.004,0.22,faster
+np.ptp(a) (float64),Statistics,Statistics,float64,100000,0.02,0.053,2.67,slower
+np.count_nonzero(a) (float64),Statistics,Statistics,float64,100000,0.038,0.009,0.23,faster
+np.median(a) (float32),Statistics,Statistics,float32,10000000,87.717,85.572,0.98,faster
+"np.percentile(a, 50) (float32)",Statistics,Statistics,float32,10000000,68.327,85.478,1.25,close
+"np.quantile(a, 0.5) (float32)",Statistics,Statistics,float32,10000000,64.192,85.632,1.33,close
+np.average(a) (float32),Statistics,Statistics,float32,10000000,9.598,0.937,0.1,faster
+np.ptp(a) (float32),Statistics,Statistics,float32,10000000,7.719,3.4,0.44,faster
+np.count_nonzero(a) (float32),Statistics,Statistics,float32,10000000,8.012,1.543,0.19,faster
+np.median(a) (float64),Statistics,Statistics,float64,10000000,113.136,87.834,0.78,faster
+"np.percentile(a, 50) (float64)",Statistics,Statistics,float64,10000000,82.265,87.76,1.07,close
+"np.quantile(a, 0.5) (float64)",Statistics,Statistics,float64,10000000,86.159,87.66,1.02,close
+np.average(a) (float64),Statistics,Statistics,float64,10000000,17.29,2.546,0.15,faster
+np.ptp(a) (float64),Statistics,Statistics,float64,10000000,18.964,10.14,0.53,faster
+np.count_nonzero(a) (float64),Statistics,Statistics,float64,10000000,22.605,3.737,0.17,faster
+np.argsort(a) (int32),Sorting,Sorting,int32,1000,0.012,0.039,3.28,slower
+np.nonzero(a) (int32),Sorting,Sorting,int32,1000,0.002,0.002,1.19,close
+"np.searchsorted(a, v) (int32)",Sorting,Sorting,int32,1000,0.002,,0.01,faster
+np.argsort(a) (int64),Sorting,Sorting,int64,1000,0.013,0.059,4.51,slower
+np.nonzero(a) (int64),Sorting,Sorting,int64,1000,0.002,0.002,1.25,close
+"np.searchsorted(a, v) (int64)",Sorting,Sorting,int64,1000,0.001,,0.02,faster
+np.argsort(a) (float32),Sorting,Sorting,float32,1000,0.012,0.069,5.88,much_slower
+np.nonzero(a) (float32),Sorting,Sorting,float32,1000,0.003,0.002,0.77,faster
+"np.searchsorted(a, v) (float32)",Sorting,Sorting,float32,1000,0.002,,0.01,faster
+np.argsort(a) (float64),Sorting,Sorting,float64,1000,0.01,0.071,6.76,much_slower
+np.nonzero(a) (float64),Sorting,Sorting,float64,1000,0.003,0.002,0.78,faster
+"np.searchsorted(a, v) (float64)",Sorting,Sorting,float64,1000,0.001,,0.02,faster
+np.argsort(a) (int32),Sorting,Sorting,int32,100000,0.442,10.404,23.54,much_slower
+np.nonzero(a) (int32),Sorting,Sorting,int32,100000,0.104,0.084,0.81,faster
+"np.searchsorted(a, v) (int32)",Sorting,Sorting,int32,100000,0.032,,,faster
+np.argsort(a) (int64),Sorting,Sorting,int64,100000,0.472,12.893,27.34,much_slower
+np.nonzero(a) (int64),Sorting,Sorting,int64,100000,0.104,0.097,0.93,faster
+"np.searchsorted(a, v) (int64)",Sorting,Sorting,int64,100000,0.001,,0.02,faster
+np.argsort(a) (float32),Sorting,Sorting,float32,100000,1.558,12.988,8.34,much_slower
+np.nonzero(a) (float32),Sorting,Sorting,float32,100000,0.195,0.085,0.44,faster
+"np.searchsorted(a, v) (float32)",Sorting,Sorting,float32,100000,0.024,,,faster
+np.argsort(a) (float64),Sorting,Sorting,float64,100000,1.422,13.471,9.48,much_slower
+np.nonzero(a) (float64),Sorting,Sorting,float64,100000,0.187,0.093,0.5,faster
+"np.searchsorted(a, v) (float64)",Sorting,Sorting,float64,100000,0.001,,0.02,faster
+np.argsort(a) (int32),Sorting,Sorting,int32,10000000,368.784,2162.089,5.86,much_slower
+np.nonzero(a) (int32),Sorting,Sorting,int32,10000000,32.405,18.612,0.57,faster
+"np.searchsorted(a, v) (int32)",Sorting,Sorting,int32,10000000,22.82,,,faster
+np.argsort(a) (int64),Sorting,Sorting,int64,10000000,572.778,2835.775,4.95,slower
+np.nonzero(a) (int64),Sorting,Sorting,int64,10000000,57.719,22.401,0.39,faster
+"np.searchsorted(a, v) (int64)",Sorting,Sorting,int64,10000000,0.003,,0.01,faster
+np.argsort(a) (float32),Sorting,Sorting,float32,10000000,1524.623,2861.32,1.88,close
+np.nonzero(a) (float32),Sorting,Sorting,float32,10000000,43.633,18.702,0.43,faster
+"np.searchsorted(a, v) (float32)",Sorting,Sorting,float32,10000000,22.951,,,faster
+np.argsort(a) (float64),Sorting,Sorting,float64,10000000,2030.567,3133.531,1.54,close
+np.nonzero(a) (float64),Sorting,Sorting,float64,10000000,56.046,21.981,0.39,faster
+"np.searchsorted(a, v) (float64)",Sorting,Sorting,float64,10000000,0.003,,0.01,faster
+"np.dot(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,1000,0.001,0.003,4.4,slower
+"np.outer(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,1000,0.002,0.005,2.36,slower
+"np.matmul(A, B) (float64)",LinearAlgebra,LinearAlgebra,float64,1000,0.003,0.005,2.03,slower
+"np.dot(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,100000,0.111,0.071,0.65,faster
+"np.outer(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,100000,0.038,0.049,1.3,close
+"np.matmul(A, B) (float64)",LinearAlgebra,LinearAlgebra,float64,100000,0.601,3.232,5.38,much_slower
+"np.dot(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,10000000,1.232,16.46,13.36,much_slower
+"np.outer(a, b) (float64)",LinearAlgebra,LinearAlgebra,float64,10000000,14.505,11.853,0.82,faster
+"np.matmul(A, B) (float64)",LinearAlgebra,LinearAlgebra,float64,10000000,0.719,4.26,5.92,much_slower
+"np.where(cond, a, b) (float64)",Selection,Selection,float64,1000,0.002,0.002,1.18,close
+np.where(cond) (float64),Selection,Selection,float64,1000,0.001,0.001,1.61,close
+"np.where(cond, a, b) (float64)",Selection,Selection,float64,100000,0.041,0.065,1.6,close
+np.where(cond) (float64),Selection,Selection,float64,100000,0.029,0.06,2.06,slower
+"np.where(cond, a, b) (float64)",Selection,Selection,float64,10000000,18.754,14.853,0.79,faster
+np.where(cond) (float64),Selection,Selection,float64,10000000,7.485,9.649,1.29,close
