@@ -112,7 +112,8 @@ def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
         dtype_map = {
             'int32': 'int32', 'int64': 'int64', 'single': 'float32', 'double': 'float64',
             'byte': 'uint8', 'uint16': 'uint16', 'uint32': 'uint32', 'uint64': 'uint64',
-            'int16': 'int16', 'boolean': 'bool', 'decimal': 'decimal'
+            'int16': 'int16', 'boolean': 'bool', 'decimal': 'decimal',
+            'sbyte': 'int8', 'half': 'float16', 'complex': 'complex128'
         }
         dtype = dtype_map.get(dtype.lower(), dtype.lower())
 

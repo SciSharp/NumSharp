@@ -43,24 +43,29 @@ ARRAY_SIZES = {
 DTYPES = {
     'bool': np.bool_,
     'uint8': np.uint8,
+    'int8': np.int8,            # NumSharp SByte
     'int16': np.int16,
     'uint16': np.uint16,
     'int32': np.int32,
     'uint32': np.uint32,
     'int64': np.int64,
     'uint64': np.uint64,
+    'float16': np.float16,      # NumSharp Half
     'float32': np.float32,
     'float64': np.float64,
+    'complex128': np.complex128, # NumSharp Complex
 }
 
 # Common types for quick benchmarks
 COMMON_DTYPES = ['int32', 'int64', 'float32', 'float64']
 
-# Arithmetic types (excludes bool)
-ARITHMETIC_DTYPES = ['uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64', 'float32', 'float64']
+# Arithmetic types (excludes bool). complex128 is fine: run_arithmetic restricts divide/modulo
+# to COMMON_DTYPES, so complex only sees +, -, * (and sum/mean/min/max in run_reduction).
+ARITHMETIC_DTYPES = ['uint8', 'int8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64',
+                     'float16', 'float32', 'float64', 'complex128']
 
 # Transcendental types (for sqrt, exp, log, trig)
-TRANSCENDENTAL_DTYPES = ['float32', 'float64']
+TRANSCENDENTAL_DTYPES = ['float16', 'float32', 'float64']
 
 # =============================================================================
 # Benchmark Infrastructure
@@ -814,8 +819,8 @@ def print_summary(results: List[BenchmarkResult]):
 # =============================================================================
 
 # dtype sets that mirror the C# TypeParameterSource collections.
-BITWISE_DTYPES = ['bool', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64']
-FLOAT_DTYPES = ['float32', 'float64']
+BITWISE_DTYPES = ['bool', 'uint8', 'int8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64']
+FLOAT_DTYPES = ['float16', 'float32', 'float64']
 
 
 def _b(func, n, iterations, name, suite, dtype, category=""):

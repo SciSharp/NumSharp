@@ -9,13 +9,14 @@ namespace NumSharp.Benchmark.GraphEngine.Infrastructure;
 public static class TypeParameterSource
 {
     /// <summary>
-    /// All 12 NumSharp supported types.
-    /// Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal
+    /// All 15 NumSharp supported types.
+    /// Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, Single, Double, Decimal, Complex
     /// </summary>
     public static IEnumerable<NPTypeCode> AllNumericTypes => new[]
     {
         NPTypeCode.Boolean,
         NPTypeCode.Byte,
+        NPTypeCode.SByte,
         NPTypeCode.Int16,
         NPTypeCode.UInt16,
         NPTypeCode.Int32,
@@ -23,18 +24,21 @@ public static class TypeParameterSource
         NPTypeCode.Int64,
         NPTypeCode.UInt64,
         NPTypeCode.Char,
+        NPTypeCode.Half,
         NPTypeCode.Single,
         NPTypeCode.Double,
-        NPTypeCode.Decimal
+        NPTypeCode.Decimal,
+        NPTypeCode.Complex
     };
 
     /// <summary>
-    /// Integer types only: bool, byte, int16, uint16, int32, uint32, int64, uint64, char
+    /// Integer types only: bool, byte, sbyte, int16, uint16, int32, uint32, int64, uint64, char
     /// </summary>
     public static IEnumerable<NPTypeCode> IntegerTypes => new[]
     {
         NPTypeCode.Boolean,
         NPTypeCode.Byte,
+        NPTypeCode.SByte,
         NPTypeCode.Int16,
         NPTypeCode.UInt16,
         NPTypeCode.Int32,
@@ -45,10 +49,11 @@ public static class TypeParameterSource
     };
 
     /// <summary>
-    /// Floating-point types only: float, double, decimal
+    /// Floating-point types only: half, float, double, decimal
     /// </summary>
     public static IEnumerable<NPTypeCode> FloatingTypes => new[]
     {
+        NPTypeCode.Half,
         NPTypeCode.Single,
         NPTypeCode.Double,
         NPTypeCode.Decimal
@@ -76,10 +81,13 @@ public static class TypeParameterSource
     };
 
     /// <summary>
-    /// Types that support standard arithmetic: excludes bool and char
+    /// Types that support standard arithmetic (+, -, *): excludes bool and char.
+    /// Complex supports +,-,*,/ and (via magnitude) min/max; it has no modulo, but the
+    /// modulo/divide benchmarks restrict themselves to CommonTypes, so it is safe here.
     /// </summary>
     public static IEnumerable<NPTypeCode> ArithmeticTypes => new[]
     {
+        NPTypeCode.SByte,
         NPTypeCode.Byte,
         NPTypeCode.Int16,
         NPTypeCode.UInt16,
@@ -87,16 +95,19 @@ public static class TypeParameterSource
         NPTypeCode.UInt32,
         NPTypeCode.Int64,
         NPTypeCode.UInt64,
+        NPTypeCode.Half,
         NPTypeCode.Single,
         NPTypeCode.Double,
-        NPTypeCode.Decimal
+        NPTypeCode.Decimal,
+        NPTypeCode.Complex
     };
 
     /// <summary>
-    /// Types that support transcendental functions (sqrt, exp, log, trig): float, double, decimal
+    /// Types that support transcendental functions (sqrt, exp, log, trig): half, float, double, decimal
     /// </summary>
     public static IEnumerable<NPTypeCode> TranscendentalTypes => new[]
     {
+        NPTypeCode.Half,
         NPTypeCode.Single,
         NPTypeCode.Double,
         NPTypeCode.Decimal
@@ -110,6 +121,7 @@ public static class TypeParameterSource
     {
         NPTypeCode.Boolean => "bool",
         NPTypeCode.Byte => "uint8",
+        NPTypeCode.SByte => "int8",
         NPTypeCode.Int16 => "int16",
         NPTypeCode.UInt16 => "uint16",
         NPTypeCode.Int32 => "int32",
@@ -117,9 +129,11 @@ public static class TypeParameterSource
         NPTypeCode.Int64 => "int64",
         NPTypeCode.UInt64 => "uint64",
         NPTypeCode.Char => "uint16",  // char is 16-bit in C#
+        NPTypeCode.Half => "float16",
         NPTypeCode.Single => "float32",
         NPTypeCode.Double => "float64",
-        NPTypeCode.Decimal => "float128",  // closest approximation
+        NPTypeCode.Decimal => "float128",  // closest approximation (no exact NumPy peer)
+        NPTypeCode.Complex => "complex128",
         _ => throw new ArgumentException($"Unknown NPTypeCode: {code}")
     };
 

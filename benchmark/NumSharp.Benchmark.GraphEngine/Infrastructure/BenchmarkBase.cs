@@ -35,6 +35,7 @@ public abstract class BenchmarkBase
         {
             NPTypeCode.Boolean => np.random.randint(0, 2, new Shape(n)).astype(np.@bool),
             NPTypeCode.Byte => np.random.randint(0, 256, new Shape(n)).astype(np.uint8),
+            NPTypeCode.SByte => np.random.randint(-100, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint16),
             NPTypeCode.Int32 => np.random.randint(-1000, 1000, new Shape(n)),
@@ -42,9 +43,11 @@ public abstract class BenchmarkBase
             NPTypeCode.Int64 => np.random.randint(-1000, 1000, new Shape(n)).astype(np.int64),
             NPTypeCode.UInt64 => np.random.randint(0, 2000, new Shape(n)).astype(np.uint64),
             NPTypeCode.Char => np.random.randint(32, 127, new Shape(n)).astype(NPTypeCode.Char),
+            NPTypeCode.Half => (np.random.rand(n) * 100 - 50).astype(NPTypeCode.Half),
             NPTypeCode.Single => (np.random.rand(n) * 100 - 50).astype(np.float32),
             NPTypeCode.Double => np.random.rand(n) * 100 - 50,
             NPTypeCode.Decimal => (np.random.rand(n) * 100 - 50).astype(NPTypeCode.Decimal),
+            NPTypeCode.Complex => (np.random.rand(n) * 100 - 50).astype(NPTypeCode.Complex),
             _ => throw new ArgumentException($"Unsupported type: {dtype}")
         };
     }
@@ -80,12 +83,15 @@ public abstract class BenchmarkBase
         return dtype switch
         {
             // Floating point: rand() * 100 + 1 gives [1, 101)
+            NPTypeCode.Half => (np.random.rand(n) * 100 + 1).astype(NPTypeCode.Half),
             NPTypeCode.Single => (np.random.rand(n) * 100 + 1).astype(np.float32),
             NPTypeCode.Double => np.random.rand(n) * 100 + 1,
             NPTypeCode.Decimal => (np.random.rand(n) * 100 + 1).astype(NPTypeCode.Decimal),
+            NPTypeCode.Complex => (np.random.rand(n) * 100 + 1).astype(NPTypeCode.Complex),
             // Integers: randint(1, N) gives [1, N) - never zero
             NPTypeCode.Boolean => np.random.randint(1, 2, new Shape(n)).astype(np.@bool),
             NPTypeCode.Byte => np.random.randint(1, 256, new Shape(n)).astype(np.uint8),
+            NPTypeCode.SByte => np.random.randint(1, 100, new Shape(n)).astype(NPTypeCode.SByte),
             NPTypeCode.Int16 => np.random.randint(1, 1000, new Shape(n)).astype(np.int16),
             NPTypeCode.UInt16 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint16),
             NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)),
@@ -104,6 +110,7 @@ public abstract class BenchmarkBase
     {
         NPTypeCode.Boolean => value != 0,
         NPTypeCode.Byte => (byte)Math.Abs(value),
+        NPTypeCode.SByte => (sbyte)value,
         NPTypeCode.Int16 => (short)value,
         NPTypeCode.UInt16 => (ushort)Math.Abs(value),
         NPTypeCode.Int32 => (int)value,
@@ -111,9 +118,11 @@ public abstract class BenchmarkBase
         NPTypeCode.Int64 => (long)value,
         NPTypeCode.UInt64 => (ulong)Math.Abs(value),
         NPTypeCode.Char => (char)(int)Math.Abs(value),
+        NPTypeCode.Half => (Half)value,
         NPTypeCode.Single => (float)value,
         NPTypeCode.Double => value,
         NPTypeCode.Decimal => (decimal)value,
+        NPTypeCode.Complex => new System.Numerics.Complex(value, 0),
         _ => throw new ArgumentException($"Unsupported type: {dtype}")
     };
 }
