@@ -2056,8 +2056,15 @@ namespace NumSharp.Backends.Iteration
                 return BufferedReduceIternext();
             }
 
-            _state->Advance();
-            return _state->IterIndex < _state->IterEnd;
+            // Respect EXLOOP / ONEITERATION. The kernel processes the innermost
+            // loop, so a plain one-element Advance() over-steps an external-loop
+            // iterator by NDim-1 positions per call (reading past the inner-loop
+            // buffer). GetIterNext() returns the correct advancer — ExternalLoopNext
+            // for EXLOOP, SingleIterationNext for ONEITERATION, StandardNext
+            // otherwise. StandardNext is byte-for-byte the old Advance() path for
+            // the common (non-EXLOOP, non-ONEITERATION) case, so this is a strict
+            // correction with no behavior change there.
+            return GetIterNext()(ref *_state);
         }
 
         /// <summary>
