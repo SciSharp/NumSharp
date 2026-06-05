@@ -355,6 +355,34 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "",
     ]
 
+    # Per-size headline: geomean ratio (NumSharp/NumPy) across all matched ops at each N,
+    # plus the status histogram. This is the "all ops at 3 sizes" summary.
+    import math
+    sizes = sorted({r.n for r in results})
+
+    def _geo(vals):
+        vals = [v for v in vals if v and v > 0]
+        return math.exp(sum(math.log(v) for v in vals) / len(vals)) if vals else None
+
+    lines.append("## Summary by size")
+    lines.append("")
+    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ⚪ n/a | geomean |")
+    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|--------:|")
+    for n in sizes:
+        rs = [r for r in results if r.n == n]
+        gz = _geo([r.ratio for r in rs if r.ratio])
+        gz_s = f"{gz:.2f}x" if gz else "-"
+        lines.append(
+            f"| {n:,} | {len(rs)} "
+            f"| {sum(1 for r in rs if r.status == 'faster')} "
+            f"| {sum(1 for r in rs if r.status == 'close')} "
+            f"| {sum(1 for r in rs if r.status == 'slower')} "
+            f"| {sum(1 for r in rs if r.status == 'much_slower')} "
+            f"| {sum(1 for r in rs if r.status == 'no_data')} | {gz_s} |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # Get results with valid data (both sides, NumPy >= 0.001ms to avoid division issues)
     with_data = [r for r in results if r.ratio is not None and r.numpy_ms >= 0.001]
 

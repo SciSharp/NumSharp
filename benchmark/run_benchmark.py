@@ -113,19 +113,21 @@ def main():
         numpy_json.write_text(json.dumps(merged, indent=2))
         print(f"NumPy: {len(merged)} results across {len(args.suites)} suites")
 
-    # 3. C# BenchmarkDotNet per suite (config provides the job + JSON exporter).
+    # 3. C# BenchmarkDotNet per suite (config provides the job + JSON exporter). BDN cleans
+    #    its artifacts dir on each run, so copy out each suite's class reports immediately
+    #    after that suite finishes — otherwise only the last suite would survive.
     if not args.skip_csharp:
-        if ARTIFACTS.exists():
-            shutil.rmtree(ARTIFACTS, ignore_errors=True)
         for s in args.suites:
+            if ARTIFACTS.exists():
+                shutil.rmtree(ARTIFACTS, ignore_errors=True)
             print(f"\n=== C# suite: {s} ({SUITES[s]}) ===", flush=True)
             run(["dotnet", "run", "-c", "Release", "--no-build", "-f", TFM,
                  "--project", str(CSHARP_PROJ), "--", "--filter", SUITES[s]],
                 cwd=CSHARP_DIR, check=False)
-        if ARTIFACTS.exists():
-            for f in ARTIFACTS.glob("*-report-full-compressed.json"):
-                shutil.copy(f, csharp_out / f.name)
-            print(f"C#: collected {len(list(csharp_out.glob('*.json')))} class reports")
+            if ARTIFACTS.exists():
+                for f in ARTIFACTS.glob("*-report-full-compressed.json"):
+                    shutil.copy(f, csharp_out / f.name)
+        print(f"C#: collected {len(list(csharp_out.glob('*.json')))} class reports")
 
     # 4. Merge into the unified per-(op, dtype, N) ratio report.
     out_base = results_dir / "benchmark-report"
