@@ -2331,30 +2331,31 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         [TestMethod]
-        public void Cast_SameKindCasting_IntToFloat_Throws()
+        public void Cast_SameKindCasting_IntToFloat_Allowed()
         {
-            // Same-kind casting does NOT allow int32 -> float64 (different kinds)
-            // NumPy: "Cannot cast array data from dtype('int32') to dtype('float64')
-            //         according to the rule 'same_kind'"
+            // NumPy ALLOWS int32 -> float64 under same_kind casting: int->float is a SAFE
+            // cast, and same_kind is a strict superset of safe. Verified against NumPy 2.x:
+            //   np.can_cast(np.int32, np.float64, 'same_kind')         -> True
+            //   np.copyto(np.zeros(3), np.array([1,2,3], np.int32))    -> [1., 2., 3.]
+            // (The previous revision of this test asserted a throw, which did not match NumPy.)
 
             var arr = np.array(new int[] { 1, 2, 3 });
 
-            bool threw = false;
-            try
-            {
-                using var iter = NpyIterRef.New(
-                    arr,
-                    NpyIterGlobalFlags.BUFFERED,
-                    NPY_ORDER.NPY_KEEPORDER,
-                    NPY_CASTING.NPY_SAME_KIND_CASTING,
-                    NPTypeCode.Double);
-            }
-            catch (InvalidCastException)
-            {
-                threw = true;
-            }
+            using var iter = NpyIterRef.New(
+                arr,
+                NpyIterGlobalFlags.BUFFERED,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_SAME_KIND_CASTING,
+                NPTypeCode.Double);
 
-            Assert.IsTrue(threw, "Same-kind casting should not allow int -> float");
+            // Construction must succeed, and the buffered cast must yield the doubles.
+            var values = new List<double>();
+            do
+            {
+                values.Add(iter.GetValue<double>(0));
+            } while (iter.Iternext());
+
+            CollectionAssert.AreEqual(new double[] { 1.0, 2.0, 3.0 }, values.ToArray());
         }
 
         [TestMethod]

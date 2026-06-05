@@ -60,13 +60,10 @@ namespace NumSharp.Backends.Iteration
                 return false;
             if (IsComplex(dstType))
             {
-                // Anything real can widen into complex128 (which carries float64 components).
-                // Int64/UInt64 lose precision above 2^53 in real -> double conversion;
-                // NumPy still classes int64->complex128 as same-kind, but not "safe" without
-                // upcast to longdouble/complex256 (which .NET doesn't have). Be conservative:
-                // mark integer->complex safe up to 32-bit, and float/half/bool->complex safe.
-                if (srcType == NPTypeCode.Int64 || srcType == NPTypeCode.UInt64)
-                    return false;
+                // Every real type casts safely into complex128. NumPy treats real→complex128
+                // as safe across the board — can_cast(int64, complex128, 'safe') is True —
+                // consistent with its treatment of int64→float64 itself as safe. The precision
+                // loss above 2^53 mirrors int64→float64 exactly and is accepted by NumPy.
                 return true;
             }
 
@@ -89,10 +86,14 @@ namespace NumSharp.Backends.Iteration
             if (srcType == NPTypeCode.Half)
                 return dstType == NPTypeCode.Single || dstType == NPTypeCode.Double || dstType == NPTypeCode.Decimal;
 
-            // Half is narrower than Single/Double — only Half->Half (handled above) is safe
-            // FROM Half. Float -> Half is never safe (loss of precision).
+            // Casting INTO Half (float16): its 11-bit mantissa exactly represents integers
+            // only up to ±2048, so just bool and the 8-bit ints widen safely (NumPy:
+            // can_cast(uint8, float16, 'safe') is True). int16/uint16 and wider, plus any
+            // float→Half narrowing, lose precision and are not safe.
             if (dstType == NPTypeCode.Half)
-                return false;
+                return srcType == NPTypeCode.Boolean
+                    || srcType == NPTypeCode.Byte
+                    || srcType == NPTypeCode.SByte;
 
             // Larger to smaller is never safe
             if (srcSize > dstSize && !dstIsFloat)
@@ -114,13 +115,15 @@ namespace NumSharp.Backends.Iteration
             if ((srcIsSigned || srcIsUnsigned) && dstType == NPTypeCode.Single && srcSize <= 2)
                 return true;
 
-            // Signed to unsigned is not safe
+            // Signed to unsigned is never safe (negatives can't be represented).
             if (srcIsSigned && dstIsUnsigned)
                 return false;
 
-            // Unsigned to signed requires larger type
-            if (srcIsUnsigned && dstIsSigned && srcSize >= dstSize)
-                return false;
+            // Unsigned to signed is safe only when the signed type is strictly wider, so the
+            // entire unsigned range fits: uint8→int16/int32/int64, uint16→int32/int64,
+            // uint32→int64. (NumPy: can_cast(uint8, int16, 'safe') is True.)
+            if (srcIsUnsigned && dstIsSigned)
+                return srcSize < dstSize;
 
             // Same signedness, smaller to larger is safe
             if ((srcIsSigned && dstIsSigned) || (srcIsUnsigned && dstIsUnsigned))
@@ -134,28 +137,53 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Check if casting is "same kind" (both integers, or both floats).
+        /// Check if casting is "same_kind" — NumPy's NPY_SAME_KIND_CASTING. This is a
+        /// strict superset of <see cref="IsSafeCast"/> plus the looser within-kind casts,
+        /// matching numpy <c>can_cast(.., 'same_kind')</c> exactly across the type matrix:
+        /// <list type="bullet">
+        ///   <item>every safe cast (int→float64, bool→numeric, float32→float64, …);</item>
+        ///   <item>float → float, including narrowing (float64→float32, →float16);</item>
+        ///   <item>int → int for every signedness pair EXCEPT signed → unsigned
+        ///         (unsigned→signed and same-sign narrowing are allowed, e.g. int64→int32,
+        ///         uint16→int8; but int32→uint32 is not);</item>
+        ///   <item>int → float, even when lossy (int64→float32);</item>
+        ///   <item>real (int or float) → complex.</item>
+        /// </list>
+        /// Notably NOT same_kind: float → int, int/float → bool, signed → unsigned,
+        /// complex → real (all match numpy's '.' entries).
         /// </summary>
         private static bool IsSameKindCast(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (srcType == dstType)
                 return true;
 
-            bool srcIsFloat = IsFloatingPoint(srcType);
-            bool dstIsFloat = IsFloatingPoint(dstType);
-            bool srcIsInt = IsSignedInteger(srcType) || IsUnsignedInteger(srcType);
-            bool dstIsInt = IsSignedInteger(dstType) || IsUnsignedInteger(dstType);
-
-            // Same kind = both floats or both integers
-            if (srcIsFloat && dstIsFloat)
-                return true;
-            if (srcIsInt && dstIsInt)
+            // same_kind is a superset of safe — fixes int→float (e.g. int32→float64),
+            // which is safe yet cross-kind and was previously rejected.
+            if (IsSafeCast(srcType, dstType))
                 return true;
 
-            // Boolean is compatible with integers
-            if (srcType == NPTypeCode.Boolean && dstIsInt)
+            bool srcFloat = IsFloatingPoint(srcType);
+            bool dstFloat = IsFloatingPoint(dstType);
+            bool srcSigned = IsSignedInteger(srcType);
+            bool srcInt = srcSigned || IsUnsignedInteger(srcType);
+            bool dstInt = IsSignedInteger(dstType) || IsUnsignedInteger(dstType);
+
+            // float → float (narrowing within the floating kind, e.g. float64→float32).
+            if (srcFloat && dstFloat)
                 return true;
-            if (srcIsInt && dstType == NPTypeCode.Boolean)
+
+            // int → int: every signedness pair EXCEPT signed → unsigned.
+            if (srcInt && dstInt)
+                return !(srcSigned && IsUnsignedInteger(dstType));
+
+            // int → float, even when lossy (e.g. int64 → float32).
+            if (srcInt && dstFloat)
+                return true;
+
+            // real (int or float) → complex is same_kind (numpy classes every real→complex
+            // as at least same_kind; the safe ones are already short-circuited above, so
+            // this adds the int64/uint64→complex pair the conservative safe rule withholds).
+            if ((srcInt || srcFloat) && IsComplex(dstType))
                 return true;
 
             return false;
