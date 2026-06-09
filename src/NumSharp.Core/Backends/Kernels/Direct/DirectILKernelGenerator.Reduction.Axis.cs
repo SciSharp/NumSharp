@@ -134,6 +134,14 @@ namespace NumSharp.Backends.Kernels
                 (NPTypeCode.Byte, NPTypeCode.UInt64) => CreateAxisReductionKernelScalar<byte, ulong>(key),
                 (NPTypeCode.Byte, NPTypeCode.Double) => CreateAxisReductionKernelScalar<byte, double>(key),
 
+                // sbyte -> int32/int64/double
+                (NPTypeCode.SByte, NPTypeCode.Int32) => CreateAxisReductionKernelScalar<sbyte, int>(key),
+                (NPTypeCode.SByte, NPTypeCode.Int64) => CreateAxisReductionKernelScalar<sbyte, long>(key),
+                (NPTypeCode.SByte, NPTypeCode.Double) => CreateAxisReductionKernelScalar<sbyte, double>(key),
+
+                // bool -> int64 (NEP50 sum/prod accumulator)
+                (NPTypeCode.Boolean, NPTypeCode.Int64) => CreateAxisReductionKernelScalar<bool, long>(key),
+
                 // int16 -> int32/int64/double
                 (NPTypeCode.Int16, NPTypeCode.Int32) => CreateAxisReductionKernelScalar<short, int>(key),
                 (NPTypeCode.Int16, NPTypeCode.Int64) => CreateAxisReductionKernelScalar<short, long>(key),
@@ -164,10 +172,11 @@ namespace NumSharp.Backends.Kernels
                 // float -> double
                 (NPTypeCode.Single, NPTypeCode.Double) => CreateAxisReductionKernelScalar<float, double>(key),
 
-                // char -> int32/int64
+                // char -> int32/int64/uint64
                 (NPTypeCode.Char, NPTypeCode.Int32) => CreateAxisReductionKernelScalar<char, int>(key),
                 (NPTypeCode.Char, NPTypeCode.Int64) => CreateAxisReductionKernelScalar<char, long>(key),
                 (NPTypeCode.Char, NPTypeCode.UInt32) => CreateAxisReductionKernelScalar<char, uint>(key),
+                (NPTypeCode.Char, NPTypeCode.UInt64) => CreateAxisReductionKernelScalar<char, ulong>(key),
 
                 // decimal -> double (for mean)
                 (NPTypeCode.Decimal, NPTypeCode.Double) => CreateAxisReductionKernelScalar<decimal, double>(key),
