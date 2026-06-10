@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Text;
 using NumSharp.Backends.Kernels;
@@ -11,20 +12,27 @@ using NumSharp.Backends.Kernels;
 // NpyInnerLoopFunc by emitting (scalarBody, vectorBody) pairs that
 // DirectILKernelGenerator.CompileInnerLoop wraps in the standard 4× unroll shell.
 //
-// TYPE DISCIPLINE
-// ---------------
-// All intermediate computation happens in the output dtype. Input loads
-// auto-promote to output dtype; constants are pushed as output dtype. This
-// mirrors NumPy's casting-by-output behavior for simple ufunc composition
-// and keeps the AST trivial to type-check.
+// TYPE DISCIPLINE — TWO MODES
+// ---------------------------
+// Legacy mode (Compile): all intermediate computation happens in the output
+// dtype. Input loads auto-promote to output dtype; constants are pushed as
+// output dtype. Simple, but does NOT match NumPy for mixed-dtype trees
+// (NumPy computes each ufunc node at its own result_type — int32*int32
+// wraps in int32 even when the final result is float64).
+//
+// NumPy mode (CompileNumPy, used by np.evaluate): a typing pass resolves
+// every node to its NumPy 2.x result_type (NEP50, incl. weak python-scalar
+// semantics for constants); emission computes each node at its resolved
+// dtype and converts at node edges. See NpyExpr.Typing.cs.
 //
 // For fine-grained type control, use ExecuteElementWise directly (Tier 3B).
 //
 // SIMD
 // ----
 // The vector path is enabled iff every input type equals the output type
-// AND every node's op supports SIMD. Otherwise the compiled kernel carries
-// a scalar-only body; the factory's strided fallback handles all cases.
+// (in NumPy mode: the whole tree resolves homogeneous) AND every node's op
+// supports SIMD. Otherwise the compiled kernel carries a scalar-only body;
+// the factory's strided fallback handles all cases.
 //
 // =============================================================================
 
@@ -34,7 +42,7 @@ namespace NumSharp.Backends.Iteration
     /// Abstract expression node. Subclasses describe computations over
     /// NpyIter operands; Compile() produces an NpyInnerLoopFunc.
     /// </summary>
-    public abstract class NpyExpr
+    public abstract partial class NpyExpr
     {
         // ----- Contract (internal API used by the compiler) -----
 
@@ -117,7 +125,7 @@ namespace NumSharp.Backends.Iteration
             return DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
         }
 
-        private string DeriveCacheKey(NPTypeCode[] inputTypes, NPTypeCode outputType)
+        private protected string DeriveCacheKey(NPTypeCode[] inputTypes, NPTypeCode outputType)
         {
             var sb = new StringBuilder("NpyExpr:");
             AppendSignature(sb);
@@ -319,22 +327,51 @@ namespace NumSharp.Backends.Iteration
         public LocalBuilder[] InputLocals { get; }
         public bool VectorMode { get; }
 
+        /// <summary>
+        /// Per-node resolved dtypes (NumPy result_type mode, produced by the
+        /// typing pass for <see cref="NpyExpr.CompileNumPy"/>). Null in legacy
+        /// mode, where every node computes at <see cref="OutputType"/>.
+        /// Keyed by node reference.
+        /// </summary>
+        public IReadOnlyDictionary<NpyExpr, NPTypeCode>? NodeTypes { get; }
+
         public NpyExprCompileContext(
             NPTypeCode[] inputTypes, NPTypeCode outputType,
             LocalBuilder[] inputLocals, bool vectorMode)
+            : this(inputTypes, outputType, inputLocals, vectorMode, null)
+        {
+        }
+
+        public NpyExprCompileContext(
+            NPTypeCode[] inputTypes, NPTypeCode outputType,
+            LocalBuilder[] inputLocals, bool vectorMode,
+            IReadOnlyDictionary<NpyExpr, NPTypeCode>? nodeTypes)
         {
             InputTypes = inputTypes;
             OutputType = outputType;
             InputLocals = inputLocals;
             VectorMode = vectorMode;
+            NodeTypes = nodeTypes;
         }
+
+        /// <summary>
+        /// The dtype this node computes at: its typing-pass entry in NumPy
+        /// mode, or the uniform <see cref="OutputType"/> in legacy mode.
+        /// </summary>
+        internal NPTypeCode TypeOf(NpyExpr node)
+            => NodeTypes is null
+                ? OutputType
+                : NodeTypes.TryGetValue(node, out var t)
+                    ? t
+                    : throw new InvalidOperationException(
+                        $"NpyExpr typing pass produced no dtype for node {node.GetType().Name} — typing/emission mismatch.");
     }
 
     // =========================================================================
     // Node: Input(i) — reference operand i
     // =========================================================================
 
-    public sealed class InputNode : NpyExpr
+    public sealed partial class InputNode : NpyExpr
     {
         private readonly int _index;
         public InputNode(int index)
@@ -342,6 +379,8 @@ namespace NumSharp.Backends.Iteration
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
             _index = index;
         }
+
+        internal int Index => _index;
 
         public override bool SupportsSimd => true;
 
@@ -352,10 +391,12 @@ namespace NumSharp.Backends.Iteration
                     $"Input({_index}) out of range; compile provided {ctx.InputTypes.Length} inputs.");
 
             il.Emit(OpCodes.Ldloc, ctx.InputLocals[_index]);
-            // Auto-convert if input type differs from output type.
+            // Leave this node's resolved dtype on the stack. Legacy mode
+            // resolves every node to OutputType (auto-promote at load);
+            // NumPy mode resolves to the operand's native dtype, so parents
+            // convert at their edges instead.
             var inType = ctx.InputTypes[_index];
-            if (inType != ctx.OutputType)
-                DirectILKernelGenerator.EmitConvertTo(il, inType, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, inType, ctx.TypeOf(this));
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -377,7 +418,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Constant
     // =========================================================================
 
-    public sealed class ConstNode : NpyExpr
+    public sealed partial class ConstNode : NpyExpr
     {
         // Store as double — widest scalar; convert down to outputType on emit.
         // Also preserve an exact-int path for integer-typed outputs.
@@ -390,17 +431,21 @@ namespace NumSharp.Backends.Iteration
         public ConstNode(long v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
         public ConstNode(int v) { _valueInt = v; _valueFp = v; _isIntegerLiteral = true; }
 
+        internal bool IsIntegerLiteral => _isIntegerLiteral;
+        internal long IntegerValue => _valueInt;
+        internal double FloatValue => _valueFp;
+
         public override bool SupportsSimd => true;
 
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
-            EmitLoadTyped(il, ctx.OutputType);
+            EmitLoadTyped(il, ctx.TypeOf(this));
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
         {
-            EmitLoadTyped(il, ctx.OutputType);
-            DirectILKernelGenerator.EmitVectorCreate(il, ctx.OutputType);
+            EmitLoadTyped(il, ctx.TypeOf(this));
+            DirectILKernelGenerator.EmitVectorCreate(il, ctx.TypeOf(this));
         }
 
         private void EmitLoadTyped(ILGenerator il, NPTypeCode target)
@@ -418,6 +463,7 @@ namespace NumSharp.Backends.Iteration
                     il.Emit(OpCodes.Ldc_I8, _isIntegerLiteral ? _valueInt : (long)_valueFp);
                     return;
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Int32:
@@ -425,6 +471,28 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Char:
                 case NPTypeCode.Boolean:
                     il.Emit(OpCodes.Ldc_I4, _isIntegerLiteral ? (int)_valueInt : (int)_valueFp);
+                    return;
+                case NPTypeCode.Half:
+                    // No Ldc for Half — load double then convert (Half consts
+                    // arise from NEP50 weak adoption: f2_array + 2.5 stays f2).
+                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Half);
+                    return;
+                case NPTypeCode.Decimal:
+                    if (_isIntegerLiteral)
+                    {
+                        il.Emit(OpCodes.Ldc_I8, _valueInt);
+                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int64, NPTypeCode.Decimal);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldc_R8, _valueFp);
+                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Decimal);
+                    }
+                    return;
+                case NPTypeCode.Complex:
+                    il.Emit(OpCodes.Ldc_R8, _isIntegerLiteral ? _valueInt : _valueFp);
+                    DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, NPTypeCode.Complex);
                     return;
                 default:
                     throw new NotSupportedException(
@@ -444,7 +512,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Binary op
     // =========================================================================
 
-    public sealed class BinaryNode : NpyExpr
+    public sealed partial class BinaryNode : NpyExpr
     {
         private readonly BinaryOp _op;
         private readonly NpyExpr _left;
@@ -470,9 +538,28 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
+            var my = ctx.TypeOf(this);
             _left.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_left), my);
             _right.EmitScalar(il, ctx);
-            DirectILKernelGenerator.EmitScalarOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_right), my);
+
+            // NumPy's bool loops: add(bool,bool) is logical OR, multiply is
+            // logical AND. The generic Add opcode would store byte 2 for
+            // True+True, which is not a valid bool.
+            if (my == NPTypeCode.Boolean && _op == BinaryOp.Add)
+            {
+                il.Emit(OpCodes.Or);
+                return;
+            }
+
+            if (my == NPTypeCode.Boolean && _op == BinaryOp.Multiply)
+            {
+                il.Emit(OpCodes.And);
+                return;
+            }
+
+            DirectILKernelGenerator.EmitScalarOperation(il, _op, my);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -496,7 +583,7 @@ namespace NumSharp.Backends.Iteration
     // Node: Unary op
     // =========================================================================
 
-    public sealed class UnaryNode : NpyExpr
+    public sealed partial class UnaryNode : NpyExpr
     {
         private readonly UnaryOp _op;
         private readonly NpyExpr _child;
@@ -526,26 +613,66 @@ namespace NumSharp.Backends.Iteration
         private static bool IsPredicateResult(UnaryOp op)
             => op == UnaryOp.IsNan || op == UnaryOp.IsFinite || op == UnaryOp.IsInf;
 
+        // NumPy preserves integer dtypes through floor/ceil/round/trunc — the op
+        // is an identity there (and Math.Floor has no integer overloads to call).
+        private static bool IsRoundingOp(UnaryOp op)
+            => op == UnaryOp.Floor || op == UnaryOp.Ceil ||
+               op == UnaryOp.Round || op == UnaryOp.Truncate;
+
+        private static bool IsIntegerKind(NPTypeCode t)
+            => t == NPTypeCode.Boolean || t == NPTypeCode.Byte || t == NPTypeCode.SByte ||
+               t == NPTypeCode.Int16 || t == NPTypeCode.UInt16 || t == NPTypeCode.Char ||
+               t == NPTypeCode.Int32 || t == NPTypeCode.UInt32 ||
+               t == NPTypeCode.Int64 || t == NPTypeCode.UInt64;
+
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
+            var my = ctx.TypeOf(this);
+            var childType = ctx.TypeOf(_child);
+
             // LogicalNot needs a special path. DirectILKernelGenerator's emit uses Ldc_I4_0+Ceq
             // which is only correct when the input value fits in I4 (Int32 and narrower).
             // For Int64/Single/Double/Decimal the types mismatch on the stack. Rewrite
             // as (x == 0) using the comparison emit, which handles all types correctly.
+            // The test runs at the CHILD's dtype (NumPy: logical_not(f8) inspects f8).
             if (_op == UnaryOp.LogicalNot)
             {
                 _child.EmitScalar(il, ctx);
-                // push zero of outputType, compare Equal
-                WhereNode.EmitPushZeroPublic(il, ctx.OutputType);
-                DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.Equal, ctx.OutputType);
-                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+                WhereNode.EmitPushZeroPublic(il, childType);
+                DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.Equal, childType);
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
+                return;
+            }
+
+            // Predicates also run at the child's dtype (NumPy: isnan(int) is
+            // all-False without promoting the input).
+            if (IsPredicateResult(_op))
+            {
+                _child.EmitScalar(il, ctx);
+                DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, childType);
+                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
                 return;
             }
 
             _child.EmitScalar(il, ctx);
-            DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, ctx.OutputType);
-            if (IsPredicateResult(_op))
-                DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, childType, my);
+
+            // Identity cases at integer/bool dtypes (NumPy preserves the value).
+            if (IsRoundingOp(_op) && IsIntegerKind(my))
+                return;
+            if (_op == UnaryOp.Abs && my == NPTypeCode.Boolean)
+                return;
+
+            // NumPy invert on bool is logical not; the raw Not opcode on the
+            // I4 0/1 would produce -1/-2.
+            if (_op == UnaryOp.BitwiseNot && my == NPTypeCode.Boolean)
+            {
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Xor);
+                return;
+            }
+
+            DirectILKernelGenerator.EmitUnaryScalarOperation(il, _op, my);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -574,7 +701,7 @@ namespace NumSharp.Backends.Iteration
     // the Comparison kernel pipeline, which is beyond this tier.
     // =========================================================================
 
-    public sealed class ComparisonNode : NpyExpr
+    public sealed partial class ComparisonNode : NpyExpr
     {
         private readonly ComparisonOp _op;
         private readonly NpyExpr _left;
@@ -591,13 +718,23 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
+            var my = ctx.TypeOf(this); // Boolean in NumPy mode; OutputType legacy
+            var lT = ctx.TypeOf(_left);
+            var rT = ctx.TypeOf(_right);
+            // NumPy compares at the operands' common dtype (result_type of the
+            // two children), then yields bool. Legacy mode compares at
+            // OutputType, where both children already sit.
+            var cmpType = ctx.NodeTypes is null
+                ? ctx.OutputType
+                : NpyExprTypeRules.PromoteStrong(lT, rT);
+
             _left.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, lT, cmpType);
             _right.EmitScalar(il, ctx);
-            // Both operands are already at ctx.OutputType (InputNode auto-converts).
-            DirectILKernelGenerator.EmitComparisonOperation(il, _op, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, rT, cmpType);
+            DirectILKernelGenerator.EmitComparisonOperation(il, _op, cmpType);
             // EmitComparisonOperation leaves an I4 (0 or 1) on the stack.
-            // Convert to ctx.OutputType so the final Stind opcode matches.
-            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, my);
         }
 
         public override void EmitVector(ILGenerator il, NpyExprCompileContext ctx)
@@ -629,7 +766,7 @@ namespace NumSharp.Backends.Iteration
     // (NaN-skipping) users can compose with IsNaN + Where.
     // =========================================================================
 
-    public sealed class MinMaxNode : NpyExpr
+    public sealed partial class MinMaxNode : NpyExpr
     {
         private readonly bool _isMin;
         private readonly NpyExpr _left;
@@ -648,19 +785,22 @@ namespace NumSharp.Backends.Iteration
         {
             // Prefer Math.Min/Max — they propagate NaN per IEEE 754, matching NumPy's
             // np.minimum/np.maximum. Fall back to a branchy select for dtypes without
-            // a Math.Min/Max overload (Char, Boolean).
+            // a Math.Min/Max overload (Char, Boolean, Half, Complex).
             EmitBranchy(il, ctx);
         }
 
         private void EmitBranchy(ILGenerator il, NpyExprCompileContext ctx)
         {
-            var clrType = DirectILKernelGenerator.GetClrType(ctx.OutputType);
+            var my = ctx.TypeOf(this);
+            var clrType = DirectILKernelGenerator.GetClrType(my);
             var locL = il.DeclareLocal(clrType);
             var locR = il.DeclareLocal(clrType);
 
             _left.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_left), my);
             il.Emit(OpCodes.Stloc, locL);
             _right.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_right), my);
             il.Emit(OpCodes.Stloc, locR);
 
             // Prefer Math.Min/Max if available (NaN-propagating for floats).
@@ -678,7 +818,7 @@ namespace NumSharp.Backends.Iteration
                 return;
             }
 
-            // Fallback: branchy select via comparison (for Char / Boolean).
+            // Fallback: branchy select via comparison (for Char / Boolean / Half).
             var lblElse = il.DefineLabel();
             var lblEnd = il.DefineLabel();
 
@@ -687,7 +827,7 @@ namespace NumSharp.Backends.Iteration
             DirectILKernelGenerator.EmitComparisonOperation(
                 il,
                 _isMin ? ComparisonOp.LessEqual : ComparisonOp.GreaterEqual,
-                ctx.OutputType);
+                my);
             il.Emit(OpCodes.Brfalse, lblElse);
             il.Emit(OpCodes.Ldloc, locL);
             il.Emit(OpCodes.Br, lblEnd);
@@ -718,7 +858,7 @@ namespace NumSharp.Backends.Iteration
     // Equivalent to np.where(cond, a, b), with cond coerced to bool.
     // =========================================================================
 
-    public sealed class WhereNode : NpyExpr
+    public sealed partial class WhereNode : NpyExpr
     {
         private readonly NpyExpr _cond;
         private readonly NpyExpr _a;
@@ -735,22 +875,27 @@ namespace NumSharp.Backends.Iteration
 
         public override void EmitScalar(ILGenerator il, NpyExprCompileContext ctx)
         {
+            var my = ctx.TypeOf(this);
+            var condType = ctx.TypeOf(_cond);
             var lblElse = il.DefineLabel();
             var lblEnd = il.DefineLabel();
 
-            // Evaluate cond in outputType, then compare to zero so we have a
-            // verifiable I4 0/1 on the stack before brfalse.
+            // Evaluate cond at its own dtype (NumPy nonzero-tests the
+            // condition without promoting it), then compare to zero so we
+            // have a verifiable I4 0/1 on the stack before brfalse.
             _cond.EmitScalar(il, ctx);
-            EmitPushZero(il, ctx.OutputType);
-            DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, ctx.OutputType);
+            EmitPushZero(il, condType);
+            DirectILKernelGenerator.EmitComparisonOperation(il, ComparisonOp.NotEqual, condType);
 
             il.Emit(OpCodes.Brfalse, lblElse);
 
             _a.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_a), my);
             il.Emit(OpCodes.Br, lblEnd);
 
             il.MarkLabel(lblElse);
             _b.EmitScalar(il, ctx);
+            DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_b), my);
 
             il.MarkLabel(lblEnd);
         }
@@ -849,7 +994,7 @@ namespace NumSharp.Backends.Iteration
     // Always false. A managed call from inside a vector loop kills SIMD.
     // =========================================================================
 
-    public sealed class CallNode : NpyExpr
+    public sealed partial class CallNode : NpyExpr
     {
         private enum Kind
         {
@@ -1042,8 +1187,7 @@ namespace NumSharp.Backends.Iteration
                     break;
             }
 
-            if (_returnCode != ctx.OutputType)
-                DirectILKernelGenerator.EmitConvertTo(il, _returnCode, ctx.OutputType);
+            DirectILKernelGenerator.EmitConvertTo(il, _returnCode, ctx.TypeOf(this));
         }
 
         private void EmitArgs(ILGenerator il, NpyExprCompileContext ctx)
@@ -1051,10 +1195,10 @@ namespace NumSharp.Backends.Iteration
             for (int i = 0; i < _args.Length; i++)
             {
                 _args[i].EmitScalar(il, ctx);
-                // Every arg leaves ctx.OutputType on the stack — convert if the
-                // method's parameter dtype is different.
-                if (_paramCodes[i] != ctx.OutputType)
-                    DirectILKernelGenerator.EmitConvertTo(il, ctx.OutputType, _paramCodes[i]);
+                // Each arg leaves its own resolved dtype on the stack
+                // (== ctx.OutputType in legacy mode) — convert to the
+                // method's parameter dtype if different.
+                DirectILKernelGenerator.EmitConvertTo(il, ctx.TypeOf(_args[i]), _paramCodes[i]);
             }
         }
 

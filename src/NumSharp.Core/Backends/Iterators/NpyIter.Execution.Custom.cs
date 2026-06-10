@@ -157,6 +157,19 @@ namespace NumSharp.Backends.Iteration
                     $"inputTypes length ({inputTypes.Length}) + 1 must equal iterator NOp ({_state->NOp}).",
                     nameof(inputTypes));
 
+            // EXTERNAL_LOOP guard (the measured ~40× foot-gun): without EXLOOP
+            // the driver advances one element at a time and the per-chunk
+            // kernel runs with count==1 — silently correct, catastrophically
+            // slow. A single-chunk iteration (ONEITERATION) is exempt: the
+            // kernel gets the whole range in one call either way.
+            bool exloop = (_state->ItFlags & (uint)NpyIterFlags.EXLOOP) != 0;
+            bool oneiter = (_state->ItFlags & (uint)NpyIterFlags.ONEITERATION) != 0;
+            if (!exloop && !oneiter && _state->IterSize > 1)
+                throw new InvalidOperationException(
+                    "ExecuteExpression requires an iterator constructed with NpyIterGlobalFlags.EXTERNAL_LOOP — " +
+                    "without it the compiled kernel is invoked once per element (~40× slower). " +
+                    "Add EXTERNAL_LOOP to the construction flags (np.evaluate configures this automatically).");
+
             var kernel = expression.Compile(inputTypes, outputType, cacheKey);
             ForEach(kernel);
         }
