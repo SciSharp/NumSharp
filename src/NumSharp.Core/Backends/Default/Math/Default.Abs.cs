@@ -12,7 +12,7 @@ namespace NumSharp.Backends
         /// NumPy behavior: preserves input dtype (unlike sin/cos which promote to float).
         /// Exception: np.abs(complex) returns float64 (the magnitude).
         /// </summary>
-        public override NDArray Abs(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Abs(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
             var inputType = nd.GetTypeCode;
 
@@ -21,7 +21,7 @@ namespace NumSharp.Backends
             if (inputType == NPTypeCode.Complex)
             {
                 var outputType = typeCode ?? NPTypeCode.Double;
-                return ExecuteUnaryOp(nd, UnaryOp.Abs, outputType);
+                return ExecuteUnaryOp(nd, UnaryOp.Abs, outputType, @out, where);
             }
 
             // np.abs preserves input dtype (unlike trigonometric functions)
@@ -29,12 +29,13 @@ namespace NumSharp.Backends
             var resultType = typeCode ?? inputType;
 
             // Unsigned types are already non-negative - just return a copy with type cast
-            if (inputType.IsUnsigned())
+            // (with out=/where= the iterator route runs so the result lands in out).
+            if (inputType.IsUnsigned() && @out is null && where is null)
             {
                 return Cast(nd, resultType, copy: true);
             }
 
-            return ExecuteUnaryOp(nd, UnaryOp.Abs, resultType);
+            return ExecuteUnaryOp(nd, UnaryOp.Abs, resultType, @out, where);
         }
     }
 }

@@ -6,28 +6,30 @@ namespace NumSharp
     public static partial class np
     {
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.add.html</remarks>
-        public static NDArray add(NDArray x1, NDArray x2)
-            => x1.TensorEngine.Add(x1, x2);
+        /// <param name="@out">A location into which the result is stored (must broadcast with the inputs without being stretched; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray add(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Add(x1, x2, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divide.html</remarks>
-        public static NDArray divide(NDArray x1, NDArray x2)
-            => x1.TensorEngine.Divide(x1, x2);
+        public static NDArray divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Divide(x1, x2, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.true_divide.html</remarks>
-        public static NDArray true_divide(NDArray x1, NDArray x2) 
-            => x1.TensorEngine.Divide(x1, x2);
+        public static NDArray true_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Divide(x1, x2, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
-        public static NDArray multiply(NDArray x1, NDArray x2)
-            => x1.TensorEngine.Multiply(x1, x2);
+        public static NDArray multiply(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Multiply(x1, x2, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.subtract.html</remarks>
-        public static NDArray subtract(NDArray x1, NDArray x2)
-            => x1.TensorEngine.Subtract(x1, x2);
+        public static NDArray subtract(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Subtract(x1, x2, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
-        public static NDArray mod(NDArray x1, NDArray x2)
-            => x1.TensorEngine.Mod(x1, x2);
+        public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+            => x1.TensorEngine.Mod(x1, x2, @out, where);
 
         public static NDArray mod(NDArray x1, float x2)
             => x1.TensorEngine.Mod(x1, x2);
@@ -69,8 +71,13 @@ namespace NumSharp
         ///     Numerical negative, element-wise.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
-        public static NDArray negative(NDArray nd)
+        public static NDArray negative(NDArray nd, NDArray @out = null, NDArray where = null)
         {
+            // ufunc out=/where=: the provided out is returned as-is (no
+            // layout post-processing — NumPy returns out untouched).
+            if (@out is not null || where is not null)
+                return nd.TensorEngine.Negate(nd, @out, where);
+
             // Route through the engine (same path as the unary `-` operator and nd.negate()):
             // the IL kernel negates unsigned integers by two's-complement wrap (NumPy: -1u -> 255)
             // and handles non-contiguous operands via NpyIter. The legacy hand-written nd.negative()

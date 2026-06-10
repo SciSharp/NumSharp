@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -9,7 +9,7 @@ namespace NumSharp.Backends
         /// Element-wise subtraction using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Subtract(NDArray lhs, NDArray rhs)
+        public override NDArray Subtract(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null)
         {
             // NumPy rejects boolean subtraction: there is no subtract ufunc loop
             // for the bool dtype, so `bool - bool` (both operands boolean) raises.
@@ -20,7 +20,7 @@ namespace NumSharp.Backends
                     "numpy boolean subtract, the `-` operator, is not supported, " +
                     "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
 
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Subtract);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Subtract, @out, where);
         }
     }
 }

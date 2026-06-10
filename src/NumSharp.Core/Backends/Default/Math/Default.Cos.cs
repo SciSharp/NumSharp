@@ -10,9 +10,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise cosine using IL-generated kernels.
         /// </summary>
-        public override NDArray Cos(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Cos(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Cos, ResolveUnaryFloatReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Cos, ResolveUnaryFloatReturnType(nd, typeCode), @out, where);
         }
     }
 }

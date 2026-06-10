@@ -78,7 +78,16 @@ namespace NumSharp.Backends.Iteration
             string cacheKey)
         {
             if (operandTypes is null) throw new ArgumentNullException(nameof(operandTypes));
-            if (operandTypes.Length != _state->NOp)
+
+            // A trailing ARRAYMASK operand (NumPy ufunc where= convention:
+            // op[nop] = wheremask) is driven by ForEach's masked inner loop,
+            // not by the kernel — the kernel compiles over the data operands
+            // only, so operandTypes excludes the mask slot.
+            int kernelNOp = _state->NOp;
+            if (_state->MaskOp == kernelNOp - 1 && operandTypes.Length == kernelNOp - 1)
+                kernelNOp--;
+
+            if (operandTypes.Length != kernelNOp)
                 throw new ArgumentException(
                     $"operandTypes length ({operandTypes.Length}) must match iterator NOp ({_state->NOp}).",
                     nameof(operandTypes));

@@ -10,9 +10,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise natural logarithm using IL-generated kernels.
         /// </summary>
-        public override NDArray Log(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Log(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Log, ResolveUnaryFloatReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Log, ResolveUnaryFloatReturnType(nd, typeCode), @out, where);
         }
     }
 }

@@ -37,6 +37,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log.html</remarks>
         public static NDArray log(NDArray x) => x.TensorEngine.Log(x);
 
+        /// <summary>Natural logarithm, element-wise, into <paramref name="@out"/>.</summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray log(NDArray x, NDArray @out, NDArray where = null)
+            => x.TensorEngine.Log(x, (NPTypeCode?)null, @out, where);
+
         /// <summary>
         ///     Base-2 logarithm of x.
         /// </summary>

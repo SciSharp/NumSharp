@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace NumSharp
 {
@@ -11,6 +11,10 @@ namespace NumSharp
         /// <param name="x1">Dividend array.</param>
         /// <param name="x2">Divisor array.</param>
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
+        public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out, NDArray where = null)
+            => x1.TensorEngine.FloorDivide(x1, x2, (NPTypeCode?)null, @out, where);
+
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
         public static NDArray floor_divide(NDArray x1, NDArray x2)
             => x1.TensorEngine.FloorDivide(x1, x2);

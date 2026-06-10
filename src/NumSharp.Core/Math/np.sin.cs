@@ -12,6 +12,12 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sin.html</remarks>
+        /// <summary>Trigonometric sine, element-wise, into <paramref name="@out"/>.</summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray sin(NDArray x, NDArray @out, NDArray where = null)
+            => x.TensorEngine.Sin(x, (NPTypeCode?)null, @out, where);
+
         public static NDArray sin(NDArray x, NPTypeCode? dtype = null) 
             => x.TensorEngine.Sin(x, dtype);
 

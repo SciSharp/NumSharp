@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -10,9 +10,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise tangent using IL-generated kernels.
         /// </summary>
-        public override NDArray Tan(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Tan(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Tan, ResolveUnaryFloatReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Tan, ResolveUnaryFloatReturnType(nd, typeCode), @out, where);
         }
     }
 }

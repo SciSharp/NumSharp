@@ -7,7 +7,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise negation using IL-generated kernels.
         /// </summary>
-        public override NDArray Negate(NDArray nd)
+        public override NDArray Negate(NDArray nd, NDArray @out = null, NDArray where = null)
         {
             // NumPy rejects boolean negative (unary `-` / np.negative): there is
             // no negative ufunc loop for the bool dtype. Callers that want a
@@ -17,7 +17,7 @@ namespace NumSharp.Backends
                     "The numpy boolean negative, the `-` operator, is not supported, " +
                     "use the `~` operator or the logical_not function instead.");
 
-            return ExecuteUnaryOp(nd, UnaryOp.Negate);
+            return ExecuteUnaryOp(nd, UnaryOp.Negate, null, @out, where);
         }
     }
 }

@@ -67,6 +67,16 @@ namespace NumSharp
         public static NDArray power(NDArray x1, NDArray x2) => x1.TensorEngine.Power(x1, x2, (NPTypeCode?)null);
 
         /// <summary>
+        ///     First array elements raised to powers from second array, element-wise,
+        ///     stored into <paramref name="@out"/> (NumPy ufunc out=/where=).
+        /// </summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(NDArray x1, NDArray x2, NDArray @out, NDArray where = null)
+            => x1.TensorEngine.Power(x1, x2, (NPTypeCode?)null, @out, where);
+
+        /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
         ///     Supports broadcasting between x1 and x2.
         /// </summary>
@@ -105,5 +115,14 @@ namespace NumSharp
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         public static NDArray square(NDArray x) => x.TensorEngine.Square(x, (NPTypeCode?)null);
+
+        /// <summary>
+        ///     Return the element-wise square of the input, stored into
+        ///     <paramref name="@out"/> (NumPy ufunc out=/where=).
+        /// </summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written.</param>
+        public static NDArray square(NDArray x, NDArray @out, NDArray where = null)
+            => x.TensorEngine.Square(x, (NPTypeCode?)null, @out, where);
     }
 }

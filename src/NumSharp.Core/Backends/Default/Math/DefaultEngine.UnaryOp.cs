@@ -20,11 +20,14 @@ namespace NumSharp.Backends
         /// <param name="nd">Input array</param>
         /// <param name="op">Operation to perform</param>
         /// <param name="typeCode">Optional output type (null = same as input or float for trig/sqrt)</param>
-        /// <returns>Result array with specified or promoted type</returns>
+        /// <param name="@out">Optional provided output (NumPy ufunc out=).</param>
+        /// <param name="where">Optional bool write mask (NumPy ufunc where=).</param>
+        /// <returns>Result array with specified or promoted type (or <paramref name="@out"/>)</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null)
+        internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null,
+            NDArray @out = null, NDArray where = null)
         {
-            if (nd.size == 0)
+            if (nd.size == 0 && @out is null && where is null)
             {
                 // For empty arrays, return empty array with correct output dtype
                 // typeCode specifies the output type (e.g., Boolean for predicate ops)
@@ -53,6 +56,15 @@ namespace NumSharp.Backends
             {
                 // Math functions promote to computing type (typically float/double)
                 outputType = ResolveUnaryReturnType(nd, (NPTypeCode?)null);
+            }
+
+            // ufunc out=/where= path (Wave 2.1): the output dtype above is the
+            // final loop dtype; out only constrains the write-back cast.
+            // NumPy disables the trivial loop for masked/provided-out execution
+            // (ufunc_object.c:2213) — same here, straight to the iterator.
+            if (@out is not null || where is not null)
+            {
+                return ExecuteUnaryUfuncInto(nd, op, inputType, outputType, @out, where);
             }
 
             // Handle scalar case

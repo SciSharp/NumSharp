@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -30,7 +30,7 @@ namespace NumSharp.Backends
         /// The integer kernel calls <see cref="Utilities.NpyIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
-        public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null)
+        public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
             // NumPy rule: signed integer exponents cannot be negative when the loop is
             // integer**integer. The check is on the exponent, regardless of base value
@@ -40,6 +40,12 @@ namespace NumSharp.Backends
                 if (ContainsNegative(rhs))
                     throw new ArgumentException("Integers to negative integer powers are not allowed.");
             }
+
+            // ufunc out=/where=: skip the scalar-exponent fast paths (they return
+            // fresh arrays) and route through the iterator with the provided out.
+            // NumPy ignores a dtype request when out is given (out's dtype governs).
+            if (@out is not null || where is not null)
+                return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, @out, where);
 
             // Scalar-exponent fast paths (mirror NumPy's loops.c.src constant-time bodies):
             //   - exp = 0 → ones_like(lhs) in result dtype

@@ -19,9 +19,17 @@ namespace NumSharp.Backends
         /// <param name="lhs">Left operand</param>
         /// <param name="rhs">Right operand</param>
         /// <param name="op">Operation to perform</param>
-        /// <returns>Result array with promoted type</returns>
+        /// <param name="@out">Optional provided output (NumPy ufunc out=): the
+        /// result is written into it (dtype must be same_kind-castable from the
+        /// loop dtype, shape joins the broadcast without stretching) and the
+        /// same instance is returned.</param>
+        /// <param name="where">Optional bool write mask (NumPy ufunc where=):
+        /// only mask-true elements are computed/written; false slots keep the
+        /// prior out contents (uninitialized for a fresh result).</param>
+        /// <returns>Result array with promoted type (or <paramref name="@out"/>)</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op)
+        internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op,
+            NDArray @out = null, NDArray where = null)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -76,6 +84,16 @@ namespace NumSharp.Backends
                 {
                     resultType = NPTypeCode.Double;
                 }
+            }
+
+            // ufunc out=/where= path (Wave 2.1): the loop dtype above is final
+            // (NumPy resolves the loop from the INPUTS; out only constrains the
+            // final cast), so branch after promotion and before any allocation.
+            // NumPy likewise disables the trivial loop when a wheremask or
+            // provided out needs the full iterator (ufunc_object.c:2213).
+            if (@out is not null || where is not null)
+            {
+                return ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
             }
 
             // Handle scalar × scalar case

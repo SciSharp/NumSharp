@@ -34,6 +34,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         public static NDArray absolute(NDArray a) => a.TensorEngine.Abs(a);
 
+        /// <summary>Calculate the absolute value element-wise, into <paramref name="@out"/>.</summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray absolute(NDArray a, NDArray @out, NDArray where = null)
+            => a.TensorEngine.Abs(a, (NPTypeCode?)null, @out, where);
+
         /// <summary>
         ///     Calculate the absolute value element-wise. <br></br>
         ///     np.abs is a shorthand for this function.
@@ -62,5 +68,11 @@ namespace NumSharp
         /// <returns>An ndarray containing the absolute value of each element in x.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.absolute.html</remarks>
         public static NDArray abs(NDArray a) => a.TensorEngine.Abs(a);
+
+        /// <summary>Calculate the absolute value element-wise, into <paramref name="@out"/>.</summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray abs(NDArray a, NDArray @out, NDArray where = null)
+            => a.TensorEngine.Abs(a, (NPTypeCode?)null, @out, where);
     }
 }

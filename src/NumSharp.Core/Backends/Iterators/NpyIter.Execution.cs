@@ -133,9 +133,19 @@ namespace NumSharp.Backends.Iteration
             long* byteStrides = GetInnerLoopByteStrides();
             long innerSize = ResolveInnerLoopCount();
 
+            // Masked inner loop (NumPy ufunc where= machinery): when a
+            // WRITEMASKED operand is present, each inner chunk is decomposed
+            // into mask-true runs and the unmasked kernel runs per run —
+            // NumPy's execute_ufunc_loop(masked=1) wrapper structure. The mask
+            // is the trailing ARRAYMASK operand (1-byte dtype required; other
+            // mask dtypes fall back to the plain nditer kernel contract, where
+            // masking is the kernel's own responsibility).
+            int maskOp = ResolveForEachMaskOp();
+            int nop = _state->NOp;
+
             if (IsSingleInnerLoop())
             {
-                kernel(dataptrs, byteStrides, innerSize, auxdata);
+                InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
                 // Windowed buffered single-fill: no iternext runs, so flush here.
                 FlushIfBuffered();
                 return;
@@ -150,7 +160,7 @@ namespace NumSharp.Backends.Iteration
                 long* bufSize = GetInnerLoopSizePtr();
                 do
                 {
-                    kernel(dataptrs, byteStrides, *bufSize, auxdata);
+                    InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
                 } while (BufferedWindowAdvance());
                 return;
             }
@@ -163,7 +173,7 @@ namespace NumSharp.Backends.Iteration
                 long* bufSize = GetInnerLoopSizePtr();
                 do
                 {
-                    kernel(dataptrs, byteStrides, *bufSize, auxdata);
+                    InvokeInner(kernel, dataptrs, byteStrides, *bufSize, auxdata, maskOp, nop);
                 } while (iternext(ref *_state));
                 return;
             }
@@ -171,8 +181,75 @@ namespace NumSharp.Backends.Iteration
             // EXLOOP and non-EXLOOP both have a stable innerSize across iterations.
             do
             {
-                kernel(dataptrs, byteStrides, innerSize, auxdata);
+                InvokeInner(kernel, dataptrs, byteStrides, innerSize, auxdata, maskOp, nop);
             } while (iternext(ref *_state));
+        }
+
+        /// <summary>
+        /// The ARRAYMASK operand index when ForEach should drive a MASKED inner
+        /// loop, else -1. Requires a WRITEMASKED operand and a 1-byte
+        /// nonzero-test mask dtype (bool/uint8 — same constraint NumPy's masked
+        /// transfer machinery enforces); anything else keeps the plain nditer
+        /// contract where masking belongs to the kernel.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private int ResolveForEachMaskOp()
+        {
+            int maskOp = _state->MaskOp;
+            if (maskOp < 0 || !HasWriteMaskedOperand)
+                return -1;
+            var maskDtype = _state->GetOpDType(maskOp);
+            if (maskDtype != NPTypeCode.Boolean && maskDtype != NPTypeCode.Byte)
+                return -1;
+            return maskOp;
+        }
+
+        /// <summary>
+        /// One inner-loop invocation, masked-aware. Unmasked: straight call.
+        /// Masked: decompose <paramref name="count"/> into contiguous mask-true
+        /// runs (reading the mask at <c>dataptrs[maskOp]</c> with its inner
+        /// byte stride) and invoke the kernel per run with run-adjusted operand
+        /// pointers — NumPy's masked inner-loop wrapper structure, so the
+        /// unmasked SIMD kernel keeps working for dense masks. A stride-0 mask
+        /// (fully-broadcast scalar) gates the whole chunk.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void InvokeInner(
+            NpyInnerLoopFunc kernel, void** dataptrs, long* strides, long count,
+            void* auxdata, int maskOp, int nop)
+        {
+            if (maskOp < 0)
+            {
+                kernel(dataptrs, strides, count, auxdata);
+                return;
+            }
+
+            byte* mask = (byte*)dataptrs[maskOp];
+            long maskStride = strides[maskOp];
+
+            if (maskStride == 0)
+            {
+                if (*mask != 0)
+                    kernel(dataptrs, strides, count, auxdata);
+                return;
+            }
+
+            void** adjusted = stackalloc void*[nop];
+            long i = 0;
+            while (i < count)
+            {
+                while (i < count && mask[i * maskStride] == 0)
+                    i++;
+                long start = i;
+                while (i < count && mask[i * maskStride] != 0)
+                    i++;
+                if (i > start)
+                {
+                    for (int op = 0; op < nop; op++)
+                        adjusted[op] = (byte*)dataptrs[op] + start * strides[op];
+                    kernel(adjusted, strides, i - start, auxdata);
+                }
+            }
         }
 
         /// <summary>
@@ -205,7 +282,13 @@ namespace NumSharp.Backends.Iteration
                 return (f & (uint)NpyIterFlags.REDUCE) != 0
                     ? _state->BufIterEnd          // legacy reduce double-loop semantics
                     : _state->BufTransferSize;    // windowed fill size (NumPy NBF_SIZE)
-            if ((f & (uint)NpyIterFlags.EXLOOP) != 0) return _state->Shape[_state->NDim - 1];
+            // 0-d (scalar) iteration has no inner axis — Shape[NDim-1] would read
+            // Shape[-1] (AV). One element, one call. Previously unreachable: the
+            // scalar×scalar engine bypass kept 0-d out of ForEach until the ufunc
+            // out= path (Wave 2.1) routed provided-out scalar ops through the
+            // iterator (NumPy O17: add(scalar, scalar, out=0-d array)).
+            if ((f & (uint)NpyIterFlags.EXLOOP) != 0)
+                return _state->NDim == 0 ? 1 : _state->Shape[_state->NDim - 1];
             return 1;
         }
 

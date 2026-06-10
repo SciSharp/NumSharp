@@ -29,7 +29,13 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(NDArray a) => a.TensorEngine.Exp(a); 
+        public static NDArray exp(NDArray a) => a.TensorEngine.Exp(a);
+
+        /// <summary>Calculate the exponential of all elements in the input array, into <paramref name="@out"/>.</summary>
+        /// <param name="@out">A location into which the result is stored; returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        public static NDArray exp(NDArray a, NDArray @out, NDArray where = null)
+            => a.TensorEngine.Exp(a, (NPTypeCode?)null, @out, where); 
         
         /// <summary>
         ///     Calculate 2**p for all p in the input array.
