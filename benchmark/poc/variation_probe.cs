@@ -72,17 +72,25 @@ var a5d = (np.arange(N).astype(np.float32) + 1f).reshape(10, 10, 10, 10, 400);
 }
 
 // ---------- overlap-hazard correctness probe (write-ahead direction) ----------
-// NumPy: np.add(a[:-1], a[:-1], out=a[1:]) — COPY_IF_OVERLAP protects it.
-// Expected (numpy): out[i] = 2*original a[i] for all i — no cascade.
+// NumPy ufunc semantics: COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE on all
+// operands (ufunc_object.c:1070). Expected: out[i] = 2*original a[i] — no
+// cascade. Before Wave 1.1 (no COPY_IF_OVERLAP implementation) this printed
+// the corrupted [1, 2, 4, 6, 8, 16, 32, 64].
 {
     var ov = np.arange(8).astype(np.float64) + 1.0;   // [1..8]
     var src = ov[":-1"]; var dst = ov["1:"];
-    using var iter = NpyIterRef.MultiNew(3, new[] { src, src, dst },
-        NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
-        new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY });
-    iter.ExecuteBinary(NumSharp.Backends.Kernels.BinaryOp.Add);
-    // numpy result: [1, 2, 4, 6, 8, 10, 12, 14]; cascade bug gives [1,2,4,8,16,...]
-    Console.WriteLine($"overlap probe (numpy expects 2,4,6,8,10,12,14): {ov.ToString().Replace("\n", " ")}");
+    var elw = NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+    // NOTE: the write-back to the user array resolves at Dispose (NumPy's
+    // WRITEBACKIFCOPY resolves at NpyIter_Deallocate) — check AFTER the using.
+    using (var iter = NpyIterRef.MultiNew(3, new[] { src, src, dst },
+        NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
+        NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
+        new[] { NpyIterPerOpFlags.READONLY | elw, NpyIterPerOpFlags.READONLY | elw, NpyIterPerOpFlags.WRITEONLY | elw }))
+    {
+        iter.ExecuteBinary(NumSharp.Backends.Kernels.BinaryOp.Add);
+    }
+    bool ovOk = ov.GetDouble(7) == 14.0 && ov.GetDouble(5) == 10.0;
+    Console.WriteLine($"overlap probe (numpy: 1,2,4,6,8,10,12,14): {ov.ToString().Replace("\n", " ")}  {(ovOk ? "PASS" : "FAIL")}");
 }
 
 Console.WriteLine();

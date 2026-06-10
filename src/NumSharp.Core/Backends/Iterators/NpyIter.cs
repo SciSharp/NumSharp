@@ -36,6 +36,17 @@ namespace NumSharp.Backends.Iteration
         private NDArray[]? _operands;
         private NpyIterNextFunc? _cachedIterNext;
 
+        /// <summary>
+        /// Write-back registrations created by COPY_IF_OVERLAP: when entry i is
+        /// non-null, <see cref="_operands"/>[i] is a temporary copy and the
+        /// stored array is the user's original operand. <see cref="Dispose"/>
+        /// copies the temporary back (NumPy's WRITEBACKIFCOPY resolved at
+        /// NpyIter_Deallocate). Not duplicated by <see cref="Copy"/> and not
+        /// carried by <c>TransferStateOwnership</c> — the write-back belongs to
+        /// the constructing NpyIterRef.
+        /// </summary>
+        private NDArray?[]? _writebackOriginals;
+
         // =========================================================================
         // Factory Methods
         // =========================================================================
@@ -164,6 +175,21 @@ namespace NumSharp.Backends.Iteration
                 ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
             }
 
+            // COPY_IF_OVERLAP: if any write operand may share memory with any
+            // read operand, replace the WRITE operand with a temporary copy and
+            // register a write-back to the original on Dispose. This is what
+            // makes ufunc-style calls with overlapping in/out well-defined
+            // (e.g. add(a[:-1], a[:-1], out=a[1:])). Runs before the ALLOCATE
+            // loop so iterator-allocated outputs (null here) are skipped — a
+            // fresh allocation can never overlap an input.
+            // NumPy: nditer_constr.c:3083-3168 (npyiter_allocate_arrays).
+            if ((flags & NpyIterGlobalFlags.COPY_IF_OVERLAP) != 0)
+            {
+                var forceCopy = ComputeCopyIfOverlap(nop, op, opFlags);
+                if (forceCopy != null)
+                    MaterializeForcedCopies(nop, op, opFlags, forceCopy);
+            }
+
             // Allocate null operands that have ALLOCATE flag set.
             // NumPy: npyiter_allocate_arrays in nditer_constr.c
             // Allocated output has shape = broadcastShape (accounting for op_axes)
@@ -289,6 +315,13 @@ namespace NumSharp.Backends.Iteration
                 if (arr.typecode != bufferDtype)
                 {
                     opFlag |= NpyIterOpFlags.CAST;
+                }
+
+                // COPY_IF_OVERLAP replaced this operand with a temporary that
+                // is written back on Dispose (NumPy: FORCECOPY + WRITEBACKIFCOPY).
+                if (_writebackOriginals?[i] is not null)
+                {
+                    opFlag |= NpyIterOpFlags.FORCECOPY | NpyIterOpFlags.HAS_WRITEBACK;
                 }
 
                 _state->SetOpFlags(i, opFlag);
@@ -935,6 +968,161 @@ namespace NumSharp.Backends.Iteration
             if (!anyWriteMasked && maskOp >= 0)
                 throw new ArgumentException(
                     $"Operand {maskOp} has ARRAYMASK but no operand has WRITEMASKED.");
+        }
+
+        // =========================================================================
+        // COPY_IF_OVERLAP (NumPy nditer_constr.c:3083-3168)
+        // =========================================================================
+
+        /// <summary>
+        /// Decide which WRITE operands must be force-copied because they may
+        /// share memory with a READ operand. Returns null when no copies are
+        /// needed (the common case — fresh outputs never overlap inputs, and
+        /// the memory-extent fast path rejects disjoint buffers cheaply).
+        ///
+        /// Mirrors NumPy's check loop exactly: only write operands are copied
+        /// ("a more sophisticated heuristic could be substituted here later"),
+        /// read operands already force-copied are skipped, and the
+        /// OVERLAP_ASSUME_ELEMENTWISE pair short-circuit allows exact aliasing
+        /// (same data, same layout, no internal overlap) without a copy because
+        /// the caller's inner loop reads each element before writing it.
+        /// </summary>
+        private static bool[]? ComputeCopyIfOverlap(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags)
+        {
+            bool[]? force = null;
+
+            for (int iop = 0; iop < nop; iop++)
+            {
+                if (op[iop] is null)
+                    continue; // iterator will allocate — cannot overlap
+
+                if ((opFlags[iop] & (NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.READWRITE)) == 0)
+                    continue; // copy output operands only, not inputs
+
+                bool mayShare = false;
+                for (int iother = 0; iother < nop; iother++)
+                {
+                    if (iother == iop || op[iother] is null)
+                        continue;
+
+                    if ((opFlags[iother] & (NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.READWRITE)) == 0)
+                        continue; // no data dependence for arrays not read from
+
+                    if (force != null && force[iother])
+                        continue; // already copied
+
+                    if (AssumeElementwiseExactAlias(op[iop], op[iother], opFlags[iop], opFlags[iother]))
+                        continue;
+
+                    // Use max work = 1, as NumPy does for this check.
+                    if (NpyMemOverlap.SolveMayShareMemory(op[iop], op[iother], maxWork: 1) != MemOverlap.No)
+                    {
+                        mayShare = true;
+                        break;
+                    }
+                }
+
+                if (mayShare)
+                {
+                    force ??= new bool[nop];
+                    force[iop] = true;
+                }
+            }
+
+            return force;
+        }
+
+        /// <summary>
+        /// The OVERLAP_ASSUME_ELEMENTWISE short-circuit: views of exactly the
+        /// same data with identical layout need no copy when the caller
+        /// accesses data strictly element-by-element in iterator order — but
+        /// only if the array has no internal overlap (e.g. a stride-0
+        /// broadcast dimension). NumPy nditer_constr.c:3130-3152.
+        /// </summary>
+        private static bool AssumeElementwiseExactAlias(NDArray a, NDArray b, NpyIterPerOpFlags aFlags, NpyIterPerOpFlags bFlags)
+        {
+            if ((aFlags & NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP) == 0 ||
+                (bFlags & NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP) == 0)
+                return false;
+
+            if (a.GetTypeCode != b.GetTypeCode)
+                return false;
+
+            var sa = a.Shape;
+            var sb = b.Shape;
+            if (sa.NDim != sb.NDim)
+                return false;
+
+            int itemsize = a.GetTypeCode.SizeOf();
+            byte* baseA = (byte*)a.Address + (long)sa.offset * itemsize;
+            byte* baseB = (byte*)b.Address + (long)sb.offset * itemsize;
+            if (baseA != baseB)
+                return false;
+
+            var dimsA = sa.dimensions;
+            var dimsB = sb.dimensions;
+            var stridesA = sa.strides;
+            var stridesB = sb.strides;
+            for (int d = 0; d < sa.NDim; d++)
+            {
+                if (dimsA[d] != dimsB[d] || stridesA[d] != stridesB[d])
+                    return false;
+            }
+
+            return NpyMemOverlap.SolveMayHaveInternalOverlap(a, maxWork: 1) == MemOverlap.No;
+        }
+
+        /// <summary>
+        /// Replace each force-copied WRITE operand with a fresh C-order
+        /// temporary: copy the original in when the operand is also READ, and
+        /// register the original for write-back on <see cref="Dispose"/>.
+        /// NumPy: the FORCECOPY branch of npyiter_allocate_arrays
+        /// (nditer_constr.c:3259-3311, WRITEBACKIFCOPY).
+        /// </summary>
+        private void MaterializeForcedCopies(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags, bool[] forceCopy)
+        {
+            for (int iop = 0; iop < nop; iop++)
+            {
+                if (!forceCopy[iop])
+                    continue;
+
+                var original = op[iop];
+                var temp = new NDArray(original.GetTypeCode, original.Shape.Clean(), fillZeros: false);
+
+                // If the data will be read, copy it into the temporary.
+                if ((opFlags[iop] & (NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.READWRITE)) != 0)
+                    np.copyto(temp, original);
+
+                op[iop] = temp;
+
+                _writebackOriginals ??= new NDArray?[nop];
+                _writebackOriginals[iop] = original;
+            }
+        }
+
+        /// <summary>
+        /// Resolve pending COPY_IF_OVERLAP write-backs: copy each temporary
+        /// operand back into the user's original array. Idempotent. NumPy
+        /// resolves WRITEBACKIFCOPY in NpyIter_Deallocate.
+        /// </summary>
+        private void ResolveWritebacks()
+        {
+            var originals = _writebackOriginals;
+            if (originals is null)
+                return;
+            _writebackOriginals = null;
+
+            var ops = _operands;
+            if (ops is null)
+                return;
+
+            for (int iop = 0; iop < originals.Length && iop < ops.Length; iop++)
+            {
+                var original = originals[iop];
+                if (original is null)
+                    continue;
+                np.copyto(original, ops[iop]);
+            }
         }
 
         /// <summary>
@@ -3114,6 +3302,10 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public void Dispose()
         {
+            // COPY_IF_OVERLAP write-backs must resolve regardless of state
+            // ownership (NumPy resolves WRITEBACKIFCOPY in NpyIter_Deallocate).
+            ResolveWritebacks();
+
             if (_ownsState && _state != null)
             {
                 // Free any buffers using NpyIterBufferManager.FreeBuffers

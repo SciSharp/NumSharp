@@ -314,16 +314,21 @@ namespace NumSharp.Backends
 
             try
             {
+                // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE mirrors NumPy's
+                // ufunc iterator flags (ufunc_object.c:1070): overlapping
+                // write/read operands force a write-back temporary; exact
+                // aliasing stays copy-free because this loop is elementwise.
+                // With a freshly allocated result this is a cheap extent check.
                 using var iter = NpyIterRef.MultiNew(
                     3, new[] { lhs, rhs, result },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP,
+                    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
                     order,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     new[]
                     {
-                        NpyIterPerOpFlags.READONLY,
-                        NpyIterPerOpFlags.READONLY,
-                        NpyIterPerOpFlags.WRITEONLY,
+                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
                     });
 
                 iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);

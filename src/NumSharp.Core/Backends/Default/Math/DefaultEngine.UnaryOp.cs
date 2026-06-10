@@ -481,11 +481,18 @@ namespace NumSharp.Backends
 
             try
             {
+                // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE per NumPy's ufunc
+                // iterator flags (ufunc_object.c:1070); cheap extent check here
+                // since the result is freshly allocated.
                 using var iter = NpyIterRef.MultiNew(
                     2, new[] { nd, result },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP,
+                    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
                     order, NPY_CASTING.NPY_SAFE_CASTING,
-                    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY });
+                    new[]
+                    {
+                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                    });
 
                 iter.ExecuteElementWiseUnary(inputType, outputType, scalarBody, vectorBody, cacheKey);
             }

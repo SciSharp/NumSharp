@@ -72,7 +72,7 @@ From source audit (`NpyIter*.cs` vs `nditer_constr.c`/`nditer_api.c`/`ufunc_obje
 ### Declared but hollow (the capability gaps)
 | capability | state | NumPy behavior |
 |---|---|---|
-| **COPY_IF_OVERLAP / overlap detection** | ❌ **nothing anywhere** (proven corruption) | ufuncs always pass it; `mem_overlap.c` bounds-check + Diophantine solver |
+| **COPY_IF_OVERLAP / overlap detection** | ✅ **implemented (Wave 1.1, 2026-06-10)** — `NpyMemOverlap.cs` full solver port + FORCECOPY/write-back; production element-wise routes pass the flag | ufuncs always pass it; `mem_overlap.c` bounds-check + Diophantine solver |
 | **WRITEMASKED execution** | ❌ masks ignored at execute/copy-back | masked transfer functions skip masked-off elements |
 | **VIRTUAL operands** | ❌ debug-print only | buffer-only operand, no backing array |
 | **RANGED iteration** | ⚠️ machinery exists (`ResetToIterIndexRange`), **no construction flag handling, no consumer** | `NpyIter_ResetToIterIndexRange` — basis for threaded ufuncs in downstream libs |
@@ -99,7 +99,7 @@ From source audit (`NpyIter*.cs` vs `nditer_constr.c`/`nditer_api.c`/`ufunc_obje
 
 **B. Pairwise paths (6):** SimdFull ✅ · SimdScalarLeft/Right ✅ · SimdChunk ✅ (inner-contig runtime dispatch) · **General ❌ scalar (S1/S2)** · mixed dtypes ⚠️ (correct, fast-ish, but scalar body — no SIMD).
 
-**C. Per-operand (8):** **aliased/overlapping ❌❌ silent corruption** · **in-place `out=` ❌ no API** · REDUCE operand ✅ · **WRITEMASKED ❌ exec missing** · **VIRTUAL ❌ stub** · buffered/cast ⚠️ (works via bridge; Advance bug latent) · read-only ✅.
+**C. Per-operand (8):** aliased/overlapping ✅ **fixed (Wave 1.1: COPY_IF_OVERLAP + write-back)** · **in-place `out=` ❌ no API** · REDUCE operand ✅ · **WRITEMASKED ❌ exec missing** · **VIRTUAL ❌ stub** · buffered/cast ⚠️ (works via bridge; Advance bug latent) · read-only ✅.
 
 **D. Iteration flags (8):** coalesced ✅ · IDENTPERM/NEGPERM ✅ · EXLOOP ✅ · **RANGED ⚠️ unused machinery** · GROWINNER ✅ buffered-only · **GATHER_ELIGIBLE ❌ unwired** · EARLY_EXIT ⚠️ (ExecuteReducing early-exits; flag itself dead) · **PARALLEL_SAFE ❌ unwired**.
 
@@ -114,7 +114,7 @@ Each wave is independently shippable, gated by `variation_probe.{cs,py}` + the f
 ### Wave 1 — Correctness (blockers for "global core" status)
 | # | change | files | evidence/gate |
 |---|---|---|---|
-| 1.1 | **Overlap detection + COPY_IF_OVERLAP.** Port NumPy's `mem_overlap.c` bounds-interval check (conservative first; exact Diophantine later). Honor the flag in `MultiNew`; pass it from the production binary/unary/compare routes like NumPy's ufunc layer does; add `OVERLAP_ASSUME_ELEMENTWISE` short-circuit (the common `out=input` identity case must NOT copy). | new `NpyIterOverlap.cs`; `NpyIter.cs` construction | overlap probe in `variation_probe.cs` returns NumPy-identical; overlap test matrix (forward/backward/partial/self) |
+| 1.1 | ✅ **DONE (2026-06-10).** **Overlap detection + COPY_IF_OVERLAP** — full port of NumPy's `mem_overlap.c` (`NpyMemOverlap.cs`: extent fast path + GCD-pruned bounded-Diophantine DFS with Int128 intermediates, maxWork semantics 0/-1/N), FORCECOPY + write-back-on-Dispose in `NpyIter.cs` (nditer_constr.c:3083-3311 parity incl. the `OVERLAP_ASSUME_ELEMENTWISE` exact-alias short-circuit + internal-overlap check), flags wired into the production binary/unary/compare routes. Solver validated 14/14 against `np.shares_memory`/`np.may_share_memory`; behaviors B1–B7 NumPy-identical; 13 tests in `NpyIterOverlapTests.cs`; suite 9490 green; no perf regression (small-N 1.37 µs, fresh outputs cost one extent check). **Bonus bug found & guarded:** the Layer-2 typed helpers (`ExecuteBinary`/`ExecuteUnary`/`ExecuteComparison`/`ExecuteScan`) bridge to whole-array kernels that IGNORE output strides — a strided write operand was silently written contiguously; now throws `InvalidOperationException` (proper fix = Phase 3 per-chunk migration; Tier-3B route was always correct). Note: write-back resolves at `Dispose` (NumPy WRITEBACKIFCOPY semantics) — consume results after the `using` scope. |
 | 1.2 | **Buffered-cast Advance fix (bug b).** Advance buffered operands by `BufStrides`, not `Strides×ElementSizes`. Prereq for Wave 4. | `NpyIter.State.cs:730`, `NpyIter.cs:1511/1521` | new multi-fill (>8192) buffered-cast test |
 | 1.3 | **WRITEMASKED/ARRAYMASK execution + VIRTUAL operands.** Masked copy-back in `NpyIterBufferManager`, masked write contract in `ForEach`/Tier-3B; VIRTUAL = buffer-only operand. Unlocks `np.place`/`copyto(where=)`/`np.where` migration onto one driver. | `NpyIterBufferManager.cs`, `NpyIter.Execution.cs` | masked-write parity tests vs NumPy |
 | 1.4 | Hygiene: CA2014 stackalloc-in-loop (`NpyIterCoalescing.cs:244`); audit coalescing size-1-axis stride rule; delete-or-wire the dead extension flags. | — | suite |

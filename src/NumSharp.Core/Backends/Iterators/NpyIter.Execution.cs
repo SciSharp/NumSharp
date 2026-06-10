@@ -305,6 +305,45 @@ namespace NumSharp.Backends.Iteration
         // =====================================================================
 
         /// <summary>
+        /// True when operand <paramref name="iop"/>'s strides describe exactly
+        /// C-contiguous traversal of the current iteration shape (post
+        /// coalescing/reordering) — the layout the legacy whole-array kernels
+        /// assume for their output operand. Size-1 and size-0 dims accept any
+        /// stride.
+        /// </summary>
+        private bool IsOperandIterContiguous(int iop)
+        {
+            int ndim = _state->NDim;
+            long* strides = _state->GetStridesPointer(iop);
+            long expected = 1;
+            for (int d = ndim - 1; d >= 0; d--)
+            {
+                long dim = _state->Shape[d];
+                if (dim > 1 && strides[d] != expected)
+                    return false;
+                expected *= dim;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Contract guard for the Layer-2 typed helpers: they bridge to legacy
+        /// whole-array Direct kernels that IGNORE output strides (the output is
+        /// assumed freshly allocated and C-contiguous). A strided/offset write
+        /// operand would be silently written contiguously — fail loudly instead.
+        /// Per-chunk routes (ExecuteElementWise*/ForEach) honor all strides.
+        /// </summary>
+        private void RequireContiguousOutput(int iop, string method)
+        {
+            if (!IsOperandIterContiguous(iop))
+                throw new InvalidOperationException(
+                    $"{method} requires a C-contiguous output operand (operand {iop}): the legacy " +
+                    "whole-array kernel it bridges to ignores output strides and would write the " +
+                    "result contiguously. Use ExecuteElementWise*/ForEach (per-chunk kernels honor " +
+                    "operand strides) or provide a contiguous output.");
+        }
+
+        /// <summary>
         /// Run a binary ufunc over three operands [in0, in1, out].
         /// Picks SimdFull / SimdScalarRight / SimdScalarLeft / SimdChunk /
         /// General based on the iterator's stride picture after coalescing.
@@ -314,6 +353,7 @@ namespace NumSharp.Backends.Iteration
             if (_state->NOp != 3)
                 throw new InvalidOperationException(
                     $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}.");
+            RequireContiguousOutput(2, nameof(ExecuteBinary));
 
             // Buffered path needs the whole-array kernel signature because the
             // iterator writes into aligned buffers whose strides == elementSize.
@@ -358,6 +398,7 @@ namespace NumSharp.Backends.Iteration
             if (_state->NOp != 2)
                 throw new InvalidOperationException(
                     $"ExecuteUnary requires 2 operands (in, out); got {_state->NOp}.");
+            RequireContiguousOutput(1, nameof(ExecuteUnary));
 
             int ndim = _state->NDim;
             bool isContig = (_state->ItFlags & (uint)NpyIterFlags.CONTIGUOUS) != 0;
@@ -453,6 +494,7 @@ namespace NumSharp.Backends.Iteration
             if (_state->NOp != 3)
                 throw new InvalidOperationException(
                     $"ExecuteComparison requires 3 operands; got {_state->NOp}.");
+            RequireContiguousOutput(2, nameof(ExecuteComparison));
 
             var key = new ComparisonKernelKey(
                 _state->GetOpDType(0),
@@ -487,6 +529,7 @@ namespace NumSharp.Backends.Iteration
             if (_state->NOp != 2)
                 throw new InvalidOperationException(
                     $"ExecuteScan requires 2 operands (in, out); got {_state->NOp}.");
+            RequireContiguousOutput(1, nameof(ExecuteScan));
 
             int ndim = _state->NDim;
             bool isContig = (_state->ItFlags & (uint)NpyIterFlags.CONTIGUOUS) != 0;
