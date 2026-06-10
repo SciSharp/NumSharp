@@ -2,6 +2,7 @@
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
+#:property Optimize=true
 // =============================================================================
 // POC — NpyIter-driven execution at NumPy parity or better
 // =============================================================================
@@ -15,12 +16,18 @@
 // Every aspect goes through the REAL NpyIterRef machinery:
 //   MultiNew -> ForEach(kernel) / ExecuteUnary / ExecuteBinary /
 //   ExecuteExpression.
-// The strided kernels below are POC implementations of the Phase 2a
-// fused-gather inner loop (raw-pointer Vector256.Create — the only proven
-// technique, handover doc section 4.3), written as CONCRETE methods per the
-// Phase 2b JIT findings (interface/generic indirection costs 1.5-7x at
-// gather density). A stride-2 vpermd-compaction variant was measured 2x
-// SLOWER than the gather on this machine (interleaved A/B) — gather stands.
+// The strided kernels below are POC implementations of the Phase 2a inner
+// loop, written as CONCRETE methods per the Phase 2b JIT findings. Strided
+// loads use AVX2 HARDWARE GATHER (Avx2.GatherVector256, scale=1, byte-offset
+// indices hoisted out of the loop) — the same technique NumPy uses for its
+// strided unary loops (npyv_loadn_f32 = _mm256_i32gather_ps,
+// simd/avx2/memory.h). For strided BINARY ops NumPy has NO simd path at all
+// (loops_arithm_fp.dispatch.c.src falls to a scalar loop), and for strided
+// REDUCTION it uses a scalar 8-accumulator loop (loops_utils.h.src
+// pairwise_sum) — hardware gather beats both on Raptor Lake (measured
+// interleaved, Release: C 334 vs 399 us, E 121 vs 221 us).
+// Software insert-gather (raw-pointer Vector256.Create) is the fallback when
+// AVX2 is unavailable or strides exceed the int32 index range.
 //
 // METHODOLOGY
 // -----------
@@ -32,7 +39,14 @@
 // Fusion aspects let the EAGER side allocate its intermediate temporaries —
 // eliminating those is precisely what fusion is.
 //
-// Run:        dotnet_run < benchmark/poc/npyiter_parity_poc.cs
+// CRITICAL: must run with the JIT optimizer enabled on BOTH the script
+// assembly and NumSharp.Core. `dotnet run file.cs` builds DEBUG by default
+// (DebuggableAttribute.DisableOptimizations — the JIT honors it even over
+// AggressiveOptimization), which silently doubles the strided kernel times
+// while leaving DynamicMethod-emitted kernels (A/B/F/G) unaffected. The
+// script asserts this at startup.
+//
+// Run:        dotnet run -c Release - < benchmark/poc/npyiter_parity_poc.cs
 // NumPy side: python benchmark/poc/npyiter_parity_poc.py
 // =============================================================================
 using System.Diagnostics;
@@ -59,6 +73,19 @@ const int N1M = 1_000_000;
 const int N10M = 10_000_000;
 
 Console.WriteLine($"AVX2={Avx2.IsSupported}  (AVX-512 absent on this machine and in NumPy's dispatch)");
+
+// Refuse to print misleading numbers from Debug-JITted code (see header).
+{
+    var dbgScript = Attribute.GetCustomAttribute(typeof(PocKernels).Assembly, typeof(System.Diagnostics.DebuggableAttribute)) as System.Diagnostics.DebuggableAttribute;
+    var dbgCore = Attribute.GetCustomAttribute(typeof(np).Assembly, typeof(System.Diagnostics.DebuggableAttribute)) as System.Diagnostics.DebuggableAttribute;
+    bool scriptDbg = dbgScript?.IsJITOptimizerDisabled ?? false;
+    bool coreDbg = dbgCore?.IsJITOptimizerDisabled ?? false;
+    if (scriptDbg || coreDbg)
+    {
+        Console.WriteLine($"!! JIT OPTIMIZER DISABLED (script={(scriptDbg ? "DEBUG" : "ok")}, NumSharp.Core={(coreDbg ? "DEBUG" : "ok")}) — numbers below are INVALID.");
+        Console.WriteLine("!! Run:  dotnet run -c Release - < benchmark/poc/npyiter_parity_poc.cs");
+    }
+}
 Console.WriteLine();
 Console.WriteLine("aspect                                NumSharp/NpyIter");
 Console.WriteLine("--------------------------------------------------------");
@@ -266,8 +293,34 @@ static unsafe class PocKernels
                     pa += 32; pb += 32; po += 32;
                 }
             }
+            else if (Avx2.IsSupported && GatherableStride(sa) && GatherableStride(sb))
+            {
+                // NumPy-style hardware gather (vgatherdps), byte-offset indices
+                // hoisted out of the loop — the hot loop is stride-agnostic.
+                int isa = (int)sa, isb = (int)sb;
+                var idxA = Vector256.Create(0, isa, 2 * isa, 3 * isa, 4 * isa, 5 * isa, 6 * isa, 7 * isa);
+                var idxB = Vector256.Create(0, isb, 2 * isb, 3 * isb, 4 * isb, 5 * isb, 6 * isb, 7 * isb);
+                for (; i + 16 <= count; i += 16)
+                {
+                    var va0 = Avx2.GatherVector256((float*)pa, idxA, 1);
+                    var vb0 = Avx2.GatherVector256((float*)pb, idxB, 1);
+                    var va1 = Avx2.GatherVector256((float*)(pa + 8 * sa), idxA, 1);
+                    var vb1 = Avx2.GatherVector256((float*)(pb + 8 * sb), idxB, 1);
+                    Vector256.Store(Avx.Add(va0, vb0), (float*)po);
+                    Vector256.Store(Avx.Add(va1, vb1), (float*)(po + 32));
+                    pa += 16 * sa; pb += 16 * sb; po += 64;
+                }
+                for (; i + 8 <= count; i += 8)
+                {
+                    Vector256.Store(Avx.Add(
+                        Avx2.GatherVector256((float*)pa, idxA, 1),
+                        Avx2.GatherVector256((float*)pb, idxB, 1)), (float*)po);
+                    pa += 8 * sa; pb += 8 * sb; po += 32;
+                }
+            }
             else
             {
+                // software insert-gather fallback
                 for (; i + 8 <= count; i += 8)
                 {
                     var va = Vector256.Create(
@@ -289,6 +342,10 @@ static unsafe class PocKernels
         }
     }
 
+    /// <summary>Byte stride usable as a vgather int32 index: |7*stride| must fit in int32.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool GatherableStride(long s) => s >= int.MinValue / 8 && s <= int.MaxValue / 8;
+
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static void SqrtF32(void** dp, long* strides, long count, void* aux)
     {
@@ -305,6 +362,30 @@ static unsafe class PocKernels
                 {
                     Vector256.Store(Avx.Sqrt(Vector256.Load((float*)ps)), (float*)po);
                     ps += 32; po += 32;
+                }
+            }
+            else if (Avx2.IsSupported && GatherableStride(ss))
+            {
+                // NumPy's exact technique for strided unary: hardware gather,
+                // 4x unrolled (loops_unary_fp.dispatch.c.src NCONTIG_CONTIG).
+                int iss = (int)ss;
+                var idx = Vector256.Create(0, iss, 2 * iss, 3 * iss, 4 * iss, 5 * iss, 6 * iss, 7 * iss);
+                for (; i + 32 <= count; i += 32)
+                {
+                    var v0 = Avx2.GatherVector256((float*)ps, idx, 1);
+                    var v1 = Avx2.GatherVector256((float*)(ps + 8 * ss), idx, 1);
+                    var v2 = Avx2.GatherVector256((float*)(ps + 16 * ss), idx, 1);
+                    var v3 = Avx2.GatherVector256((float*)(ps + 24 * ss), idx, 1);
+                    Vector256.Store(Avx.Sqrt(v0), (float*)po);
+                    Vector256.Store(Avx.Sqrt(v1), (float*)(po + 32));
+                    Vector256.Store(Avx.Sqrt(v2), (float*)(po + 64));
+                    Vector256.Store(Avx.Sqrt(v3), (float*)(po + 96));
+                    ps += 32 * ss; po += 128;
+                }
+                for (; i + 8 <= count; i += 8)
+                {
+                    Vector256.Store(Avx.Sqrt(Avx2.GatherVector256((float*)ps, idx, 1)), (float*)po);
+                    ps += 8 * ss; po += 32;
                 }
             }
             else
@@ -345,6 +426,31 @@ static unsafe class PocKernels
                 acc1 = Avx.Add(acc1, Vector256.Load((float*)(ps + 32)));
                 ps += 64;
             }
+        }
+        else if (Avx2.IsSupported && GatherableStride(ss))
+        {
+            // Hardware gather + 4 independent accumulators. NumPy has no SIMD
+            // here at all (strided pairwise_sum is a scalar 8-acc loop) — this
+            // is where the architecture overtakes it.
+            int iss = (int)ss;
+            var idx = Vector256.Create(0, iss, 2 * iss, 3 * iss, 4 * iss, 5 * iss, 6 * iss, 7 * iss);
+            var acc2 = Vector256<float>.Zero;
+            var acc3 = Vector256<float>.Zero;
+            for (; i + 32 <= count; i += 32)
+            {
+                acc0 = Avx.Add(acc0, Avx2.GatherVector256((float*)ps, idx, 1));
+                acc1 = Avx.Add(acc1, Avx2.GatherVector256((float*)(ps + 8 * ss), idx, 1));
+                acc2 = Avx.Add(acc2, Avx2.GatherVector256((float*)(ps + 16 * ss), idx, 1));
+                acc3 = Avx.Add(acc3, Avx2.GatherVector256((float*)(ps + 24 * ss), idx, 1));
+                ps += 32 * ss;
+            }
+            for (; i + 8 <= count; i += 8)
+            {
+                acc0 = Avx.Add(acc0, Avx2.GatherVector256((float*)ps, idx, 1));
+                ps += 8 * ss;
+            }
+            acc0 = Avx.Add(acc0, acc2);
+            acc1 = Avx.Add(acc1, acc3);
         }
         else
         {

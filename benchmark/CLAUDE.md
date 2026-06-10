@@ -4,6 +4,31 @@ This document provides comprehensive guidance for working with the NumSharp benc
 
 ---
 
+## ⚠️ CRITICAL: ad-hoc `dotnet run` scripts build DEBUG by default
+
+`dotnet run file.cs` / `dotnet_run <<'EOF'` (file-based apps) compile **both the
+script AND any `#:project`-referenced NumSharp.Core in Debug** with
+`DebuggableAttribute(DisableOptimizations)` — the JIT honors it even over
+`[MethodImpl(AggressiveOptimization)]`. Measured effect: hand-written C# hot
+loops run ~2× slower; `NpyIterRef` construction ~40% slower.
+
+**Rule: every timing script must run as `dotnet run -c Release - < script.cs`.**
+- `#:property Optimize=true` fixes only the *script* assembly — NumSharp.Core stays Debug.
+- `#:property Configuration=Release` changes output paths but the binaries remain unoptimized.
+- Only the command-line `-c Release` produces optimized script + optimized NumSharp.Core.
+
+**Diagnostic signature of a Debug-tainted measurement**: paths through
+`DynamicMethod`-emitted kernels (ILKernelGenerator, `ExecuteExpression`) look
+normal — emitted IL is always JIT-optimized — while hand-written C# kernels and
+NumSharp.Core C# glue inflate ~2×. If strided/custom-kernel numbers look ~2×
+worse than contiguous/IL-kernel numbers suggest, check
+`Assembly.GetCustomAttribute<DebuggableAttribute>().IsJITOptimizerDisabled`
+for both assemblies (see the startup guard in `poc/npyiter_parity_poc.cs`).
+
+The BenchmarkDotNet projects below are unaffected (they already mandate `-c Release`).
+
+---
+
 ## Table of Contents
 
 1. [Overview](#overview)
