@@ -127,6 +127,8 @@ namespace NumSharp.Backends.Iteration
         {
             if (kernel is null) throw new ArgumentNullException(nameof(kernel));
 
+            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
+
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
             long innerSize = ResolveInnerLoopCount();
@@ -134,12 +136,28 @@ namespace NumSharp.Backends.Iteration
             if (IsSingleInnerLoop())
             {
                 kernel(dataptrs, byteStrides, innerSize, auxdata);
+                // Windowed buffered single-fill: no iternext runs, so flush here.
+                FlushIfBuffered();
+                return;
+            }
+
+            // Windowed buffered (non-reduce): the kernel consumes one whole
+            // fill per call, so advance by WINDOW regardless of EXLOOP (the
+            // per-element protocol is only for user-facing Iternext walks).
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (_state->ItFlags & (uint)NpyIterFlags.REDUCE) == 0)
+            {
+                long* bufSize = GetInnerLoopSizePtr();
+                do
+                {
+                    kernel(dataptrs, byteStrides, *bufSize, auxdata);
+                } while (BufferedWindowAdvance());
                 return;
             }
 
             var iternext = GetIterNext();
 
-            // Buffered fills can change size at the tail, so re-read per call.
+            // Buffered (reduce) fills can change size at the tail, so re-read per call.
             if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
             {
                 long* bufSize = GetInnerLoopSizePtr();
@@ -183,7 +201,10 @@ namespace NumSharp.Backends.Iteration
         private long ResolveInnerLoopCount()
         {
             uint f = _state->ItFlags;
-            if ((f & (uint)NpyIterFlags.BUFFER) != 0) return _state->BufIterEnd;
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0)
+                return (f & (uint)NpyIterFlags.REDUCE) != 0
+                    ? _state->BufIterEnd          // legacy reduce double-loop semantics
+                    : _state->BufTransferSize;    // windowed fill size (NumPy NBF_SIZE)
             if ((f & (uint)NpyIterFlags.EXLOOP) != 0) return _state->Shape[_state->NDim - 1];
             return 1;
         }
@@ -200,6 +221,7 @@ namespace NumSharp.Backends.Iteration
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ExecuteGeneric<TKernel>(TKernel kernel) where TKernel : struct, INpyInnerLoop
         {
+            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
             if (IsSingleInnerLoop())
                 ExecuteGenericSingle(kernel);
             else
@@ -215,6 +237,8 @@ namespace NumSharp.Backends.Iteration
         private void ExecuteGenericSingle<TKernel>(TKernel kernel) where TKernel : struct, INpyInnerLoop
         {
             kernel.Execute(GetDataPtrArray(), GetInnerLoopByteStrides(), ResolveInnerLoopCount());
+            // Windowed buffered single-fill: no iternext runs, so flush here.
+            FlushIfBuffered();
         }
 
         /// <summary>Multi-loop path with do/while driver.</summary>
@@ -223,6 +247,18 @@ namespace NumSharp.Backends.Iteration
         {
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
+
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (_state->ItFlags & (uint)NpyIterFlags.REDUCE) == 0)
+            {
+                long* winSize = GetInnerLoopSizePtr();
+                do
+                {
+                    kernel.Execute(dataptrs, byteStrides, *winSize);
+                } while (BufferedWindowAdvance());
+                return;
+            }
+
             var iternext = GetIterNext();
 
             if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
@@ -250,12 +286,18 @@ namespace NumSharp.Backends.Iteration
         private bool IsSingleInnerLoop()
         {
             uint f = _state->ItFlags;
+            // Windowed buffered iteration overrides the EXLOOP/coalesce shortcut:
+            // even a fully-coalesced 1-D iterator needs one kernel call PER
+            // WINDOW when the iteration is larger than the buffer. Single only
+            // when the first window already covers the whole range.
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0 && (f & (uint)NpyIterFlags.REDUCE) == 0)
+                return _state->BufIterEnd >= _state->IterEnd;
             // ONEITERATION: iter size <= 1.
             if ((f & (uint)NpyIterFlags.ONEITERATION) != 0) return true;
             // Fully coalesced to one axis + EXLOOP: whole iteration is one inner loop.
             if ((f & (uint)NpyIterFlags.EXLOOP) != 0 && _state->NDim <= 1) return true;
-            // Buffered and whole iteration fits in one buffer fill.
-            if ((f & (uint)NpyIterFlags.BUFFER) != 0 && _state->BufIterEnd >= _state->IterSize) return true;
+            // Buffered (reduce) and whole iteration fits in one buffer fill.
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0 && _state->BufIterEnd >= _state->IterEnd) return true;
             return false;
         }
 
@@ -268,6 +310,8 @@ namespace NumSharp.Backends.Iteration
             where TKernel : struct, INpyReducingInnerLoop<TAccum>
             where TAccum : unmanaged
         {
+            EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
+
             void** dataptrs = GetDataPtrArray();
             long* byteStrides = GetInnerLoopByteStrides();
             TAccum accum = init;
@@ -275,6 +319,19 @@ namespace NumSharp.Backends.Iteration
             if (IsSingleInnerLoop())
             {
                 kernel.Execute(dataptrs, byteStrides, ResolveInnerLoopCount(), ref accum);
+                FlushIfBuffered();
+                return accum;
+            }
+
+            if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (_state->ItFlags & (uint)NpyIterFlags.REDUCE) == 0)
+            {
+                long* winSize = GetInnerLoopSizePtr();
+                do
+                {
+                    if (!kernel.Execute(dataptrs, byteStrides, *winSize, ref accum))
+                        break;
+                } while (BufferedWindowAdvance());
                 return accum;
             }
 
@@ -353,15 +410,18 @@ namespace NumSharp.Backends.Iteration
             if (_state->NOp != 3)
                 throw new InvalidOperationException(
                     $"ExecuteBinary requires 3 operands (in0, in1, out); got {_state->NOp}.");
-            RequireContiguousOutput(2, nameof(ExecuteBinary));
 
-            // Buffered path needs the whole-array kernel signature because the
-            // iterator writes into aligned buffers whose strides == elementSize.
+            // Buffered path first: a buffered (possibly strided/cast) output is
+            // legal there — the windowed write-back honors the array's true
+            // strides, so the contiguous-output guard below must not apply.
             if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
             {
+                EnsureBuffersReady();
                 RunBufferedBinary(op);
                 return;
             }
+
+            RequireContiguousOutput(2, nameof(ExecuteBinary));
 
             var key = new MixedTypeKernelKey(
                 _state->GetOpDType(0),
@@ -725,36 +785,101 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         private void RunBufferedBinary(BinaryOp op)
         {
+            // Windowed contract: DataPtrs point at tight buffers for buffered
+            // operands and at the array position for unbuffered (linear) ones;
+            // BufStrides holds each operand's effective inner byte stride.
+            // The whole-array MixedType kernel needs dense (elemSize) or
+            // scalar-broadcast (0) strides — pick the path accordingly, and
+            // reject layouts it cannot express (Tier-3B handles those).
+            bool dense0 = _state->BufStrides[0] == _state->GetElementSize(0);
+            bool dense1 = _state->BufStrides[1] == _state->GetElementSize(1);
+            bool dense2 = _state->BufStrides[2] == _state->GetElementSize(2);
+            bool zero0 = _state->BufStrides[0] == 0;
+            bool zero1 = _state->BufStrides[1] == 0;
+
+            if (!dense2)
+                throw new InvalidOperationException(
+                    "ExecuteBinary (buffered): the output operand is neither buffered nor " +
+                    "contiguous in iteration order. Route this layout through " +
+                    "ExecuteElementWise*/ForEach (per-chunk kernels honor operand strides).");
+
+            ExecutionPath path;
+            if (dense0 && dense1) path = ExecutionPath.SimdFull;
+            else if (zero0 && dense1) path = ExecutionPath.SimdScalarLeft;
+            else if (dense0 && zero1) path = ExecutionPath.SimdScalarRight;
+            else
+                throw new InvalidOperationException(
+                    "ExecuteBinary (buffered): input operands are neither buffered, contiguous, " +
+                    "nor scalar-broadcast in iteration order. Route this layout through " +
+                    "ExecuteElementWise*/ForEach.");
+
             var key = new MixedTypeKernelKey(
                 _state->GetOpDType(0),
                 _state->GetOpDType(1),
                 _state->GetOpDType(2),
                 op,
-                ExecutionPath.SimdFull);  // buffers are always contiguous
+                path);
             var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
-            // Single-axis byte strides for each operand = element size (buffer is tight).
-            long s0 = _state->BufStrides[0];
-            long s1 = _state->BufStrides[1];
-            long s2 = _state->BufStrides[2];
-            long* lhsStr = &s0;
-            long* rhsStr = &s1;
+            long lhsStr = 1, rhsStr = 1;
 
-            long shape0 = _state->BufIterEnd;
-            long* shape = &shape0;
-
-            // Drive the outer loop across buffer fills.
+            // Drive across buffer fills. Iternext -> BufferedNext flushes the
+            // window's WRITE operands (incl. the output buffer) back to the
+            // arrays and refills — including after the final window, so no
+            // manual write-back is needed here.
             do
             {
+                long count = _state->BufTransferSize;
+                if (count <= 0)
+                    break;
+                long shape0 = count;
                 kernel(
-                    _state->GetBuffer(0),
-                    _state->GetBuffer(1),
-                    _state->GetBuffer(2),
-                    lhsStr, rhsStr, shape, 1, _state->BufIterEnd);
+                    (void*)_state->DataPtrs[0],
+                    (void*)_state->DataPtrs[1],
+                    (void*)_state->DataPtrs[2],
+                    &lhsStr, &rhsStr, &shape0, 1, count);
+            } while (BufferedWindowAdvance());
 
-                // Flush the output buffer back into its array slot.
-                NpyIterBufferManager.CopyFromBuffer(ref *_state, 2, _state->BufIterEnd);
-            } while (Iternext());  // Iternext re-fills input buffers on each pass.
+            // Single-fill case never enters Iternext (it returns false up front
+            // only after flushing) — but if the loop exited via count<=0 or the
+            // iterator was already exhausted, make sure the window is flushed.
+            FlushIfBuffered();
+        }
+
+        /// <summary>
+        /// Flush the pending windowed-buffer write-backs (no-op for unbuffered,
+        /// reduce-buffered, or already-flushed iterators).
+        /// </summary>
+        /// <summary>
+        /// Advance the windowed buffered iterator by one whole fill (flush →
+        /// jump → refill), regardless of EXTERNAL_LOOP — used by the kernel
+        /// drivers, whose kernels always consume entire windows.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool BufferedWindowAdvance()
+        {
+            NpyIterBufferManager.FlushBufferWindow(ref *_state);
+
+            _state->IterIndex = _state->BufIterEnd;
+            if (_state->IterIndex >= _state->IterEnd)
+                return false;
+
+            _state->GotoIterIndex(_state->IterIndex);
+            long count = NpyIterBufferManager.ComputeTransferSize(ref *_state);
+            NpyIterBufferManager.FillBufferWindow(ref *_state, count);
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void FlushIfBuffered()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (f & (uint)NpyIterFlags.REDUCE) == 0 &&
+                (f & (uint)NpyIterFlags.DELAYBUF) == 0)
+            {
+                NpyIterBufferManager.FlushBufferWindow(ref *_state);
+            }
         }
 
         // =====================================================================

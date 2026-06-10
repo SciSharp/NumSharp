@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Iteration
@@ -71,6 +72,19 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Allocate buffers for all operands that need buffering.
+        ///
+        /// Buffering criterion (NumPy nditer parity): an operand is buffered when
+        /// it needs a CAST, when the user requested CONTIG, or when its memory is
+        /// not a single linear walk across the whole (coalesced) iteration space
+        /// (<see cref="IsOperandIterLinear"/>). Linear operands — contiguous OR
+        /// constant-stride 1-D views OR fully-broadcast scalars — stay unbuffered
+        /// (BUFNEVER-style) and the kernel reads/writes the array directly through
+        /// its true stride, which the Tier-3B kernels handle (incl. AVX2 gather).
+        ///
+        /// For unbuffered operands, <see cref="NpyIterState.BufStrides"/> is set to
+        /// the operand's TRUE inner-axis byte stride so that
+        /// <c>GetInnerLoopByteStrides()</c> exposes one consistent stride array to
+        /// kernels under BUFFER. (Buffered operands get the tight element size.)
         /// </summary>
         public static bool AllocateBuffers(ref NpyIterState state, long bufferSize)
         {
@@ -86,11 +100,24 @@ namespace NumSharp.Backends.Iteration
 
                 // Skip if operand doesn't need buffering
                 if ((opFlags & NpyIterOpFlags.BUFNEVER) != 0)
+                {
+                    SetUnbufferedBufStride(ref state, op);
                     continue;
+                }
 
-                // Check if operand needs buffering (non-contiguous or needs cast)
-                if ((opFlags & (NpyIterOpFlags.CAST | NpyIterOpFlags.CONTIG)) != 0 ||
-                    !IsOperandContiguous(ref state, op))
+                // Buffered REDUCE keeps the historical criterion (its double-loop
+                // machinery owns BufStrides/DataPtr swapping for every operand,
+                // incl. the stride-0 accumulator slot). The windowed non-reduce
+                // path uses the linearity criterion so linear strided operands
+                // stay unbuffered and keep their true strides.
+                bool reduceIter = (state.ItFlags & (uint)NpyIterFlags.REDUCE) != 0;
+                bool needsBuffer =
+                    state.NeedsCast(op) ||
+                    (opFlags & (NpyIterOpFlags.CAST | NpyIterOpFlags.CONTIG | NpyIterOpFlags.REDUCE)) != 0 ||
+                    (reduceIter ? !IsOperandContiguous(ref state, op)
+                                : !IsOperandIterLinear(ref state, op));
+
+                if (needsBuffer)
                 {
                     var buffer = AllocateAligned(bufferSize, dtype);
                     if (buffer == null)
@@ -103,6 +130,60 @@ namespace NumSharp.Backends.Iteration
                     state.SetBuffer(op, buffer);
                     state.BufStrides[op] = state.GetElementSize(op);
                 }
+                else
+                {
+                    SetUnbufferedBufStride(ref state, op);
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Record the true inner-axis byte stride for an operand that is NOT
+        /// buffered, so kernels see correct strides via BufStrides under BUFFER.
+        /// </summary>
+        private static void SetUnbufferedBufStride(ref NpyIterState state, int op)
+        {
+            if (state.NDim == 0)
+            {
+                state.BufStrides[op] = 0;
+                return;
+            }
+
+            long innerElemStride = state.GetStride(state.NDim - 1, op);
+            state.BufStrides[op] = innerElemStride * state.GetSrcElementSize(op);
+        }
+
+        /// <summary>
+        /// True when the operand's memory positions form one arithmetic
+        /// progression over the entire (coalesced) iteration space — i.e. a
+        /// single 1-D walk at the inner stride covers every element in order.
+        /// Contiguous operands, constant-stride 1-D views, and fully-broadcast
+        /// (all-stride-0) operands qualify; genuinely multi-dimensional strided
+        /// operands do not.
+        /// </summary>
+        public static bool IsOperandIterLinear(ref NpyIterState state, int op)
+        {
+            if (state.NDim <= 1)
+                return true;
+
+            long inner = state.GetStride(state.NDim - 1, op);
+            long expected = inner * state.Shape[state.NDim - 1];
+
+            for (int d = state.NDim - 2; d >= 0; d--)
+            {
+                long dim = state.Shape[d];
+                if (dim == 0)
+                    return true;  // empty iteration — trivially linear
+
+                if (dim != 1)
+                {
+                    if (state.GetStride(d, op) != expected)
+                        return false;
+                }
+
+                expected *= dim;
             }
 
             return true;
@@ -464,6 +545,415 @@ namespace NumSharp.Backends.Iteration
                     coords[d] = 0;
                 }
             }
+        }
+
+        // =========================================================================
+        // Windowed buffered iteration (NumPy npyiter_copy_to_buffers /
+        // npyiter_copy_from_buffers / npyiter_buffered_iternext equivalents)
+        // =========================================================================
+        // A "window" is one buffer fill: BufTransferSize elements starting at the
+        // iterator's current position (IterIndex/Coords — which stay parked at the
+        // fill start while the kernel consumes the window; BufferedNext flushes,
+        // jumps, and refills).
+        //
+        // Per-operand semantics per fill (matching NumPy):
+        //   • buffered + READ      → strided/casting copy into the buffer
+        //   • buffered + WRITEONLY → no copy-in; kernel produces the contents
+        //   • buffered + WRITE     → flushed back to the array on iternext/Dispose
+        //   • unbuffered (linear)  → DataPtr stays in the array; BufStrides holds
+        //                            its true inner byte stride
+        //
+        // Fills are capped at BufferSize and, for NDim > 1, row-aligned (end on an
+        // inner-dimension boundary) — observed NumPy behavior: a (100,100) strided
+        // source with buffersize=4096 fills in chunks of 4000/4000/2000, with and
+        // without GROWINNER.
+        // =========================================================================
+
+        /// <summary>
+        /// Number of elements the next buffer fill should cover, from the
+        /// iterator's current position. Capped at <see cref="NpyIterState.BufferSize"/>;
+        /// for multi-dim iterations the window ends on an inner-row boundary
+        /// unless a single row exceeds the buffer (then a partial row is used).
+        /// </summary>
+        public static long ComputeTransferSize(ref NpyIterState state)
+        {
+            long remaining = state.IterEnd - state.IterIndex;
+            if (remaining <= 0)
+                return 0;
+
+            long cap = Math.Min(remaining, state.BufferSize);
+            if (state.NDim <= 1 || cap == remaining)
+                return cap;
+
+            long inner = state.Shape[state.NDim - 1];
+            if (inner <= 0)
+                return cap;
+
+            long posInRow = state.Coords[state.NDim - 1];
+            long firstRun = inner - posInRow;
+            if (cap <= firstRun)
+                return cap;  // can't finish the current row — partial-row fill
+
+            long wholeRows = (cap - firstRun) / inner;
+            return firstRun + wholeRows * inner;
+        }
+
+        /// <summary>
+        /// Fill all buffered READ operands from the iterator's current position
+        /// for <paramref name="count"/> elements, record the array write-back
+        /// positions, swap buffered operands' DataPtrs to their buffers, and set
+        /// the window bookkeeping (BufTransferSize / BufIterEnd / BufFlushed).
+        /// </summary>
+        public static void FillBufferWindow(ref NpyIterState state, long count)
+        {
+
+            // Save the array positions of the fill start: flush targets, and the
+            // restore points for unbuffered operands are simply unchanged.
+            for (int op = 0; op < state.NOp; op++)
+                state.SetArrayWritebackPtr(op, state.GetDataPtr(op));
+
+            for (int op = 0; op < state.NOp; op++)
+            {
+                var buffer = state.GetBuffer(op);
+                if (buffer == null)
+                    continue;
+
+                if ((state.GetOpFlags(op) & NpyIterOpFlags.READ) != 0 && count > 0)
+                    CopyWindowToBuffer(ref state, op, count);
+
+                state.SetDataPtr(op, buffer);
+            }
+
+            state.BufTransferSize = count;
+            state.BufIterEnd = state.IterIndex + count;
+            state.BufFlushed = 0;
+        }
+
+        /// <summary>
+        /// Write the current window's buffered WRITE operands back to their
+        /// arrays. Idempotent (BufFlushed) so iternext, the single-inner-loop
+        /// fast paths, and Dispose can all call it.
+        /// </summary>
+        public static void FlushBufferWindow(ref NpyIterState state)
+        {
+            if (state.BufFlushed != 0)
+                return;
+            state.BufFlushed = 1;
+
+            long count = state.BufTransferSize;
+            if (count <= 0)
+                return;
+
+            for (int op = 0; op < state.NOp; op++)
+            {
+                var buffer = state.GetBuffer(op);
+                if (buffer == null)
+                    continue;
+
+                if ((state.GetOpFlags(op) & NpyIterOpFlags.WRITE) != 0)
+                    CopyWindowFromBuffer(ref state, op, count);
+            }
+        }
+
+        /// <summary>
+        /// Strided/casting gather of <paramref name="count"/> elements from the
+        /// operand's array (starting at the fill-start position recorded in
+        /// ArrayWritebackPtrs, walking the iteration space from the current
+        /// Coords) into its tight contiguous buffer. Decomposes the window into
+        /// inner-axis runs and uses the SIMD IL cast kernels per run.
+        /// </summary>
+        private static void CopyWindowToBuffer(ref NpyIterState state, int op, long count)
+        {
+            var srcType = state.GetOpSrcDType(op);
+            var dstType = state.GetOpDType(op);
+            int srcSize = state.GetSrcElementSize(op);
+            int dstSize = state.GetElementSize(op);
+
+            byte* src = (byte*)state.GetArrayWritebackPtr(op);
+            byte* dst = (byte*)state.GetBuffer(op);
+
+            if (state.NDim <= 1)
+            {
+                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
+                CopyRunToBuffer(src, stride, srcType, srcSize, dst, dstType, count);
+                return;
+            }
+
+            int ndim = state.NDim;
+            int innerAxis = ndim - 1;
+            long innerLen = state.Shape[innerAxis];
+            long innerStride = state.GetStride(innerAxis, op);
+
+            // Local walk state — must NOT mutate the iterator's Coords.
+            long* coords;
+            long* coordsHeap = null;
+            if (ndim <= NpyIterState.StackAllocThreshold)
+            {
+                long* coordsStack = stackalloc long[ndim];
+                coords = coordsStack;
+            }
+            else
+            {
+                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
+                coords = coordsHeap;
+            }
+            try
+            {
+                for (int d = 0; d < ndim; d++)
+                    coords[d] = state.Coords[d];
+
+                long remaining = count;
+                while (remaining > 0)
+                {
+                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
+                    CopyRunToBuffer(src, innerStride, srcType, srcSize, dst, dstType, run);
+
+                    dst += run * dstSize;
+                    remaining -= run;
+                    if (remaining <= 0)
+                        break;
+
+                    // Row finished — ripple-carry to the next position, adjusting
+                    // the source pointer incrementally (same math as Advance()).
+                    src += run * innerStride * srcSize;
+                    coords[innerAxis] += run;
+
+                    for (int d = innerAxis; d >= 0; d--)
+                    {
+                        if (coords[d] < state.Shape[d])
+                            break;
+
+                        coords[d] = 0;
+                        src -= state.GetStride(d, op) * state.Shape[d] * srcSize;
+                        if (d == 0)
+                            break;
+                        coords[d - 1]++;
+                        src += state.GetStride(d - 1, op) * srcSize;
+                    }
+                }
+            }
+            finally
+            {
+                if (coordsHeap != null)
+                    NativeMemory.Free(coordsHeap);
+            }
+        }
+
+        /// <summary>
+        /// Scatter of <paramref name="count"/> elements from the operand's tight
+        /// contiguous buffer back into its array — the mirror of
+        /// <see cref="CopyWindowToBuffer"/> (same window: ArrayWritebackPtrs +
+        /// current Coords, which still describe the fill start).
+        /// </summary>
+        private static void CopyWindowFromBuffer(ref NpyIterState state, int op, long count)
+        {
+            var bufType = state.GetOpDType(op);
+            var arrType = state.GetOpSrcDType(op);
+            int bufSize = state.GetElementSize(op);
+            int arrSize = state.GetSrcElementSize(op);
+
+            byte* buf = (byte*)state.GetBuffer(op);
+            byte* dst = (byte*)state.GetArrayWritebackPtr(op);
+
+            if (state.NDim <= 1)
+            {
+                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
+                CopyRunFromBuffer(buf, bufType, bufSize, dst, stride, arrType, count);
+                return;
+            }
+
+            int ndim = state.NDim;
+            int innerAxis = ndim - 1;
+            long innerLen = state.Shape[innerAxis];
+            long innerStride = state.GetStride(innerAxis, op);
+
+            long* coords;
+            long* coordsHeap = null;
+            if (ndim <= NpyIterState.StackAllocThreshold)
+            {
+                long* coordsStack = stackalloc long[ndim];
+                coords = coordsStack;
+            }
+            else
+            {
+                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
+                coords = coordsHeap;
+            }
+            try
+            {
+                for (int d = 0; d < ndim; d++)
+                    coords[d] = state.Coords[d];
+
+                long remaining = count;
+                while (remaining > 0)
+                {
+                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
+                    CopyRunFromBuffer(buf, bufType, bufSize, dst, innerStride, arrType, run);
+
+                    buf += run * bufSize;
+                    remaining -= run;
+                    if (remaining <= 0)
+                        break;
+
+                    dst += run * innerStride * arrSize;
+                    coords[innerAxis] += run;
+
+                    for (int d = innerAxis; d >= 0; d--)
+                    {
+                        if (coords[d] < state.Shape[d])
+                            break;
+
+                        coords[d] = 0;
+                        dst -= state.GetStride(d, op) * state.Shape[d] * arrSize;
+                        if (d == 0)
+                            break;
+                        coords[d - 1]++;
+                        dst += state.GetStride(d - 1, op) * arrSize;
+                    }
+                }
+            }
+            finally
+            {
+                if (coordsHeap != null)
+                    NativeMemory.Free(coordsHeap);
+            }
+        }
+
+        /// <summary>
+        /// One inner-axis run: array (element stride <paramref name="srcStride"/>)
+        /// → tight buffer. SIMD IL cast kernels when available; same-type memcpy /
+        /// typed loop otherwise; scalar ConvertValue as the last resort
+        /// (Decimal/Half/Complex pairs the IL generator does not cover).
+        /// </summary>
+        private static void CopyRunToBuffer(
+            byte* src, long srcStride, NPTypeCode srcType, int srcSize,
+            byte* dst, NPTypeCode dstType, long count)
+        {
+            if (count <= 0)
+                return;
+
+
+            if (srcType == dstType)
+            {
+                if (srcStride == 1)
+                {
+                    Buffer.MemoryCopy(src, dst, count * srcSize, count * srcSize);
+                    return;
+                }
+
+                CopySameTypeStridedRun(src, srcStride, dst, 1, srcType, count);
+                return;
+            }
+
+            if (srcStride == 1)
+            {
+                var contig = DirectILKernelGenerator.TryGetCastKernel(srcType, dstType);
+                if (contig != null)
+                {
+                    contig(src, dst, count);
+                    return;
+                }
+            }
+            else
+            {
+                var strided = DirectILKernelGenerator.TryGetStridedCastKernel(srcType, dstType);
+                if (strided != null)
+                {
+                    long srcStrideLocal = srcStride;
+                    long dstStrideLocal = 1;
+                    long shapeLocal = count;
+                    strided(src, dst, &srcStrideLocal, &dstStrideLocal, &shapeLocal, 1);
+                    return;
+                }
+            }
+
+            NpyIterCasting.CopyWithCast(src, srcStride, srcType, dst, 1, dstType, count);
+        }
+
+        /// <summary>
+        /// One inner-axis run: tight buffer → array (element stride
+        /// <paramref name="dstStride"/>). Mirror of <see cref="CopyRunToBuffer"/>.
+        /// </summary>
+        private static void CopyRunFromBuffer(
+            byte* buf, NPTypeCode bufType, int bufSize,
+            byte* dst, long dstStride, NPTypeCode arrType, long count)
+        {
+            if (count <= 0)
+                return;
+
+            if (bufType == arrType)
+            {
+                if (dstStride == 1)
+                {
+                    Buffer.MemoryCopy(buf, dst, count * bufSize, count * bufSize);
+                    return;
+                }
+
+                CopySameTypeStridedRun(buf, 1, dst, dstStride, bufType, count);
+                return;
+            }
+
+            if (dstStride == 1)
+            {
+                var contig = DirectILKernelGenerator.TryGetCastKernel(bufType, arrType);
+                if (contig != null)
+                {
+                    contig(buf, dst, count);
+                    return;
+                }
+            }
+            else
+            {
+                var strided = DirectILKernelGenerator.TryGetStridedCastKernel(bufType, arrType);
+                if (strided != null)
+                {
+                    long srcStrideLocal = 1;
+                    long dstStrideLocal = dstStride;
+                    long shapeLocal = count;
+                    strided(buf, dst, &srcStrideLocal, &dstStrideLocal, &shapeLocal, 1);
+                    return;
+                }
+            }
+
+            NpyIterCasting.CopyWithCast(buf, 1, bufType, dst, dstStride, arrType, count);
+        }
+
+        /// <summary>
+        /// Same-dtype strided 1-D run copy (src/dst element strides). Mirrors the
+        /// file's existing per-dtype dispatch style.
+        /// </summary>
+        private static void CopySameTypeStridedRun(
+            byte* src, long srcStride, byte* dst, long dstStride, NPTypeCode dtype, long count)
+        {
+            switch (dtype)
+            {
+                case NPTypeCode.Boolean: StridedRun<bool>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Byte: StridedRun<byte>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.SByte: StridedRun<sbyte>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Int16: StridedRun<short>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.UInt16: StridedRun<ushort>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Int32: StridedRun<int>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.UInt32: StridedRun<uint>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Int64: StridedRun<long>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.UInt64: StridedRun<ulong>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Char: StridedRun<char>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Half: StridedRun<Half>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Single: StridedRun<float>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Double: StridedRun<double>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Decimal: StridedRun<decimal>(src, srcStride, dst, dstStride, count); break;
+                case NPTypeCode.Complex: StridedRun<System.Numerics.Complex>(src, srcStride, dst, dstStride, count); break;
+                default: throw new NotSupportedException($"Buffer run copy not supported for dtype {dtype}");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void StridedRun<T>(byte* src, long srcStride, byte* dst, long dstStride, long count)
+            where T : unmanaged
+        {
+            var s = (T*)src;
+            var d = (T*)dst;
+            for (long i = 0; i < count; i++)
+                d[i * dstStride] = s[i * srcStride];
         }
 
         // =========================================================================

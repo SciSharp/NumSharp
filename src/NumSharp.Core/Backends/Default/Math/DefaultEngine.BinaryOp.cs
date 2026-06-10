@@ -288,6 +288,22 @@ namespace NumSharp.Backends
                               && DirectILKernelGenerator.CanUseSimd(resultType)
                               && DirectILKernelGenerator.CanUseSimdForOp(op);
 
+            // NOTE (Wave 4, measured): the buffered-cast route (NumPy's ufunc
+            // config — cast inputs to the computation dtype in 8192-element
+            // windows, then run the same-dtype SIMD body) was implemented and
+            // A/B-measured here, and LOST to this fused per-element-convert
+            // path for every SIMD-able binary op class on i9-13900K/Release:
+            //   add contig 2M:  buffered 2.20 ms vs fused 1.49 ms
+            //   add strided 1M: buffered 3.18 ms vs fused 2.98 ms
+            //   div contig 2M:  buffered 1.72 ms vs fused 1.61 ms
+            // The extra buffer round-trip (~16 B/element of L2 traffic + window
+            // machinery) outweighs the SIMD gain on cheap ops. NumPy buffers
+            // because its AOT C loops cannot fuse casts; our runtime IL CAN —
+            // the fused path also beats NumPy itself (i32+f64 4M: 5.8-6.9 ms vs
+            // NumPy 7.3-7.6 ms). Promoting UNARY math ops (sqrt/exp/...) DO use
+            // the buffered-cast route (see DefaultEngine.UnaryOp) where the
+            // SIMD body wins 1.36x+. Revisit only with new A/B evidence.
+            //
             // Build per-element scalar emit body. For same-dtype we just call
             // EmitScalarOperation directly. For mixed-dtype we wrap it with
             // a per-operand convert pass (the direct path's

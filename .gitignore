@@ -368,3 +368,4 @@ benchmark/numpy-results.json
 benchmark/benchmark-report.json
 benchmark/benchmark-report.csv
 benchmark/.claude_*.log
+/.claude/scripts

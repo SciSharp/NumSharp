@@ -351,7 +351,13 @@ namespace NumSharp.UnitTest.Backends
         [TestMethod]
         public void NpyIterCopy_BufferedIterator_AllocatesIndependentBuffers()
         {
-            var source = np.arange(16)["::2"];
+            // NOTE: a same-dtype linear-strided operand is no longer buffered
+            // (NumPy parity: 'buffered' enables buffering only when REQUIRED —
+            // cast / non-linear layout). Request float64 op_dtypes over the
+            // int32 source so the operand genuinely needs a cast buffer,
+            // preserving this test's purpose: Copy() must duplicate the
+            // buffer storage, not alias it.
+            var source = np.arange(16)["::2"].astype(np.int32);
 
             using var iter = NpyIterRef.AdvancedNew(
                 nop: 1,
@@ -360,12 +366,13 @@ namespace NumSharp.UnitTest.Backends
                 order: NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_SAFE_CASTING,
                 opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                opDtypes: new[] { NPTypeCode.Double },
                 bufferSize: 4);
 
             using var copy = iter.Copy();
 
             Assert.AreNotEqual((nint)iter.GetDataPtr(0), (nint)copy.GetDataPtr(0));
-            Assert.AreEqual(iter.GetValue<int>(0), copy.GetValue<int>(0));
+            Assert.AreEqual(iter.GetValue<double>(0), copy.GetValue<double>(0));
 
             Assert.IsTrue(iter.Iternext());
             Assert.AreEqual(1, iter.IterIndex);

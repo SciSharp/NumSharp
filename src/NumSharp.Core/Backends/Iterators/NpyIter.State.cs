@@ -203,6 +203,23 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Current buffer iteration end.</summary>
         public long BufIterEnd;
 
+        /// <summary>
+        /// Number of elements in the current buffer fill (the inner-loop count
+        /// the kernel must process). Matches NumPy's NBF_SIZE. For the
+        /// non-reduce buffered path, <see cref="BufIterEnd"/> = fill-start
+        /// IterIndex + BufTransferSize.
+        /// </summary>
+        public long BufTransferSize;
+
+        /// <summary>
+        /// 1 when the current fill's WRITE operands have been flushed back to
+        /// their arrays (or no fill is pending). Lets flush be idempotent so
+        /// iternext, the single-inner-loop fast path, and Dispose can all call
+        /// it safely. Matches the role of NumPy's "buffers written" tracking
+        /// in npyiter_copy_from_buffers.
+        /// </summary>
+        public byte BufFlushed;
+
         /// <summary>Buffer pointers for each operand. Size = NOp.</summary>
         public long* Buffers;
 
@@ -723,11 +740,16 @@ namespace NumSharp.Backends.Iteration
 
                 if (Coords[axis] < Shape[axis])
                 {
-                    // Advance data pointers along this axis
+                    // Advance data pointers along this axis.
+                    // Strides are SOURCE-array element strides and DataPtrs point
+                    // into source-array memory, so the byte multiplier must be the
+                    // SOURCE element size. ElementSizes is the buffer dtype size,
+                    // which diverges when a buffered cast is active (bug (b):
+                    // int32 source buffered as float64 made every delta 2x).
                     for (int op = 0; op < NOp; op++)
                     {
                         long stride = Strides[op * StridesNDim + axis];
-                        DataPtrs[op] += stride * ElementSizes[op];
+                        DataPtrs[op] += stride * SrcElementSizes[op];
                     }
 
                     // Update flat index AFTER coords are updated
@@ -744,12 +766,12 @@ namespace NumSharp.Backends.Iteration
                 // Carry: reset this axis, continue to next
                 Coords[axis] = 0;
 
-                // Reset data pointers for this axis
+                // Reset data pointers for this axis (source element size — see above)
                 for (int op = 0; op < NOp; op++)
                 {
                     long stride = Strides[op * StridesNDim + axis];
                     long axisShape = Shape[axis];
-                    DataPtrs[op] -= stride * (axisShape - 1) * ElementSizes[op];
+                    DataPtrs[op] -= stride * (axisShape - 1) * SrcElementSizes[op];
                 }
             }
 
@@ -885,7 +907,10 @@ namespace NumSharp.Backends.Iteration
                 FlatIndex = ComputeFlatIndex();
             }
 
-            // Update data pointers
+            // Update data pointers. ResetDataPtrs are source-array bases and
+            // Strides are source element strides, so the byte multiplier is the
+            // SOURCE element size (ElementSizes is the buffer dtype size and
+            // diverges under a buffered cast — bug (b)).
             for (int op = 0; op < NOp; op++)
             {
                 long offset = 0;
@@ -893,7 +918,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     offset += Coords[d] * Strides[op * StridesNDim + d];
                 }
-                DataPtrs[op] = ResetDataPtrs[op] + offset * ElementSizes[op];
+                DataPtrs[op] = ResetDataPtrs[op] + offset * SrcElementSizes[op];
             }
 
             // Invalidate all buffer reuse flags since position changed

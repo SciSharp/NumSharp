@@ -399,6 +399,11 @@ namespace NumSharp.Backends
             // Stash rhs into a local so we can convert lhs (bottom of stack)
             // first, then reload rhs and convert it, matching the mixed-binary
             // pattern. Then EmitComparisonOperation pops both and pushes bool.
+            // NOTE (Wave 4, measured): the buffered-cast route was tried here
+            // and reverted — comparisons are add-class cheap ops where the
+            // fused per-element convert beats the buffer round-trip (see the
+            // A/B table in DefaultEngine.BinaryOp). Promoting unary math keeps
+            // the buffered route (DefaultEngine.UnaryOp).
             NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
             ComparisonOp capOp = op;
             Action<ILGenerator> scalarBody = il =>

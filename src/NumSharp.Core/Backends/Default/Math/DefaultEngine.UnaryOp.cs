@@ -440,6 +440,20 @@ namespace NumSharp.Backends
             var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
+            // Promoting-unary buffered-cast route (NumPy ufunc parity): for
+            // sqrt(i32)->f64-style ops, cast the input to the OUTPUT dtype in
+            // buffer windows via the SIMD IL cast kernels and run the
+            // same-dtype vector body over the buffer — NumPy's d->d loop with
+            // a buffering iterator, replacing the per-element convert scalar
+            // body. Predicate ops (IsNan/IsInf/...) operate on the INPUT type
+            // and Complex Abs has its own scalar special case — both excluded.
+            bool bufferedPromoting = inputType != outputType
+                && !IsUnaryPredicateOp(op)
+                && !(op == UnaryOp.Abs && inputType == NPTypeCode.Complex)
+                && DirectILKernelGenerator.CanUseUnarySimd(
+                       new UnaryKernelKey(outputType, outputType, op, IsContiguous: true))
+                && DirectILKernelGenerator.TryGetCastKernel(inputType, outputType) != null;
+
             // Scalar body — mirrors the direct path's per-element sequence
             // in DirectILKernelGenerator.Unary's emit loops:
             //   • Predicate ops (IsNan / IsInf / IsFinite) operate on the
@@ -454,47 +468,77 @@ namespace NumSharp.Backends
             //     the value to already be in the floating-point domain.
             NPTypeCode capIn = inputType, capOut = outputType;
             UnaryOp capOp = op;
-            Action<ILGenerator> scalarBody = il =>
+            Action<ILGenerator> scalarBody;
+            Action<ILGenerator>? vectorBody;
+            string cacheKey;
+            if (bufferedPromoting)
             {
-                if (IsUnaryPredicateOp(capOp))
+                // Kernel only ever sees the output dtype — the iterator's
+                // buffered fill already performed the input cast.
+                scalarBody = il => DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
+                vectorBody = il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capOut);
+                cacheKey = $"npy_unop_{op}_{outputType}_{outputType}";
+            }
+            else
+            {
+                scalarBody = il =>
                 {
-                    DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
-                }
-                else if (capOp == UnaryOp.Abs && capIn == NPTypeCode.Complex)
-                {
-                    il.EmitCall(OpCodes.Call, s_complexAbs, null);
-                    if (capOut != NPTypeCode.Double)
-                        DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, capOut);
-                }
-                else
-                {
-                    if (capIn != capOut)
-                        DirectILKernelGenerator.EmitConvertTo(il, capIn, capOut);
-                    DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
-                }
-            };
-            Action<ILGenerator>? vectorBody = simdViable
-                ? il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
-                : null;
-
-            string cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
+                    if (IsUnaryPredicateOp(capOp))
+                    {
+                        DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capIn);
+                    }
+                    else if (capOp == UnaryOp.Abs && capIn == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, s_complexAbs, null);
+                        if (capOut != NPTypeCode.Double)
+                            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Double, capOut);
+                    }
+                    else
+                    {
+                        if (capIn != capOut)
+                            DirectILKernelGenerator.EmitConvertTo(il, capIn, capOut);
+                        DirectILKernelGenerator.EmitUnaryScalarOperation(il, capOp, capOut);
+                    }
+                };
+                vectorBody = simdViable
+                    ? il => DirectILKernelGenerator.EmitUnaryVectorOperation(il, capOp, capIn)
+                    : null;
+                cacheKey = $"npy_unop_{op}_{inputType}_{outputType}";
+            }
 
             try
             {
                 // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE per NumPy's ufunc
                 // iterator flags (ufunc_object.c:1070); cheap extent check here
                 // since the result is freshly allocated.
+                var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+                NPTypeCode[]? opDtypes = null;
+                var casting = NPY_CASTING.NPY_SAFE_CASTING;
+                if (bufferedPromoting)
+                {
+                    // NumPy ufunc config (loop dtypes already resolved → unsafe).
+                    globalFlags |= NpyIterGlobalFlags.BUFFERED
+                                 | NpyIterGlobalFlags.GROWINNER
+                                 | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                    opDtypes = new[] { outputType, outputType };
+                    casting = NPY_CASTING.NPY_UNSAFE_CASTING;
+                }
+
                 using var iter = NpyIterRef.MultiNew(
                     2, new[] { nd, result },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
-                    order, NPY_CASTING.NPY_SAFE_CASTING,
+                    globalFlags,
+                    order, casting,
                     new[]
                     {
                         NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
                         NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                    });
+                    },
+                    opDtypes);
 
-                iter.ExecuteElementWiseUnary(inputType, outputType, scalarBody, vectorBody, cacheKey);
+                if (bufferedPromoting)
+                    iter.ExecuteElementWiseUnary(outputType, outputType, scalarBody, vectorBody, cacheKey);
+                else
+                    iter.ExecuteElementWiseUnary(inputType, outputType, scalarBody, vectorBody, cacheKey);
             }
             catch (NotSupportedException)
             {

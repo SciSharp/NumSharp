@@ -636,25 +636,47 @@ namespace NumSharp.Backends.Iteration
                 _state->ItFlags |= (uint)NpyIterFlags.BUFFER;
                 _state->BufferSize = bufferSize > 0 ? bufferSize : NpyIterBufferManager.DefaultBufferSize;
 
-                // Allocate buffers for each operand
-                NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+                bool isReduce = (_state->ItFlags & (uint)NpyIterFlags.REDUCE) != 0;
 
-                // Copy initial data to buffers (with casting if needed)
-                long copyCount = Math.Min(_state->IterSize, _state->BufferSize);
-                for (int op1 = 0; op1 < nop; op1++)
+                if (!isReduce && (flags & NpyIterGlobalFlags.DELAY_BUFALLOC) != 0)
                 {
-                    var opFlag = _state->GetOpFlags(op1);
-                    if ((opFlag & NpyIterOpFlags.READ) != 0 || (opFlag & NpyIterOpFlags.READWRITE) != 0)
-                    {
-                        NpyIterBufferManager.CopyToBuffer(ref *_state, op1, copyCount);
-                    }
+                    // DELAY_BUFALLOC: defer allocation + first fill until first
+                    // use. NumPy demands an explicit Reset before iterating
+                    // (ValueError otherwise); NumSharp auto-ensures at the
+                    // execution entry points (EnsureBuffersReady) instead, so
+                    // construction stays allocation-free for the common
+                    // construct-then-execute pattern. Ignored for buffered
+                    // REDUCE, whose double-loop setup is construction-bound.
+                    _state->ItFlags |= (uint)NpyIterFlags.DELAYBUF;
                 }
-
-                _state->BufIterEnd = copyCount;
-
-                // Set up buffered reduction if REDUCE flag is also set
-                if ((_state->ItFlags & (uint)NpyIterFlags.REDUCE) != 0)
+                else if (!isReduce)
                 {
+                    // Windowed buffered iteration (non-reduce): allocate and
+                    // prime the first window. FillBufferWindow swaps buffered
+                    // operands' DataPtrs to their buffers and records the
+                    // array write-back positions.
+                    NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+                    NpyIterBufferManager.FillBufferWindow(ref *_state,
+                        NpyIterBufferManager.ComputeTransferSize(ref *_state));
+                }
+                else
+                {
+                    // Buffered REDUCE keeps its dedicated double-loop machinery
+                    // (BufferedReduceIternext) and legacy initial fill.
+                    NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+
+                    // Copy initial data to buffers (with casting if needed)
+                    long copyCount = Math.Min(_state->IterSize, _state->BufferSize);
+                    for (int op1 = 0; op1 < nop; op1++)
+                    {
+                        var opFlag = _state->GetOpFlags(op1);
+                        if ((opFlag & NpyIterOpFlags.READ) != 0 || (opFlag & NpyIterOpFlags.READWRITE) != 0)
+                        {
+                            NpyIterBufferManager.CopyToBuffer(ref *_state, op1, copyCount);
+                        }
+                    }
+
+                    _state->BufIterEnd = copyCount;
                     SetupBufferedReduction(copyCount);
                 }
             }
@@ -1688,6 +1710,16 @@ namespace NumSharp.Backends.Iteration
 
             if ((itflags & NpyIterFlags.ONEITERATION) != 0)
                 _cachedIterNext = SingleIterationNext;
+            else if ((itflags & NpyIterFlags.BUFFER) != 0 && (itflags & NpyIterFlags.REDUCE) == 0)
+            {
+                // NumPy protocol split (nditer_templ.c.src): with EXTERNAL_LOOP
+                // the user consumes one buffer fill per iternext (window jump);
+                // without it, iternext presents ONE ELEMENT at a time, walking
+                // the buffer by BufStrides and refilling at the window edge.
+                _cachedIterNext = (itflags & NpyIterFlags.EXLOOP) != 0
+                    ? BufferedNext
+                    : BufferedElementNext;
+            }
             else if ((itflags & NpyIterFlags.EXLOOP) != 0)
                 _cachedIterNext = ExternalLoopNext;
             else
@@ -1704,6 +1736,65 @@ namespace NumSharp.Backends.Iteration
             return false;
         }
 
+        /// <summary>
+        /// iternext for windowed buffered (non-reduce) iteration. Matches
+        /// NumPy's npyiter_buffered_iternext (nditer_templ.c.src): flush the
+        /// current window's WRITE operands back to their arrays, advance to the
+        /// window end, reposition into the source arrays, and fill the next
+        /// window. Returns false when iteration is complete — by which point
+        /// the final window has been flushed.
+        /// </summary>
+        private static bool BufferedNext(ref NpyIterState state)
+        {
+            NpyIterBufferManager.FlushBufferWindow(ref state);
+
+            state.IterIndex = state.BufIterEnd;
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            // Reposition DataPtrs into the source arrays at the new index
+            // (GotoIterIndex computes from ResetDataPtrs — the array bases).
+            state.GotoIterIndex(state.IterIndex);
+
+            long count = NpyIterBufferManager.ComputeTransferSize(ref state);
+            NpyIterBufferManager.FillBufferWindow(ref state, count);
+            return true;
+        }
+
+        /// <summary>
+        /// Per-element iternext for buffered (non-reduce) iteration WITHOUT
+        /// EXTERNAL_LOOP — NumPy's user-facing nditer protocol: each call
+        /// advances one element, walking the current buffer window via
+        /// BufStrides; at the window edge the WRITE operands are flushed and
+        /// the next window is filled. (NumPy nditer_templ.c.src buffered
+        /// specialization + npyiter_buffered_iternext slow path.)
+        /// </summary>
+        private static bool BufferedElementNext(ref NpyIterState state)
+        {
+            long next = state.IterIndex + 1;
+            if (next < state.BufIterEnd)
+            {
+                state.IterIndex = next;
+                for (int op = 0; op < state.NOp; op++)
+                    state.DataPtrs[op] += state.BufStrides[op];
+                return true;
+            }
+
+            // Window exhausted — flush, then refill at the next position.
+            // NOTE: FlushBufferWindow relies on Coords still describing the
+            // fill start; per-element stepping above only moved DataPtrs.
+            NpyIterBufferManager.FlushBufferWindow(ref state);
+
+            state.IterIndex = state.BufIterEnd;
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            state.GotoIterIndex(state.IterIndex);
+            long count = NpyIterBufferManager.ComputeTransferSize(ref state);
+            NpyIterBufferManager.FillBufferWindow(ref state, count);
+            return true;
+        }
+
         private static bool ExternalLoopNext(ref NpyIterState state)
         {
             // For external loop, we advance outer dimensions
@@ -1716,7 +1807,9 @@ namespace NumSharp.Backends.Iteration
             if (state.IterIndex >= state.IterEnd)
                 return false;
 
-            // Advance outer coordinates
+            // Advance outer coordinates. DataPtrs traverse SOURCE-array memory,
+            // so multiply element strides by the SOURCE element size (the buffer
+            // dtype's ElementSizes diverges under a buffered cast — bug (b)).
             for (int axis = state.NDim - 2; axis >= 0; axis--)
             {
                 state.Coords[axis]++;
@@ -1727,7 +1820,7 @@ namespace NumSharp.Backends.Iteration
                     for (int op = 0; op < state.NOp; op++)
                     {
                         long stride = state.GetStride(axis, op);
-                        state.DataPtrs[op] += stride * state.ElementSizes[op];
+                        state.DataPtrs[op] += stride * state.SrcElementSizes[op];
                     }
                     return true;
                 }
@@ -1737,7 +1830,7 @@ namespace NumSharp.Backends.Iteration
                 for (int op = 0; op < state.NOp; op++)
                 {
                     long stride = state.GetStride(axis, op);
-                    state.DataPtrs[op] -= stride * (state.Shape[axis] - 1) * state.ElementSizes[op];
+                    state.DataPtrs[op] -= stride * (state.Shape[axis] - 1) * state.SrcElementSizes[op];
                 }
             }
 
@@ -1777,19 +1870,66 @@ namespace NumSharp.Backends.Iteration
         public long* GetInnerLoopSizePtr()
         {
             if ((_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0)
-                return &_state->BufIterEnd;
+            {
+                // Buffered REDUCE keeps its legacy double-loop semantics where
+                // BufIterEnd doubles as the inner count; the windowed non-reduce
+                // path exposes the fill size (NumPy's NBF_SIZE).
+                if ((_state->ItFlags & (uint)NpyIterFlags.REDUCE) != 0)
+                    return &_state->BufIterEnd;
+                return &_state->BufTransferSize;
+            }
 
             // Return pointer to innermost shape dimension
             return &_state->Shape[_state->NDim - 1];
         }
 
         /// <summary>
-        /// Reset iterator to the beginning.
+        /// Reset iterator to the beginning. For windowed buffered iterators this
+        /// flushes the pending window (NumPy flushes in NpyIter_Reset too),
+        /// materializes DELAY_BUFALLOC buffers, and primes the first window.
         /// </summary>
         public bool Reset()
         {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NpyIterFlags.BUFFER) != 0 && (f & (uint)NpyIterFlags.REDUCE) == 0)
+            {
+                if ((f & (uint)NpyIterFlags.DELAYBUF) != 0)
+                {
+                    if (!NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                        return false;
+                    _state->ItFlags &= ~(uint)NpyIterFlags.DELAYBUF;
+                }
+                else
+                {
+                    NpyIterBufferManager.FlushBufferWindow(ref *_state);
+                }
+
+                _state->Reset();
+                NpyIterBufferManager.FillBufferWindow(ref *_state,
+                    NpyIterBufferManager.ComputeTransferSize(ref *_state));
+                return true;
+            }
+
             _state->Reset();
             return true;
+        }
+
+        /// <summary>
+        /// Materialize DELAY_BUFALLOC buffers and prime the first window. No-op
+        /// unless BUFFER+DELAYBUF are pending. NumPy requires an explicit Reset
+        /// before iterating a delay-allocated iterator; NumSharp auto-ensures at
+        /// the execution entry points instead.
+        /// </summary>
+        public void EnsureBuffersReady()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NpyIterFlags.BUFFER) == 0 || (f & (uint)NpyIterFlags.DELAYBUF) == 0)
+                return;
+
+            NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+            _state->ItFlags &= ~(uint)NpyIterFlags.DELAYBUF;
+            NpyIterBufferManager.FillBufferWindow(ref *_state,
+                NpyIterBufferManager.ComputeTransferSize(ref *_state));
         }
 
         /// <summary>
@@ -2181,10 +2321,15 @@ namespace NumSharp.Backends.Iteration
                     }
                     _state->ItFlags &= ~(uint)NpyIterFlags.DELAYBUF;
                 }
-                else
+                else if ((itFlags & (uint)NpyIterFlags.REDUCE) != 0)
                 {
                     // Flush any pending writes before replacing pointers
                     CopyReduceBuffersToArrays();
+                }
+                else
+                {
+                    // Windowed path: flush the pending window before replacing pointers
+                    NpyIterBufferManager.FlushBufferWindow(ref *_state);
                 }
             }
 
@@ -2201,16 +2346,25 @@ namespace NumSharp.Backends.Iteration
             // Re-prime buffers if buffered
             if ((itFlags & (uint)NpyIterFlags.BUFFER) != 0)
             {
-                long remaining = _state->IterEnd - _state->IterIndex;
-                long copyCount = Math.Min(remaining, _state->BufferSize);
-                if (copyCount > 0)
+                if ((itFlags & (uint)NpyIterFlags.REDUCE) == 0)
                 {
-                    for (int iop = 0; iop < _state->NOp; iop++)
+                    // Windowed path: prime a fresh window at the new position.
+                    NpyIterBufferManager.FillBufferWindow(ref *_state,
+                        NpyIterBufferManager.ComputeTransferSize(ref *_state));
+                }
+                else
+                {
+                    long remaining = _state->IterEnd - _state->IterIndex;
+                    long copyCount = Math.Min(remaining, _state->BufferSize);
+                    if (copyCount > 0)
                     {
-                        var opFlags = _state->GetOpFlags(iop);
-                        if ((opFlags & NpyIterOpFlags.READ) != 0)
+                        for (int iop = 0; iop < _state->NOp; iop++)
                         {
-                            NpyIterBufferManager.CopyToBuffer(ref *_state, iop, copyCount);
+                            var opFlags = _state->GetOpFlags(iop);
+                            if ((opFlags & NpyIterOpFlags.READ) != 0)
+                            {
+                                NpyIterBufferManager.CopyToBuffer(ref *_state, iop, copyCount);
+                            }
                         }
                     }
                 }
@@ -2731,14 +2885,16 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            // Update data pointers using internal coordinates
+            // Update data pointers using internal coordinates. ResetDataPtrs are
+            // source-array bases — multiply by the SOURCE element size (bug (b):
+            // ElementSizes is the buffer dtype size under a buffered cast).
             for (int op = 0; op < _state->NOp; op++)
             {
                 long offset = 0;
                 for (int d = 0; d < _state->NDim; d++)
                     offset += _state->Coords[d] * _state->GetStride(d, op);
 
-                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->ElementSizes[op];
+                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->SrcElementSizes[op];
             }
         }
 
@@ -2903,14 +3059,14 @@ namespace NumSharp.Backends.Iteration
 
             _state->IterIndex = iterIndex;
 
-            // Update data pointers
+            // Update data pointers (source element size — see GotoIterIndex / bug (b))
             for (int op = 0; op < _state->NOp; op++)
             {
                 long offset = 0;
                 for (int d = 0; d < _state->NDim; d++)
                     offset += _state->Coords[d] * _state->GetStride(d, op);
 
-                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->ElementSizes[op];
+                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->SrcElementSizes[op];
             }
         }
 
@@ -3027,12 +3183,16 @@ namespace NumSharp.Backends.Iteration
                         return _state->GetDataPtr(operand);
                     }
 
-                    // For simple buffered iteration (non-reduce), compute from IterIndex
-                    // (IterIndex directly maps to buffer position within current buffer)
-                    int elemSize = _state->GetElementSize(operand);
-                    long bufferPos = _state->IterIndex - (_state->BufIterEnd - Math.Min(_state->BufferSize, _state->IterSize - _state->IterStart));
-                    if (bufferPos < 0) bufferPos = _state->IterIndex;
-                    return (byte*)buffer + bufferPos * elemSize;
+                    // Windowed buffered iteration keeps DataPtrs correct at all
+                    // times: FillBufferWindow swaps buffered operands' pointers to
+                    // their buffers and BufferedElementNext walks them by
+                    // BufStrides. The legacy recomputation that used to live here
+                    // (IterIndex - (BufIterEnd - BufferSize)) silently broke on
+                    // the PARTIAL final window — e.g. 20005 elements with the
+                    // default 8192 buffer put the third window's start at
+                    // 20005-8192=11813 instead of 16384, reading stale data from
+                    // the previous fill. DataPtrs is the single source of truth.
+                    return _state->GetDataPtr(operand);
                 }
             }
 
@@ -3237,6 +3397,8 @@ namespace NumSharp.Backends.Iteration
                 newStatePtr->StridesNDim = _state->StridesNDim;
                 newStatePtr->BufferSize = _state->BufferSize;
                 newStatePtr->BufIterEnd = _state->BufIterEnd;
+                newStatePtr->BufTransferSize = _state->BufTransferSize;
+                newStatePtr->BufFlushed = _state->BufFlushed;
                 newStatePtr->ReducePos = _state->ReducePos;
                 newStatePtr->ReduceOuterSize = _state->ReduceOuterSize;
                 newStatePtr->CoreSize = _state->CoreSize;
@@ -3333,6 +3495,20 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         public void Dispose()
         {
+            // Windowed buffered iteration: flush the pending window so kernels
+            // that consumed the final fill without a trailing iternext (e.g. the
+            // single-inner-loop fast path) still land their writes (NumPy
+            // resolves pending buffer write-backs in NpyIter_Deallocate too).
+            // Must run BEFORE ResolveWritebacks so the buffer contents reach the
+            // forced-copy temp before that temp is copied to the user's array.
+            if (_state != null &&
+                (_state->ItFlags & (uint)NpyIterFlags.BUFFER) != 0 &&
+                (_state->ItFlags & (uint)NpyIterFlags.REDUCE) == 0 &&
+                (_state->ItFlags & (uint)NpyIterFlags.DELAYBUF) == 0)
+            {
+                NpyIterBufferManager.FlushBufferWindow(ref *_state);
+            }
+
             // COPY_IF_OVERLAP write-backs must resolve regardless of state
             // ownership (NumPy resolves WRITEBACKIFCOPY in NpyIter_Deallocate).
             ResolveWritebacks();
