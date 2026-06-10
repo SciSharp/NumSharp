@@ -1,0 +1,220 @@
+# PR #611 — Changelog
+
+**[Major Rewrite] NumPy nditer port, NpyExpr DSL with 3-tier custom-op API, C/F/A/K memory layout support, stride-native matmul**
+
+**272 commits · 519 files · +198,407 / −16,069** (vs `master`, after #612)
+
+---
+
+## TL;DR
+
+- **`NpyIter` — full port of NumPy 2.4.2's `nditer`** (~12.5K lines): all iteration orders (C/F/A/K), all indexing modes, buffered casting, buffered-reduce double-loop, masking, memory-overlap protection (`COPY_IF_OVERLAP`), windowed buffering (`DELAY_BUFALLOC`), unlimited operands and dimensions. 566+ byte-for-byte NumPy parity scenarios.
+- **`NpyExpr` DSL + three-tier custom-op API** — write your own ufuncs: raw IL (Tier 3A), element-wise scalar/SIMD (Tier 3B), or composable expression trees with operator overloads (Tier 3C). Fused expressions run **2.8–5.4× faster than NumPy** (which can't fuse).
+- **NumPy-parity benchmark: geomean 1.00× at 10M elements** across ~409 ops (166 faster / 171 close / 36 slower) — measured by a new official BenchmarkDotNet-vs-NumPy suite committed with the report.
+- **30 new `np.*` APIs** — `pad` (11 modes), `tile`, `median`/`percentile`/`quantile` (all 13 interpolation methods) + their `nan*` variants, `average`, `ptp`, `take`/`put`/`place`, `extract`/`compress`, `diagonal`/`trace`, `argwhere`/`flatnonzero`, `unravel_index`/`ravel_multi_index`/`indices`, `delete`/`insert`/`append`, `diff`/`ediff1d`, `asfortranarray`/`ascontiguousarray`, `np.multithreading`.
+- **C/F/A/K order support wired through the whole API** — `Shape` understands F-contiguity, `OrderResolver` resolves NumPy order modes, ~68 layout bugs fixed across 9 fix groups.
+- **Stride-native matmul/dot** — BLIS-style GEBP GEMM absorbs arbitrary strides for all dtypes (kills a ~100× penalty on transposed inputs); fused 1-D dot is 3.5–9× faster with zero GC; opt-in multithreaded dot ~2× faster than NumPy's default on 1M vectors.
+- **Deterministic memory management** — atomic reference counting + `IDisposable` on `NDArray`, plus a tcache-style sub-1MiB buffer pool.
+- **Differential fuzzing infrastructure** — 37,445 bit-exact NumPy-comparison cases across 24 corpus tiers, a seeded random fuzzer with shrinker, a CI FuzzMatrix gate, and a nightly soak workflow.
+- **Legacy iterator stack deleted** — `MultiIterator` and the Regen-generated `NDIterator` cast templates are gone (−3,870 LOC); `NDIterator` survives as a thin lazy wrapper over `NpyIter`.
+- **Test suite: 9,447 passed / 0 failed** on net10.0 — +2,219 new test methods, plus the 37,445-case fuzz corpus replayed by the FuzzMatrix gate.
+
+---
+
+## 1. NpyIter — full NumPy `nditer` port
+
+From-scratch C# port of NumPy 2.4.2's iterator machinery under `src/NumSharp.Core/Backends/Iterators/` (~12,557 lines), promoted to **public API** with NDArray overloads.
+
+| Capability | Detail |
+|---|---|
+| Iteration orders | C, F, A, K — incl. NEGPERM negative-stride handling, axis reordering + coalescing to full 1-D collapse |
+| Indexing modes | `MULTI_INDEX`, `C_INDEX`, `F_INDEX`, `RANGE` (parallel chunking), `GotoIndex` / `GotoMultiIndex` / `GotoIterIndex` |
+| Buffering | Buffered casting with all 5 casting rules, **windowed buffered iteration**, `DELAY_BUFALLOC`, buffered-reduce double-loop (incl. `bufferSize < coreSize`) |
+| Reductions | `op_axes` with `-1` reduction axes, `REDUCE_OK`, `IsFirstVisit`, `REUSE_REDUCE_LOOPS` slab accumulation |
+| Overlap safety | **`COPY_IF_OVERLAP`** via a port of NumPy's `mem_overlap` solver (`NpyMemOverlap.cs`) — overlapping in/out operands no longer silently corrupt |
+| Masking | `WRITEMASKED` + `ARRAYMASK` with reduction-safety validation |
+| Operands / dims | **Unlimited operands** (NumPy caps at `NPY_MAXARGS=64`) and **unlimited dimensions** (NumPy caps at `NPY_MAXDIMS=64`) via dynamic allocation |
+| APIs | `Copy`, `GetIterView`, `RemoveAxis`, `RemoveMultiIndex`, `ResetBasePointers`, `IterRange`, `DebugPrint`, fixed/axis stride queries, `GetValue<T>`/`SetValue<T>`, … |
+| Casting parity | `NpyIterCasting.CanCast` matches NumPy's `safe`/`same_kind` lattice exactly |
+
+Validated by a dedicated battletest harness: **566 scenarios** replayed against NumPy 2.4.2 byte-for-byte, a permanent variation-probe harness, and `tools/iterator_parity`. Dozens of parity bugs found and fixed during the port (negative-stride flipping, `NO_BROADCAST` enforcement, `F_INDEX` coalescing, buffered-reduction stride inversion, K-order on broadcast inputs, EXLOOP `iternext`, buffered-cast `Advance`, ranged `Reset()` desync, buffer free-list corruption…).
+
+### Execution at NumPy speed
+
+`NpyIter` isn't just correct — it is now the production execution engine: `DefaultEngine`'s binary, unary, and comparison ops (same- and mixed-dtype) route through the NpyIter Tier-3B shell, and it measures **at-or-faster than NumPy on every probed aspect** (Release, i9-13900K, NumPy 2.4.2):
+
+| Aspect (float32) | NumSharp | NumPy | Ratio |
+|---|---|---|---|
+| contig sqrt 10M | 2.98 ms | 3.24 ms | 0.92× |
+| contig add 10M | 3.91 ms | 4.09 ms | 0.96× |
+| strided add 1M | 319 µs | 416 µs | 0.77× |
+| strided sqrt 1M | 206 µs | 374 µs | 0.55× |
+| strided sum 1M | 109 µs | 205 µs | 0.53× |
+| **fused** `a*b+c` 10M | 4.77 ms | 13.38 ms | **0.36×** |
+| **fused** `(a-b)/(a+b)` 10M | 4.12 ms | 22.33 ms | **0.18×** |
+
+Key mechanisms: an O(1) **trivial-loop bypass** that skips iterator construction for contiguous operands, identity-broadcast fast paths, **AVX2 hardware-gather** (`vgatherdps`) strided SIMD in the Tier-3B shell (NumPy uses scalar loops for strided binary/reduce — its floors are beatable), and strided-reduction kernels (2-D strided sqrt 1.36× faster than NumPy, strided sum 2.2× faster).
+
+## 2. NpyExpr DSL + three-tier custom-op API
+
+User-extensible kernel layer on top of `NpyIter` — the public answer to "how do I write my own ufunc":
+
+- **Tier 3A — `ExecuteRawIL`**: emit raw IL against the NumPy ufunc signature `void(void** dataptrs, long* strides, long count, void* aux)`.
+- **Tier 3B — `ExecuteElementWise`**: provide scalar + vector IL; the shell supplies a 4×-unrolled SIMD loop, remainder vector, scalar tail, and strided fallback.
+- **Tier 3C — `ExecuteExpression`**: compose `NpyExpr` trees with C# operators (`(a - b) / (a + b)`), 50+ node types (arithmetic, trig, exp/log, rounding, predicates, comparisons, `Min/Max/Clamp/Where`), plus **`Call()`** to splice any delegate/`MethodInfo` into a fused kernel. Compiled once, cached by structural key, ~5 ns dispatch.
+
+This is what powers the 2.8–5.4× fusion wins above — one pass, no temporaries.
+
+## 3. Legacy iterator stack retired
+
+- `MultiIterator` **deleted**; all callers migrated to `NpyIter.Copy` / multi-operand execution.
+- The Regen template `NDIterator.template.cs` + 16 generated `NDIterator.Cast.*` partials **deleted** (−3,870 LOC in one commit).
+- `NDIterator` survives as a thin, **lazy** compatibility wrapper over `NpyIter` (294 lines) — no more materialized copies; same `MoveNext()`/`HasNext()`/`Reset()` surface.
+- `~400` per-dtype `NPTypeCode` switch sites replaced by a generic `NpFunc` dispatch utility.
+
+## 4. C/F/A/K memory-layout support
+
+- `Shape` now tracks **F-contiguity** with NumPy-convention contiguity computation; new `OrderResolver` resolves `C`/`F`/`A`/`K` for every API with an `order` parameter.
+- Order support wired through: `copy`, `array`, `asarray`, `asanyarray`, `*_like`, `astype`, `flatten`, `ravel`, `reshape`, `eye`, `concatenate`, `cumsum`, `argsort`, `tile`, plus **post-hoc F-contig preservation across the IL-kernel dispatchers**.
+- New: `np.asfortranarray`, `np.ascontiguousarray`.
+- `np.where` selects C/F output layout the way NumPy does; `ravel('F')` of an F-contig source returns a **view** (was a 3,000× copy).
+- ~68 layout bugs fixed across 9 TDD fix groups, backed by ~3,300 lines of new order tests (Sections 41–51: reductions/keepdims, matmul/dot/outer/convolve, broadcasting-from-F, manipulation, file I/O `fortran_order`, Decimal scalar path, fancy-write isolation, …).
+
+## 5. New & completed `np.*` APIs
+
+**New functions (30):**
+
+| Area | APIs |
+|---|---|
+| Manipulation | `np.pad` (all 11 NumPy modes + callable), `np.tile`, `np.delete`, `np.insert`, `np.append` |
+| Indexing/selection | `np.take`, `np.put`, `np.place`, `np.extract`, `np.compress`, `np.argwhere`, `np.flatnonzero`, `np.diagonal`, `np.trace`, `np.unravel_index`, `np.ravel_multi_index`, `np.indices` |
+| Statistics | `np.median`, `np.percentile`, `np.quantile` (**all 13 interpolation methods**, tuple axis, `out=`, `keepdims`, QuickSelect engine), `np.average` (`weights`, `returned`, tuple-axis; fused kernel 1.3–1.6× faster than NumPy at 1M), `np.ptp`, `np.nanmedian`, `np.nanpercentile`, `np.nanquantile` |
+| Math | `np.diff`, `np.ediff1d` |
+| Creation | `np.asfortranarray`, `np.ascontiguousarray` |
+| Runtime | `np.multithreading(enabled, max_threads)` — opt-in threaded kernels |
+
+**Rebuilt to full NumPy 2.x parity:**
+
+- `np.clip` — `min=`/`max=` keyword aliases, default-None bounds, NumPy 2.x dtype promotion, `out=` validation.
+- `np.unique` — 5 missing kwargs, sort+mask algorithm (up to 43× faster), NaN partitioning, `n > Array.MaxLength` fallback.
+- `np.searchsorted` — `side=`, `sorter=`, multidim validation; IL binary-search kernels 5–25× faster (beats NumPy on 20/22 benchmarks).
+- `np.copyto` — `casting=`, `where=` masked copies at NumPy speed (was 7–72× slower).
+- `np.asarray` — `copy=`, `like=`, `device=`, dtype-as-string. `np.concatenate` — full parity + C/F fast paths. `np.all`/`np.any` — tuple-axis, `out=`, `where=`. `np.expand_dims` — tuple axis. `np.repeat` — `axis=` parameter. `np.power` — integer-power semantics, negative-exponent `ValueError`, crash fix.
+- Engine completeness: bool/char `max`/`min`, Complex quantile, `IsInf` implemented (was a stub).
+- **Full 15-dtype coverage pushed through the hot paths** — the SByte/Half/Complex dtypes introduced in #612 now work across every kernel family this PR touches (reductions, indexing, trace, casts, quantile, …).
+
+## 6. Linear algebra
+
+- **Stride-native GEMM for all 12 numeric dtypes** — BLIS-style GEBP with stride-aware packers; the 8×16 `Vector256` FMA micro-kernel reads packed panels, so transposed/sliced inputs cost nothing extra. Eliminates the ~100× fallback penalty (`np.dot(x.T, grad)`: 240 ms → ~1 ms) and the boxing `GetValue` fallback chain.
+- **Full `matmul` gufunc semantics** — batched stacking, 1-D promotion/squeeze rules, validated by a dedicated differential matrix (816 cases).
+- **Fused single-pass 1-D dot** — 3.5–9× faster, **zero GC** (was up to 446 gen-0 collections per call at 100K).
+- **`np.multithreading`** — opt-in parallel 1-D dot: 1M float dot 172 → 60 µs, ~2× faster than NumPy's default build. Off by default; bitwise-identical summation order when off.
+
+## 7. Performance (beyond NpyIter and linalg)
+
+| Op | Improvement |
+|---|---|
+| Axis reductions, narrow ints | **Widening SIMD** (int16→int32 accum etc.): `sum(int16, axis=1)` 1058 ms → 2.7 ms (**389×**, now faster than NumPy); int32/uint32 2.3–4.6×; also fixes a uint32 axis-sum **corruption** bug |
+| `mean` (axis) | **217×** (Phase-0 bug surgery); `var`/`std` 21×; `count_nonzero` 20× |
+| `np.nonzero` | IL SIMD kernel closes an **8–241×** gap to NumPy |
+| `np.where` | IL kernels for scalar-broadcast & non-contiguous (1.2–2× NumPy on broadcast conditions) |
+| Strided 1-D unary | Fused strided-SIMD kernel: 0.55 ns/elem flat — beats NumPy at every size; strided `sqrt` reached parity via gather→tile→SIMD buffering |
+| Strided flat reductions | Incremental-advance path: strided sum 8.3× faster (11.8× behind NumPy → 1.4×) |
+| Comparisons | **PDEP**-based packed mask→bool store; broadcast/strided compares routed via NpyIter |
+| Axis-0 reductions | Column-tiled accumulation (breaks the output RAW dependency); 8× pairwise unrolled flat reductions |
+| Allocation | tcache-style **size-bucketed buffer pool** for sub-1MiB blocks; `using`/ARC adopted across `concatenate`, `allclose`, `convolve`, `tile`, `eye`, masking, shuffle, … |
+| Casts | NumPy-faithful SIMD `float→int32` (`cvtt`), strided/reversed/gathered variants; `astype` cross-dtype routed through NpyIter KEEPORDER copy |
+| `np.split` family | O(1) sub-shape derivation, direct views — 1.5–4× faster than NumPy |
+| Where/copyto/searchsorted/unique | see §5 |
+
+## 8. Official benchmark suite + honest methodology
+
+- New cross-platform `run_benchmark.py` entry point: BenchmarkDotNet Full rigor (50 iters, InProcessEmit) × all suites × {1K, 100K, 10M} vs NumPy 2.x — **1,813 C# measurements, 1,111 matched op×dtype×size comparisons**, structural op-name join, tracked markdown report + per-suite artifacts + history snapshots. Coverage spans **all 15 dtypes** (SByte/Half/Complex suites added).
+- **Headline:** geomean NumSharp÷NumPy = **1.00× at N=10M** (166 ops faster / 171 close / 36 slower) — parity across the whole op surface at memory-bound sizes; ~1.9× at 1K where per-call dispatch dominates (tracked as the next focus).
+- Found and neutralized a **benchmark-invalidating tooling bug**: `dotnet run` file-based apps compile the project reference in Debug (optimizations off) even with `Configuration=Release` properties — hand loops measured ~2× slow while DynamicMethod IL was immune. Benchmarks now assert `IsJITOptimizerDisabled == false` and refuse to mislead; the rule is documented.
+
+## 9. Differential fuzzing vs NumPy (new infrastructure)
+
+- **37,445 bit-exact corpus cases** across 24 JSONL tiers generated from real NumPy 2.4.2 outputs: casts (full 15×15 matrix), binary arith (NEP50), div/mod/power, comparisons, unary (incl. float16 inputs + all narrow ints), reductions, NaN-aware reductions, cumulative, statistics, logic/extrema, bitwise+shift, where/place, manipulation, matmul, modf multi-output, sorting/searching, parameter sweeps, SIMD-tail boundaries (900 cases around vector-width edges), operand aliasing, and error-parity (exception-for-exception).
+- **Seeded random fuzzer** with an element-wise shrinker for minimal repros; **metamorphic invariant tier** (11 algebraic properties).
+- **CI integration:** FuzzMatrix gate wired into the build workflow + a new nightly **fuzz-soak** workflow (`.github/workflows/fuzz-soak.yml`).
+- Findings inventoried in `docs/FUZZ_FINDINGS.md`; every fixed class re-armed as a permanent regression gate. The error-parity tier alone surfaced 1 critical crash; the op tiers surfaced 17+ distinct bug classes that are now fixed (see §10).
+
+## 10. Correctness — NumPy-parity bug fixes
+
+**Semantics (behavioral changes, may affect callers):**
+
+- `floor_divide` / `mod`: NumPy-exact floored semantics and divide-by-zero results.
+- Comparisons: `<=` / `>=` now return `False` for NaN (IEEE/NumPy).
+- Flat `min`/`max` propagate NaN.
+- `np.negative(uint)` wraps modulo 2ⁿ instead of throwing; `bool - bool` and `-bool`/`np.negative(bool)` now **throw** (NumPy behavior).
+- Transcendental ufuncs use NEP50 width-based float promotion.
+- `np.power`: negative integer exponent raises `ValueError`; exact integer-power semantics.
+- Cast semantics aligned with NumPy across all dtype pairs (IL kernels + `ConvertValue`); `complex→bool` no longer drops the imaginary part; `float→int` SIMD uses truncation (`cvtt`) like NumPy.
+- Broadcasting keeps rank when a 1-D `[1]` meets a lower-rank operand; quantile-family dtype & bool handling; Complex `np.where`.
+
+**Crashes & corruption:**
+
+- Overlapping-operand corruption eliminated iterator-wide (`COPY_IF_OVERLAP`, §1).
+- uint32 axis-sum produced wrong values past 8 distinct columns (widening-SIMD rewrite).
+- `np.pad`: 5 correctness/crash bugs (battle-tested against NumPy 2.4.2); linear_ramp preserved Complex dtype.
+- `UnmanagedStorage`/`ArraySlice`: `CopyTo` direction + bounds bugs; `CloneData` partial-buffer bug; scalar offset lost on `Clone`; buffered `NpyIter.Clone` shared buffers; `DTypeSize` reported `Marshal.SizeOf` instead of in-memory stride; `NPTypeCode.Char.SizeOf` returned 1 (real: 2); stale Decimal priority.
+- `TensorEngine` now propagates through `Cast`/`Transpose`/`copy`/`reshape`/`ravel` (custom engines were silently dropped).
+- `take` with `out=` enforces NumPy's safe-cast direction; `put`/`place` non-contiguous writeback fixes; `argsort` on non-C-contiguous input.
+- NpyIter `ForEach`/`ExecuteGeneric`/`ExecuteReducing` read past the end without `EXTERNAL_LOOP`.
+
+## 11. Memory management — ARC + `IDisposable`
+
+- `NDArray` now implements **`IDisposable`** backed by **atomic reference counting** on the unmanaged block: CAS-driven `TryAddRef`/`Release`, idempotent `Dispose`, finalizer safety net, immortal non-owning wraps. Views keep parents alive; parent disposal never invalidates live views.
+- Hammered by a 15-case lifecycle suite incl. 32-thread × 1,000-op concurrency races and 50-way parallel dispose — zero corruption.
+- Deterministic release means hot loops no longer wait on the finalizer queue; combined with the buffer pool this removes most steady-state GC pressure (`dot` at 100K: 446 collections → 0).
+
+## 12. `Char8` primitive
+
+New 1-byte character type (`NumSharp.Char8`) — the NumPy `S1`/Python `bytes(1)` equivalent — with conversions, operators, span helpers, and **100% Python `bytes` API parity** validated against a Python oracle. Vendored .NET ASCII/Latin-1 reference sources under `src/dotnet/` document the upstream implementations it mirrors.
+
+## 13. Examples — trainable MNIST MLP
+
+New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation and a **fused** one (single-`NpyIter` bias+ReLU fusion, fused softmax-cross-entropy backward, Adam optimizer). Originally needed a "copy transposed views before `np.dot`" workaround (31× training speedup at the time); the stride-native GEMM (§6) made the workaround unnecessary. Converges to >99% test accuracy in the bundled demo.
+
+## 14. Kernel architecture & hygiene
+
+- `ILKernelGenerator` split into **`DirectILKernelGenerator`** (legacy whole-array kernels, 51 partials under `Kernels/Direct/`) and **`ILKernelGenerator`** (NpyIter-driven per-chunk kernels — the target model matching NumPy's `PyUFuncGenericFunction`); migration path documented per kernel family.
+- All `Vector128/256/512` and `Math`/`MathF` reflection centralized in `VectorMethodCache` / `ScalarMethodCache`; IL-emitted typed-field copier replaces the `UnmanagedStorage.Alias` switch.
+- 24 dead kernel methods poisoned with `[Obsolete(error: true)]` pending deletion; dead axis-reduction SIMD paths removed.
+
+## 15. Documentation
+
+- **NpyIter/NDIter book**: `docs/website-src/docs/NDIter.md` (7-technique quick reference, decision tree, memory model, gotchas) + `ndarray.md`.
+- **Engineering ledgers**: `PERF_LEDGER.md` (every optimization with before/after), `ROADMAP.md`, `NPYITER_GAPS_AND_ROADMAP.md` (gap analysis vs NumPy 2.4.2 + 6-wave plan), `NPYITER_PARITY_ANALYSIS.md`, `NPYITER_PERF_HANDOVER.md`, `MIGRATE_NPYITER.md`, IL-kernel playbook + rulebook, fuzz findings/coverage/next-plan.
+- **Branch quality audits** V1+V2 (8 chapter reviews under `docs/plans/audit_v2/`) with every Tier-1 finding either fixed or reproduced as an `[OpenBugs]` test.
+
+## 16. Tests & CI
+
+- **+2,219 test methods**; suite now **9,447 passed / 0 failed / 11 skipped** on net10.0 (also green on net8.0). Zero regressions maintained commit-by-commit.
+- New suites: NpyIter battletests (566 scenarios), order-support sections 41–51, ARC lifecycle, clone regression, np.pad/average/median/percentile/ptp/diff battle tests, IL-kernel battle tests, behavioral audit harness.
+- CI: fuzz gate in `build-and-release.yml`, new nightly `fuzz-soak.yml`.
+- **Known gaps stay visible**: `np.sort` remains unimplemented (tracked `[OpenBugs]`), and small-N (~1K) dispatch overhead is the documented next focus (`docs/ROADMAP.md`) — every open issue found by the audits/fuzzers is checked in as a failing-by-design `[OpenBugs]` test rather than ignored.
+
+---
+
+## Breaking changes
+
+| Change | Impact | Migration |
+|---|---|---|
+| `bool - bool`, `-bool`, `np.negative(bool)` now throw | Matches NumPy | Use `^` / cast to int first |
+| NaN `<=` / `>=` returns `False` | Matches IEEE & NumPy | Use `np.isnan` explicitly |
+| `floor_divide`/`mod` divide-by-zero & floored results | Matches NumPy | — |
+| `np.negative(uint)` wraps instead of throwing | Matches NumPy | — |
+| `np.power(int, negative int)` raises `ValueError` | Matches NumPy | Use float exponents |
+| Cast edge cases (overflow/NaN/complex→bool/float→int truncation) | Matches NumPy | — |
+| Transcendental ufuncs: NEP50 width-based promotion | Return dtype may change | — |
+| `np.clip`/quantile-family dtype promotion | Return dtype may change | — |
+| Broadcast views are read-only; broadcasting keeps rank for 1-D `[1]` | Matches NumPy | `.copy()` to write |
+| `MultiIterator` removed; `NDIterator` is now an NpyIter facade | Internal API | Use `NpyIter` / `NpyIter.Copy` |
+| NpyIter: `MaxOperands=8` and 64-dim limits removed | None (loosening) | — |
+| `np.copyto` unwriteable-destination error type corrected | Exception type change | — |
+
+---
+
+*Everything above was validated against NumPy 2.4.2 ground truth — by 37k differential corpus cases, 566 iterator parity scenarios, and per-feature battle tests run on actual NumPy output.*
