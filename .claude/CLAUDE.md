@@ -274,6 +274,8 @@ Tested against NumPy 2.x.
 ### Math — Arithmetic
 `abs`, `absolute`, `add`, `cbrt`, `ceil`, `clip`, `convolve`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `reciprocal`, `sign`, `sin`, `cos`, `tan`, `sqrt`, `square`, `subtract`, `true_divide`, `trunc`
 
+**ufunc `out=` / `where=` parameters** are supported on the elementwise core (NumPy semantics, probed against 2.4.2): binary `add`/`subtract`/`multiply`/`divide`/`true_divide`/`mod`/`power`/`floor_divide`, unary `sqrt`/`exp`/`log`/`sin`/`cos`/`tan`/`abs`/`absolute`/`negative`/`square`. `out` joins the broadcast but is never stretched, requires a same_kind cast from the loop dtype (resolved from inputs), returns the same instance, and may alias an input (overlap-safe via COPY_IF_OVERLAP). `where` must be bool, broadcasts and joins the output shape; masked-off `out` slots keep prior contents. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
+
 ### Math — Reductions
 `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
 
@@ -288,6 +290,20 @@ Tested against NumPy 2.x.
 
 ### Selection
 `where`
+
+### Fused Expressions (NumSharp extension)
+`evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NpyExpr` tree to ONE NpyIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: `benchmark/poc/evaluate_bench.{cs,py}`).
+
+```csharp
+NDArray r = np.evaluate((NpyExpr)a * b + 2);                          // fused a*b+2
+NDArray d = np.evaluate((NpyExpr.Arr(a) - b) / (NpyExpr.Arr(a) + b)); // a,b dedup → 3 operand streams
+NDArray s = np.evaluate(NpyExpr.Sum((NpyExpr)a * b), @out: x);        // one-pass sum(a*b), no temp
+```
+
+Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
+- **Dtypes follow NumPy result_type PER NODE** (`NpyExpr.Typing.cs`): NEP50 strong-strong incl. the int/float tier crossing (`i4+f4→f8`); weak python-scalar literals (`i4+2→i4`, `f2+2.5→f2`, `bool+2→i64`, out-of-range → OverflowError); `true_divide` ints→f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool→i8; unary math tiers (`bool/i8→f16`, `i16→f32`, `i32+→f64`); comparisons→bool. `(i4*i4)+f8` wraps the multiply in int32 before promoting — bit-compatible with the unfused NumPy sequence.
+- **Reductions are root-only**: `NpyExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back — documented divergence from NumPy's pairwise, usually more accurate; min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
+- Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules above; `ExecuteExpression` (Tier 3C) throws without `EXTERNAL_LOOP` (the ~40× per-element foot-gun) — `np.evaluate` configures the iterator itself.
 
 ### Sorting & Searching
 `argmax`, `argmin`, `argsort`, `nonzero`, `searchsorted`
@@ -327,7 +343,8 @@ Tested against NumPy 2.x.
 | TensorEngine | `Backends/TensorEngine.cs` |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs`, `NpyExpr.cs` |
+| Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs` |
+| Expression DSL (np.evaluate) | `Backends/Iterators/NpyExpr.cs` (nodes + emission), `NpyExpr.Typing.cs` (per-node NumPy result_type pass), `NpyExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator (target) | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
 | DirectILKernelGenerator (legacy) | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 50 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
