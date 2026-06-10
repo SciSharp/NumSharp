@@ -1192,7 +1192,38 @@ namespace NumSharp.Backends.Iteration
             }
 
             if (allContiguous)
+            {
                 _state->ItFlags |= (uint)NpyIterFlags.CONTIGUOUS;
+            }
+            else
+            {
+                // GATHER_ELIGIBLE: every operand is a gather-capable element
+                // width (32/64-bit) and every inner-axis byte stride fits the
+                // int32 gather-index budget — the Tier-3B kernels' AVX2
+                // hardware-gather strided path can service the inner loop.
+                // Informational (kernels re-check at runtime); used by
+                // DebugPrint and future per-layout kernel-key selection.
+                bool gatherEligible = true;
+                int innerDim = _state->NDim - 1;
+                for (int op = 0; op < _state->NOp && gatherEligible; op++)
+                {
+                    int elemSize = _state->GetOpDType(op).SizeOf();
+                    if (elemSize != 4 && elemSize != 8)
+                    {
+                        gatherEligible = false;
+                        break;
+                    }
+                    long byteStride = _state->GetStridesPointer(op)[innerDim] * elemSize;
+                    if (byteStride > DirectILKernelGenerator.GatherStrideLimit ||
+                        byteStride < -DirectILKernelGenerator.GatherStrideLimit)
+                    {
+                        gatherEligible = false;
+                    }
+                }
+
+                if (gatherEligible)
+                    _state->ItFlags |= (uint)NpyIterFlags.GATHER_ELIGIBLE;
+            }
 
             // Set legacy flags for first two operands
             if (_state->NOp >= 1)

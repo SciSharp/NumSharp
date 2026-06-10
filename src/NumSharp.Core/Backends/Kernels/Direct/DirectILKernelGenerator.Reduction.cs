@@ -154,6 +154,166 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Gate for the gather-SIMD section of the 1-D strided reduction:
+        /// mirrors the contiguous CanUseReductionSimd whitelist minus the
+        /// early-exit (All/Any) and index-tracking (ArgMax/ArgMin) ops, and
+        /// requires same-type accumulation (vectors can't widen lanes).
+        /// </summary>
+        private static bool CanUseGatherReduction(ElementReductionKernelKey key)
+        {
+            if (key.InputType != key.AccumulatorType)
+                return false;
+            if (!CanUseSimd(key.InputType))
+                return false;
+            return key.Op == ReductionOp.Sum || key.Op == ReductionOp.Max ||
+                   key.Op == ReductionOp.Min || key.Op == ReductionOp.Prod;
+        }
+
+        /// <summary>
+        /// Emit the gather-SIMD bulk of a 1-D strided reduction. On entry
+        /// locI == 0, locOffset == 0 and locStride0 holds the ELEMENT stride.
+        /// Runtime-guards the stride against the int32 gather-index budget;
+        /// on success processes ⌊count/(4·lanes)⌋·4·lanes elements into 4
+        /// independent vector accumulators, tree-merges, horizontally reduces,
+        /// combines into <paramref name="locAccum"/>, and advances locI /
+        /// locOffset so the scalar loop that follows finishes the tail.
+        /// </summary>
+        private static void EmitGatherReductionSection(
+            ILGenerator il, ElementReductionKernelKey key, int inputSize,
+            GatherSupport g,
+            LocalBuilder locI, LocalBuilder locOffset, LocalBuilder locStride0,
+            LocalBuilder locAccum)
+        {
+            long lanes = g.Lanes;
+            long step = lanes * 4;
+            long elemStrideLimit = GatherStrideLimit / inputSize;
+
+            var lblSkip = il.DefineLabel();
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // |stride0| must fit the byte-offset index budget.
+            il.Emit(OpCodes.Ldloc, locStride0);
+            il.Emit(OpCodes.Ldc_I8, elemStrideLimit);
+            il.Emit(OpCodes.Bgt, lblSkip);
+            il.Emit(OpCodes.Ldloc, locStride0);
+            il.Emit(OpCodes.Ldc_I8, -elemStrideLimit);
+            il.Emit(OpCodes.Blt, lblSkip);
+
+            // byteStride (long for addressing, int for the index vector).
+            var locBS = il.DeclareLocal(typeof(long));
+            var locBSInt = il.DeclareLocal(typeof(int));
+            il.Emit(OpCodes.Ldloc, locStride0);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Stloc, locBS);
+            il.Emit(OpCodes.Conv_I4);
+            il.Emit(OpCodes.Stloc, locBSInt);
+
+            // idx = Create(0, bs, 2bs, …, (lanes-1)·bs)
+            var locIdx = il.DeclareLocal(g.IndexVectorType);
+            for (int k = 0; k < g.Lanes; k++)
+            {
+                if (k == 0)
+                {
+                    il.Emit(OpCodes.Ldc_I4_0);
+                }
+                else if (k == 1)
+                {
+                    il.Emit(OpCodes.Ldloc, locBSInt);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldloc, locBSInt);
+                    il.Emit(OpCodes.Ldc_I4, k);
+                    il.Emit(OpCodes.Mul);
+                }
+            }
+            il.Emit(OpCodes.Call, g.IndexCreate);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // 4 vector accumulators = identity.
+            var vectorType = GetVectorType(GetClrType(key.InputType));
+            var locAcc = new LocalBuilder[4];
+            for (int k = 0; k < 4; k++)
+            {
+                locAcc[k] = il.DeclareLocal(vectorType);
+                EmitVectorIdentity(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
+
+            // gatherEnd = totalSize - step
+            var locGatherEnd = il.DeclareLocal(typeof(long));
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Ldc_I8, step);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locGatherEnd);
+
+            il.MarkLabel(lblLoop);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locGatherEnd);
+            il.Emit(OpCodes.Bgt, lblLoopEnd);
+
+            for (int k = 0; k < 4; k++)
+            {
+                // acc[k] = acc[k] OP gather(input + (i + k·lanes) · byteStride)
+                il.Emit(OpCodes.Ldloc, locAcc[k]);
+                il.Emit(OpCodes.Ldarg_0); // input
+                il.Emit(OpCodes.Ldloc, locI);
+                if (k != 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, lanes * k);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldloc, locBS);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Ldloc, locIdx);
+                il.Emit(OpCodes.Ldc_I4_1); // scale = 1 (byte offsets)
+                il.Emit(OpCodes.Call, g.Gather);
+                EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+                il.Emit(OpCodes.Stloc, locAcc[k]);
+            }
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, step);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+
+            // Tree-merge 4 → 2 → 1, horizontal-reduce, fold into locAccum.
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[1]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[2]);
+            il.Emit(OpCodes.Ldloc, locAcc[3]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locAcc[2]);
+            il.Emit(OpCodes.Ldloc, locAcc[0]);
+            il.Emit(OpCodes.Ldloc, locAcc[2]);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            EmitVectorHorizontalReduction(il, key.Op, key.InputType);
+
+            // Stack: [horizontal]; combine into the scalar accumulator the
+            // same way the scalar loop does ([value, accum] → combine).
+            il.Emit(OpCodes.Ldloc, locAccum);
+            EmitReductionCombine(il, key.Op, key.AccumulatorType);
+            il.Emit(OpCodes.Stloc, locAccum);
+
+            // offset = i * stride0 — position the scalar tail loop.
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locStride0);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Stloc, locOffset);
+
+            il.MarkLabel(lblSkip);
+        }
+
+        /// <summary>
         /// Per-accumulator load+combine emit for the 8x unrolled SIMD reduction body.
         /// Stack before:  empty
         /// Stack after:   empty (the result is stored back to locAcc)
@@ -616,6 +776,20 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldarg_1);      // strides
                 il.Emit(OpCodes.Ldind_I8);
                 il.Emit(OpCodes.Stloc, locStride0);
+
+                // ── AVX2 hardware-gather SIMD section (Phase 2a) ─────────────
+                // Bulk of a 1-D strided reduction runs as gathered vectors
+                // into 4 independent accumulators (NumPy has NO simd here —
+                // its strided pairwise_sum is a scalar 8-accumulator loop).
+                // Leaves locI/locOffset positioned so the scalar loop below
+                // finishes the tail. Emitted only for gather-capable dtypes
+                // with same-type accumulation; combine/identity/horizontal
+                // helpers are shared with the contiguous SIMD path so the
+                // semantics (incl. float min/max NaN behavior) are identical.
+                if (CanUseGatherReduction(key) && TryGetGatherSupport(key.InputType, out var gsup))
+                {
+                    EmitGatherReductionSection(il, key, inputSize, gsup, locI, locOffset, locStride0, locAccum);
+                }
 
                 il.MarkLabel(lblFastHead);
                 // if (i >= totalSize) goto end

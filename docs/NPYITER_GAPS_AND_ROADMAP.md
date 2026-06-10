@@ -95,15 +95,15 @@ From source audit (`NpyIter*.cs` vs `nditer_constr.c`/`nditer_api.c`/`ufunc_obje
 
 ## 4. Variation-coverage map (/np-function grid → status)
 
-**A. Single-array layouts (25):** C-contig ✅ · F-contig ✅ · strided 1-D unary ✅ (pre-iterator fused rescue) · **strided 1-D binary ❌ S1** · **≥2-D strided ❌ S2** · transposed ✅ (F-contig coalesce) · negative-stride ✅ · simple slice ✅ · **sliced+composed ≥2-D ❌ (S2 class)** · broadcast ✅ · scalar-broadcast ✅ · partial broadcast ✅ · 0-d/1-element ⚠️ (small-N tax) · empty ✅ · NewAxis/singleton ✅ (coalesced) · 5+D ✅ (P14) · stride>bufferSize ⚠️ untested edge · reshape view/copy ✅ · fancy/bool-mask results ✅ · read-only broadcast ✅ · non-owning ✅ · aligned ✅.
+**A. Single-array layouts (25):** C-contig ✅ · F-contig ✅ · strided 1-D unary ✅ (pre-iterator fused rescue) · strided 1-D binary ✅ **fixed (Wave 3 hw-gather, kernel 318 µs)** · ≥2-D strided ✅ **fixed (Wave 3: 941 vs NumPy 1282 e2e)** · transposed ✅ (F-contig coalesce) · negative-stride ✅ · simple slice ✅ · sliced+composed ≥2-D ✅ **fixed (Wave 3)** · broadcast ✅ · scalar-broadcast ✅ · partial broadcast ✅ · 0-d/1-element ⚠️ (small-N tax) · empty ✅ · NewAxis/singleton ✅ (coalesced) · 5+D ✅ (P14) · stride>bufferSize ⚠️ untested edge · reshape view/copy ✅ · fancy/bool-mask results ✅ · read-only broadcast ✅ · non-owning ✅ · aligned ✅.
 
-**B. Pairwise paths (6):** SimdFull ✅ · SimdScalarLeft/Right ✅ · SimdChunk ✅ (inner-contig runtime dispatch) · **General ❌ scalar (S1/S2)** · mixed dtypes ⚠️ (correct, fast-ish, but scalar body — no SIMD).
+**B. Pairwise paths (6):** SimdFull ✅ · SimdScalarLeft/Right ✅ · SimdChunk ✅ (inner-contig runtime dispatch) · General ✅ **hw-gather for 32/64-bit dtypes (Wave 3); scalar fallback otherwise** · mixed dtypes ⚠️ (correct, fast-ish, but scalar body — no SIMD).
 
 **C. Per-operand (8):** aliased/overlapping ✅ **fixed (Wave 1.1: COPY_IF_OVERLAP + write-back)** · **in-place `out=` ❌ no API** · REDUCE operand ✅ · **WRITEMASKED ❌ exec missing** · **VIRTUAL ❌ stub** · buffered/cast ⚠️ (works via bridge; Advance bug latent) · read-only ✅.
 
-**D. Iteration flags (8):** coalesced ✅ · IDENTPERM/NEGPERM ✅ · EXLOOP ✅ · **RANGED ⚠️ unused machinery** · GROWINNER ✅ buffered-only · **GATHER_ELIGIBLE ❌ unwired** · EARLY_EXIT ⚠️ (ExecuteReducing early-exits; flag itself dead) · **PARALLEL_SAFE ❌ unwired**.
+**D. Iteration flags (8):** coalesced ✅ · IDENTPERM/NEGPERM ✅ · EXLOOP ✅ · **RANGED ⚠️ unused machinery** · GROWINNER ✅ buffered-only · GATHER_ELIGIBLE ✅ **wired (Wave 3; informational — kernels self-dispatch)** · EARLY_EXIT ⚠️ (ExecuteReducing early-exits; flag itself dead) · **PARALLEL_SAFE ❌ unwired**.
 
-**E. Composite (4):** src-broadcast+dst-contig ✅ · src-contig+dst-strided ⚠️ (store is scalar lane-by-lane) · buffer-required ✅ (bridge) · **REUSE_REDUCE_LOOPS ❌ stub**.
+**E. Composite (4):** src-broadcast+dst-contig ✅ · src-contig+dst-strided ✅ **(Wave 3 scatter store: vectorized compute, per-lane stores)** · buffer-required ✅ (bridge) · **REUSE_REDUCE_LOOPS ❌ stub**.
 
 ---
 
@@ -130,10 +130,10 @@ Each wave is independently shippable, gated by `variation_probe.{cs,py}` + the f
 ### Wave 3 — Strided roofline (S1/S2/S3: 3–13× headroom; kernels already proven)
 | # | change | target |
 |---|---|---|
-| 3.1 | **Phase 2a: `EmitFusedStridedSimdLoop`** at the `lblScalarStrided` site (`DirectILKernelGenerator.InnerLoop.cs:304`): **AVX2 hardware-gather body** for f32/f64/i32/i64 (index vector hoisted, scale=1 byte offsets, guard `Avx2.IsSupported && |7·stride| ≤ int.MaxValue`), insert-gather fallback otherwise. Transcribe `PocKernels.AddF32/SqrtF32/SumF32`; unrolls: binary 2×, unary 4×, reduce 4 accumulators. | S1 1264→~330 µs, S2 2654→~210 µs (beats NumPy) |
-| 3.2 | Wire `GATHER_ELIGIBLE` at construction; include in the Tier-3B kernel cache key so gather/insert/scalar bodies are selected per layout class. | — |
-| 3.3 | **Strided store** (dest-strided): NumPy's `npyv_storen` analog (scalar lane stores from the vector) so CONTIG→NCONTIG and NCONTIG→NCONTIG vectorize too (composite class E2). | `a[::2] = sqrt(b[::2])` shapes |
-| 3.4 | Strided **reduce** body via hw-gather + 4 accumulators in `ExecuteReduction`'s strided kernel. | S3 371→~110 µs |
+| 3.1 | **Phase 2a: `EmitFusedStridedSimdLoop`** at the `lblScalarStrided` site (`DirectILKernelGenerator.InnerLoop.cs:304`): **AVX2 hardware-gather body** for f32/f64/i32/i64 (index vector hoisted, scale=1 byte offsets, guard `Avx2.IsSupported && |7·stride| ≤ int.MaxValue`), insert-gather fallback otherwise. Transcribe `PocKernels.AddF32/SqrtF32/SumF32`; unrolls: binary 2×, unary 4×, reduce 4 accumulators. | ✅ **DONE (2026-06-10).** Kernel: strided add 318 µs (POC 334), strided 2-D sqrt 201 µs (POC 203). Production e2e same-run vs NumPy: S1 1080 vs 1033 (parity), S2 941 vs 1282 (1.36× faster); preallocated-out iterator route 354 µs — the residual e2e delta is the Wave-2.4 allocator tax. Implementation: gather dispatcher + `EmitSimdGatherLoop` in the Tier-3B shell (per-input AVX2 vgather, byte-offset index vector hoisted, runtime stride guard, stride-0/negative valid), reusing the caller's vectorBody; 4× unroll + remainder + scalar tail; i32/u32/f32/i64/u64/f64 at V256+AVX2, scalar fallback otherwise. |
+| 3.2 | ✅ **DONE.** `GATHER_ELIGIBLE` computed in `UpdateContiguityFlags`. Kernel-key selection unnecessary (the Tier-3B kernel is layout-polymorphic; runtime dispatch ≈ 2 compares/chunk). **Bonus bug found & fixed: the NumSharp extension flags ALIASED the shifted NumPy flags** (`CONTIGUOUS==GROWINNER`, `GATHER_ELIGIBLE==ONEITERATION`, `EARLY_EXIT==DELAYBUF`, `PARALLEL_SAFE==REDUCE`) — setting GATHER_ELIGIBLE made `ForEach` run ONE inner loop and silently skip all remaining rows. Renumbered to free bits 3–6; pinned by `NpyIterFlags_ExtensionFlags_DoNotAliasNumPyFlags`. | — |
+| 3.3 | **Strided store** (dest-strided): NumPy's `npyv_storen` analog (scalar lane stores from the vector) so CONTIG→NCONTIG and NCONTIG→NCONTIG vectorize too (composite class E2). | ✅ **DONE.** Scatter-store gather variant (per-lane GetElement + scalar store — NumPy's `npyv_storen` shape): NCONTIG→NCONTIG vectorizes the compute; all 6 dtypes exercised through the real iterator. |
+| 3.4 | Strided **reduce** body via hw-gather + 4 accumulators in `ExecuteReduction`'s strided kernel. | ✅ **DONE.** Gather section in `EmitReductionStridedLoop` ndim==1: 4 vector accumulators → tree-merge → horizontal → scalar-tail continuation; shares identity/combine helpers with the contiguous SIMD path (identical NaN semantics). Sum/Min/Max/Prod. **S3 371→117 µs vs NumPy 205–259 (1.7–2.2× faster).** |
 
 ### Wave 4 — NumPy-default iterator config for ufuncs
 | # | change | rationale |

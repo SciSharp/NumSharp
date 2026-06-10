@@ -95,20 +95,30 @@ namespace NumSharp.Backends.Iteration
         REUSE_REDUCE_LOOPS = 0x1000 << 8,
 
         // =========================================================================
-        // NumSharp Extensions
+        // NumSharp Extensions (bits 3-6 of the legacy byte)
+        //
+        // HISTORY: these previously sat at 0x00010000-0x00080000, which
+        // COLLIDES with the NumPy-parity flags shifted to bits 8-20
+        // (CONTIGUOUS==GROWINNER, GATHER_ELIGIBLE==ONEITERATION,
+        // EARLY_EXIT==DELAYBUF, PARALLEL_SAFE==REDUCE). Setting CONTIGUOUS
+        // silently set GROWINNER (latent — only matters with BUFFER), and
+        // setting GATHER_ELIGIBLE set ONEITERATION, making ForEach run a
+        // single inner loop and silently skip the rest of the iteration.
+        // Bits 3-6 are free: the legacy block uses bits 0-2, NumPy-parity
+        // flags use 8-20, transfer flags use 24-31.
         // =========================================================================
 
         /// <summary>All operands are contiguous (SIMD eligible).</summary>
-        CONTIGUOUS = 0x00010000,
+        CONTIGUOUS = 1 << 3,
 
         /// <summary>Can use AVX2 gather for strided access.</summary>
-        GATHER_ELIGIBLE = 0x00020000,
+        GATHER_ELIGIBLE = 1 << 4,
 
         /// <summary>Operation supports early exit (boolean ops).</summary>
-        EARLY_EXIT = 0x00040000,
+        EARLY_EXIT = 1 << 5,
 
         /// <summary>Parallel outer loop is safe.</summary>
-        PARALLEL_SAFE = 0x00080000,
+        PARALLEL_SAFE = 1 << 6,
     }
 
     /// <summary>

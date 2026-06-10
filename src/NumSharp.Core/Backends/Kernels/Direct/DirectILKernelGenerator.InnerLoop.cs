@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
@@ -181,8 +184,23 @@ namespace NumSharp.Backends.Kernels
             // dtype across operands and SIMD-capable.
             bool simdBroadcastBinaryPossible = simdPossible && nIn == 2;
 
+            // ---- Hardware-gather viability (Phase 2a). ----
+            // Same-dtype SIMD kernels additionally get a strided fast path:
+            // inputs are loaded with AVX2 vgather (byte-offset index vector
+            // hoisted out of the loop — the hot loop is stride-agnostic), the
+            // user's vectorBody runs unchanged, and the output is stored
+            // contiguously (or scattered per-lane when the output is strided
+            // too). This is NumPy's npyv_loadn technique, POC-proven 1.3-1.9x
+            // FASTER than NumPy on strided shapes (benchmark/poc/).
+            GatherSupport gatherSupport = default;
+            bool gatherPossible = simdPossible && TryGetGatherSupport(operandTypes[0], out gatherSupport);
+
             var lblScalarStrided = il.DefineLabel();
+            var lblTryGather = il.DefineLabel();
             var lblEnd = il.DefineLabel();
+            // Where the contig/broadcast checks bail to: the gather dispatcher
+            // when available, else straight to the scalar-strided fallback.
+            var lblSimdBail = gatherPossible ? lblTryGather : lblScalarStrided;
 
             if (simdPossible)
             {
@@ -206,10 +224,10 @@ namespace NumSharp.Backends.Kernels
                     var lblSimdSR = il.DefineLabel();
                     var lblLhsIsZero = il.DefineLabel();
 
-                    // Output stride must == elemSize for SIMD store; else scalar.
+                    // Output stride must == elemSize for SIMD store; else try gather.
                     il.Emit(OpCodes.Ldloc, strideLocals[2]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-                    il.Emit(OpCodes.Bne_Un, lblScalarStrided);
+                    il.Emit(OpCodes.Bne_Un, lblSimdBail);
 
                     // Branch on lhs stride: 0 → check rhs for SL/scalar; else
                     // check for == elemSize → check rhs for CC/SR; else scalar.
@@ -220,7 +238,7 @@ namespace NumSharp.Backends.Kernels
                     // lhs != 0; require lhs == elemSize for CC or SR.
                     il.Emit(OpCodes.Ldloc, strideLocals[0]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-                    il.Emit(OpCodes.Bne_Un, lblScalarStrided);
+                    il.Emit(OpCodes.Bne_Un, lblSimdBail);
 
                     // lhs == elemSize; now check rhs.
                     il.Emit(OpCodes.Ldloc, strideLocals[1]);
@@ -229,13 +247,13 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, strideLocals[1]);
                     il.Emit(OpCodes.Ldc_I8, 0L);
                     il.Emit(OpCodes.Beq, lblSimdSR);
-                    il.Emit(OpCodes.Br, lblScalarStrided);
+                    il.Emit(OpCodes.Br, lblSimdBail);
 
                     // lhs == 0; require rhs == elemSize for SL.
                     il.MarkLabel(lblLhsIsZero);
                     il.Emit(OpCodes.Ldloc, strideLocals[1]);
                     il.Emit(OpCodes.Ldc_I8, (long)elemSize);
-                    il.Emit(OpCodes.Bne_Un, lblScalarStrided);
+                    il.Emit(OpCodes.Bne_Un, lblSimdBail);
                     il.Emit(OpCodes.Br, lblSimdSL);
 
                     // ── SIMD contig+contig (existing path) ──────────────────
@@ -259,16 +277,59 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    // Non-binary (unary, ternary, ...): only the all-contig SIMD
-                    // path. Any stride != elemSize → scalar fallback.
+                    // Non-binary (unary, ternary, ...): the all-contig SIMD
+                    // path. Any stride != elemSize → gather (when available)
+                    // → scalar fallback.
                     for (int op = 0; op < nOp; op++)
                     {
                         int sz = GetTypeSize(operandTypes[op]);
                         il.Emit(OpCodes.Ldloc, strideLocals[op]);
                         il.Emit(OpCodes.Ldc_I8, (long)sz);
-                        il.Emit(OpCodes.Bne_Un, lblScalarStrided);
+                        il.Emit(OpCodes.Bne_Un, lblSimdBail);
                     }
                     EmitSimdContigLoop(il, operandTypes, ptrLocals, vectorBody!, scalarBody);
+                    il.Emit(OpCodes.Br, lblEnd);
+                }
+
+                // ── Hardware-gather dispatcher (Phase 2a) ───────────────────
+                // Reached when the inner axis is genuinely strided. Guards:
+                // every input's byte stride must fit the int32 lane-index
+                // budget (|7·stride| ≤ int.MaxValue, covers negative and
+                // zero strides); then pick contig-store (out == elemSize) or
+                // per-lane scatter-store (out strided within budget).
+                if (gatherPossible)
+                {
+                    il.MarkLabel(lblTryGather);
+
+                    for (int op = 0; op < nIn; op++)
+                    {
+                        il.Emit(OpCodes.Ldloc, strideLocals[op]);
+                        il.Emit(OpCodes.Ldc_I8, GatherStrideLimit);
+                        il.Emit(OpCodes.Bgt, lblScalarStrided);
+                        il.Emit(OpCodes.Ldloc, strideLocals[op]);
+                        il.Emit(OpCodes.Ldc_I8, -GatherStrideLimit);
+                        il.Emit(OpCodes.Blt, lblScalarStrided);
+                    }
+
+                    var lblGatherScatter = il.DefineLabel();
+                    il.Emit(OpCodes.Ldloc, strideLocals[nIn]);
+                    il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+                    il.Emit(OpCodes.Bne_Un, lblGatherScatter);
+
+                    EmitSimdGatherLoop(il, operandTypes, ptrLocals, strideLocals,
+                        vectorBody!, scalarBody, gatherSupport, scatterOut: false);
+                    il.Emit(OpCodes.Br, lblEnd);
+
+                    il.MarkLabel(lblGatherScatter);
+                    il.Emit(OpCodes.Ldloc, strideLocals[nIn]);
+                    il.Emit(OpCodes.Ldc_I8, GatherStrideLimit);
+                    il.Emit(OpCodes.Bgt, lblScalarStrided);
+                    il.Emit(OpCodes.Ldloc, strideLocals[nIn]);
+                    il.Emit(OpCodes.Ldc_I8, -GatherStrideLimit);
+                    il.Emit(OpCodes.Blt, lblScalarStrided);
+
+                    EmitSimdGatherLoop(il, operandTypes, ptrLocals, strideLocals,
+                        vectorBody!, scalarBody, gatherSupport, scatterOut: true);
                     il.Emit(OpCodes.Br, lblEnd);
                 }
 
@@ -825,6 +886,302 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
+        }
+
+        // =====================================================================
+        // Hardware-gather strided SIMD (Phase 2a)
+        // =====================================================================
+
+        /// <summary>
+        /// Byte-stride budget for vgather int32 lane indices: the largest lane
+        /// offset is 7·stride (8-lane) so |stride| must stay ≤ int.MaxValue/8.
+        /// Used uniformly for 4-lane dtypes too (slightly conservative).
+        /// </summary>
+        internal const long GatherStrideLimit = int.MaxValue / 8;
+
+        /// <summary>Reflection handles for one dtype's gather emission.</summary>
+        internal readonly struct GatherSupport
+        {
+            /// <summary>SIMD lanes per vector (8 for 32-bit dtypes, 4 for 64-bit at V256).</summary>
+            public readonly int Lanes;
+
+            /// <summary>Index vector CLR type (Vector256&lt;int&gt; or Vector128&lt;int&gt;).</summary>
+            public readonly Type IndexVectorType;
+
+            /// <summary><c>Vector{128|256}.Create(int×lanes)</c>.</summary>
+            public readonly MethodInfo IndexCreate;
+
+            /// <summary><c>Avx2.GatherVector256(T*, idx, scale)</c>.</summary>
+            public readonly MethodInfo Gather;
+
+            /// <summary><c>Vector256.GetElement&lt;T&gt;(vec, i)</c> for scatter stores.</summary>
+            public readonly MethodInfo GetElement;
+
+            public GatherSupport(int lanes, Type indexVectorType, MethodInfo indexCreate, MethodInfo gather, MethodInfo getElement)
+            {
+                Lanes = lanes;
+                IndexVectorType = indexVectorType;
+                IndexCreate = indexCreate;
+                Gather = gather;
+                GetElement = getElement;
+            }
+        }
+
+        /// <summary>
+        /// Whether <paramref name="dtype"/> can use the AVX2 hardware-gather
+        /// strided path on this machine. Requires the baked SIMD width to be
+        /// 256 (the gather output must match the Vector{W} the vectorBody
+        /// operates on) and a gather-capable element width (32/64-bit) — the
+        /// same dtype set NumPy's npyv_loadn gathers. Other dtypes/widths keep
+        /// the scalar-strided fallback.
+        /// </summary>
+        internal static bool TryGetGatherSupport(NPTypeCode dtype, out GatherSupport support)
+        {
+            support = default;
+            if (VectorBits != 256 || !Avx2.IsSupported)
+                return false;
+
+            Type clrType;
+            switch (dtype)
+            {
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Single:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Double:
+                    clrType = GetClrType(dtype);
+                    break;
+                default:
+                    return false;
+            }
+
+            bool is32 = GetTypeSize(dtype) == 4;
+            int lanes = is32 ? 8 : 4;
+            Type idxVecType = is32 ? typeof(Vector256<int>) : typeof(Vector128<int>);
+
+            var idxArgTypes = new Type[lanes];
+            for (int i = 0; i < lanes; i++) idxArgTypes[i] = typeof(int);
+            MethodInfo idxCreate = (is32 ? typeof(Vector256) : typeof(Vector128))
+                .GetMethod("Create", idxArgTypes)
+                ?? throw new InvalidOperationException($"Vector{(is32 ? 256 : 128)}.Create(int×{lanes}) not found");
+
+            MethodInfo gather = typeof(Avx2).GetMethod(
+                    "GatherVector256",
+                    new[] { clrType.MakePointerType(), idxVecType, typeof(byte) })
+                ?? throw new InvalidOperationException($"Avx2.GatherVector256({clrType.Name}*) not found");
+
+            MethodInfo getElement = typeof(Vector256).GetMethod("GetElement")!.MakeGenericMethod(clrType);
+
+            support = new GatherSupport(lanes, idxVecType, idxCreate, gather, getElement);
+            return true;
+        }
+
+        /// <summary>
+        /// Push: basePtr + (i + constOffset) * strideBytes.
+        /// </summary>
+        private static void EmitAddrIStridedOffset(
+            ILGenerator il, LocalBuilder basePtr, LocalBuilder locI, long constOffset, LocalBuilder strideBytes)
+        {
+            il.Emit(OpCodes.Ldloc, basePtr);
+            il.Emit(OpCodes.Ldloc, locI);
+            if (constOffset != 0)
+            {
+                il.Emit(OpCodes.Ldc_I8, constOffset);
+                il.Emit(OpCodes.Add);
+            }
+            il.Emit(OpCodes.Ldloc, strideBytes);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+        }
+
+        /// <summary>
+        /// Emit the strided SIMD loop: per-input AVX2 hardware gather (byte-
+        /// offset index vector built ONCE from the runtime stride — the hot
+        /// loop advances only the base address), the caller's vectorBody, and
+        /// either a contiguous vector store or a per-lane scatter store.
+        /// Structure mirrors <see cref="EmitSimdContigLoop"/>: 4× unrolled +
+        /// 1-vector remainder + scalar-strided tail.
+        ///
+        /// Stride-0 (broadcast) inputs are valid here — the index vector is
+        /// all-zero and the gather replicates the element; the dedicated
+        /// SL/SR broadcast paths catch the common binary cases first.
+        /// </summary>
+        private static void EmitSimdGatherLoop(
+            ILGenerator il,
+            NPTypeCode[] operandTypes,
+            LocalBuilder[] ptrLocals,
+            LocalBuilder[] strideLocals,
+            Action<ILGenerator> vectorBody,
+            Action<ILGenerator> scalarBody,
+            GatherSupport g,
+            bool scatterOut)
+        {
+            int nOp = operandTypes.Length;
+            int nIn = nOp - 1;
+            NPTypeCode dtype = operandTypes[0]; // same dtype across operands (CanSimdAllOperands)
+            int elemSize = GetTypeSize(dtype);
+            long lanes = g.Lanes;
+            long unrollStep = lanes * 4;
+
+            // ── Hoist per-input index vectors: Create(0, s, 2s, …, (lanes-1)s). ──
+            var idxLocals = new LocalBuilder[nIn];
+            var locSInt = il.DeclareLocal(typeof(int));
+            for (int op = 0; op < nIn; op++)
+            {
+                idxLocals[op] = il.DeclareLocal(g.IndexVectorType);
+                il.Emit(OpCodes.Ldloc, strideLocals[op]);
+                il.Emit(OpCodes.Conv_I4); // guarded: |stride| ≤ GatherStrideLimit
+                il.Emit(OpCodes.Stloc, locSInt);
+                for (int k = 0; k < g.Lanes; k++)
+                {
+                    if (k == 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    else if (k == 1)
+                    {
+                        il.Emit(OpCodes.Ldloc, locSInt);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldloc, locSInt);
+                        il.Emit(OpCodes.Ldc_I4, k);
+                        il.Emit(OpCodes.Mul);
+                    }
+                }
+                il.Emit(OpCodes.Call, g.IndexCreate);
+                il.Emit(OpCodes.Stloc, idxLocals[op]);
+            }
+
+            var locI = il.DeclareLocal(typeof(long));
+            var locUnrollEnd = il.DeclareLocal(typeof(long));
+            var locVectorEnd = il.DeclareLocal(typeof(long));
+            LocalBuilder? locOutVec = scatterOut ? il.DeclareLocal(GetVectorType(GetClrType(dtype))) : null;
+
+            var lblUnroll = il.DefineLabel();
+            var lblUnrollEnd = il.DefineLabel();
+            var lblRem = il.DefineLabel();
+            var lblRemEnd = il.DefineLabel();
+            var lblTail = il.DefineLabel();
+            var lblTailEnd = il.DefineLabel();
+
+            // unrollEnd = count - unrollStep; vectorEnd = count - lanes; i = 0
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldc_I8, lanes);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // === 4× UNROLLED GATHER LOOP ===
+            il.MarkLabel(lblUnroll);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollEnd);
+
+            for (int u = 0; u < 4; u++)
+            {
+                long offset = u * lanes;
+                EmitGatherVectorGroup(il, operandTypes, ptrLocals, strideLocals, idxLocals,
+                    locI, offset, elemSize, g, vectorBody, scatterOut, locOutVec);
+            }
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblUnroll);
+            il.MarkLabel(lblUnrollEnd);
+
+            // === REMAINDER (single vector) ===
+            il.MarkLabel(lblRem);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemEnd);
+
+            EmitGatherVectorGroup(il, operandTypes, ptrLocals, strideLocals, idxLocals,
+                locI, 0, elemSize, g, vectorBody, scatterOut, locOutVec);
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, lanes);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblRem);
+            il.MarkLabel(lblRemEnd);
+
+            // === SCALAR TAIL (strided) ===
+            il.MarkLabel(lblTail);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Bge, lblTailEnd);
+
+            EmitScalarElement(il, operandTypes, ptrLocals, strideLocals, locI, contig: false, scalarBody);
+
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblTail);
+            il.MarkLabel(lblTailEnd);
+        }
+
+        /// <summary>
+        /// One vector group of the gather loop: gather N input vectors at
+        /// element position (i + offset), run vectorBody, store the result —
+        /// contiguous vector store, or per-lane extract+store when the output
+        /// is strided.
+        /// </summary>
+        private static void EmitGatherVectorGroup(
+            ILGenerator il,
+            NPTypeCode[] operandTypes,
+            LocalBuilder[] ptrLocals,
+            LocalBuilder[] strideLocals,
+            LocalBuilder[] idxLocals,
+            LocalBuilder locI, long offset, int elemSize,
+            GatherSupport g,
+            Action<ILGenerator> vectorBody,
+            bool scatterOut, LocalBuilder? locOutVec)
+        {
+            int nIn = operandTypes.Length - 1;
+            NPTypeCode outType = operandTypes[nIn];
+
+            for (int op = 0; op < nIn; op++)
+            {
+                // base = ptr + (i + offset) * stride  (byte*)
+                EmitAddrIStridedOffset(il, ptrLocals[op], locI, offset, strideLocals[op]);
+                il.Emit(OpCodes.Ldloc, idxLocals[op]);
+                il.Emit(OpCodes.Ldc_I4_1); // scale = 1: indices are byte offsets
+                il.Emit(OpCodes.Call, g.Gather);
+            }
+
+            vectorBody(il);
+
+            if (!scatterOut)
+            {
+                // Store(vec, ptr): stack already [vec]; push dest address.
+                EmitAddrIPlusOffset(il, ptrLocals[nIn], locI, offset, elemSize);
+                EmitVectorStore(il, outType);
+            }
+            else
+            {
+                // Per-lane scatter: NumPy's npyv_storen shape (no AVX2 scatter
+                // instruction exists; compute is vectorized, stores are scalar).
+                il.Emit(OpCodes.Stloc, locOutVec!);
+                for (int k = 0; k < g.Lanes; k++)
+                {
+                    EmitAddrIStridedOffset(il, ptrLocals[nIn], locI, offset + k, strideLocals[nIn]);
+                    il.Emit(OpCodes.Ldloc, locOutVec!);
+                    il.Emit(OpCodes.Ldc_I4, k);
+                    il.Emit(OpCodes.Call, g.GetElement);
+                    EmitStoreIndirect(il, outType);
+                }
+            }
         }
 
         private static string Sanitize(string key)
