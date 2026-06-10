@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -37,6 +37,36 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
+        // Call-invariant flag arrays for the out=/where= iterator configs
+        // (Wave 2.2) -- allocated once, reused every call.
+        private static readonly NpyIterPerOpFlags[] s_ufuncBinaryOutFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
+        private static readonly NpyIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
+        };
+
+        private static readonly NpyIterPerOpFlags[] s_ufuncUnaryOutFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
+        private static readonly NpyIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
+        };
+
         // =====================================================================
         // NumPy ufunc names (error-text parity). NumPy 2.4.2: np.mod is the
         // 'remainder' ufunc, np.divide/np.true_divide are 'divide',
@@ -284,12 +314,7 @@ namespace NumSharp.Backends
                 using var iter = NpyIterRef.MultiNew(
                     3, new[] { lhs, rhs, target },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | Elw,
-                    },
+                    s_ufuncBinaryOutFlags,
                     opDtypes);
 
                 iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
@@ -307,13 +332,7 @@ namespace NumSharp.Backends
                 using var iter = NpyIterRef.MultiNew(
                     4, new[] { lhs, rhs, target, where },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | Elw,
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
-                    },
+                    s_ufuncBinaryOutMaskedFlags,
                     opDtypes);
 
                 iter.ExecuteElementWise(
@@ -434,11 +453,7 @@ namespace NumSharp.Backends
                 using var iter = NpyIterRef.MultiNew(
                     2, new[] { nd, target },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | Elw,
-                    },
+                    s_ufuncUnaryOutFlags,
                     opDtypes);
 
                 iter.ExecuteElementWiseUnary(kernelIn, outputType, scalarBody, vectorBody, cacheKey);
@@ -448,12 +463,7 @@ namespace NumSharp.Backends
                 using var iter = NpyIterRef.MultiNew(
                     3, new[] { nd, target, where },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | Elw,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | Elw,
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
-                    },
+                    s_ufuncUnaryOutMaskedFlags,
                     opDtypes);
 
                 iter.ExecuteElementWise(

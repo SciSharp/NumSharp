@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -28,14 +28,17 @@ namespace NumSharp.Backends.Unmanaged.Pooling
     ///
     ///     SIZING POLICY
     ///     -------------
-    ///     • Below <see cref="MinPoolableBytes"/> (4 KiB): no pooling. The
-    ///       existing <c>StackedMemoryPool</c> already serves scalar / tiny
-    ///       allocations; adding them here just doubles the work.
-    ///     • Above <see cref="MaxPoolableBytes"/> (default 64 MiB): no
-    ///       pooling. Huge buffers are rare and the memory cost of keeping
-    ///       them around dwarfs the alloc-cost savings.
-    ///     • Per-bucket cap of <see cref="MaxBuffersPerBucket"/> entries to
-    ///       bound peak resident memory.
+    ///     • The window is <see cref="MinPoolableBytes"/> (1 B) to
+    ///       <see cref="MaxPoolableBytes"/> (64 MiB) — Wave 2.4 opened both
+    ///       ends: the 1000-element float32 result (4000 B) missed the old
+    ///       4 KiB floor by 96 bytes, and every 4M-element output (16–32 MiB)
+    ///       missed the old 1 MiB cap, paying ~2× in demand-zero page faults
+    ///       per call (in-place toggle-verified: P1 contig add 4M 3.37→1.74 ms).
+    ///     • Above the cap: no pooling. Huge buffers are rare and the memory
+    ///       cost of keeping them around dwarfs the alloc-cost savings.
+    ///     • Per-bucket cap of <see cref="MaxBuffersPerBucket"/> entries
+    ///       (<see cref="MaxBuffersPerLargeBucket"/> at ≥ 1 MiB) to bound
+    ///       peak resident memory.
     ///     • Bucket key is the EXACT byte count requested (no rounding).
     ///       Same-size repeated allocs are the dominant pattern in element-
     ///       wise ops; rounding to power-of-2 would waste memory and break
@@ -55,22 +58,39 @@ namespace NumSharp.Backends.Unmanaged.Pooling
     /// </summary>
     public static unsafe class SizeBucketedBufferPool
     {
-        /// <summary>Minimum allocation size to pool (bytes). Smaller allocations skip the pool entirely.</summary>
-        public const long MinPoolableBytes = 4096;
+        /// <summary>
+        ///     Minimum allocation size to pool (bytes). Wave 2.4 lowered this
+        ///     from 4096 to 1: the small-N hot path (e.g. a 1000-element
+        ///     float32 ufunc result = 4000 bytes) sat just under the old
+        ///     threshold and paid a fresh NativeMemory.Alloc + GC memory
+        ///     pressure pair on EVERY call. Tiny buckets cost almost nothing
+        ///     resident (8 × size) and a pool hit skips the pressure churn
+        ///     entirely (see the pool-owned pressure accounting below).
+        /// </summary>
+        public const long MinPoolableBytes = 1;
 
         /// <summary>
-        ///     Maximum allocation size to pool (bytes). Capped at &lt; 1 MiB
-        ///     so the pool can't accumulate large resident buffers — a single
-        ///     workload pattern with many 4 MiB+ allocations could otherwise
-        ///     keep tens of MiB pinned in pool indefinitely. Allocations at or
-        ///     above this cap go straight to <see cref="NativeMemory.Alloc"/>
-        ///     and are freed straight back via <see cref="NativeMemory.Free"/>
-        ///     on release; no pool involvement either way.
+        ///     Maximum allocation size to pool (bytes). Wave 2.4 raised this
+        ///     from 1 MiB to 64 MiB: the dominant benchmark/e2e shapes (4M
+        ///     elements = 16 MiB float32 / 32 MiB float64 outputs) all missed
+        ///     the old cap and paid ~0.3–0.4 ms of first-touch page faults per
+        ///     call — the "allocator tax" residual on every measured e2e
+        ///     strided row. NumPy gets the same reuse for free from glibc's
+        ///     arena caching. Resident growth is bounded by the per-bucket cap,
+        ///     which drops to <see cref="MaxBuffersPerLargeBucket"/> at
+        ///     <see cref="LargeBucketThreshold"/> (realistic workloads keep one
+        ///     or two hot output shapes — exactly the tcache pattern).
         /// </summary>
-        public const long MaxPoolableBytes = 1024L * 1024;
+        public const long MaxPoolableBytes = 64L * 1024 * 1024;
 
-        /// <summary>Maximum number of buffers kept per exact-size bucket.</summary>
+        /// <summary>Maximum number of buffers kept per exact-size bucket (below <see cref="LargeBucketThreshold"/>).</summary>
         public const int MaxBuffersPerBucket = 8;
+
+        /// <summary>Bucket sizes at/above this hold at most <see cref="MaxBuffersPerLargeBucket"/> buffers.</summary>
+        public const long LargeBucketThreshold = 1024L * 1024;
+
+        /// <summary>Per-bucket cap for large (≥ 1 MiB) buckets — bounds peak resident memory.</summary>
+        public const int MaxBuffersPerLargeBucket = 2;
 
         // Bucket map keyed on exact byte size. ConcurrentStack gives lock-
         // free Push/TryPop, which is the entire fast-path here.
@@ -117,9 +137,27 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     zeroed.
         /// </summary>
         /// <param name="bytes">Byte size of the buffer. Must be &gt; 0.</param>
+        // -----------------------------------------------------------------
+        // GC memory pressure accounting (Wave 2.4) — POOL-OWNED, tracking
+        // the buffer's LIVE state (checked out to a caller), not its native
+        // residency. Pressure exists so the GC collects often enough for
+        // finalizer-driven NDArray reclamation to keep up (issue #501) —
+        // pressure must therefore follow what user code holds. Registering
+        // pressure for IDLE pooled buffers was measured to inflate the GC's
+        // view of memory tightness by the pool's whole resident set
+        // (~100-200 MB of warm large buffers) and drove constant gen2
+        // collections: every probe row degraded 30-50%. So: Add on every
+        // Take (fresh or hit), Remove on every Return (pooled or freed) —
+        // the same net semantics the per-block Disposer accounting had,
+        // owned by the pool so the Disposer stays pressure-free.
+        // -----------------------------------------------------------------
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IntPtr Take(long bytes)
         {
+            if (bytes > 0)
+                GC.AddMemoryPressure(bytes);
+
             if (bytes < MinPoolableBytes || bytes >= MaxPoolableBytes)
             {
                 Interlocked.Increment(ref _misses);
@@ -154,6 +192,11 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         {
             if (ptr == IntPtr.Zero) return;
 
+            // Live-state pressure accounting: the buffer leaves user hands
+            // here regardless of whether it parks in the pool or frees.
+            if (bytes > 0)
+                GC.RemoveMemoryPressure(bytes);
+
             if (bytes < MinPoolableBytes || bytes >= MaxPoolableBytes)
             {
                 NativeMemory.Free((void*)ptr);
@@ -165,8 +208,10 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             // Increment first; if we go over the cap, undo and free. This is
             // a benign race — slightly more buffers can be in flight than
             // the cap suggests at any moment, but never permanently.
+            // Large buckets hold fewer buffers to bound resident memory.
+            int cap = bytes >= LargeBucketThreshold ? MaxBuffersPerLargeBucket : MaxBuffersPerBucket;
             int newDepth = Interlocked.Increment(ref depth.Value);
-            if (newDepth > MaxBuffersPerBucket)
+            if (newDepth > cap)
             {
                 Interlocked.Decrement(ref depth.Value);
                 NativeMemory.Free((void*)ptr);
@@ -181,16 +226,19 @@ namespace NumSharp.Backends.Unmanaged.Pooling
 
         /// <summary>
         ///     Drain every pooled buffer immediately (testing / memory pressure).
-        ///     Calls <see cref="NativeMemory.Free"/> on each.
+        ///     Calls <see cref="NativeMemory.Free"/> on each. No pressure
+        ///     adjustment — pooled buffers carry none (live-state accounting).
         /// </summary>
         public static void Clear()
         {
             foreach (var kv in _buckets)
             {
                 while (kv.Value.TryPop(out var ptr))
+                {
                     NativeMemory.Free((void*)ptr);
-                if (_bucketDepth.TryGetValue(kv.Key, out var depth))
-                    Interlocked.Exchange(ref depth.Value, 0);
+                    if (_bucketDepth.TryGetValue(kv.Key, out var depth))
+                        Interlocked.Decrement(ref depth.Value);
+                }
             }
         }
     }

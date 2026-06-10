@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
@@ -12,6 +12,19 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
+        // Call-invariant per-operand flag arrays for the NpyIter routes
+        // (Wave 2.2): identical on every call, so allocating them per call
+        // was pure small-N overhead. The operand arrays stay per-call --
+        // the iterator stores the reference (_operands) and the overlap
+        // machinery can construct nested iterators (np.copyto) on the same
+        // thread, so thread-static reuse would alias live iterators.
+        private static readonly NpyIterPerOpFlags[] s_binaryIterFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
         /// <summary>
         /// Execute a binary operation using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
@@ -358,12 +371,7 @@ namespace NumSharp.Backends
                     NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
                     order,
                     NPY_CASTING.NPY_SAFE_CASTING,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                    });
+                    s_binaryIterFlags);
 
                 iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
             }

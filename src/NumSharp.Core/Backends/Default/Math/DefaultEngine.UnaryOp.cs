@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -13,6 +13,13 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
+        // Call-invariant flag array for the unary NpyIter route (Wave 2.2).
+        private static readonly NpyIterPerOpFlags[] s_unaryIterFlags =
+        {
+            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
         /// <summary>
         /// Execute a unary operation using IL-generated kernels.
         /// Handles type promotion, strided arrays, and kernel dispatch.
@@ -540,11 +547,7 @@ namespace NumSharp.Backends
                     2, new[] { nd, result },
                     globalFlags,
                     order, casting,
-                    new[]
-                    {
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                    },
+                    s_unaryIterFlags,
                     opDtypes);
 
                 if (bufferedPromoting)

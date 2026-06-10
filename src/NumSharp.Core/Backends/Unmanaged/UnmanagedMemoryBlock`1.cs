@@ -1060,10 +1060,14 @@ namespace NumSharp.Backends.Unmanaged
                 _bytesCount = bytesCount;
                 _type = AllocationType.Native;
 
-                // Inform the GC about unmanaged memory allocation so it can
-                // schedule collections appropriately (fixes GitHub issue #501)
-                if (bytesCount > 0)
-                    GC.AddMemoryPressure(bytesCount);
+                // GC memory pressure for Native allocations is POOL-OWNED
+                // (Wave 2.4): SizeBucketedBufferPool.Take registers pressure
+                // when it actually calls NativeMemory.Alloc and unregisters
+                // when it actually frees — pooled reuse neither adds nor
+                // removes. Per-block Add/Remove here double-billed pooled
+                // buffers and cost a GC pressure pair on every transient
+                // result array (the issue #501 protection is preserved at
+                // the pool layer).
             }
 
             /// <summary>
@@ -1113,6 +1117,15 @@ namespace NumSharp.Backends.Unmanaged
                 if (Interlocked.Exchange(ref _freed, 1) != 0)
                     return;
 
+                // Once freed, the finalizer would be a guaranteed no-op
+                // (_freed == 1) — pull this Disposer out of the finalizer
+                // queue so the refcount-driven release path (NDArray Dispose
+                // OR the NDArray finalizer's Release) doesn't leave a dead
+                // finalizable object churning the finalizer thread. Harmless
+                // when called from the finalizer itself or after Dispose's
+                // own SuppressFinalize.
+                GC.SuppressFinalize(this);
+
                 switch (_type)
                 {
                     case AllocationType.Native:
@@ -1120,9 +1133,9 @@ namespace NumSharp.Backends.Unmanaged
                         // next same-size allocation can reuse this buffer
                         // warm (matches the NativeMemory.Alloc call the
                         // owning constructor made via SizeBucketedBufferPool.Take).
+                        // GC pressure is pool-owned (registered at true alloc,
+                        // unregistered at true free) — no per-block Remove.
                         Pooling.SizeBucketedBufferPool.Return(Address, _bytesCount);
-                        if (_bytesCount > 0)
-                            GC.RemoveMemoryPressure(_bytesCount);
                         return;
                     case AllocationType.Wrap:
                         return;
