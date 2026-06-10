@@ -69,20 +69,24 @@ namespace NumSharp
 
         /// <summary>
         ///     Numerical negative, element-wise.
+        ///     Mirrors NumPy's ufunc signature: <c>negative(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
+        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop, so negative(bool, dtype: float64) is legal while plain negative(bool) raises (NumPy parity).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
-        public static NDArray negative(NDArray nd, NDArray @out = null, NDArray where = null)
+        public static NDArray negative(NDArray nd, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
         {
             // ufunc out=/where=: the provided out is returned as-is (no
             // layout post-processing — NumPy returns out untouched).
             if (@out is not null || where is not null)
-                return nd.TensorEngine.Negate(nd, @out, where);
+                return nd.TensorEngine.Negate(nd, dtype, @out, where);
 
             // Route through the engine (same path as the unary `-` operator and nd.negate()):
             // the IL kernel negates unsigned integers by two's-complement wrap (NumPy: -1u -> 255)
             // and handles non-contiguous operands via NpyIter. The legacy hand-written nd.negative()
             // threw NotSupportedException for unsigned dtypes and required a flat Address.
-            var result = nd.TensorEngine.Negate(nd);
+            var result = nd.TensorEngine.Negate(nd, dtype);
             // NumPy-aligned layout preservation: negative preserves F-contig input.
             if (nd.Shape.NDim > 1 && nd.size > 1
                 && nd.Shape.IsFContiguous && !nd.Shape.IsContiguous

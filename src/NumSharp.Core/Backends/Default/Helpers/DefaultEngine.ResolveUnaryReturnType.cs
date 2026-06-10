@@ -9,14 +9,14 @@ namespace NumSharp.Backends
         public NPTypeCode ResolveUnaryReturnType(NDArray nd, Type @override) => ResolveUnaryReturnType(nd, @override?.GetTypeCode());
 
         [MethodImpl(OptimizeAndInline)]
-        public NPTypeCode ResolveUnaryReturnType(NDArray nd, NPTypeCode? @override)
+        public NPTypeCode ResolveUnaryReturnType(NDArray nd, NPTypeCode? @override, string ufunc = "sin")
         {
             if (!@override.HasValue)
                 return nd.GetTypeCode.GetComputingType();
 
             var over = @override.Value;
             if (over < NPTypeCode.Single)
-                throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {nameof(Sin)}");
+                throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
 
             return over;
         }
@@ -32,16 +32,17 @@ namespace NumSharp.Backends
         ///       <item>float16/float32/float64/decimal/complex → preserved</item>
         ///     </list>
         ///     An explicit <paramref name="override"/> dtype is honored (must be a float/complex
-        ///     loop, matching NumPy's "no loop matching signature" error for integer targets).
+        ///     loop, matching NumPy's "no loop matching signature" error for integer targets;
+        ///     <paramref name="ufunc"/> is the NumPy ufunc name quoted in that error).
         /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public NPTypeCode ResolveUnaryFloatReturnType(NDArray nd, NPTypeCode? @override)
+        public NPTypeCode ResolveUnaryFloatReturnType(NDArray nd, NPTypeCode? @override, string ufunc = "sin")
         {
             if (@override.HasValue)
             {
                 var over = @override.Value;
                 if (over < NPTypeCode.Single)
-                    throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {nameof(Sin)}");
+                    throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
                 return over;
             }
 

@@ -127,7 +127,8 @@ public class NpApiOverloadTests_UnaryMath
         var a = np.array(new double[] { 1.0, 4.0, 9.0 });
         var result = np.sqrt(a, typeof(float));
         Assert.IsNotNull(result);
-        // Note: sqrt(a, Type) doesn't actually convert dtype in current impl
+        // sqrt(a, Type) used to silently drop the dtype; it now routes it.
+        Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
     #endregion

@@ -145,6 +145,42 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        /// An explicit dtype= request makes the loop run in that dtype, so each
+        /// input must be reachable from its own dtype by a same_kind cast —
+        /// NumPy's loop resolution rule (UFuncTypeError, probed 2.4.2:
+        /// negative(f64, dtype=i32) → "Cannot cast ufunc 'negative' input from
+        /// dtype('float64') to dtype('int32') with casting rule 'same_kind'").
+        /// The unary error names no input index; the binary one does
+        /// ("input 0" / "input 1", probed via floor_divide).
+        /// </summary>
+        private static void ValidateUnaryInputCast(NPTypeCode inputType, NPTypeCode loopType, string ufuncName)
+        {
+            if (inputType == loopType)
+                return;
+            if (NpyIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                return;
+            throw new ArgumentException(
+                $"Cannot cast ufunc '{ufuncName}' input from " +
+                $"dtype('{inputType.AsNumpyDtypeName()}') to " +
+                $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+        }
+
+        /// <inheritdoc cref="ValidateUnaryInputCast"/>
+        private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
+        {
+            if (lhsType != loopType && !NpyIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw new ArgumentException(
+                    $"Cannot cast ufunc '{ufuncName}' input 0 from " +
+                    $"dtype('{lhsType.AsNumpyDtypeName()}') to " +
+                    $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+            if (rhsType != loopType && !NpyIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw new ArgumentException(
+                    $"Cannot cast ufunc '{ufuncName}' input 1 from " +
+                    $"dtype('{rhsType.AsNumpyDtypeName()}') to " +
+                    $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
+        }
+
+        /// <summary>
         /// Resolve the iteration (= output) shape for a ufunc call with
         /// optional out/where, with NumPy's exact error texts:
         ///   • out joins the broadcast: inputs may broadcast UP to out's shape.

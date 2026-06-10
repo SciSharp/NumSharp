@@ -9,16 +9,15 @@ namespace NumSharp.Backends
 
         public override NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            // ufunc out=/where=: the provided out's dtype governs the final cast
-            // (NumPy ignores a dtype request when out is given); route directly.
-            if (@out is not null || where is not null)
-                return ExecuteBinaryOp(lhs, rhs, BinaryOp.FloorDivide, @out, where);
-
-            // If typeCode specified, cast result after operation
-            var result = ExecuteBinaryOp(lhs, rhs, BinaryOp.FloorDivide);
-            if (typeCode.HasValue && result.typecode != typeCode.Value)
-                return Cast(result, typeCode.Value, copy: false);
-            return result;
+            // ufunc dtype=/out=/where= compose exactly like NumPy 2.4.2 (probed):
+            // dtype= selects the LOOP — floor_divide(i32,i32,dtype=f64) computes
+            // the float loop (-7//2 → -4.0); floor_divide(f64,f64,dtype=i32)
+            // raises the same_kind input-cast UFuncTypeError; and with out= the
+            // loop value is same_kind-cast into out (floor_divide(i32,i32,
+            // out=f32,dtype=f64) lands -4.0f). ExecuteBinaryOp implements the
+            // override + validation; no post-cast — NumPy never computes in the
+            // promoted dtype and casts afterwards.
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.FloorDivide, @out, where, typeCode);
         }
     }
 }

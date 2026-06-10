@@ -53,7 +53,7 @@ namespace NumSharp
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sum(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(NDArray nd, int axis, Type dtype, bool keepdims = false);
-        public abstract NDArray Negate(NDArray nd, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Negate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
@@ -77,7 +77,7 @@ namespace NumSharp
         public abstract NDArray Expm1(NDArray nd, Type dtype);
         public abstract NDArray Expm1(NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Tan(NDArray nd, Type dtype);
-        public abstract NDArray Tan(NDArray nd, NPTypeCode? typeCod = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Tan(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sin(NDArray nd, Type dtype);
         public abstract NDArray Sin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cos(NDArray nd, Type dtype);
@@ -156,9 +156,9 @@ namespace NumSharp
         public abstract NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs);
 
         // Bitwise operations
-        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs);
-        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs);
-        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs);
+        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
 
         // Bit shift operations (integer types only)
         public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);

@@ -7,17 +7,17 @@ namespace NumSharp
         /// <summary>
         /// Return the largest integer smaller or equal to the division of the inputs.
         /// It is equivalent to the Python // operator.
+        /// Mirrors NumPy's ufunc signature: <c>floor_divide(x1, x2, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
         /// <param name="x1">Dividend array.</param>
         /// <param name="x2">Divisor array.</param>
+        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): the computation runs in this dtype; inputs must be same_kind-castable to it.</param>
         /// <returns>y = floor(x1/x2). This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
-        public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out, NDArray where = null)
-            => x1.TensorEngine.FloorDivide(x1, x2, (NPTypeCode?)null, @out, where);
-
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor_divide.html</remarks>
-        public static NDArray floor_divide(NDArray x1, NDArray x2)
-            => x1.TensorEngine.FloorDivide(x1, x2);
+        public static NDArray floor_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.FloorDivide(x1, x2, dtype, @out, where);
 
         /// <summary>
         /// Return the largest integer smaller or equal to the division of the inputs.

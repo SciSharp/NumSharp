@@ -32,10 +32,15 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            // NumPy rule: signed integer exponents cannot be negative when the loop is
+            // NumPy rule: signed integer exponents cannot be negative when the LOOP is
             // integer**integer. The check is on the exponent, regardless of base value
             // (NumPy throws even for base=1 or base=-1 where the answer would be exact).
-            if (lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger() && IsSignedInteger(rhs.GetTypeCode))
+            // An explicit dtype= selects the loop, so power(2, -1, dtype=f64) = 0.5 is
+            // legal while power(2, -1, dtype=i64) still raises (probed 2.4.2).
+            bool loopIsInteger = typeCode.HasValue
+                ? typeCode.Value.IsInteger()
+                : lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger();
+            if (loopIsInteger && lhs.GetTypeCode.IsInteger() && rhs.GetTypeCode.IsInteger() && IsSignedInteger(rhs.GetTypeCode))
             {
                 if (ContainsNegative(rhs))
                     throw new ArgumentException("Integers to negative integer powers are not allowed.");
@@ -43,9 +48,22 @@ namespace NumSharp.Backends
 
             // ufunc out=/where=: skip the scalar-exponent fast paths (they return
             // fresh arrays) and route through the iterator with the provided out.
-            // NumPy ignores a dtype request when out is given (out's dtype governs).
+            // dtype= composes with out — the loop COMPUTES in dtype and the value
+            // is same_kind-cast into out (probed 2.4.2: power(10,8,out=f64,
+            // dtype=f32) stores the float32-rounded value; the out-cast error
+            // reports the dtype-overridden loop, not the promoted one).
             if (@out is not null || where is not null)
-                return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, @out, where);
+                return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, @out, where, typeCode);
+
+            // ufunc dtype= without out: the loop runs IN the requested dtype
+            // (NumPy resolves the loop signature from dtype= — power(10,11,
+            // dtype=f64) = 1e11 exactly, NOT int32-wrap-then-cast). The
+            // scalar-exponent fast paths below substitute whole other ufunc
+            // loops (sqrt/multiply/reciprocal), which resolve differently
+            // under a dtype request — skip them and let the iterator compute
+            // at the requested precision.
+            if (typeCode.HasValue)
+                return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power, null, null, typeCode);
 
             // Scalar-exponent fast paths (mirror NumPy's loops.c.src constant-time bodies):
             //   - exp = 0 → ones_like(lhs) in result dtype
@@ -61,17 +79,10 @@ namespace NumSharp.Backends
             {
                 var fast = TryScalarExponentFastPath(lhs, rhs);
                 if (fast is not null)
-                {
-                    if (typeCode.HasValue && fast.typecode != typeCode.Value)
-                        return Cast(fast, typeCode.Value, copy: false);
                     return fast;
-                }
             }
 
-            var result = ExecuteBinaryOp(lhs, rhs, BinaryOp.Power);
-            if (typeCode.HasValue && result.typecode != typeCode.Value)
-                return Cast(result, typeCode.Value, copy: false);
-            return result;
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Power);
         }
 
         /// <summary>

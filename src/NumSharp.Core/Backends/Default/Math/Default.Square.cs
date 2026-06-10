@@ -13,6 +13,11 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Square(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
+            // dtype= runs the loop in that dtype: the input must reach it via
+            // a same_kind cast (square(f64, dtype=i32) raises, probed 2.4.2).
+            if (typeCode.HasValue)
+                ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "square");
+
             // np.square preserves input dtype (unlike sin/cos which promote to float)
             var outputType = typeCode ?? nd.GetTypeCode;
             return ExecuteUnaryOp(nd, UnaryOp.Square, outputType, @out, where);

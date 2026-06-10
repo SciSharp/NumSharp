@@ -39,10 +39,16 @@ namespace NumSharp.Backends
         /// <param name="where">Optional bool write mask (NumPy ufunc where=):
         /// only mask-true elements are computed/written; false slots keep the
         /// prior out contents (uninitialized for a fresh result).</param>
+        /// <param name="dtype">Optional explicit loop dtype (NumPy ufunc dtype=):
+        /// overrides NEP50 promotion — the loop COMPUTES in this dtype (probed
+        /// 2.4.2: power(10,11,dtype=f64) = 1e11 exactly, no int wrap; the
+        /// f32-rounding of sqrt/power dtype=f32 lands even in a wider out).
+        /// Each input must be same_kind-castable to it, and a provided out is
+        /// validated against it rather than the promoted dtype.</param>
         /// <returns>Result array with promoted type (or <paramref name="@out"/>)</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op,
-            NDArray @out = null, NDArray where = null)
+            NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -97,6 +103,18 @@ namespace NumSharp.Backends
                 {
                     resultType = NPTypeCode.Double;
                 }
+            }
+
+            // ufunc dtype= (NumPy loop-signature override): the loop runs IN the
+            // requested dtype — inputs are cast (same_kind-validated, NumPy's
+            // UFuncTypeError text) and computation happens at that precision.
+            // Replaces the promoted dtype BEFORE the out/where branch so a
+            // provided out is validated against the dtype-overridden loop
+            // (probed: power(dtype=f32, out=i32) reports float32 → int32).
+            if (dtype.HasValue && dtype.Value != resultType)
+            {
+                ValidateBinaryInputCasts(lhsType, rhsType, dtype.Value, UfuncName(op));
+                resultType = dtype.Value;
             }
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final

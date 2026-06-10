@@ -17,12 +17,24 @@ namespace NumSharp.Backends
             var inputType = nd.GetTypeCode;
 
             // NumPy: np.abs(complex) returns float64 (the magnitude), not complex
-            // The IL kernel handles Complex→Double type change
+            // The IL kernel handles Complex→Double type change.
+            // dtype= names the loop's OUTPUT for complex absolute (D->d): float
+            // kinds select the magnitude dtype; integer/bool/complex requests
+            // have no loop (probed 2.4.2: abs(c128, dtype=f64) → [5.],
+            // dtype=c128 → "No loop matching ... ufunc absolute").
             if (inputType == NPTypeCode.Complex)
             {
+                if (typeCode.HasValue && (typeCode.Value < NPTypeCode.Single || typeCode.Value == NPTypeCode.Complex))
+                    throw new IncorrectTypeException(
+                        "No loop matching the specified signature and casting was found for ufunc absolute");
                 var outputType = typeCode ?? NPTypeCode.Double;
                 return ExecuteUnaryOp(nd, UnaryOp.Abs, outputType, @out, where);
             }
+
+            // dtype= runs the loop in that dtype: the input must reach it via
+            // a same_kind cast (abs(f64, dtype=i32) raises, probed 2.4.2).
+            if (typeCode.HasValue)
+                ValidateUnaryInputCast(inputType, typeCode.Value, "absolute");
 
             // np.abs preserves input dtype (unlike trigonometric functions)
             // Only use explicit typeCode if provided, otherwise keep input type
