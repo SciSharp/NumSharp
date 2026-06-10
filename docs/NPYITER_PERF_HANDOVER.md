@@ -288,6 +288,8 @@ dotnet test --no-build -f net10.0 --filter "TestCategory!=OpenBugs&TestCategory!
 
 ## 10. Open decisions — **what should the next session do?**
 
+> **2026-06-10:** a full gap analysis vs NumPy (capability matrix, variation-grid measurements, proven overlap-corruption bug) with a prioritized 6-wave change plan now lives in **`docs/NPYITER_GAPS_AND_ROADMAP.md`** — it supersedes the options below as the planning surface. Gate scripts: `benchmark/poc/variation_probe.{cs,py}`.
+
 Pick one (my recommendation in **bold**):
 
 - **A. Phase 2a (fused strided-SIMD).** Highest confidence: 2.2×→parity already proven, reference impl in-tree to port, additive/low-risk, moves real production numbers (multi-D strided + binary). *Recommended first.*
