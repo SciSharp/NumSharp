@@ -179,8 +179,8 @@ Total: ~44 distinct variations — 25 single-array layouts, 6 pairwise paths, 8 
 - Ranged iteration (RANGE) — Partial traversal of a subset.
 - GROWINNER — Inner-loop length varies across outer iterations.
 - GATHER_ELIGIBLE — Strided inner axis but dtype supports AVX2 gather.
-- EARLY_EXIT — Op supports short-circuit (All/Any/IsAllZero).
-- PARALLEL_SAFE — Outer loop has no cross-iteration dependency.
+- Early exit — short-circuit (All/Any/IsAllZero) is a KERNEL property (`SupportsEarlyExit`/`ShouldExit`), not an iterator flag.
+- PARALLEL_SAFE — iteration range splittable across workers: no REDUCE operand, ≤1 WRITE operand with COPY_IF_OVERLAP-resolved overlap (`IsParallelSafe`).
 
 ### E. NpyIter composite execution paths
 

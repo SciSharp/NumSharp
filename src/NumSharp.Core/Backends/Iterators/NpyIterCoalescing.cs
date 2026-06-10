@@ -44,15 +44,19 @@ namespace NumSharp.Backends.Iteration
                     long stride0 = strides[op * stridesNDim + writeAxis];
                     long stride1 = strides[op * stridesNDim + nextAxis];
 
-                    // Can coalesce if:
-                    // - Either axis has shape 1 (trivial dimension, contributes no iteration)
-                    //   Unlike NumPy's stricter rule (requires stride==0), NumSharp absorbs
-                    //   any size-1 axis into its neighbor since it's a no-op iteration-wise.
-                    //   This is needed for correctness with cases like (2,4,1) contiguous.
-                    // - Strides are compatible: stride0 * shape0 == stride1
+                    // NumPy's exact rule (nditer_api.c npyiter_coalesce_axes): a
+                    // size-1 axis is only trivially absorbable when its stride is
+                    // 0. Construction guarantees that invariant (fill_axisdata
+                    // parity: any iterator axis with Shape[d]==1 gets stride 0 for
+                    // every operand), which is what makes the merge rule below
+                    // ("take stride1 when stride0==0") correct. The previous
+                    // relaxed rule (any size-1 axis) combined with that merge rule
+                    // let a size-1 axis carrying a nonzero stride win the merge,
+                    // corrupting the iteration order (RemoveMultiIndex on
+                    // transposed/sliced views walked the wrong elements).
                     bool opCanCoalesce =
-                        shape0 == 1 ||
-                        shape1 == 1 ||
+                        (shape0 == 1 && stride0 == 0) ||
+                        (shape1 == 1 && stride1 == 0) ||
                         (stride0 * shape0 == stride1);
 
                     if (!opCanCoalesce)
@@ -110,6 +114,76 @@ namespace NumSharp.Backends.Iteration
             state.ItFlags &= ~(uint)NpyIterFlags.HASMULTIINDEX;
 
             // Update inner strides cache after dimension change
+            state.UpdateInnerStrides();
+        }
+
+        /// <summary>
+        /// Remove size-1 axes from the internal representation. Each contributes
+        /// exactly one coordinate (always 0) and stride 0 (fill invariant), so
+        /// removal never changes the element-visit sequence — it restores a
+        /// meaningful innermost axis for EXLOOP/kernels and the buffer-manager
+        /// linearity test. NumPy reaches the same state through its
+        /// UNCONDITIONAL npyiter_coalesce_axes (the strict trivial branch
+        /// absorbs every stride-0 size-1 axis); NumSharp's full coalesce is
+        /// gated on all-operands-contiguous, so the non-coalesced branch calls
+        /// this instead — without it, a trailing size-1 axis sits innermost and
+        /// collapses EXLOOP to one-element inner loops ((N,1) strided views ran
+        /// N kernel invocations of count 1).
+        ///
+        /// Must NOT be used when a multi-index or flat index is tracked — index
+        /// reconstruction needs the original axis structure (NumPy likewise
+        /// skips coalescing there).
+        /// </summary>
+        public static void RemoveUnitAxes(ref NpyIterState state)
+        {
+            if (state.NDim <= 1)
+                return;
+
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+
+            int write = 0;
+            for (int read = 0; read < state.NDim; read++)
+            {
+                if (shape[read] == 1)
+                    continue;
+
+                if (write != read)
+                {
+                    shape[write] = shape[read];
+                    for (int op = 0; op < state.NOp; op++)
+                    {
+                        int baseIdx = op * stridesNDim;
+                        strides[baseIdx + write] = strides[baseIdx + read];
+                    }
+                }
+                write++;
+            }
+
+            if (write == state.NDim)
+                return;  // no size-1 axes
+
+            // Degenerate all-size-1 iteration: keep a single unit axis
+            // (stride 0 already, per the fill invariant).
+            if (write == 0)
+            {
+                shape[0] = 1;
+                for (int op = 0; op < state.NOp; op++)
+                    strides[op * stridesNDim] = 0;
+                write = 1;
+            }
+
+            state.NDim = write;
+
+            // Axis removal invalidates the original-axis mapping; reset to
+            // identity exactly like CoalesceAxes (no index tracking is active
+            // on this path).
+            for (int d = 0; d < write; d++)
+                perm[d] = (sbyte)d;
+            state.ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+
             state.UpdateInnerStrides();
         }
 
@@ -235,22 +309,41 @@ namespace NumSharp.Backends.Iteration
 
             // Simple insertion sort by minimum absolute stride across all operands
             // Using insertion sort for stability and good performance on nearly-sorted data
+            // Key-strides scratch is hoisted out of the loop (CA2014: stackalloc in
+            // a loop accumulates stack space per iteration — overflow risk for
+            // high-dimensional iterators since NumSharp has no NPY_MAXDIMS cap).
+            //
+            // All-stride-0 axes (GetMinStride == 0; size-1 axes under the
+            // fill_axisdata invariant) carry no ordering signal. In DESCENDING
+            // (iteration-order) mode they must sort OUTERMOST, never innermost:
+            // an innermost stride-0 axis collapses the inner loop to one element
+            // and defeats the linearity test (forcing needless buffering), while
+            // its position never changes the element-visit sequence (one
+            // coordinate value). NumPy reaches the same outcome — its ambiguous
+            // comparison keeps size-1 axes out of the way and its unconditional
+            // coalesce absorbs them. In ASCENDING (pre-coalesce) mode key 0
+            // sorting first is exactly right: the strict trivial branch absorbs
+            // those axes immediately.
+            var keyStrides = stackalloc long[state.NOp];
             for (int i = 1; i < ndim; i++)
             {
                 long keyShape = shape[i];
                 sbyte keyPerm = perm[i];
 
                 // Gather key strides for all operands
-                var keyStrides = stackalloc long[state.NOp];
                 for (int op = 0; op < state.NOp; op++)
                     keyStrides[op] = strides[op * stridesNDim + i];
 
                 long keyMinStride = GetMinStride(strides, state.NOp, i, stridesNDim);
+                if (!ascending && keyMinStride == 0)
+                    keyMinStride = long.MaxValue;
 
                 int j = i - 1;
                 while (j >= 0)
                 {
                     long jMinStride = GetMinStride(strides, state.NOp, j, stridesNDim);
+                    if (!ascending && jMinStride == 0)
+                        jMinStride = long.MaxValue;
 
                     // Compare based on order (ascending = smallest first)
                     bool shouldShift = ascending
@@ -453,7 +546,14 @@ namespace NumSharp.Backends.Iteration
                     for (int op = 0; op < nop; op++)
                     {
                         long stride = strides[op * stridesNDim + axis];
-                        int elemSize = state.ElementSizes[op];
+                        // Strides are SOURCE-array element strides and BaseOffsets/
+                        // ResetDataPtrs/DataPtrs are byte positions in source-array
+                        // memory, so the byte multiplier must be the SOURCE element
+                        // size. ElementSizes is the buffer dtype size, which
+                        // diverges under a buffered cast (bug (b) family: an int32
+                        // source buffered as float64 doubled the flip offset and
+                        // read past the array under K-order).
+                        int elemSize = state.SrcElementSizes[op];
                         long byteOffset = shapeMinus1 * stride * elemSize;
 
                         // Track cumulative byte offset per-operand (negative because stride<0).

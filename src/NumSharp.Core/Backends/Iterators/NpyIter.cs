@@ -333,17 +333,31 @@ namespace NumSharp.Backends.Iteration
                 // Check if op_axes is provided for this operand
                 if (opAxes != null && i < opAxes.Length && opAxes[i] != null)
                 {
-                    // Use op_axes mapping to set up strides directly
+                    // Use op_axes mapping to set up strides directly.
+                    // NumPy fill_axisdata parity (nditer_constr.c:1618-1679):
+                    // the stride is 0 when the iterator dim is 1, when the entry
+                    // is a broadcast/reduction axis (-1 or REDUCTION_AXIS-encoded),
+                    // or when the operand's mapped axis has length 1 (broadcast
+                    // stretch) — using the raw array stride for a stretched size-1
+                    // axis walked out of bounds.
                     var opAxisMap = opAxes[i];
                     var arrStrides = arrShape.strides;
+                    var arrDims = arrShape.dimensions;
 
                     basePtr = (byte*)arr.Address;
 
                     for (int d = 0; d < _state->NDim; d++)
                     {
-                        if (d < opAxisMap.Length)
+                        if (_state->Shape[d] == 1)
                         {
-                            int opAxis = opAxisMap[d];
+                            // Iterator dim of size 1: never advanced; NumPy forces
+                            // stride 0 (the coalesce trivial-branch and merge rule
+                            // rely on this invariant).
+                            stridePtr[d] = 0;
+                        }
+                        else if (d < opAxisMap.Length)
+                        {
+                            int opAxis = NpyIterUtils.GetOpAxis(opAxisMap[d], out _);
                             if (opAxis < 0)
                             {
                                 // -1 means broadcast/reduce this dimension
@@ -351,8 +365,9 @@ namespace NumSharp.Backends.Iteration
                             }
                             else if (opAxis < arrStrides.Length)
                             {
-                                // Use stride from the mapped axis
-                                stridePtr[d] = arrStrides[opAxis];
+                                // Operand axis of length 1 is broadcast-stretched
+                                // to the iter dim: stride 0, not the raw stride.
+                                stridePtr[d] = arrDims[opAxis] == 1 ? 0 : arrStrides[opAxis];
                             }
                             else
                             {
@@ -392,12 +407,18 @@ namespace NumSharp.Backends.Iteration
                             if (adims[d] != _state->Shape[d]) { sameAsIter = false; break; }
                     }
 
+                    // NumPy fill_axisdata parity (nditer_constr.c:1594-1615): any
+                    // iterator axis of size 1 gets stride 0 for every operand. The
+                    // raw stride of a size-1 axis is arbitrary (transposed/sliced
+                    // views carry nonzero values there) and must never survive
+                    // into the iterator — CoalesceAxes' trivial-branch and merge
+                    // rule both rely on the size-1 ⇒ stride-0 invariant.
                     if (sameAsIter)
                     {
                         basePtr = (byte*)arr.Address + (arrShape.offset * elemBytes);
                         var astrides = arrShape.strides;
                         for (int d = 0; d < _state->NDim; d++)
-                            stridePtr[d] = astrides[d];
+                            stridePtr[d] = _state->Shape[d] == 1 ? 0 : astrides[d];
                     }
                     else
                     {
@@ -406,7 +427,7 @@ namespace NumSharp.Backends.Iteration
 
                         for (int d = 0; d < _state->NDim; d++)
                         {
-                            stridePtr[d] = broadcastArr.strides[d];
+                            stridePtr[d] = _state->Shape[d] == 1 ? 0 : broadcastArr.strides[d];
                         }
                     }
                 }
@@ -414,13 +435,46 @@ namespace NumSharp.Backends.Iteration
                 _state->SetDataPtr(i, basePtr);
                 _state->SetResetDataPtr(i, basePtr);
 
-                // Check for broadcast
+                // Scan stretched dimensions (stride 0 with iter dim > 1).
+                // Read operands: record SourceBroadcast (legacy layout flag).
+                // Write operands: a stretched dim means several iterations land
+                // on the same element — that is a reduction. NumPy fill_axisdata
+                // (nditer_constr.c:1601-1611, npyiter_check_reduce_ok_and_set_flags)
+                // refuses it unless REDUCE_OK is set and the operand is readable;
+                // NumSharp previously filled stride 0 silently and let the
+                // colliding writes race. op_axes-mapped operands get the same
+                // treatment in ApplyOpAxes, which owns reduction semantics for
+                // mapped axes (including REDUCTION_AXIS-encoded entries).
+                bool opAxesMapped = opAxes != null && i < opAxes.Length && opAxes[i] != null;
                 for (int d = 0; d < _state->NDim; d++)
                 {
                     if (_state->Shape[d] > 1 && stridePtr[d] == 0)
                     {
-                        _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
-                        break;
+                        if (!opAxesMapped && (opFlag & NpyIterOpFlags.WRITE) != 0)
+                        {
+                            if ((flags & NpyIterGlobalFlags.REDUCE_OK) == 0)
+                            {
+                                throw new ArgumentException(
+                                    $"output operand requires a reduction along dimension {d}, " +
+                                    "but the reduction is not enabled. The dimension size of 1 " +
+                                    "does not match the expected output shape.");
+                            }
+
+                            if ((opFlag & NpyIterOpFlags.READ) == 0)
+                            {
+                                throw new ArgumentException(
+                                    "output operand requires a reduction, but is flagged as " +
+                                    "write-only, not read-write");
+                            }
+
+                            opFlag |= NpyIterOpFlags.REDUCE;
+                            _state->SetOpFlags(i, opFlag);
+                            _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
+                        }
+                        else
+                        {
+                            _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
+                        }
                     }
                 }
             }
@@ -574,6 +628,17 @@ namespace NumSharp.Backends.Iteration
                     {
                         // Can't coalesce - reorder for the requested iteration order
                         NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
+
+                        // NumPy coalesces UNCONDITIONALLY after order resolution
+                        // (npyiter_coalesce_axes has no contiguity guard), which
+                        // absorbs every size-1 axis via the strict trivial branch.
+                        // NumSharp's full coalesce is gated on all-contiguous, so
+                        // absorb the size-1 axes here explicitly — a trailing one
+                        // would sit innermost (stride 0 under the fill invariant),
+                        // collapsing EXLOOP to one-element inner loops and failing
+                        // the buffer-manager linearity test. Safe on this branch
+                        // only: no multi-index/flat-index is tracked.
+                        NpyIterCoalescing.RemoveUnitAxes(ref *_state);
                     }
                 }
                 else
@@ -685,6 +750,33 @@ namespace NumSharp.Backends.Iteration
             if (_state->IterSize <= 1)
             {
                 _state->ItFlags |= (uint)NpyIterFlags.ONEITERATION;
+            }
+
+            // PARALLEL_SAFE (NumSharp extension): the iteration range can be
+            // split across workers (RANGED + Copy() per worker) without write
+            // hazards when:
+            //  - there is no REDUCE operand (cross-iteration accumulation on a
+            //    shared slot; stretched write dims were flagged REDUCE above), and
+            //  - there are no WRITE operands at all, or exactly one WRITE operand
+            //    whose potential overlap with the inputs was already resolved by
+            //    COPY_IF_OVERLAP processing (forced copy + write-back on Dispose).
+            // Costs nothing extra at construction — it only reuses decisions the
+            // overlap machinery already made. Consumed by the parallel ForEach
+            // work (roadmap Wave 6.2).
+            if ((_state->ItFlags & (uint)NpyIterFlags.REDUCE) == 0)
+            {
+                int writeCount = 0;
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) & NpyIterOpFlags.WRITE) != 0)
+                        writeCount++;
+                }
+
+                if (writeCount == 0 ||
+                    (writeCount == 1 && (flags & NpyIterGlobalFlags.COPY_IF_OVERLAP) != 0))
+                {
+                    _state->ItFlags |= (uint)NpyIterFlags.PARALLEL_SAFE;
+                }
             }
         }
 
@@ -1615,6 +1707,33 @@ namespace NumSharp.Backends.Iteration
                             _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
                         }
                     }
+                    else if (_operands?[op] is { } mappedArr
+                             && opAxis < mappedArr.Shape.dimensions.Length
+                             && mappedArr.Shape.dimensions[opAxis] == 1
+                             && _state->Shape[iterAxis] > 1)
+                    {
+                        // Operand axis of length 1 broadcast-stretched to a larger
+                        // iter dim: same reduction semantics as op_axis = -1 when
+                        // the operand is writeable. NumPy fill_axisdata
+                        // (nditer_constr.c:1653-1661). The stride for this dim was
+                        // already forced to 0 during operand setup.
+                        if (isWriteable)
+                        {
+                            hasReductionAxis = true;
+
+                            if (!reduceOkSet)
+                            {
+                                throw new ArgumentException(
+                                    $"Output operand {op} requires a reduction along dimension {iterAxis}, " +
+                                    "but the reduction is not enabled. " +
+                                    "Add NpyIterGlobalFlags.REDUCE_OK to allow reduction.");
+                            }
+                        }
+                        else
+                        {
+                            _state->ItFlags |= (uint)NpyIterFlags.SourceBroadcast;
+                        }
+                    }
                 }
 
                 // Set reduction flags if this operand has reduction axes
@@ -1687,6 +1806,14 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>Whether all operands are contiguous.</summary>
         public bool IsContiguous => (_state->ItFlags & (uint)NpyIterFlags.CONTIGUOUS) != 0;
+
+        /// <summary>
+        /// Whether the iteration range can be split across parallel workers
+        /// without write hazards (see <see cref="NpyIterFlags.PARALLEL_SAFE"/>):
+        /// no REDUCE operand, and either no WRITE operands or exactly one whose
+        /// potential overlap with inputs was resolved by COPY_IF_OVERLAP.
+        /// </summary>
+        public bool IsParallelSafe => (_state->ItFlags & (uint)NpyIterFlags.PARALLEL_SAFE) != 0;
 
         /// <summary>Whether iterator has external loop.</summary>
         public bool HasExternalLoop => (_state->ItFlags & (uint)NpyIterFlags.EXLOOP) != 0;
@@ -2228,11 +2355,15 @@ namespace NumSharp.Backends.Iteration
                 internalIdim = _state->NDim - 1 - axis;
             }
 
-            // Return byte strides (NumPy convention); internal strides are element counts.
+            // Return byte strides (NumPy convention). Internal strides are element
+            // counts of the SOURCE arrays (NumPy's NAD_STRIDES are array byte
+            // strides), so the multiplier is the SOURCE element size — ElementSizes
+            // is the buffer dtype size and diverges under a buffered cast (bug (b)
+            // family).
             for (int op = 0; op < nop; op++)
             {
                 long elemStride = _state->Strides[op * stridesNDim + internalIdim];
-                outStrides[op] = elemStride * _state->ElementSizes[op];
+                outStrides[op] = elemStride * _state->SrcElementSizes[op];
             }
         }
 
@@ -2276,7 +2407,10 @@ namespace NumSharp.Backends.Iteration
                     for (int op = 0; op < nop; op++)
                     {
                         long elemStride = _state->Strides[op * stridesNDim + innermost];
-                        outStrides[op] = elemStride * _state->ElementSizes[op];
+                        // Strides traverse source-array memory → source element
+                        // size. (Equal to ElementSizes on this branch: casts
+                        // require BUFFER, which took the BufStrides branch above.)
+                        outStrides[op] = elemStride * _state->SrcElementSizes[op];
                     }
                 }
             }

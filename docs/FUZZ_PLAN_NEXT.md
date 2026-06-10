@@ -75,8 +75,9 @@ containment).
 
 ## Part 2 — #3 NpyIter behaviors (= section D, white-box)
 
-Section D's flags (coalesce, IDENTPERM/NEGPERM, EXLOOP, RANGE, GROWINNER, GATHER, EARLY_EXIT,
-PARALLEL) are **chosen by the iterator**, not selectable via `np.*`. They need white-box tests that
+Section D's flags (coalesce, IDENTPERM/NEGPERM, EXLOOP, RANGE, GROWINNER, GATHER,
+PARALLEL_SAFE — EARLY_EXIT was deleted in Wave 1.4; early exit is a kernel property) are
+**chosen by the iterator**, not selectable via `np.*`. They need white-box tests that
 assert the iterator's *chosen plan*, ported from NumPy's own `test_nditer.py`
 (`src/numpy/numpy/_core/tests/test_nditer.py`, ~106 functions). Land under
 `test/NumSharp.UnitTest/Backends/Iterators/Parity/`.

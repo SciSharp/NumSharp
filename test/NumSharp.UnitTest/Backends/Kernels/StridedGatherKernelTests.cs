@@ -19,9 +19,9 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 ///
 /// Also pins the NpyIterFlags collision regression: the NumSharp extension
 /// flags used to alias the shifted NumPy flags (GATHER_ELIGIBLE==ONEITERATION,
-/// CONTIGUOUS==GROWINNER, EARLY_EXIT==DELAYBUF, PARALLEL_SAFE==REDUCE), so
-/// setting GATHER_ELIGIBLE made ForEach run a single inner loop and silently
-/// skip every row after the first.
+/// CONTIGUOUS==GROWINNER, PARALLEL_SAFE==REDUCE), so setting GATHER_ELIGIBLE
+/// made ForEach run a single inner loop and silently skip every row after
+/// the first.
 /// </summary>
 [TestClass]
 public class StridedGatherKernelTests
@@ -228,13 +228,13 @@ public class StridedGatherKernelTests
     [TestMethod]
     public void NpyIterFlags_ExtensionFlags_DoNotAliasNumPyFlags()
     {
-        // The four NumSharp extension flags must not collide with any other
+        // The NumSharp extension flags must not collide with any other
         // NpyIterFlags member (they used to alias GROWINNER/ONEITERATION/
-        // DELAYBUF/REDUCE, silently corrupting multi-row iteration).
+        // REDUCE, silently corrupting multi-row iteration).
         var extension = new[]
         {
             NpyIterFlags.CONTIGUOUS, NpyIterFlags.GATHER_ELIGIBLE,
-            NpyIterFlags.EARLY_EXIT, NpyIterFlags.PARALLEL_SAFE,
+            NpyIterFlags.PARALLEL_SAFE,
         };
         foreach (NpyIterFlags value in Enum.GetValues<NpyIterFlags>())
         {

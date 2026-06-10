@@ -100,12 +100,15 @@ namespace NumSharp.Backends.Iteration
         // HISTORY: these previously sat at 0x00010000-0x00080000, which
         // COLLIDES with the NumPy-parity flags shifted to bits 8-20
         // (CONTIGUOUS==GROWINNER, GATHER_ELIGIBLE==ONEITERATION,
-        // EARLY_EXIT==DELAYBUF, PARALLEL_SAFE==REDUCE). Setting CONTIGUOUS
-        // silently set GROWINNER (latent — only matters with BUFFER), and
-        // setting GATHER_ELIGIBLE set ONEITERATION, making ForEach run a
-        // single inner loop and silently skip the rest of the iteration.
+        // PARALLEL_SAFE==REDUCE). Setting CONTIGUOUS silently set GROWINNER
+        // (latent — only matters with BUFFER), and setting GATHER_ELIGIBLE
+        // set ONEITERATION, making ForEach run a single inner loop and
+        // silently skip the rest of the iteration.
         // Bits 3-6 are free: the legacy block uses bits 0-2, NumPy-parity
-        // flags use 8-20, transfer flags use 24-31.
+        // flags use 8-20, transfer flags use 24-31. Bit 5 (formerly a dead
+        // EARLY_EXIT flag) is unassigned — early exit is a KERNEL property
+        // (INpyBooleanReductionKernel.ShouldExit / SupportsEarlyExit), not
+        // iterator state, so the iterator-level flag was removed.
         // =========================================================================
 
         /// <summary>All operands are contiguous (SIMD eligible).</summary>
@@ -114,10 +117,15 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Can use AVX2 gather for strided access.</summary>
         GATHER_ELIGIBLE = 1 << 4,
 
-        /// <summary>Operation supports early exit (boolean ops).</summary>
-        EARLY_EXIT = 1 << 5,
-
-        /// <summary>Parallel outer loop is safe.</summary>
+        /// <summary>
+        /// The iteration range can be split across parallel workers without
+        /// write hazards. Set at construction when there is no REDUCE operand
+        /// (cross-iteration accumulation on a shared slot) and either no WRITE
+        /// operands at all, or exactly one WRITE operand whose potential
+        /// overlap with the inputs was resolved by COPY_IF_OVERLAP processing
+        /// (forced copy + write-back on Dispose). Consumed by the parallel
+        /// ForEach work (roadmap Wave 6.2).
+        /// </summary>
         PARALLEL_SAFE = 1 << 6,
     }
 
