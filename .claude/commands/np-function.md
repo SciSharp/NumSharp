@@ -166,8 +166,8 @@ Total: ~44 distinct variations — 25 single-array layouts, 6 pairwise paths, 8 
 - Overlapping views — Two views with partial overlap (a[1:] and a[:-1]); writes can clobber unread reads.
 - In-place output (out=) — Output aliases an input; loop order must respect read-before-write.
 - Reduction operand — Output has stride=0 along the reduction axis (REDUCE flag).
-- Write-masked operand — WRITEMASKED: write only where mask is true.
-- Virtual operand — VIRTUAL: no backing array, computed on demand.
+- Write-masked operand — WRITEMASKED: write only where mask (ARRAYMASK) is true. Enforced ONLY at buffered copy-back (NumPy parity); unbuffered = kernel contract.
+- Virtual operand — VIRTUAL: null operand, allocate-equivalent in NumPy 2.x (real backing array, dtype request discarded → common dtype).
 - Buffered / casting operand — CAST / FORCECOPY / HAS_WRITEBACK: type conversion needs a temp.
 - Read-only operand — READ without WRITE; matters for output selection.
 

@@ -150,10 +150,11 @@ namespace NumSharp.Backends.Iteration
             _state->MaskOp = -1;
             _state->IterStart = 0;
 
-            // Pre-check WRITEMASKED/ARRAYMASK pairing BEFORE allocation (nop arg, not state).
+            // Pre-check per-operand flags BEFORE allocation (nop arg, not state):
+            // WRITEMASKED/ARRAYMASK pairing, VIRTUAL/null-operand rules.
             // The actual MaskOp assignment happens after AllocateDimArrays when NOp is set.
             if (opFlags != null)
-                PreCheckMaskOpPairing(nop, opFlags);
+                PreCheckMaskOpPairing(nop, op, opFlags);
 
             // Calculate broadcast shape, optionally overridden by iterShape.
             // Dimensions are long (NumPy npy_intp parity) so large axes (> int.MaxValue
@@ -190,17 +191,60 @@ namespace NumSharp.Backends.Iteration
                     MaterializeForcedCopies(nop, op, opFlags, forceCopy);
             }
 
-            // Allocate null operands that have ALLOCATE flag set.
-            // NumPy: npyiter_allocate_arrays in nditer_constr.c
-            // Allocated output has shape = broadcastShape (accounting for op_axes)
-            // and dtype = opDtypes[opIdx] (required when ALLOCATE is set)
+            // Allocate null operands that have ALLOCATE or VIRTUAL set.
+            // NumPy: npyiter_allocate_arrays in nditer_constr.c allocates a temp
+            // array for EVERY null operand — including VIRTUAL ones, whose
+            // NPY_OP_ITFLAG_VIRTUAL is consumed nowhere but DebugPrint (the
+            // NEP-12 buffer-only semantics never landed). Verified NumPy 2.4.2:
+            // a virtual operand gets a real backing array; writes through the
+            // iterator land in it; it.operands[i] exposes it.
+            // Allocated output has shape = broadcastShape (accounting for op_axes).
+            // Dtype: ALLOCATE takes opDtypes[opIdx] (NumSharp requires it);
+            // VIRTUAL-only DISCARDS any requested dtype (npyiter_prepare_one_operand
+            // c:1037-1039 nulls op_dtype for the non-ALLOCATE branch) and resolves
+            // the common dtype of the real operands instead — except an ARRAYMASK
+            // operand, which defaults to bool (c:1041-1049). When both flags are
+            // set, ALLOCATE wins (c:1009 checks it first) and the request holds.
             for (int opIdx = 0; opIdx < nop; opIdx++)
             {
-                if (op[opIdx] is null && (opFlags[opIdx] & NpyIterPerOpFlags.ALLOCATE) != 0)
+                if (op[opIdx] is null &&
+                    (opFlags[opIdx] & (NpyIterPerOpFlags.ALLOCATE | NpyIterPerOpFlags.VIRTUAL)) != 0)
                 {
-                    if (opDtypes is null || opIdx >= opDtypes.Length)
-                        throw new ArgumentException(
-                            $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
+                    NPTypeCode allocDtype;
+                    bool isArrayMaskOp = (opFlags[opIdx] & NpyIterPerOpFlags.ARRAYMASK) != 0;
+                    if ((opFlags[opIdx] & NpyIterPerOpFlags.ALLOCATE) != 0)
+                    {
+                        bool hasRequest = opDtypes != null && opIdx < opDtypes.Length &&
+                                          opDtypes[opIdx] != NPTypeCode.Empty;
+                        if (hasRequest)
+                            allocDtype = opDtypes[opIdx];
+                        else if (isArrayMaskOp)
+                            allocDtype = NPTypeCode.Boolean;  // mask default (c:1041-1049)
+                        else
+                            throw new ArgumentException(
+                                $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
+                    }
+                    else if (isArrayMaskOp)
+                    {
+                        allocDtype = NPTypeCode.Boolean;  // virtual mask default (c:1041-1049)
+                    }
+                    else
+                    {
+                        // VIRTUAL: common dtype over the real operands (the
+                        // requested dtype was discarded, NumPy parity).
+                        allocDtype = NPTypeCode.Empty;
+                        for (int j = 0; j < nop; j++)
+                        {
+                            if (op[j] is null)
+                                continue;
+                            allocDtype = allocDtype == NPTypeCode.Empty
+                                ? op[j].typecode
+                                : NpyIterCasting.PromoteTypes(allocDtype, op[j].typecode);
+                        }
+                        if (allocDtype == NPTypeCode.Empty)
+                            throw new ArgumentException(
+                                "at least one array or dtype is required");
+                    }
 
                     // Determine output shape: for op_axes, filter out -1 entries
                     long[] outputShape;
@@ -228,9 +272,9 @@ namespace NumSharp.Backends.Iteration
                         outputShape = (long[])broadcastShape.Clone();
                     }
 
-                    // Allocate the NDArray with specified dtype and shape
+                    // Allocate the NDArray with the resolved dtype and shape
                     var shape = outputShape.Length == 0 ? new Shape() : new Shape(outputShape);
-                    op[opIdx] = np.zeros(shape, opDtypes[opIdx]);
+                    op[opIdx] = np.zeros(shape, allocDtype);
                 }
             }
             // Update _operands so it reflects the allocated arrays
@@ -286,9 +330,20 @@ namespace NumSharp.Backends.Iteration
                 // Store source dtype (actual array dtype)
                 _state->SetOpSrcDType(i, arr.typecode);
 
-                // Determine buffer/target dtype
+                // Determine buffer/target dtype. virtual-without-allocate is a
+                // single masked equality so the common path pays one AND.
                 NPTypeCode bufferDtype;
-                if (opDtypes != null && i < opDtypes.Length && opDtypes[i] != NPTypeCode.Empty)
+                bool virtualAllocated =
+                    (opFlags[i] & (NpyIterPerOpFlags.VIRTUAL | NpyIterPerOpFlags.ALLOCATE))
+                        == NpyIterPerOpFlags.VIRTUAL;
+                if (virtualAllocated)
+                {
+                    // VIRTUAL discarded any requested dtype at allocation
+                    // (NumPy parity — see the allocation loop above): the
+                    // freshly allocated array IS the iteration dtype, no cast.
+                    bufferDtype = arr.typecode;
+                }
+                else if (opDtypes != null && i < opDtypes.Length && opDtypes[i] != NPTypeCode.Empty)
                 {
                     bufferDtype = opDtypes[i];
                 }
@@ -467,6 +522,23 @@ namespace NumSharp.Backends.Iteration
                                     "write-only, not read-write");
                             }
 
+                            // The ARRAYMASK operand may never be the result of a
+                            // reduction: a slot could be written while the mask
+                            // reads True, then the reduction overwrite the mask
+                            // to False — retroactively invalidating the write and
+                            // violating the strict masking semantics. NumPy
+                            // npyiter_check_reduce_ok_and_set_flags
+                            // (nditer_constr.c:1404-1421).
+                            if (i == _state->MaskOp)
+                            {
+                                throw new ArgumentException(
+                                    "output operand requires a " +
+                                    "reduction, but is flagged as " +
+                                    "the ARRAYMASK operand which " +
+                                    "is not permitted to be the " +
+                                    "result of a reduction");
+                            }
+
                             opFlag |= NpyIterOpFlags.REDUCE;
                             _state->SetOpFlags(i, opFlag);
                             _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
@@ -494,6 +566,25 @@ namespace NumSharp.Backends.Iteration
             if (opAxes != null && opAxesNDim >= 0)
             {
                 ApplyOpAxes(opAxesNDim, opAxes, flags);
+            }
+
+            // Deferred WRITEMASKED + REDUCE validation: every operand's strides
+            // are final here (standard fill AND op_axes both done), so the
+            // per-dim "one mask value per WRITEMASKED element" invariant can be
+            // checked against the mask's strides regardless of operand order.
+            // NumPy runs the identical loop at the tail of
+            // npyiter_allocate_arrays (nditer_constr.c:3351-3370).
+            if (_state->MaskOp >= 0)
+            {
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) &
+                         (NpyIterOpFlags.WRITEMASKED | NpyIterOpFlags.REDUCE)) ==
+                        (NpyIterOpFlags.WRITEMASKED | NpyIterOpFlags.REDUCE))
+                    {
+                        CheckMaskForWriteMaskedReduction(iop);
+                    }
+                }
             }
 
             // Apply axis reordering based on iteration order.
@@ -727,7 +818,13 @@ namespace NumSharp.Backends.Iteration
                 else
                 {
                     // Buffered REDUCE keeps its dedicated double-loop machinery
-                    // (BufferedReduceIternext) and legacy initial fill.
+                    // (BufferedReduceIternext) and legacy initial fill. NOTE:
+                    // that machinery predates masked copy-back; construction
+                    // with WRITEMASKED succeeds (NumPy parity — 2.4.2 accepts
+                    // the aligned-mask pattern) but the legacy write-back
+                    // refuses loudly in CopyReduceBuffersToArrays instead of
+                    // silently writing unmasked slots. Proper masked support
+                    // lands with reductions-through-core (roadmap Wave 5).
                     NpyIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
 
                     // Copy initial data to buffers (with casting if needed)
@@ -790,11 +887,15 @@ namespace NumSharp.Backends.Iteration
         private static long[] CalculateBroadcastShape(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags,
             int opAxesNDim = -1, int[][]? opAxes = null)
         {
-            // Validate null operands have ALLOCATE flag
+            // Validate null operands have ALLOCATE or VIRTUAL (NumPy
+            // npyiter_prepare_one_operand, nditer_constr.c:999-1007).
             for (int i = 0; i < nop; i++)
             {
-                if (op[i] is null && (opFlags[i] & NpyIterPerOpFlags.ALLOCATE) == 0)
-                    throw new ArgumentException($"Operand {i} is null but ALLOCATE flag is not set", nameof(op));
+                if (op[i] is null &&
+                    (opFlags[i] & (NpyIterPerOpFlags.ALLOCATE | NpyIterPerOpFlags.VIRTUAL)) == 0)
+                    throw new ArgumentException(
+                        "Iterator operand was NULL, but neither the " +
+                        "ALLOCATE nor the VIRTUAL flag was specified");
             }
 
             // With op_axes, iteration ndim is set by opAxesNDim. Each operand's virtual
@@ -1041,47 +1142,114 @@ namespace NumSharp.Backends.Iteration
             // Requires a corresponding ARRAYMASK operand. NumPy nditer_constr.c:950-965.
             if ((flags & NpyIterPerOpFlags.WRITEMASKED) != 0)
                 result |= NpyIterOpFlags.WRITEMASKED;
+            // VIRTUAL: the operand had no backing array — the iterator allocated
+            // one (NumPy 2.x allocate-equivalent semantics; the flag survives
+            // only as state, mirroring NPY_OP_ITFLAG_VIRTUAL whose sole consumer
+            // is DebugPrint). NumPy nditer_constr.c:967-975.
+            if ((flags & NpyIterPerOpFlags.VIRTUAL) != 0)
+                result |= NpyIterOpFlags.VIRTUAL;
 
             return result;
         }
 
         /// <summary>
-        /// Pre-construction check for WRITEMASKED/ARRAYMASK pairing.
-        /// Matches NumPy's prepare_operands checks (nditer_constr.c:1176-1230).
+        /// Pre-construction per-operand flag validation. Matches NumPy's
+        /// npyiter_prepare_operands loop (nditer_constr.c:1159-1242): per-op
+        /// flag consistency (npyiter_check_per_op_flags, c:951-975), ARRAYMASK
+        /// uniqueness, null/VIRTUAL operand rules (npyiter_prepare_one_operand,
+        /// c:999-1062), then the WRITEMASKED/ARRAYMASK pairing checks — in
+        /// NumPy's exact order, with NumPy's exact error texts.
         /// Runs before state allocation (uses the raw <paramref name="nop"/> arg).
         /// </summary>
-        private static void PreCheckMaskOpPairing(int nop, NpyIterPerOpFlags[] opFlags)
+        private static void PreCheckMaskOpPairing(int nop, NDArray[] op, NpyIterPerOpFlags[] opFlags)
         {
+            // Fast path (small-N construction cost): one OR-sweep decides
+            // whether any operand carries a mask/virtual flag or is null;
+            // the typical elementwise construction (plain READ/WRITE flags,
+            // non-null operands) pays 1 OR + 1 null-test per op and skips
+            // the full validation loop entirely.
+            NpyIterPerOpFlags combined = NpyIterPerOpFlags.None;
+            bool anyNull = false;
+            for (int iop = 0; iop < nop && iop < opFlags.Length; iop++)
+            {
+                combined |= opFlags[iop];
+                anyNull |= iop < op.Length && op[iop] is null;
+            }
+
+            if (!anyNull &&
+                (combined & (NpyIterPerOpFlags.WRITEMASKED |
+                             NpyIterPerOpFlags.ARRAYMASK |
+                             NpyIterPerOpFlags.VIRTUAL)) == 0)
+                return;
+
             int maskOp = -1;
             bool anyWriteMasked = false;
 
             for (int iop = 0; iop < nop && iop < opFlags.Length; iop++)
             {
-                bool isArrayMask = (opFlags[iop] & NpyIterPerOpFlags.ARRAYMASK) != 0;
-                bool isWriteMasked = (opFlags[iop] & NpyIterPerOpFlags.WRITEMASKED) != 0;
+                var flags = opFlags[iop];
+                bool isArrayMask = (flags & NpyIterPerOpFlags.ARRAYMASK) != 0;
+                bool isWriteMasked = (flags & NpyIterPerOpFlags.WRITEMASKED) != 0;
 
-                if (isArrayMask && isWriteMasked)
+                // WRITEMASKED needs a writable operand (nditer_constr.c:951-957).
+                if (isWriteMasked &&
+                    (flags & (NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.READWRITE)) == 0)
                     throw new ArgumentException(
-                        $"Operand {iop} cannot be both ARRAYMASK and WRITEMASKED.");
+                        "The iterator flag WRITEMASKED may only " +
+                        "be used with READWRITE or WRITEONLY");
+
+                // The mask cannot itself be write-masked (nditer_constr.c:958-963).
+                if (isWriteMasked && isArrayMask)
+                    throw new ArgumentException(
+                        "The iterator flag WRITEMASKED may not " +
+                        "be used together with ARRAYMASK");
+
+                // VIRTUAL requires READWRITE (nditer_constr.c:967-973). NumPy's
+                // message carries a doubled "be" — matched verbatim.
+                if ((flags & NpyIterPerOpFlags.VIRTUAL) != 0 &&
+                    (flags & NpyIterPerOpFlags.READWRITE) == 0)
+                    throw new ArgumentException(
+                        "The iterator flag VIRTUAL should be " +
+                        "be used together with READWRITE");
 
                 if (isArrayMask)
                 {
                     if (maskOp >= 0)
                         throw new ArgumentException(
-                            $"At most one operand may be flagged ARRAYMASK " +
-                            $"(currently {maskOp} and {iop}).");
+                            "Only one iterator operand may receive an " +
+                            "ARRAYMASK flag");
                     maskOp = iop;
                 }
 
                 if (isWriteMasked) anyWriteMasked = true;
+
+                // npyiter_prepare_one_operand: null operands must be ALLOCATE
+                // or VIRTUAL; VIRTUAL operands must be null (c:999-1062).
+                if (iop < op.Length && op[iop] is null)
+                {
+                    if ((flags & (NpyIterPerOpFlags.ALLOCATE | NpyIterPerOpFlags.VIRTUAL)) == 0)
+                        throw new ArgumentException(
+                            "Iterator operand was NULL, but neither the " +
+                            "ALLOCATE nor the VIRTUAL flag was specified");
+                }
+                else if ((flags & NpyIterPerOpFlags.VIRTUAL) != 0)
+                {
+                    throw new ArgumentException(
+                        "Iterator operand flag VIRTUAL was specified, " +
+                        "but the operand was not NULL");
+                }
             }
 
             if (anyWriteMasked && maskOp < 0)
                 throw new ArgumentException(
-                    "Iterator operand has WRITEMASKED but no operand has ARRAYMASK.");
+                    "An iterator operand was flagged as WRITEMASKED, " +
+                    "but no ARRAYMASK operand was given to supply " +
+                    "the mask");
             if (!anyWriteMasked && maskOp >= 0)
                 throw new ArgumentException(
-                    $"Operand {maskOp} has ARRAYMASK but no operand has WRITEMASKED.");
+                    "An iterator operand was flagged as the ARRAYMASK, " +
+                    "but no WRITEMASKED operands were given to use " +
+                    "the mask");
         }
 
         // =========================================================================
@@ -1748,16 +1916,27 @@ namespace NumSharp.Backends.Iteration
                             "write-only, not read-write. Use READWRITE instead of WRITEONLY.");
                     }
 
+                    // The ARRAYMASK operand may never be the result of a reduction
+                    // (strict masking semantics — see the standard-path check).
+                    // NumPy npyiter_check_reduce_ok_and_set_flags (c:1404-1421).
+                    if (op == _state->MaskOp)
+                    {
+                        throw new ArgumentException(
+                            "output operand requires a " +
+                            "reduction, but is flagged as " +
+                            "the ARRAYMASK operand which " +
+                            "is not permitted to be the " +
+                            "result of a reduction");
+                    }
+
                     _state->ItFlags |= (uint)NpyIterFlags.REDUCE;
                     _state->SetOpFlags(op, opFlags | NpyIterOpFlags.REDUCE);
 
-                    // If this reduction operand is also WRITEMASKED, enforce the
-                    // "one mask value per reduction element" constraint.
-                    // NumPy: check_mask_for_writemasked_reduction (nditer_constr.c:1328).
-                    if ((opFlags & NpyIterOpFlags.WRITEMASKED) != 0)
-                    {
-                        CheckMaskForWriteMaskedReduction(op);
-                    }
+                    // WRITEMASKED + REDUCE mask-broadcast validation is deferred
+                    // to the unified post-ApplyOpAxes loop in Initialize (NumPy
+                    // defers it to the tail of npyiter_allocate_arrays the same
+                    // way, c:3351-3370) so the standard and op_axes paths share
+                    // one check site after ALL operands' strides are final.
                 }
             }
         }
@@ -2692,6 +2871,22 @@ namespace NumSharp.Backends.Iteration
                 var buffer = _state->GetBuffer(op);
                 if (buffer == null)
                     continue;
+
+                // The legacy reduce write-back predates masked copy-back: it
+                // would write the buffer's unmasked slots too, silently
+                // violating WRITEMASKED. Refuse at the exact corruption point
+                // (construction succeeds, NumPy parity). Masked reduce
+                // write-back lands with reductions-through-core (roadmap Wave 5);
+                // the windowed non-reduce path already enforces masks
+                // (NpyIterBufferManager.FlushBufferWindow).
+                if ((opFlags & NpyIterOpFlags.WRITEMASKED) != 0)
+                {
+                    throw new NotSupportedException(
+                        "WRITEMASKED write-back is not supported on a buffered REDUCE " +
+                        "iterator yet (legacy buffered-reduce machinery; roadmap Wave 5). " +
+                        "Use an unbuffered iterator (mask enforcement is then the " +
+                        "kernel's responsibility, matching NumPy) or drop REDUCE.");
+                }
 
                 // Get array writeback pointer (saved at buffer start)
                 // Falls back to ResetDataPtr if ArrayWritebackPtr not set

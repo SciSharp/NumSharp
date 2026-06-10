@@ -303,9 +303,11 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Promote two types to a common type.
+        /// Promote two types to a common type. Internal so iterator construction
+        /// can resolve the common dtype of VIRTUAL operands across null slots
+        /// (FindCommonDtype assumes a dense non-null operand array).
         /// </summary>
-        private static NPTypeCode PromoteTypes(NPTypeCode a, NPTypeCode b)
+        internal static NPTypeCode PromoteTypes(NPTypeCode a, NPTypeCode b)
         {
             if (a == b)
                 return a;

@@ -119,6 +119,27 @@ namespace NumSharp.Backends.Iteration
 
                 if (needsBuffer)
                 {
+                    // A buffered WRITEMASKED write means the flush will be a
+                    // MASKED copy-back reading the ARRAYMASK operand byte-wise.
+                    // NumPy validates the mask dtype when it builds that masked
+                    // transfer function (nditer_constr.c:3470-3494 →
+                    // dtype_transfer.c, TypeError) — same here, same text. Both
+                    // the mask's array dtype and its buffer dtype must be a
+                    // 1-byte nonzero-test type or the byte-wise reads are junk.
+                    if ((opFlags & NpyIterOpFlags.WRITEMASKED) != 0 &&
+                        (opFlags & NpyIterOpFlags.WRITE) != 0 &&
+                        state.MaskOp >= 0)
+                    {
+                        var maskSrcType = state.GetOpSrcDType(state.MaskOp);
+                        var maskBufType = state.GetOpDType(state.MaskOp);
+                        if ((maskSrcType != NPTypeCode.Boolean && maskSrcType != NPTypeCode.Byte) ||
+                            (maskBufType != NPTypeCode.Boolean && maskBufType != NPTypeCode.Byte))
+                        {
+                            throw new NotSupportedException(
+                                "Only bool and uint8 masks are supported.");
+                        }
+                    }
+
                     var buffer = AllocateAligned(bufferSize, dtype);
                     if (buffer == null)
                     {
@@ -650,8 +671,22 @@ namespace NumSharp.Backends.Iteration
                 if (buffer == null)
                     continue;
 
-                if ((state.GetOpFlags(op) & NpyIterOpFlags.WRITE) != 0)
-                    CopyWindowFromBuffer(ref state, op, count);
+                var opFlags = state.GetOpFlags(op);
+                if ((opFlags & NpyIterOpFlags.WRITE) != 0)
+                {
+                    // WRITEMASKED: only elements whose ARRAYMASK byte is true
+                    // reach the array; everything else in the buffer is
+                    // discarded. This is the ONLY place masking is enforced —
+                    // an unbuffered WRITEMASKED operand writes the array
+                    // directly and the mask is the kernel's contract, exactly
+                    // like NumPy (verified 2.4.2: 'buffered' + contiguous
+                    // same-dtype operands write unmasked slots too).
+                    // NumPy npyiter_copy_from_buffers (nditer_api.c:2001-2026).
+                    if ((opFlags & NpyIterOpFlags.WRITEMASKED) != 0 && state.MaskOp >= 0)
+                        CopyWindowFromBufferMasked(ref state, op, count);
+                    else
+                        CopyWindowFromBuffer(ref state, op, count);
+                }
             }
         }
 
@@ -816,6 +851,146 @@ namespace NumSharp.Backends.Iteration
             {
                 if (coordsHeap != null)
                     NativeMemory.Free(coordsHeap);
+            }
+        }
+
+        /// <summary>
+        /// Masked mirror of <see cref="CopyWindowFromBuffer"/> for WRITEMASKED
+        /// operands: scatters the window back to the array but ONLY where the
+        /// ARRAYMASK operand's byte is nonzero. The mask is read from its
+        /// buffer when it was buffered, else from its array at the window's
+        /// fill-start position (ArrayWritebackPtrs — saved for every operand
+        /// by <see cref="FillBufferWindow"/>) — NumPy chooses the same way by
+        /// BUFNEVER (nditer_api.c:2002-2014). The mask byte stride is
+        /// <see cref="NpyIterState.BufStrides"/>: the tight element size for a
+        /// buffered mask, the TRUE single linear byte stride for an unbuffered
+        /// one (unbuffered ⇒ IsOperandIterLinear, so window element k sits at
+        /// exactly k strides from the window start — incl. stride 0 for a
+        /// fully-broadcast mask).
+        /// </summary>
+        private static void CopyWindowFromBufferMasked(ref NpyIterState state, int op, long count)
+        {
+            int maskOp = state.MaskOp;
+            byte* maskBuffer = (byte*)state.GetBuffer(maskOp);
+            byte* mask = maskBuffer != null ? maskBuffer : (byte*)state.GetArrayWritebackPtr(maskOp);
+            long maskStride = maskBuffer != null
+                ? state.GetElementSize(maskOp)
+                : state.BufStrides[maskOp];
+
+            var bufType = state.GetOpDType(op);
+            var arrType = state.GetOpSrcDType(op);
+            int bufSize = state.GetElementSize(op);
+            int arrSize = state.GetSrcElementSize(op);
+
+            byte* buf = (byte*)state.GetBuffer(op);
+            byte* dst = (byte*)state.GetArrayWritebackPtr(op);
+
+            if (state.NDim <= 1)
+            {
+                long stride = state.NDim == 0 ? 0 : state.GetStride(0, op);
+                CopyRunFromBufferMasked(buf, bufType, bufSize, dst, stride, arrType, arrSize,
+                    count, mask, maskStride);
+                return;
+            }
+
+            int ndim = state.NDim;
+            int innerAxis = ndim - 1;
+            long innerLen = state.Shape[innerAxis];
+            long innerStride = state.GetStride(innerAxis, op);
+
+            long* coords;
+            long* coordsHeap = null;
+            if (ndim <= NpyIterState.StackAllocThreshold)
+            {
+                long* coordsStack = stackalloc long[ndim];
+                coords = coordsStack;
+            }
+            else
+            {
+                coordsHeap = (long*)NativeMemory.Alloc((nuint)(ndim * sizeof(long)));
+                coords = coordsHeap;
+            }
+            try
+            {
+                for (int d = 0; d < ndim; d++)
+                    coords[d] = state.Coords[d];
+
+                long remaining = count;
+                while (remaining > 0)
+                {
+                    long run = Math.Min(remaining, innerLen - coords[innerAxis]);
+                    CopyRunFromBufferMasked(buf, bufType, bufSize, dst, innerStride, arrType, arrSize,
+                        run, mask, maskStride);
+
+                    buf += run * bufSize;
+                    mask += run * maskStride;
+                    remaining -= run;
+                    if (remaining <= 0)
+                        break;
+
+                    dst += run * innerStride * arrSize;
+                    coords[innerAxis] += run;
+
+                    for (int d = innerAxis; d >= 0; d--)
+                    {
+                        if (coords[d] < state.Shape[d])
+                            break;
+
+                        coords[d] = 0;
+                        dst -= state.GetStride(d, op) * state.Shape[d] * arrSize;
+                        if (d == 0)
+                            break;
+                        coords[d - 1]++;
+                        dst += state.GetStride(d - 1, op) * arrSize;
+                    }
+                }
+            }
+            finally
+            {
+                if (coordsHeap != null)
+                    NativeMemory.Free(coordsHeap);
+            }
+        }
+
+        /// <summary>
+        /// One masked inner-axis run: tight buffer → array, writing only where
+        /// the mask byte is nonzero. Decomposes the run into contiguous TRUE
+        /// stretches and hands each to the unmasked <see cref="CopyRunFromBuffer"/>
+        /// (memcpy / SIMD cast kernels stay effective for dense masks) — the
+        /// same structure as NumPy's _strided_masked_wrapper
+        /// (dtype_transfer.c: skip false runs via mask scan, transfer true runs).
+        /// The mask reads are 1-byte nonzero tests, guaranteed by the
+        /// bool/uint8 mask validation in <see cref="AllocateBuffers"/>.
+        /// </summary>
+        private static void CopyRunFromBufferMasked(
+            byte* buf, NPTypeCode bufType, int bufSize,
+            byte* dst, long dstStride, NPTypeCode arrType, int arrSize,
+            long count, byte* mask, long maskStride)
+        {
+            if (count <= 0)
+                return;
+
+            // Broadcast mask (stride 0): one value gates the whole run.
+            if (maskStride == 0)
+            {
+                if (mask[0] != 0)
+                    CopyRunFromBuffer(buf, bufType, bufSize, dst, dstStride, arrType, count);
+                return;
+            }
+
+            long i = 0;
+            while (i < count)
+            {
+                while (i < count && mask[i * maskStride] == 0)
+                    i++;
+                long start = i;
+                while (i < count && mask[i * maskStride] != 0)
+                    i++;
+                if (i > start)
+                    CopyRunFromBuffer(
+                        buf + start * bufSize, bufType, bufSize,
+                        dst + start * dstStride * arrSize, dstStride, arrType,
+                        i - start);
             }
         }
 
