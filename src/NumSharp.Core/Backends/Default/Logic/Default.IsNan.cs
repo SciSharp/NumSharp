@@ -27,5 +27,14 @@ namespace NumSharp.Backends
             var result = ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean);
             return result.MakeGeneric<bool>();
         }
+
+        /// <summary>
+        /// ufunc out=/where= overload: rides the shared unary Into-path with a
+        /// Boolean loop dtype (the predicate body emits bool at the INPUT
+        /// dtype); a non-bool out engages the windowed bool→X flush. Returns
+        /// the provided out (no MakeGeneric — out may be any numeric dtype).
+        /// </summary>
+        public override NDArray IsNan(NDArray a, NDArray @out, NDArray where = null)
+            => ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean, @out, where);
     }
 }

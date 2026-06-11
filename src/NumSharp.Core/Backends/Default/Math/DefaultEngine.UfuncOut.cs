@@ -89,6 +89,17 @@ namespace NumSharp.Backends
             _ => op.ToString().ToLowerInvariant(),
         };
 
+        private static string UfuncName(ComparisonOp op) => op switch
+        {
+            ComparisonOp.Equal => "equal",
+            ComparisonOp.NotEqual => "not_equal",
+            ComparisonOp.Less => "less",
+            ComparisonOp.LessEqual => "less_equal",
+            ComparisonOp.Greater => "greater",
+            ComparisonOp.GreaterEqual => "greater_equal",
+            _ => op.ToString().ToLowerInvariant(),
+        };
+
         private static string UfuncName(UnaryOp op) => op switch
         {
             UnaryOp.Sqrt => "sqrt",
@@ -382,6 +393,124 @@ namespace NumSharp.Backends
 
                 iter.ExecuteElementWise(
                     new[] { lhsType, rhsType, resultType }, scalarBody, vectorBody, cacheKey);
+            }
+
+            return target;
+        }
+
+        // =====================================================================
+        // Comparison ufunc with out/where
+        // =====================================================================
+
+        /// <summary>
+        /// Run a comparison ufunc into <paramref name="@out"/> (or a fresh
+        /// bool result when only <paramref name="where"/> was given). The loop
+        /// dtype is Boolean: the kernel compares at result_type(lhs, rhs)
+        /// INSIDE the body (fused per-element converts — the Wave-4 measured
+        /// winner for cheap ops) and emits bool; a non-bool out is a CAST
+        /// operand handled by the windowed flush. bool casts same_kind to
+        /// EVERY numeric dtype (probed: less(f8,f8,out=complex128) works,
+        /// True→1), so <see cref="ValidateOutCast"/> is structural here.
+        /// The scalar body and npy_cmp_* cache key are shared with
+        /// <see cref="TryExecuteComparisonOpViaNpyIter"/> (same compiled
+        /// kernels) and the flag arrays are the binary configs (identical
+        /// operand layout) — no new statics. No F-layout post-step: NumPy
+        /// returns the provided out untouched (reference identity).
+        /// </summary>
+        private unsafe NDArray ExecuteComparisonUfuncInto(
+            NDArray lhs, NDArray rhs, ComparisonOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType,
+            NDArray? @out, NDArray? where)
+        {
+            ValidateWhereMask(where);
+
+            string name = UfuncName(op);
+            if (@out is not null)
+                ValidateOutCast(NPTypeCode.Boolean, @out.typecode, name);
+
+            var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+            var iterShape = ResolveUfuncIterationShape(
+                leftShape.Clean(), new[] { lhs, rhs }, @out, where);
+
+            // 'where' without 'out': unmasked slots stay uninitialized
+            // (NumPy warns; values are unobservable garbage).
+            var target = @out ?? new NDArray(NPTypeCode.Boolean, iterShape.Clean(), false);
+
+            if (target.size == 0)
+                return target;
+
+            // Comparison computes at the NumPy common dtype inside the kernel
+            // (probed A3: greater(i8 2^53+1, f8 2^53) → False, equal → True —
+            // both operands cast to f64 first).
+            var comparisonType = lhsType == rhsType
+                ? lhsType
+                : np._FindCommonScalarType(lhsType, rhsType);
+
+            NPTypeCode capLhs = lhsType, capRhs = rhsType, capCmp = comparisonType;
+            ComparisonOp capOp = op;
+            Action<ILGenerator> scalarBody = il =>
+            {
+                if (capLhs == capRhs && capLhs == capCmp)
+                {
+                    // Same-dtype fast path — no convert pass.
+                    DirectILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                }
+                else
+                {
+                    var locRhs = il.DeclareLocal(DirectILKernelGenerator.GetClrType(capRhs));
+                    il.Emit(OpCodes.Stloc, locRhs);
+                    if (capLhs != capCmp)
+                        DirectILKernelGenerator.EmitConvertTo(il, capLhs, capCmp);
+                    il.Emit(OpCodes.Ldloc, locRhs);
+                    if (capRhs != capCmp)
+                        DirectILKernelGenerator.EmitConvertTo(il, capRhs, capCmp);
+                    DirectILKernelGenerator.EmitComparisonOperation(il, capOp, capCmp);
+                }
+            };
+
+            // Vector body intentionally null: bool output breaks the Tier-3B
+            // same-dtype invariant (unchanged from the no-out route).
+            string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
+
+            bool outNeedsCast = target.typecode != NPTypeCode.Boolean;
+            var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+            var casting = NPY_CASTING.NPY_SAFE_CASTING;
+            if (outNeedsCast)
+            {
+                globalFlags |= NpyIterGlobalFlags.BUFFERED
+                             | NpyIterGlobalFlags.GROWINNER
+                             | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                casting = NPY_CASTING.NPY_UNSAFE_CASTING;
+            }
+
+            if (where is null)
+            {
+                NPTypeCode[]? opDtypes = outNeedsCast
+                    ? new[] { lhsType, rhsType, NPTypeCode.Boolean }
+                    : null;
+
+                using var iter = NpyIterRef.MultiNew(
+                    3, new[] { lhs, rhs, target },
+                    globalFlags, NPY_ORDER.NPY_CORDER, casting,
+                    s_ufuncBinaryOutFlags,
+                    opDtypes);
+
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);
+            }
+            else
+            {
+                NPTypeCode[]? opDtypes = outNeedsCast
+                    ? new[] { lhsType, rhsType, NPTypeCode.Boolean, NPTypeCode.Empty }
+                    : null;
+
+                using var iter = NpyIterRef.MultiNew(
+                    4, new[] { lhs, rhs, target, where },
+                    globalFlags, NPY_ORDER.NPY_CORDER, casting,
+                    s_ufuncBinaryOutMaskedFlags,
+                    opDtypes);
+
+                iter.ExecuteElementWise(
+                    new[] { lhsType, rhsType, NPTypeCode.Boolean }, scalarBody, null, cacheKey);
             }
 
             return target;

@@ -288,7 +288,9 @@ Tested against NumPy 2.x.
 `bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=` supported; float/complex/decimal inputs raise NumPy's no-loop TypeError, probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
-`all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`
+`all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`, `equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal`
+
+The six comparisons and `isnan`/`isfinite`/`isinf` also take ufunc `out=`/`where=` (additive overloads returning plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them; no-out forms keep the `NDArray<bool>` sugar). Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True).
 
 ### Selection
 `where`

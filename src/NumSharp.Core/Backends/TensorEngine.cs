@@ -155,6 +155,17 @@ namespace NumSharp
         public abstract NDArray<bool> Greater(NDArray lhs, NDArray rhs);
         public abstract NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs);
 
+        // Comparison ufunc out=/where= overloads: NumPy returns the provided
+        // out as-is (its dtype may be any numeric — bool casts same_kind to
+        // all of them), so these return plain NDArray. The no-out forms above
+        // keep the typed NDArray<bool> sugar.
+        public abstract NDArray Compare(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        public abstract NDArray NotEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        public abstract NDArray Less(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        public abstract NDArray LessEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        public abstract NDArray Greater(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+
         // Bitwise operations
         public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
         public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
@@ -173,6 +184,11 @@ namespace NumSharp
         public abstract NDArray<bool> IsFinite(NDArray a);
         public abstract NDArray<bool> IsNan(NDArray a);
         public abstract NDArray<bool> IsInf(NDArray a);
+
+        // Predicate ufunc out=/where= overloads (same plain-NDArray rule).
+        public abstract NDArray IsFinite(NDArray a, NDArray @out, NDArray where = null);
+        public abstract NDArray IsNan(NDArray a, NDArray @out, NDArray where = null);
+        public abstract NDArray IsInf(NDArray a, NDArray @out, NDArray where = null);
 
         #endregion
 

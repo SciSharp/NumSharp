@@ -317,6 +317,34 @@ namespace NumSharp.Backends
         public override NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
 
+        // ---- ufunc out=/where= overloads (plan §4.1, option (i)) -----------
+        // Additive: the no-out forms above keep their NDArray<bool> sugar;
+        // these return plain NDArray — NumPy's np.less(a, b, out=f64) returns
+        // the f64 out itself, so the static type is "an array" and dtype is
+        // runtime data. They route straight to the Into-path: NumPy's masked
+        // execution never takes the trivial loop (ufunc_object.c:2213), and a
+        // provided out needs reference identity + write-masking, so the
+        // scalar×scalar / trivial-bypass arms of the ladder are skipped by
+        // design (0-d EXLOOP works post-Wave-2.1). No F-layout post-step.
+
+        public override NDArray Compare(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Equal, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
+        public override NDArray NotEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.NotEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
+        public override NDArray Less(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Less, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
+        public override NDArray LessEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.LessEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
+        public override NDArray Greater(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.Greater, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
+        public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null)
+            => ExecuteComparisonUfuncInto(lhs, rhs, ComparisonOp.GreaterEqual, lhs.GetTypeCode, rhs.GetTypeCode, @out, where);
+
         #endregion
 
         /// <summary>
