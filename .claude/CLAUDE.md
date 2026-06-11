@@ -285,7 +285,7 @@ Tested against NumPy 2.x.
 `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`
 
 ### Bitwise
-`bitwise_and`, `bitwise_or`, `bitwise_xor`, `invert`, `left_shift`, `right_shift`
+`bitwise_and`, `bitwise_or`, `bitwise_xor` (ufunc `out=`/`where=` supported; float/complex/decimal inputs raise NumPy's no-loop TypeError, probed order: bad `where` → no-loop → out-cast → shape), `invert`, `left_shift`, `right_shift`
 
 ### Comparison & Logic
 `all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`
