@@ -479,6 +479,25 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfLog2, null);
                     break;
 
+                case UnaryOp.Sinh:
+                case UnaryOp.Cosh:
+                case UnaryOp.Tanh:
+                case UnaryOp.ASin:
+                case UnaryOp.ACos:
+                case UnaryOp.ATan:
+                case UnaryOp.Round:
+                case UnaryOp.Deg2Rad:
+                case UnaryOp.Rad2Deg:
+                    // Previously MISSING from the Half switch: the whole f16
+                    // tier (sinh(i1) etc., NumPy 'e->e' loops) threw
+                    // NotSupported. Half -> double -> Math.X -> Half roundtrip
+                    // (house Half policy; matches NumPy's promote-compute-round
+                    // model for npy_half) by delegating to the double arm.
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                    EmitUnaryScalarOperation(il, op, NPTypeCode.Double);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    break;
+
                 case UnaryOp.Cbrt:
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfCbrt, null);
                     break;

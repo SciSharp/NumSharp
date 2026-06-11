@@ -46,7 +46,17 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sinh.html</remarks>
-        public static NDArray sinh(NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray sinh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.Sinh(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sinh.html</remarks>
+        public static NDArray sinh(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Sinh(x, dtype);
 
         /// <summary>
@@ -68,7 +78,17 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsin.html</remarks>
-        public static NDArray arcsin(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray arcsin(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.ASin(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsin.html</remarks>
+        public static NDArray arcsin(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.ASin(x, dtype);
 
         /// <summary>

@@ -13,7 +13,17 @@ namespace NumSharp
         /// If x contains negative values, the result contains the (negative) real cube root.
         /// This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cbrt.html</remarks>
-        public static NDArray cbrt(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray cbrt(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.Cbrt(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cbrt.html</remarks>
+        public static NDArray cbrt(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Cbrt(x, dtype);
 
         /// <summary>

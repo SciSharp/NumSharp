@@ -54,7 +54,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
-        public static NDArray log2(NDArray x, Type dtype) => x.TensorEngine.Log2(x);
+        public static NDArray log2(NDArray x, Type dtype) => x.TensorEngine.Log2(x, dtype);
 
         /// <summary>
         ///     Base-2 logarithm of x.
@@ -62,7 +62,14 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Base-2 logarithm of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
-        public static NDArray log2(NDArray x, NPTypeCode? dtype = null) => x.TensorEngine.Log2(x, dtype);
+        public static NDArray log2(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null) => x.TensorEngine.Log2(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log2.html</remarks>
+        public static NDArray log2(NDArray x, NPTypeCode dtype) => x.TensorEngine.Log2(x, dtype);
 
         /// <summary>
         ///     Base-2 logarithm of x.
@@ -78,7 +85,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
-        public static NDArray log10(NDArray x, Type dtype) => x.TensorEngine.Log10(x);
+        public static NDArray log10(NDArray x, Type dtype) => x.TensorEngine.Log10(x, dtype);
 
         /// <summary>
         ///     Return the base 10 logarithm of the input array, element-wise.
@@ -86,7 +93,14 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>The logarithm to the base 10 of x, element-wise. NaNs are returned where x is negative. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
-        public static NDArray log10(NDArray x, NPTypeCode? dtype = null) => x.TensorEngine.Log10(x, dtype);
+        public static NDArray log10(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null) => x.TensorEngine.Log10(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log10.html</remarks>
+        public static NDArray log10(NDArray x, NPTypeCode dtype) => x.TensorEngine.Log10(x, dtype);
 
         /// <summary>
         ///     Return the base 10 logarithm of the input array, element-wise.
@@ -103,7 +117,7 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
-        public static NDArray log1p(NDArray x, Type dtype) => x.TensorEngine.Log1p(x);
+        public static NDArray log1p(NDArray x, Type dtype) => x.TensorEngine.Log1p(x, dtype);
 
         /// <summary>
         ///     Return the natural logarithm of one plus the input array, element-wise.<br></br>
@@ -112,7 +126,14 @@ namespace NumSharp
         /// <param name="x">Input value.</param>
         /// <returns>Natural logarithm of 1 + x, element-wise. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
-        public static NDArray log1p(NDArray x, NPTypeCode? dtype = null) => x.TensorEngine.Log1p(x, dtype);
+        public static NDArray log1p(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null) => x.TensorEngine.Log1p(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.log1p.html</remarks>
+        public static NDArray log1p(NDArray x, NPTypeCode dtype) => x.TensorEngine.Log1p(x, dtype);
 
         /// <summary>
         ///     Return the natural logarithm of one plus the input array, element-wise.<br></br>

@@ -14,16 +14,45 @@ namespace NumSharp.Backends
         /// C-style truncated integer division (so 1/x is 0 for |x| >= 2, and 0
         /// for x == 0 per NumPy seterr=ignore semantics).
         /// </summary>
-        public override NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            if (!typeCode.HasValue && nd.GetTypeCode.IsInteger())
-                return ReciprocalInteger(nd);
-            return ExecuteUnaryOp(nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode));
+            ValidateWhereMask(where);
+
+            // dtype= selects the loop; the input must reach it same_kind
+            // (probed: reciprocal(f8, dtype=i4) raises the input cast error;
+            // reciprocal(i4, dtype=f8) -> [1., .5, .333..., .25]).
+            if (typeCode.HasValue)
+                ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "reciprocal");
+
+            var loopType = typeCode ?? nd.GetTypeCode;
+            if (loopType.IsInteger())
+            {
+                // Integer loop: C-truncating 1/x with the probed 1/0 ->
+                // MinValue semantic. The hand loop is the compute path; a
+                // provided out/where gets a masked identity copy through the
+                // shared Into machinery (plan §4.3.3 temp+copy route).
+                var tmp = ReciprocalInteger(typeCode.HasValue && typeCode.Value != nd.GetTypeCode
+                    ? Cast(nd, typeCode.Value, copy: true)
+                    : nd);
+                if (@out is null && where is null)
+                    return tmp;
+                return ExecuteUnaryOp(tmp, UnaryOp.Positive, tmp.GetTypeCode, @out, where);
+            }
+
+            return ExecuteUnaryOp(nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode), @out, where);
         }
 
         private static NDArray ReciprocalInteger(NDArray nd)
         {
-            // NumPy: 1/x with C truncating integer division, returning 0 when x == 0.
+            // NumPy: 1/x with C truncating integer division. 1/0 produces the
+            // signed MinValue with a RuntimeWarning in NumPy 2.4.2 (probed:
+            // reciprocal(i4 [1,2,-3,0]) -> [1, 0, 0, -2147483648]); unsigned
+            // zero stays 0. The linear walk below requires contiguous memory --
+            // sliced/strided/broadcast views are materialized first (the
+            // previous direct _Unsafe.Address read THREW for views).
+            if (nd.Shape.IsSliced || nd.Shape.IsBroadcasted || !nd.Shape.IsContiguous)
+                nd = nd.copy();
+
             var tc = nd.GetTypeCode;
             var result = new NDArray(tc, new Shape((long[])nd.shape.Clone()), false);
             long n = nd.size;
@@ -35,7 +64,7 @@ namespace NumSharp.Backends
                     {
                         var src = (sbyte*)nd.Unsafe.Address;
                         var dst = (sbyte*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? (sbyte)0 : (sbyte)(1 / src[i]);
+                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? sbyte.MinValue : (sbyte)(1 / src[i]);
                         break;
                     }
                     case NPTypeCode.Byte:
@@ -49,7 +78,7 @@ namespace NumSharp.Backends
                     {
                         var src = (short*)nd.Unsafe.Address;
                         var dst = (short*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? (short)0 : (short)(1 / src[i]);
+                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? short.MinValue : (short)(1 / src[i]);
                         break;
                     }
                     case NPTypeCode.UInt16:
@@ -63,7 +92,7 @@ namespace NumSharp.Backends
                     {
                         var src = (int*)nd.Unsafe.Address;
                         var dst = (int*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? 0 : 1 / src[i];
+                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? int.MinValue : 1 / src[i];
                         break;
                     }
                     case NPTypeCode.UInt32:
@@ -77,7 +106,7 @@ namespace NumSharp.Backends
                     {
                         var src = (long*)nd.Unsafe.Address;
                         var dst = (long*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? 0L : 1L / src[i];
+                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? long.MinValue : 1L / src[i];
                         break;
                     }
                     case NPTypeCode.UInt64:

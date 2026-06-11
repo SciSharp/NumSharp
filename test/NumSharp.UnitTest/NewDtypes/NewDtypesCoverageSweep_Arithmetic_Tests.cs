@@ -187,14 +187,16 @@ namespace NumSharp.UnitTest.NewDtypes
         [TestMethod]
         public void B36_SByte_Reciprocal_PreservesIntegerDtype()
         {
-            // NumPy: np.reciprocal(np.array([1,-2,100,0], i8)) → array([1,0,0,0], i8)
+            // NumPy 2.4.2 (probed): np.reciprocal(np.array([1,-2,100,0,10,-50], i1))
+            // -> [1, 0, 0, -128, 0, 0] with a RuntimeWarning — signed 1/0 yields
+            // the dtype's MinValue, NOT 0 (the previous pin was disproven by probe).
             var a = np.array(new sbyte[] { 1, -2, 100, 0, 10, -50 });
             var r = np.reciprocal(a);
             r.typecode.Should().Be(NPTypeCode.SByte);
             r.GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
             r.GetAtIndex<sbyte>(1).Should().Be((sbyte)0);
             r.GetAtIndex<sbyte>(2).Should().Be((sbyte)0);
-            r.GetAtIndex<sbyte>(3).Should().Be((sbyte)0);  // 1/0 under seterr=ignore = 0
+            r.GetAtIndex<sbyte>(3).Should().Be(sbyte.MinValue); // 1/0 -> MinValue (NumPy 2.4.2)
             r.GetAtIndex<sbyte>(4).Should().Be((sbyte)0);
             r.GetAtIndex<sbyte>(5).Should().Be((sbyte)0);
         }
@@ -202,6 +204,8 @@ namespace NumSharp.UnitTest.NewDtypes
         [TestMethod]
         public void B36_Int32_Reciprocal_PreservesIntegerDtype()
         {
+            // NumPy 2.4.2 (probed): signed 1/0 -> int.MinValue with a
+            // RuntimeWarning (reciprocal(i4 [1,2,-3,0]) -> [1,0,0,-2147483648]).
             var a = np.array(new int[] { 1, -1, 2, -2, 0 });
             var r = np.reciprocal(a);
             r.typecode.Should().Be(NPTypeCode.Int32);
@@ -209,7 +213,7 @@ namespace NumSharp.UnitTest.NewDtypes
             r.GetAtIndex<int>(1).Should().Be(-1);
             r.GetAtIndex<int>(2).Should().Be(0);
             r.GetAtIndex<int>(3).Should().Be(0);
-            r.GetAtIndex<int>(4).Should().Be(0);
+            r.GetAtIndex<int>(4).Should().Be(int.MinValue);
         }
 
         [TestMethod]

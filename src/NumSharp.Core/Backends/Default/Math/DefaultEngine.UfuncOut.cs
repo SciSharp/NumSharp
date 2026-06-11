@@ -85,6 +85,7 @@ namespace NumSharp.Backends
             BinaryOp.BitwiseAnd => "bitwise_and",
             BinaryOp.BitwiseOr => "bitwise_or",
             BinaryOp.BitwiseXor => "bitwise_xor",
+            BinaryOp.ATan2 => "arctan2",
             _ => op.ToString().ToLowerInvariant(),
         };
 
@@ -99,6 +100,14 @@ namespace NumSharp.Backends
             UnaryOp.Cos => "cos",
             UnaryOp.Tan => "tan",
             UnaryOp.Square => "square",
+            UnaryOp.Round => "rint",
+            UnaryOp.Truncate => "trunc",
+            UnaryOp.ASin => "arcsin",
+            UnaryOp.ACos => "arccos",
+            UnaryOp.ATan => "arctan",
+            UnaryOp.BitwiseNot => "invert",
+            UnaryOp.LogicalNot => "logical_not",
+            UnaryOp.Positive => "positive",
             _ => op.ToString().ToLowerInvariant(),
         };
 

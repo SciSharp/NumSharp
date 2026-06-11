@@ -261,6 +261,15 @@ namespace NumSharp.Backends.Kernels
             if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
                 return false;
 
+#if NET8_0
+            // Vector128/256/512.Round and .Truncate are .NET 9+ BCL APIs --
+            // on net8.0 the vector emit threw "Could not find Round for
+            // Vector256<Double>" at kernel-compile time (the long-known
+            // net8.0 failure set). Scalar fallback instead.
+            if (key.Op == UnaryOp.Round || key.Op == UnaryOp.Truncate)
+                return false;
+#endif
+
             return key.Op == UnaryOp.Sqrt ||
                    key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil || key.Op == UnaryOp.Round ||
                    key.Op == UnaryOp.Truncate || key.Op == UnaryOp.Reciprocal ||

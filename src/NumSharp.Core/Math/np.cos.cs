@@ -46,7 +46,17 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Output array of same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
-        public static NDArray cosh(NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray cosh(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.Cosh(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
+        public static NDArray cosh(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Cosh(x, dtype);
 
         /// <summary>
@@ -68,7 +78,17 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The angle of the ray intersecting the unit circle at the given x-coordinate in radians [0, pi]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
-        public static NDArray arccos(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray arccos(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.ACos(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
+        public static NDArray arccos(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.ACos(x, dtype);
 
         /// <summary>

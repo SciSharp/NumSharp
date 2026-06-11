@@ -30,6 +30,17 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitUnaryScalarOperation(ILGenerator il, UnaryOp op, NPTypeCode type)
         {
+            // NumPy identity loops: 'positive' is identity at every dtype, and
+            // floor/ceil/trunc register identity inner loops for every
+            // bool/integer dtype ('?->?','b->b',...,'Q->Q' in ufunc.types,
+            // probed 2.4.2; np.round's integer path is likewise an identity
+            // copy). The loaded value already IS the result: emit nothing.
+            if (op == UnaryOp.Positive)
+                return;
+            if ((op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Truncate || op == UnaryOp.Round) &&
+                (type == NPTypeCode.Boolean || type.IsInteger()))
+                return;
+
             // Special handling for decimal
             if (type == NPTypeCode.Decimal)
             {

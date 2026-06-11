@@ -60,6 +60,17 @@ namespace NumSharp
         public static NDArray exp2(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp2(a, typeCode);
 
         /// <summary>
+        ///     Mirrors NumPy's ufunc signature: <c>exp2(x, /, out=None, *, where=True, dtype=None)</c>.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop; the input must be same_kind-castable to it.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
+        public static NDArray exp2(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => a.TensorEngine.Exp2(a, dtype, @out, where);
+
+        /// <summary>
         ///     Calculate 2**p for all p in the input array.
         /// </summary>
         /// <param name="a">Input value.</param>
@@ -82,6 +93,17 @@ namespace NumSharp
         /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
         public static NDArray expm1(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Expm1(a, typeCode);
+
+        /// <summary>
+        ///     Mirrors NumPy's ufunc signature: <c>expm1(x, /, out=None, *, where=True, dtype=None)</c>.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): selects the loop; the input must be same_kind-castable to it.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
+        public static NDArray expm1(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => a.TensorEngine.Expm1(a, dtype, @out, where);
 
         /// <summary>
         ///     Calculate exp(x) - 1 for all elements in the array.

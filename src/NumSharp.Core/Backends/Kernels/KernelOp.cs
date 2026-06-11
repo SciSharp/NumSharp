@@ -67,6 +67,8 @@ namespace NumSharp.Backends.Kernels
         BitwiseNot,
         /// <summary>Logical NOT for boolean arrays (! operator, not ~ bitwise)</summary>
         LogicalNot,
+        /// <summary>Identity at every dtype (NumPy 'positive'; also the masked-copy vehicle for out=/where= compositions)</summary>
+        Positive,
 
         // Floating-point classification (returns bool)
         /// <summary>Test element-wise for finiteness (not infinity and not NaN)</summary>
