@@ -169,6 +169,37 @@ What needs **no** work, now proven at the iterator level: construction beats `nd
 
 `np.add` **allocating at 4M is 2–2.6× faster than NumPy** (the Wave-2.4 pool eliminates the page-fault tax NumPy pays per fresh 32 MB output); **F-order-out elementwise is 1.5× faster** (X1/X1p); **`where=` wins at both extremes** (all-true 0.79, alternating 0.72); **axis-1 reductions 2–2.8× faster** (R2/R0b); **8-op single-pass fusion is 1.9× faster than NumPy's best possible composition** (Y1) — the multi-operand architecture dividend, same family as `np.evaluate`.
 
+## Frontier round 2 (2026-06-12) — overlap taxes, predicates, broadcast-reduce, parallel dividend
+
+**Scripts:** `npyiter_frontier2_bench.{cs,py}`. Probes: COPY_IF_OVERLAP per-call taxes, comparison→bool outputs, early-exit boolean reduces, reduce over a broadcast view, mixed-dtype/scalar/empty small-N, 8-D construction, and a hand-rolled 8-band parallel iteration (the Wave-6.2 dividend made concrete — one iterator per disjoint row band via `Parallel.For`, exactly what PARALLEL_SAFE+RANGED+`Copy()` will automate).
+
+| id | aspect | NumSharp | NumPy | NS/NP | verdict |
+|---|---|--:|--:|--:|---|
+| C14 | ctor 2-op 8-D contig (4⁸) | 321 ns | 953 ns | **0.34** | **3× faster** |
+| V1 | in-place `np.add(a,b,out=a)` 4M (exact alias) | 2.185 ms | 2.480 ms | **0.88** | **faster** |
+| V2 | `np.add(x[:-1],x[:-1],out=x[1:])` 4M (forced copy) | 4.719 ms | 8.257 ms | **0.57** | **1.75× faster** — pooled overlap temp vs their fresh-alloc copy |
+| D1 | `np.less(a,b,out=bool)` f64 4M | 2.988 ms | 2.117 ms | **1.41** | **behind** — bool-output packing |
+| E1 | `np.any(bool 10M)` ALL-FALSE (full scan) | 1.856 ms | 128 µs | **14.5** | **BIG LOSS** — scalar scan at 4.9 GB/s |
+| E2 | `np.any(bool 10M)` TRUE@1000 (early exit) | 350 ns | 1.35 µs | **0.26** | **3.9× faster** — early exit works and beats theirs |
+| F1 | `np.sum(broadcast_to(8K → (1024,8192)))` | **61.9 ms** | 1.140 ms | **54×** | **CATASTROPHIC** — general per-element path |
+| M1 | `np.add(i32, f64, out=f64)` 1K mixed small-N | 888 ns | 931 ns | 0.95 | parity-win |
+| O3 | `np.add(a 1K, scalar, out=)` | 901 ns | 520 ns | **1.73** | **behind** — scalar wrap costs MORE than a 2nd array (H0 648 ns) |
+| O4 | `np.add` on EMPTY (0,) out= | 88.5 ns | 250 ns | **0.35** | **2.8× faster** (zero-size guards cheap) |
+| PAR0 | production `np.sin(out=)` f64 4M, 1 thread | 12.099 ms | 11.672 ms | 1.04 | parity (both ~2.9 ns/elem) |
+| PAR1 | iterator sin, ONE iterator | 12.183 ms | 11.672 ms | 1.04 | parity |
+| PAR8 | iterator sin, **8 banded iterators** (`Parallel.For`) | **2.472 ms** | 11.672 ms (their ceiling) | **0.21** | **4.7× faster — NumPy never threads its iterator** |
+
+### Round-2 root causes (probed, `/tmp/f1probe.cs` methodology inline)
+
+13. **`np.sum` over a broadcast view takes a per-element general path: 61.99 ms = 7.4 ns/elem (54× behind NumPy).** Probe decomposition: materializing the view (`bc.copy()`, 64 MB) costs 11.26 ms and summing a dense same-size array costs 2.58 ms — so even the naive materialize-then-sum strategy would be 4.5× faster than today's path, and NumPy's direct strided-read reduction is 54× faster. The reduction route must read through stride-0 dims (or at minimum materialize) instead of falling to coordinate-walking scalar iteration.
+14. **`np.any`/`np.all` full scans are scalar while the SIMD machinery exists ten feet away:** `np.any(bool 10M)` = 2.03 ms (4.9 GB/s) vs `np.count_nonzero` on the *same array* = 0.16 ms (63.7 GB/s SIMD). 12.7× left on the table by routing; `np.any` should be strictly ≤ `count_nonzero` (it can exit early — and its early-exit case DOES win, E2 0.26).
+15. **Comparison→bool at 4M f64 is 1.41× behind** (D1) — NumPy packs SIMD compare masks to bytes at near-roofline; our comparison kernel leaves ~0.9 ms on the table per 4M call.
+16. **The array+scalar path costs more than a second full array** (O3 901 ns vs H0 648 ns array+array; NumPy 520 ns) — the `NDArray.Scalar` wrap/dispatch adds ~250 ns where NumPy's scalar fast path saves time instead.
+
+### Round-2 wins to bank
+
+**Parallel banded iteration is real and big: 4.9× scaling over our own single thread, 4.7× over NumPy's ceiling** (PAR8 — and this is the *manual* version of what Wave 6.2 automates; production `np.sin` is already at single-thread parity with NumPy's vectorized sin). **The overlap machinery is cheaper than NumPy's** (V2 forced-copy 1.75× faster, V1 exact-alias 0.88 — Wave 1.1 + the Wave 2.4 pool compound). 8-D construction 3× faster (C14), empty-array calls 2.8× faster (O4), early-exit `any` 3.9× faster (E2), mixed-dtype small-N at parity (M1).
+
 ## Reproduce
 
 ```bash
@@ -177,6 +208,9 @@ dotnet run -c Release - < benchmark/poc/npyiter_core_bench.cs       # NumSharp s
 
 python benchmark/poc/npyiter_frontier_bench.py                      # frontier: NumPy side
 dotnet run -c Release - < benchmark/poc/npyiter_frontier_bench.cs   # frontier: NumSharp side
+
+python benchmark/poc/npyiter_frontier2_bench.py                     # frontier 2: NumPy side
+dotnet run -c Release - < benchmark/poc/npyiter_frontier2_bench.cs  # frontier 2: NumSharp side
 ```
 
 S/G supplements were run as inline variants of the same harness (strided-row add 3-op at w∈{4,16,64,1024} both sides; same-dtype 4M add under EXLOOP vs BUFFERED|GROWINNER vs full ufunc config). All aspects correctness-checked in-script before timing; both scripts assert the JIT optimizer is enabled (Debug builds refuse to print).
