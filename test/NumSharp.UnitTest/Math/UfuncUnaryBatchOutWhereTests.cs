@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
@@ -132,7 +132,7 @@ namespace NumSharp.UnitTest.MathSuite
             var exTrunc = Assert.ThrowsException<ArgumentException>(() => np.trunc(f, i4out));
             StringAssert.Contains(exTrunc.Message, "ufunc 'trunc'");
 
-            var exRint = Assert.ThrowsException<ArgumentException>(() => np.round_(f, i4out));
+            var exRint = Assert.ThrowsException<ArgumentException>(() => np.round_(f, @out: i4out));
             StringAssert.Contains(exRint.Message, "ufunc 'rint'");
 
             var exSinh = Assert.ThrowsException<ArgumentException>(() => np.sinh(f, i4out));
@@ -365,7 +365,7 @@ namespace NumSharp.UnitTest.MathSuite
 
             // decimals=0 route: banker's rounding [0., 2., 2., -2.].
             var o2 = np.empty(new Shape(4), np.float64);
-            np.around(np.array(new[] { 0.5, 1.5, 2.5, -2.5 }), o2);
+            np.around(np.array(new[] { 0.5, 1.5, 2.5, -2.5 }), @out: o2);
             var expected2 = new[] { 0.0, 2, 2, -2 };
             for (int i = 0; i < 4; i++)
                 Assert.AreEqual(expected2[i], o2.GetDouble(i));
@@ -387,9 +387,10 @@ namespace NumSharp.UnitTest.MathSuite
         {
             var x = np.array(new[] { 1.44, 1.55, 2.5, -2.5 });
 
-            // decimals==0 -> the rint ufunc.
+            // decimals==0 -> the rint ufunc. (np.round's 2nd positional is
+            // decimals per NumPy — out rides the 3rd slot or the name.)
             var exRint = Assert.ThrowsException<ArgumentException>(() =>
-                np.round_(x, np.empty(new Shape(4), np.int32)));
+                np.round_(x, @out: np.empty(new Shape(4), np.int32)));
             Assert.AreEqual(
                 "Cannot cast ufunc 'rint' output from dtype('float64') to dtype('int32') " +
                 "with casting rule 'same_kind'", exRint.Message);

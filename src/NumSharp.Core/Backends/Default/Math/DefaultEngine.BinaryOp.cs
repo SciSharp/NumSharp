@@ -56,17 +56,6 @@ namespace NumSharp.Backends
             // Determine result type using NumPy type promotion rules
             var resultType = np._FindCommonType(lhs, rhs);
 
-            // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`
-            // is logical OR and `*` is logical AND (so True + True == True, raw byte 1, not 2).
-            // resultType is Boolean only when both operands are bool; remap the op so every
-            // downstream kernel path (SIMD/scalar, same-type/mixed) emits the bitwise op and writes
-            // a normalized 0/1 byte. (`-` has no bool loop and already throws like NumPy.)
-            if (resultType == NPTypeCode.Boolean)
-            {
-                if (op == BinaryOp.Add) op = BinaryOp.BitwiseOr;
-                else if (op == BinaryOp.Multiply) op = BinaryOp.BitwiseAnd;
-            }
-
             // NumPy: true division (/) always returns float64 for integer types
             // This matches Python 3 / NumPy 2.x semantics where / is "true division"
             // Group 3 = float (Single, Double), Group 4 = Decimal
@@ -115,6 +104,20 @@ namespace NumSharp.Backends
             {
                 ValidateBinaryInputCasts(lhsType, rhsType, dtype.Value, UfuncName(op));
                 resultType = dtype.Value;
+            }
+
+            // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`
+            // is logical OR and `*` is logical AND (so True + True == True, raw byte 1, not 2).
+            // The remap keys off the FINAL loop dtype (i.e. AFTER the dtype= override):
+            // add(bool, bool, dtype=i32) runs the i32 add loop and returns 2 (probed 2.4.2),
+            // while add(bool, bool) and add(bool, bool, dtype=bool) stay logical OR. The op
+            // remap makes every downstream kernel path (SIMD/scalar, same-type/mixed) emit
+            // the bitwise op and write a normalized 0/1 byte. (`-` has no bool loop and
+            // already throws like NumPy.)
+            if (resultType == NPTypeCode.Boolean)
+            {
+                if (op == BinaryOp.Add) op = BinaryOp.BitwiseOr;
+                else if (op == BinaryOp.Multiply) op = BinaryOp.BitwiseAnd;
             }
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final

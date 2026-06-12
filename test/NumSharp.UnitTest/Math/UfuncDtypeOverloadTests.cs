@@ -377,5 +377,200 @@ namespace NumSharp.UnitTest.MathSuite
             Assert.AreEqual(NPTypeCode.Single, np.sqrt(x, typeof(float)).typecode);
             Assert.AreEqual(NPTypeCode.Single, np.log(x, typeof(float)).typecode);
         }
+
+        // =====================================================================
+        // Binary six dtype= — the loop runs IN dtype (all probed NumPy 2.4.2)
+        // =====================================================================
+
+        [TestMethod]
+        public void BinarySix_Dtype_SelectsTheLoop()
+        {
+            var a = np.array(new int[] { 1, 2 });
+            var b = np.array(new int[] { 3, 4 });
+
+            // add(i32, i32, dtype=f64) → [4., 6.] float64
+            var r = np.add(a, b, dtype: NPTypeCode.Double);
+            Assert.AreEqual(NPTypeCode.Double, r.typecode);
+            Assert.AreEqual(4.0, r.GetDouble(0));
+
+            // subtract(i64, i64, dtype=i16) → 295 in the int16 loop
+            var s = np.subtract(np.array(new long[] { 300 }), np.array(new long[] { 5 }), dtype: NPTypeCode.Int16);
+            Assert.AreEqual(NPTypeCode.Int16, s.typecode);
+            Assert.AreEqual((short)295, s.GetInt16(0));
+
+            // divide(i32, i32, dtype=f32) → float32 loop
+            var d = np.divide(a, b, dtype: NPTypeCode.Single);
+            Assert.AreEqual(NPTypeCode.Single, d.typecode);
+            Assert.AreEqual(1f / 3f, d.GetSingle(0));
+
+            // mod(i32:-7, i32:2, dtype=f64) → 1.0 (float remainder loop)
+            var m = np.mod(np.array(new int[] { -7 }), np.array(new int[] { 2 }), dtype: NPTypeCode.Double);
+            Assert.AreEqual(NPTypeCode.Double, m.typecode);
+            Assert.AreEqual(1.0, m.GetDouble(0));
+
+            // true_divide is the divide ufunc
+            Assert.AreEqual(NPTypeCode.Single, np.true_divide(a, b, dtype: NPTypeCode.Single).typecode);
+
+            // dtype + out compose: f32 loop value lands in the f64 out
+            var o = np.zeros(new Shape(1), np.float64);
+            np.add(np.array(new[] { 0.1 }), np.array(new[] { 0.2 }), o, dtype: NPTypeCode.Single);
+            Assert.AreEqual((double)(0.1f + 0.2f), o.GetDouble(0));
+        }
+
+        [TestMethod]
+        public void Add_BoolLoopRemap_FollowsTheResolvedLoop()
+        {
+            // NumPy: bool 'add' is logical OR (no integer bool loop), but
+            // dtype= selects the loop — add(True, True, dtype=i32) runs the
+            // int32 add loop and returns 2 (probed).
+            var t = np.array(new[] { true });
+
+            Assert.IsTrue(np.add(t, t).GetBoolean(0));                                    // True + True = True
+            Assert.IsTrue(np.add(t, t, dtype: NPTypeCode.Boolean).GetBoolean(0));         // explicit bool loop
+            Assert.AreEqual(2, np.add(t, t, dtype: NPTypeCode.Int32).GetInt32(0));        // i32 loop: 1+1=2
+            Assert.AreEqual(1, np.multiply(t, t, dtype: NPTypeCode.Int32).GetInt32(0));   // i32 loop: 1*1=1
+        }
+
+        [TestMethod]
+        public void BinarySix_Dtype_ErrorTexts()
+        {
+            var a = np.array(new int[] { 1, 2 });
+            var x = np.array(new double[] { 1.5 });
+
+            // divide is float-only: integer/bool dtype= names no loop.
+            var exDiv = Assert.ThrowsException<IncorrectTypeException>(() =>
+                np.divide(a, a, dtype: NPTypeCode.Int32));
+            Assert.AreEqual("No loop matching the specified signature and casting was found for ufunc divide", exDiv.Message);
+            Assert.ThrowsException<IncorrectTypeException>(() => np.divide(x, x, dtype: NPTypeCode.Boolean));
+
+            // same_kind input casts, NumPy names ('remainder' for np.mod) + index.
+            var exMod = Assert.ThrowsException<ArgumentException>(() =>
+                np.mod(np.array(new double[] { 7.5 }), np.array(new double[] { 2.0 }), dtype: NPTypeCode.Int32));
+            Assert.AreEqual(
+                "Cannot cast ufunc 'remainder' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
+                exMod.Message);
+
+            var exAdd = Assert.ThrowsException<ArgumentException>(() =>
+                np.add(a, a, dtype: NPTypeCode.Boolean));
+            Assert.AreEqual(
+                "Cannot cast ufunc 'add' input 0 from dtype('int32') to dtype('bool') with casting rule 'same_kind'",
+                exAdd.Message);
+        }
+
+        // =====================================================================
+        // Bitwise dtype= — bool/int loops only (probed)
+        // =====================================================================
+
+        [TestMethod]
+        public void Bitwise_Dtype_IntLoopsOnly()
+        {
+            var a = np.array(new int[] { 1, 2 });
+            var b = np.array(new int[] { 3, 4 });
+
+            var r = np.bitwise_and(a, b, dtype: NPTypeCode.Int64);
+            Assert.AreEqual(NPTypeCode.Int64, r.typecode);
+            Assert.AreEqual(1L, r.GetInt64(0));
+            Assert.AreEqual(0L, r.GetInt64(1));
+
+            // i64 → i16 narrowing is same_kind: 300 survives
+            var n = np.bitwise_and(np.array(new long[] { 300 }), np.array(new long[] { 300 }), dtype: NPTypeCode.Int16);
+            Assert.AreEqual((short)300, n.GetInt16(0));
+
+            var ex = Assert.ThrowsException<IncorrectTypeException>(() =>
+                np.bitwise_and(a, b, dtype: NPTypeCode.Double));
+            Assert.AreEqual("No loop matching the specified signature and casting was found for ufunc bitwise_and", ex.Message);
+            Assert.ThrowsException<IncorrectTypeException>(() => np.bitwise_or(a, b, dtype: NPTypeCode.Single));
+            Assert.ThrowsException<IncorrectTypeException>(() => np.bitwise_xor(a, b, dtype: NPTypeCode.Double));
+        }
+
+        // =====================================================================
+        // positive — full ufunc surface (was plain-copy only; all probed)
+        // =====================================================================
+
+        [TestMethod]
+        public void Positive_NumPyCallForms_OneOverload()
+        {
+            var x = np.array(new double[] { 1.5, -2.5 });
+
+            // plain: identity copy
+            var p = np.positive(x);
+            Assert.AreEqual(1.5, p.GetDouble(0));
+            Assert.AreEqual(-2.5, p.GetDouble(1));
+            Assert.IsFalse(ReferenceEquals(p, x));
+
+            // out= returns the provided instance
+            var o = np.zeros(new Shape(2), np.float64);
+            Assert.IsTrue(ReferenceEquals(np.positive(x, o), o));
+            Assert.AreEqual(-2.5, o.GetDouble(1));
+
+            // where= masks; false slots keep prior contents
+            var o9 = np.ones(new Shape(2)) * 9.0;
+            np.positive(x, o9, np.array(new[] { true, false }));
+            Assert.AreEqual(1.5, o9.GetDouble(0));
+            Assert.AreEqual(9.0, o9.GetDouble(1));
+
+            // dtype= widens (positive(i32, dtype=f64) ≡ identity loop at f64)
+            var w = np.positive(np.array(new int[] { 1, -2 }), dtype: NPTypeCode.Double);
+            Assert.AreEqual(NPTypeCode.Double, w.typecode);
+            Assert.AreEqual(-2.0, w.GetDouble(1));
+
+            // dtype + out compose
+            var of = np.zeros(new Shape(2), np.float32);
+            np.positive(x, of, dtype: NPTypeCode.Double);
+            Assert.AreEqual(-2.5f, of.GetSingle(1));
+        }
+
+        [TestMethod]
+        public void Positive_LoopErrors_NumPyTexts()
+        {
+            var x = np.array(new double[] { 1.5 });
+
+            // positive has no bool loop — plain bool raises naming "-> None"
+            var ex1 = Assert.ThrowsException<TypeError>(() => np.positive(np.array(new[] { true })));
+            Assert.AreEqual(
+                "ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.BoolDType'> -> None",
+                ex1.Message);
+
+            // dtype=bool names both sides
+            var ex2 = Assert.ThrowsException<TypeError>(() => np.positive(x, dtype: NPTypeCode.Boolean));
+            Assert.AreEqual(
+                "ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.Float64DType'> -> <class 'numpy.dtypes.BoolDType'>",
+                ex2.Message);
+
+            // but dtype= can SELECT a loop bool input can reach: [1., -0.] → [1., 0.]
+            var ok = np.positive(np.array(new[] { true, false }), dtype: NPTypeCode.Double);
+            Assert.AreEqual(1.0, ok.GetDouble(0));
+            Assert.AreEqual(0.0, ok.GetDouble(1));
+
+            // non-bool dtype follows the same_kind input rule
+            var ex3 = Assert.ThrowsException<ArgumentException>(() => np.positive(x, dtype: NPTypeCode.Int32));
+            Assert.AreEqual(
+                "Cannot cast ufunc 'positive' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
+                ex3.Message);
+        }
+
+        // =====================================================================
+        // round family — NumPy's round(a, decimals=0, out=None) single shape
+        // =====================================================================
+
+        [TestMethod]
+        public void RoundFamily_SingleNumPyShape()
+        {
+            var x = np.array(new[] { 1.234, 5.678 });
+
+            // round(a) / round(a, decimals) / round(a, decimals, out) — NumPy positions
+            Assert.AreEqual(1.0, np.around(x).GetDouble(0));
+            Assert.AreEqual(1.2, np.around(x, 1).GetDouble(0), 1e-12);
+
+            var o = np.zeros(new Shape(2));
+            var r = np.around(x, 1, o);
+            Assert.IsTrue(ReferenceEquals(r, o));
+            Assert.AreEqual(5.7, o.GetDouble(1), 1e-12);
+
+            // out reachable by name without decimals (decimals defaults to 0)
+            var o2 = np.zeros(new Shape(2));
+            Assert.IsTrue(ReferenceEquals(np.round_(x, @out: o2), o2));
+            Assert.AreEqual(6.0, o2.GetDouble(1));
+        }
     }
 }

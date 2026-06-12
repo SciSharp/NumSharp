@@ -8,28 +8,28 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.add.html</remarks>
         /// <param name="@out">A location into which the result is stored (must broadcast with the inputs without being stretched; returned as-is).</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
-        public static NDArray add(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Add(x1, x2, @out, where);
+        public static NDArray add(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Add(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divide.html</remarks>
-        public static NDArray divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Divide(x1, x2, @out, where);
+        public static NDArray divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.true_divide.html</remarks>
-        public static NDArray true_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Divide(x1, x2, @out, where);
+        public static NDArray true_divide(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Divide(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
-        public static NDArray multiply(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Multiply(x1, x2, @out, where);
+        public static NDArray multiply(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Multiply(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.subtract.html</remarks>
-        public static NDArray subtract(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Subtract(x1, x2, @out, where);
+        public static NDArray subtract(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Subtract(x1, x2, dtype, @out, where);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
-        public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
-            => x1.TensorEngine.Mod(x1, x2, @out, where);
+        public static NDArray mod(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x1.TensorEngine.Mod(x1, x2, dtype, @out, where);
 
         public static NDArray mod(NDArray x1, float x2)
             => x1.TensorEngine.Mod(x1, x2);
@@ -61,11 +61,15 @@ namespace NumSharp
             => a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype != null ? dtype.GetTypeCode() : (NPTypeCode?)null);
 
         /// <summary>
-        ///     Numerical positive, element-wise.
+        ///     Numerical positive, element-wise (identity: returns +x, a copy).
+        ///     Mirrors NumPy's ufunc signature: <c>positive(x, /, out=None, *, where=True, dtype=None)</c>.
         /// </summary>
+        /// <param name="@out">A location into which the result is stored (joins the broadcast without being stretched, must be same_kind-castable from the loop dtype; returned as-is).</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written (NumPy ufunc where=).</param>
+        /// <param name="dtype">Explicit loop dtype (NumPy ufunc dtype=): positive(i32, dtype: float64) widens; bool loop requests raise NumPy's did-not-contain-a-loop TypeError (positive has no bool loop, but positive(bool, dtype: float64) is legal).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.positive.html</remarks>
-        public static NDArray positive(NDArray nd)
-            => nd.positive();
+        public static NDArray positive(NDArray nd, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => nd.TensorEngine.Positive(nd, dtype, @out, where);
 
         /// <summary>
         ///     Numerical negative, element-wise.

@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
@@ -21,31 +21,58 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise AND operation.
         /// </summary>
-        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_and");
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseAnd, @out, where);
+            // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
+            // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under
+            // same_kind). A float/complex/decimal dtype= names no loop — NumPy
+            // raises the no-loop text here (NOT the float-INPUT coercion text
+            // ValidateBitwiseLoop produces for float operands; both probed).
+            if (typeCode.HasValue && typeCode.Value != NPTypeCode.Boolean
+                && !typeCode.Value.IsInteger() && typeCode.Value != NPTypeCode.Char)
+                throw new IncorrectTypeException(
+                    "No loop matching the specified signature and casting was found for ufunc bitwise_and");
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseAnd, @out, where, typeCode);
         }
 
         /// <summary>
         /// Execute bitwise OR operation.
         /// </summary>
-        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_or");
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseOr, @out, where);
+            // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
+            // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under
+            // same_kind). A float/complex/decimal dtype= names no loop — NumPy
+            // raises the no-loop text here (NOT the float-INPUT coercion text
+            // ValidateBitwiseLoop produces for float operands; both probed).
+            if (typeCode.HasValue && typeCode.Value != NPTypeCode.Boolean
+                && !typeCode.Value.IsInteger() && typeCode.Value != NPTypeCode.Char)
+                throw new IncorrectTypeException(
+                    "No loop matching the specified signature and casting was found for ufunc bitwise_or");
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseOr, @out, where, typeCode);
         }
 
         /// <summary>
         /// Execute bitwise XOR operation.
         /// </summary>
-        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null)
+        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
             ValidateWhereMask(where);
             ValidateBitwiseLoop(np._FindCommonType(lhs, rhs), "bitwise_xor");
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseXor, @out, where);
+            // ufunc dtype= selects among the bool/int loops (probed 2.4.2:
+            // bitwise_and(i32,i32,dtype=i64) widens, dtype=i16 narrows under
+            // same_kind). A float/complex/decimal dtype= names no loop — NumPy
+            // raises the no-loop text here (NOT the float-INPUT coercion text
+            // ValidateBitwiseLoop produces for float operands; both probed).
+            if (typeCode.HasValue && typeCode.Value != NPTypeCode.Boolean
+                && !typeCode.Value.IsInteger() && typeCode.Value != NPTypeCode.Char)
+                throw new IncorrectTypeException(
+                    "No loop matching the specified signature and casting was found for ufunc bitwise_xor");
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseXor, @out, where, typeCode);
         }
 
         /// <summary>

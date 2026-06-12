@@ -13,8 +13,8 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray round_(NDArray x, NDArray @out = null)
-            => x.TensorEngine.Round(x, null, @out, null);
+        public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null)
+            => x.TensorEngine.Round(x, decimals, null, @out);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -34,8 +34,6 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray round_(NDArray x, int decimals, NDArray @out = null)
-            => x.TensorEngine.Round(x, decimals, null, @out);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -76,8 +74,8 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray around(NDArray x, NDArray @out = null)
-            => x.TensorEngine.Round(x, null, @out, null);
+        public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null)
+            => x.TensorEngine.Round(x, decimals, null, @out);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
@@ -97,8 +95,6 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray around(NDArray x, int decimals, NDArray @out = null)
-            => x.TensorEngine.Round(x, decimals, null, @out);
 
         /// <summary>
         ///     Computed in <paramref name="dtype"/> — positional-dtype convenience

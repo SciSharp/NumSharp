@@ -39,11 +39,16 @@ namespace NumSharp
 
         #endregion
 
-        public abstract NDArray Add(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Subtract(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Multiply(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Divide(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray Mod(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
+        // Binary arithmetic ufuncs — house parameter order (inputs, typeCode,
+        // out, where). typeCode is NumPy's ufunc dtype=: it selects the LOOP
+        // (computation runs in that dtype; inputs must be same_kind-castable
+        // to it; out is validated against it). Divide is float-only — an
+        // integer/bool dtype= raises NumPy's no-loop TypeError.
+        public abstract NDArray Add(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Subtract(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Multiply(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Divide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Mod(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Mean(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(NDArray nd, int axis, Type dtype, bool keepdims = false);
@@ -54,6 +59,13 @@ namespace NumSharp
         public abstract NDArray Sum(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy 'positive' — identity at every numeric dtype (no bool loop).
+        ///     typeCode selects the loop (positive(i32, dtype=f64) widens; a bool
+        ///     loop request raises NumPy's did-not-contain-a-loop TypeError).
+        /// </summary>
+        public abstract NDArray Positive(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
@@ -164,10 +176,12 @@ namespace NumSharp
         public abstract NDArray Greater(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
-        // Bitwise operations
-        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
-        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
+        // Bitwise operations — typeCode (ufunc dtype=) selects the loop among
+        // the bool/integer loops; float/complex/decimal requests raise NumPy's
+        // no-loop TypeError (the bitwise family has no such loops).
+        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         // Bit shift operations (integer types only)
         public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);

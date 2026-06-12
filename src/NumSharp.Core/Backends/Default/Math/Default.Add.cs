@@ -8,9 +8,9 @@ namespace NumSharp.Backends
         /// Element-wise addition using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Add(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null)
+        public override NDArray Add(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Add, @out, where);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Add, @out, where, typeCode);
         }
     }
 }
