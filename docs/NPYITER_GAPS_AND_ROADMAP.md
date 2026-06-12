@@ -172,6 +172,11 @@ python benchmark/poc/variation_probe.py
 dotnet run -c Release - < benchmark/poc/npyiter_parity_poc.cs
 python benchmark/poc/npyiter_parity_poc.py
 
+# iterator-core bench (construction / chunk-dispatch / buffering / protocol,
+# matched ids both sides; results + findings: benchmark/poc/NPYITER_CORE_BENCH_RESULTS.md):
+dotnet run -c Release - < benchmark/poc/npyiter_core_bench.cs
+python benchmark/poc/npyiter_core_bench.py
+
 # suite gate
 cd test/NumSharp.UnitTest && dotnet test --no-build -f net10.0 --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
 ```
