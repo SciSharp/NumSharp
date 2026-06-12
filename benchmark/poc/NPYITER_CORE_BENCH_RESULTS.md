@@ -200,6 +200,74 @@ What needs **no** work, now proven at the iterator level: construction beats `nd
 
 **Parallel banded iteration is real and big: 4.9× scaling over our own single thread, 4.7× over NumPy's ceiling** (PAR8 — and this is the *manual* version of what Wave 6.2 automates; production `np.sin` is already at single-thread parity with NumPy's vectorized sin). **The overlap machinery is cheaper than NumPy's** (V2 forced-copy 1.75× faster, V1 exact-alias 0.88 — Wave 1.1 + the Wave 2.4 pool compound). 8-D construction 3× faster (C14), empty-array calls 2.8× faster (O4), early-exit `any` 3.9× faster (E2), mixed-dtype small-N at parity (M1).
 
+## Round 3 (2026-06-12) — NumPy's internal NpyIter consumers, mapped and benchmarked
+
+**Scripts:** `npyiter_consumers_bench.{cs,py}`. The map below is grounded in the in-repo NumPy 2.4.2 source (`grep NpyIter_{New,MultiNew,AdvancedNew}` over `src/numpy/numpy/_core/src`, enclosing functions resolved). Every benchable consumer is exercised through its user-facing `np.*` surface with the perf-relevant argument matrix; consumers NumSharp lacks are timed NumPy-only as implementation targets.
+
+### The consumer map (NumPy 2.4.2)
+
+| internal consumer | call site | user-facing surface | NumSharp |
+|---|---|---|---|
+| `execute_ufunc_loop` | ufunc_object.c:1084 | every non-trivial `np.<ufunc>` (broadcast/cast/`where=`/`out=`/`dtype=`) | ✅ benched (UF + prior rounds) |
+| `PyUFunc_GeneralizedFunctionInternal` | ufunc_object.c:1978 | gufuncs (`matmul` inner) | ➖ different machinery in NS |
+| `PyUFunc_Accumulate` | ufunc_object.c:2695 | `np.cumsum`/`np.cumprod` (+axis) | ✅ benched (AC) |
+| `PyUFunc_Reduceat` | ufunc_object.c:3127 | `ufunc.reduceat` | ❌ missing (RA1 target: 1.24 ms) |
+| `ufunc_at__slow_iter` | ufunc_object.c:5772 | `np.add.at` scatter-add | ❌ missing (AT1 target: 6.86 ms) |
+| `PyUFunc_ReduceWrapper` (2–3 op, wheremask) | reduction.c:286 | `np.sum/prod/min/max…` × axis/dtype/out/keepdims/initial/where | ✅ benched (RD); axis-tuple/`where=`/`initial=` ❌ missing |
+| `array_boolean_subscript` | mapping.c:1007 | `a[mask]` read | ✅ benched (BM1) |
+| `array_assign_boolean_subscript` | mapping.c:1205 | `a[mask] = v` | ✅ benched (BM2) |
+| `PyArray_MapIterNew`/`CheckIndices` | mapping.c:3126/2696 | fancy `a[idx]` gather / scatter | ✅ benched (FX) |
+| `PyArray_CountNonzero` | item_selection.c:2747 | `np.count_nonzero` (non-bool dtypes via NpyIter) | ✅ benched (BM3) |
+| `PyArray_Nonzero` | item_selection.c:2959 | `np.nonzero`/`np.argwhere` | ✅ benched (BM4; note: no public `np.nonzero` alias in NS — engine `NonZero` + `np.argwhere` exist) |
+| `PyArray_CopyAsFlat` | ctors.c:2787 | `np.ravel`/`flatten` copies, `copy(order=)` | ✅ benched (RV) |
+| `arr_ravel_multi_index` | compiled_base.c:1186 | `np.ravel_multi_index` (BUFFERED MultiNew) | ✅ benched (MI2) |
+| `arr_unravel_index` | compiled_base.c:1337 | `np.unravel_index` | ✅ benched (MI1) |
+| `PyArray_Where` | multiarraymodule.c:3303 | `np.where(c, x, y)` | ✅ benched (WH) |
+| `einsum` | einsum.cpp:1051 | `np.einsum` | ❌ missing (EI1/EI2 targets: 2.30/1.42 ms) |
+| `nditer_pywrap` (+nested) | nditer_pywrap.c:815/1098 | `np.nditer`, `np.nested_iters` | ✅ nditer benched (rounds 1–2); `nested_iters` ❌ |
+| busday/datetime/strings/void-compare/deepcopy | datetime_*.c, string_ufuncs.cpp, arrayobject.c:967, methods.c:1681 | `np.busday_*`, `datetime_as_string`, str ufuncs, structured `==`, `deepcopy` | ➖ outside NS dtype system |
+
+### Results (f64 unless noted; A=(2048,2048), 4M elements)
+
+| id | aspect | NumSharp | NumPy | NS/NP | verdict |
+|---|---|--:|--:|--:|---|
+| UF1 | `np.add(dtype=float32)` allocating 4M | 4.054 ms | 7.202 ms | **0.56** | **faster** |
+| UF2 | `np.add(out=f32)` write-cast 4M | 3.313 ms | 3.636 ms | **0.91** | **faster** |
+| UF3 | `np.sqrt(int32)` promoting unary 4M | 4.845 ms | 7.393 ms | **0.66** | **faster** |
+| RD1 | `np.sum(A)` full | 806 µs | 2.285 ms | **0.35** | **2.8× faster** |
+| RD2 | `np.sum(A, axis=0, keepdims=True)` | 1.020 ms | 1.129 ms | **0.90** | **faster** |
+| RD3 | `np.sum(f32, dtype=float64)` upcast | **3.225 ms** | 1.633 ms | **1.97** | **behind — casts whole array first** (astype 2.3 + sum 0.8 ≈ 3.2 confirms composition; NumPy casts on load inside the loop) |
+| RD4 | `np.sum(B, axis=1)` 3-D middle axis | 1.117 ms | 1.681 ms | **0.66** | **faster** |
+| RD5 | `np.amin(A, axis=1)` | **1.714 ms** | 1.115 ms | **1.54** | **behind** — min/max axis kernels lag (sum axis=1 wins 2.8×) |
+| AC1 | `np.cumsum(a)` flat 4M | 5.805 ms | 10.167 ms | **0.57** | **faster** |
+| AC2 | `np.cumsum(A, axis=0)` | **95.04 ms** | 69.90 ms | **1.36** | **behind — both terrible** (~20 ns/elem column-walk; a vertical-SIMD pass would run ~4–5 ms ⇒ 15–20× leapfrog open) |
+| AC3 | `np.cumsum(A, axis=1)` | 3.496 ms | 10.213 ms | **0.34** | **2.9× faster** |
+| WH1 | `np.where(c,x,y)` same-shape | 4.227 ms | 7.751 ms | **0.55** | **faster** |
+| WH2 | `np.where(c,x,0.0)` scalar branch | 3.291 ms | 6.761 ms | **0.49** | **2× faster** |
+| WH3 | `np.where(c2d,row,y2d)` broadcasting | 3.350 ms | 7.190 ms | **0.47** | **2.1× faster** |
+| BM1 | `a[mask]` boolean read (50%) | 4.016 ms | 10.465 ms | **0.38** | **2.6× faster** |
+| BM2 | `a[mask] = 5.0` boolean assign | 9.404 ms | 17.813 ms | **0.53** | **1.9× faster** |
+| BM3 | `np.count_nonzero(f64 4M)` | 1.655 ms | 2.258 ms | **0.73** | **faster** |
+| BM4 | `np.argwhere(bool 4M)` | 1.201 ms | 5.923 ms | **0.20** | **4.9× faster** |
+| FX1 | `a[idx]` fancy gather 1M | 9.496 ms | 12.523 ms | **0.76** | **faster** |
+| FX2 | `a[idx] = b` fancy scatter 1M | **10.113 ms** | 6.790 ms | **1.49** | **behind** |
+| RV1 | `np.ravel(A.T)` forced copy | 26.324 ms | 49.207 ms | **0.53** | **1.9× faster** |
+| RV2 | `np.ravel(A, order='F')` | 22.198 ms | 48.889 ms | **0.45** | **2.2× faster** |
+| RV3 | `A.flatten()` contiguous | 1.760 ms | 5.301 ms | **0.33** | **3× faster** |
+| RV4 | `A.astype(float32)` | 2.286 ms | 4.032 ms | **0.57** | **faster** |
+| MI1 | `np.unravel_index(1M, dims)` | 5.293 ms | 5.417 ms | 0.98 | parity |
+| MI2 | `np.ravel_multi_index((i,j))` 1M | 2.122 ms | 3.004 ms | **0.71** | **faster** |
+
+**Feature gaps with NumPy target numbers** (rows NumSharp cannot run): reduce `axis=(0,1)` 2.078 ms · reduce `where=` 9.266 ms · reduce `initial=` 2.034 ms · `np.einsum('i,i->')` 2.304 ms · `np.einsum('ij,j->i')` 1.415 ms · `np.add.at` 6.860 ms · `np.add.reduceat` 1.236 ms · `np.nested_iters` — plus no public `np.nonzero` alias. Note `np.einsum` is the canonical multi-operand NpyIter consumer — `NpyIterRef` + `NpyExpr` already have the machinery shape for it, and the `np.add.at` target (6.9 ms for 1M scatter-adds) is soft.
+
+### Round-3 findings
+
+17. **`np.sum(dtype=)` upcast composes instead of fusing (1.97×):** measured 3.225 ms ≈ astype-materialize (2.3 ms) + dense sum (0.8 ms). NumPy's reduce loop casts on load through the iterator's buffering. Fix belongs to Wave 5 (reductions through the core — the buffered REDUCE iterator does exactly this).
+18. **`np.amin/amax` axis kernels lag sum** (1.54× behind where sum wins 2.8× on the same shape) — min/max row-reduce needs the same SIMD/unroll treatment sum already got.
+19. **Fancy scatter is 1.49× behind** its gather twin (FX1 wins 0.76) — write-side MapIter path.
+20. **Column cumsum (AC2) is a 15–20× leapfrog opportunity:** both sides run ~20 ns/elem scalar column-walks (NS 95 ms, NP 70 ms); a vertical-SIMD accumulate (row-vector running sums) would be DRAM-bound ~4–5 ms. NumPy can't do it without rewriting `PyUFunc_Accumulate`; `ILKernelGenerator` can.
+21. The whole **selection/where/boolean family is decisively won** (0.20–0.76 across BM/WH/FX1) — NumPy's mapping.c iterator-driven paths are consistently slower than NumSharp's Direct kernels; these families should NOT be migrated onto per-chunk callbacks without keeping the current kernels as the fast path.
+
 ## Reproduce
 
 ```bash
@@ -214,3 +282,8 @@ dotnet run -c Release - < benchmark/poc/npyiter_frontier2_bench.cs  # frontier 2
 ```
 
 S/G supplements were run as inline variants of the same harness (strided-row add 3-op at w∈{4,16,64,1024} both sides; same-dtype 4M add under EXLOOP vs BUFFERED|GROWINNER vs full ufunc config). All aspects correctness-checked in-script before timing; both scripts assert the JIT optimizer is enabled (Debug builds refuse to print).
+
+```bash
+python benchmark/poc/npyiter_consumers_bench.py                     # round 3: NumPy side
+dotnet run -c Release - < benchmark/poc/npyiter_consumers_bench.cs  # round 3: NumSharp side
+```
