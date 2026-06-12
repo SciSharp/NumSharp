@@ -123,11 +123,60 @@ Reading:
 
 What needs **no** work, now proven at the iterator level: construction beats `nditer` across every config (C2–C13); buffered mixed-dtype, broadcast, transposed, reduction traversal all faster (T3–T8s); full-iterator strided traversal at parity-to-2× (S); per-element protocol 2.5 ns/elem with free MULTI_INDEX; contiguous traversal at the DRAM roofline (T1).
 
+## Frontier follow-up (2026-06-12) — adversarial probe of the NOT-winning territory
+
+**Scripts:** `npyiter_frontier_bench.{cs,py}` (same harness, same ids both sides). Targets every suspected weak spot: axis reductions through op_axes+REDUCE (the Wave-5 territory), ALLOCATE outputs, `where=` masks at degenerate run lengths, strided buffered casts, forced-order outputs, 0-d scalars, plus balancing win-candidates (reversed copy, 8-op single-pass fusion) and the kernel-bound dtype frontier as labeled context. R-rows show ±10% run-to-run variance.
+
+| id | aspect | NumSharp | NumPy | NS/NP | verdict |
+|---|---|--:|--:|--:|---|
+| R0a | production `np.sum(A, axis=0)` f64 (2000²) | 1.124 ms | 1.029 ms | 1.09 | ≈parity |
+| R0b | production `np.sum(A, axis=1)` | 803 µs | 2.220 ms | **0.36** | **2.8× faster** |
+| R1 | iterator axis-0 sum via op_axes+REDUCE | 1.279 ms | 1.065 ms (`add.reduce`) | **1.20** | **behind** |
+| R2 | iterator axis-1 sum via op_axes+REDUCE | 1.157 ms | 2.347 ms | **0.49** | **2× faster** |
+| R3 | axis-0 sum BUFFERED (legacy reduce loop) | **CRASH** | — | — | **AccessViolation — driver bug, see findings** |
+| A3 | anchor: iterator add f64 4M, out= provided | 3.526 ms | 3.737 ms | 0.94 | faster |
+| A1 | iterator add 4M, out=null + ALLOCATE | 5.852 ms | 7.515 ms (allocating `np.add`) | 0.78 | faster **despite** the zeros tax (+2.33 ms, see findings) |
+| A2 | production `np.add(a,b)` allocating 4M | 3.832 ms | 7.515–9.832 ms | **0.39–0.51** | **2–2.6× faster** — pooled warm pages vs NumPy's page-fault tax |
+| W1 | `np.add(out=, where=ALL-TRUE)` f32 4M | 2.801 ms | 3.536 ms | **0.79** | **faster** |
+| W2 | `where=` ALTERNATING (run=1, worst case) | 10.646 ms | 14.853 ms | **0.72** | **faster** — NumPy degrades 4.2×, we degrade 3.8× |
+| W3 | `where=` BLOCKY (run=64) | 4.097 ms | 3.186 ms | **1.29** | **behind — and slower than our own unmasked**, while NumPy goes FASTER than unmasked |
+| B1 | buffered cast copy f32[::2]→f64 2M (windowed) | 2.334 ms | 1.531 ms (one-pass `copyto`) | **1.52** | **behind** — buffer round-trip vs direct strided cast |
+| B1p | production `np.copyto` same | 1.648 ms | 1.531 ms | 1.08 | ≈parity (production already one-pass) |
+| X1 | iterator add C+C→F-ORDER out (1448²) | 3.014 ms | 4.499 ms | **0.67** | **faster** |
+| X1p | production `np.add(out=F-order)` | 2.942 ms | 4.499 ms | **0.65** | **faster** |
+| X2 | iterator copy REVERSED `a[::-1]` 4M | 2.745 ms | 2.915 ms | 0.94 | faster |
+| O1 | production `np.add(0-d, 0-d, out=0-d)` | 469 ns | 286 ns | **1.64** | **behind** (scalar fast-path gap) |
+| O2 | production `np.add(0-d, 0-d)` allocating | 811 ns | 337 ns | **2.41** | **behind** |
+| P4 | production `np.copyto` strided rows w=4 | 2.147 ms · 4 ns/chunk | 2.218 ms · 4 ns/chunk | 0.97 | parity with their raw walker |
+| Y1 | **ONE-PASS sum of 7 arrays** (8-op iterator) 4M | 7.851 ms | 14.591 ms (best possible: 6 chained `add(out=)`) | **0.54** | **1.9× faster — multi-op fusion NumPy cannot express** |
+| Y2 | chained 6× `np.add(out=)` same data | 13.829 ms | 14.591 ms | 0.95 | parity (sanity: chained ≈ chained) |
+| Z1 | `np.add` complex128 4M (kernel-bound ctx) | 7.352 ms | 6.672 ms | 1.10 | mildly behind (scalar `Complex`) |
+| Z2 | `np.multiply` complex128 4M | 7.552 ms | 6.542 ms | **1.15** | behind (scalar `Complex.Multiply`) |
+| Z3 | `np.add` float16 4M | 20.747 ms | 15.447 ms | **1.34** | **behind** (scalar Half path) |
+| Z4 | `np.add` int8 4M | **173 µs** | 1.201 ms | **0.14** | **7× faster** (NumPy's i8 loop underperforms badly here) |
+
+### Frontier findings
+
+6. **CRASH (P0): `ForEach` on a BUFFERED+REDUCE iterator dies with AccessViolationException.** `GetIterNext()` has no BUFFER+REDUCE branch — `(BUFFER && !REDUCE)` fails, EXLOOP matches, so it returns `ExternalLoopNext`, which advances the (buffer-pointing) DataPtrs by SOURCE-array strides while `GetInnerLoopSizePtr()` hands the kernel `BufIterEnd` as the count. Pointers run off the 8192-element buffers → AV (uncatchable). The only safe driver for this config is `BufferedReduce<TKernel>`/`Iternext()` (which picks `BufferedReduceIternext`). Fix: route `ForEach` to the buffered-reduce advancer, or throw `InvalidOperationException` at entry. Repro: `npyiter_frontier_bench.cs` R3 (skipped with comment).
+7. **Iterator ALLOCATE outputs are zeroed (`np.zeros`, NpyIter.cs:277) — NumPy allocates EMPTY** for write-only ALLOCATE operands. Measured +2.33 ms per 4M-f64 call (a full 32 MB memset). We *still* beat NumPy's allocating path (0.78) only because their fresh-page fault tax is worse than our pooled memset; switching to `np.empty` for WRITEONLY ALLOCATE makes A1 ≈ 3.6 ms ⇒ ~2× ahead.
+8. **Blocky `where=` masks regress below the unmasked baseline** (W3 4.10 ms vs W1 2.80 all-true) while NumPy *gains* from the same mask (3.19 vs 3.54 — it banks the skipped compute/writes). At run=64 the per-run overhead (mask-run scan + per-run delegate invocation in `InvokeInner`, ~30–40 ns × 32 768 runs) eats more than the saved work. All-true and run=1 masks both WIN (0.79 / 0.72) — the gap is specifically the mid-length-run regime.
+9. **Windowed buffered cast on a strided source is 1.52× behind** NumPy's one-pass strided-cast transfer (B1) — the strided-gather copy-in plus buffer round-trip vs their fused cast loop. Production `np.copyto` already takes the direct route (1.08, B1p); only iterator-driven cast traversal pays this.
+10. **0-d scalar ufunc calls are 1.6–2.4× behind** (O1/O2: 469/811 ns vs NumPy 286/337 ns) — NumPy's scalar fast path vs our full ctor+glue pipeline at N=1. Same fix family as the small-N glue (reuse/pooling + trivial path).
+11. **Axis-0 reduction through op_axes runs 1.20× behind** NumPy's nditer reduction (R1) while axis-1 wins 2× (R2) — the axis-0 inner loop (`out[i] += a[i]` row-accumulate) needs the same unroll/SIMD attention as the Wave-5 migration; production axis sums beat NumPy on axis-1 (0.36) and sit at parity on axis-0 (1.09).
+12. *(kernel-bound context, not iterator)* float16 1.34× and complex128 1.10–1.15× behind (scalar Half/Complex paths, known); **int8 is 7× ahead** (Z4 — NumPy 2.4.2's i8 add loop is unexpectedly slow at 10 GB/s effective).
+
+### Frontier wins to bank
+
+`np.add` **allocating at 4M is 2–2.6× faster than NumPy** (the Wave-2.4 pool eliminates the page-fault tax NumPy pays per fresh 32 MB output); **F-order-out elementwise is 1.5× faster** (X1/X1p); **`where=` wins at both extremes** (all-true 0.79, alternating 0.72); **axis-1 reductions 2–2.8× faster** (R2/R0b); **8-op single-pass fusion is 1.9× faster than NumPy's best possible composition** (Y1) — the multi-operand architecture dividend, same family as `np.evaluate`.
+
 ## Reproduce
 
 ```bash
 python benchmark/poc/npyiter_core_bench.py                          # NumPy side
 dotnet run -c Release - < benchmark/poc/npyiter_core_bench.cs       # NumSharp side (Release is MANDATORY)
+
+python benchmark/poc/npyiter_frontier_bench.py                      # frontier: NumPy side
+dotnet run -c Release - < benchmark/poc/npyiter_frontier_bench.cs   # frontier: NumSharp side
 ```
 
 S/G supplements were run as inline variants of the same harness (strided-row add 3-op at w∈{4,16,64,1024} both sides; same-dtype 4M add under EXLOOP vs BUFFERED|GROWINNER vs full ufunc config). All aspects correctness-checked in-script before timing; both scripts assert the JIT optimizer is enabled (Debug builds refuse to print).
