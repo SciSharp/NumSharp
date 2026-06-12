@@ -290,7 +290,7 @@ Tested against NumPy 2.x.
 ### Comparison & Logic
 `all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`, `equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal`
 
-The six comparisons and `isnan`/`isfinite`/`isinf` also take ufunc `out=`/`where=` (additive overloads returning plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them; no-out forms keep the `NDArray<bool>` sugar). Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True).
+The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped overload each** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` (no bare/out split). It returns plain `NDArray` — NumPy's `np.less(a, b, out=f64)` returns the f64 out itself; `True→1` at any numeric out dtype since bool casts same_kind to all of them. A plain call still returns an `NDArray<bool>` *instance* (TensorEngine contract), so the typed wrapper is one zero-alloc cast away and the C# comparison operators (`==`, `<`, …) keep the `NDArray<bool>` static type via `AsGeneric<bool>()`. `dtype=` is validate-only (probed 2.4.2): bool loops only — `dtype: Boolean` is a no-op, anything else raises `No loop matching the specified signature and casting was found for ufunc <name>`. Comparisons compare at `result_type(lhs, rhs)` inside the kernel (probed: `greater(i8 2^53+1, f8 2^53)` → False, `equal` → True). Engine members follow the house order `(inputs, typeCode, out, where)`.
 
 ### Selection
 `where`

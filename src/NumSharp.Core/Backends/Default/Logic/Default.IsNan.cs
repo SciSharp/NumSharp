@@ -18,23 +18,24 @@ namespace NumSharp.Backends
         /// - Infinity: Returns False (Inf is not NaN)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray<bool> IsNan(NDArray a)
+        public override NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            // Use IL kernel with UnaryOp.IsNan
-            // The kernel handles:
+            // typeCode is validate-only: isnan has bool-output loops only
+            // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
+            ValidateBoolLoopDtype(typeCode, "isnan");
+
+            // Plain call: keep the typed NDArray<bool> instance (TensorEngine
+            // contract). The IL kernel handles:
             // - Float/Double: calls float.IsNaN/double.IsNaN
             // - All other types: returns false (integers cannot be NaN)
-            var result = ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean);
-            return result.MakeGeneric<bool>();
-        }
+            if (@out is null && where is null)
+                return ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-        /// <summary>
-        /// ufunc out=/where= overload: rides the shared unary Into-path with a
-        /// Boolean loop dtype (the predicate body emits bool at the INPUT
-        /// dtype); a non-bool out engages the windowed bool→X flush. Returns
-        /// the provided out (no MakeGeneric — out may be any numeric dtype).
-        /// </summary>
-        public override NDArray IsNan(NDArray a, NDArray @out, NDArray where = null)
-            => ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean, @out, where);
+            // ufunc out=/where=: rides the shared unary Into-path with a
+            // Boolean loop dtype (the predicate body emits bool at the INPUT
+            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // the provided out (no MakeGeneric — out may be any numeric dtype).
+            return ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean, @out, where);
+        }
     }
 }

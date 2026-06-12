@@ -48,64 +48,48 @@ namespace NumSharp
             => a.TensorEngine.IsClose(a, b, rtol, atol, equal_nan);
 
         /// <summary>
-        /// Test element-wise for finiteness (not infinity or not Not a Number).
-        /// </summary>
-        /// <param name="a"></param>
-        /// <returns>The result is returned as a boolean array.</returns>
-        public static NDArray<bool> isfinite(NDArray a)
-            => a.TensorEngine.IsFinite(a);
-
-        /// <summary>
-        /// Test element-wise into <paramref name="@out"/> (NumPy ufunc out=/where=).
+        /// Test element-wise for finiteness (not infinity and not Not a Number).
+        /// Mirrors NumPy's ufunc signature: <c>isfinite(x, /, out=None, *, where=True, dtype=None)</c>.
+        /// A plain call returns a bool-dtype array (the instance is an <see cref="NDArray{T}"/> of bool).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="@out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
+        /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html</remarks>
-        public static NDArray isfinite(NDArray a, NDArray @out, NDArray where = null)
-            => a.TensorEngine.IsFinite(a, @out, where);
+        public static NDArray isfinite(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => a.TensorEngine.IsFinite(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for Not a Number.
-        /// </summary>
-        /// <param name="a"></param>
-        /// <returns>The result is returned as a boolean array.</returns>
-        public static NDArray<bool> isnan(NDArray a)
-            => a.TensorEngine.IsNan(a);
-
-        /// <summary>
-        /// Test element-wise into <paramref name="@out"/> (NumPy ufunc out=/where=).
+        /// Mirrors NumPy's ufunc signature: <c>isnan(x, /, out=None, *, where=True, dtype=None)</c>.
+        /// A plain call returns a bool-dtype array (the instance is an <see cref="NDArray{T}"/> of bool).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="@out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
         /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
+        /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isnan.html</remarks>
-        public static NDArray isnan(NDArray a, NDArray @out, NDArray where = null)
-            => a.TensorEngine.IsNan(a, @out, where);
+        public static NDArray isnan(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => a.TensorEngine.IsNan(a, dtype, @out, where);
 
         /// <summary>
         /// Test element-wise for positive or negative infinity.
+        /// Mirrors NumPy's ufunc signature: <c>isinf(x, /, out=None, *, where=True, dtype=None)</c>.
+        /// A plain call returns a bool-dtype array (the instance is an <see cref="NDArray{T}"/> of bool).
         /// </summary>
-        /// <param name="a">Input array</param>
-        /// <returns>Boolean array where True indicates the element is positive or negative infinity</returns>
+        /// <param name="a">Input array.</param>
+        /// <param name="@out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
+        /// <param name="dtype">Validate-only (NumPy parity): the predicate has bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>
-        /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isinf.html
+        /// https://numpy.org/doc/stable/reference/generated/numpy.isinf.html
         /// - Float/Double: True if value is +Inf or -Inf
         /// - Integer types: Always False (integers cannot be Inf)
         /// - NaN: Returns False (NaN is not infinity)
         /// </remarks>
-        public static NDArray<bool> isinf(NDArray a)
-            => a.TensorEngine.IsInf(a);
-
-        /// <summary>
-        /// Test element-wise into <paramref name="@out"/> (NumPy ufunc out=/where=).
-        /// </summary>
-        /// <param name="a">Input array.</param>
-        /// <param name="@out">A location into which the result is stored; any numeric dtype (bool casts same_kind to all, True→1); returned as-is.</param>
-        /// <param name="where">Boolean mask: only mask-true elements are computed/written; masked-off out slots keep prior contents.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isinf.html</remarks>
-        public static NDArray isinf(NDArray a, NDArray @out, NDArray where = null)
-            => a.TensorEngine.IsInf(a, @out, where);
+        public static NDArray isinf(NDArray a, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => a.TensorEngine.IsInf(a, dtype, @out, where);
 
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.

@@ -416,18 +416,88 @@ namespace NumSharp.UnitTest.MathSuite
         }
 
         // =====================================================================
-        // return-type contract (S22)
+        // return-type contract (S22): ONE NumPy-shaped overload per comparison.
+        // The merged overload returns plain NDArray (with out= the provided
+        // array is returned whatever its dtype), but a plain call still
+        // produces an NDArray<bool> INSTANCE (TensorEngine contract), so the
+        // typed wrapper is one zero-alloc cast away — and the C# comparison
+        // operators keep the NDArray<bool> static type.
         // =====================================================================
 
         [TestMethod]
-        public void ReturnTypes_NoOutKeepsTypedSugar_OutFormReturnsNDArray()
+        public void ReturnTypes_PlainCallIsBoolInstance_OutFormReturnsProvidedOut()
         {
-            NDArray<bool> typed = np.less(Af(), Bf());
-            Assert.AreEqual(NPTypeCode.Boolean, ((NDArray)typed).typecode);
+            NDArray plain = np.less(Af(), Bf());
+            Assert.AreEqual(NPTypeCode.Boolean, plain.typecode);
+            Assert.IsInstanceOfType(plain, typeof(NDArray<bool>), "plain calls must return an NDArray<bool> instance");
+            NDArray<bool> typed = (NDArray<bool>)plain;     // zero-alloc cast
+            Assert.IsTrue(typed.GetBoolean(0));
+
+            NDArray<bool> viaOperator = Af() < Bf();        // operator keeps the typed static type
+            Assert.IsTrue(viaOperator.GetBoolean(0));
 
             var o = np.empty(new Shape(4), np.@bool);
-            NDArray plain = np.less(Af(), Bf(), o);
-            Assert.IsTrue(ReferenceEquals(plain, o));
+            NDArray viaOut = np.less(Af(), Bf(), o);
+            Assert.IsTrue(ReferenceEquals(viaOut, o));
+        }
+
+        // =====================================================================
+        // dtype= is validate-only on comparisons (bool loops only, NumPy 2.4.2)
+        // =====================================================================
+
+        [TestMethod]
+        public void Dtype_BoolIsNoOp_NonBoolRaisesNoLoopWithUfuncName()
+        {
+            // NumPy: np.equal(a, b, dtype=bool) → normal bool result.
+            var ok = np.equal(Af(), Af(), dtype: NPTypeCode.Boolean);
+            Assert.AreEqual(NPTypeCode.Boolean, ok.typecode);
+            Assert.IsTrue(ok.GetBoolean(0));
+
+            // NumPy: any other dtype raises, naming THIS ufunc:
+            // "No loop matching the specified signature and casting was found for ufunc equal"
+            void AssertNoLoop(Action act, string ufunc)
+            {
+                var ex = Assert.ThrowsException<IncorrectTypeException>(act);
+                Assert.AreEqual(
+                    $"No loop matching the specified signature and casting was found for ufunc {ufunc}",
+                    ex.Message);
+            }
+
+            AssertNoLoop(() => np.equal(Af(), Af(), dtype: NPTypeCode.Double), "equal");
+            AssertNoLoop(() => np.not_equal(Af(), Af(), dtype: NPTypeCode.Int32), "not_equal");
+            AssertNoLoop(() => np.less(Af(), Bf(), dtype: NPTypeCode.Double), "less");
+            AssertNoLoop(() => np.less_equal(Af(), Bf(), dtype: NPTypeCode.Double), "less_equal");
+            AssertNoLoop(() => np.greater(Af(), Bf(), dtype: NPTypeCode.Double), "greater");
+            AssertNoLoop(() => np.greater_equal(Af(), Bf(), dtype: NPTypeCode.Double), "greater_equal");
+
+            // Predicates follow the same rule (probed: isnan(x, dtype=f64) raises).
+            var x = np.array(new double[] { 1.0, double.NaN });
+            var nan = np.isnan(x, dtype: NPTypeCode.Boolean);
+            Assert.IsTrue(nan.GetBoolean(1));
+            AssertNoLoop(() => np.isnan(x, dtype: NPTypeCode.Double), "isnan");
+            AssertNoLoop(() => np.isinf(x, dtype: NPTypeCode.Double), "isinf");
+            AssertNoLoop(() => np.isfinite(x, dtype: NPTypeCode.Double), "isfinite");
+        }
+
+        [TestMethod]
+        public void Predicates_SingleOverload_NumPyCallForms()
+        {
+            // The np.isinf family exposes ONE overload: (a, out=, where=, dtype=).
+            var x = np.array(new[] { 1.0, double.PositiveInfinity, double.NaN });
+
+            NDArray plain = np.isinf(x);
+            Assert.IsInstanceOfType(plain, typeof(NDArray<bool>));
+            Assert.IsTrue(plain.GetBoolean(1));
+            Assert.IsFalse(plain.GetBoolean(2));
+
+            var o = np.empty(new Shape(3), np.float64);          // non-bool out: bool loop casts up
+            Assert.IsTrue(ReferenceEquals(np.isinf(x, o), o));
+            Assert.AreEqual(1.0, o.GetDouble(1));
+
+            var masked = np.isinf(x, o, np.array(new[] { false, false, true }));
+            Assert.IsTrue(ReferenceEquals(masked, o));
+            Assert.AreEqual(1.0, o.GetDouble(1), "mask-false slot keeps prior contents");
+            Assert.AreEqual(0.0, o.GetDouble(2));
         }
 
         // =====================================================================

@@ -147,24 +147,22 @@ namespace NumSharp
 
         #region Logic
 
-        // Comparison operations - all return NDArray<bool>
-        public abstract NDArray<bool> Compare(NDArray lhs, NDArray rhs);  // Equal
-        public abstract NDArray<bool> NotEqual(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> Less(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> LessEqual(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> Greater(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs);
-
-        // Comparison ufunc out=/where= overloads: NumPy returns the provided
-        // out as-is (its dtype may be any numeric — bool casts same_kind to
-        // all of them), so these return plain NDArray. The no-out forms above
-        // keep the typed NDArray<bool> sugar.
-        public abstract NDArray Compare(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
-        public abstract NDArray NotEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
-        public abstract NDArray Less(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
-        public abstract NDArray LessEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
-        public abstract NDArray Greater(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
-        public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, NDArray @out, NDArray where = null);
+        // Comparison ufuncs — ONE NumPy-shaped member each (no bare/out split),
+        // house parameter order (typeCode, out, where) like the unary family.
+        // The loop output is bool: typeCode may only request Boolean (NumPy
+        // raises the no-loop TypeError for anything else — dtype= is a
+        // validate-only parameter on comparisons); with out= the provided
+        // array is returned as-is (any numeric dtype — bool casts same_kind
+        // to all of them), so the static return type is plain NDArray.
+        // CONTRACT: a plain call (out == null && where == null) must return an
+        // NDArray<bool> instance — the C# comparison operators rely on it for
+        // their zero-alloc AsGeneric<bool>() typed sugar.
+        public abstract NDArray Compare(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);  // Equal
+        public abstract NDArray NotEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Less(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray LessEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Greater(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         // Bitwise operations
         public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NDArray @out = null, NDArray where = null);
@@ -181,14 +179,12 @@ namespace NumSharp
         public abstract NDArray<bool> Any(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
-        public abstract NDArray<bool> IsFinite(NDArray a);
-        public abstract NDArray<bool> IsNan(NDArray a);
-        public abstract NDArray<bool> IsInf(NDArray a);
-
-        // Predicate ufunc out=/where= overloads (same plain-NDArray rule).
-        public abstract NDArray IsFinite(NDArray a, NDArray @out, NDArray where = null);
-        public abstract NDArray IsNan(NDArray a, NDArray @out, NDArray where = null);
-        public abstract NDArray IsInf(NDArray a, NDArray @out, NDArray where = null);
+        // Predicate ufuncs — same single-member rule as the comparisons above
+        // (bool loop, validate-only typeCode, plain-NDArray return, plain
+        // calls must return an NDArray<bool> instance).
+        public abstract NDArray IsFinite(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray IsInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         #endregion
 

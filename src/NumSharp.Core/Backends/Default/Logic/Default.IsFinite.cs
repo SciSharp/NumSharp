@@ -17,23 +17,24 @@ namespace NumSharp.Backends
         /// - Integer types: Always True (integers cannot be Inf or NaN)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray<bool> IsFinite(NDArray a)
+        public override NDArray IsFinite(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            // Use IL kernel with UnaryOp.IsFinite
-            // The kernel handles:
+            // typeCode is validate-only: isfinite has bool-output loops only
+            // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
+            ValidateBoolLoopDtype(typeCode, "isfinite");
+
+            // Plain call: keep the typed NDArray<bool> instance (TensorEngine
+            // contract). The IL kernel handles:
             // - Float/Double: calls float.IsFinite/double.IsFinite
             // - All other types: returns true (integers are always finite)
-            var result = ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean);
-            return result.MakeGeneric<bool>();
-        }
+            if (@out is null && where is null)
+                return ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-        /// <summary>
-        /// ufunc out=/where= overload: rides the shared unary Into-path with a
-        /// Boolean loop dtype (the predicate body emits bool at the INPUT
-        /// dtype); a non-bool out engages the windowed bool→X flush. Returns
-        /// the provided out (no MakeGeneric — out may be any numeric dtype).
-        /// </summary>
-        public override NDArray IsFinite(NDArray a, NDArray @out, NDArray where = null)
-            => ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean, @out, where);
+            // ufunc out=/where=: rides the shared unary Into-path with a
+            // Boolean loop dtype (the predicate body emits bool at the INPUT
+            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // the provided out (no MakeGeneric — out may be any numeric dtype).
+            return ExecuteUnaryOp(a, UnaryOp.IsFinite, NPTypeCode.Boolean, @out, where);
+        }
     }
 }

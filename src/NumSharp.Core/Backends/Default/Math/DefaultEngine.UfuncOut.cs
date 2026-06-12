@@ -185,6 +185,19 @@ namespace NumSharp.Backends
                 $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
         }
 
+        /// <summary>
+        /// Comparison/predicate ufuncs have bool-output loops ONLY: a dtype=
+        /// request other than bool has no loop to select — NumPy raises the
+        /// no-loop TypeError (probed 2.4.2: equal(a,b,dtype=f64/i32) and
+        /// isnan(x,dtype=f64) raise; dtype=bool is a legal no-op).
+        /// </summary>
+        private static void ValidateBoolLoopDtype(NPTypeCode? dtype, string ufuncName)
+        {
+            if (dtype.HasValue && dtype.Value != NPTypeCode.Boolean)
+                throw new IncorrectTypeException(
+                    $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
+        }
+
         /// <inheritdoc cref="ValidateUnaryInputCast"/>
         private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
         {

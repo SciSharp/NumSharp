@@ -18,19 +18,22 @@ namespace NumSharp.Backends
         /// - NaN: Returns False (NaN is not infinity)
         /// - Empty arrays: Returns empty bool array
         /// </remarks>
-        public override NDArray<bool> IsInf(NDArray a)
+        public override NDArray IsInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            var result = ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean);
-            return result.MakeGeneric<bool>();
-        }
+            // typeCode is validate-only: isinf has bool-output loops only
+            // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
+            ValidateBoolLoopDtype(typeCode, "isinf");
 
-        /// <summary>
-        /// ufunc out=/where= overload: rides the shared unary Into-path with a
-        /// Boolean loop dtype (the predicate body emits bool at the INPUT
-        /// dtype); a non-bool out engages the windowed bool→X flush. Returns
-        /// the provided out (no MakeGeneric — out may be any numeric dtype).
-        /// </summary>
-        public override NDArray IsInf(NDArray a, NDArray @out, NDArray where = null)
-            => ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean, @out, where);
+            // Plain call: keep the typed NDArray<bool> instance (TensorEngine
+            // contract — operators/casts rely on it).
+            if (@out is null && where is null)
+                return ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean).MakeGeneric<bool>();
+
+            // ufunc out=/where=: rides the shared unary Into-path with a
+            // Boolean loop dtype (the predicate body emits bool at the INPUT
+            // dtype); a non-bool out engages the windowed bool→X flush. Returns
+            // the provided out (no MakeGeneric — out may be any numeric dtype).
+            return ExecuteUnaryOp(a, UnaryOp.IsInf, NPTypeCode.Boolean, @out, where);
+        }
     }
 }
