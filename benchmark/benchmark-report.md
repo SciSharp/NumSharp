@@ -2,16 +2,18 @@
 
 **Baseline:** NumPy · measured across all array sizes (per-(op, dtype, N))
 
-**Ratio** = NumSharp ÷ NumPy → Lower is better for NumSharp
+**Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)
 
-| | Status | Ratio | Meaning |
-|:-:|--------|:-----:|---------|
-|✅| Faster | <1.0 | NumSharp beats NumPy |
-|🟡| Close | 1-2x | Acceptable parity |
-|🟠| Slower | 2-5x | Optimization target |
-|🔴| Slow | >5x | Priority fix |
-|▫| Negligible | <1µs / >20x | Too fast to compare — excluded from rankings |
-|⚪| Pending | - | C# benchmark not run |
+**🕐 %NumPy** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses (30% = NumSharp takes only 30% of the time NumPy would; <100% = faster).
+
+| | Status | Ratio | 🕐 %NumPy | Meaning |
+|:-:|--------|:-----:|:------:|---------|
+|✅| Faster | ≥1.0× | ≤100% | NumSharp ≥ NumPy speed |
+|🟡| Close | 0.5–1.0× | 100–200% | within 2× slower |
+|🟠| Slower | 0.2–0.5× | 200–500% | optimization target |
+|🔴| Slow | <0.2× | >500% | priority fix |
+|▫| Negligible | <1µs / >20× | — | too fast to compare — excluded from rankings |
+|⚪| Pending | - | — | C# benchmark not run |
 
 ---
 
@@ -19,1361 +21,1361 @@
 
 ## Summary by size
 
-| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean |
-|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|
-| 500 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - |
-| 900 | 3 | 0 | 0 | 0 | 0 | 0 | 3 | - |
-| 1,000 | 409 | 41 | 19 | 28 | 21 | 258 | 42 | 1.37x |
-| 50,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - |
-| 100,000 | 409 | 104 | 65 | 121 | 69 | 10 | 40 | 1.82x |
-| 5,000,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - |
-| 10,000,000 | 409 | 160 | 171 | 20 | 13 | 7 | 38 | 1.02x |
+| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | 🕐 %NP |
+|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|
+| 500 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
+| 900 | 3 | 0 | 0 | 0 | 0 | 0 | 3 | - | - |
+| 1,000 | 409 | 41 | 19 | 28 | 21 | 258 | 42 | 0.73x | 137% |
+| 50,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
+| 100,000 | 409 | 104 | 65 | 121 | 69 | 10 | 40 | 0.55x | 182% |
+| 5,000,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
+| 10,000,000 | 409 | 160 | 171 | 20 | 13 | 7 | 38 | 0.98x | 102% |
 
 ---
 
-### 🏆 Top 15 Best (NumSharp closest to / beating NumPy)
+### 🏆 Top 15 Best (NumSharp fastest vs NumPy)
 
-_Ranked over 832 credible comparisons (both sides ≥1µs, speedup ≤20×); 275 negligible rows excluded as non-comparable (▫). Ratio = NumSharp ÷ NumPy — below 1.0 = NumSharp faster._
+_Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 negligible rows excluded as non-comparable (▫). Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · 🕐 %NumPy = share of NumPy's time NumSharp uses._
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|✅| np.nansum(a) (float64) | float64 | 100,000 | 0.242 | 0.019 | 0.08x |
-|✅| np.percentile(a, 50) (float64) | float64 | 1,000 | 0.025 | 0.002 | 0.10x |
-|✅| np.percentile(a, 50) (float32) | float32 | 1,000 | 0.025 | 0.002 | 0.10x |
-|✅| np.average(a) (float32) | float32 | 10,000,000 | 9.598 | 0.937 | 0.10x |
-|✅| np.quantile(a, 0.5) (float32) | float32 | 1,000 | 0.024 | 0.002 | 0.10x |
-|✅| np.quantile(a, 0.5) (float64) | float64 | 1,000 | 0.023 | 0.002 | 0.10x |
-|✅| np.nanprod(a) (float32) | float32 | 10,000,000 | 18.515 | 1.904 | 0.10x |
-|✅| np.nansum(a) (float32) | float32 | 10,000,000 | 14.349 | 1.488 | 0.10x |
-|✅| np.nanprod(a) (float64) | float64 | 100,000 | 0.287 | 0.032 | 0.11x |
-|✅| np.average(a) (float32) | float32 | 100,000 | 0.018 | 0.002 | 0.12x |
-|✅| np.count_nonzero(a) (float32) | float32 | 100,000 | 0.038 | 0.005 | 0.12x |
-|✅| np.nanstd(a) (float32) | float32 | 1,000 | 0.020 | 0.003 | 0.12x |
-|✅| np.std (float32) | float32 | 1,000 | 0.008 | 0.001 | 0.13x |
-|✅| np.nanvar(a) (float32) | float32 | 1,000 | 0.019 | 0.003 | 0.13x |
-|✅| np.nanquantile(a, 0.5) (float64) | float64 | 1,000 | 0.028 | 0.004 | 0.13x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|✅| np.nansum(a) (float64) | float64 | 100,000 | 0.242 | 0.019 | 12.65× | 8% |
+|✅| np.percentile(a, 50) (float64) | float64 | 1,000 | 0.025 | 0.002 | 10.50× | 10% |
+|✅| np.percentile(a, 50) (float32) | float32 | 1,000 | 0.025 | 0.002 | 10.30× | 10% |
+|✅| np.average(a) (float32) | float32 | 10,000,000 | 9.598 | 0.937 | 10.24× | 10% |
+|✅| np.quantile(a, 0.5) (float32) | float32 | 1,000 | 0.024 | 0.002 | 10.01× | 10% |
+|✅| np.quantile(a, 0.5) (float64) | float64 | 1,000 | 0.023 | 0.002 | 9.89× | 10% |
+|✅| np.nanprod(a) (float32) | float32 | 10,000,000 | 18.515 | 1.904 | 9.72× | 10% |
+|✅| np.nansum(a) (float32) | float32 | 10,000,000 | 14.349 | 1.488 | 9.64× | 10% |
+|✅| np.nanprod(a) (float64) | float64 | 100,000 | 0.287 | 0.032 | 8.98× | 11% |
+|✅| np.average(a) (float32) | float32 | 100,000 | 0.018 | 0.002 | 8.32× | 12% |
+|✅| np.count_nonzero(a) (float32) | float32 | 100,000 | 0.038 | 0.005 | 8.26× | 12% |
+|✅| np.nanstd(a) (float32) | float32 | 1,000 | 0.020 | 0.003 | 8.08× | 12% |
+|✅| np.std (float32) | float32 | 1,000 | 0.008 | 0.001 | 7.73× | 13% |
+|✅| np.nanquantile(a, 0.5) (float64) | float64 | 1,000 | 0.028 | 0.004 | 7.71× | 13% |
+|✅| np.nanvar(a) (float32) | float32 | 1,000 | 0.019 | 0.003 | 7.69× | 13% |
 
 ### 🔻 Top 15 Worst (Optimization priorities)
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|🔴| np.zeros (int64) | int64 | 10,000,000 | 0.012 | 10.747 | 879.57x |
-|🔴| np.zeros (int32) | int32 | 10,000,000 | 0.011 | 5.622 | 518.20x |
-|🔴| np.zeros (float64) | float64 | 10,000,000 | 0.021 | 10.755 | 507.65x |
-|🔴| np.zeros (float32) | float32 | 10,000,000 | 0.017 | 5.673 | 334.03x |
-|🔴| np.argsort(a) (int64) | int64 | 100,000 | 0.472 | 12.893 | 27.34x |
-|🔴| np.argsort(a) (int32) | int32 | 100,000 | 0.442 | 10.404 | 23.54x |
-|🔴| a * 2 (literal) (float32) | float32 | 100,000 | 0.007 | 0.129 | 19.37x |
-|🔴| np.right_shift(a, 2) (int64) | int64 | 1,000 | 0.001 | 0.019 | 19.20x |
-|🔴| np.left_shift(a, 2) (int64) | int64 | 1,000 | 0.001 | 0.020 | 19.11x |
-|🔴| np.sum axis=1 (uint8) | uint8 | 10,000,000 | 3.115 | 49.741 | 15.97x |
-|🔴| np.right_shift(a, 2) (int32) | int32 | 1,000 | 0.001 | 0.017 | 15.61x |
-|🔴| np.sum axis=0 (uint16) | uint16 | 10,000,000 | 4.620 | 71.694 | 15.52x |
-|🔴| np.sum axis=1 (uint16) | uint16 | 10,000,000 | 3.365 | 49.896 | 14.83x |
-|🔴| a + 5 (literal) (float32) | float32 | 100,000 | 0.007 | 0.097 | 14.66x |
-|🔴| np.sum axis=1 (uint8) | uint8 | 100,000 | 0.037 | 0.500 | 13.45x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|🔴| np.zeros (int64) | int64 | 10,000,000 | 0.012 | 10.747 | 0.001× | 880× |
+|🔴| np.zeros (float64) | float64 | 10,000,000 | 0.021 | 10.755 | 0.002× | 508× |
+|🔴| np.zeros (int32) | int32 | 10,000,000 | 0.011 | 5.622 | 0.002× | 518× |
+|🔴| np.zeros (float32) | float32 | 10,000,000 | 0.017 | 5.673 | 0.003× | 334× |
+|🔴| np.argsort(a) (int64) | int64 | 100,000 | 0.472 | 12.893 | 0.037× | 27× |
+|🔴| np.argsort(a) (int32) | int32 | 100,000 | 0.442 | 10.404 | 0.042× | 24× |
+|🔴| np.right_shift(a, 2) (int64) | int64 | 1,000 | 0.001 | 0.019 | 0.052× | 19× |
+|🔴| np.left_shift(a, 2) (int64) | int64 | 1,000 | 0.001 | 0.020 | 0.052× | 19× |
+|🔴| a * 2 (literal) (float32) | float32 | 100,000 | 0.007 | 0.129 | 0.052× | 19× |
+|🔴| np.sum axis=1 (uint8) | uint8 | 10,000,000 | 3.115 | 49.741 | 0.063× | 16× |
+|🔴| np.right_shift(a, 2) (int32) | int32 | 1,000 | 0.001 | 0.017 | 0.064× | 16× |
+|🔴| np.sum axis=0 (uint16) | uint16 | 10,000,000 | 4.620 | 71.694 | 0.064× | 16× |
+|🔴| np.sum axis=1 (uint16) | uint16 | 10,000,000 | 3.365 | 49.896 | 0.067× | 15× |
+|🔴| a + 5 (literal) (float32) | float32 | 100,000 | 0.007 | 0.097 | 0.068× | 15× |
+|🔴| np.sum axis=1 (uint8) | uint8 | 100,000 | 0.037 | 0.500 | 0.074× | 13× |
 
 ---
 
 ### Arithmetic
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|🟡| a % 7 (literal) (float32) | float32 | 1,000 | 0.0141 | 0.0190 | 1.34x |
-|🟡| a % 7 (literal) (float32) | float32 | 100,000 | 1.6551 | 1.9677 | 1.19x |
-|🟡| a % 7 (literal) (float32) | float32 | 10,000,000 | 167.3112 | 194.6954 | 1.16x |
-|🟠| a % 7 (literal) (float64) | float64 | 1,000 | 0.0114 | 0.0238 | 2.09x |
-|🟡| a % 7 (literal) (float64) | float64 | 100,000 | 1.4792 | 1.7960 | 1.21x |
-|🟡| a % 7 (literal) (float64) | float64 | 10,000,000 | 155.5835 | 178.7748 | 1.15x |
-|🟡| a % 7 (literal) (int32) | int32 | 1,000 | 0.0020 | 0.0039 | 1.92x |
-|🟡| a % 7 (literal) (int32) | int32 | 100,000 | 0.4121 | 0.6918 | 1.68x |
-|🟡| a % 7 (literal) (int32) | int32 | 10,000,000 | 45.8307 | 70.8023 | 1.54x |
-|🟡| a % 7 (literal) (int64) | int64 | 1,000 | 0.0042 | 0.0057 | 1.35x |
-|🟠| a % 7 (literal) (int64) | int64 | 100,000 | 0.4216 | 0.9121 | 2.16x |
-|🟡| a % 7 (literal) (int64) | int64 | 10,000,000 | 51.6809 | 93.8372 | 1.82x |
-|✅| a % b (element-wise) (float32) | float32 | 1,000 | 0.0126 | 0.0123 | 0.98x |
-|🟡| a % b (element-wise) (float32) | float32 | 100,000 | 1.5069 | 1.6644 | 1.10x |
-|🟡| a % b (element-wise) (float32) | float32 | 10,000,000 | 156.3306 | 166.9308 | 1.07x |
-|✅| a % b (element-wise) (float64) | float64 | 1,000 | 0.0099 | 0.0098 | 0.99x |
-|🟡| a % b (element-wise) (float64) | float64 | 100,000 | 1.3230 | 1.4718 | 1.11x |
-|🟡| a % b (element-wise) (float64) | float64 | 10,000,000 | 143.2559 | 151.6138 | 1.06x |
-|🟡| a % b (element-wise) (int32) | int32 | 1,000 | 0.0020 | 0.0038 | 1.89x |
-|🟡| a % b (element-wise) (int32) | int32 | 100,000 | 0.3760 | 0.6165 | 1.64x |
-|🟡| a % b (element-wise) (int32) | int32 | 10,000,000 | 43.2277 | 64.9449 | 1.50x |
-|🟡| a % b (element-wise) (int64) | int64 | 1,000 | 0.0037 | 0.0039 | 1.05x |
-|🟡| a % b (element-wise) (int64) | int64 | 100,000 | 0.4161 | 0.6301 | 1.51x |
-|🟡| a % b (element-wise) (int64) | int64 | 10,000,000 | 48.6074 | 67.4008 | 1.39x |
-|▫| a * 2 (literal) (float32) | float32 | 1,000 | 0.0008 | 0.0063 | 8.21x |
-|🔴| a * 2 (literal) (float32) | float32 | 100,000 | 0.0067 | 0.1288 | 19.37x |
-|🟡| a * 2 (literal) (float32) | float32 | 10,000,000 | 8.3163 | 12.2127 | 1.47x |
-|▫| a * 2 (literal) (float64) | float64 | 1,000 | 0.0008 | 0.0071 | 9.02x |
-|🔴| a * 2 (literal) (float64) | float64 | 100,000 | 0.0133 | 0.1505 | 11.34x |
-|🟡| a * 2 (literal) (float64) | float64 | 10,000,000 | 17.3763 | 21.6842 | 1.25x |
-|🔴| a * 2 (literal) (int16) | int16 | 1,000 | 0.0010 | 0.0055 | 5.38x |
-|🟠| a * 2 (literal) (int16) | int16 | 100,000 | 0.0230 | 0.0935 | 4.07x |
-|🟠| a * 2 (literal) (int16) | int16 | 10,000,000 | 4.6629 | 9.7334 | 2.09x |
-|🟠| a * 2 (literal) (int32) | int32 | 1,000 | 0.0010 | 0.0038 | 3.81x |
-|🟠| a * 2 (literal) (int32) | int32 | 100,000 | 0.0228 | 0.0550 | 2.42x |
-|🟡| a * 2 (literal) (int32) | int32 | 10,000,000 | 8.7622 | 10.1737 | 1.16x |
-|▫| a * 2 (literal) (int64) | int64 | 1,000 | 0.0009 | 0.0069 | 7.66x |
-|🔴| a * 2 (literal) (int64) | int64 | 100,000 | 0.0223 | 0.1206 | 5.41x |
-|🟡| a * 2 (literal) (int64) | int64 | 10,000,000 | 18.5884 | 22.7628 | 1.23x |
-|🔴| a * 2 (literal) (uint16) | uint16 | 1,000 | 0.0010 | 0.0065 | 6.43x |
-|🔴| a * 2 (literal) (uint16) | uint16 | 100,000 | 0.0225 | 0.1190 | 5.29x |
-|🟠| a * 2 (literal) (uint16) | uint16 | 10,000,000 | 4.4333 | 9.0584 | 2.04x |
-|🔴| a * 2 (literal) (uint32) | uint32 | 1,000 | 0.0010 | 0.0060 | 5.97x |
-|🟠| a * 2 (literal) (uint32) | uint32 | 100,000 | 0.0246 | 0.1099 | 4.47x |
-|🟡| a * 2 (literal) (uint32) | uint32 | 10,000,000 | 8.5106 | 12.0673 | 1.42x |
-|▫| a * 2 (literal) (uint64) | uint64 | 1,000 | 0.0009 | 0.0074 | 8.17x |
-|🔴| a * 2 (literal) (uint64) | uint64 | 100,000 | 0.0234 | 0.1581 | 6.77x |
-|🟡| a * 2 (literal) (uint64) | uint64 | 10,000,000 | 15.8401 | 22.1489 | 1.40x |
-|▫| a * 2 (literal) (uint8) | uint8 | 1,000 | 0.0009 | 0.0043 | 4.99x |
-|🟠| a * 2 (literal) (uint8) | uint8 | 100,000 | 0.0236 | 0.1037 | 4.40x |
-|🟠| a * 2 (literal) (uint8) | uint8 | 10,000,000 | 3.6469 | 8.4932 | 2.33x |
-|▫| a * a (square) (float32) | float32 | 1,000 | 0.0005 | 0.0018 | 3.41x |
-|🔴| a * a (square) (float32) | float32 | 100,000 | 0.0079 | 0.0543 | 6.90x |
-|🟡| a * a (square) (float32) | float32 | 10,000,000 | 8.0929 | 11.1120 | 1.37x |
-|▫| a * a (square) (float64) | float64 | 1,000 | 0.0005 | 0.0026 | 5.33x |
-|🔴| a * a (square) (float64) | float64 | 100,000 | 0.0161 | 0.1043 | 6.48x |
-|🟡| a * a (square) (float64) | float64 | 10,000,000 | 16.9687 | 20.3622 | 1.20x |
-|▫| a * a (square) (int16) | int16 | 1,000 | 0.0008 | 0.0016 | 2.11x |
-|✅| a * a (square) (int16) | int16 | 100,000 | 0.0301 | 0.0280 | 0.93x |
-|🟡| a * a (square) (int16) | int16 | 10,000,000 | 5.0053 | 5.5910 | 1.12x |
-|▫| a * a (square) (int32) | int32 | 1,000 | 0.0008 | 0.0017 | 2.18x |
-|🟠| a * a (square) (int32) | int32 | 100,000 | 0.0286 | 0.0579 | 2.02x |
-|🟡| a * a (square) (int32) | int32 | 10,000,000 | 8.7437 | 10.0335 | 1.15x |
-|▫| a * a (square) (int64) | int64 | 1,000 | 0.0007 | 0.0029 | 3.93x |
-|🟠| a * a (square) (int64) | int64 | 100,000 | 0.0292 | 0.1098 | 3.77x |
-|🟡| a * a (square) (int64) | int64 | 10,000,000 | 17.1429 | 21.0324 | 1.23x |
-|▫| a * a (square) (uint16) | uint16 | 1,000 | 0.0008 | 0.0017 | 2.10x |
-|✅| a * a (square) (uint16) | uint16 | 100,000 | 0.0282 | 0.0274 | 0.97x |
-|🟡| a * a (square) (uint16) | uint16 | 10,000,000 | 4.9792 | 5.4124 | 1.09x |
-|▫| a * a (square) (uint32) | uint32 | 1,000 | 0.0008 | 0.0018 | 2.28x |
-|🟡| a * a (square) (uint32) | uint32 | 100,000 | 0.0305 | 0.0550 | 1.80x |
-|🟡| a * a (square) (uint32) | uint32 | 10,000,000 | 8.4000 | 10.8109 | 1.29x |
-|▫| a * a (square) (uint64) | uint64 | 1,000 | 0.0007 | 0.0028 | 3.94x |
-|🟠| a * a (square) (uint64) | uint64 | 100,000 | 0.0295 | 0.1148 | 3.89x |
-|🟡| a * a (square) (uint64) | uint64 | 10,000,000 | 16.3411 | 21.5055 | 1.32x |
-|▫| a * a (square) (uint8) | uint8 | 1,000 | 0.0006 | 0.0014 | 2.24x |
-|✅| a * a (square) (uint8) | uint8 | 100,000 | 0.0278 | 0.0159 | 0.57x |
-|✅| a * a (square) (uint8) | uint8 | 10,000,000 | 3.8696 | 2.2714 | 0.59x |
-|▫| a * b (element-wise) (float32) | float32 | 1,000 | 0.0005 | 0.0019 | 3.52x |
-|🔴| a * b (element-wise) (float32) | float32 | 100,000 | 0.0071 | 0.0544 | 7.67x |
-|🟡| a * b (element-wise) (float32) | float32 | 10,000,000 | 8.9544 | 14.0772 | 1.57x |
-|▫| a * b (element-wise) (float64) | float64 | 1,000 | 0.0005 | 0.0030 | 5.81x |
-|🟠| a * b (element-wise) (float64) | float64 | 100,000 | 0.0311 | 0.1140 | 3.66x |
-|🟡| a * b (element-wise) (float64) | float64 | 10,000,000 | 17.6849 | 26.5088 | 1.50x |
-|▫| a * b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0019 | 2.43x |
-|✅| a * b (element-wise) (int16) | int16 | 100,000 | 0.0284 | 0.0281 | 0.99x |
-|🟡| a * b (element-wise) (int16) | int16 | 10,000,000 | 5.1147 | 7.0273 | 1.37x |
-|▫| a * b (element-wise) (int32) | int32 | 1,000 | 0.0008 | 0.0018 | 2.18x |
-|🟡| a * b (element-wise) (int32) | int32 | 100,000 | 0.0303 | 0.0577 | 1.91x |
-|🟡| a * b (element-wise) (int32) | int32 | 10,000,000 | 10.0582 | 14.3013 | 1.42x |
-|▫| a * b (element-wise) (int64) | int64 | 1,000 | 0.0008 | 0.0029 | 3.60x |
-|🟠| a * b (element-wise) (int64) | int64 | 100,000 | 0.0326 | 0.1179 | 3.62x |
-|🟡| a * b (element-wise) (int64) | int64 | 10,000,000 | 18.7233 | 28.7622 | 1.54x |
-|✅| a * b (element-wise) (uint16) | uint16 | 1,000 | 0.0019 | 0.0017 | 0.90x |
-|🟡| a * b (element-wise) (uint16) | uint16 | 100,000 | 0.0279 | 0.0289 | 1.04x |
-|🟡| a * b (element-wise) (uint16) | uint16 | 10,000,000 | 5.3957 | 6.9261 | 1.28x |
-|▫| a * b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0022 | 2.75x |
-|🟡| a * b (element-wise) (uint32) | uint32 | 100,000 | 0.0297 | 0.0550 | 1.85x |
-|🟡| a * b (element-wise) (uint32) | uint32 | 10,000,000 | 8.8650 | 13.5566 | 1.53x |
-|▫| a * b (element-wise) (uint64) | uint64 | 1,000 | 0.0007 | 0.0028 | 3.98x |
-|🟠| a * b (element-wise) (uint64) | uint64 | 100,000 | 0.0312 | 0.1133 | 3.63x |
-|🟡| a * b (element-wise) (uint64) | uint64 | 10,000,000 | 19.0202 | 31.9026 | 1.68x |
-|▫| a * b (element-wise) (uint8) | uint8 | 1,000 | 0.0007 | 0.0017 | 2.63x |
-|✅| a * b (element-wise) (uint8) | uint8 | 100,000 | 0.0277 | 0.0153 | 0.55x |
-|✅| a * b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0144 | 3.3705 | 0.84x |
-|▫| a * scalar (float32) | float32 | 1,000 | 0.0007 | 0.0019 | 2.60x |
-|🔴| a * scalar (float32) | float32 | 100,000 | 0.0062 | 0.0574 | 9.26x |
-|🟡| a * scalar (float32) | float32 | 10,000,000 | 8.0655 | 10.2659 | 1.27x |
-|▫| a * scalar (float64) | float64 | 1,000 | 0.0007 | 0.0017 | 2.51x |
-|🔴| a * scalar (float64) | float64 | 100,000 | 0.0150 | 0.1151 | 7.69x |
-|🟡| a * scalar (float64) | float64 | 10,000,000 | 18.5637 | 20.1307 | 1.08x |
-|▫| a * scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 2.23x |
-|🟡| a * scalar (int16) | int16 | 100,000 | 0.0238 | 0.0273 | 1.15x |
-|🟡| a * scalar (int16) | int16 | 10,000,000 | 4.6196 | 5.4073 | 1.17x |
-|▫| a * scalar (int32) | int32 | 1,000 | 0.0009 | 0.0019 | 2.14x |
-|🟠| a * scalar (int32) | int32 | 100,000 | 0.0232 | 0.0546 | 2.35x |
-|🟡| a * scalar (int32) | int32 | 10,000,000 | 8.3511 | 10.1460 | 1.22x |
-|▫| a * scalar (int64) | int64 | 1,000 | 0.0008 | 0.0028 | 3.37x |
-|🟠| a * scalar (int64) | int64 | 100,000 | 0.0252 | 0.1085 | 4.30x |
-|🟡| a * scalar (int64) | int64 | 10,000,000 | 19.4204 | 21.9689 | 1.13x |
-|▫| a * scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0020 | 2.17x |
-|🟡| a * scalar (uint16) | uint16 | 100,000 | 0.0227 | 0.0285 | 1.25x |
-|🟡| a * scalar (uint16) | uint16 | 10,000,000 | 4.4608 | 5.3498 | 1.20x |
-|▫| a * scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0021 | 2.46x |
-|🟠| a * scalar (uint32) | uint32 | 100,000 | 0.0234 | 0.0526 | 2.25x |
-|🟡| a * scalar (uint32) | uint32 | 10,000,000 | 8.1414 | 10.3010 | 1.26x |
-|▫| a * scalar (uint64) | uint64 | 1,000 | 0.0008 | 0.0027 | 3.49x |
-|🟠| a * scalar (uint64) | uint64 | 100,000 | 0.0227 | 0.1114 | 4.92x |
-|🟡| a * scalar (uint64) | uint64 | 10,000,000 | 16.9767 | 21.1373 | 1.25x |
-|▫| a * scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0018 | 2.44x |
-|✅| a * scalar (uint8) | uint8 | 100,000 | 0.0242 | 0.0157 | 0.65x |
-|✅| a * scalar (uint8) | uint8 | 10,000,000 | 3.7185 | 2.4709 | 0.66x |
-|▫| a + 5 (literal) (float32) | float32 | 1,000 | 0.0008 | 0.0059 | 7.01x |
-|🔴| a + 5 (literal) (float32) | float32 | 100,000 | 0.0066 | 0.0968 | 14.66x |
-|🟡| a + 5 (literal) (float32) | float32 | 10,000,000 | 8.6016 | 12.9626 | 1.51x |
-|▫| a + 5 (literal) (float64) | float64 | 1,000 | 0.0008 | 0.0071 | 9.16x |
-|🔴| a + 5 (literal) (float64) | float64 | 100,000 | 0.0137 | 0.1214 | 8.87x |
-|🟡| a + 5 (literal) (float64) | float64 | 10,000,000 | 16.3098 | 21.8587 | 1.34x |
-|🔴| a + 5 (literal) (int16) | int16 | 1,000 | 0.0011 | 0.0065 | 6.10x |
-|🟠| a + 5 (literal) (int16) | int16 | 100,000 | 0.0247 | 0.0883 | 3.58x |
-|🟡| a + 5 (literal) (int16) | int16 | 10,000,000 | 7.7897 | 9.6845 | 1.24x |
-|🟠| a + 5 (literal) (int32) | int32 | 1,000 | 0.0010 | 0.0032 | 3.19x |
-|🟠| a + 5 (literal) (int32) | int32 | 100,000 | 0.0243 | 0.0530 | 2.18x |
-|🟡| a + 5 (literal) (int32) | int32 | 10,000,000 | 9.4343 | 10.1109 | 1.07x |
-|▫| a + 5 (literal) (int64) | int64 | 1,000 | 0.0010 | 0.0041 | 4.08x |
-|🔴| a + 5 (literal) (int64) | int64 | 100,000 | 0.0238 | 0.1342 | 5.63x |
-|🟡| a + 5 (literal) (int64) | int64 | 10,000,000 | 16.0346 | 22.1195 | 1.38x |
-|🔴| a + 5 (literal) (uint16) | uint16 | 1,000 | 0.0010 | 0.0066 | 6.42x |
-|🟠| a + 5 (literal) (uint16) | uint16 | 100,000 | 0.0260 | 0.0895 | 3.44x |
-|🟡| a + 5 (literal) (uint16) | uint16 | 10,000,000 | 4.8116 | 9.2841 | 1.93x |
-|🔴| a + 5 (literal) (uint32) | uint32 | 1,000 | 0.0010 | 0.0064 | 6.27x |
-|🟠| a + 5 (literal) (uint32) | uint32 | 100,000 | 0.0249 | 0.0954 | 3.83x |
-|🟡| a + 5 (literal) (uint32) | uint32 | 10,000,000 | 8.2202 | 12.3833 | 1.51x |
-|🔴| a + 5 (literal) (uint64) | uint64 | 1,000 | 0.0010 | 0.0075 | 7.45x |
-|🟠| a + 5 (literal) (uint64) | uint64 | 100,000 | 0.0262 | 0.1244 | 4.75x |
-|🟡| a + 5 (literal) (uint64) | uint64 | 10,000,000 | 15.7466 | 22.7518 | 1.45x |
-|▫| a + 5 (literal) (uint8) | uint8 | 1,000 | 0.0009 | 0.0049 | 5.58x |
-|🟠| a + 5 (literal) (uint8) | uint8 | 100,000 | 0.0256 | 0.0886 | 3.46x |
-|🟠| a + 5 (literal) (uint8) | uint8 | 10,000,000 | 3.4863 | 8.8818 | 2.55x |
-|▫| a + b (element-wise) (float32) | float32 | 1,000 | 0.0006 | 0.0021 | 3.69x |
-|🔴| a + b (element-wise) (float32) | float32 | 100,000 | 0.0070 | 0.0504 | 7.25x |
-|🟡| a + b (element-wise) (float32) | float32 | 10,000,000 | 9.5103 | 13.8917 | 1.46x |
-|▫| a + b (element-wise) (float64) | float64 | 1,000 | 0.0007 | 0.0032 | 4.68x |
-|🟠| a + b (element-wise) (float64) | float64 | 100,000 | 0.0301 | 0.1169 | 3.88x |
-|🟡| a + b (element-wise) (float64) | float64 | 10,000,000 | 18.9762 | 26.6012 | 1.40x |
-|▫| a + b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0022 | 2.81x |
-|✅| a + b (element-wise) (int16) | int16 | 100,000 | 0.0303 | 0.0294 | 0.97x |
-|🟡| a + b (element-wise) (int16) | int16 | 10,000,000 | 6.6919 | 7.2019 | 1.08x |
-|🟡| a + b (element-wise) (int32) | int32 | 1,000 | 0.0010 | 0.0010 | 1.02x |
-|🟡| a + b (element-wise) (int32) | int32 | 100,000 | 0.0295 | 0.0575 | 1.95x |
-|🟡| a + b (element-wise) (int32) | int32 | 10,000,000 | 9.0923 | 13.8151 | 1.52x |
-|▫| a + b (element-wise) (int64) | int64 | 1,000 | 0.0007 | 0.0030 | 4.08x |
-|🟠| a + b (element-wise) (int64) | int64 | 100,000 | 0.0337 | 0.1194 | 3.55x |
-|🟡| a + b (element-wise) (int64) | int64 | 10,000,000 | 19.8215 | 26.2861 | 1.33x |
-|▫| a + b (element-wise) (uint16) | uint16 | 1,000 | 0.0008 | 0.0021 | 2.62x |
-|✅| a + b (element-wise) (uint16) | uint16 | 100,000 | 0.0299 | 0.0287 | 0.96x |
-|🟡| a + b (element-wise) (uint16) | uint16 | 10,000,000 | 5.3257 | 7.1654 | 1.34x |
-|▫| a + b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0020 | 2.53x |
-|🟡| a + b (element-wise) (uint32) | uint32 | 100,000 | 0.0323 | 0.0523 | 1.62x |
-|🟡| a + b (element-wise) (uint32) | uint32 | 10,000,000 | 9.0103 | 14.3468 | 1.59x |
-|▫| a + b (element-wise) (uint64) | uint64 | 1,000 | 0.0008 | 0.0034 | 4.49x |
-|🟠| a + b (element-wise) (uint64) | uint64 | 100,000 | 0.0350 | 0.1053 | 3.01x |
-|🟡| a + b (element-wise) (uint64) | uint64 | 10,000,000 | 18.6852 | 26.5867 | 1.42x |
-|▫| a + b (element-wise) (uint8) | uint8 | 1,000 | 0.0007 | 0.0015 | 2.11x |
-|✅| a + b (element-wise) (uint8) | uint8 | 100,000 | 0.0288 | 0.0181 | 0.63x |
-|✅| a + b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0514 | 3.6027 | 0.89x |
-|▫| a + scalar (float32) | float32 | 1,000 | 0.0008 | 0.0024 | 3.09x |
-|🔴| a + scalar (float32) | float32 | 100,000 | 0.0064 | 0.0543 | 8.51x |
-|🟡| a + scalar (float32) | float32 | 10,000,000 | 8.1738 | 10.5122 | 1.29x |
-|▫| a + scalar (float64) | float64 | 1,000 | 0.0006 | 0.0031 | 4.89x |
-|🔴| a + scalar (float64) | float64 | 100,000 | 0.0132 | 0.1095 | 8.30x |
-|🟡| a + scalar (float64) | float64 | 10,000,000 | 16.1087 | 19.6990 | 1.22x |
-|▫| a + scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 2.20x |
-|🟡| a + scalar (int16) | int16 | 100,000 | 0.0248 | 0.0286 | 1.15x |
-|✅| a + scalar (int16) | int16 | 10,000,000 | 6.9438 | 5.0678 | 0.73x |
-|🟡| a + scalar (int32) | int32 | 1,000 | 0.0011 | 0.0017 | 1.54x |
-|🟠| a + scalar (int32) | int32 | 100,000 | 0.0245 | 0.0528 | 2.16x |
-|🟡| a + scalar (int32) | int32 | 10,000,000 | 9.2976 | 10.1713 | 1.09x |
-|▫| a + scalar (int64) | int64 | 1,000 | 0.0008 | 0.0032 | 3.80x |
-|🟠| a + scalar (int64) | int64 | 100,000 | 0.0238 | 0.1109 | 4.67x |
-|🟡| a + scalar (int64) | int64 | 10,000,000 | 15.7965 | 19.6952 | 1.25x |
-|▫| a + scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0017 | 1.86x |
-|🟡| a + scalar (uint16) | uint16 | 100,000 | 0.0247 | 0.0262 | 1.06x |
-|🟡| a + scalar (uint16) | uint16 | 10,000,000 | 5.1277 | 5.4373 | 1.06x |
-|▫| a + scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0018 | 1.98x |
-|🟠| a + scalar (uint32) | uint32 | 100,000 | 0.0245 | 0.0582 | 2.38x |
-|🟡| a + scalar (uint32) | uint32 | 10,000,000 | 8.1236 | 10.3644 | 1.28x |
-|▫| a + scalar (uint64) | uint64 | 1,000 | 0.0009 | 0.0030 | 3.43x |
-|🟠| a + scalar (uint64) | uint64 | 100,000 | 0.0249 | 0.1055 | 4.23x |
-|🟡| a + scalar (uint64) | uint64 | 10,000,000 | 16.2198 | 20.3895 | 1.26x |
-|▫| a + scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0015 | 2.00x |
-|✅| a + scalar (uint8) | uint8 | 100,000 | 0.0249 | 0.0140 | 0.56x |
-|✅| a + scalar (uint8) | uint8 | 10,000,000 | 3.6095 | 2.4040 | 0.67x |
-|▫| a - b (element-wise) (float32) | float32 | 1,000 | 0.0006 | 0.0020 | 3.55x |
-|🔴| a - b (element-wise) (float32) | float32 | 100,000 | 0.0073 | 0.0576 | 7.91x |
-|🟡| a - b (element-wise) (float32) | float32 | 10,000,000 | 9.0617 | 14.1836 | 1.56x |
-|▫| a - b (element-wise) (float64) | float64 | 1,000 | 0.0005 | 0.0031 | 6.16x |
-|🟠| a - b (element-wise) (float64) | float64 | 100,000 | 0.0297 | 0.1124 | 3.79x |
-|🟡| a - b (element-wise) (float64) | float64 | 10,000,000 | 17.6095 | 26.5901 | 1.51x |
-|▫| a - b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0020 | 2.54x |
-|🟡| a - b (element-wise) (int16) | int16 | 100,000 | 0.0294 | 0.0298 | 1.01x |
-|🟡| a - b (element-wise) (int16) | int16 | 10,000,000 | 7.1685 | 7.3131 | 1.02x |
-|▫| a - b (element-wise) (int32) | int32 | 1,000 | 0.0008 | 0.0024 | 2.99x |
-|🟠| a - b (element-wise) (int32) | int32 | 100,000 | 0.0297 | 0.0616 | 2.07x |
-|🟡| a - b (element-wise) (int32) | int32 | 10,000,000 | 10.2594 | 14.1255 | 1.38x |
-|▫| a - b (element-wise) (int64) | int64 | 1,000 | 0.0007 | 0.0031 | 4.20x |
-|🟠| a - b (element-wise) (int64) | int64 | 100,000 | 0.0344 | 0.1160 | 3.37x |
-|🟡| a - b (element-wise) (int64) | int64 | 10,000,000 | 18.0470 | 27.6480 | 1.53x |
-|▫| a - b (element-wise) (uint16) | uint16 | 1,000 | 0.0008 | 0.0019 | 2.33x |
-|✅| a - b (element-wise) (uint16) | uint16 | 100,000 | 0.0321 | 0.0299 | 0.93x |
-|🟡| a - b (element-wise) (uint16) | uint16 | 10,000,000 | 5.2552 | 6.9091 | 1.31x |
-|▫| a - b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0019 | 2.23x |
-|🟡| a - b (element-wise) (uint32) | uint32 | 100,000 | 0.0319 | 0.0563 | 1.77x |
-|🟡| a - b (element-wise) (uint32) | uint32 | 10,000,000 | 8.8780 | 14.3279 | 1.61x |
-|▫| a - b (element-wise) (uint64) | uint64 | 1,000 | 0.0007 | 0.0029 | 3.87x |
-|🟠| a - b (element-wise) (uint64) | uint64 | 100,000 | 0.0334 | 0.1087 | 3.26x |
-|🟡| a - b (element-wise) (uint64) | uint64 | 10,000,000 | 18.6896 | 27.2793 | 1.46x |
-|▫| a - b (element-wise) (uint8) | uint8 | 1,000 | 0.0006 | 0.0017 | 2.63x |
-|✅| a - b (element-wise) (uint8) | uint8 | 100,000 | 0.0290 | 0.0156 | 0.54x |
-|✅| a - b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0510 | 3.3608 | 0.83x |
-|▫| a - scalar (float32) | float32 | 1,000 | 0.0007 | 0.0018 | 2.53x |
-|🔴| a - scalar (float32) | float32 | 100,000 | 0.0063 | 0.0556 | 8.84x |
-|🟡| a - scalar (float32) | float32 | 10,000,000 | 8.2991 | 10.2151 | 1.23x |
-|▫| a - scalar (float64) | float64 | 1,000 | 0.0006 | 0.0028 | 4.45x |
-|🔴| a - scalar (float64) | float64 | 100,000 | 0.0164 | 0.1059 | 6.47x |
-|🟡| a - scalar (float64) | float64 | 10,000,000 | 16.1449 | 20.1159 | 1.25x |
-|▫| a - scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 2.24x |
-|🟡| a - scalar (int16) | int16 | 100,000 | 0.0253 | 0.0280 | 1.11x |
-|✅| a - scalar (int16) | int16 | 10,000,000 | 5.4927 | 5.4867 | 1.00x |
-|▫| a - scalar (int32) | int32 | 1,000 | 0.0009 | 0.0022 | 2.41x |
-|🟠| a - scalar (int32) | int32 | 100,000 | 0.0253 | 0.0562 | 2.22x |
-|🟡| a - scalar (int32) | int32 | 10,000,000 | 9.2399 | 10.0023 | 1.08x |
-|▫| a - scalar (int64) | int64 | 1,000 | 0.0009 | 0.0029 | 3.38x |
-|🟠| a - scalar (int64) | int64 | 100,000 | 0.0256 | 0.1178 | 4.61x |
-|🟡| a - scalar (int64) | int64 | 10,000,000 | 15.5433 | 20.3870 | 1.31x |
-|▫| a - scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0021 | 2.38x |
-|🟡| a - scalar (uint16) | uint16 | 100,000 | 0.0246 | 0.0296 | 1.20x |
-|🟡| a - scalar (uint16) | uint16 | 10,000,000 | 5.1743 | 5.3098 | 1.03x |
-|▫| a - scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0021 | 2.30x |
-|🟠| a - scalar (uint32) | uint32 | 100,000 | 0.0256 | 0.0567 | 2.22x |
-|🟡| a - scalar (uint32) | uint32 | 10,000,000 | 7.9586 | 10.5442 | 1.32x |
-|▫| a - scalar (uint64) | uint64 | 1,000 | 0.0009 | 0.0028 | 3.22x |
-|🟠| a - scalar (uint64) | uint64 | 100,000 | 0.0252 | 0.1117 | 4.44x |
-|🟡| a - scalar (uint64) | uint64 | 10,000,000 | 16.4043 | 20.4110 | 1.24x |
-|▫| a - scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0016 | 2.12x |
-|✅| a - scalar (uint8) | uint8 | 100,000 | 0.0250 | 0.0152 | 0.61x |
-|✅| a - scalar (uint8) | uint8 | 10,000,000 | 3.5888 | 2.2351 | 0.62x |
-|▫| a / b (element-wise) (float32) | float32 | 1,000 | 0.0005 | 0.0023 | 4.52x |
-|🔴| a / b (element-wise) (float32) | float32 | 100,000 | 0.0123 | 0.0662 | 5.38x |
-|🟡| a / b (element-wise) (float32) | float32 | 10,000,000 | 9.1487 | 13.7920 | 1.51x |
-|▫| a / b (element-wise) (float64) | float64 | 1,000 | 0.0008 | 0.0041 | 5.16x |
-|🔴| a / b (element-wise) (float64) | float64 | 100,000 | 0.0380 | 0.2011 | 5.29x |
-|🟡| a / b (element-wise) (float64) | float64 | 10,000,000 | 19.1611 | 27.3718 | 1.43x |
-|🟠| a / b (element-wise) (int32) | int32 | 1,000 | 0.0021 | 0.0065 | 3.05x |
-|🟠| a / b (element-wise) (int32) | int32 | 100,000 | 0.0884 | 0.2040 | 2.31x |
-|🟡| a / b (element-wise) (int32) | int32 | 10,000,000 | 20.6747 | 25.0264 | 1.21x |
-|🟠| a / b (element-wise) (int64) | int64 | 1,000 | 0.0019 | 0.0064 | 3.43x |
-|🟠| a / b (element-wise) (int64) | int64 | 100,000 | 0.0839 | 0.2048 | 2.44x |
-|🟡| a / b (element-wise) (int64) | int64 | 10,000,000 | 26.5556 | 31.1644 | 1.17x |
-|▫| a / scalar (float32) | float32 | 1,000 | 0.0008 | 0.0022 | 2.69x |
-|🔴| a / scalar (float32) | float32 | 100,000 | 0.0127 | 0.0657 | 5.16x |
-|🟡| a / scalar (float32) | float32 | 10,000,000 | 8.4858 | 10.5237 | 1.24x |
-|▫| a / scalar (float64) | float64 | 1,000 | 0.0009 | 0.0045 | 4.99x |
-|🟠| a / scalar (float64) | float64 | 100,000 | 0.0381 | 0.1875 | 4.92x |
-|🟡| a / scalar (float64) | float64 | 10,000,000 | 16.4902 | 23.7052 | 1.44x |
-|🟠| a / scalar (int32) | int32 | 1,000 | 0.0017 | 0.0079 | 4.63x |
-|🟠| a / scalar (int32) | int32 | 100,000 | 0.0711 | 0.2066 | 2.90x |
-|🟡| a / scalar (int32) | int32 | 10,000,000 | 17.1919 | 24.3257 | 1.42x |
-|🟠| a / scalar (int64) | int64 | 1,000 | 0.0017 | 0.0070 | 4.15x |
-|🟠| a / scalar (int64) | int64 | 100,000 | 0.0602 | 0.2092 | 3.47x |
-|🟡| a / scalar (int64) | int64 | 10,000,000 | 19.6405 | 24.9502 | 1.27x |
-|▫| np.add(a, b) (float32) | float32 | 1,000 | 0.0006 | 0.0018 | 3.10x |
-|🔴| np.add(a, b) (float32) | float32 | 100,000 | 0.0071 | 0.0515 | 7.28x |
-|🟡| np.add(a, b) (float32) | float32 | 10,000,000 | 8.9121 | 13.2948 | 1.49x |
-|▫| np.add(a, b) (float64) | float64 | 1,000 | 0.0006 | 0.0030 | 5.17x |
-|🟠| np.add(a, b) (float64) | float64 | 100,000 | 0.0301 | 0.1134 | 3.76x |
-|🟡| np.add(a, b) (float64) | float64 | 10,000,000 | 17.9589 | 27.0545 | 1.51x |
-|▫| np.add(a, b) (int16) | int16 | 1,000 | 0.0008 | 0.0020 | 2.47x |
-|✅| np.add(a, b) (int16) | int16 | 100,000 | 0.0309 | 0.0285 | 0.92x |
-|✅| np.add(a, b) (int16) | int16 | 10,000,000 | 7.3309 | 7.1899 | 0.98x |
-|▫| np.add(a, b) (int32) | int32 | 1,000 | 0.0008 | 0.0018 | 2.28x |
-|🟡| np.add(a, b) (int32) | int32 | 100,000 | 0.0316 | 0.0611 | 1.93x |
-|🟡| np.add(a, b) (int32) | int32 | 10,000,000 | 9.9565 | 14.0945 | 1.42x |
-|▫| np.add(a, b) (int64) | int64 | 1,000 | 0.0008 | 0.0031 | 4.05x |
-|🟠| np.add(a, b) (int64) | int64 | 100,000 | 0.0332 | 0.1083 | 3.26x |
-|🟡| np.add(a, b) (int64) | int64 | 10,000,000 | 20.6288 | 27.6310 | 1.34x |
-|▫| np.add(a, b) (uint16) | uint16 | 1,000 | 0.0008 | 0.0016 | 2.07x |
-|✅| np.add(a, b) (uint16) | uint16 | 100,000 | 0.0298 | 0.0257 | 0.86x |
-|🟡| np.add(a, b) (uint16) | uint16 | 10,000,000 | 5.3638 | 7.1577 | 1.33x |
-|▫| np.add(a, b) (uint32) | uint32 | 1,000 | 0.0008 | 0.0018 | 2.31x |
-|🟡| np.add(a, b) (uint32) | uint32 | 100,000 | 0.0373 | 0.0543 | 1.46x |
-|🟡| np.add(a, b) (uint32) | uint32 | 10,000,000 | 9.5713 | 14.2468 | 1.49x |
-|▫| np.add(a, b) (uint64) | uint64 | 1,000 | 0.0008 | 0.0032 | 4.16x |
-|🟠| np.add(a, b) (uint64) | uint64 | 100,000 | 0.0332 | 0.1151 | 3.47x |
-|🟡| np.add(a, b) (uint64) | uint64 | 10,000,000 | 18.7016 | 26.5089 | 1.42x |
-|▫| np.add(a, b) (uint8) | uint8 | 1,000 | 0.0007 | 0.0020 | 2.81x |
-|✅| np.add(a, b) (uint8) | uint8 | 100,000 | 0.0289 | 0.0158 | 0.55x |
-|✅| np.add(a, b) (uint8) | uint8 | 10,000,000 | 4.0238 | 3.0195 | 0.75x |
-|▫| scalar - a (float32) | float32 | 1,000 | 0.0007 | 0.0020 | 2.72x |
-|🔴| scalar - a (float32) | float32 | 100,000 | 0.0067 | 0.0536 | 7.94x |
-|🟡| scalar - a (float32) | float32 | 10,000,000 | 8.4095 | 10.3296 | 1.23x |
-|▫| scalar - a (float64) | float64 | 1,000 | 0.0007 | 0.0028 | 4.26x |
-|🔴| scalar - a (float64) | float64 | 100,000 | 0.0137 | 0.1064 | 7.76x |
-|🟡| scalar - a (float64) | float64 | 10,000,000 | 16.6031 | 19.7539 | 1.19x |
-|▫| scalar - a (int16) | int16 | 1,000 | 0.0009 | 0.0016 | 1.78x |
-|🟡| scalar - a (int16) | int16 | 100,000 | 0.0245 | 0.0289 | 1.18x |
-|🟡| scalar - a (int16) | int16 | 10,000,000 | 4.6706 | 5.1130 | 1.09x |
-|▫| scalar - a (int32) | int32 | 1,000 | 0.0009 | 0.0020 | 2.16x |
-|🟠| scalar - a (int32) | int32 | 100,000 | 0.0260 | 0.0565 | 2.17x |
-|🟡| scalar - a (int32) | int32 | 10,000,000 | 9.3299 | 10.1595 | 1.09x |
-|▫| scalar - a (int64) | int64 | 1,000 | 0.0009 | 0.0031 | 3.63x |
-|🟠| scalar - a (int64) | int64 | 100,000 | 0.0270 | 0.1098 | 4.07x |
-|🟡| scalar - a (int64) | int64 | 10,000,000 | 16.0797 | 20.5011 | 1.27x |
-|▫| scalar - a (uint16) | uint16 | 1,000 | 0.0009 | 0.0020 | 2.12x |
-|🟡| scalar - a (uint16) | uint16 | 100,000 | 0.0260 | 0.0278 | 1.07x |
-|🟡| scalar - a (uint16) | uint16 | 10,000,000 | 4.9032 | 5.4813 | 1.12x |
-|▫| scalar - a (uint32) | uint32 | 1,000 | 0.0009 | 0.0019 | 2.07x |
-|🟠| scalar - a (uint32) | uint32 | 100,000 | 0.0257 | 0.0537 | 2.09x |
-|🟡| scalar - a (uint32) | uint32 | 10,000,000 | 8.2139 | 10.4418 | 1.27x |
-|▫| scalar - a (uint64) | uint64 | 1,000 | 0.0010 | 0.0031 | 3.23x |
-|🟠| scalar - a (uint64) | uint64 | 100,000 | 0.0248 | 0.1110 | 4.47x |
-|🟡| scalar - a (uint64) | uint64 | 10,000,000 | 16.0049 | 19.7881 | 1.24x |
-|▫| scalar - a (uint8) | uint8 | 1,000 | 0.0008 | 0.0018 | 2.25x |
-|✅| scalar - a (uint8) | uint8 | 100,000 | 0.0244 | 0.0154 | 0.63x |
-|✅| scalar - a (uint8) | uint8 | 10,000,000 | 3.7318 | 2.3712 | 0.64x |
-|▫| scalar / a (float32) | float32 | 1,000 | 0.0009 | 0.0023 | 2.72x |
-|🔴| scalar / a (float32) | float32 | 100,000 | 0.0124 | 0.0664 | 5.33x |
-|🟡| scalar / a (float32) | float32 | 10,000,000 | 8.3590 | 10.1975 | 1.22x |
-|▫| scalar / a (float64) | float64 | 1,000 | 0.0009 | 0.0041 | 4.47x |
-|🔴| scalar / a (float64) | float64 | 100,000 | 0.0376 | 0.2015 | 5.36x |
-|🟡| scalar / a (float64) | float64 | 10,000,000 | 16.3767 | 24.1568 | 1.48x |
-|🟠| scalar / a (int32) | int32 | 1,000 | 0.0018 | 0.0073 | 4.13x |
-|🟠| scalar / a (int32) | int32 | 100,000 | 0.0645 | 0.2063 | 3.20x |
-|🟡| scalar / a (int32) | int32 | 10,000,000 | 17.3386 | 23.7354 | 1.37x |
-|🟠| scalar / a (int64) | int64 | 1,000 | 0.0017 | 0.0076 | 4.45x |
-|🟠| scalar / a (int64) | int64 | 100,000 | 0.0591 | 0.2074 | 3.51x |
-|🟡| scalar / a (int64) | int64 | 10,000,000 | 19.6936 | 24.9236 | 1.27x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|🟡| a % 7 (literal) (float32) | float32 | 1,000 | 0.0141 | 0.0190 | 0.74× | 134% |
+|🟡| a % 7 (literal) (float32) | float32 | 100,000 | 1.6551 | 1.9677 | 0.84× | 119% |
+|🟡| a % 7 (literal) (float32) | float32 | 10,000,000 | 167.3112 | 194.6954 | 0.86× | 116% |
+|🟠| a % 7 (literal) (float64) | float64 | 1,000 | 0.0114 | 0.0238 | 0.48× | 209% |
+|🟡| a % 7 (literal) (float64) | float64 | 100,000 | 1.4792 | 1.7960 | 0.82× | 121% |
+|🟡| a % 7 (literal) (float64) | float64 | 10,000,000 | 155.5835 | 178.7748 | 0.87× | 115% |
+|🟡| a % 7 (literal) (int32) | int32 | 1,000 | 0.0020 | 0.0039 | 0.52× | 192% |
+|🟡| a % 7 (literal) (int32) | int32 | 100,000 | 0.4121 | 0.6918 | 0.60× | 168% |
+|🟡| a % 7 (literal) (int32) | int32 | 10,000,000 | 45.8307 | 70.8023 | 0.65× | 154% |
+|🟡| a % 7 (literal) (int64) | int64 | 1,000 | 0.0042 | 0.0057 | 0.74× | 135% |
+|🟠| a % 7 (literal) (int64) | int64 | 100,000 | 0.4216 | 0.9121 | 0.46× | 216% |
+|🟡| a % 7 (literal) (int64) | int64 | 10,000,000 | 51.6809 | 93.8372 | 0.55× | 182% |
+|✅| a % b (element-wise) (float32) | float32 | 1,000 | 0.0126 | 0.0123 | 1.02× | 98% |
+|🟡| a % b (element-wise) (float32) | float32 | 100,000 | 1.5069 | 1.6644 | 0.91× | 110% |
+|🟡| a % b (element-wise) (float32) | float32 | 10,000,000 | 156.3306 | 166.9308 | 0.94× | 107% |
+|✅| a % b (element-wise) (float64) | float64 | 1,000 | 0.0099 | 0.0098 | 1.01× | 99% |
+|🟡| a % b (element-wise) (float64) | float64 | 100,000 | 1.3230 | 1.4718 | 0.90× | 111% |
+|🟡| a % b (element-wise) (float64) | float64 | 10,000,000 | 143.2559 | 151.6138 | 0.94× | 106% |
+|🟡| a % b (element-wise) (int32) | int32 | 1,000 | 0.0020 | 0.0038 | 0.53× | 189% |
+|🟡| a % b (element-wise) (int32) | int32 | 100,000 | 0.3760 | 0.6165 | 0.61× | 164% |
+|🟡| a % b (element-wise) (int32) | int32 | 10,000,000 | 43.2277 | 64.9449 | 0.67× | 150% |
+|🟡| a % b (element-wise) (int64) | int64 | 1,000 | 0.0037 | 0.0039 | 0.95× | 105% |
+|🟡| a % b (element-wise) (int64) | int64 | 100,000 | 0.4161 | 0.6301 | 0.66× | 151% |
+|🟡| a % b (element-wise) (int64) | int64 | 10,000,000 | 48.6074 | 67.4008 | 0.72× | 139% |
+|▫| a * 2 (literal) (float32) | float32 | 1,000 | 0.0008 | 0.0063 | 0.12× | 821% |
+|🔴| a * 2 (literal) (float32) | float32 | 100,000 | 0.0067 | 0.1288 | 0.052× | 19× |
+|🟡| a * 2 (literal) (float32) | float32 | 10,000,000 | 8.3163 | 12.2127 | 0.68× | 147% |
+|▫| a * 2 (literal) (float64) | float64 | 1,000 | 0.0008 | 0.0071 | 0.11× | 902% |
+|🔴| a * 2 (literal) (float64) | float64 | 100,000 | 0.0133 | 0.1505 | 0.088× | 11× |
+|🟡| a * 2 (literal) (float64) | float64 | 10,000,000 | 17.3763 | 21.6842 | 0.80× | 125% |
+|🔴| a * 2 (literal) (int16) | int16 | 1,000 | 0.0010 | 0.0055 | 0.19× | 538% |
+|🟠| a * 2 (literal) (int16) | int16 | 100,000 | 0.0230 | 0.0935 | 0.25× | 407% |
+|🟠| a * 2 (literal) (int16) | int16 | 10,000,000 | 4.6629 | 9.7334 | 0.48× | 209% |
+|🟠| a * 2 (literal) (int32) | int32 | 1,000 | 0.0010 | 0.0038 | 0.26× | 381% |
+|🟠| a * 2 (literal) (int32) | int32 | 100,000 | 0.0228 | 0.0550 | 0.41× | 242% |
+|🟡| a * 2 (literal) (int32) | int32 | 10,000,000 | 8.7622 | 10.1737 | 0.86× | 116% |
+|▫| a * 2 (literal) (int64) | int64 | 1,000 | 0.0009 | 0.0069 | 0.13× | 766% |
+|🔴| a * 2 (literal) (int64) | int64 | 100,000 | 0.0223 | 0.1206 | 0.18× | 541% |
+|🟡| a * 2 (literal) (int64) | int64 | 10,000,000 | 18.5884 | 22.7628 | 0.82× | 122% |
+|🔴| a * 2 (literal) (uint16) | uint16 | 1,000 | 0.0010 | 0.0065 | 0.16× | 643% |
+|🔴| a * 2 (literal) (uint16) | uint16 | 100,000 | 0.0225 | 0.1190 | 0.19× | 529% |
+|🟠| a * 2 (literal) (uint16) | uint16 | 10,000,000 | 4.4333 | 9.0584 | 0.49× | 204% |
+|🔴| a * 2 (literal) (uint32) | uint32 | 1,000 | 0.0010 | 0.0060 | 0.17× | 597% |
+|🟠| a * 2 (literal) (uint32) | uint32 | 100,000 | 0.0246 | 0.1099 | 0.22× | 447% |
+|🟡| a * 2 (literal) (uint32) | uint32 | 10,000,000 | 8.5106 | 12.0673 | 0.70× | 142% |
+|▫| a * 2 (literal) (uint64) | uint64 | 1,000 | 0.0009 | 0.0074 | 0.12× | 817% |
+|🔴| a * 2 (literal) (uint64) | uint64 | 100,000 | 0.0234 | 0.1581 | 0.15× | 677% |
+|🟡| a * 2 (literal) (uint64) | uint64 | 10,000,000 | 15.8401 | 22.1489 | 0.71× | 140% |
+|▫| a * 2 (literal) (uint8) | uint8 | 1,000 | 0.0009 | 0.0043 | 0.20× | 499% |
+|🟠| a * 2 (literal) (uint8) | uint8 | 100,000 | 0.0236 | 0.1037 | 0.23× | 440% |
+|🟠| a * 2 (literal) (uint8) | uint8 | 10,000,000 | 3.6469 | 8.4932 | 0.43× | 233% |
+|▫| a * a (square) (float32) | float32 | 1,000 | 0.0005 | 0.0018 | 0.29× | 341% |
+|🔴| a * a (square) (float32) | float32 | 100,000 | 0.0079 | 0.0543 | 0.14× | 690% |
+|🟡| a * a (square) (float32) | float32 | 10,000,000 | 8.0929 | 11.1120 | 0.73× | 137% |
+|▫| a * a (square) (float64) | float64 | 1,000 | 0.0005 | 0.0026 | 0.19× | 533% |
+|🔴| a * a (square) (float64) | float64 | 100,000 | 0.0161 | 0.1043 | 0.15× | 648% |
+|🟡| a * a (square) (float64) | float64 | 10,000,000 | 16.9687 | 20.3622 | 0.83× | 120% |
+|▫| a * a (square) (int16) | int16 | 1,000 | 0.0008 | 0.0016 | 0.47× | 211% |
+|✅| a * a (square) (int16) | int16 | 100,000 | 0.0301 | 0.0280 | 1.07× | 93% |
+|🟡| a * a (square) (int16) | int16 | 10,000,000 | 5.0053 | 5.5910 | 0.90× | 112% |
+|▫| a * a (square) (int32) | int32 | 1,000 | 0.0008 | 0.0017 | 0.46× | 218% |
+|🟠| a * a (square) (int32) | int32 | 100,000 | 0.0286 | 0.0579 | 0.49× | 202% |
+|🟡| a * a (square) (int32) | int32 | 10,000,000 | 8.7437 | 10.0335 | 0.87× | 115% |
+|▫| a * a (square) (int64) | int64 | 1,000 | 0.0007 | 0.0029 | 0.26× | 393% |
+|🟠| a * a (square) (int64) | int64 | 100,000 | 0.0292 | 0.1098 | 0.27× | 376% |
+|🟡| a * a (square) (int64) | int64 | 10,000,000 | 17.1429 | 21.0324 | 0.81× | 123% |
+|▫| a * a (square) (uint16) | uint16 | 1,000 | 0.0008 | 0.0017 | 0.48× | 210% |
+|✅| a * a (square) (uint16) | uint16 | 100,000 | 0.0282 | 0.0274 | 1.03× | 97% |
+|🟡| a * a (square) (uint16) | uint16 | 10,000,000 | 4.9792 | 5.4124 | 0.92× | 109% |
+|▫| a * a (square) (uint32) | uint32 | 1,000 | 0.0008 | 0.0018 | 0.44× | 228% |
+|🟡| a * a (square) (uint32) | uint32 | 100,000 | 0.0305 | 0.0550 | 0.55× | 180% |
+|🟡| a * a (square) (uint32) | uint32 | 10,000,000 | 8.4000 | 10.8109 | 0.78× | 129% |
+|▫| a * a (square) (uint64) | uint64 | 1,000 | 0.0007 | 0.0028 | 0.25× | 394% |
+|🟠| a * a (square) (uint64) | uint64 | 100,000 | 0.0295 | 0.1148 | 0.26× | 389% |
+|🟡| a * a (square) (uint64) | uint64 | 10,000,000 | 16.3411 | 21.5055 | 0.76× | 132% |
+|▫| a * a (square) (uint8) | uint8 | 1,000 | 0.0006 | 0.0014 | 0.45× | 224% |
+|✅| a * a (square) (uint8) | uint8 | 100,000 | 0.0278 | 0.0159 | 1.75× | 57% |
+|✅| a * a (square) (uint8) | uint8 | 10,000,000 | 3.8696 | 2.2714 | 1.70× | 59% |
+|▫| a * b (element-wise) (float32) | float32 | 1,000 | 0.0005 | 0.0019 | 0.28× | 352% |
+|🔴| a * b (element-wise) (float32) | float32 | 100,000 | 0.0071 | 0.0544 | 0.13× | 768% |
+|🟡| a * b (element-wise) (float32) | float32 | 10,000,000 | 8.9544 | 14.0772 | 0.64× | 157% |
+|▫| a * b (element-wise) (float64) | float64 | 1,000 | 0.0005 | 0.0030 | 0.17× | 581% |
+|🟠| a * b (element-wise) (float64) | float64 | 100,000 | 0.0311 | 0.1140 | 0.27× | 366% |
+|🟡| a * b (element-wise) (float64) | float64 | 10,000,000 | 17.6849 | 26.5088 | 0.67× | 150% |
+|▫| a * b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0019 | 0.41× | 243% |
+|✅| a * b (element-wise) (int16) | int16 | 100,000 | 0.0284 | 0.0281 | 1.01× | 99% |
+|🟡| a * b (element-wise) (int16) | int16 | 10,000,000 | 5.1147 | 7.0273 | 0.73× | 137% |
+|▫| a * b (element-wise) (int32) | int32 | 1,000 | 0.0008 | 0.0018 | 0.46× | 218% |
+|🟡| a * b (element-wise) (int32) | int32 | 100,000 | 0.0303 | 0.0577 | 0.53× | 190% |
+|🟡| a * b (element-wise) (int32) | int32 | 10,000,000 | 10.0582 | 14.3013 | 0.70× | 142% |
+|▫| a * b (element-wise) (int64) | int64 | 1,000 | 0.0008 | 0.0029 | 0.28× | 360% |
+|🟠| a * b (element-wise) (int64) | int64 | 100,000 | 0.0326 | 0.1179 | 0.28× | 362% |
+|🟡| a * b (element-wise) (int64) | int64 | 10,000,000 | 18.7233 | 28.7622 | 0.65× | 154% |
+|✅| a * b (element-wise) (uint16) | uint16 | 1,000 | 0.0019 | 0.0017 | 1.11× | 90% |
+|🟡| a * b (element-wise) (uint16) | uint16 | 100,000 | 0.0279 | 0.0289 | 0.96× | 104% |
+|🟡| a * b (element-wise) (uint16) | uint16 | 10,000,000 | 5.3957 | 6.9261 | 0.78× | 128% |
+|▫| a * b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0022 | 0.36× | 275% |
+|🟡| a * b (element-wise) (uint32) | uint32 | 100,000 | 0.0297 | 0.0550 | 0.54× | 186% |
+|🟡| a * b (element-wise) (uint32) | uint32 | 10,000,000 | 8.8650 | 13.5566 | 0.65× | 153% |
+|▫| a * b (element-wise) (uint64) | uint64 | 1,000 | 0.0007 | 0.0028 | 0.25× | 398% |
+|🟠| a * b (element-wise) (uint64) | uint64 | 100,000 | 0.0312 | 0.1133 | 0.28× | 363% |
+|🟡| a * b (element-wise) (uint64) | uint64 | 10,000,000 | 19.0202 | 31.9026 | 0.60× | 168% |
+|▫| a * b (element-wise) (uint8) | uint8 | 1,000 | 0.0007 | 0.0017 | 0.38× | 263% |
+|✅| a * b (element-wise) (uint8) | uint8 | 100,000 | 0.0277 | 0.0153 | 1.80× | 55% |
+|✅| a * b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0144 | 3.3705 | 1.19× | 84% |
+|▫| a * scalar (float32) | float32 | 1,000 | 0.0007 | 0.0019 | 0.39× | 260% |
+|🔴| a * scalar (float32) | float32 | 100,000 | 0.0062 | 0.0574 | 0.11× | 926% |
+|🟡| a * scalar (float32) | float32 | 10,000,000 | 8.0655 | 10.2659 | 0.79× | 127% |
+|▫| a * scalar (float64) | float64 | 1,000 | 0.0007 | 0.0017 | 0.40× | 251% |
+|🔴| a * scalar (float64) | float64 | 100,000 | 0.0150 | 0.1151 | 0.13× | 769% |
+|🟡| a * scalar (float64) | float64 | 10,000,000 | 18.5637 | 20.1307 | 0.92× | 108% |
+|▫| a * scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 0.45× | 222% |
+|🟡| a * scalar (int16) | int16 | 100,000 | 0.0238 | 0.0273 | 0.87× | 115% |
+|🟡| a * scalar (int16) | int16 | 10,000,000 | 4.6196 | 5.4073 | 0.85× | 117% |
+|▫| a * scalar (int32) | int32 | 1,000 | 0.0009 | 0.0019 | 0.47× | 214% |
+|🟠| a * scalar (int32) | int32 | 100,000 | 0.0232 | 0.0546 | 0.43× | 235% |
+|🟡| a * scalar (int32) | int32 | 10,000,000 | 8.3511 | 10.1460 | 0.82× | 122% |
+|▫| a * scalar (int64) | int64 | 1,000 | 0.0008 | 0.0028 | 0.30× | 337% |
+|🟠| a * scalar (int64) | int64 | 100,000 | 0.0252 | 0.1085 | 0.23× | 430% |
+|🟡| a * scalar (int64) | int64 | 10,000,000 | 19.4204 | 21.9689 | 0.88× | 113% |
+|▫| a * scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0020 | 0.46× | 217% |
+|🟡| a * scalar (uint16) | uint16 | 100,000 | 0.0227 | 0.0285 | 0.80× | 125% |
+|🟡| a * scalar (uint16) | uint16 | 10,000,000 | 4.4608 | 5.3498 | 0.83× | 120% |
+|▫| a * scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0021 | 0.41× | 246% |
+|🟠| a * scalar (uint32) | uint32 | 100,000 | 0.0234 | 0.0526 | 0.45× | 224% |
+|🟡| a * scalar (uint32) | uint32 | 10,000,000 | 8.1414 | 10.3010 | 0.79× | 126% |
+|▫| a * scalar (uint64) | uint64 | 1,000 | 0.0008 | 0.0027 | 0.29× | 349% |
+|🟠| a * scalar (uint64) | uint64 | 100,000 | 0.0227 | 0.1114 | 0.20× | 492% |
+|🟡| a * scalar (uint64) | uint64 | 10,000,000 | 16.9767 | 21.1373 | 0.80× | 124% |
+|▫| a * scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0018 | 0.41× | 244% |
+|✅| a * scalar (uint8) | uint8 | 100,000 | 0.0242 | 0.0157 | 1.54× | 65% |
+|✅| a * scalar (uint8) | uint8 | 10,000,000 | 3.7185 | 2.4709 | 1.50× | 66% |
+|▫| a + 5 (literal) (float32) | float32 | 1,000 | 0.0008 | 0.0059 | 0.14× | 701% |
+|🔴| a + 5 (literal) (float32) | float32 | 100,000 | 0.0066 | 0.0968 | 0.068× | 15× |
+|🟡| a + 5 (literal) (float32) | float32 | 10,000,000 | 8.6016 | 12.9626 | 0.66× | 151% |
+|▫| a + 5 (literal) (float64) | float64 | 1,000 | 0.0008 | 0.0071 | 0.11× | 916% |
+|🔴| a + 5 (literal) (float64) | float64 | 100,000 | 0.0137 | 0.1214 | 0.11× | 887% |
+|🟡| a + 5 (literal) (float64) | float64 | 10,000,000 | 16.3098 | 21.8587 | 0.75× | 134% |
+|🔴| a + 5 (literal) (int16) | int16 | 1,000 | 0.0011 | 0.0065 | 0.16× | 610% |
+|🟠| a + 5 (literal) (int16) | int16 | 100,000 | 0.0247 | 0.0883 | 0.28× | 358% |
+|🟡| a + 5 (literal) (int16) | int16 | 10,000,000 | 7.7897 | 9.6845 | 0.80× | 124% |
+|🟠| a + 5 (literal) (int32) | int32 | 1,000 | 0.0010 | 0.0032 | 0.31× | 319% |
+|🟠| a + 5 (literal) (int32) | int32 | 100,000 | 0.0243 | 0.0530 | 0.46× | 218% |
+|🟡| a + 5 (literal) (int32) | int32 | 10,000,000 | 9.4343 | 10.1109 | 0.93× | 107% |
+|▫| a + 5 (literal) (int64) | int64 | 1,000 | 0.0010 | 0.0041 | 0.24× | 408% |
+|🔴| a + 5 (literal) (int64) | int64 | 100,000 | 0.0238 | 0.1342 | 0.18× | 563% |
+|🟡| a + 5 (literal) (int64) | int64 | 10,000,000 | 16.0346 | 22.1195 | 0.72× | 138% |
+|🔴| a + 5 (literal) (uint16) | uint16 | 1,000 | 0.0010 | 0.0066 | 0.16× | 642% |
+|🟠| a + 5 (literal) (uint16) | uint16 | 100,000 | 0.0260 | 0.0895 | 0.29× | 344% |
+|🟡| a + 5 (literal) (uint16) | uint16 | 10,000,000 | 4.8116 | 9.2841 | 0.52× | 193% |
+|🔴| a + 5 (literal) (uint32) | uint32 | 1,000 | 0.0010 | 0.0064 | 0.16× | 627% |
+|🟠| a + 5 (literal) (uint32) | uint32 | 100,000 | 0.0249 | 0.0954 | 0.26× | 383% |
+|🟡| a + 5 (literal) (uint32) | uint32 | 10,000,000 | 8.2202 | 12.3833 | 0.66× | 151% |
+|🔴| a + 5 (literal) (uint64) | uint64 | 1,000 | 0.0010 | 0.0075 | 0.13× | 745% |
+|🟠| a + 5 (literal) (uint64) | uint64 | 100,000 | 0.0262 | 0.1244 | 0.21× | 475% |
+|🟡| a + 5 (literal) (uint64) | uint64 | 10,000,000 | 15.7466 | 22.7518 | 0.69× | 144% |
+|▫| a + 5 (literal) (uint8) | uint8 | 1,000 | 0.0009 | 0.0049 | 0.18× | 558% |
+|🟠| a + 5 (literal) (uint8) | uint8 | 100,000 | 0.0256 | 0.0886 | 0.29× | 346% |
+|🟠| a + 5 (literal) (uint8) | uint8 | 10,000,000 | 3.4863 | 8.8818 | 0.39× | 255% |
+|▫| a + b (element-wise) (float32) | float32 | 1,000 | 0.0006 | 0.0021 | 0.27× | 369% |
+|🔴| a + b (element-wise) (float32) | float32 | 100,000 | 0.0070 | 0.0504 | 0.14× | 725% |
+|🟡| a + b (element-wise) (float32) | float32 | 10,000,000 | 9.5103 | 13.8917 | 0.69× | 146% |
+|▫| a + b (element-wise) (float64) | float64 | 1,000 | 0.0007 | 0.0032 | 0.21× | 468% |
+|🟠| a + b (element-wise) (float64) | float64 | 100,000 | 0.0301 | 0.1169 | 0.26× | 388% |
+|🟡| a + b (element-wise) (float64) | float64 | 10,000,000 | 18.9762 | 26.6012 | 0.71× | 140% |
+|▫| a + b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0022 | 0.35× | 282% |
+|✅| a + b (element-wise) (int16) | int16 | 100,000 | 0.0303 | 0.0294 | 1.03× | 97% |
+|🟡| a + b (element-wise) (int16) | int16 | 10,000,000 | 6.6919 | 7.2019 | 0.93× | 108% |
+|🟡| a + b (element-wise) (int32) | int32 | 1,000 | 0.0010 | 0.0010 | 0.98× | 102% |
+|🟡| a + b (element-wise) (int32) | int32 | 100,000 | 0.0295 | 0.0575 | 0.51× | 195% |
+|🟡| a + b (element-wise) (int32) | int32 | 10,000,000 | 9.0923 | 13.8151 | 0.66× | 152% |
+|▫| a + b (element-wise) (int64) | int64 | 1,000 | 0.0007 | 0.0030 | 0.24× | 408% |
+|🟠| a + b (element-wise) (int64) | int64 | 100,000 | 0.0337 | 0.1194 | 0.28× | 355% |
+|🟡| a + b (element-wise) (int64) | int64 | 10,000,000 | 19.8215 | 26.2861 | 0.75× | 133% |
+|▫| a + b (element-wise) (uint16) | uint16 | 1,000 | 0.0008 | 0.0021 | 0.38× | 262% |
+|✅| a + b (element-wise) (uint16) | uint16 | 100,000 | 0.0299 | 0.0287 | 1.04× | 96% |
+|🟡| a + b (element-wise) (uint16) | uint16 | 10,000,000 | 5.3257 | 7.1654 | 0.74× | 134% |
+|▫| a + b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0020 | 0.40× | 253% |
+|🟡| a + b (element-wise) (uint32) | uint32 | 100,000 | 0.0323 | 0.0523 | 0.62× | 162% |
+|🟡| a + b (element-wise) (uint32) | uint32 | 10,000,000 | 9.0103 | 14.3468 | 0.63× | 159% |
+|▫| a + b (element-wise) (uint64) | uint64 | 1,000 | 0.0008 | 0.0034 | 0.22× | 449% |
+|🟠| a + b (element-wise) (uint64) | uint64 | 100,000 | 0.0350 | 0.1053 | 0.33× | 301% |
+|🟡| a + b (element-wise) (uint64) | uint64 | 10,000,000 | 18.6852 | 26.5867 | 0.70× | 142% |
+|▫| a + b (element-wise) (uint8) | uint8 | 1,000 | 0.0007 | 0.0015 | 0.47× | 211% |
+|✅| a + b (element-wise) (uint8) | uint8 | 100,000 | 0.0288 | 0.0181 | 1.59× | 63% |
+|✅| a + b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0514 | 3.6027 | 1.12× | 89% |
+|▫| a + scalar (float32) | float32 | 1,000 | 0.0008 | 0.0024 | 0.32× | 309% |
+|🔴| a + scalar (float32) | float32 | 100,000 | 0.0064 | 0.0543 | 0.12× | 851% |
+|🟡| a + scalar (float32) | float32 | 10,000,000 | 8.1738 | 10.5122 | 0.78× | 129% |
+|▫| a + scalar (float64) | float64 | 1,000 | 0.0006 | 0.0031 | 0.20× | 489% |
+|🔴| a + scalar (float64) | float64 | 100,000 | 0.0132 | 0.1095 | 0.12× | 830% |
+|🟡| a + scalar (float64) | float64 | 10,000,000 | 16.1087 | 19.6990 | 0.82× | 122% |
+|▫| a + scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 0.46× | 220% |
+|🟡| a + scalar (int16) | int16 | 100,000 | 0.0248 | 0.0286 | 0.87× | 115% |
+|✅| a + scalar (int16) | int16 | 10,000,000 | 6.9438 | 5.0678 | 1.37× | 73% |
+|🟡| a + scalar (int32) | int32 | 1,000 | 0.0011 | 0.0017 | 0.65× | 154% |
+|🟠| a + scalar (int32) | int32 | 100,000 | 0.0245 | 0.0528 | 0.46× | 216% |
+|🟡| a + scalar (int32) | int32 | 10,000,000 | 9.2976 | 10.1713 | 0.91× | 109% |
+|▫| a + scalar (int64) | int64 | 1,000 | 0.0008 | 0.0032 | 0.26× | 380% |
+|🟠| a + scalar (int64) | int64 | 100,000 | 0.0238 | 0.1109 | 0.21× | 467% |
+|🟡| a + scalar (int64) | int64 | 10,000,000 | 15.7965 | 19.6952 | 0.80× | 125% |
+|▫| a + scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0017 | 0.54× | 186% |
+|🟡| a + scalar (uint16) | uint16 | 100,000 | 0.0247 | 0.0262 | 0.94× | 106% |
+|🟡| a + scalar (uint16) | uint16 | 10,000,000 | 5.1277 | 5.4373 | 0.94× | 106% |
+|▫| a + scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0018 | 0.50× | 198% |
+|🟠| a + scalar (uint32) | uint32 | 100,000 | 0.0245 | 0.0582 | 0.42× | 238% |
+|🟡| a + scalar (uint32) | uint32 | 10,000,000 | 8.1236 | 10.3644 | 0.78× | 128% |
+|▫| a + scalar (uint64) | uint64 | 1,000 | 0.0009 | 0.0030 | 0.29× | 343% |
+|🟠| a + scalar (uint64) | uint64 | 100,000 | 0.0249 | 0.1055 | 0.24× | 423% |
+|🟡| a + scalar (uint64) | uint64 | 10,000,000 | 16.2198 | 20.3895 | 0.80× | 126% |
+|▫| a + scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0015 | 0.50× | 200% |
+|✅| a + scalar (uint8) | uint8 | 100,000 | 0.0249 | 0.0140 | 1.77× | 56% |
+|✅| a + scalar (uint8) | uint8 | 10,000,000 | 3.6095 | 2.4040 | 1.50× | 67% |
+|▫| a - b (element-wise) (float32) | float32 | 1,000 | 0.0006 | 0.0020 | 0.28× | 355% |
+|🔴| a - b (element-wise) (float32) | float32 | 100,000 | 0.0073 | 0.0576 | 0.13× | 791% |
+|🟡| a - b (element-wise) (float32) | float32 | 10,000,000 | 9.0617 | 14.1836 | 0.64× | 156% |
+|▫| a - b (element-wise) (float64) | float64 | 1,000 | 0.0005 | 0.0031 | 0.16× | 616% |
+|🟠| a - b (element-wise) (float64) | float64 | 100,000 | 0.0297 | 0.1124 | 0.26× | 379% |
+|🟡| a - b (element-wise) (float64) | float64 | 10,000,000 | 17.6095 | 26.5901 | 0.66× | 151% |
+|▫| a - b (element-wise) (int16) | int16 | 1,000 | 0.0008 | 0.0020 | 0.39× | 254% |
+|🟡| a - b (element-wise) (int16) | int16 | 100,000 | 0.0294 | 0.0298 | 0.99× | 101% |
+|🟡| a - b (element-wise) (int16) | int16 | 10,000,000 | 7.1685 | 7.3131 | 0.98× | 102% |
+|▫| a - b (element-wise) (int32) | int32 | 1,000 | 0.0008 | 0.0024 | 0.33× | 299% |
+|🟠| a - b (element-wise) (int32) | int32 | 100,000 | 0.0297 | 0.0616 | 0.48× | 207% |
+|🟡| a - b (element-wise) (int32) | int32 | 10,000,000 | 10.2594 | 14.1255 | 0.73× | 138% |
+|▫| a - b (element-wise) (int64) | int64 | 1,000 | 0.0007 | 0.0031 | 0.24× | 420% |
+|🟠| a - b (element-wise) (int64) | int64 | 100,000 | 0.0344 | 0.1160 | 0.30× | 337% |
+|🟡| a - b (element-wise) (int64) | int64 | 10,000,000 | 18.0470 | 27.6480 | 0.65× | 153% |
+|▫| a - b (element-wise) (uint16) | uint16 | 1,000 | 0.0008 | 0.0019 | 0.43× | 234% |
+|✅| a - b (element-wise) (uint16) | uint16 | 100,000 | 0.0321 | 0.0299 | 1.08× | 93% |
+|🟡| a - b (element-wise) (uint16) | uint16 | 10,000,000 | 5.2552 | 6.9091 | 0.76× | 132% |
+|▫| a - b (element-wise) (uint32) | uint32 | 1,000 | 0.0008 | 0.0019 | 0.45× | 224% |
+|🟡| a - b (element-wise) (uint32) | uint32 | 100,000 | 0.0319 | 0.0563 | 0.57× | 177% |
+|🟡| a - b (element-wise) (uint32) | uint32 | 10,000,000 | 8.8780 | 14.3279 | 0.62× | 161% |
+|▫| a - b (element-wise) (uint64) | uint64 | 1,000 | 0.0007 | 0.0029 | 0.26× | 387% |
+|🟠| a - b (element-wise) (uint64) | uint64 | 100,000 | 0.0334 | 0.1087 | 0.31× | 326% |
+|🟡| a - b (element-wise) (uint64) | uint64 | 10,000,000 | 18.6896 | 27.2793 | 0.69× | 146% |
+|▫| a - b (element-wise) (uint8) | uint8 | 1,000 | 0.0006 | 0.0017 | 0.38× | 264% |
+|✅| a - b (element-wise) (uint8) | uint8 | 100,000 | 0.0290 | 0.0156 | 1.86× | 54% |
+|✅| a - b (element-wise) (uint8) | uint8 | 10,000,000 | 4.0510 | 3.3608 | 1.21× | 83% |
+|▫| a - scalar (float32) | float32 | 1,000 | 0.0007 | 0.0018 | 0.40× | 253% |
+|🔴| a - scalar (float32) | float32 | 100,000 | 0.0063 | 0.0556 | 0.11× | 884% |
+|🟡| a - scalar (float32) | float32 | 10,000,000 | 8.2991 | 10.2151 | 0.81× | 123% |
+|▫| a - scalar (float64) | float64 | 1,000 | 0.0006 | 0.0028 | 0.23× | 445% |
+|🔴| a - scalar (float64) | float64 | 100,000 | 0.0164 | 0.1059 | 0.15× | 647% |
+|🟡| a - scalar (float64) | float64 | 10,000,000 | 16.1449 | 20.1159 | 0.80× | 125% |
+|▫| a - scalar (int16) | int16 | 1,000 | 0.0009 | 0.0020 | 0.45× | 224% |
+|🟡| a - scalar (int16) | int16 | 100,000 | 0.0253 | 0.0280 | 0.90× | 111% |
+|✅| a - scalar (int16) | int16 | 10,000,000 | 5.4927 | 5.4867 | 1.00× | 100% |
+|▫| a - scalar (int32) | int32 | 1,000 | 0.0009 | 0.0022 | 0.41× | 241% |
+|🟠| a - scalar (int32) | int32 | 100,000 | 0.0253 | 0.0562 | 0.45× | 222% |
+|🟡| a - scalar (int32) | int32 | 10,000,000 | 9.2399 | 10.0023 | 0.92× | 108% |
+|▫| a - scalar (int64) | int64 | 1,000 | 0.0009 | 0.0029 | 0.30× | 338% |
+|🟠| a - scalar (int64) | int64 | 100,000 | 0.0256 | 0.1178 | 0.22× | 461% |
+|🟡| a - scalar (int64) | int64 | 10,000,000 | 15.5433 | 20.3870 | 0.76× | 131% |
+|▫| a - scalar (uint16) | uint16 | 1,000 | 0.0009 | 0.0021 | 0.42× | 238% |
+|🟡| a - scalar (uint16) | uint16 | 100,000 | 0.0246 | 0.0296 | 0.83× | 120% |
+|🟡| a - scalar (uint16) | uint16 | 10,000,000 | 5.1743 | 5.3098 | 0.97× | 103% |
+|▫| a - scalar (uint32) | uint32 | 1,000 | 0.0009 | 0.0021 | 0.43× | 230% |
+|🟠| a - scalar (uint32) | uint32 | 100,000 | 0.0256 | 0.0567 | 0.45× | 222% |
+|🟡| a - scalar (uint32) | uint32 | 10,000,000 | 7.9586 | 10.5442 | 0.76× | 132% |
+|▫| a - scalar (uint64) | uint64 | 1,000 | 0.0009 | 0.0028 | 0.31× | 322% |
+|🟠| a - scalar (uint64) | uint64 | 100,000 | 0.0252 | 0.1117 | 0.23× | 444% |
+|🟡| a - scalar (uint64) | uint64 | 10,000,000 | 16.4043 | 20.4110 | 0.80× | 124% |
+|▫| a - scalar (uint8) | uint8 | 1,000 | 0.0008 | 0.0016 | 0.47× | 212% |
+|✅| a - scalar (uint8) | uint8 | 100,000 | 0.0250 | 0.0152 | 1.65× | 61% |
+|✅| a - scalar (uint8) | uint8 | 10,000,000 | 3.5888 | 2.2351 | 1.61× | 62% |
+|▫| a / b (element-wise) (float32) | float32 | 1,000 | 0.0005 | 0.0023 | 0.22× | 452% |
+|🔴| a / b (element-wise) (float32) | float32 | 100,000 | 0.0123 | 0.0662 | 0.19× | 538% |
+|🟡| a / b (element-wise) (float32) | float32 | 10,000,000 | 9.1487 | 13.7920 | 0.66× | 151% |
+|▫| a / b (element-wise) (float64) | float64 | 1,000 | 0.0008 | 0.0041 | 0.19× | 516% |
+|🔴| a / b (element-wise) (float64) | float64 | 100,000 | 0.0380 | 0.2011 | 0.19× | 529% |
+|🟡| a / b (element-wise) (float64) | float64 | 10,000,000 | 19.1611 | 27.3718 | 0.70× | 143% |
+|🟠| a / b (element-wise) (int32) | int32 | 1,000 | 0.0021 | 0.0065 | 0.33× | 305% |
+|🟠| a / b (element-wise) (int32) | int32 | 100,000 | 0.0884 | 0.2040 | 0.43× | 231% |
+|🟡| a / b (element-wise) (int32) | int32 | 10,000,000 | 20.6747 | 25.0264 | 0.83× | 121% |
+|🟠| a / b (element-wise) (int64) | int64 | 1,000 | 0.0019 | 0.0064 | 0.29× | 343% |
+|🟠| a / b (element-wise) (int64) | int64 | 100,000 | 0.0839 | 0.2048 | 0.41× | 244% |
+|🟡| a / b (element-wise) (int64) | int64 | 10,000,000 | 26.5556 | 31.1644 | 0.85× | 117% |
+|▫| a / scalar (float32) | float32 | 1,000 | 0.0008 | 0.0022 | 0.37× | 269% |
+|🔴| a / scalar (float32) | float32 | 100,000 | 0.0127 | 0.0657 | 0.19× | 516% |
+|🟡| a / scalar (float32) | float32 | 10,000,000 | 8.4858 | 10.5237 | 0.81× | 124% |
+|▫| a / scalar (float64) | float64 | 1,000 | 0.0009 | 0.0045 | 0.20× | 499% |
+|🟠| a / scalar (float64) | float64 | 100,000 | 0.0381 | 0.1875 | 0.20× | 492% |
+|🟡| a / scalar (float64) | float64 | 10,000,000 | 16.4902 | 23.7052 | 0.70× | 144% |
+|🟠| a / scalar (int32) | int32 | 1,000 | 0.0017 | 0.0079 | 0.22× | 463% |
+|🟠| a / scalar (int32) | int32 | 100,000 | 0.0711 | 0.2066 | 0.34× | 290% |
+|🟡| a / scalar (int32) | int32 | 10,000,000 | 17.1919 | 24.3257 | 0.71× | 142% |
+|🟠| a / scalar (int64) | int64 | 1,000 | 0.0017 | 0.0070 | 0.24× | 415% |
+|🟠| a / scalar (int64) | int64 | 100,000 | 0.0602 | 0.2092 | 0.29× | 347% |
+|🟡| a / scalar (int64) | int64 | 10,000,000 | 19.6405 | 24.9502 | 0.79× | 127% |
+|▫| np.add(a, b) (float32) | float32 | 1,000 | 0.0006 | 0.0018 | 0.32× | 310% |
+|🔴| np.add(a, b) (float32) | float32 | 100,000 | 0.0071 | 0.0515 | 0.14× | 728% |
+|🟡| np.add(a, b) (float32) | float32 | 10,000,000 | 8.9121 | 13.2948 | 0.67× | 149% |
+|▫| np.add(a, b) (float64) | float64 | 1,000 | 0.0006 | 0.0030 | 0.19× | 518% |
+|🟠| np.add(a, b) (float64) | float64 | 100,000 | 0.0301 | 0.1134 | 0.27× | 376% |
+|🟡| np.add(a, b) (float64) | float64 | 10,000,000 | 17.9589 | 27.0545 | 0.66× | 151% |
+|▫| np.add(a, b) (int16) | int16 | 1,000 | 0.0008 | 0.0020 | 0.41× | 247% |
+|✅| np.add(a, b) (int16) | int16 | 100,000 | 0.0309 | 0.0285 | 1.08× | 92% |
+|✅| np.add(a, b) (int16) | int16 | 10,000,000 | 7.3309 | 7.1899 | 1.02× | 98% |
+|▫| np.add(a, b) (int32) | int32 | 1,000 | 0.0008 | 0.0018 | 0.44× | 228% |
+|🟡| np.add(a, b) (int32) | int32 | 100,000 | 0.0316 | 0.0611 | 0.52× | 193% |
+|🟡| np.add(a, b) (int32) | int32 | 10,000,000 | 9.9565 | 14.0945 | 0.71× | 142% |
+|▫| np.add(a, b) (int64) | int64 | 1,000 | 0.0008 | 0.0031 | 0.25× | 405% |
+|🟠| np.add(a, b) (int64) | int64 | 100,000 | 0.0332 | 0.1083 | 0.31× | 326% |
+|🟡| np.add(a, b) (int64) | int64 | 10,000,000 | 20.6288 | 27.6310 | 0.75× | 134% |
+|▫| np.add(a, b) (uint16) | uint16 | 1,000 | 0.0008 | 0.0016 | 0.48× | 207% |
+|✅| np.add(a, b) (uint16) | uint16 | 100,000 | 0.0298 | 0.0257 | 1.16× | 86% |
+|🟡| np.add(a, b) (uint16) | uint16 | 10,000,000 | 5.3638 | 7.1577 | 0.75× | 133% |
+|▫| np.add(a, b) (uint32) | uint32 | 1,000 | 0.0008 | 0.0018 | 0.43× | 231% |
+|🟡| np.add(a, b) (uint32) | uint32 | 100,000 | 0.0373 | 0.0543 | 0.69× | 146% |
+|🟡| np.add(a, b) (uint32) | uint32 | 10,000,000 | 9.5713 | 14.2468 | 0.67× | 149% |
+|▫| np.add(a, b) (uint64) | uint64 | 1,000 | 0.0008 | 0.0032 | 0.24× | 416% |
+|🟠| np.add(a, b) (uint64) | uint64 | 100,000 | 0.0332 | 0.1151 | 0.29× | 347% |
+|🟡| np.add(a, b) (uint64) | uint64 | 10,000,000 | 18.7016 | 26.5089 | 0.70× | 142% |
+|▫| np.add(a, b) (uint8) | uint8 | 1,000 | 0.0007 | 0.0020 | 0.36× | 281% |
+|✅| np.add(a, b) (uint8) | uint8 | 100,000 | 0.0289 | 0.0158 | 1.83× | 55% |
+|✅| np.add(a, b) (uint8) | uint8 | 10,000,000 | 4.0238 | 3.0195 | 1.33× | 75% |
+|▫| scalar - a (float32) | float32 | 1,000 | 0.0007 | 0.0020 | 0.37× | 272% |
+|🔴| scalar - a (float32) | float32 | 100,000 | 0.0067 | 0.0536 | 0.13× | 794% |
+|🟡| scalar - a (float32) | float32 | 10,000,000 | 8.4095 | 10.3296 | 0.81× | 123% |
+|▫| scalar - a (float64) | float64 | 1,000 | 0.0007 | 0.0028 | 0.23× | 426% |
+|🔴| scalar - a (float64) | float64 | 100,000 | 0.0137 | 0.1064 | 0.13× | 776% |
+|🟡| scalar - a (float64) | float64 | 10,000,000 | 16.6031 | 19.7539 | 0.84× | 119% |
+|▫| scalar - a (int16) | int16 | 1,000 | 0.0009 | 0.0016 | 0.56× | 178% |
+|🟡| scalar - a (int16) | int16 | 100,000 | 0.0245 | 0.0289 | 0.85× | 118% |
+|🟡| scalar - a (int16) | int16 | 10,000,000 | 4.6706 | 5.1130 | 0.91× | 110% |
+|▫| scalar - a (int32) | int32 | 1,000 | 0.0009 | 0.0020 | 0.46× | 216% |
+|🟠| scalar - a (int32) | int32 | 100,000 | 0.0260 | 0.0565 | 0.46× | 217% |
+|🟡| scalar - a (int32) | int32 | 10,000,000 | 9.3299 | 10.1595 | 0.92× | 109% |
+|▫| scalar - a (int64) | int64 | 1,000 | 0.0009 | 0.0031 | 0.28× | 364% |
+|🟠| scalar - a (int64) | int64 | 100,000 | 0.0270 | 0.1098 | 0.25× | 406% |
+|🟡| scalar - a (int64) | int64 | 10,000,000 | 16.0797 | 20.5011 | 0.78× | 128% |
+|▫| scalar - a (uint16) | uint16 | 1,000 | 0.0009 | 0.0020 | 0.47× | 212% |
+|🟡| scalar - a (uint16) | uint16 | 100,000 | 0.0260 | 0.0278 | 0.94× | 107% |
+|🟡| scalar - a (uint16) | uint16 | 10,000,000 | 4.9032 | 5.4813 | 0.90× | 112% |
+|▫| scalar - a (uint32) | uint32 | 1,000 | 0.0009 | 0.0019 | 0.48× | 207% |
+|🟠| scalar - a (uint32) | uint32 | 100,000 | 0.0257 | 0.0537 | 0.48× | 209% |
+|🟡| scalar - a (uint32) | uint32 | 10,000,000 | 8.2139 | 10.4418 | 0.79× | 127% |
+|▫| scalar - a (uint64) | uint64 | 1,000 | 0.0010 | 0.0031 | 0.31× | 323% |
+|🟠| scalar - a (uint64) | uint64 | 100,000 | 0.0248 | 0.1110 | 0.22× | 447% |
+|🟡| scalar - a (uint64) | uint64 | 10,000,000 | 16.0049 | 19.7881 | 0.81× | 124% |
+|▫| scalar - a (uint8) | uint8 | 1,000 | 0.0008 | 0.0018 | 0.44× | 226% |
+|✅| scalar - a (uint8) | uint8 | 100,000 | 0.0244 | 0.0154 | 1.58× | 63% |
+|✅| scalar - a (uint8) | uint8 | 10,000,000 | 3.7318 | 2.3712 | 1.57× | 64% |
+|▫| scalar / a (float32) | float32 | 1,000 | 0.0009 | 0.0023 | 0.37× | 272% |
+|🔴| scalar / a (float32) | float32 | 100,000 | 0.0124 | 0.0664 | 0.19× | 533% |
+|🟡| scalar / a (float32) | float32 | 10,000,000 | 8.3590 | 10.1975 | 0.82× | 122% |
+|▫| scalar / a (float64) | float64 | 1,000 | 0.0009 | 0.0041 | 0.22× | 447% |
+|🔴| scalar / a (float64) | float64 | 100,000 | 0.0376 | 0.2015 | 0.19× | 536% |
+|🟡| scalar / a (float64) | float64 | 10,000,000 | 16.3767 | 24.1568 | 0.68× | 148% |
+|🟠| scalar / a (int32) | int32 | 1,000 | 0.0018 | 0.0073 | 0.24× | 414% |
+|🟠| scalar / a (int32) | int32 | 100,000 | 0.0645 | 0.2063 | 0.31× | 320% |
+|🟡| scalar / a (int32) | int32 | 10,000,000 | 17.3386 | 23.7354 | 0.73× | 137% |
+|🟠| scalar / a (int64) | int64 | 1,000 | 0.0017 | 0.0076 | 0.23× | 445% |
+|🟠| scalar / a (int64) | int64 | 100,000 | 0.0591 | 0.2074 | 0.28× | 351% |
+|🟡| scalar / a (int64) | int64 | 10,000,000 | 19.6936 | 24.9236 | 0.79× | 127% |
 
 ### Unary
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.abs (float32) | float32 | 1,000 | 0.0005 | 0.0018 | 3.49x |
-|🔴| np.abs (float32) | float32 | 100,000 | 0.0063 | 0.0641 | 10.14x |
-|🟡| np.abs (float32) | float32 | 10,000,000 | 7.2200 | 10.9816 | 1.52x |
-|▫| np.abs (float64) | float64 | 1,000 | 0.0005 | 0.0040 | 7.45x |
-|🔴| np.abs (float64) | float64 | 100,000 | 0.0118 | 0.1196 | 10.16x |
-|🟡| np.abs (float64) | float64 | 10,000,000 | 16.1376 | 20.9449 | 1.30x |
-|🟠| np.cbrt(a) (float32) | float32 | 1,000 | 0.0062 | 0.0143 | 2.31x |
-|🟡| np.cbrt(a) (float32) | float32 | 100,000 | 0.8787 | 1.5399 | 1.75x |
-|🟡| np.cbrt(a) (float32) | float32 | 10,000,000 | 94.6669 | 150.8870 | 1.59x |
-|🟠| np.cbrt(a) (float64) | float64 | 1,000 | 0.0095 | 0.0201 | 2.11x |
-|🟠| np.cbrt(a) (float64) | float64 | 100,000 | 1.0613 | 2.1329 | 2.01x |
-|🟡| np.cbrt(a) (float64) | float64 | 10,000,000 | 116.2440 | 210.7332 | 1.81x |
-|▫| np.ceil (float32) | float32 | 1,000 | 0.0005 | 0.0020 | 4.04x |
-|🔴| np.ceil (float32) | float32 | 100,000 | 0.0063 | 0.0537 | 8.55x |
-|🟡| np.ceil (float32) | float32 | 10,000,000 | 7.9457 | 10.8311 | 1.36x |
-|▫| np.ceil (float64) | float64 | 1,000 | 0.0006 | 0.0030 | 5.42x |
-|🔴| np.ceil (float64) | float64 | 100,000 | 0.0110 | 0.1075 | 9.79x |
-|🟡| np.ceil (float64) | float64 | 10,000,000 | 15.8831 | 21.5457 | 1.36x |
-|🟡| np.cos (float32) | float32 | 1,000 | 0.0051 | 0.0082 | 1.61x |
-|🟡| np.cos (float32) | float32 | 100,000 | 0.7044 | 1.1593 | 1.65x |
-|🟡| np.cos (float32) | float32 | 10,000,000 | 80.2264 | 121.5219 | 1.51x |
-|🟠| np.cos (float64) | float64 | 1,000 | 0.0049 | 0.0119 | 2.45x |
-|🟡| np.cos (float64) | float64 | 100,000 | 0.7019 | 1.2530 | 1.78x |
-|🟡| np.cos (float64) | float64 | 10,000,000 | 79.2760 | 128.1130 | 1.62x |
-|🟠| np.exp (float32) | float32 | 1,000 | 0.0013 | 0.0060 | 4.56x |
-|🔴| np.exp (float32) | float32 | 100,000 | 0.0574 | 0.3996 | 6.96x |
-|🟠| np.exp (float32) | float32 | 10,000,000 | 14.0653 | 42.5193 | 3.02x |
-|🟠| np.exp (float64) | float64 | 1,000 | 0.0029 | 0.0074 | 2.50x |
-|🟠| np.exp (float64) | float64 | 100,000 | 0.2525 | 0.5145 | 2.04x |
-|🟡| np.exp (float64) | float64 | 10,000,000 | 33.8602 | 53.0973 | 1.57x |
-|▫| np.floor (float32) | float32 | 1,000 | 0.0005 | 0.0022 | 4.13x |
-|🔴| np.floor (float32) | float32 | 100,000 | 0.0065 | 0.0578 | 8.91x |
-|🟡| np.floor (float32) | float32 | 10,000,000 | 8.0349 | 10.8412 | 1.35x |
-|▫| np.floor (float64) | float64 | 1,000 | 0.0006 | 0.0031 | 5.69x |
-|🔴| np.floor (float64) | float64 | 100,000 | 0.0112 | 0.1256 | 11.21x |
-|🟡| np.floor (float64) | float64 | 10,000,000 | 16.5852 | 21.3637 | 1.29x |
-|🟠| np.log (float32) | float32 | 1,000 | 0.0013 | 0.0059 | 4.39x |
-|🔴| np.log (float32) | float32 | 100,000 | 0.0876 | 0.4897 | 5.59x |
-|🟠| np.log (float32) | float32 | 10,000,000 | 16.0105 | 46.6480 | 2.91x |
-|🟠| np.log (float64) | float64 | 1,000 | 0.0028 | 0.0075 | 2.65x |
-|🟠| np.log (float64) | float64 | 100,000 | 0.2495 | 0.5997 | 2.40x |
-|🟡| np.log (float64) | float64 | 10,000,000 | 31.7591 | 61.5853 | 1.94x |
-|🟠| np.log10 (float32) | float32 | 1,000 | 0.0024 | 0.0055 | 2.29x |
-|🟠| np.log10 (float32) | float32 | 100,000 | 0.1905 | 0.4873 | 2.56x |
-|🟡| np.log10 (float32) | float32 | 10,000,000 | 23.3160 | 46.3308 | 1.99x |
-|🟠| np.log10 (float64) | float64 | 1,000 | 0.0029 | 0.0077 | 2.65x |
-|🟠| np.log10 (float64) | float64 | 100,000 | 0.2461 | 0.6713 | 2.73x |
-|🟡| np.log10 (float64) | float64 | 10,000,000 | 33.4928 | 64.1697 | 1.92x |
-|▫| np.negative(a) (float32) | float32 | 1,000 | 0.0005 | 0.0020 | 3.82x |
-|🔴| np.negative(a) (float32) | float32 | 100,000 | 0.0063 | 0.0531 | 8.44x |
-|🟡| np.negative(a) (float32) | float32 | 10,000,000 | 8.2190 | 10.4472 | 1.27x |
-|▫| np.negative(a) (float64) | float64 | 1,000 | 0.0005 | 0.0027 | 4.97x |
-|🔴| np.negative(a) (float64) | float64 | 100,000 | 0.0134 | 0.0977 | 7.29x |
-|🟡| np.negative(a) (float64) | float64 | 10,000,000 | 16.8373 | 20.2151 | 1.20x |
-|▫| np.positive(a) (float32) | float32 | 1,000 | 0.0008 | 0.0021 | 2.73x |
-|🟠| np.positive(a) (float32) | float32 | 100,000 | 0.0193 | 0.0510 | 2.64x |
-|✅| np.positive(a) (float32) | float32 | 10,000,000 | 8.1732 | 7.4167 | 0.91x |
-|▫| np.positive(a) (float64) | float64 | 1,000 | 0.0007 | 0.0030 | 4.12x |
-|🔴| np.positive(a) (float64) | float64 | 100,000 | 0.0205 | 0.1042 | 5.09x |
-|🟡| np.positive(a) (float64) | float64 | 10,000,000 | 14.9741 | 15.0630 | 1.01x |
-|▫| np.reciprocal(a) (float32) | float32 | 1,000 | 0.0006 | 0.0021 | 3.43x |
-|🟠| np.reciprocal(a) (float32) | float32 | 100,000 | 0.0144 | 0.0646 | 4.48x |
-|🟡| np.reciprocal(a) (float32) | float32 | 10,000,000 | 7.3153 | 10.4864 | 1.43x |
-|▫| np.reciprocal(a) (float64) | float64 | 1,000 | 0.0008 | 0.0045 | 5.81x |
-|🔴| np.reciprocal(a) (float64) | float64 | 100,000 | 0.0380 | 0.2049 | 5.40x |
-|🟡| np.reciprocal(a) (float64) | float64 | 10,000,000 | 15.6905 | 23.3012 | 1.49x |
-|⚪| np.round (float32) | float32 | 1,000 | 0.0011 | - | - |
-|⚪| np.round (float32) | float32 | 100,000 | 0.0069 | - | - |
-|⚪| np.round (float32) | float32 | 10,000,000 | 8.9861 | - | - |
-|⚪| np.round (float64) | float64 | 1,000 | 0.0012 | - | - |
-|⚪| np.round (float64) | float64 | 100,000 | 0.0118 | - | - |
-|⚪| np.round (float64) | float64 | 10,000,000 | 16.6718 | - | - |
-|🟠| np.sign (float32) | float32 | 1,000 | 0.0012 | 0.0042 | 3.62x |
-|🟡| np.sign (float32) | float32 | 100,000 | 0.2996 | 0.5602 | 1.87x |
-|🟡| np.sign (float32) | float32 | 10,000,000 | 36.4791 | 60.9430 | 1.67x |
-|🟠| np.sign (float64) | float64 | 1,000 | 0.0011 | 0.0042 | 3.96x |
-|🟠| np.sign (float64) | float64 | 100,000 | 0.2916 | 0.5861 | 2.01x |
-|🟡| np.sign (float64) | float64 | 10,000,000 | 45.0343 | 63.7798 | 1.42x |
-|🟡| np.sin (float32) | float32 | 1,000 | 0.0048 | 0.0090 | 1.89x |
-|🟡| np.sin (float32) | float32 | 100,000 | 0.7145 | 1.2215 | 1.71x |
-|🟡| np.sin (float32) | float32 | 10,000,000 | 79.8713 | 123.5466 | 1.55x |
-|🟠| np.sin (float64) | float64 | 1,000 | 0.0047 | 0.0117 | 2.47x |
-|🟡| np.sin (float64) | float64 | 100,000 | 0.7068 | 1.2552 | 1.78x |
-|🟡| np.sin (float64) | float64 | 10,000,000 | 79.5760 | 127.2737 | 1.60x |
-|🟡| np.sqrt (float32) | float32 | 1,000 | 0.0013 | 0.0023 | 1.85x |
-|🔴| np.sqrt (float32) | float32 | 100,000 | 0.0143 | 0.0777 | 5.42x |
-|🟡| np.sqrt (float32) | float32 | 10,000,000 | 7.3215 | 11.0763 | 1.51x |
-|🔴| np.sqrt (float64) | float64 | 1,000 | 0.0010 | 0.0052 | 5.20x |
-|🔴| np.sqrt (float64) | float64 | 100,000 | 0.0580 | 0.3056 | 5.27x |
-|🟠| np.sqrt (float64) | float64 | 10,000,000 | 15.8606 | 33.0776 | 2.09x |
-|▫| np.square(a) (float32) | float32 | 1,000 | 0.0005 | 0.0017 | 3.45x |
-|🔴| np.square(a) (float32) | float32 | 100,000 | 0.0067 | 0.0562 | 8.36x |
-|🟡| np.square(a) (float32) | float32 | 10,000,000 | 7.6096 | 10.4224 | 1.37x |
-|▫| np.square(a) (float64) | float64 | 1,000 | 0.0005 | 0.0030 | 6.09x |
-|🔴| np.square(a) (float64) | float64 | 100,000 | 0.0109 | 0.1017 | 9.33x |
-|🟡| np.square(a) (float64) | float64 | 10,000,000 | 15.6136 | 19.9551 | 1.28x |
-|▫| np.trunc(a) (float32) | float32 | 1,000 | 0.0005 | 0.0021 | 3.97x |
-|🔴| np.trunc(a) (float32) | float32 | 100,000 | 0.0058 | 0.0538 | 9.28x |
-|🟡| np.trunc(a) (float32) | float32 | 10,000,000 | 7.6326 | 10.5661 | 1.38x |
-|▫| np.trunc(a) (float64) | float64 | 1,000 | 0.0005 | 0.0029 | 5.52x |
-|🔴| np.trunc(a) (float64) | float64 | 100,000 | 0.0109 | 0.1040 | 9.50x |
-|🟡| np.trunc(a) (float64) | float64 | 10,000,000 | 14.6536 | 20.0106 | 1.37x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.abs (float32) | float32 | 1,000 | 0.0005 | 0.0018 | 0.29× | 349% |
+|🔴| np.abs (float32) | float32 | 100,000 | 0.0063 | 0.0641 | 0.099× | 10× |
+|🟡| np.abs (float32) | float32 | 10,000,000 | 7.2200 | 10.9816 | 0.66× | 152% |
+|▫| np.abs (float64) | float64 | 1,000 | 0.0005 | 0.0040 | 0.13× | 745% |
+|🔴| np.abs (float64) | float64 | 100,000 | 0.0118 | 0.1196 | 0.098× | 10× |
+|🟡| np.abs (float64) | float64 | 10,000,000 | 16.1376 | 20.9449 | 0.77× | 130% |
+|🟠| np.cbrt(a) (float32) | float32 | 1,000 | 0.0062 | 0.0143 | 0.43× | 231% |
+|🟡| np.cbrt(a) (float32) | float32 | 100,000 | 0.8787 | 1.5399 | 0.57× | 175% |
+|🟡| np.cbrt(a) (float32) | float32 | 10,000,000 | 94.6669 | 150.8870 | 0.63× | 159% |
+|🟠| np.cbrt(a) (float64) | float64 | 1,000 | 0.0095 | 0.0201 | 0.47× | 211% |
+|🟠| np.cbrt(a) (float64) | float64 | 100,000 | 1.0613 | 2.1329 | 0.50× | 201% |
+|🟡| np.cbrt(a) (float64) | float64 | 10,000,000 | 116.2440 | 210.7332 | 0.55× | 181% |
+|▫| np.ceil (float32) | float32 | 1,000 | 0.0005 | 0.0020 | 0.25× | 404% |
+|🔴| np.ceil (float32) | float32 | 100,000 | 0.0063 | 0.0537 | 0.12× | 855% |
+|🟡| np.ceil (float32) | float32 | 10,000,000 | 7.9457 | 10.8311 | 0.73× | 136% |
+|▫| np.ceil (float64) | float64 | 1,000 | 0.0006 | 0.0030 | 0.18× | 542% |
+|🔴| np.ceil (float64) | float64 | 100,000 | 0.0110 | 0.1075 | 0.10× | 979% |
+|🟡| np.ceil (float64) | float64 | 10,000,000 | 15.8831 | 21.5457 | 0.74× | 136% |
+|🟡| np.cos (float32) | float32 | 1,000 | 0.0051 | 0.0082 | 0.62× | 161% |
+|🟡| np.cos (float32) | float32 | 100,000 | 0.7044 | 1.1593 | 0.61× | 165% |
+|🟡| np.cos (float32) | float32 | 10,000,000 | 80.2264 | 121.5219 | 0.66× | 152% |
+|🟠| np.cos (float64) | float64 | 1,000 | 0.0049 | 0.0119 | 0.41× | 245% |
+|🟡| np.cos (float64) | float64 | 100,000 | 0.7019 | 1.2530 | 0.56× | 178% |
+|🟡| np.cos (float64) | float64 | 10,000,000 | 79.2760 | 128.1130 | 0.62× | 162% |
+|🟠| np.exp (float32) | float32 | 1,000 | 0.0013 | 0.0060 | 0.22× | 456% |
+|🔴| np.exp (float32) | float32 | 100,000 | 0.0574 | 0.3996 | 0.14× | 696% |
+|🟠| np.exp (float32) | float32 | 10,000,000 | 14.0653 | 42.5193 | 0.33× | 302% |
+|🟠| np.exp (float64) | float64 | 1,000 | 0.0029 | 0.0074 | 0.40× | 250% |
+|🟠| np.exp (float64) | float64 | 100,000 | 0.2525 | 0.5145 | 0.49× | 204% |
+|🟡| np.exp (float64) | float64 | 10,000,000 | 33.8602 | 53.0973 | 0.64× | 157% |
+|▫| np.floor (float32) | float32 | 1,000 | 0.0005 | 0.0022 | 0.24× | 413% |
+|🔴| np.floor (float32) | float32 | 100,000 | 0.0065 | 0.0578 | 0.11× | 891% |
+|🟡| np.floor (float32) | float32 | 10,000,000 | 8.0349 | 10.8412 | 0.74× | 135% |
+|▫| np.floor (float64) | float64 | 1,000 | 0.0006 | 0.0031 | 0.18× | 569% |
+|🔴| np.floor (float64) | float64 | 100,000 | 0.0112 | 0.1256 | 0.089× | 11× |
+|🟡| np.floor (float64) | float64 | 10,000,000 | 16.5852 | 21.3637 | 0.78× | 129% |
+|🟠| np.log (float32) | float32 | 1,000 | 0.0013 | 0.0059 | 0.23× | 439% |
+|🔴| np.log (float32) | float32 | 100,000 | 0.0876 | 0.4897 | 0.18× | 559% |
+|🟠| np.log (float32) | float32 | 10,000,000 | 16.0105 | 46.6480 | 0.34× | 291% |
+|🟠| np.log (float64) | float64 | 1,000 | 0.0028 | 0.0075 | 0.38× | 264% |
+|🟠| np.log (float64) | float64 | 100,000 | 0.2495 | 0.5997 | 0.42× | 240% |
+|🟡| np.log (float64) | float64 | 10,000,000 | 31.7591 | 61.5853 | 0.52× | 194% |
+|🟠| np.log10 (float32) | float32 | 1,000 | 0.0024 | 0.0055 | 0.44× | 229% |
+|🟠| np.log10 (float32) | float32 | 100,000 | 0.1905 | 0.4873 | 0.39× | 256% |
+|🟡| np.log10 (float32) | float32 | 10,000,000 | 23.3160 | 46.3308 | 0.50× | 199% |
+|🟠| np.log10 (float64) | float64 | 1,000 | 0.0029 | 0.0077 | 0.38× | 266% |
+|🟠| np.log10 (float64) | float64 | 100,000 | 0.2461 | 0.6713 | 0.37× | 273% |
+|🟡| np.log10 (float64) | float64 | 10,000,000 | 33.4928 | 64.1697 | 0.52× | 192% |
+|▫| np.negative(a) (float32) | float32 | 1,000 | 0.0005 | 0.0020 | 0.26× | 382% |
+|🔴| np.negative(a) (float32) | float32 | 100,000 | 0.0063 | 0.0531 | 0.12× | 844% |
+|🟡| np.negative(a) (float32) | float32 | 10,000,000 | 8.2190 | 10.4472 | 0.79× | 127% |
+|▫| np.negative(a) (float64) | float64 | 1,000 | 0.0005 | 0.0027 | 0.20× | 497% |
+|🔴| np.negative(a) (float64) | float64 | 100,000 | 0.0134 | 0.0977 | 0.14× | 729% |
+|🟡| np.negative(a) (float64) | float64 | 10,000,000 | 16.8373 | 20.2151 | 0.83× | 120% |
+|▫| np.positive(a) (float32) | float32 | 1,000 | 0.0008 | 0.0021 | 0.37× | 274% |
+|🟠| np.positive(a) (float32) | float32 | 100,000 | 0.0193 | 0.0510 | 0.38× | 264% |
+|✅| np.positive(a) (float32) | float32 | 10,000,000 | 8.1732 | 7.4167 | 1.10× | 91% |
+|▫| np.positive(a) (float64) | float64 | 1,000 | 0.0007 | 0.0030 | 0.24× | 412% |
+|🔴| np.positive(a) (float64) | float64 | 100,000 | 0.0205 | 0.1042 | 0.20× | 509% |
+|🟡| np.positive(a) (float64) | float64 | 10,000,000 | 14.9741 | 15.0630 | 0.99× | 101% |
+|▫| np.reciprocal(a) (float32) | float32 | 1,000 | 0.0006 | 0.0021 | 0.29× | 343% |
+|🟠| np.reciprocal(a) (float32) | float32 | 100,000 | 0.0144 | 0.0646 | 0.22× | 448% |
+|🟡| np.reciprocal(a) (float32) | float32 | 10,000,000 | 7.3153 | 10.4864 | 0.70× | 143% |
+|▫| np.reciprocal(a) (float64) | float64 | 1,000 | 0.0008 | 0.0045 | 0.17× | 581% |
+|🔴| np.reciprocal(a) (float64) | float64 | 100,000 | 0.0380 | 0.2049 | 0.18× | 540% |
+|🟡| np.reciprocal(a) (float64) | float64 | 10,000,000 | 15.6905 | 23.3012 | 0.67× | 148% |
+|⚪| np.round (float32) | float32 | 1,000 | 0.0011 | - | - | - |
+|⚪| np.round (float32) | float32 | 100,000 | 0.0069 | - | - | - |
+|⚪| np.round (float32) | float32 | 10,000,000 | 8.9861 | - | - | - |
+|⚪| np.round (float64) | float64 | 1,000 | 0.0012 | - | - | - |
+|⚪| np.round (float64) | float64 | 100,000 | 0.0118 | - | - | - |
+|⚪| np.round (float64) | float64 | 10,000,000 | 16.6718 | - | - | - |
+|🟠| np.sign (float32) | float32 | 1,000 | 0.0012 | 0.0042 | 0.28× | 362% |
+|🟡| np.sign (float32) | float32 | 100,000 | 0.2996 | 0.5602 | 0.54× | 187% |
+|🟡| np.sign (float32) | float32 | 10,000,000 | 36.4791 | 60.9430 | 0.60× | 167% |
+|🟠| np.sign (float64) | float64 | 1,000 | 0.0011 | 0.0042 | 0.25× | 396% |
+|🟠| np.sign (float64) | float64 | 100,000 | 0.2916 | 0.5861 | 0.50× | 201% |
+|🟡| np.sign (float64) | float64 | 10,000,000 | 45.0343 | 63.7798 | 0.71× | 142% |
+|🟡| np.sin (float32) | float32 | 1,000 | 0.0048 | 0.0090 | 0.53× | 188% |
+|🟡| np.sin (float32) | float32 | 100,000 | 0.7145 | 1.2215 | 0.58× | 171% |
+|🟡| np.sin (float32) | float32 | 10,000,000 | 79.8713 | 123.5466 | 0.65× | 155% |
+|🟠| np.sin (float64) | float64 | 1,000 | 0.0047 | 0.0117 | 0.40× | 247% |
+|🟡| np.sin (float64) | float64 | 100,000 | 0.7068 | 1.2552 | 0.56× | 178% |
+|🟡| np.sin (float64) | float64 | 10,000,000 | 79.5760 | 127.2737 | 0.62× | 160% |
+|🟡| np.sqrt (float32) | float32 | 1,000 | 0.0013 | 0.0023 | 0.54× | 186% |
+|🔴| np.sqrt (float32) | float32 | 100,000 | 0.0143 | 0.0777 | 0.18× | 542% |
+|🟡| np.sqrt (float32) | float32 | 10,000,000 | 7.3215 | 11.0763 | 0.66× | 151% |
+|🔴| np.sqrt (float64) | float64 | 1,000 | 0.0010 | 0.0052 | 0.19× | 520% |
+|🔴| np.sqrt (float64) | float64 | 100,000 | 0.0580 | 0.3056 | 0.19× | 527% |
+|🟠| np.sqrt (float64) | float64 | 10,000,000 | 15.8606 | 33.0776 | 0.48× | 209% |
+|▫| np.square(a) (float32) | float32 | 1,000 | 0.0005 | 0.0017 | 0.29× | 345% |
+|🔴| np.square(a) (float32) | float32 | 100,000 | 0.0067 | 0.0562 | 0.12× | 836% |
+|🟡| np.square(a) (float32) | float32 | 10,000,000 | 7.6096 | 10.4224 | 0.73× | 137% |
+|▫| np.square(a) (float64) | float64 | 1,000 | 0.0005 | 0.0030 | 0.16× | 609% |
+|🔴| np.square(a) (float64) | float64 | 100,000 | 0.0109 | 0.1017 | 0.11× | 933% |
+|🟡| np.square(a) (float64) | float64 | 10,000,000 | 15.6136 | 19.9551 | 0.78× | 128% |
+|▫| np.trunc(a) (float32) | float32 | 1,000 | 0.0005 | 0.0021 | 0.25× | 397% |
+|🔴| np.trunc(a) (float32) | float32 | 100,000 | 0.0058 | 0.0538 | 0.11× | 928% |
+|🟡| np.trunc(a) (float32) | float32 | 10,000,000 | 7.6326 | 10.5661 | 0.72× | 138% |
+|▫| np.trunc(a) (float64) | float64 | 1,000 | 0.0005 | 0.0029 | 0.18× | 552% |
+|🔴| np.trunc(a) (float64) | float64 | 100,000 | 0.0109 | 0.1040 | 0.10× | 950% |
+|🟡| np.trunc(a) (float64) | float64 | 10,000,000 | 14.6536 | 20.0106 | 0.73× | 137% |
 
 ### Reduction
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.amax (float32) | float32 | 1,000 | 0.0017 | 0.0008 | 0.47x |
-|🟠| np.amax (float32) | float32 | 100,000 | 0.0060 | 0.0138 | 2.30x |
-|🟡| np.amax (float32) | float32 | 10,000,000 | 1.4959 | 2.0328 | 1.36x |
-|✅| np.amax (float64) | float64 | 1,000 | 0.0017 | 0.0010 | 0.60x |
-|🟠| np.amax (float64) | float64 | 100,000 | 0.0102 | 0.0271 | 2.66x |
-|🟡| np.amax (float64) | float64 | 10,000,000 | 3.7656 | 4.2964 | 1.14x |
-|▫| np.amax (int16) | int16 | 1,000 | 0.0016 | 0.0008 | 0.49x |
-|✅| np.amax (int16) | int16 | 100,000 | 0.0030 | 0.0020 | 0.66x |
-|🟡| np.amax (int16) | int16 | 10,000,000 | 0.3013 | 0.3398 | 1.13x |
-|▫| np.amax (int32) | int32 | 1,000 | 0.0024 | 0.0007 | 0.27x |
-|✅| np.amax (int32) | int32 | 100,000 | 0.0042 | 0.0032 | 0.77x |
-|🟡| np.amax (int32) | int32 | 10,000,000 | 1.2020 | 1.2196 | 1.01x |
-|▫| np.amax (int64) | int64 | 1,000 | 0.0017 | 0.0008 | 0.47x |
-|✅| np.amax (int64) | int64 | 100,000 | 0.0091 | 0.0074 | 0.82x |
-|🟡| np.amax (int64) | int64 | 10,000,000 | 3.7203 | 3.8740 | 1.04x |
-|▫| np.amax (uint16) | uint16 | 1,000 | 0.0016 | 0.0008 | 0.49x |
-|✅| np.amax (uint16) | uint16 | 100,000 | 0.0031 | 0.0020 | 0.64x |
-|✅| np.amax (uint16) | uint16 | 10,000,000 | 0.3344 | 0.3302 | 0.99x |
-|▫| np.amax (uint32) | uint32 | 1,000 | 0.0016 | 0.0008 | 0.48x |
-|✅| np.amax (uint32) | uint32 | 100,000 | 0.0042 | 0.0032 | 0.77x |
-|✅| np.amax (uint32) | uint32 | 10,000,000 | 1.2650 | 1.2167 | 0.96x |
-|▫| np.amax (uint64) | uint64 | 1,000 | 0.0017 | 0.0008 | 0.45x |
-|✅| np.amax (uint64) | uint64 | 100,000 | 0.0120 | 0.0097 | 0.81x |
-|🟡| np.amax (uint64) | uint64 | 10,000,000 | 4.0728 | 4.0940 | 1.00x |
-|▫| np.amax (uint8) | uint8 | 1,000 | 0.0016 | 0.0006 | 0.40x |
-|✅| np.amax (uint8) | uint8 | 100,000 | 0.0024 | 0.0012 | 0.49x |
-|✅| np.amax (uint8) | uint8 | 10,000,000 | 0.1476 | 0.1468 | 0.99x |
-|✅| np.amin (float32) | float32 | 1,000 | 0.0016 | 0.0013 | 0.81x |
-|🔴| np.amin (float32) | float32 | 100,000 | 0.0066 | 0.0512 | 7.78x |
-|🟠| np.amin (float32) | float32 | 10,000,000 | 1.4832 | 5.2599 | 3.55x |
-|🟡| np.amin (float64) | float64 | 1,000 | 0.0017 | 0.0021 | 1.26x |
-|🔴| np.amin (float64) | float64 | 100,000 | 0.0102 | 0.0922 | 9.06x |
-|🟠| np.amin (float64) | float64 | 10,000,000 | 3.9366 | 10.3287 | 2.62x |
-|▫| np.amin (int16) | int16 | 1,000 | 0.0016 | 0.0006 | 0.40x |
-|✅| np.amin (int16) | int16 | 100,000 | 0.0036 | 0.0027 | 0.77x |
-|🟠| np.amin (int16) | int16 | 10,000,000 | 0.3248 | 0.7557 | 2.33x |
-|▫| np.amin (int32) | int32 | 1,000 | 0.0016 | 0.0008 | 0.48x |
-|🟡| np.amin (int32) | int32 | 100,000 | 0.0046 | 0.0048 | 1.04x |
-|🟠| np.amin (int32) | int32 | 10,000,000 | 1.2313 | 3.5990 | 2.92x |
-|✅| np.amin (int64) | int64 | 1,000 | 0.0017 | 0.0010 | 0.62x |
-|🟠| np.amin (int64) | int64 | 100,000 | 0.0121 | 0.0275 | 2.27x |
-|🟠| np.amin (int64) | int64 | 10,000,000 | 3.6693 | 8.4604 | 2.31x |
-|▫| np.amin (uint16) | uint16 | 1,000 | 0.0016 | 0.0008 | 0.52x |
-|✅| np.amin (uint16) | uint16 | 100,000 | 0.0034 | 0.0028 | 0.83x |
-|🟠| np.amin (uint16) | uint16 | 10,000,000 | 0.3120 | 0.7134 | 2.29x |
-|▫| np.amin (uint32) | uint32 | 1,000 | 0.0016 | 0.0008 | 0.49x |
-|🟡| np.amin (uint32) | uint32 | 100,000 | 0.0048 | 0.0056 | 1.17x |
-|🟠| np.amin (uint32) | uint32 | 10,000,000 | 1.3068 | 3.7324 | 2.86x |
-|✅| np.amin (uint64) | uint64 | 1,000 | 0.0017 | 0.0012 | 0.70x |
-|🟠| np.amin (uint64) | uint64 | 100,000 | 0.0122 | 0.0364 | 2.98x |
-|🟠| np.amin (uint64) | uint64 | 10,000,000 | 3.7867 | 8.9571 | 2.37x |
-|▫| np.amin (uint8) | uint8 | 1,000 | 0.0016 | 0.0007 | 0.44x |
-|✅| np.amin (uint8) | uint8 | 100,000 | 0.0026 | 0.0019 | 0.76x |
-|🟡| np.amin (uint8) | uint8 | 10,000,000 | 0.1496 | 0.2392 | 1.60x |
-|▫| np.argmax (float32) | float32 | 1,000 | 0.0009 | 0.0012 | 1.38x |
-|🔴| np.argmax (float32) | float32 | 100,000 | 0.0088 | 0.0562 | 6.42x |
-|🟠| np.argmax (float32) | float32 | 10,000,000 | 2.0610 | 5.8117 | 2.82x |
-|▫| np.argmax (float64) | float64 | 1,000 | 0.0010 | 0.0012 | 1.25x |
-|🟠| np.argmax (float64) | float64 | 100,000 | 0.0166 | 0.0566 | 3.42x |
-|🟡| np.argmax (float64) | float64 | 10,000,000 | 4.9803 | 6.9656 | 1.40x |
-|▫| np.argmax (int16) | int16 | 1,000 | 0.0009 | 0.0007 | 0.83x |
-|✅| np.argmax (int16) | int16 | 100,000 | 0.0034 | 0.0020 | 0.58x |
-|✅| np.argmax (int16) | int16 | 10,000,000 | 0.4154 | 0.3655 | 0.88x |
-|▫| np.argmax (int32) | int32 | 1,000 | 0.0009 | 0.0007 | 0.84x |
-|✅| np.argmax (int32) | int32 | 100,000 | 0.0055 | 0.0037 | 0.67x |
-|✅| np.argmax (int32) | int32 | 10,000,000 | 1.9769 | 1.4307 | 0.72x |
-|▫| np.argmax (int64) | int64 | 1,000 | 0.0009 | 0.0009 | 0.98x |
-|🟡| np.argmax (int64) | int64 | 100,000 | 0.0145 | 0.0282 | 1.95x |
-|🟡| np.argmax (int64) | int64 | 10,000,000 | 4.6597 | 4.7984 | 1.03x |
-|▫| np.argmax (uint16) | uint16 | 1,000 | 0.0009 | 0.0007 | 0.82x |
-|✅| np.argmax (uint16) | uint16 | 100,000 | 0.0050 | 0.0020 | 0.40x |
-|✅| np.argmax (uint16) | uint16 | 10,000,000 | 0.6705 | 0.3817 | 0.57x |
-|▫| np.argmax (uint32) | uint32 | 1,000 | 0.0009 | 0.0008 | 0.87x |
-|✅| np.argmax (uint32) | uint32 | 100,000 | 0.0088 | 0.0037 | 0.42x |
-|✅| np.argmax (uint32) | uint32 | 10,000,000 | 2.0347 | 1.3987 | 0.69x |
-|▫| np.argmax (uint64) | uint64 | 1,000 | 0.0010 | 0.0009 | 0.94x |
-|🟡| np.argmax (uint64) | uint64 | 100,000 | 0.0210 | 0.0330 | 1.57x |
-|🟡| np.argmax (uint64) | uint64 | 10,000,000 | 4.5903 | 5.1927 | 1.13x |
-|▫| np.argmax (uint8) | uint8 | 1,000 | 0.0010 | 0.0007 | 0.68x |
-|✅| np.argmax (uint8) | uint8 | 100,000 | 0.0031 | 0.0013 | 0.40x |
-|✅| np.argmax (uint8) | uint8 | 10,000,000 | 0.2231 | 0.1490 | 0.67x |
-|▫| np.argmin (float32) | float32 | 1,000 | 0.0009 | 0.0012 | 1.39x |
-|🔴| np.argmin (float32) | float32 | 100,000 | 0.0088 | 0.0566 | 6.39x |
-|🟠| np.argmin (float32) | float32 | 10,000,000 | 1.9838 | 5.7762 | 2.91x |
-|▫| np.argmin (float64) | float64 | 1,000 | 0.0010 | 0.0010 | 1.00x |
-|🟠| np.argmin (float64) | float64 | 100,000 | 0.0165 | 0.0571 | 3.45x |
-|🟡| np.argmin (float64) | float64 | 10,000,000 | 4.9495 | 6.8670 | 1.39x |
-|▫| np.argmin (int16) | int16 | 1,000 | 0.0009 | 0.0006 | 0.72x |
-|✅| np.argmin (int16) | int16 | 100,000 | 0.0039 | 0.0022 | 0.58x |
-|✅| np.argmin (int16) | int16 | 10,000,000 | 0.5638 | 0.3626 | 0.64x |
-|▫| np.argmin (int32) | int32 | 1,000 | 0.0009 | 0.0008 | 0.88x |
-|✅| np.argmin (int32) | int32 | 100,000 | 0.0054 | 0.0036 | 0.66x |
-|✅| np.argmin (int32) | int32 | 10,000,000 | 2.0515 | 1.3733 | 0.67x |
-|▫| np.argmin (int64) | int64 | 1,000 | 0.0009 | 0.0008 | 0.90x |
-|🟠| np.argmin (int64) | int64 | 100,000 | 0.0141 | 0.0284 | 2.00x |
-|✅| np.argmin (int64) | int64 | 10,000,000 | 4.9670 | 4.6915 | 0.94x |
-|▫| np.argmin (uint16) | uint16 | 1,000 | 0.0009 | 0.0007 | 0.85x |
-|✅| np.argmin (uint16) | uint16 | 100,000 | 0.0050 | 0.0021 | 0.43x |
-|✅| np.argmin (uint16) | uint16 | 10,000,000 | 0.5498 | 0.3746 | 0.68x |
-|▫| np.argmin (uint32) | uint32 | 1,000 | 0.0009 | 0.0006 | 0.72x |
-|✅| np.argmin (uint32) | uint32 | 100,000 | 0.0087 | 0.0036 | 0.41x |
-|✅| np.argmin (uint32) | uint32 | 10,000,000 | 2.0280 | 1.2602 | 0.62x |
-|▫| np.argmin (uint64) | uint64 | 1,000 | 0.0010 | 0.0010 | 0.98x |
-|🟡| np.argmin (uint64) | uint64 | 100,000 | 0.0170 | 0.0331 | 1.95x |
-|🟡| np.argmin (uint64) | uint64 | 10,000,000 | 4.4945 | 5.1462 | 1.15x |
-|▫| np.argmin (uint8) | uint8 | 1,000 | 0.0009 | 0.0008 | 0.83x |
-|✅| np.argmin (uint8) | uint8 | 100,000 | 0.0030 | 0.0012 | 0.40x |
-|✅| np.argmin (uint8) | uint8 | 10,000,000 | 0.2171 | 0.1481 | 0.68x |
-|🔴| np.cumprod(a) (float32) | float32 | 1,000 | 0.0037 | 0.0190 | 5.17x |
-|🟡| np.cumprod(a) (float32) | float32 | 100,000 | 0.1714 | 0.2774 | 1.62x |
-|🟡| np.cumprod(a) (float32) | float32 | 10,000,000 | 22.7044 | 23.9230 | 1.05x |
-|🟠| np.cumprod(a) (float64) | float64 | 1,000 | 0.0043 | 0.0169 | 3.94x |
-|🟠| np.cumprod(a) (float64) | float64 | 100,000 | 0.1718 | 0.4216 | 2.45x |
-|🟡| np.cumprod(a) (float64) | float64 | 10,000,000 | 25.3609 | 39.2889 | 1.55x |
-|▫| np.mean (float32) | float32 | 1,000 | 0.0037 | 0.0008 | 0.21x |
-|✅| np.mean (float32) | float32 | 100,000 | 0.0190 | 0.0032 | 0.17x |
-|✅| np.mean (float32) | float32 | 10,000,000 | 3.0599 | 1.0998 | 0.36x |
-|▫| np.mean (float64) | float64 | 1,000 | 0.0024 | 0.0008 | 0.34x |
-|✅| np.mean (float64) | float64 | 100,000 | 0.0176 | 0.0040 | 0.23x |
-|✅| np.mean (float64) | float64 | 10,000,000 | 5.0231 | 2.9177 | 0.58x |
-|⚪| np.mean (int16) | int16 | 1,000 | 0.0030 | - | - |
-|⚪| np.mean (int16) | int16 | 100,000 | 0.0520 | - | - |
-|⚪| np.mean (int16) | int16 | 10,000,000 | 5.1284 | - | - |
-|✅| np.mean (int32) | int32 | 1,000 | 0.0030 | 0.0012 | 0.40x |
-|✅| np.mean (int32) | int32 | 100,000 | 0.0465 | 0.0191 | 0.41x |
-|✅| np.mean (int32) | int32 | 10,000,000 | 4.5937 | 2.8233 | 0.61x |
-|✅| np.mean (int64) | int64 | 1,000 | 0.0029 | 0.0014 | 0.48x |
-|✅| np.mean (int64) | int64 | 100,000 | 0.0338 | 0.0045 | 0.13x |
-|✅| np.mean (int64) | int64 | 10,000,000 | 6.3172 | 2.9911 | 0.47x |
-|⚪| np.mean (uint16) | uint16 | 1,000 | 0.0030 | - | - |
-|⚪| np.mean (uint16) | uint16 | 100,000 | 0.0549 | - | - |
-|⚪| np.mean (uint16) | uint16 | 10,000,000 | 5.0823 | - | - |
-|⚪| np.mean (uint32) | uint32 | 1,000 | 0.0029 | - | - |
-|⚪| np.mean (uint32) | uint32 | 100,000 | 0.0399 | - | - |
-|⚪| np.mean (uint32) | uint32 | 10,000,000 | 4.7566 | - | - |
-|⚪| np.mean (uint64) | uint64 | 1,000 | 0.0030 | - | - |
-|⚪| np.mean (uint64) | uint64 | 100,000 | 0.0519 | - | - |
-|⚪| np.mean (uint64) | uint64 | 10,000,000 | 7.8053 | - | - |
-|⚪| np.mean (uint8) | uint8 | 1,000 | 0.0030 | - | - |
-|⚪| np.mean (uint8) | uint8 | 100,000 | 0.0544 | - | - |
-|⚪| np.mean (uint8) | uint8 | 10,000,000 | 5.0084 | - | - |
-|✅| np.nanmax(a) (float32) | float32 | 1,000 | 0.0029 | 0.0013 | 0.43x |
-|🔴| np.nanmax(a) (float32) | float32 | 100,000 | 0.0078 | 0.0518 | 6.60x |
-|🟠| np.nanmax(a) (float32) | float32 | 10,000,000 | 1.4629 | 3.3143 | 2.27x |
-|✅| np.nanmax(a) (float64) | float64 | 1,000 | 0.0029 | 0.0019 | 0.65x |
-|🔴| np.nanmax(a) (float64) | float64 | 100,000 | 0.0114 | 0.1022 | 8.93x |
-|🟡| np.nanmax(a) (float64) | float64 | 10,000,000 | 4.0560 | 6.9618 | 1.72x |
-|✅| np.nanmean(a) (float32) | float32 | 1,000 | 0.0100 | 0.0018 | 0.18x |
-|✅| np.nanmean(a) (float32) | float32 | 100,000 | 0.0732 | 0.0725 | 0.99x |
-|✅| np.nanmean(a) (float32) | float32 | 10,000,000 | 19.8275 | 4.1943 | 0.21x |
-|✅| np.nanmean(a) (float64) | float64 | 1,000 | 0.0085 | 0.0019 | 0.22x |
-|✅| np.nanmean(a) (float64) | float64 | 100,000 | 0.3215 | 0.0745 | 0.23x |
-|✅| np.nanmean(a) (float64) | float64 | 10,000,000 | 33.4663 | 5.6865 | 0.17x |
-|✅| np.nanmedian(a) (float32) | float32 | 1,000 | 0.0131 | 0.0037 | 0.28x |
-|🟡| np.nanmedian(a) (float32) | float32 | 100,000 | 0.4984 | 0.9645 | 1.94x |
-|🟡| np.nanmedian(a) (float32) | float32 | 10,000,000 | 77.8307 | 80.5666 | 1.03x |
-|✅| np.nanmedian(a) (float64) | float64 | 1,000 | 0.0116 | 0.0039 | 0.33x |
-|🟠| np.nanmedian(a) (float64) | float64 | 100,000 | 0.4838 | 0.9947 | 2.06x |
-|✅| np.nanmedian(a) (float64) | float64 | 10,000,000 | 93.1146 | 92.3006 | 0.99x |
-|✅| np.nanmin(a) (float32) | float32 | 1,000 | 0.0029 | 0.0012 | 0.42x |
-|🔴| np.nanmin(a) (float32) | float32 | 100,000 | 0.0071 | 0.0523 | 7.38x |
-|🟠| np.nanmin(a) (float32) | float32 | 10,000,000 | 1.6131 | 3.3612 | 2.08x |
-|✅| np.nanmin(a) (float64) | float64 | 1,000 | 0.0029 | 0.0019 | 0.66x |
-|🔴| np.nanmin(a) (float64) | float64 | 100,000 | 0.0115 | 0.1021 | 8.85x |
-|🟡| np.nanmin(a) (float64) | float64 | 10,000,000 | 4.2492 | 6.9814 | 1.64x |
-|✅| np.nanpercentile(a, 50) (float32) | float32 | 1,000 | 0.0259 | 0.0037 | 0.14x |
-|🟡| np.nanpercentile(a, 50) (float32) | float32 | 100,000 | 0.7090 | 0.9670 | 1.36x |
-|🟡| np.nanpercentile(a, 50) (float32) | float32 | 10,000,000 | 52.5157 | 80.7603 | 1.54x |
-|✅| np.nanpercentile(a, 50) (float64) | float64 | 1,000 | 0.0276 | 0.0038 | 0.14x |
-|🟡| np.nanpercentile(a, 50) (float64) | float64 | 100,000 | 0.7817 | 1.0271 | 1.31x |
-|🟡| np.nanpercentile(a, 50) (float64) | float64 | 10,000,000 | 66.2596 | 90.8813 | 1.37x |
-|✅| np.nanprod(a) (float32) | float32 | 1,000 | 0.0050 | 0.0014 | 0.28x |
-|✅| np.nanprod(a) (float32) | float32 | 100,000 | 0.0959 | 0.0162 | 0.17x |
-|✅| np.nanprod(a) (float32) | float32 | 10,000,000 | 18.5148 | 1.9040 | 0.10x |
-|✅| np.nanprod(a) (float64) | float64 | 1,000 | 0.0050 | 0.0010 | 0.20x |
-|✅| np.nanprod(a) (float64) | float64 | 100,000 | 0.2867 | 0.0319 | 0.11x |
-|✅| np.nanprod(a) (float64) | float64 | 10,000,000 | 27.1782 | 4.5263 | 0.17x |
-|✅| np.nanquantile(a, 0.5) (float32) | float32 | 1,000 | 0.0251 | 0.0037 | 0.15x |
-|🟡| np.nanquantile(a, 0.5) (float32) | float32 | 100,000 | 0.7374 | 0.9637 | 1.31x |
-|🟡| np.nanquantile(a, 0.5) (float32) | float32 | 10,000,000 | 66.8036 | 80.4490 | 1.20x |
-|✅| np.nanquantile(a, 0.5) (float64) | float64 | 1,000 | 0.0283 | 0.0037 | 0.13x |
-|🟡| np.nanquantile(a, 0.5) (float64) | float64 | 100,000 | 0.7495 | 0.9853 | 1.31x |
-|🟡| np.nanquantile(a, 0.5) (float64) | float64 | 10,000,000 | 64.7940 | 90.9806 | 1.40x |
-|✅| np.nanstd(a) (float32) | float32 | 1,000 | 0.0203 | 0.0025 | 0.12x |
-|✅| np.nanstd(a) (float32) | float32 | 100,000 | 0.1635 | 0.1517 | 0.93x |
-|✅| np.nanstd(a) (float32) | float32 | 10,000,000 | 32.7545 | 9.2835 | 0.28x |
-|✅| np.nanstd(a) (float64) | float64 | 1,000 | 0.0183 | 0.0024 | 0.13x |
-|✅| np.nanstd(a) (float64) | float64 | 100,000 | 0.4565 | 0.1477 | 0.32x |
-|✅| np.nanstd(a) (float64) | float64 | 10,000,000 | 52.9156 | 11.4366 | 0.22x |
-|✅| np.nansum(a) (float32) | float32 | 1,000 | 0.0037 | 0.0013 | 0.34x |
-|✅| np.nansum(a) (float32) | float32 | 100,000 | 0.0324 | 0.0096 | 0.30x |
-|✅| np.nansum(a) (float32) | float32 | 10,000,000 | 14.3488 | 1.4880 | 0.10x |
-|✅| np.nansum(a) (float64) | float64 | 1,000 | 0.0037 | 0.0014 | 0.37x |
-|✅| np.nansum(a) (float64) | float64 | 100,000 | 0.2425 | 0.0192 | 0.08x |
-|✅| np.nansum(a) (float64) | float64 | 10,000,000 | 25.5404 | 3.6530 | 0.14x |
-|✅| np.nanvar(a) (float32) | float32 | 1,000 | 0.0195 | 0.0025 | 0.13x |
-|✅| np.nanvar(a) (float32) | float32 | 100,000 | 0.1731 | 0.1550 | 0.90x |
-|✅| np.nanvar(a) (float32) | float32 | 10,000,000 | 33.3949 | 9.2884 | 0.28x |
-|✅| np.nanvar(a) (float64) | float64 | 1,000 | 0.0175 | 0.0024 | 0.14x |
-|✅| np.nanvar(a) (float64) | float64 | 100,000 | 0.4367 | 0.1528 | 0.35x |
-|✅| np.nanvar(a) (float64) | float64 | 10,000,000 | 56.9159 | 11.7838 | 0.21x |
-|✅| np.std (float32) | float32 | 1,000 | 0.0082 | 0.0011 | 0.13x |
-|✅| np.std (float32) | float32 | 100,000 | 0.0480 | 0.0097 | 0.20x |
-|✅| np.std (float32) | float32 | 10,000,000 | 16.7538 | 2.5973 | 0.15x |
-|▫| np.std (float64) | float64 | 1,000 | 0.0067 | 0.0009 | 0.13x |
-|✅| np.std (float64) | float64 | 100,000 | 0.0578 | 0.0190 | 0.33x |
-|✅| np.std (float64) | float64 | 10,000,000 | 32.8482 | 6.7593 | 0.21x |
-|▫| np.sum (float32) | float32 | 1,000 | 0.0018 | 0.0008 | 0.42x |
-|✅| np.sum (float32) | float32 | 100,000 | 0.0160 | 0.0032 | 0.20x |
-|✅| np.sum (float32) | float32 | 10,000,000 | 2.9675 | 1.0551 | 0.36x |
-|▫| np.sum (float64) | float64 | 1,000 | 0.0017 | 0.0008 | 0.44x |
-|🔴| np.sum (float64) | float64 | 100,000 | 0.0176 | 0.2085 | 11.83x |
-|✅| np.sum (float64) | float64 | 10,000,000 | 5.0434 | 3.4958 | 0.69x |
-|▫| np.sum (int16) | int16 | 1,000 | 0.0022 | 0.0008 | 0.37x |
-|✅| np.sum (int16) | int16 | 100,000 | 0.0334 | 0.0189 | 0.56x |
-|✅| np.sum (int16) | int16 | 10,000,000 | 3.3717 | 1.9534 | 0.58x |
-|▫| np.sum (int32) | int32 | 1,000 | 0.0024 | 0.0008 | 0.33x |
-|✅| np.sum (int32) | int32 | 100,000 | 0.0352 | 0.0190 | 0.54x |
-|✅| np.sum (int32) | int32 | 10,000,000 | 4.4795 | 2.7217 | 0.61x |
-|▫| np.sum (int64) | int64 | 1,000 | 0.0017 | 0.0008 | 0.44x |
-|✅| np.sum (int64) | int64 | 100,000 | 0.0199 | 0.0066 | 0.33x |
-|✅| np.sum (int64) | int64 | 10,000,000 | 4.5897 | 2.7890 | 0.61x |
-|▫| np.sum (uint16) | uint16 | 1,000 | 0.0021 | 0.0008 | 0.39x |
-|✅| np.sum (uint16) | uint16 | 100,000 | 0.0343 | 0.0189 | 0.55x |
-|✅| np.sum (uint16) | uint16 | 10,000,000 | 3.3164 | 1.9407 | 0.58x |
-|▫| np.sum (uint32) | uint32 | 1,000 | 0.0021 | 0.0008 | 0.38x |
-|✅| np.sum (uint32) | uint32 | 100,000 | 0.0330 | 0.0190 | 0.57x |
-|✅| np.sum (uint32) | uint32 | 10,000,000 | 4.2657 | 2.6585 | 0.62x |
-|▫| np.sum (uint64) | uint64 | 1,000 | 0.0017 | 0.0007 | 0.42x |
-|✅| np.sum (uint64) | uint64 | 100,000 | 0.0189 | 0.0062 | 0.33x |
-|✅| np.sum (uint64) | uint64 | 10,000,000 | 4.9134 | 2.8027 | 0.57x |
-|▫| np.sum (uint8) | uint8 | 1,000 | 0.0022 | 0.0008 | 0.36x |
-|✅| np.sum (uint8) | uint8 | 100,000 | 0.0357 | 0.0186 | 0.52x |
-|✅| np.sum (uint8) | uint8 | 10,000,000 | 3.2143 | 1.8386 | 0.57x |
-|▫| np.sum axis=0 (float32) | float32 | 1,000 | 0.0019 | 0.0007 | 0.36x |
-|✅| np.sum axis=0 (float32) | float32 | 100,000 | 0.0082 | 0.0049 | 0.59x |
-|✅| np.sum axis=0 (float32) | float32 | 10,000,000 | 1.5596 | 1.3524 | 0.87x |
-|▫| np.sum axis=0 (float64) | float64 | 1,000 | 0.0019 | 0.0007 | 0.37x |
-|✅| np.sum axis=0 (float64) | float64 | 100,000 | 0.0139 | 0.0099 | 0.71x |
-|✅| np.sum axis=0 (float64) | float64 | 10,000,000 | 3.8823 | 3.2508 | 0.84x |
-|🟡| np.sum axis=0 (int16) | int16 | 1,000 | 0.0024 | 0.0033 | 1.38x |
-|🔴| np.sum axis=0 (int16) | int16 | 100,000 | 0.0467 | 0.4029 | 8.62x |
-|🔴| np.sum axis=0 (int16) | int16 | 10,000,000 | 4.6351 | 58.1349 | 12.54x |
-|▫| np.sum axis=0 (int32) | int32 | 1,000 | 0.0025 | 0.0008 | 0.32x |
-|✅| np.sum axis=0 (int32) | int32 | 100,000 | 0.0502 | 0.0122 | 0.24x |
-|🟡| np.sum axis=0 (int32) | int32 | 10,000,000 | 5.4902 | 6.2016 | 1.13x |
-|▫| np.sum axis=0 (int64) | int64 | 1,000 | 0.0020 | 0.0007 | 0.37x |
-|✅| np.sum axis=0 (int64) | int64 | 100,000 | 0.0273 | 0.0103 | 0.38x |
-|✅| np.sum axis=0 (int64) | int64 | 10,000,000 | 5.3570 | 3.2692 | 0.61x |
-|🟡| np.sum axis=0 (uint16) | uint16 | 1,000 | 0.0024 | 0.0048 | 1.99x |
-|🔴| np.sum axis=0 (uint16) | uint16 | 100,000 | 0.0472 | 0.5051 | 10.70x |
-|🔴| np.sum axis=0 (uint16) | uint16 | 10,000,000 | 4.6196 | 71.6938 | 15.52x |
-|▫| np.sum axis=0 (uint32) | uint32 | 1,000 | 0.0024 | 0.0008 | 0.34x |
-|✅| np.sum axis=0 (uint32) | uint32 | 100,000 | 0.0508 | 0.0123 | 0.24x |
-|🟡| np.sum axis=0 (uint32) | uint32 | 10,000,000 | 5.5936 | 5.9806 | 1.07x |
-|▫| np.sum axis=0 (uint64) | uint64 | 1,000 | 0.0020 | 0.0008 | 0.39x |
-|✅| np.sum axis=0 (uint64) | uint64 | 100,000 | 0.0274 | 0.0103 | 0.38x |
-|✅| np.sum axis=0 (uint64) | uint64 | 10,000,000 | 5.6359 | 3.2594 | 0.58x |
-|🟡| np.sum axis=0 (uint8) | uint8 | 1,000 | 0.0025 | 0.0048 | 1.89x |
-|🔴| np.sum axis=0 (uint8) | uint8 | 100,000 | 0.0495 | 0.4962 | 10.03x |
-|🔴| np.sum axis=0 (uint8) | uint8 | 10,000,000 | 4.4068 | 55.3512 | 12.56x |
-|▫| np.sum axis=1 (float32) | float32 | 1,000 | 0.0019 | 0.0008 | 0.42x |
-|✅| np.sum axis=1 (float32) | float32 | 100,000 | 0.0161 | 0.0033 | 0.21x |
-|✅| np.sum axis=1 (float32) | float32 | 10,000,000 | 3.1946 | 1.0783 | 0.34x |
-|▫| np.sum axis=1 (float64) | float64 | 1,000 | 0.0019 | 0.0008 | 0.41x |
-|✅| np.sum axis=1 (float64) | float64 | 100,000 | 0.0184 | 0.0069 | 0.38x |
-|✅| np.sum axis=1 (float64) | float64 | 10,000,000 | 5.3940 | 2.9397 | 0.55x |
-|🟡| np.sum axis=1 (int16) | int16 | 1,000 | 0.0023 | 0.0034 | 1.44x |
-|🔴| np.sum axis=1 (int16) | int16 | 100,000 | 0.0372 | 0.4069 | 10.95x |
-|🔴| np.sum axis=1 (int16) | int16 | 10,000,000 | 3.3824 | 40.8465 | 12.08x |
-|▫| np.sum axis=1 (int32) | int32 | 1,000 | 0.0025 | 0.0009 | 0.37x |
-|✅| np.sum axis=1 (int32) | int32 | 100,000 | 0.0397 | 0.0160 | 0.40x |
-|✅| np.sum axis=1 (int32) | int32 | 10,000,000 | 4.2000 | 1.8994 | 0.45x |
-|▫| np.sum axis=1 (int64) | int64 | 1,000 | 0.0019 | 0.0008 | 0.43x |
-|✅| np.sum axis=1 (int64) | int64 | 100,000 | 0.0172 | 0.0074 | 0.43x |
-|✅| np.sum axis=1 (int64) | int64 | 10,000,000 | 4.5772 | 2.9075 | 0.64x |
-|🟠| np.sum axis=1 (uint16) | uint16 | 1,000 | 0.0023 | 0.0048 | 2.05x |
-|🔴| np.sum axis=1 (uint16) | uint16 | 100,000 | 0.0402 | 0.4973 | 12.38x |
-|🔴| np.sum axis=1 (uint16) | uint16 | 10,000,000 | 3.3650 | 49.8962 | 14.83x |
-|✅| np.sum axis=1 (uint32) | uint32 | 1,000 | 0.0023 | 0.0011 | 0.46x |
-|🟡| np.sum axis=1 (uint32) | uint32 | 100,000 | 0.0382 | 0.0402 | 1.05x |
-|✅| np.sum axis=1 (uint32) | uint32 | 10,000,000 | 4.3360 | 4.0859 | 0.94x |
-|▫| np.sum axis=1 (uint64) | uint64 | 1,000 | 0.0019 | 0.0007 | 0.37x |
-|✅| np.sum axis=1 (uint64) | uint64 | 100,000 | 0.0182 | 0.0074 | 0.41x |
-|✅| np.sum axis=1 (uint64) | uint64 | 10,000,000 | 5.0466 | 2.9711 | 0.59x |
-|🟡| np.sum axis=1 (uint8) | uint8 | 1,000 | 0.0025 | 0.0048 | 1.92x |
-|🔴| np.sum axis=1 (uint8) | uint8 | 100,000 | 0.0372 | 0.5005 | 13.45x |
-|🔴| np.sum axis=1 (uint8) | uint8 | 10,000,000 | 3.1152 | 49.7407 | 15.97x |
-|▫| np.var (float32) | float32 | 1,000 | 0.0078 | 0.0008 | 0.10x |
-|✅| np.var (float32) | float32 | 100,000 | 0.0477 | 0.0096 | 0.20x |
-|✅| np.var (float32) | float32 | 10,000,000 | 16.9566 | 2.6033 | 0.15x |
-|▫| np.var (float64) | float64 | 1,000 | 0.0063 | 0.0008 | 0.12x |
-|✅| np.var (float64) | float64 | 100,000 | 0.0557 | 0.0190 | 0.34x |
-|✅| np.var (float64) | float64 | 10,000,000 | 31.7478 | 6.7135 | 0.21x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.amax (float32) | float32 | 1,000 | 0.0017 | 0.0008 | 2.14× | 47% |
+|🟠| np.amax (float32) | float32 | 100,000 | 0.0060 | 0.0138 | 0.43× | 230% |
+|🟡| np.amax (float32) | float32 | 10,000,000 | 1.4959 | 2.0328 | 0.74× | 136% |
+|✅| np.amax (float64) | float64 | 1,000 | 0.0017 | 0.0010 | 1.65× | 60% |
+|🟠| np.amax (float64) | float64 | 100,000 | 0.0102 | 0.0271 | 0.38× | 266% |
+|🟡| np.amax (float64) | float64 | 10,000,000 | 3.7656 | 4.2964 | 0.88× | 114% |
+|▫| np.amax (int16) | int16 | 1,000 | 0.0016 | 0.0008 | 2.05× | 49% |
+|✅| np.amax (int16) | int16 | 100,000 | 0.0030 | 0.0020 | 1.51× | 66% |
+|🟡| np.amax (int16) | int16 | 10,000,000 | 0.3013 | 0.3398 | 0.89× | 113% |
+|▫| np.amax (int32) | int32 | 1,000 | 0.0024 | 0.0007 | 3.65× | 27% |
+|✅| np.amax (int32) | int32 | 100,000 | 0.0042 | 0.0032 | 1.31× | 76% |
+|🟡| np.amax (int32) | int32 | 10,000,000 | 1.2020 | 1.2196 | 0.99× | 102% |
+|▫| np.amax (int64) | int64 | 1,000 | 0.0017 | 0.0008 | 2.14× | 47% |
+|✅| np.amax (int64) | int64 | 100,000 | 0.0091 | 0.0074 | 1.22× | 82% |
+|🟡| np.amax (int64) | int64 | 10,000,000 | 3.7203 | 3.8740 | 0.96× | 104% |
+|▫| np.amax (uint16) | uint16 | 1,000 | 0.0016 | 0.0008 | 2.02× | 49% |
+|✅| np.amax (uint16) | uint16 | 100,000 | 0.0031 | 0.0020 | 1.55× | 64% |
+|✅| np.amax (uint16) | uint16 | 10,000,000 | 0.3344 | 0.3302 | 1.01× | 99% |
+|▫| np.amax (uint32) | uint32 | 1,000 | 0.0016 | 0.0008 | 2.07× | 48% |
+|✅| np.amax (uint32) | uint32 | 100,000 | 0.0042 | 0.0032 | 1.29× | 77% |
+|✅| np.amax (uint32) | uint32 | 10,000,000 | 1.2650 | 1.2167 | 1.04× | 96% |
+|▫| np.amax (uint64) | uint64 | 1,000 | 0.0017 | 0.0008 | 2.20× | 45% |
+|✅| np.amax (uint64) | uint64 | 100,000 | 0.0120 | 0.0097 | 1.23× | 81% |
+|🟡| np.amax (uint64) | uint64 | 10,000,000 | 4.0728 | 4.0940 | 0.99× | 100% |
+|▫| np.amax (uint8) | uint8 | 1,000 | 0.0016 | 0.0006 | 2.50× | 40% |
+|✅| np.amax (uint8) | uint8 | 100,000 | 0.0024 | 0.0012 | 2.04× | 49% |
+|✅| np.amax (uint8) | uint8 | 10,000,000 | 0.1476 | 0.1468 | 1.00× | 100% |
+|✅| np.amin (float32) | float32 | 1,000 | 0.0016 | 0.0013 | 1.24× | 81% |
+|🔴| np.amin (float32) | float32 | 100,000 | 0.0066 | 0.0512 | 0.13× | 778% |
+|🟠| np.amin (float32) | float32 | 10,000,000 | 1.4832 | 5.2599 | 0.28× | 355% |
+|🟡| np.amin (float64) | float64 | 1,000 | 0.0017 | 0.0021 | 0.79× | 126% |
+|🔴| np.amin (float64) | float64 | 100,000 | 0.0102 | 0.0922 | 0.11× | 906% |
+|🟠| np.amin (float64) | float64 | 10,000,000 | 3.9366 | 10.3287 | 0.38× | 262% |
+|▫| np.amin (int16) | int16 | 1,000 | 0.0016 | 0.0006 | 2.48× | 40% |
+|✅| np.amin (int16) | int16 | 100,000 | 0.0036 | 0.0027 | 1.30× | 77% |
+|🟠| np.amin (int16) | int16 | 10,000,000 | 0.3248 | 0.7557 | 0.43× | 233% |
+|▫| np.amin (int32) | int32 | 1,000 | 0.0016 | 0.0008 | 2.06× | 48% |
+|🟡| np.amin (int32) | int32 | 100,000 | 0.0046 | 0.0048 | 0.96× | 104% |
+|🟠| np.amin (int32) | int32 | 10,000,000 | 1.2313 | 3.5990 | 0.34× | 292% |
+|✅| np.amin (int64) | int64 | 1,000 | 0.0017 | 0.0010 | 1.61× | 62% |
+|🟠| np.amin (int64) | int64 | 100,000 | 0.0121 | 0.0275 | 0.44× | 227% |
+|🟠| np.amin (int64) | int64 | 10,000,000 | 3.6693 | 8.4604 | 0.43× | 231% |
+|▫| np.amin (uint16) | uint16 | 1,000 | 0.0016 | 0.0008 | 1.92× | 52% |
+|✅| np.amin (uint16) | uint16 | 100,000 | 0.0034 | 0.0028 | 1.20× | 83% |
+|🟠| np.amin (uint16) | uint16 | 10,000,000 | 0.3120 | 0.7134 | 0.44× | 229% |
+|▫| np.amin (uint32) | uint32 | 1,000 | 0.0016 | 0.0008 | 2.04× | 49% |
+|🟡| np.amin (uint32) | uint32 | 100,000 | 0.0048 | 0.0056 | 0.85× | 117% |
+|🟠| np.amin (uint32) | uint32 | 10,000,000 | 1.3068 | 3.7324 | 0.35× | 286% |
+|✅| np.amin (uint64) | uint64 | 1,000 | 0.0017 | 0.0012 | 1.42× | 70% |
+|🟠| np.amin (uint64) | uint64 | 100,000 | 0.0122 | 0.0364 | 0.34× | 298% |
+|🟠| np.amin (uint64) | uint64 | 10,000,000 | 3.7867 | 8.9571 | 0.42× | 236% |
+|▫| np.amin (uint8) | uint8 | 1,000 | 0.0016 | 0.0007 | 2.26× | 44% |
+|✅| np.amin (uint8) | uint8 | 100,000 | 0.0026 | 0.0019 | 1.32× | 76% |
+|🟡| np.amin (uint8) | uint8 | 10,000,000 | 0.1496 | 0.2392 | 0.62× | 160% |
+|▫| np.argmax (float32) | float32 | 1,000 | 0.0009 | 0.0012 | 0.72× | 138% |
+|🔴| np.argmax (float32) | float32 | 100,000 | 0.0088 | 0.0562 | 0.16× | 642% |
+|🟠| np.argmax (float32) | float32 | 10,000,000 | 2.0610 | 5.8117 | 0.35× | 282% |
+|▫| np.argmax (float64) | float64 | 1,000 | 0.0010 | 0.0012 | 0.80× | 124% |
+|🟠| np.argmax (float64) | float64 | 100,000 | 0.0166 | 0.0566 | 0.29× | 342% |
+|🟡| np.argmax (float64) | float64 | 10,000,000 | 4.9803 | 6.9656 | 0.71× | 140% |
+|▫| np.argmax (int16) | int16 | 1,000 | 0.0009 | 0.0007 | 1.21× | 83% |
+|✅| np.argmax (int16) | int16 | 100,000 | 0.0034 | 0.0020 | 1.72× | 58% |
+|✅| np.argmax (int16) | int16 | 10,000,000 | 0.4154 | 0.3655 | 1.14× | 88% |
+|▫| np.argmax (int32) | int32 | 1,000 | 0.0009 | 0.0007 | 1.18× | 84% |
+|✅| np.argmax (int32) | int32 | 100,000 | 0.0055 | 0.0037 | 1.50× | 66% |
+|✅| np.argmax (int32) | int32 | 10,000,000 | 1.9769 | 1.4307 | 1.38× | 72% |
+|▫| np.argmax (int64) | int64 | 1,000 | 0.0009 | 0.0009 | 1.02× | 98% |
+|🟡| np.argmax (int64) | int64 | 100,000 | 0.0145 | 0.0282 | 0.51× | 195% |
+|🟡| np.argmax (int64) | int64 | 10,000,000 | 4.6597 | 4.7984 | 0.97× | 103% |
+|▫| np.argmax (uint16) | uint16 | 1,000 | 0.0009 | 0.0007 | 1.23× | 82% |
+|✅| np.argmax (uint16) | uint16 | 100,000 | 0.0050 | 0.0020 | 2.52× | 40% |
+|✅| np.argmax (uint16) | uint16 | 10,000,000 | 0.6705 | 0.3817 | 1.76× | 57% |
+|▫| np.argmax (uint32) | uint32 | 1,000 | 0.0009 | 0.0008 | 1.15× | 87% |
+|✅| np.argmax (uint32) | uint32 | 100,000 | 0.0088 | 0.0037 | 2.40× | 42% |
+|✅| np.argmax (uint32) | uint32 | 10,000,000 | 2.0347 | 1.3987 | 1.46× | 69% |
+|▫| np.argmax (uint64) | uint64 | 1,000 | 0.0010 | 0.0009 | 1.06× | 94% |
+|🟡| np.argmax (uint64) | uint64 | 100,000 | 0.0210 | 0.0330 | 0.64× | 157% |
+|🟡| np.argmax (uint64) | uint64 | 10,000,000 | 4.5903 | 5.1927 | 0.88× | 113% |
+|▫| np.argmax (uint8) | uint8 | 1,000 | 0.0010 | 0.0007 | 1.46× | 68% |
+|✅| np.argmax (uint8) | uint8 | 100,000 | 0.0031 | 0.0013 | 2.48× | 40% |
+|✅| np.argmax (uint8) | uint8 | 10,000,000 | 0.2231 | 0.1490 | 1.50× | 67% |
+|▫| np.argmin (float32) | float32 | 1,000 | 0.0009 | 0.0012 | 0.72× | 139% |
+|🔴| np.argmin (float32) | float32 | 100,000 | 0.0088 | 0.0566 | 0.16× | 640% |
+|🟠| np.argmin (float32) | float32 | 10,000,000 | 1.9838 | 5.7762 | 0.34× | 291% |
+|▫| np.argmin (float64) | float64 | 1,000 | 0.0010 | 0.0010 | 1.00× | 100% |
+|🟠| np.argmin (float64) | float64 | 100,000 | 0.0165 | 0.0571 | 0.29× | 345% |
+|🟡| np.argmin (float64) | float64 | 10,000,000 | 4.9495 | 6.8670 | 0.72× | 139% |
+|▫| np.argmin (int16) | int16 | 1,000 | 0.0009 | 0.0006 | 1.40× | 72% |
+|✅| np.argmin (int16) | int16 | 100,000 | 0.0039 | 0.0022 | 1.73× | 58% |
+|✅| np.argmin (int16) | int16 | 10,000,000 | 0.5638 | 0.3626 | 1.55× | 64% |
+|▫| np.argmin (int32) | int32 | 1,000 | 0.0009 | 0.0008 | 1.13× | 88% |
+|✅| np.argmin (int32) | int32 | 100,000 | 0.0054 | 0.0036 | 1.52× | 66% |
+|✅| np.argmin (int32) | int32 | 10,000,000 | 2.0515 | 1.3733 | 1.49× | 67% |
+|▫| np.argmin (int64) | int64 | 1,000 | 0.0009 | 0.0008 | 1.11× | 90% |
+|🟠| np.argmin (int64) | int64 | 100,000 | 0.0141 | 0.0284 | 0.50× | 200% |
+|✅| np.argmin (int64) | int64 | 10,000,000 | 4.9670 | 4.6915 | 1.06× | 94% |
+|▫| np.argmin (uint16) | uint16 | 1,000 | 0.0009 | 0.0007 | 1.18× | 85% |
+|✅| np.argmin (uint16) | uint16 | 100,000 | 0.0050 | 0.0021 | 2.32× | 43% |
+|✅| np.argmin (uint16) | uint16 | 10,000,000 | 0.5498 | 0.3746 | 1.47× | 68% |
+|▫| np.argmin (uint32) | uint32 | 1,000 | 0.0009 | 0.0006 | 1.39× | 72% |
+|✅| np.argmin (uint32) | uint32 | 100,000 | 0.0087 | 0.0036 | 2.44× | 41% |
+|✅| np.argmin (uint32) | uint32 | 10,000,000 | 2.0280 | 1.2602 | 1.61× | 62% |
+|▫| np.argmin (uint64) | uint64 | 1,000 | 0.0010 | 0.0010 | 1.02× | 98% |
+|🟡| np.argmin (uint64) | uint64 | 100,000 | 0.0170 | 0.0331 | 0.51× | 195% |
+|🟡| np.argmin (uint64) | uint64 | 10,000,000 | 4.4945 | 5.1462 | 0.87× | 114% |
+|▫| np.argmin (uint8) | uint8 | 1,000 | 0.0009 | 0.0008 | 1.20× | 83% |
+|✅| np.argmin (uint8) | uint8 | 100,000 | 0.0030 | 0.0012 | 2.49× | 40% |
+|✅| np.argmin (uint8) | uint8 | 10,000,000 | 0.2171 | 0.1481 | 1.47× | 68% |
+|🔴| np.cumprod(a) (float32) | float32 | 1,000 | 0.0037 | 0.0190 | 0.19× | 517% |
+|🟡| np.cumprod(a) (float32) | float32 | 100,000 | 0.1714 | 0.2774 | 0.62× | 162% |
+|🟡| np.cumprod(a) (float32) | float32 | 10,000,000 | 22.7044 | 23.9230 | 0.95× | 105% |
+|🟠| np.cumprod(a) (float64) | float64 | 1,000 | 0.0043 | 0.0169 | 0.25× | 394% |
+|🟠| np.cumprod(a) (float64) | float64 | 100,000 | 0.1718 | 0.4216 | 0.41× | 245% |
+|🟡| np.cumprod(a) (float64) | float64 | 10,000,000 | 25.3609 | 39.2889 | 0.65× | 155% |
+|▫| np.mean (float32) | float32 | 1,000 | 0.0037 | 0.0008 | 4.87× | 21% |
+|✅| np.mean (float32) | float32 | 100,000 | 0.0190 | 0.0032 | 5.91× | 17% |
+|✅| np.mean (float32) | float32 | 10,000,000 | 3.0599 | 1.0998 | 2.78× | 36% |
+|▫| np.mean (float64) | float64 | 1,000 | 0.0024 | 0.0008 | 2.96× | 34% |
+|✅| np.mean (float64) | float64 | 100,000 | 0.0176 | 0.0040 | 4.39× | 23% |
+|✅| np.mean (float64) | float64 | 10,000,000 | 5.0231 | 2.9177 | 1.72× | 58% |
+|⚪| np.mean (int16) | int16 | 1,000 | 0.0030 | - | - | - |
+|⚪| np.mean (int16) | int16 | 100,000 | 0.0520 | - | - | - |
+|⚪| np.mean (int16) | int16 | 10,000,000 | 5.1284 | - | - | - |
+|✅| np.mean (int32) | int32 | 1,000 | 0.0030 | 0.0012 | 2.52× | 40% |
+|✅| np.mean (int32) | int32 | 100,000 | 0.0465 | 0.0191 | 2.44× | 41% |
+|✅| np.mean (int32) | int32 | 10,000,000 | 4.5937 | 2.8233 | 1.63× | 62% |
+|✅| np.mean (int64) | int64 | 1,000 | 0.0029 | 0.0014 | 2.06× | 48% |
+|✅| np.mean (int64) | int64 | 100,000 | 0.0338 | 0.0045 | 7.47× | 13% |
+|✅| np.mean (int64) | int64 | 10,000,000 | 6.3172 | 2.9911 | 2.11× | 47% |
+|⚪| np.mean (uint16) | uint16 | 1,000 | 0.0030 | - | - | - |
+|⚪| np.mean (uint16) | uint16 | 100,000 | 0.0549 | - | - | - |
+|⚪| np.mean (uint16) | uint16 | 10,000,000 | 5.0823 | - | - | - |
+|⚪| np.mean (uint32) | uint32 | 1,000 | 0.0029 | - | - | - |
+|⚪| np.mean (uint32) | uint32 | 100,000 | 0.0399 | - | - | - |
+|⚪| np.mean (uint32) | uint32 | 10,000,000 | 4.7566 | - | - | - |
+|⚪| np.mean (uint64) | uint64 | 1,000 | 0.0030 | - | - | - |
+|⚪| np.mean (uint64) | uint64 | 100,000 | 0.0519 | - | - | - |
+|⚪| np.mean (uint64) | uint64 | 10,000,000 | 7.8053 | - | - | - |
+|⚪| np.mean (uint8) | uint8 | 1,000 | 0.0030 | - | - | - |
+|⚪| np.mean (uint8) | uint8 | 100,000 | 0.0544 | - | - | - |
+|⚪| np.mean (uint8) | uint8 | 10,000,000 | 5.0084 | - | - | - |
+|✅| np.nanmax(a) (float32) | float32 | 1,000 | 0.0029 | 0.0013 | 2.33× | 43% |
+|🔴| np.nanmax(a) (float32) | float32 | 100,000 | 0.0078 | 0.0518 | 0.15× | 660% |
+|🟠| np.nanmax(a) (float32) | float32 | 10,000,000 | 1.4629 | 3.3143 | 0.44× | 226% |
+|✅| np.nanmax(a) (float64) | float64 | 1,000 | 0.0029 | 0.0019 | 1.54× | 65% |
+|🔴| np.nanmax(a) (float64) | float64 | 100,000 | 0.0114 | 0.1022 | 0.11× | 893% |
+|🟡| np.nanmax(a) (float64) | float64 | 10,000,000 | 4.0560 | 6.9618 | 0.58× | 172% |
+|✅| np.nanmean(a) (float32) | float32 | 1,000 | 0.0100 | 0.0018 | 5.46× | 18% |
+|✅| np.nanmean(a) (float32) | float32 | 100,000 | 0.0732 | 0.0725 | 1.01× | 99% |
+|✅| np.nanmean(a) (float32) | float32 | 10,000,000 | 19.8275 | 4.1943 | 4.73× | 21% |
+|✅| np.nanmean(a) (float64) | float64 | 1,000 | 0.0085 | 0.0019 | 4.46× | 22% |
+|✅| np.nanmean(a) (float64) | float64 | 100,000 | 0.3215 | 0.0745 | 4.31× | 23% |
+|✅| np.nanmean(a) (float64) | float64 | 10,000,000 | 33.4663 | 5.6865 | 5.88× | 17% |
+|✅| np.nanmedian(a) (float32) | float32 | 1,000 | 0.0131 | 0.0037 | 3.58× | 28% |
+|🟡| np.nanmedian(a) (float32) | float32 | 100,000 | 0.4984 | 0.9645 | 0.52× | 194% |
+|🟡| np.nanmedian(a) (float32) | float32 | 10,000,000 | 77.8307 | 80.5666 | 0.97× | 104% |
+|✅| np.nanmedian(a) (float64) | float64 | 1,000 | 0.0116 | 0.0039 | 3.00× | 33% |
+|🟠| np.nanmedian(a) (float64) | float64 | 100,000 | 0.4838 | 0.9947 | 0.49× | 206% |
+|✅| np.nanmedian(a) (float64) | float64 | 10,000,000 | 93.1146 | 92.3006 | 1.01× | 99% |
+|✅| np.nanmin(a) (float32) | float32 | 1,000 | 0.0029 | 0.0012 | 2.35× | 42% |
+|🔴| np.nanmin(a) (float32) | float32 | 100,000 | 0.0071 | 0.0523 | 0.14× | 738% |
+|🟠| np.nanmin(a) (float32) | float32 | 10,000,000 | 1.6131 | 3.3612 | 0.48× | 208% |
+|✅| np.nanmin(a) (float64) | float64 | 1,000 | 0.0029 | 0.0019 | 1.51× | 66% |
+|🔴| np.nanmin(a) (float64) | float64 | 100,000 | 0.0115 | 0.1021 | 0.11× | 885% |
+|🟡| np.nanmin(a) (float64) | float64 | 10,000,000 | 4.2492 | 6.9814 | 0.61× | 164% |
+|✅| np.nanpercentile(a, 50) (float32) | float32 | 1,000 | 0.0259 | 0.0037 | 7.06× | 14% |
+|🟡| np.nanpercentile(a, 50) (float32) | float32 | 100,000 | 0.7090 | 0.9670 | 0.73× | 136% |
+|🟡| np.nanpercentile(a, 50) (float32) | float32 | 10,000,000 | 52.5157 | 80.7603 | 0.65× | 154% |
+|✅| np.nanpercentile(a, 50) (float64) | float64 | 1,000 | 0.0276 | 0.0038 | 7.24× | 14% |
+|🟡| np.nanpercentile(a, 50) (float64) | float64 | 100,000 | 0.7817 | 1.0271 | 0.76× | 131% |
+|🟡| np.nanpercentile(a, 50) (float64) | float64 | 10,000,000 | 66.2596 | 90.8813 | 0.73× | 137% |
+|✅| np.nanprod(a) (float32) | float32 | 1,000 | 0.0050 | 0.0014 | 3.55× | 28% |
+|✅| np.nanprod(a) (float32) | float32 | 100,000 | 0.0959 | 0.0162 | 5.92× | 17% |
+|✅| np.nanprod(a) (float32) | float32 | 10,000,000 | 18.5148 | 1.9040 | 9.72× | 10% |
+|✅| np.nanprod(a) (float64) | float64 | 1,000 | 0.0050 | 0.0010 | 4.92× | 20% |
+|✅| np.nanprod(a) (float64) | float64 | 100,000 | 0.2867 | 0.0319 | 8.98× | 11% |
+|✅| np.nanprod(a) (float64) | float64 | 10,000,000 | 27.1782 | 4.5263 | 6.00× | 17% |
+|✅| np.nanquantile(a, 0.5) (float32) | float32 | 1,000 | 0.0251 | 0.0037 | 6.84× | 15% |
+|🟡| np.nanquantile(a, 0.5) (float32) | float32 | 100,000 | 0.7374 | 0.9637 | 0.77× | 131% |
+|🟡| np.nanquantile(a, 0.5) (float32) | float32 | 10,000,000 | 66.8036 | 80.4490 | 0.83× | 120% |
+|✅| np.nanquantile(a, 0.5) (float64) | float64 | 1,000 | 0.0283 | 0.0037 | 7.71× | 13% |
+|🟡| np.nanquantile(a, 0.5) (float64) | float64 | 100,000 | 0.7495 | 0.9853 | 0.76× | 132% |
+|🟡| np.nanquantile(a, 0.5) (float64) | float64 | 10,000,000 | 64.7940 | 90.9806 | 0.71× | 140% |
+|✅| np.nanstd(a) (float32) | float32 | 1,000 | 0.0203 | 0.0025 | 8.08× | 12% |
+|✅| np.nanstd(a) (float32) | float32 | 100,000 | 0.1635 | 0.1517 | 1.08× | 93% |
+|✅| np.nanstd(a) (float32) | float32 | 10,000,000 | 32.7545 | 9.2835 | 3.53× | 28% |
+|✅| np.nanstd(a) (float64) | float64 | 1,000 | 0.0183 | 0.0024 | 7.63× | 13% |
+|✅| np.nanstd(a) (float64) | float64 | 100,000 | 0.4565 | 0.1477 | 3.09× | 32% |
+|✅| np.nanstd(a) (float64) | float64 | 10,000,000 | 52.9156 | 11.4366 | 4.63× | 22% |
+|✅| np.nansum(a) (float32) | float32 | 1,000 | 0.0037 | 0.0013 | 2.95× | 34% |
+|✅| np.nansum(a) (float32) | float32 | 100,000 | 0.0324 | 0.0096 | 3.38× | 30% |
+|✅| np.nansum(a) (float32) | float32 | 10,000,000 | 14.3488 | 1.4880 | 9.64× | 10% |
+|✅| np.nansum(a) (float64) | float64 | 1,000 | 0.0037 | 0.0014 | 2.69× | 37% |
+|✅| np.nansum(a) (float64) | float64 | 100,000 | 0.2425 | 0.0192 | 12.65× | 8% |
+|✅| np.nansum(a) (float64) | float64 | 10,000,000 | 25.5404 | 3.6530 | 6.99× | 14% |
+|✅| np.nanvar(a) (float32) | float32 | 1,000 | 0.0195 | 0.0025 | 7.69× | 13% |
+|✅| np.nanvar(a) (float32) | float32 | 100,000 | 0.1731 | 0.1550 | 1.12× | 90% |
+|✅| np.nanvar(a) (float32) | float32 | 10,000,000 | 33.3949 | 9.2884 | 3.60× | 28% |
+|✅| np.nanvar(a) (float64) | float64 | 1,000 | 0.0175 | 0.0024 | 7.32× | 14% |
+|✅| np.nanvar(a) (float64) | float64 | 100,000 | 0.4367 | 0.1528 | 2.86× | 35% |
+|✅| np.nanvar(a) (float64) | float64 | 10,000,000 | 56.9159 | 11.7838 | 4.83× | 21% |
+|✅| np.std (float32) | float32 | 1,000 | 0.0082 | 0.0011 | 7.73× | 13% |
+|✅| np.std (float32) | float32 | 100,000 | 0.0480 | 0.0097 | 4.96× | 20% |
+|✅| np.std (float32) | float32 | 10,000,000 | 16.7538 | 2.5973 | 6.45× | 16% |
+|▫| np.std (float64) | float64 | 1,000 | 0.0067 | 0.0009 | 7.80× | 13% |
+|✅| np.std (float64) | float64 | 100,000 | 0.0578 | 0.0190 | 3.04× | 33% |
+|✅| np.std (float64) | float64 | 10,000,000 | 32.8482 | 6.7593 | 4.86× | 21% |
+|▫| np.sum (float32) | float32 | 1,000 | 0.0018 | 0.0008 | 2.38× | 42% |
+|✅| np.sum (float32) | float32 | 100,000 | 0.0160 | 0.0032 | 5.07× | 20% |
+|✅| np.sum (float32) | float32 | 10,000,000 | 2.9675 | 1.0551 | 2.81× | 36% |
+|▫| np.sum (float64) | float64 | 1,000 | 0.0017 | 0.0008 | 2.26× | 44% |
+|🔴| np.sum (float64) | float64 | 100,000 | 0.0176 | 0.2085 | 0.085× | 12× |
+|✅| np.sum (float64) | float64 | 10,000,000 | 5.0434 | 3.4958 | 1.44× | 69% |
+|▫| np.sum (int16) | int16 | 1,000 | 0.0022 | 0.0008 | 2.69× | 37% |
+|✅| np.sum (int16) | int16 | 100,000 | 0.0334 | 0.0189 | 1.77× | 56% |
+|✅| np.sum (int16) | int16 | 10,000,000 | 3.3717 | 1.9534 | 1.73× | 58% |
+|▫| np.sum (int32) | int32 | 1,000 | 0.0024 | 0.0008 | 3.04× | 33% |
+|✅| np.sum (int32) | int32 | 100,000 | 0.0352 | 0.0190 | 1.85× | 54% |
+|✅| np.sum (int32) | int32 | 10,000,000 | 4.4795 | 2.7217 | 1.65× | 61% |
+|▫| np.sum (int64) | int64 | 1,000 | 0.0017 | 0.0008 | 2.29× | 44% |
+|✅| np.sum (int64) | int64 | 100,000 | 0.0199 | 0.0066 | 3.02× | 33% |
+|✅| np.sum (int64) | int64 | 10,000,000 | 4.5897 | 2.7890 | 1.65× | 61% |
+|▫| np.sum (uint16) | uint16 | 1,000 | 0.0021 | 0.0008 | 2.59× | 39% |
+|✅| np.sum (uint16) | uint16 | 100,000 | 0.0343 | 0.0189 | 1.82× | 55% |
+|✅| np.sum (uint16) | uint16 | 10,000,000 | 3.3164 | 1.9407 | 1.71× | 58% |
+|▫| np.sum (uint32) | uint32 | 1,000 | 0.0021 | 0.0008 | 2.67× | 38% |
+|✅| np.sum (uint32) | uint32 | 100,000 | 0.0330 | 0.0190 | 1.74× | 58% |
+|✅| np.sum (uint32) | uint32 | 10,000,000 | 4.2657 | 2.6585 | 1.60× | 62% |
+|▫| np.sum (uint64) | uint64 | 1,000 | 0.0017 | 0.0007 | 2.35× | 42% |
+|✅| np.sum (uint64) | uint64 | 100,000 | 0.0189 | 0.0062 | 3.03× | 33% |
+|✅| np.sum (uint64) | uint64 | 10,000,000 | 4.9134 | 2.8027 | 1.75× | 57% |
+|▫| np.sum (uint8) | uint8 | 1,000 | 0.0022 | 0.0008 | 2.75× | 36% |
+|✅| np.sum (uint8) | uint8 | 100,000 | 0.0357 | 0.0186 | 1.92× | 52% |
+|✅| np.sum (uint8) | uint8 | 10,000,000 | 3.2143 | 1.8386 | 1.75× | 57% |
+|▫| np.sum axis=0 (float32) | float32 | 1,000 | 0.0019 | 0.0007 | 2.76× | 36% |
+|✅| np.sum axis=0 (float32) | float32 | 100,000 | 0.0082 | 0.0049 | 1.68× | 60% |
+|✅| np.sum axis=0 (float32) | float32 | 10,000,000 | 1.5596 | 1.3524 | 1.15× | 87% |
+|▫| np.sum axis=0 (float64) | float64 | 1,000 | 0.0019 | 0.0007 | 2.69× | 37% |
+|✅| np.sum axis=0 (float64) | float64 | 100,000 | 0.0139 | 0.0099 | 1.41× | 71% |
+|✅| np.sum axis=0 (float64) | float64 | 10,000,000 | 3.8823 | 3.2508 | 1.19× | 84% |
+|🟡| np.sum axis=0 (int16) | int16 | 1,000 | 0.0024 | 0.0033 | 0.72× | 138% |
+|🔴| np.sum axis=0 (int16) | int16 | 100,000 | 0.0467 | 0.4029 | 0.12× | 862% |
+|🔴| np.sum axis=0 (int16) | int16 | 10,000,000 | 4.6351 | 58.1349 | 0.080× | 13× |
+|▫| np.sum axis=0 (int32) | int32 | 1,000 | 0.0025 | 0.0008 | 3.18× | 32% |
+|✅| np.sum axis=0 (int32) | int32 | 100,000 | 0.0502 | 0.0122 | 4.10× | 24% |
+|🟡| np.sum axis=0 (int32) | int32 | 10,000,000 | 5.4902 | 6.2016 | 0.89× | 113% |
+|▫| np.sum axis=0 (int64) | int64 | 1,000 | 0.0020 | 0.0007 | 2.71× | 37% |
+|✅| np.sum axis=0 (int64) | int64 | 100,000 | 0.0273 | 0.0103 | 2.66× | 38% |
+|✅| np.sum axis=0 (int64) | int64 | 10,000,000 | 5.3570 | 3.2692 | 1.64× | 61% |
+|🟡| np.sum axis=0 (uint16) | uint16 | 1,000 | 0.0024 | 0.0048 | 0.50× | 198% |
+|🔴| np.sum axis=0 (uint16) | uint16 | 100,000 | 0.0472 | 0.5051 | 0.093× | 11× |
+|🔴| np.sum axis=0 (uint16) | uint16 | 10,000,000 | 4.6196 | 71.6938 | 0.064× | 16× |
+|▫| np.sum axis=0 (uint32) | uint32 | 1,000 | 0.0024 | 0.0008 | 2.97× | 34% |
+|✅| np.sum axis=0 (uint32) | uint32 | 100,000 | 0.0508 | 0.0123 | 4.13× | 24% |
+|🟡| np.sum axis=0 (uint32) | uint32 | 10,000,000 | 5.5936 | 5.9806 | 0.94× | 107% |
+|▫| np.sum axis=0 (uint64) | uint64 | 1,000 | 0.0020 | 0.0008 | 2.55× | 39% |
+|✅| np.sum axis=0 (uint64) | uint64 | 100,000 | 0.0274 | 0.0103 | 2.65× | 38% |
+|✅| np.sum axis=0 (uint64) | uint64 | 10,000,000 | 5.6359 | 3.2594 | 1.73× | 58% |
+|🟡| np.sum axis=0 (uint8) | uint8 | 1,000 | 0.0025 | 0.0048 | 0.53× | 189% |
+|🔴| np.sum axis=0 (uint8) | uint8 | 100,000 | 0.0495 | 0.4962 | 0.10× | 10× |
+|🔴| np.sum axis=0 (uint8) | uint8 | 10,000,000 | 4.4068 | 55.3512 | 0.080× | 13× |
+|▫| np.sum axis=1 (float32) | float32 | 1,000 | 0.0019 | 0.0008 | 2.37× | 42% |
+|✅| np.sum axis=1 (float32) | float32 | 100,000 | 0.0161 | 0.0033 | 4.86× | 21% |
+|✅| np.sum axis=1 (float32) | float32 | 10,000,000 | 3.1946 | 1.0783 | 2.96× | 34% |
+|▫| np.sum axis=1 (float64) | float64 | 1,000 | 0.0019 | 0.0008 | 2.44× | 41% |
+|✅| np.sum axis=1 (float64) | float64 | 100,000 | 0.0184 | 0.0069 | 2.66× | 38% |
+|✅| np.sum axis=1 (float64) | float64 | 10,000,000 | 5.3940 | 2.9397 | 1.83× | 54% |
+|🟡| np.sum axis=1 (int16) | int16 | 1,000 | 0.0023 | 0.0034 | 0.70× | 144% |
+|🔴| np.sum axis=1 (int16) | int16 | 100,000 | 0.0372 | 0.4069 | 0.091× | 11× |
+|🔴| np.sum axis=1 (int16) | int16 | 10,000,000 | 3.3824 | 40.8465 | 0.083× | 12× |
+|▫| np.sum axis=1 (int32) | int32 | 1,000 | 0.0025 | 0.0009 | 2.73× | 37% |
+|✅| np.sum axis=1 (int32) | int32 | 100,000 | 0.0397 | 0.0160 | 2.48× | 40% |
+|✅| np.sum axis=1 (int32) | int32 | 10,000,000 | 4.2000 | 1.8994 | 2.21× | 45% |
+|▫| np.sum axis=1 (int64) | int64 | 1,000 | 0.0019 | 0.0008 | 2.35× | 43% |
+|✅| np.sum axis=1 (int64) | int64 | 100,000 | 0.0172 | 0.0074 | 2.32× | 43% |
+|✅| np.sum axis=1 (int64) | int64 | 10,000,000 | 4.5772 | 2.9075 | 1.57× | 64% |
+|🟠| np.sum axis=1 (uint16) | uint16 | 1,000 | 0.0023 | 0.0048 | 0.49× | 205% |
+|🔴| np.sum axis=1 (uint16) | uint16 | 100,000 | 0.0402 | 0.4973 | 0.081× | 12× |
+|🔴| np.sum axis=1 (uint16) | uint16 | 10,000,000 | 3.3650 | 49.8962 | 0.067× | 15× |
+|✅| np.sum axis=1 (uint32) | uint32 | 1,000 | 0.0023 | 0.0011 | 2.17× | 46% |
+|🟡| np.sum axis=1 (uint32) | uint32 | 100,000 | 0.0382 | 0.0402 | 0.95× | 105% |
+|✅| np.sum axis=1 (uint32) | uint32 | 10,000,000 | 4.3360 | 4.0859 | 1.06× | 94% |
+|▫| np.sum axis=1 (uint64) | uint64 | 1,000 | 0.0019 | 0.0007 | 2.69× | 37% |
+|✅| np.sum axis=1 (uint64) | uint64 | 100,000 | 0.0182 | 0.0074 | 2.45× | 41% |
+|✅| np.sum axis=1 (uint64) | uint64 | 10,000,000 | 5.0466 | 2.9711 | 1.70× | 59% |
+|🟡| np.sum axis=1 (uint8) | uint8 | 1,000 | 0.0025 | 0.0048 | 0.52× | 192% |
+|🔴| np.sum axis=1 (uint8) | uint8 | 100,000 | 0.0372 | 0.5005 | 0.074× | 13× |
+|🔴| np.sum axis=1 (uint8) | uint8 | 10,000,000 | 3.1152 | 49.7407 | 0.063× | 16× |
+|▫| np.var (float32) | float32 | 1,000 | 0.0078 | 0.0008 | 10.12× | 10% |
+|✅| np.var (float32) | float32 | 100,000 | 0.0477 | 0.0096 | 4.98× | 20% |
+|✅| np.var (float32) | float32 | 10,000,000 | 16.9566 | 2.6033 | 6.51× | 15% |
+|▫| np.var (float64) | float64 | 1,000 | 0.0063 | 0.0008 | 8.28× | 12% |
+|✅| np.var (float64) | float64 | 100,000 | 0.0557 | 0.0190 | 2.94× | 34% |
+|✅| np.var (float64) | float64 | 10,000,000 | 31.7478 | 6.7135 | 4.73× | 21% |
 
 ### Broadcasting
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|⚪| matrix + col_vector (N,M)+(N,1) | float64 | 1,000 | 0.0015 | - | - |
-|⚪| matrix + col_vector (N,M)+(N,1) | float64 | 100,000 | 0.0300 | - | - |
-|✅| matrix + col_vector (N,M)+(N,1) | float64 | 10,000,000 | 16.7419 | 14.4534 | 0.86x |
-|⚪| matrix + row_vector (N,M)+(M,) | float64 | 1,000 | 0.0011 | - | - |
-|⚪| matrix + row_vector (N,M)+(M,) | float64 | 100,000 | 0.0286 | - | - |
-|✅| matrix + row_vector (N,M)+(M,) | float64 | 10,000,000 | 16.9725 | 13.4835 | 0.79x |
-|⚪| matrix + scalar | float64 | 1,000 | 0.0007 | - | - |
-|⚪| matrix + scalar | float64 | 100,000 | 0.0132 | - | - |
-|✅| matrix + scalar | float64 | 10,000,000 | 17.0427 | 13.6337 | 0.80x |
-|⚪| np.broadcast_to(row, (N,M)) | float64 | 1,000 | 0.0018 | - | - |
-|⚪| np.broadcast_to(row, (N,M)) | float64 | 100,000 | 0.0018 | - | - |
-|▫| np.broadcast_to(row, (N,M)) | float64 | 10,000,000 | 0.0019 | 0.0006 | 0.31x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|⚪| matrix + col_vector (N,M)+(N,1) | float64 | 1,000 | 0.0015 | - | - | - |
+|⚪| matrix + col_vector (N,M)+(N,1) | float64 | 100,000 | 0.0300 | - | - | - |
+|✅| matrix + col_vector (N,M)+(N,1) | float64 | 10,000,000 | 16.7419 | 14.4534 | 1.16× | 86% |
+|⚪| matrix + row_vector (N,M)+(M,) | float64 | 1,000 | 0.0011 | - | - | - |
+|⚪| matrix + row_vector (N,M)+(M,) | float64 | 100,000 | 0.0286 | - | - | - |
+|✅| matrix + row_vector (N,M)+(M,) | float64 | 10,000,000 | 16.9725 | 13.4835 | 1.26× | 79% |
+|⚪| matrix + scalar | float64 | 1,000 | 0.0007 | - | - | - |
+|⚪| matrix + scalar | float64 | 100,000 | 0.0132 | - | - | - |
+|✅| matrix + scalar | float64 | 10,000,000 | 17.0427 | 13.6337 | 1.25× | 80% |
+|⚪| np.broadcast_to(row, (N,M)) | float64 | 1,000 | 0.0018 | - | - | - |
+|⚪| np.broadcast_to(row, (N,M)) | float64 | 100,000 | 0.0018 | - | - | - |
+|▫| np.broadcast_to(row, (N,M)) | float64 | 10,000,000 | 0.0019 | 0.0006 | 3.24× | 31% |
 
 ### Creation
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.copy (float32) | float32 | 1,000 | 0.0006 | 0.0097 | 16.27x |
-|🟠| np.copy (float32) | float32 | 100,000 | 0.0060 | 0.0179 | 2.99x |
-|✅| np.copy (float32) | float32 | 10,000,000 | 9.3184 | 5.4432 | 0.58x |
-|▫| np.copy (float64) | float64 | 1,000 | 0.0006 | 0.0201 | 33.78x |
-|🟠| np.copy (float64) | float64 | 100,000 | 0.0114 | 0.0325 | 2.85x |
-|✅| np.copy (float64) | float64 | 10,000,000 | 18.5103 | 11.0427 | 0.60x |
-|▫| np.copy (int32) | int32 | 1,000 | 0.0006 | 0.0087 | 14.88x |
-|🟠| np.copy (int32) | int32 | 100,000 | 0.0061 | 0.0233 | 3.83x |
-|✅| np.copy (int32) | int32 | 10,000,000 | 6.6283 | 5.4291 | 0.82x |
-|▫| np.copy (int64) | int64 | 1,000 | 0.0006 | 0.0192 | 31.76x |
-|🟠| np.copy (int64) | int64 | 100,000 | 0.0114 | 0.0358 | 3.14x |
-|✅| np.copy (int64) | int64 | 10,000,000 | 18.5224 | 11.1762 | 0.60x |
-|▫| np.empty (float32) | float32 | 1,000 | 0.0003 | 0.0076 | 23.03x |
-|▫| np.empty (float32) | float32 | 100,000 | 0.0003 | 0.0049 | 14.79x |
-|✅| np.empty (float32) | float32 | 10,000,000 | 0.0196 | 0.0077 | 0.39x |
-|▫| np.empty (float64) | float64 | 1,000 | 0.0003 | 0.0083 | 27.82x |
-|▫| np.empty (float64) | float64 | 100,000 | 0.0003 | 0.0061 | 21.20x |
-|⚪| np.empty (float64) | float64 | 10,000,000 | 0.0095 | - | - |
-|▫| np.empty (int32) | int32 | 1,000 | 0.0003 | 0.0076 | 23.08x |
-|▫| np.empty (int32) | int32 | 100,000 | 0.0003 | 0.0126 | 40.73x |
-|✅| np.empty (int32) | int32 | 10,000,000 | 0.0106 | 0.0066 | 0.62x |
-|▫| np.empty (int64) | int64 | 1,000 | 0.0003 | 0.0101 | 30.74x |
-|▫| np.empty (int64) | int64 | 100,000 | 0.0003 | 0.0092 | 28.37x |
-|⚪| np.empty (int64) | int64 | 10,000,000 | 0.0209 | - | - |
-|🔴| np.full (float32) | float32 | 1,000 | 0.0010 | 0.0070 | 6.91x |
-|🟠| np.full (float32) | float32 | 100,000 | 0.0054 | 0.0176 | 3.27x |
-|✅| np.full (float32) | float32 | 10,000,000 | 9.6279 | 5.7904 | 0.60x |
-|▫| np.full (float64) | float64 | 1,000 | 0.0009 | 0.0122 | 13.84x |
-|🟠| np.full (float64) | float64 | 100,000 | 0.0097 | 0.0300 | 3.09x |
-|✅| np.full (float64) | float64 | 10,000,000 | 18.7710 | 10.9587 | 0.58x |
-|▫| np.full (int32) | int32 | 1,000 | 0.0009 | 0.0083 | 9.27x |
-|🟠| np.full (int32) | int32 | 100,000 | 0.0054 | 0.0204 | 3.77x |
-|✅| np.full (int32) | int32 | 10,000,000 | 7.5837 | 5.6049 | 0.74x |
-|▫| np.full (int64) | int64 | 1,000 | 0.0009 | 0.0128 | 14.83x |
-|🟠| np.full (int64) | int64 | 100,000 | 0.0098 | 0.0300 | 3.05x |
-|✅| np.full (int64) | int64 | 10,000,000 | 18.6308 | 10.6743 | 0.57x |
-|▫| np.ones (float32) | float32 | 1,000 | 0.0010 | 0.0089 | 8.99x |
-|🟠| np.ones (float32) | float32 | 100,000 | 0.0052 | 0.0173 | 3.31x |
-|✅| np.ones (float32) | float32 | 10,000,000 | 9.3400 | 5.8107 | 0.62x |
-|▫| np.ones (float64) | float64 | 1,000 | 0.0009 | 0.0141 | 16.33x |
-|🟠| np.ones (float64) | float64 | 100,000 | 0.0097 | 0.0291 | 2.99x |
-|✅| np.ones (float64) | float64 | 10,000,000 | 18.3874 | 10.9115 | 0.59x |
-|▫| np.ones (int32) | int32 | 1,000 | 0.0009 | 0.0089 | 10.05x |
-|🟠| np.ones (int32) | int32 | 100,000 | 0.0054 | 0.0186 | 3.42x |
-|✅| np.ones (int32) | int32 | 10,000,000 | 7.4068 | 5.6583 | 0.76x |
-|▫| np.ones (int64) | int64 | 1,000 | 0.0008 | 0.0152 | 17.96x |
-|🟠| np.ones (int64) | int64 | 100,000 | 0.0097 | 0.0297 | 3.04x |
-|✅| np.ones (int64) | int64 | 10,000,000 | 15.1807 | 10.6316 | 0.70x |
-|▫| np.zeros (float32) | float32 | 1,000 | 0.0004 | 0.0084 | 19.65x |
-|🟠| np.zeros (float32) | float32 | 100,000 | 0.0048 | 0.0176 | 3.63x |
-|🔴| np.zeros (float32) | float32 | 10,000,000 | 0.0170 | 5.6725 | 334.03x |
-|▫| np.zeros (float64) | float64 | 1,000 | 0.0004 | 0.0097 | 26.85x |
-|🟠| np.zeros (float64) | float64 | 100,000 | 0.0094 | 0.0305 | 3.25x |
-|🔴| np.zeros (float64) | float64 | 10,000,000 | 0.0212 | 10.7550 | 507.65x |
-|▫| np.zeros (int32) | int32 | 1,000 | 0.0004 | 0.0081 | 20.60x |
-|🟠| np.zeros (int32) | int32 | 100,000 | 0.0051 | 0.0186 | 3.67x |
-|🔴| np.zeros (int32) | int32 | 10,000,000 | 0.0108 | 5.6225 | 518.20x |
-|▫| np.zeros (int64) | int64 | 1,000 | 0.0004 | 0.0094 | 24.68x |
-|🟠| np.zeros (int64) | int64 | 100,000 | 0.0093 | 0.0303 | 3.25x |
-|🔴| np.zeros (int64) | int64 | 10,000,000 | 0.0122 | 10.7466 | 879.57x |
-|🔴| np.zeros_like (float32) | float32 | 1,000 | 0.0010 | 0.0093 | 8.88x |
-|🟠| np.zeros_like (float32) | float32 | 100,000 | 0.0054 | 0.0173 | 3.20x |
-|✅| np.zeros_like (float32) | float32 | 10,000,000 | 9.3810 | 5.6115 | 0.60x |
-|▫| np.zeros_like (float64) | float64 | 1,000 | 0.0010 | 0.0087 | 8.66x |
-|🟠| np.zeros_like (float64) | float64 | 100,000 | 0.0099 | 0.0311 | 3.15x |
-|✅| np.zeros_like (float64) | float64 | 10,000,000 | 18.4492 | 10.7073 | 0.58x |
-|🟠| np.zeros_like (int32) | int32 | 1,000 | 0.0012 | 0.0056 | 4.55x |
-|🟠| np.zeros_like (int32) | int32 | 100,000 | 0.0054 | 0.0179 | 3.29x |
-|✅| np.zeros_like (int32) | int32 | 10,000,000 | 7.6603 | 5.6188 | 0.73x |
-|🔴| np.zeros_like (int64) | int64 | 1,000 | 0.0010 | 0.0086 | 8.19x |
-|🟠| np.zeros_like (int64) | int64 | 100,000 | 0.0102 | 0.0316 | 3.11x |
-|✅| np.zeros_like (int64) | int64 | 10,000,000 | 19.3508 | 10.7454 | 0.56x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.copy (float32) | float32 | 1,000 | 0.0006 | 0.0097 | 0.061× | 16× |
+|🟠| np.copy (float32) | float32 | 100,000 | 0.0060 | 0.0179 | 0.34× | 299% |
+|✅| np.copy (float32) | float32 | 10,000,000 | 9.3184 | 5.4432 | 1.71× | 58% |
+|▫| np.copy (float64) | float64 | 1,000 | 0.0006 | 0.0201 | 0.030× | 34× |
+|🟠| np.copy (float64) | float64 | 100,000 | 0.0114 | 0.0325 | 0.35× | 285% |
+|✅| np.copy (float64) | float64 | 10,000,000 | 18.5103 | 11.0427 | 1.68× | 60% |
+|▫| np.copy (int32) | int32 | 1,000 | 0.0006 | 0.0087 | 0.067× | 15× |
+|🟠| np.copy (int32) | int32 | 100,000 | 0.0061 | 0.0233 | 0.26× | 383% |
+|✅| np.copy (int32) | int32 | 10,000,000 | 6.6283 | 5.4291 | 1.22× | 82% |
+|▫| np.copy (int64) | int64 | 1,000 | 0.0006 | 0.0192 | 0.031× | 32× |
+|🟠| np.copy (int64) | int64 | 100,000 | 0.0114 | 0.0358 | 0.32× | 314% |
+|✅| np.copy (int64) | int64 | 10,000,000 | 18.5224 | 11.1762 | 1.66× | 60% |
+|▫| np.empty (float32) | float32 | 1,000 | 0.0003 | 0.0076 | 0.043× | 23× |
+|▫| np.empty (float32) | float32 | 100,000 | 0.0003 | 0.0049 | 0.068× | 15× |
+|✅| np.empty (float32) | float32 | 10,000,000 | 0.0196 | 0.0077 | 2.55× | 39% |
+|▫| np.empty (float64) | float64 | 1,000 | 0.0003 | 0.0083 | 0.036× | 28× |
+|▫| np.empty (float64) | float64 | 100,000 | 0.0003 | 0.0061 | 0.047× | 21× |
+|⚪| np.empty (float64) | float64 | 10,000,000 | 0.0095 | - | - | - |
+|▫| np.empty (int32) | int32 | 1,000 | 0.0003 | 0.0076 | 0.043× | 23× |
+|▫| np.empty (int32) | int32 | 100,000 | 0.0003 | 0.0126 | 0.025× | 41× |
+|✅| np.empty (int32) | int32 | 10,000,000 | 0.0106 | 0.0066 | 1.62× | 62% |
+|▫| np.empty (int64) | int64 | 1,000 | 0.0003 | 0.0101 | 0.033× | 31× |
+|▫| np.empty (int64) | int64 | 100,000 | 0.0003 | 0.0092 | 0.035× | 28× |
+|⚪| np.empty (int64) | int64 | 10,000,000 | 0.0209 | - | - | - |
+|🔴| np.full (float32) | float32 | 1,000 | 0.0010 | 0.0070 | 0.14× | 691% |
+|🟠| np.full (float32) | float32 | 100,000 | 0.0054 | 0.0176 | 0.31× | 327% |
+|✅| np.full (float32) | float32 | 10,000,000 | 9.6279 | 5.7904 | 1.66× | 60% |
+|▫| np.full (float64) | float64 | 1,000 | 0.0009 | 0.0122 | 0.072× | 14× |
+|🟠| np.full (float64) | float64 | 100,000 | 0.0097 | 0.0300 | 0.32× | 309% |
+|✅| np.full (float64) | float64 | 10,000,000 | 18.7710 | 10.9587 | 1.71× | 58% |
+|▫| np.full (int32) | int32 | 1,000 | 0.0009 | 0.0083 | 0.11× | 927% |
+|🟠| np.full (int32) | int32 | 100,000 | 0.0054 | 0.0204 | 0.27× | 377% |
+|✅| np.full (int32) | int32 | 10,000,000 | 7.5837 | 5.6049 | 1.35× | 74% |
+|▫| np.full (int64) | int64 | 1,000 | 0.0009 | 0.0128 | 0.067× | 15× |
+|🟠| np.full (int64) | int64 | 100,000 | 0.0098 | 0.0300 | 0.33× | 305% |
+|✅| np.full (int64) | int64 | 10,000,000 | 18.6308 | 10.6743 | 1.75× | 57% |
+|▫| np.ones (float32) | float32 | 1,000 | 0.0010 | 0.0089 | 0.11× | 899% |
+|🟠| np.ones (float32) | float32 | 100,000 | 0.0052 | 0.0173 | 0.30× | 331% |
+|✅| np.ones (float32) | float32 | 10,000,000 | 9.3400 | 5.8107 | 1.61× | 62% |
+|▫| np.ones (float64) | float64 | 1,000 | 0.0009 | 0.0141 | 0.061× | 16× |
+|🟠| np.ones (float64) | float64 | 100,000 | 0.0097 | 0.0291 | 0.33× | 299% |
+|✅| np.ones (float64) | float64 | 10,000,000 | 18.3874 | 10.9115 | 1.69× | 59% |
+|▫| np.ones (int32) | int32 | 1,000 | 0.0009 | 0.0089 | 0.099× | 10× |
+|🟠| np.ones (int32) | int32 | 100,000 | 0.0054 | 0.0186 | 0.29× | 342% |
+|✅| np.ones (int32) | int32 | 10,000,000 | 7.4068 | 5.6583 | 1.31× | 76% |
+|▫| np.ones (int64) | int64 | 1,000 | 0.0008 | 0.0152 | 0.056× | 18× |
+|🟠| np.ones (int64) | int64 | 100,000 | 0.0097 | 0.0297 | 0.33× | 304% |
+|✅| np.ones (int64) | int64 | 10,000,000 | 15.1807 | 10.6316 | 1.43× | 70% |
+|▫| np.zeros (float32) | float32 | 1,000 | 0.0004 | 0.0084 | 0.051× | 20× |
+|🟠| np.zeros (float32) | float32 | 100,000 | 0.0048 | 0.0176 | 0.28× | 363% |
+|🔴| np.zeros (float32) | float32 | 10,000,000 | 0.0170 | 5.6725 | 0.003× | 334× |
+|▫| np.zeros (float64) | float64 | 1,000 | 0.0004 | 0.0097 | 0.037× | 27× |
+|🟠| np.zeros (float64) | float64 | 100,000 | 0.0094 | 0.0305 | 0.31× | 324% |
+|🔴| np.zeros (float64) | float64 | 10,000,000 | 0.0212 | 10.7550 | 0.002× | 508× |
+|▫| np.zeros (int32) | int32 | 1,000 | 0.0004 | 0.0081 | 0.049× | 21× |
+|🟠| np.zeros (int32) | int32 | 100,000 | 0.0051 | 0.0186 | 0.27× | 367% |
+|🔴| np.zeros (int32) | int32 | 10,000,000 | 0.0108 | 5.6225 | 0.002× | 518× |
+|▫| np.zeros (int64) | int64 | 1,000 | 0.0004 | 0.0094 | 0.041× | 25× |
+|🟠| np.zeros (int64) | int64 | 100,000 | 0.0093 | 0.0303 | 0.31× | 325% |
+|🔴| np.zeros (int64) | int64 | 10,000,000 | 0.0122 | 10.7466 | 0.001× | 880× |
+|🔴| np.zeros_like (float32) | float32 | 1,000 | 0.0010 | 0.0093 | 0.11× | 888% |
+|🟠| np.zeros_like (float32) | float32 | 100,000 | 0.0054 | 0.0173 | 0.31× | 320% |
+|✅| np.zeros_like (float32) | float32 | 10,000,000 | 9.3810 | 5.6115 | 1.67× | 60% |
+|▫| np.zeros_like (float64) | float64 | 1,000 | 0.0010 | 0.0087 | 0.12× | 866% |
+|🟠| np.zeros_like (float64) | float64 | 100,000 | 0.0099 | 0.0311 | 0.32× | 315% |
+|✅| np.zeros_like (float64) | float64 | 10,000,000 | 18.4492 | 10.7073 | 1.72× | 58% |
+|🟠| np.zeros_like (int32) | int32 | 1,000 | 0.0012 | 0.0056 | 0.22× | 455% |
+|🟠| np.zeros_like (int32) | int32 | 100,000 | 0.0054 | 0.0179 | 0.30× | 329% |
+|✅| np.zeros_like (int32) | int32 | 10,000,000 | 7.6603 | 5.6188 | 1.36× | 73% |
+|🔴| np.zeros_like (int64) | int64 | 1,000 | 0.0010 | 0.0086 | 0.12× | 819% |
+|🟠| np.zeros_like (int64) | int64 | 100,000 | 0.0102 | 0.0316 | 0.32× | 311% |
+|✅| np.zeros_like (int64) | int64 | 10,000,000 | 19.3508 | 10.7454 | 1.80× | 56% |
 
 ### Manipulation
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|⚪| a.T (2D) | float64 | 1,000 | 0.0001 | - | - |
-|⚪| a.T (2D) | float64 | 100,000 | 0.0001 | - | - |
-|⚪| a.T (2D) | float64 | 10,000,000 | 0.0001 | - | - |
-|⚪| a.flatten | float64 | 1,000 | 0.0005 | - | - |
-|⚪| a.flatten | float64 | 100,000 | 0.0113 | - | - |
-|⚪| a.flatten | float64 | 10,000,000 | 13.5031 | - | - |
-|⚪| np.concatenate | float64 | 1,000 | 0.0010 | - | - |
-|⚪| np.concatenate | float64 | 100,000 | 0.3073 | - | - |
-|⚪| np.concatenate | float64 | 10,000,000 | 39.3042 | - | - |
-|⚪| np.ravel | float64 | 1,000 | 0.0004 | - | - |
-|▫| np.ravel | float64 | 100,000 | 0.0003 | 0.0006 | 1.63x |
-|▫| np.ravel | float64 | 10,000,000 | 0.0003 | 0.0005 | 1.44x |
-|⚪| np.stack | float64 | 1,000 | 0.0021 | - | - |
-|⚪| np.stack | float64 | 100,000 | 0.3302 | - | - |
-|⚪| np.stack | float64 | 10,000,000 | 44.9542 | - | - |
-|⚪| np.transpose (2D) | float64 | 1,000 | 0.0004 | - | - |
-|⚪| np.transpose (2D) | float64 | 100,000 | 0.0004 | - | - |
-|⚪| np.transpose (2D) | float64 | 10,000,000 | 0.0004 | - | - |
-|⚪| reshape 1D->2D | float64 | 1,000 | 0.0002 | - | - |
-|⚪| reshape 1D->2D | float64 | 100,000 | 0.0002 | - | - |
-|⚪| reshape 1D->2D | float64 | 10,000,000 | 0.0002 | - | - |
-|⚪| reshape 2D->1D | float64 | 1,000 | 0.0002 | - | - |
-|⚪| reshape 2D->1D | float64 | 100,000 | 0.0002 | - | - |
-|⚪| reshape 2D->1D | float64 | 10,000,000 | 0.0002 | - | - |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|⚪| a.T (2D) | float64 | 1,000 | 0.0001 | - | - | - |
+|⚪| a.T (2D) | float64 | 100,000 | 0.0001 | - | - | - |
+|⚪| a.T (2D) | float64 | 10,000,000 | 0.0001 | - | - | - |
+|⚪| a.flatten | float64 | 1,000 | 0.0005 | - | - | - |
+|⚪| a.flatten | float64 | 100,000 | 0.0113 | - | - | - |
+|⚪| a.flatten | float64 | 10,000,000 | 13.5031 | - | - | - |
+|⚪| np.concatenate | float64 | 1,000 | 0.0010 | - | - | - |
+|⚪| np.concatenate | float64 | 100,000 | 0.3073 | - | - | - |
+|⚪| np.concatenate | float64 | 10,000,000 | 39.3042 | - | - | - |
+|⚪| np.ravel | float64 | 1,000 | 0.0004 | - | - | - |
+|▫| np.ravel | float64 | 100,000 | 0.0003 | 0.0006 | 0.61× | 163% |
+|▫| np.ravel | float64 | 10,000,000 | 0.0003 | 0.0005 | 0.69× | 144% |
+|⚪| np.stack | float64 | 1,000 | 0.0021 | - | - | - |
+|⚪| np.stack | float64 | 100,000 | 0.3302 | - | - | - |
+|⚪| np.stack | float64 | 10,000,000 | 44.9542 | - | - | - |
+|⚪| np.transpose (2D) | float64 | 1,000 | 0.0004 | - | - | - |
+|⚪| np.transpose (2D) | float64 | 100,000 | 0.0004 | - | - | - |
+|⚪| np.transpose (2D) | float64 | 10,000,000 | 0.0004 | - | - | - |
+|⚪| reshape 1D->2D | float64 | 1,000 | 0.0002 | - | - | - |
+|⚪| reshape 1D->2D | float64 | 100,000 | 0.0002 | - | - | - |
+|⚪| reshape 1D->2D | float64 | 10,000,000 | 0.0002 | - | - | - |
+|⚪| reshape 2D->1D | float64 | 1,000 | 0.0002 | - | - | - |
+|⚪| reshape 2D->1D | float64 | 100,000 | 0.0002 | - | - | - |
+|⚪| reshape 2D->1D | float64 | 10,000,000 | 0.0002 | - | - | - |
 
 ### Slicing
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|⚪| a[100:1000] (contiguous) | float64 | 1,000 | 0.0002 | - | - |
-|⚪| a[100:1000] (contiguous) | float64 | 100,000 | 0.0002 | - | - |
-|⚪| a[100:1000] (contiguous) | float64 | 10,000,000 | 0.0001 | - | - |
-|⚪| a[::-1] (reversed) | float64 | 1,000 | 0.0001 | - | - |
-|▫| a[::-1] (reversed) | float64 | 100,000 | 0.0001 | 0.0012 | 7.72x |
-|▫| a[::-1] (reversed) | float64 | 10,000,000 | 0.0001 | 0.0013 | 9.77x |
-|⚪| a[::2] (strided) | float64 | 1,000 | 0.0002 | - | - |
-|⚪| a[::2] (strided) | float64 | 100,000 | 0.0001 | - | - |
-|⚪| a[::2] (strided) | float64 | 10,000,000 | 0.0002 | - | - |
-|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0016 | - | - |
-|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0016 | - | - |
-|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0017 | - | - |
-|⚪| np.sum(strided_slice) | float64 | 500 | 0.0017 | - | - |
-|⚪| np.sum(strided_slice) | float64 | 50,000 | 0.0100 | - | - |
-|⚪| np.sum(strided_slice) | float64 | 5,000,000 | 4.9331 | - | - |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|⚪| a[100:1000] (contiguous) | float64 | 1,000 | 0.0002 | - | - | - |
+|⚪| a[100:1000] (contiguous) | float64 | 100,000 | 0.0002 | - | - | - |
+|⚪| a[100:1000] (contiguous) | float64 | 10,000,000 | 0.0001 | - | - | - |
+|⚪| a[::-1] (reversed) | float64 | 1,000 | 0.0001 | - | - | - |
+|▫| a[::-1] (reversed) | float64 | 100,000 | 0.0001 | 0.0012 | 0.13× | 772% |
+|▫| a[::-1] (reversed) | float64 | 10,000,000 | 0.0001 | 0.0013 | 0.10× | 976% |
+|⚪| a[::2] (strided) | float64 | 1,000 | 0.0002 | - | - | - |
+|⚪| a[::2] (strided) | float64 | 100,000 | 0.0001 | - | - | - |
+|⚪| a[::2] (strided) | float64 | 10,000,000 | 0.0002 | - | - | - |
+|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0016 | - | - | - |
+|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0016 | - | - | - |
+|⚪| np.sum(contiguous_slice) | float64 | 900 | 0.0017 | - | - | - |
+|⚪| np.sum(strided_slice) | float64 | 500 | 0.0017 | - | - | - |
+|⚪| np.sum(strided_slice) | float64 | 50,000 | 0.0100 | - | - | - |
+|⚪| np.sum(strided_slice) | float64 | 5,000,000 | 4.9331 | - | - | - |
 
 ### Comparison
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| a != b (float32) | float32 | 1,000 | 0.0005 | 0.0007 | 1.38x |
-|🟠| a != b (float32) | float32 | 100,000 | 0.0055 | 0.0161 | 2.95x |
-|✅| a != b (float32) | float32 | 10,000,000 | 9.7856 | 4.0476 | 0.41x |
-|▫| a != b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.51x |
-|🟠| a != b (float64) | float64 | 100,000 | 0.0102 | 0.0229 | 2.24x |
-|✅| a != b (float64) | float64 | 10,000,000 | 18.4551 | 6.6072 | 0.36x |
-|▫| a != b (int32) | int32 | 1,000 | 0.0005 | 0.0007 | 1.30x |
-|🟠| a != b (int32) | int32 | 100,000 | 0.0070 | 0.0181 | 2.58x |
-|✅| a != b (int32) | int32 | 10,000,000 | 4.6312 | 4.0588 | 0.88x |
-|▫| a != b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 1.56x |
-|🟠| a != b (int64) | int64 | 100,000 | 0.0126 | 0.0276 | 2.20x |
-|✅| a != b (int64) | int64 | 10,000,000 | 7.2078 | 6.5913 | 0.91x |
-|▫| a < b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 1.69x |
-|🟠| a < b (float32) | float32 | 100,000 | 0.0056 | 0.0143 | 2.56x |
-|✅| a < b (float32) | float32 | 10,000,000 | 10.3517 | 3.9582 | 0.38x |
-|▫| a < b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.65x |
-|🟠| a < b (float64) | float64 | 100,000 | 0.0107 | 0.0228 | 2.13x |
-|✅| a < b (float64) | float64 | 10,000,000 | 18.6797 | 6.4870 | 0.35x |
-|▫| a < b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 1.62x |
-|🟠| a < b (int32) | int32 | 100,000 | 0.0069 | 0.0168 | 2.42x |
-|✅| a < b (int32) | int32 | 10,000,000 | 4.5830 | 3.9640 | 0.86x |
-|▫| a < b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 1.28x |
-|🟡| a < b (int64) | int64 | 100,000 | 0.0179 | 0.0260 | 1.46x |
-|✅| a < b (int64) | int64 | 10,000,000 | 13.4370 | 6.6691 | 0.50x |
-|▫| a <= b (float32) | float32 | 1,000 | 0.0004 | 0.0008 | 1.94x |
-|🟠| a <= b (float32) | float32 | 100,000 | 0.0057 | 0.0135 | 2.38x |
-|✅| a <= b (float32) | float32 | 10,000,000 | 10.5595 | 3.9351 | 0.37x |
-|▫| a <= b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.60x |
-|🟡| a <= b (float64) | float64 | 100,000 | 0.0105 | 0.0204 | 1.95x |
-|✅| a <= b (float64) | float64 | 10,000,000 | 18.1656 | 6.4961 | 0.36x |
-|▫| a <= b (int32) | int32 | 1,000 | 0.0004 | 0.0006 | 1.52x |
-|🟠| a <= b (int32) | int32 | 100,000 | 0.0071 | 0.0169 | 2.39x |
-|✅| a <= b (int32) | int32 | 10,000,000 | 4.4351 | 4.1131 | 0.93x |
-|▫| a <= b (int64) | int64 | 1,000 | 0.0006 | 0.0007 | 1.23x |
-|🟡| a <= b (int64) | int64 | 100,000 | 0.0180 | 0.0276 | 1.53x |
-|✅| a <= b (int64) | int64 | 10,000,000 | 18.9495 | 6.8388 | 0.36x |
-|▫| a == b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 1.57x |
-|🟠| a == b (float32) | float32 | 100,000 | 0.0055 | 0.0162 | 2.98x |
-|✅| a == b (float32) | float32 | 10,000,000 | 10.4596 | 3.9621 | 0.38x |
-|▫| a == b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.60x |
-|🟠| a == b (float64) | float64 | 100,000 | 0.0101 | 0.0248 | 2.46x |
-|✅| a == b (float64) | float64 | 10,000,000 | 18.0360 | 6.5660 | 0.36x |
-|▫| a == b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 1.72x |
-|🟠| a == b (int32) | int32 | 100,000 | 0.0071 | 0.0163 | 2.28x |
-|✅| a == b (int32) | int32 | 10,000,000 | 4.5825 | 3.9854 | 0.87x |
-|▫| a == b (int64) | int64 | 1,000 | 0.0004 | 0.0007 | 1.47x |
-|🟠| a == b (int64) | int64 | 100,000 | 0.0125 | 0.0263 | 2.10x |
-|✅| a == b (int64) | int64 | 10,000,000 | 6.9799 | 6.4802 | 0.93x |
-|▫| a > b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 1.65x |
-|🟠| a > b (float32) | float32 | 100,000 | 0.0056 | 0.0142 | 2.53x |
-|✅| a > b (float32) | float32 | 10,000,000 | 10.1546 | 3.9550 | 0.39x |
-|▫| a > b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.53x |
-|🟠| a > b (float64) | float64 | 100,000 | 0.0103 | 0.0249 | 2.42x |
-|✅| a > b (float64) | float64 | 10,000,000 | 19.3510 | 6.4686 | 0.33x |
-|▫| a > b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 1.57x |
-|🟠| a > b (int32) | int32 | 100,000 | 0.0070 | 0.0172 | 2.46x |
-|✅| a > b (int32) | int32 | 10,000,000 | 4.2011 | 3.9656 | 0.94x |
-|▫| a > b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 1.29x |
-|🟡| a > b (int64) | int64 | 100,000 | 0.0182 | 0.0267 | 1.47x |
-|✅| a > b (int64) | int64 | 10,000,000 | 19.0728 | 6.6286 | 0.35x |
-|▫| a >= b (float32) | float32 | 1,000 | 0.0005 | 0.0007 | 1.30x |
-|🟠| a >= b (float32) | float32 | 100,000 | 0.0057 | 0.0140 | 2.47x |
-|✅| a >= b (float32) | float32 | 10,000,000 | 9.9412 | 3.9784 | 0.40x |
-|▫| a >= b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 1.56x |
-|🟠| a >= b (float64) | float64 | 100,000 | 0.0103 | 0.0251 | 2.45x |
-|✅| a >= b (float64) | float64 | 10,000,000 | 19.0127 | 6.5439 | 0.34x |
-|▫| a >= b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 1.58x |
-|🟠| a >= b (int32) | int32 | 100,000 | 0.0070 | 0.0163 | 2.33x |
-|✅| a >= b (int32) | int32 | 10,000,000 | 4.4060 | 4.0361 | 0.92x |
-|▫| a >= b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 1.25x |
-|🟡| a >= b (int64) | int64 | 100,000 | 0.0185 | 0.0273 | 1.48x |
-|✅| a >= b (int64) | int64 | 10,000,000 | 20.9543 | 6.6942 | 0.32x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| a != b (float32) | float32 | 1,000 | 0.0005 | 0.0007 | 0.72× | 138% |
+|🟠| a != b (float32) | float32 | 100,000 | 0.0055 | 0.0161 | 0.34× | 295% |
+|✅| a != b (float32) | float32 | 10,000,000 | 9.7856 | 4.0476 | 2.42× | 41% |
+|▫| a != b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.66× | 151% |
+|🟠| a != b (float64) | float64 | 100,000 | 0.0102 | 0.0229 | 0.45× | 224% |
+|✅| a != b (float64) | float64 | 10,000,000 | 18.4551 | 6.6072 | 2.79× | 36% |
+|▫| a != b (int32) | int32 | 1,000 | 0.0005 | 0.0007 | 0.77× | 130% |
+|🟠| a != b (int32) | int32 | 100,000 | 0.0070 | 0.0181 | 0.39× | 258% |
+|✅| a != b (int32) | int32 | 10,000,000 | 4.6312 | 4.0588 | 1.14× | 88% |
+|▫| a != b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 0.64× | 156% |
+|🟠| a != b (int64) | int64 | 100,000 | 0.0126 | 0.0276 | 0.46× | 220% |
+|✅| a != b (int64) | int64 | 10,000,000 | 7.2078 | 6.5913 | 1.09× | 91% |
+|▫| a < b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 0.59× | 169% |
+|🟠| a < b (float32) | float32 | 100,000 | 0.0056 | 0.0143 | 0.39× | 256% |
+|✅| a < b (float32) | float32 | 10,000,000 | 10.3517 | 3.9582 | 2.62× | 38% |
+|▫| a < b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.61× | 165% |
+|🟠| a < b (float64) | float64 | 100,000 | 0.0107 | 0.0228 | 0.47× | 213% |
+|✅| a < b (float64) | float64 | 10,000,000 | 18.6797 | 6.4870 | 2.88× | 35% |
+|▫| a < b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 0.62× | 162% |
+|🟠| a < b (int32) | int32 | 100,000 | 0.0069 | 0.0168 | 0.41× | 242% |
+|✅| a < b (int32) | int32 | 10,000,000 | 4.5830 | 3.9640 | 1.16× | 86% |
+|▫| a < b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 0.78× | 128% |
+|🟡| a < b (int64) | int64 | 100,000 | 0.0179 | 0.0260 | 0.69× | 146% |
+|✅| a < b (int64) | int64 | 10,000,000 | 13.4370 | 6.6691 | 2.02× | 50% |
+|▫| a <= b (float32) | float32 | 1,000 | 0.0004 | 0.0008 | 0.52× | 194% |
+|🟠| a <= b (float32) | float32 | 100,000 | 0.0057 | 0.0135 | 0.42× | 238% |
+|✅| a <= b (float32) | float32 | 10,000,000 | 10.5595 | 3.9351 | 2.68× | 37% |
+|▫| a <= b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.62× | 160% |
+|🟡| a <= b (float64) | float64 | 100,000 | 0.0105 | 0.0204 | 0.51× | 195% |
+|✅| a <= b (float64) | float64 | 10,000,000 | 18.1656 | 6.4961 | 2.80× | 36% |
+|▫| a <= b (int32) | int32 | 1,000 | 0.0004 | 0.0006 | 0.66× | 152% |
+|🟠| a <= b (int32) | int32 | 100,000 | 0.0071 | 0.0169 | 0.42× | 239% |
+|✅| a <= b (int32) | int32 | 10,000,000 | 4.4351 | 4.1131 | 1.08× | 93% |
+|▫| a <= b (int64) | int64 | 1,000 | 0.0006 | 0.0007 | 0.82× | 122% |
+|🟡| a <= b (int64) | int64 | 100,000 | 0.0180 | 0.0276 | 0.65× | 153% |
+|✅| a <= b (int64) | int64 | 10,000,000 | 18.9495 | 6.8388 | 2.77× | 36% |
+|▫| a == b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 0.64× | 157% |
+|🟠| a == b (float32) | float32 | 100,000 | 0.0055 | 0.0162 | 0.34× | 298% |
+|✅| a == b (float32) | float32 | 10,000,000 | 10.4596 | 3.9621 | 2.64× | 38% |
+|▫| a == b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.62× | 160% |
+|🟠| a == b (float64) | float64 | 100,000 | 0.0101 | 0.0248 | 0.41× | 246% |
+|✅| a == b (float64) | float64 | 10,000,000 | 18.0360 | 6.5660 | 2.75× | 36% |
+|▫| a == b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 0.58× | 172% |
+|🟠| a == b (int32) | int32 | 100,000 | 0.0071 | 0.0163 | 0.44× | 228% |
+|✅| a == b (int32) | int32 | 10,000,000 | 4.5825 | 3.9854 | 1.15× | 87% |
+|▫| a == b (int64) | int64 | 1,000 | 0.0004 | 0.0007 | 0.68× | 147% |
+|🟠| a == b (int64) | int64 | 100,000 | 0.0125 | 0.0263 | 0.47× | 210% |
+|✅| a == b (int64) | int64 | 10,000,000 | 6.9799 | 6.4802 | 1.08× | 93% |
+|▫| a > b (float32) | float32 | 1,000 | 0.0004 | 0.0007 | 0.61× | 165% |
+|🟠| a > b (float32) | float32 | 100,000 | 0.0056 | 0.0142 | 0.40× | 253% |
+|✅| a > b (float32) | float32 | 10,000,000 | 10.1546 | 3.9550 | 2.57× | 39% |
+|▫| a > b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.65× | 153% |
+|🟠| a > b (float64) | float64 | 100,000 | 0.0103 | 0.0249 | 0.41× | 242% |
+|✅| a > b (float64) | float64 | 10,000,000 | 19.3510 | 6.4686 | 2.99× | 33% |
+|▫| a > b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 0.64× | 157% |
+|🟠| a > b (int32) | int32 | 100,000 | 0.0070 | 0.0172 | 0.41× | 246% |
+|✅| a > b (int32) | int32 | 10,000,000 | 4.2011 | 3.9656 | 1.06× | 94% |
+|▫| a > b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 0.78× | 129% |
+|🟡| a > b (int64) | int64 | 100,000 | 0.0182 | 0.0267 | 0.68× | 147% |
+|✅| a > b (int64) | int64 | 10,000,000 | 19.0728 | 6.6286 | 2.88× | 35% |
+|▫| a >= b (float32) | float32 | 1,000 | 0.0005 | 0.0007 | 0.77× | 130% |
+|🟠| a >= b (float32) | float32 | 100,000 | 0.0057 | 0.0140 | 0.41× | 247% |
+|✅| a >= b (float32) | float32 | 10,000,000 | 9.9412 | 3.9784 | 2.50× | 40% |
+|▫| a >= b (float64) | float64 | 1,000 | 0.0004 | 0.0007 | 0.64× | 156% |
+|🟠| a >= b (float64) | float64 | 100,000 | 0.0103 | 0.0251 | 0.41× | 245% |
+|✅| a >= b (float64) | float64 | 10,000,000 | 19.0127 | 6.5439 | 2.90× | 34% |
+|▫| a >= b (int32) | int32 | 1,000 | 0.0004 | 0.0007 | 0.63× | 158% |
+|🟠| a >= b (int32) | int32 | 100,000 | 0.0070 | 0.0163 | 0.43× | 234% |
+|✅| a >= b (int32) | int32 | 10,000,000 | 4.4060 | 4.0361 | 1.09× | 92% |
+|▫| a >= b (int64) | int64 | 1,000 | 0.0005 | 0.0007 | 0.80× | 125% |
+|🟡| a >= b (int64) | int64 | 100,000 | 0.0185 | 0.0273 | 0.68× | 148% |
+|✅| a >= b (int64) | int64 | 10,000,000 | 20.9543 | 6.6942 | 3.13× | 32% |
 
 ### Bitwise
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| a & b (bool) | bool | 1,000 | 0.0004 | 0.0012 | 3.22x |
-|🔴| a & b (bool) | bool | 100,000 | 0.0033 | 0.0225 | 6.88x |
-|🟡| a & b (bool) | bool | 10,000,000 | 2.0034 | 2.7889 | 1.39x |
-|▫| a & b (int16) | int16 | 1,000 | 0.0008 | 0.0046 | 5.96x |
-|✅| a & b (int16) | int16 | 100,000 | 0.0295 | 0.0101 | 0.34x |
-|✅| a & b (int16) | int16 | 10,000,000 | 9.2627 | 3.7953 | 0.41x |
-|▫| a & b (int32) | int32 | 1,000 | 0.0008 | 0.0054 | 6.84x |
-|✅| a & b (int32) | int32 | 100,000 | 0.0325 | 0.0211 | 0.65x |
-|✅| a & b (int32) | int32 | 10,000,000 | 16.8456 | 7.6036 | 0.45x |
-|▫| a & b (int64) | int64 | 1,000 | 0.0008 | 0.0119 | 15.18x |
-|🟡| a & b (int64) | int64 | 100,000 | 0.0352 | 0.0449 | 1.27x |
-|✅| a & b (int64) | int64 | 10,000,000 | 37.9424 | 14.9278 | 0.39x |
-|▫| a & b (uint16) | uint16 | 1,000 | 0.0008 | 0.0040 | 5.08x |
-|✅| a & b (uint16) | uint16 | 100,000 | 0.0309 | 0.0105 | 0.34x |
-|✅| a & b (uint16) | uint16 | 10,000,000 | 9.5081 | 3.7945 | 0.40x |
-|▫| a & b (uint32) | uint32 | 1,000 | 0.0008 | 0.0083 | 10.36x |
-|✅| a & b (uint32) | uint32 | 100,000 | 0.0329 | 0.0206 | 0.63x |
-|✅| a & b (uint32) | uint32 | 10,000,000 | 18.7328 | 7.6036 | 0.41x |
-|▫| a & b (uint64) | uint64 | 1,000 | 0.0008 | 0.0094 | 11.97x |
-|🟡| a & b (uint64) | uint64 | 100,000 | 0.0360 | 0.0442 | 1.23x |
-|✅| a & b (uint64) | uint64 | 10,000,000 | 39.5694 | 15.0468 | 0.38x |
-|▫| a & b (uint8) | uint8 | 1,000 | 0.0008 | 0.0015 | 1.88x |
-|✅| a & b (uint8) | uint8 | 100,000 | 0.0285 | 0.0061 | 0.21x |
-|✅| a & b (uint8) | uint8 | 10,000,000 | 3.8970 | 1.8615 | 0.48x |
-|▫| a ^ b (bool) | bool | 1,000 | 0.0004 | 0.0015 | 3.46x |
-|🔴| a ^ b (bool) | bool | 100,000 | 0.0031 | 0.0224 | 7.20x |
-|🟡| a ^ b (bool) | bool | 10,000,000 | 1.8487 | 2.8187 | 1.52x |
-|▫| a ^ b (int16) | int16 | 1,000 | 0.0008 | 0.0027 | 3.48x |
-|✅| a ^ b (int16) | int16 | 100,000 | 0.0285 | 0.0095 | 0.34x |
-|✅| a ^ b (int16) | int16 | 10,000,000 | 9.7269 | 3.7538 | 0.39x |
-|▫| a ^ b (int32) | int32 | 1,000 | 0.0008 | 0.0081 | 10.44x |
-|✅| a ^ b (int32) | int32 | 100,000 | 0.0288 | 0.0218 | 0.76x |
-|✅| a ^ b (int32) | int32 | 10,000,000 | 17.4185 | 7.5248 | 0.43x |
-|▫| a ^ b (int64) | int64 | 1,000 | 0.0008 | 0.0093 | 12.04x |
-|🟡| a ^ b (int64) | int64 | 100,000 | 0.0363 | 0.0453 | 1.25x |
-|✅| a ^ b (int64) | int64 | 10,000,000 | 33.1728 | 14.8136 | 0.45x |
-|▫| a ^ b (uint16) | uint16 | 1,000 | 0.0008 | 0.0032 | 4.11x |
-|✅| a ^ b (uint16) | uint16 | 100,000 | 0.0293 | 0.0107 | 0.37x |
-|✅| a ^ b (uint16) | uint16 | 10,000,000 | 9.3024 | 3.7737 | 0.41x |
-|▫| a ^ b (uint32) | uint32 | 1,000 | 0.0008 | 0.0060 | 7.68x |
-|✅| a ^ b (uint32) | uint32 | 100,000 | 0.0286 | 0.0211 | 0.74x |
-|✅| a ^ b (uint32) | uint32 | 10,000,000 | 18.9513 | 7.5649 | 0.40x |
-|▫| a ^ b (uint64) | uint64 | 1,000 | 0.0008 | 0.0124 | 15.80x |
-|🟡| a ^ b (uint64) | uint64 | 100,000 | 0.0358 | 0.0433 | 1.21x |
-|✅| a ^ b (uint64) | uint64 | 10,000,000 | 42.5116 | 15.2940 | 0.36x |
-|▫| a ^ b (uint8) | uint8 | 1,000 | 0.0007 | 0.0013 | 1.98x |
-|✅| a ^ b (uint8) | uint8 | 100,000 | 0.0285 | 0.0068 | 0.24x |
-|✅| a ^ b (uint8) | uint8 | 10,000,000 | 6.5357 | 1.8194 | 0.28x |
-|▫| a | b (bool) | bool | 1,000 | 0.0004 | 0.0017 | 4.21x |
-|🔴| a | b (bool) | bool | 100,000 | 0.0028 | 0.0238 | 8.41x |
-|🟡| a | b (bool) | bool | 10,000,000 | 1.8630 | 3.2311 | 1.73x |
-|▫| a | b (int16) | int16 | 1,000 | 0.0008 | 0.0030 | 3.80x |
-|✅| a | b (int16) | int16 | 100,000 | 0.0285 | 0.0112 | 0.39x |
-|✅| a | b (int16) | int16 | 10,000,000 | 9.4168 | 3.7613 | 0.40x |
-|▫| a | b (int32) | int32 | 1,000 | 0.0008 | 0.0083 | 10.50x |
-|✅| a | b (int32) | int32 | 100,000 | 0.0303 | 0.0222 | 0.73x |
-|✅| a | b (int32) | int32 | 10,000,000 | 16.5894 | 7.5214 | 0.45x |
-|▫| a | b (int64) | int64 | 1,000 | 0.0008 | 0.0130 | 16.47x |
-|🟡| a | b (int64) | int64 | 100,000 | 0.0366 | 0.0429 | 1.17x |
-|✅| a | b (int64) | int64 | 10,000,000 | 36.1764 | 14.8245 | 0.41x |
-|▫| a | b (uint16) | uint16 | 1,000 | 0.0008 | 0.0032 | 4.07x |
-|✅| a | b (uint16) | uint16 | 100,000 | 0.0286 | 0.0112 | 0.39x |
-|✅| a | b (uint16) | uint16 | 10,000,000 | 9.4580 | 3.7895 | 0.40x |
-|▫| a | b (uint32) | uint32 | 1,000 | 0.0008 | 0.0065 | 8.20x |
-|✅| a | b (uint32) | uint32 | 100,000 | 0.0286 | 0.0194 | 0.68x |
-|✅| a | b (uint32) | uint32 | 10,000,000 | 19.7626 | 7.5865 | 0.38x |
-|▫| a | b (uint64) | uint64 | 1,000 | 0.0008 | 0.0126 | 15.71x |
-|🟡| a | b (uint64) | uint64 | 100,000 | 0.0353 | 0.0452 | 1.28x |
-|✅| a | b (uint64) | uint64 | 10,000,000 | 38.8894 | 15.0789 | 0.39x |
-|▫| a | b (uint8) | uint8 | 1,000 | 0.0007 | 0.0011 | 1.65x |
-|✅| a | b (uint8) | uint8 | 100,000 | 0.0304 | 0.0064 | 0.21x |
-|✅| a | b (uint8) | uint8 | 10,000,000 | 4.3234 | 1.8380 | 0.42x |
-|▫| np.invert(a) (bool) | bool | 1,000 | 0.0004 | 0.0017 | 4.55x |
-|🔴| np.invert(a) (bool) | bool | 100,000 | 0.0026 | 0.0241 | 9.32x |
-|🟡| np.invert(a) (bool) | bool | 10,000,000 | 1.6922 | 3.0191 | 1.78x |
-|▫| np.invert(a) (int16) | int16 | 1,000 | 0.0007 | 0.0035 | 4.73x |
-|✅| np.invert(a) (int16) | int16 | 100,000 | 0.0262 | 0.0102 | 0.39x |
-|✅| np.invert(a) (int16) | int16 | 10,000,000 | 7.9035 | 3.3957 | 0.43x |
-|▫| np.invert(a) (int32) | int32 | 1,000 | 0.0008 | 0.0075 | 9.64x |
-|✅| np.invert(a) (int32) | int32 | 100,000 | 0.0352 | 0.0205 | 0.58x |
-|✅| np.invert(a) (int32) | int32 | 10,000,000 | 14.1460 | 7.1424 | 0.51x |
-|▫| np.invert(a) (int64) | int64 | 1,000 | 0.0007 | 0.0088 | 12.04x |
-|🟡| np.invert(a) (int64) | int64 | 100,000 | 0.0263 | 0.0464 | 1.76x |
-|✅| np.invert(a) (int64) | int64 | 10,000,000 | 26.1526 | 13.5612 | 0.52x |
-|▫| np.invert(a) (uint16) | uint16 | 1,000 | 0.0007 | 0.0030 | 4.09x |
-|✅| np.invert(a) (uint16) | uint16 | 100,000 | 0.0360 | 0.0103 | 0.28x |
-|✅| np.invert(a) (uint16) | uint16 | 10,000,000 | 6.7184 | 3.4013 | 0.51x |
-|▫| np.invert(a) (uint32) | uint32 | 1,000 | 0.0008 | 0.0100 | 12.92x |
-|✅| np.invert(a) (uint32) | uint32 | 100,000 | 0.0338 | 0.0200 | 0.59x |
-|✅| np.invert(a) (uint32) | uint32 | 10,000,000 | 13.9398 | 6.9702 | 0.50x |
-|▫| np.invert(a) (uint64) | uint64 | 1,000 | 0.0007 | 0.0098 | 13.45x |
-|🟡| np.invert(a) (uint64) | uint64 | 100,000 | 0.0262 | 0.0387 | 1.48x |
-|✅| np.invert(a) (uint64) | uint64 | 10,000,000 | 33.5033 | 13.6426 | 0.41x |
-|▫| np.invert(a) (uint8) | uint8 | 1,000 | 0.0006 | 0.0013 | 2.18x |
-|✅| np.invert(a) (uint8) | uint8 | 100,000 | 0.0258 | 0.0069 | 0.27x |
-|✅| np.invert(a) (uint8) | uint8 | 10,000,000 | 5.7393 | 1.6899 | 0.29x |
-|⚪| np.left_shift(a, 2) (bool) | bool | 1,000 | 0.0015 | - | - |
-|⚪| np.left_shift(a, 2) (bool) | bool | 100,000 | 0.1933 | - | - |
-|⚪| np.left_shift(a, 2) (bool) | bool | 10,000,000 | 15.1279 | - | - |
-|🔴| np.left_shift(a, 2) (int16) | int16 | 1,000 | 0.0011 | 0.0101 | 9.55x |
-|🟠| np.left_shift(a, 2) (int16) | int16 | 100,000 | 0.0289 | 0.0641 | 2.21x |
-|🟡| np.left_shift(a, 2) (int16) | int16 | 10,000,000 | 7.5456 | 11.1718 | 1.48x |
-|▫| np.left_shift(a, 2) (int32) | int32 | 1,000 | 0.0010 | 0.0144 | 14.48x |
-|🟠| np.left_shift(a, 2) (int32) | int32 | 100,000 | 0.0192 | 0.0657 | 3.42x |
-|✅| np.left_shift(a, 2) (int32) | int32 | 10,000,000 | 14.7614 | 13.8055 | 0.94x |
-|🔴| np.left_shift(a, 2) (int64) | int64 | 1,000 | 0.0010 | 0.0199 | 19.11x |
-|🟠| np.left_shift(a, 2) (int64) | int64 | 100,000 | 0.0199 | 0.0806 | 4.04x |
-|✅| np.left_shift(a, 2) (int64) | int64 | 10,000,000 | 25.6758 | 19.0870 | 0.74x |
-|🔴| np.left_shift(a, 2) (uint16) | uint16 | 1,000 | 0.0011 | 0.0103 | 9.67x |
-|🟠| np.left_shift(a, 2) (uint16) | uint16 | 100,000 | 0.0295 | 0.0635 | 2.15x |
-|🟡| np.left_shift(a, 2) (uint16) | uint16 | 10,000,000 | 7.6829 | 11.1922 | 1.46x |
-|▫| np.left_shift(a, 2) (uint32) | uint32 | 1,000 | 0.0010 | 0.0089 | 8.93x |
-|🟠| np.left_shift(a, 2) (uint32) | uint32 | 100,000 | 0.0198 | 0.0654 | 3.30x |
-|✅| np.left_shift(a, 2) (uint32) | uint32 | 10,000,000 | 15.2253 | 13.5976 | 0.89x |
-|▫| np.left_shift(a, 2) (uint64) | uint64 | 1,000 | 0.0010 | 0.0243 | 24.86x |
-|🟠| np.left_shift(a, 2) (uint64) | uint64 | 100,000 | 0.0191 | 0.0732 | 3.83x |
-|✅| np.left_shift(a, 2) (uint64) | uint64 | 10,000,000 | 34.3965 | 19.0897 | 0.56x |
-|▫| np.left_shift(a, 2) (uint8) | uint8 | 1,000 | 0.0009 | 0.0057 | 6.22x |
-|🟠| np.left_shift(a, 2) (uint8) | uint8 | 100,000 | 0.0282 | 0.0632 | 2.24x |
-|🟡| np.left_shift(a, 2) (uint8) | uint8 | 10,000,000 | 6.2092 | 10.3006 | 1.66x |
-|⚪| np.right_shift(a, 2) (bool) | bool | 1,000 | 0.0016 | - | - |
-|⚪| np.right_shift(a, 2) (bool) | bool | 100,000 | 0.1884 | - | - |
-|⚪| np.right_shift(a, 2) (bool) | bool | 10,000,000 | 15.2908 | - | - |
-|🔴| np.right_shift(a, 2) (int16) | int16 | 1,000 | 0.0012 | 0.0088 | 7.54x |
-|🟡| np.right_shift(a, 2) (int16) | int16 | 100,000 | 0.0375 | 0.0661 | 1.76x |
-|🟡| np.right_shift(a, 2) (int16) | int16 | 10,000,000 | 9.3594 | 11.1885 | 1.20x |
-|🔴| np.right_shift(a, 2) (int32) | int32 | 1,000 | 0.0011 | 0.0172 | 15.61x |
-|🟠| np.right_shift(a, 2) (int32) | int32 | 100,000 | 0.0284 | 0.0664 | 2.34x |
-|✅| np.right_shift(a, 2) (int32) | int32 | 10,000,000 | 15.3178 | 13.4878 | 0.88x |
-|🔴| np.right_shift(a, 2) (int64) | int64 | 1,000 | 0.0010 | 0.0195 | 19.20x |
-|🟠| np.right_shift(a, 2) (int64) | int64 | 100,000 | 0.0296 | 0.0775 | 2.62x |
-|✅| np.right_shift(a, 2) (int64) | int64 | 10,000,000 | 31.6268 | 19.1637 | 0.61x |
-|🔴| np.right_shift(a, 2) (uint16) | uint16 | 1,000 | 0.0012 | 0.0095 | 7.74x |
-|🟠| np.right_shift(a, 2) (uint16) | uint16 | 100,000 | 0.0294 | 0.0644 | 2.19x |
-|🟡| np.right_shift(a, 2) (uint16) | uint16 | 10,000,000 | 7.1666 | 11.3780 | 1.59x |
-|▫| np.right_shift(a, 2) (uint32) | uint32 | 1,000 | 0.0010 | 0.0151 | 15.13x |
-|🟠| np.right_shift(a, 2) (uint32) | uint32 | 100,000 | 0.0195 | 0.0665 | 3.41x |
-|✅| np.right_shift(a, 2) (uint32) | uint32 | 10,000,000 | 14.9491 | 13.5401 | 0.91x |
-|▫| np.right_shift(a, 2) (uint64) | uint64 | 1,000 | 0.0010 | 0.0156 | 15.71x |
-|🟠| np.right_shift(a, 2) (uint64) | uint64 | 100,000 | 0.0309 | 0.0724 | 2.35x |
-|✅| np.right_shift(a, 2) (uint64) | uint64 | 10,000,000 | 32.6266 | 19.1042 | 0.59x |
-|▫| np.right_shift(a, 2) (uint8) | uint8 | 1,000 | 0.0009 | 0.0079 | 8.66x |
-|🟠| np.right_shift(a, 2) (uint8) | uint8 | 100,000 | 0.0284 | 0.0645 | 2.27x |
-|🟡| np.right_shift(a, 2) (uint8) | uint8 | 10,000,000 | 6.3306 | 10.3850 | 1.64x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| a & b (bool) | bool | 1,000 | 0.0004 | 0.0012 | 0.31× | 322% |
+|🔴| a & b (bool) | bool | 100,000 | 0.0033 | 0.0225 | 0.14× | 688% |
+|🟡| a & b (bool) | bool | 10,000,000 | 2.0034 | 2.7889 | 0.72× | 139% |
+|▫| a & b (int16) | int16 | 1,000 | 0.0008 | 0.0046 | 0.17× | 596% |
+|✅| a & b (int16) | int16 | 100,000 | 0.0295 | 0.0101 | 2.91× | 34% |
+|✅| a & b (int16) | int16 | 10,000,000 | 9.2627 | 3.7953 | 2.44× | 41% |
+|▫| a & b (int32) | int32 | 1,000 | 0.0008 | 0.0054 | 0.15× | 684% |
+|✅| a & b (int32) | int32 | 100,000 | 0.0325 | 0.0211 | 1.54× | 65% |
+|✅| a & b (int32) | int32 | 10,000,000 | 16.8456 | 7.6036 | 2.21× | 45% |
+|▫| a & b (int64) | int64 | 1,000 | 0.0008 | 0.0119 | 0.066× | 15× |
+|🟡| a & b (int64) | int64 | 100,000 | 0.0352 | 0.0449 | 0.78× | 128% |
+|✅| a & b (int64) | int64 | 10,000,000 | 37.9424 | 14.9278 | 2.54× | 39% |
+|▫| a & b (uint16) | uint16 | 1,000 | 0.0008 | 0.0040 | 0.20× | 508% |
+|✅| a & b (uint16) | uint16 | 100,000 | 0.0309 | 0.0105 | 2.93× | 34% |
+|✅| a & b (uint16) | uint16 | 10,000,000 | 9.5081 | 3.7945 | 2.51× | 40% |
+|▫| a & b (uint32) | uint32 | 1,000 | 0.0008 | 0.0083 | 0.096× | 10× |
+|✅| a & b (uint32) | uint32 | 100,000 | 0.0329 | 0.0206 | 1.59× | 63% |
+|✅| a & b (uint32) | uint32 | 10,000,000 | 18.7328 | 7.6036 | 2.46× | 41% |
+|▫| a & b (uint64) | uint64 | 1,000 | 0.0008 | 0.0094 | 0.084× | 12× |
+|🟡| a & b (uint64) | uint64 | 100,000 | 0.0360 | 0.0442 | 0.81× | 123% |
+|✅| a & b (uint64) | uint64 | 10,000,000 | 39.5694 | 15.0468 | 2.63× | 38% |
+|▫| a & b (uint8) | uint8 | 1,000 | 0.0008 | 0.0015 | 0.53× | 188% |
+|✅| a & b (uint8) | uint8 | 100,000 | 0.0285 | 0.0061 | 4.67× | 21% |
+|✅| a & b (uint8) | uint8 | 10,000,000 | 3.8970 | 1.8615 | 2.09× | 48% |
+|▫| a ^ b (bool) | bool | 1,000 | 0.0004 | 0.0015 | 0.29× | 346% |
+|🔴| a ^ b (bool) | bool | 100,000 | 0.0031 | 0.0224 | 0.14× | 720% |
+|🟡| a ^ b (bool) | bool | 10,000,000 | 1.8487 | 2.8187 | 0.66× | 152% |
+|▫| a ^ b (int16) | int16 | 1,000 | 0.0008 | 0.0027 | 0.29× | 348% |
+|✅| a ^ b (int16) | int16 | 100,000 | 0.0285 | 0.0095 | 2.99× | 34% |
+|✅| a ^ b (int16) | int16 | 10,000,000 | 9.7269 | 3.7538 | 2.59× | 39% |
+|▫| a ^ b (int32) | int32 | 1,000 | 0.0008 | 0.0081 | 0.096× | 10× |
+|✅| a ^ b (int32) | int32 | 100,000 | 0.0288 | 0.0218 | 1.32× | 76% |
+|✅| a ^ b (int32) | int32 | 10,000,000 | 17.4185 | 7.5248 | 2.31× | 43% |
+|▫| a ^ b (int64) | int64 | 1,000 | 0.0008 | 0.0093 | 0.083× | 12× |
+|🟡| a ^ b (int64) | int64 | 100,000 | 0.0363 | 0.0453 | 0.80× | 125% |
+|✅| a ^ b (int64) | int64 | 10,000,000 | 33.1728 | 14.8136 | 2.24× | 45% |
+|▫| a ^ b (uint16) | uint16 | 1,000 | 0.0008 | 0.0032 | 0.24× | 411% |
+|✅| a ^ b (uint16) | uint16 | 100,000 | 0.0293 | 0.0107 | 2.73× | 37% |
+|✅| a ^ b (uint16) | uint16 | 10,000,000 | 9.3024 | 3.7737 | 2.46× | 41% |
+|▫| a ^ b (uint32) | uint32 | 1,000 | 0.0008 | 0.0060 | 0.13× | 768% |
+|✅| a ^ b (uint32) | uint32 | 100,000 | 0.0286 | 0.0211 | 1.36× | 74% |
+|✅| a ^ b (uint32) | uint32 | 10,000,000 | 18.9513 | 7.5649 | 2.50× | 40% |
+|▫| a ^ b (uint64) | uint64 | 1,000 | 0.0008 | 0.0124 | 0.063× | 16× |
+|🟡| a ^ b (uint64) | uint64 | 100,000 | 0.0358 | 0.0433 | 0.83× | 121% |
+|✅| a ^ b (uint64) | uint64 | 10,000,000 | 42.5116 | 15.2940 | 2.78× | 36% |
+|▫| a ^ b (uint8) | uint8 | 1,000 | 0.0007 | 0.0013 | 0.51× | 198% |
+|✅| a ^ b (uint8) | uint8 | 100,000 | 0.0285 | 0.0068 | 4.22× | 24% |
+|✅| a ^ b (uint8) | uint8 | 10,000,000 | 6.5357 | 1.8194 | 3.59× | 28% |
+|▫| a | b (bool) | bool | 1,000 | 0.0004 | 0.0017 | 0.24× | 421% |
+|🔴| a | b (bool) | bool | 100,000 | 0.0028 | 0.0238 | 0.12× | 841% |
+|🟡| a | b (bool) | bool | 10,000,000 | 1.8630 | 3.2311 | 0.58× | 173% |
+|▫| a | b (int16) | int16 | 1,000 | 0.0008 | 0.0030 | 0.26× | 380% |
+|✅| a | b (int16) | int16 | 100,000 | 0.0285 | 0.0112 | 2.55× | 39% |
+|✅| a | b (int16) | int16 | 10,000,000 | 9.4168 | 3.7613 | 2.50× | 40% |
+|▫| a | b (int32) | int32 | 1,000 | 0.0008 | 0.0083 | 0.095× | 11× |
+|✅| a | b (int32) | int32 | 100,000 | 0.0303 | 0.0222 | 1.36× | 73% |
+|✅| a | b (int32) | int32 | 10,000,000 | 16.5894 | 7.5214 | 2.21× | 45% |
+|▫| a | b (int64) | int64 | 1,000 | 0.0008 | 0.0130 | 0.061× | 16× |
+|🟡| a | b (int64) | int64 | 100,000 | 0.0366 | 0.0429 | 0.85× | 117% |
+|✅| a | b (int64) | int64 | 10,000,000 | 36.1764 | 14.8245 | 2.44× | 41% |
+|▫| a | b (uint16) | uint16 | 1,000 | 0.0008 | 0.0032 | 0.25× | 407% |
+|✅| a | b (uint16) | uint16 | 100,000 | 0.0286 | 0.0112 | 2.55× | 39% |
+|✅| a | b (uint16) | uint16 | 10,000,000 | 9.4580 | 3.7895 | 2.50× | 40% |
+|▫| a | b (uint32) | uint32 | 1,000 | 0.0008 | 0.0065 | 0.12× | 820% |
+|✅| a | b (uint32) | uint32 | 100,000 | 0.0286 | 0.0194 | 1.47× | 68% |
+|✅| a | b (uint32) | uint32 | 10,000,000 | 19.7626 | 7.5865 | 2.60× | 38% |
+|▫| a | b (uint64) | uint64 | 1,000 | 0.0008 | 0.0126 | 0.064× | 16× |
+|🟡| a | b (uint64) | uint64 | 100,000 | 0.0353 | 0.0452 | 0.78× | 128% |
+|✅| a | b (uint64) | uint64 | 10,000,000 | 38.8894 | 15.0789 | 2.58× | 39% |
+|▫| a | b (uint8) | uint8 | 1,000 | 0.0007 | 0.0011 | 0.61× | 165% |
+|✅| a | b (uint8) | uint8 | 100,000 | 0.0304 | 0.0064 | 4.72× | 21% |
+|✅| a | b (uint8) | uint8 | 10,000,000 | 4.3234 | 1.8380 | 2.35× | 42% |
+|▫| np.invert(a) (bool) | bool | 1,000 | 0.0004 | 0.0017 | 0.22× | 455% |
+|🔴| np.invert(a) (bool) | bool | 100,000 | 0.0026 | 0.0241 | 0.11× | 932% |
+|🟡| np.invert(a) (bool) | bool | 10,000,000 | 1.6922 | 3.0191 | 0.56× | 178% |
+|▫| np.invert(a) (int16) | int16 | 1,000 | 0.0007 | 0.0035 | 0.21× | 473% |
+|✅| np.invert(a) (int16) | int16 | 100,000 | 0.0262 | 0.0102 | 2.57× | 39% |
+|✅| np.invert(a) (int16) | int16 | 10,000,000 | 7.9035 | 3.3957 | 2.33× | 43% |
+|▫| np.invert(a) (int32) | int32 | 1,000 | 0.0008 | 0.0075 | 0.10× | 964% |
+|✅| np.invert(a) (int32) | int32 | 100,000 | 0.0352 | 0.0205 | 1.72× | 58% |
+|✅| np.invert(a) (int32) | int32 | 10,000,000 | 14.1460 | 7.1424 | 1.98× | 50% |
+|▫| np.invert(a) (int64) | int64 | 1,000 | 0.0007 | 0.0088 | 0.083× | 12× |
+|🟡| np.invert(a) (int64) | int64 | 100,000 | 0.0263 | 0.0464 | 0.57× | 176% |
+|✅| np.invert(a) (int64) | int64 | 10,000,000 | 26.1526 | 13.5612 | 1.93× | 52% |
+|▫| np.invert(a) (uint16) | uint16 | 1,000 | 0.0007 | 0.0030 | 0.24× | 409% |
+|✅| np.invert(a) (uint16) | uint16 | 100,000 | 0.0360 | 0.0103 | 3.50× | 28% |
+|✅| np.invert(a) (uint16) | uint16 | 10,000,000 | 6.7184 | 3.4013 | 1.98× | 51% |
+|▫| np.invert(a) (uint32) | uint32 | 1,000 | 0.0008 | 0.0100 | 0.077× | 13× |
+|✅| np.invert(a) (uint32) | uint32 | 100,000 | 0.0338 | 0.0200 | 1.70× | 59% |
+|✅| np.invert(a) (uint32) | uint32 | 10,000,000 | 13.9398 | 6.9702 | 2.00× | 50% |
+|▫| np.invert(a) (uint64) | uint64 | 1,000 | 0.0007 | 0.0098 | 0.074× | 13× |
+|🟡| np.invert(a) (uint64) | uint64 | 100,000 | 0.0262 | 0.0387 | 0.68× | 148% |
+|✅| np.invert(a) (uint64) | uint64 | 10,000,000 | 33.5033 | 13.6426 | 2.46× | 41% |
+|▫| np.invert(a) (uint8) | uint8 | 1,000 | 0.0006 | 0.0013 | 0.46× | 218% |
+|✅| np.invert(a) (uint8) | uint8 | 100,000 | 0.0258 | 0.0069 | 3.72× | 27% |
+|✅| np.invert(a) (uint8) | uint8 | 10,000,000 | 5.7393 | 1.6899 | 3.40× | 29% |
+|⚪| np.left_shift(a, 2) (bool) | bool | 1,000 | 0.0015 | - | - | - |
+|⚪| np.left_shift(a, 2) (bool) | bool | 100,000 | 0.1933 | - | - | - |
+|⚪| np.left_shift(a, 2) (bool) | bool | 10,000,000 | 15.1279 | - | - | - |
+|🔴| np.left_shift(a, 2) (int16) | int16 | 1,000 | 0.0011 | 0.0101 | 0.10× | 955% |
+|🟠| np.left_shift(a, 2) (int16) | int16 | 100,000 | 0.0289 | 0.0641 | 0.45× | 221% |
+|🟡| np.left_shift(a, 2) (int16) | int16 | 10,000,000 | 7.5456 | 11.1718 | 0.68× | 148% |
+|▫| np.left_shift(a, 2) (int32) | int32 | 1,000 | 0.0010 | 0.0144 | 0.069× | 14× |
+|🟠| np.left_shift(a, 2) (int32) | int32 | 100,000 | 0.0192 | 0.0657 | 0.29× | 342% |
+|✅| np.left_shift(a, 2) (int32) | int32 | 10,000,000 | 14.7614 | 13.8055 | 1.07× | 94% |
+|🔴| np.left_shift(a, 2) (int64) | int64 | 1,000 | 0.0010 | 0.0199 | 0.052× | 19× |
+|🟠| np.left_shift(a, 2) (int64) | int64 | 100,000 | 0.0199 | 0.0806 | 0.25× | 404% |
+|✅| np.left_shift(a, 2) (int64) | int64 | 10,000,000 | 25.6758 | 19.0870 | 1.34× | 74% |
+|🔴| np.left_shift(a, 2) (uint16) | uint16 | 1,000 | 0.0011 | 0.0103 | 0.10× | 967% |
+|🟠| np.left_shift(a, 2) (uint16) | uint16 | 100,000 | 0.0295 | 0.0635 | 0.46× | 215% |
+|🟡| np.left_shift(a, 2) (uint16) | uint16 | 10,000,000 | 7.6829 | 11.1922 | 0.69× | 146% |
+|▫| np.left_shift(a, 2) (uint32) | uint32 | 1,000 | 0.0010 | 0.0089 | 0.11× | 893% |
+|🟠| np.left_shift(a, 2) (uint32) | uint32 | 100,000 | 0.0198 | 0.0654 | 0.30× | 330% |
+|✅| np.left_shift(a, 2) (uint32) | uint32 | 10,000,000 | 15.2253 | 13.5976 | 1.12× | 89% |
+|▫| np.left_shift(a, 2) (uint64) | uint64 | 1,000 | 0.0010 | 0.0243 | 0.040× | 25× |
+|🟠| np.left_shift(a, 2) (uint64) | uint64 | 100,000 | 0.0191 | 0.0732 | 0.26× | 383% |
+|✅| np.left_shift(a, 2) (uint64) | uint64 | 10,000,000 | 34.3965 | 19.0897 | 1.80× | 56% |
+|▫| np.left_shift(a, 2) (uint8) | uint8 | 1,000 | 0.0009 | 0.0057 | 0.16× | 622% |
+|🟠| np.left_shift(a, 2) (uint8) | uint8 | 100,000 | 0.0282 | 0.0632 | 0.45× | 224% |
+|🟡| np.left_shift(a, 2) (uint8) | uint8 | 10,000,000 | 6.2092 | 10.3006 | 0.60× | 166% |
+|⚪| np.right_shift(a, 2) (bool) | bool | 1,000 | 0.0016 | - | - | - |
+|⚪| np.right_shift(a, 2) (bool) | bool | 100,000 | 0.1884 | - | - | - |
+|⚪| np.right_shift(a, 2) (bool) | bool | 10,000,000 | 15.2908 | - | - | - |
+|🔴| np.right_shift(a, 2) (int16) | int16 | 1,000 | 0.0012 | 0.0088 | 0.13× | 754% |
+|🟡| np.right_shift(a, 2) (int16) | int16 | 100,000 | 0.0375 | 0.0661 | 0.57× | 176% |
+|🟡| np.right_shift(a, 2) (int16) | int16 | 10,000,000 | 9.3594 | 11.1885 | 0.84× | 120% |
+|🔴| np.right_shift(a, 2) (int32) | int32 | 1,000 | 0.0011 | 0.0172 | 0.064× | 16× |
+|🟠| np.right_shift(a, 2) (int32) | int32 | 100,000 | 0.0284 | 0.0664 | 0.43× | 234% |
+|✅| np.right_shift(a, 2) (int32) | int32 | 10,000,000 | 15.3178 | 13.4878 | 1.14× | 88% |
+|🔴| np.right_shift(a, 2) (int64) | int64 | 1,000 | 0.0010 | 0.0195 | 0.052× | 19× |
+|🟠| np.right_shift(a, 2) (int64) | int64 | 100,000 | 0.0296 | 0.0775 | 0.38× | 262% |
+|✅| np.right_shift(a, 2) (int64) | int64 | 10,000,000 | 31.6268 | 19.1637 | 1.65× | 61% |
+|🔴| np.right_shift(a, 2) (uint16) | uint16 | 1,000 | 0.0012 | 0.0095 | 0.13× | 774% |
+|🟠| np.right_shift(a, 2) (uint16) | uint16 | 100,000 | 0.0294 | 0.0644 | 0.46× | 219% |
+|🟡| np.right_shift(a, 2) (uint16) | uint16 | 10,000,000 | 7.1666 | 11.3780 | 0.63× | 159% |
+|▫| np.right_shift(a, 2) (uint32) | uint32 | 1,000 | 0.0010 | 0.0151 | 0.066× | 15× |
+|🟠| np.right_shift(a, 2) (uint32) | uint32 | 100,000 | 0.0195 | 0.0665 | 0.29× | 341% |
+|✅| np.right_shift(a, 2) (uint32) | uint32 | 10,000,000 | 14.9491 | 13.5401 | 1.10× | 91% |
+|▫| np.right_shift(a, 2) (uint64) | uint64 | 1,000 | 0.0010 | 0.0156 | 0.064× | 16× |
+|🟠| np.right_shift(a, 2) (uint64) | uint64 | 100,000 | 0.0309 | 0.0724 | 0.43× | 235% |
+|✅| np.right_shift(a, 2) (uint64) | uint64 | 10,000,000 | 32.6266 | 19.1042 | 1.71× | 59% |
+|▫| np.right_shift(a, 2) (uint8) | uint8 | 1,000 | 0.0009 | 0.0079 | 0.12× | 866% |
+|🟠| np.right_shift(a, 2) (uint8) | uint8 | 100,000 | 0.0284 | 0.0645 | 0.44× | 227% |
+|🟡| np.right_shift(a, 2) (uint8) | uint8 | 10,000,000 | 6.3306 | 10.3850 | 0.61× | 164% |
 
 ### Logic
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|⚪| np.all(a) (bool) | bool | 1,000 | 0.0014 | - | - |
-|⚪| np.all(a) (bool) | bool | 100,000 | 0.0014 | - | - |
-|⚪| np.all(a) (bool) | bool | 10,000,000 | 0.0039 | - | - |
-|⚪| np.allclose(a, b) (float32) | float32 | 1,000 | 0.0134 | - | - |
-|⚪| np.allclose(a, b) (float32) | float32 | 100,000 | 0.0794 | - | - |
-|⚪| np.allclose(a, b) (float32) | float32 | 10,000,000 | 103.4373 | - | - |
-|⚪| np.allclose(a, b) (float64) | float64 | 1,000 | 0.0139 | - | - |
-|⚪| np.allclose(a, b) (float64) | float64 | 100,000 | 0.7088 | - | - |
-|⚪| np.allclose(a, b) (float64) | float64 | 10,000,000 | 186.0116 | - | - |
-|⚪| np.any(a) (bool) | bool | 1,000 | 0.0014 | - | - |
-|⚪| np.any(a) (bool) | bool | 100,000 | 0.0014 | - | - |
-|⚪| np.any(a) (bool) | bool | 10,000,000 | 0.0041 | - | - |
-|⚪| np.array_equal(a, b) (float32) | float32 | 1,000 | 0.0023 | - | - |
-|⚪| np.array_equal(a, b) (float32) | float32 | 100,000 | 0.0067 | - | - |
-|⚪| np.array_equal(a, b) (float32) | float32 | 10,000,000 | 10.8635 | - | - |
-|⚪| np.array_equal(a, b) (float64) | float64 | 1,000 | 0.0018 | - | - |
-|⚪| np.array_equal(a, b) (float64) | float64 | 100,000 | 0.0133 | - | - |
-|⚪| np.array_equal(a, b) (float64) | float64 | 10,000,000 | 19.7996 | - | - |
-|⚪| np.isclose(a, b) (float32) | float32 | 1,000 | 0.0118 | - | - |
-|⚪| np.isclose(a, b) (float32) | float32 | 100,000 | 0.0781 | - | - |
-|⚪| np.isclose(a, b) (float32) | float32 | 10,000,000 | 98.4756 | - | - |
-|⚪| np.isclose(a, b) (float64) | float64 | 1,000 | 0.0120 | - | - |
-|⚪| np.isclose(a, b) (float64) | float64 | 100,000 | 0.7128 | - | - |
-|⚪| np.isclose(a, b) (float64) | float64 | 10,000,000 | 187.4282 | - | - |
-|⚪| np.isfinite(a) (float32) | float32 | 1,000 | 0.0004 | - | - |
-|⚪| np.isfinite(a) (float32) | float32 | 100,000 | 0.0052 | - | - |
-|⚪| np.isfinite(a) (float32) | float32 | 10,000,000 | 3.6660 | - | - |
-|⚪| np.isfinite(a) (float64) | float64 | 1,000 | 0.0005 | - | - |
-|⚪| np.isfinite(a) (float64) | float64 | 100,000 | 0.0104 | - | - |
-|⚪| np.isfinite(a) (float64) | float64 | 10,000,000 | 10.9932 | - | - |
-|⚪| np.isinf(a) (float32) | float32 | 1,000 | 0.0004 | - | - |
-|⚪| np.isinf(a) (float32) | float32 | 100,000 | 0.0053 | - | - |
-|⚪| np.isinf(a) (float32) | float32 | 10,000,000 | 3.7905 | - | - |
-|⚪| np.isinf(a) (float64) | float64 | 1,000 | 0.0005 | - | - |
-|⚪| np.isinf(a) (float64) | float64 | 100,000 | 0.0101 | - | - |
-|⚪| np.isinf(a) (float64) | float64 | 10,000,000 | 12.2420 | - | - |
-|⚪| np.isnan(a) (float32) | float32 | 1,000 | 0.0005 | - | - |
-|⚪| np.isnan(a) (float32) | float32 | 100,000 | 0.0042 | - | - |
-|⚪| np.isnan(a) (float32) | float32 | 10,000,000 | 3.8648 | - | - |
-|⚪| np.isnan(a) (float64) | float64 | 1,000 | 0.0005 | - | - |
-|⚪| np.isnan(a) (float64) | float64 | 100,000 | 0.0086 | - | - |
-|⚪| np.isnan(a) (float64) | float64 | 10,000,000 | 11.1539 | - | - |
-|⚪| np.maximum(a, b) (float32) | float32 | 1,000 | 0.0006 | - | - |
-|⚪| np.maximum(a, b) (float32) | float32 | 100,000 | 0.0071 | - | - |
-|⚪| np.maximum(a, b) (float32) | float32 | 10,000,000 | 8.9753 | - | - |
-|⚪| np.maximum(a, b) (float64) | float64 | 1,000 | 0.0008 | - | - |
-|⚪| np.maximum(a, b) (float64) | float64 | 100,000 | 0.0301 | - | - |
-|⚪| np.maximum(a, b) (float64) | float64 | 10,000,000 | 33.1903 | - | - |
-|⚪| np.minimum(a, b) (float32) | float32 | 1,000 | 0.0006 | - | - |
-|⚪| np.minimum(a, b) (float32) | float32 | 100,000 | 0.0074 | - | - |
-|⚪| np.minimum(a, b) (float32) | float32 | 10,000,000 | 9.0843 | - | - |
-|⚪| np.minimum(a, b) (float64) | float64 | 1,000 | 0.0006 | - | - |
-|⚪| np.minimum(a, b) (float64) | float64 | 100,000 | 0.0293 | - | - |
-|⚪| np.minimum(a, b) (float64) | float64 | 10,000,000 | 32.3178 | - | - |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|⚪| np.all(a) (bool) | bool | 1,000 | 0.0014 | - | - | - |
+|⚪| np.all(a) (bool) | bool | 100,000 | 0.0014 | - | - | - |
+|⚪| np.all(a) (bool) | bool | 10,000,000 | 0.0039 | - | - | - |
+|⚪| np.allclose(a, b) (float32) | float32 | 1,000 | 0.0134 | - | - | - |
+|⚪| np.allclose(a, b) (float32) | float32 | 100,000 | 0.0794 | - | - | - |
+|⚪| np.allclose(a, b) (float32) | float32 | 10,000,000 | 103.4373 | - | - | - |
+|⚪| np.allclose(a, b) (float64) | float64 | 1,000 | 0.0139 | - | - | - |
+|⚪| np.allclose(a, b) (float64) | float64 | 100,000 | 0.7088 | - | - | - |
+|⚪| np.allclose(a, b) (float64) | float64 | 10,000,000 | 186.0116 | - | - | - |
+|⚪| np.any(a) (bool) | bool | 1,000 | 0.0014 | - | - | - |
+|⚪| np.any(a) (bool) | bool | 100,000 | 0.0014 | - | - | - |
+|⚪| np.any(a) (bool) | bool | 10,000,000 | 0.0041 | - | - | - |
+|⚪| np.array_equal(a, b) (float32) | float32 | 1,000 | 0.0023 | - | - | - |
+|⚪| np.array_equal(a, b) (float32) | float32 | 100,000 | 0.0067 | - | - | - |
+|⚪| np.array_equal(a, b) (float32) | float32 | 10,000,000 | 10.8635 | - | - | - |
+|⚪| np.array_equal(a, b) (float64) | float64 | 1,000 | 0.0018 | - | - | - |
+|⚪| np.array_equal(a, b) (float64) | float64 | 100,000 | 0.0133 | - | - | - |
+|⚪| np.array_equal(a, b) (float64) | float64 | 10,000,000 | 19.7996 | - | - | - |
+|⚪| np.isclose(a, b) (float32) | float32 | 1,000 | 0.0118 | - | - | - |
+|⚪| np.isclose(a, b) (float32) | float32 | 100,000 | 0.0781 | - | - | - |
+|⚪| np.isclose(a, b) (float32) | float32 | 10,000,000 | 98.4756 | - | - | - |
+|⚪| np.isclose(a, b) (float64) | float64 | 1,000 | 0.0120 | - | - | - |
+|⚪| np.isclose(a, b) (float64) | float64 | 100,000 | 0.7128 | - | - | - |
+|⚪| np.isclose(a, b) (float64) | float64 | 10,000,000 | 187.4282 | - | - | - |
+|⚪| np.isfinite(a) (float32) | float32 | 1,000 | 0.0004 | - | - | - |
+|⚪| np.isfinite(a) (float32) | float32 | 100,000 | 0.0052 | - | - | - |
+|⚪| np.isfinite(a) (float32) | float32 | 10,000,000 | 3.6660 | - | - | - |
+|⚪| np.isfinite(a) (float64) | float64 | 1,000 | 0.0005 | - | - | - |
+|⚪| np.isfinite(a) (float64) | float64 | 100,000 | 0.0104 | - | - | - |
+|⚪| np.isfinite(a) (float64) | float64 | 10,000,000 | 10.9932 | - | - | - |
+|⚪| np.isinf(a) (float32) | float32 | 1,000 | 0.0004 | - | - | - |
+|⚪| np.isinf(a) (float32) | float32 | 100,000 | 0.0053 | - | - | - |
+|⚪| np.isinf(a) (float32) | float32 | 10,000,000 | 3.7905 | - | - | - |
+|⚪| np.isinf(a) (float64) | float64 | 1,000 | 0.0005 | - | - | - |
+|⚪| np.isinf(a) (float64) | float64 | 100,000 | 0.0101 | - | - | - |
+|⚪| np.isinf(a) (float64) | float64 | 10,000,000 | 12.2420 | - | - | - |
+|⚪| np.isnan(a) (float32) | float32 | 1,000 | 0.0005 | - | - | - |
+|⚪| np.isnan(a) (float32) | float32 | 100,000 | 0.0042 | - | - | - |
+|⚪| np.isnan(a) (float32) | float32 | 10,000,000 | 3.8648 | - | - | - |
+|⚪| np.isnan(a) (float64) | float64 | 1,000 | 0.0005 | - | - | - |
+|⚪| np.isnan(a) (float64) | float64 | 100,000 | 0.0086 | - | - | - |
+|⚪| np.isnan(a) (float64) | float64 | 10,000,000 | 11.1539 | - | - | - |
+|⚪| np.maximum(a, b) (float32) | float32 | 1,000 | 0.0006 | - | - | - |
+|⚪| np.maximum(a, b) (float32) | float32 | 100,000 | 0.0071 | - | - | - |
+|⚪| np.maximum(a, b) (float32) | float32 | 10,000,000 | 8.9753 | - | - | - |
+|⚪| np.maximum(a, b) (float64) | float64 | 1,000 | 0.0008 | - | - | - |
+|⚪| np.maximum(a, b) (float64) | float64 | 100,000 | 0.0301 | - | - | - |
+|⚪| np.maximum(a, b) (float64) | float64 | 10,000,000 | 33.1903 | - | - | - |
+|⚪| np.minimum(a, b) (float32) | float32 | 1,000 | 0.0006 | - | - | - |
+|⚪| np.minimum(a, b) (float32) | float32 | 100,000 | 0.0074 | - | - | - |
+|⚪| np.minimum(a, b) (float32) | float32 | 10,000,000 | 9.0843 | - | - | - |
+|⚪| np.minimum(a, b) (float64) | float64 | 1,000 | 0.0006 | - | - | - |
+|⚪| np.minimum(a, b) (float64) | float64 | 100,000 | 0.0293 | - | - | - |
+|⚪| np.minimum(a, b) (float64) | float64 | 10,000,000 | 32.3178 | - | - | - |
 
 ### Statistics
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.average(a) (float32) | float32 | 1,000 | 0.0043 | 0.0007 | 0.15x |
-|✅| np.average(a) (float32) | float32 | 100,000 | 0.0177 | 0.0021 | 0.12x |
-|✅| np.average(a) (float32) | float32 | 10,000,000 | 9.5978 | 0.9373 | 0.10x |
-|▫| np.average(a) (float64) | float64 | 1,000 | 0.0029 | 0.0006 | 0.23x |
-|✅| np.average(a) (float64) | float64 | 100,000 | 0.0181 | 0.0040 | 0.22x |
-|✅| np.average(a) (float64) | float64 | 10,000,000 | 17.2902 | 2.5462 | 0.15x |
-|▫| np.count_nonzero(a) (float32) | float32 | 1,000 | 0.0008 | 0.0001 | 0.10x |
-|✅| np.count_nonzero(a) (float32) | float32 | 100,000 | 0.0379 | 0.0046 | 0.12x |
-|✅| np.count_nonzero(a) (float32) | float32 | 10,000,000 | 8.0124 | 1.5426 | 0.19x |
-|▫| np.count_nonzero(a) (float64) | float64 | 1,000 | 0.0006 | 0.0001 | 0.19x |
-|✅| np.count_nonzero(a) (float64) | float64 | 100,000 | 0.0381 | 0.0088 | 0.23x |
-|✅| np.count_nonzero(a) (float64) | float64 | 10,000,000 | 22.6049 | 3.7369 | 0.17x |
-|✅| np.median(a) (float32) | float32 | 1,000 | 0.0110 | 0.0024 | 0.22x |
-|🟡| np.median(a) (float32) | float32 | 100,000 | 0.4716 | 0.7425 | 1.57x |
-|✅| np.median(a) (float32) | float32 | 10,000,000 | 87.7171 | 85.5722 | 0.98x |
-|✅| np.median(a) (float64) | float64 | 1,000 | 0.0098 | 0.0023 | 0.24x |
-|🟡| np.median(a) (float64) | float64 | 100,000 | 0.4704 | 0.7067 | 1.50x |
-|✅| np.median(a) (float64) | float64 | 10,000,000 | 113.1357 | 87.8338 | 0.78x |
-|✅| np.percentile(a, 50) (float32) | float32 | 1,000 | 0.0248 | 0.0024 | 0.10x |
-|🟡| np.percentile(a, 50) (float32) | float32 | 100,000 | 0.7319 | 0.7428 | 1.01x |
-|🟡| np.percentile(a, 50) (float32) | float32 | 10,000,000 | 68.3265 | 85.4781 | 1.25x |
-|✅| np.percentile(a, 50) (float64) | float64 | 1,000 | 0.0245 | 0.0023 | 0.10x |
-|✅| np.percentile(a, 50) (float64) | float64 | 100,000 | 0.7119 | 0.7082 | 0.99x |
-|🟡| np.percentile(a, 50) (float64) | float64 | 10,000,000 | 82.2651 | 87.7597 | 1.07x |
-|✅| np.ptp(a) (float32) | float32 | 1,000 | 0.0031 | 0.0020 | 0.63x |
-|🟡| np.ptp(a) (float32) | float32 | 100,000 | 0.0140 | 0.0275 | 1.97x |
-|✅| np.ptp(a) (float32) | float32 | 10,000,000 | 7.7188 | 3.4002 | 0.44x |
-|✅| np.ptp(a) (float64) | float64 | 1,000 | 0.0033 | 0.0026 | 0.77x |
-|🟠| np.ptp(a) (float64) | float64 | 100,000 | 0.0198 | 0.0528 | 2.67x |
-|✅| np.ptp(a) (float64) | float64 | 10,000,000 | 18.9636 | 10.1399 | 0.54x |
-|✅| np.quantile(a, 0.5) (float32) | float32 | 1,000 | 0.0240 | 0.0024 | 0.10x |
-|🟡| np.quantile(a, 0.5) (float32) | float32 | 100,000 | 0.6880 | 0.7436 | 1.08x |
-|🟡| np.quantile(a, 0.5) (float32) | float32 | 10,000,000 | 64.1916 | 85.6317 | 1.33x |
-|✅| np.quantile(a, 0.5) (float64) | float64 | 1,000 | 0.0232 | 0.0023 | 0.10x |
-|🟡| np.quantile(a, 0.5) (float64) | float64 | 100,000 | 0.7042 | 0.7066 | 1.00x |
-|🟡| np.quantile(a, 0.5) (float64) | float64 | 10,000,000 | 86.1589 | 87.6596 | 1.02x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.average(a) (float32) | float32 | 1,000 | 0.0043 | 0.0007 | 6.61× | 15% |
+|✅| np.average(a) (float32) | float32 | 100,000 | 0.0177 | 0.0021 | 8.32× | 12% |
+|✅| np.average(a) (float32) | float32 | 10,000,000 | 9.5978 | 0.9373 | 10.24× | 10% |
+|▫| np.average(a) (float64) | float64 | 1,000 | 0.0029 | 0.0006 | 4.42× | 23% |
+|✅| np.average(a) (float64) | float64 | 100,000 | 0.0181 | 0.0040 | 4.58× | 22% |
+|✅| np.average(a) (float64) | float64 | 10,000,000 | 17.2902 | 2.5462 | 6.79× | 15% |
+|▫| np.count_nonzero(a) (float32) | float32 | 1,000 | 0.0008 | 0.0001 | 9.81× | 10% |
+|✅| np.count_nonzero(a) (float32) | float32 | 100,000 | 0.0379 | 0.0046 | 8.26× | 12% |
+|✅| np.count_nonzero(a) (float32) | float32 | 10,000,000 | 8.0124 | 1.5426 | 5.19× | 19% |
+|▫| np.count_nonzero(a) (float64) | float64 | 1,000 | 0.0006 | 0.0001 | 5.24× | 19% |
+|✅| np.count_nonzero(a) (float64) | float64 | 100,000 | 0.0381 | 0.0088 | 4.31× | 23% |
+|✅| np.count_nonzero(a) (float64) | float64 | 10,000,000 | 22.6049 | 3.7369 | 6.05× | 16% |
+|✅| np.median(a) (float32) | float32 | 1,000 | 0.0110 | 0.0024 | 4.60× | 22% |
+|🟡| np.median(a) (float32) | float32 | 100,000 | 0.4716 | 0.7425 | 0.64× | 158% |
+|✅| np.median(a) (float32) | float32 | 10,000,000 | 87.7171 | 85.5722 | 1.02× | 98% |
+|✅| np.median(a) (float64) | float64 | 1,000 | 0.0098 | 0.0023 | 4.23× | 24% |
+|🟡| np.median(a) (float64) | float64 | 100,000 | 0.4704 | 0.7067 | 0.67× | 150% |
+|✅| np.median(a) (float64) | float64 | 10,000,000 | 113.1357 | 87.8338 | 1.29× | 78% |
+|✅| np.percentile(a, 50) (float32) | float32 | 1,000 | 0.0248 | 0.0024 | 10.30× | 10% |
+|🟡| np.percentile(a, 50) (float32) | float32 | 100,000 | 0.7319 | 0.7428 | 0.98× | 102% |
+|🟡| np.percentile(a, 50) (float32) | float32 | 10,000,000 | 68.3265 | 85.4781 | 0.80× | 125% |
+|✅| np.percentile(a, 50) (float64) | float64 | 1,000 | 0.0245 | 0.0023 | 10.50× | 10% |
+|✅| np.percentile(a, 50) (float64) | float64 | 100,000 | 0.7119 | 0.7082 | 1.00× | 100% |
+|🟡| np.percentile(a, 50) (float64) | float64 | 10,000,000 | 82.2651 | 87.7597 | 0.94× | 107% |
+|✅| np.ptp(a) (float32) | float32 | 1,000 | 0.0031 | 0.0020 | 1.59× | 63% |
+|🟡| np.ptp(a) (float32) | float32 | 100,000 | 0.0140 | 0.0275 | 0.51× | 197% |
+|✅| np.ptp(a) (float32) | float32 | 10,000,000 | 7.7188 | 3.4002 | 2.27× | 44% |
+|✅| np.ptp(a) (float64) | float64 | 1,000 | 0.0033 | 0.0026 | 1.29× | 77% |
+|🟠| np.ptp(a) (float64) | float64 | 100,000 | 0.0198 | 0.0528 | 0.37× | 268% |
+|✅| np.ptp(a) (float64) | float64 | 10,000,000 | 18.9636 | 10.1399 | 1.87× | 54% |
+|✅| np.quantile(a, 0.5) (float32) | float32 | 1,000 | 0.0240 | 0.0024 | 10.01× | 10% |
+|🟡| np.quantile(a, 0.5) (float32) | float32 | 100,000 | 0.6880 | 0.7436 | 0.93× | 108% |
+|🟡| np.quantile(a, 0.5) (float32) | float32 | 10,000,000 | 64.1916 | 85.6317 | 0.75× | 133% |
+|✅| np.quantile(a, 0.5) (float64) | float64 | 1,000 | 0.0232 | 0.0023 | 9.89× | 10% |
+|🟡| np.quantile(a, 0.5) (float64) | float64 | 100,000 | 0.7042 | 0.7066 | 1.00× | 100% |
+|🟡| np.quantile(a, 0.5) (float64) | float64 | 10,000,000 | 86.1589 | 87.6596 | 0.98× | 102% |
 
 ### Sorting
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|🔴| np.argsort(a) (float32) | float32 | 1,000 | 0.0118 | 0.0691 | 5.88x |
-|🔴| np.argsort(a) (float32) | float32 | 100,000 | 1.5577 | 12.9884 | 8.34x |
-|🟡| np.argsort(a) (float32) | float32 | 10,000,000 | 1524.6232 | 2861.3197 | 1.88x |
-|🔴| np.argsort(a) (float64) | float64 | 1,000 | 0.0105 | 0.0707 | 6.76x |
-|🔴| np.argsort(a) (float64) | float64 | 100,000 | 1.4217 | 13.4715 | 9.47x |
-|🟡| np.argsort(a) (float64) | float64 | 10,000,000 | 2030.5666 | 3133.5306 | 1.54x |
-|🟠| np.argsort(a) (int32) | int32 | 1,000 | 0.0118 | 0.0387 | 3.27x |
-|🔴| np.argsort(a) (int32) | int32 | 100,000 | 0.4419 | 10.4036 | 23.54x |
-|🔴| np.argsort(a) (int32) | int32 | 10,000,000 | 368.7844 | 2162.0888 | 5.86x |
-|🟠| np.argsort(a) (int64) | int64 | 1,000 | 0.0132 | 0.0594 | 4.51x |
-|🔴| np.argsort(a) (int64) | int64 | 100,000 | 0.4716 | 12.8928 | 27.34x |
-|🟠| np.argsort(a) (int64) | int64 | 10,000,000 | 572.7782 | 2835.7755 | 4.95x |
-|✅| np.nonzero(a) (float32) | float32 | 1,000 | 0.0027 | 0.0021 | 0.77x |
-|✅| np.nonzero(a) (float32) | float32 | 100,000 | 0.1952 | 0.0853 | 0.44x |
-|✅| np.nonzero(a) (float32) | float32 | 10,000,000 | 43.6328 | 18.7015 | 0.43x |
-|✅| np.nonzero(a) (float64) | float64 | 1,000 | 0.0028 | 0.0022 | 0.78x |
-|✅| np.nonzero(a) (float64) | float64 | 100,000 | 0.1868 | 0.0927 | 0.50x |
-|✅| np.nonzero(a) (float64) | float64 | 10,000,000 | 56.0464 | 21.9806 | 0.39x |
-|🟡| np.nonzero(a) (int32) | int32 | 1,000 | 0.0017 | 0.0021 | 1.19x |
-|✅| np.nonzero(a) (int32) | int32 | 100,000 | 0.1037 | 0.0842 | 0.81x |
-|✅| np.nonzero(a) (int32) | int32 | 10,000,000 | 32.4047 | 18.6123 | 0.57x |
-|🟡| np.nonzero(a) (int64) | int64 | 1,000 | 0.0018 | 0.0022 | 1.25x |
-|✅| np.nonzero(a) (int64) | int64 | 100,000 | 0.1045 | 0.0973 | 0.93x |
-|✅| np.nonzero(a) (int64) | int64 | 10,000,000 | 57.7190 | 22.4015 | 0.39x |
-|▫| np.searchsorted(a, v) (float32) | float32 | 1,000 | 0.0015 | 0.0000 | 0.01x |
-|▫| np.searchsorted(a, v) (float32) | float32 | 100,000 | 0.0239 | 0.0000 | 0.00x |
-|▫| np.searchsorted(a, v) (float32) | float32 | 10,000,000 | 22.9514 | 0.0000 | 0.00x |
-|▫| np.searchsorted(a, v) (float64) | float64 | 1,000 | 0.0009 | 0.0000 | 0.02x |
-|▫| np.searchsorted(a, v) (float64) | float64 | 100,000 | 0.0011 | 0.0000 | 0.02x |
-|▫| np.searchsorted(a, v) (float64) | float64 | 10,000,000 | 0.0028 | 0.0000 | 0.01x |
-|▫| np.searchsorted(a, v) (int32) | int32 | 1,000 | 0.0015 | 0.0000 | 0.01x |
-|▫| np.searchsorted(a, v) (int32) | int32 | 100,000 | 0.0317 | 0.0000 | 0.00x |
-|▫| np.searchsorted(a, v) (int32) | int32 | 10,000,000 | 22.8202 | 0.0000 | 0.00x |
-|▫| np.searchsorted(a, v) (int64) | int64 | 1,000 | 0.0009 | 0.0000 | 0.02x |
-|▫| np.searchsorted(a, v) (int64) | int64 | 100,000 | 0.0009 | 0.0000 | 0.02x |
-|▫| np.searchsorted(a, v) (int64) | int64 | 10,000,000 | 0.0027 | 0.0000 | 0.01x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|🔴| np.argsort(a) (float32) | float32 | 1,000 | 0.0118 | 0.0691 | 0.17× | 588% |
+|🔴| np.argsort(a) (float32) | float32 | 100,000 | 1.5577 | 12.9884 | 0.12× | 834% |
+|🟡| np.argsort(a) (float32) | float32 | 10,000,000 | 1524.6232 | 2861.3197 | 0.53× | 188% |
+|🔴| np.argsort(a) (float64) | float64 | 1,000 | 0.0105 | 0.0707 | 0.15× | 676% |
+|🔴| np.argsort(a) (float64) | float64 | 100,000 | 1.4217 | 13.4715 | 0.11× | 948% |
+|🟡| np.argsort(a) (float64) | float64 | 10,000,000 | 2030.5666 | 3133.5306 | 0.65× | 154% |
+|🟠| np.argsort(a) (int32) | int32 | 1,000 | 0.0118 | 0.0387 | 0.30× | 328% |
+|🔴| np.argsort(a) (int32) | int32 | 100,000 | 0.4419 | 10.4036 | 0.042× | 24× |
+|🔴| np.argsort(a) (int32) | int32 | 10,000,000 | 368.7844 | 2162.0888 | 0.17× | 586% |
+|🟠| np.argsort(a) (int64) | int64 | 1,000 | 0.0132 | 0.0594 | 0.22× | 451% |
+|🔴| np.argsort(a) (int64) | int64 | 100,000 | 0.4716 | 12.8928 | 0.037× | 27× |
+|🟠| np.argsort(a) (int64) | int64 | 10,000,000 | 572.7782 | 2835.7755 | 0.20× | 495% |
+|✅| np.nonzero(a) (float32) | float32 | 1,000 | 0.0027 | 0.0021 | 1.31× | 76% |
+|✅| np.nonzero(a) (float32) | float32 | 100,000 | 0.1952 | 0.0853 | 2.29× | 44% |
+|✅| np.nonzero(a) (float32) | float32 | 10,000,000 | 43.6328 | 18.7015 | 2.33× | 43% |
+|✅| np.nonzero(a) (float64) | float64 | 1,000 | 0.0028 | 0.0022 | 1.28× | 78% |
+|✅| np.nonzero(a) (float64) | float64 | 100,000 | 0.1868 | 0.0927 | 2.02× | 50% |
+|✅| np.nonzero(a) (float64) | float64 | 10,000,000 | 56.0464 | 21.9806 | 2.55× | 39% |
+|🟡| np.nonzero(a) (int32) | int32 | 1,000 | 0.0017 | 0.0021 | 0.84× | 119% |
+|✅| np.nonzero(a) (int32) | int32 | 100,000 | 0.1037 | 0.0842 | 1.23× | 81% |
+|✅| np.nonzero(a) (int32) | int32 | 10,000,000 | 32.4047 | 18.6123 | 1.74× | 57% |
+|🟡| np.nonzero(a) (int64) | int64 | 1,000 | 0.0018 | 0.0022 | 0.80× | 125% |
+|✅| np.nonzero(a) (int64) | int64 | 100,000 | 0.1045 | 0.0973 | 1.07× | 93% |
+|✅| np.nonzero(a) (int64) | int64 | 10,000,000 | 57.7190 | 22.4015 | 2.58× | 39% |
+|▫| np.searchsorted(a, v) (float32) | float32 | 1,000 | 0.0015 | 0.0000 | 97.12× | 1% |
+|▫| np.searchsorted(a, v) (float32) | float32 | 100,000 | 0.0239 | 0.0000 | 1302.97× | 0% |
+|▫| np.searchsorted(a, v) (float32) | float32 | 10,000,000 | 22.9514 | 0.0000 | 1110401.72× | 0% |
+|▫| np.searchsorted(a, v) (float64) | float64 | 1,000 | 0.0009 | 0.0000 | 58.00× | 2% |
+|▫| np.searchsorted(a, v) (float64) | float64 | 100,000 | 0.0011 | 0.0000 | 62.13× | 2% |
+|▫| np.searchsorted(a, v) (float64) | float64 | 10,000,000 | 0.0028 | 0.0000 | 133.05× | 1% |
+|▫| np.searchsorted(a, v) (int32) | int32 | 1,000 | 0.0015 | 0.0000 | 92.81× | 1% |
+|▫| np.searchsorted(a, v) (int32) | int32 | 100,000 | 0.0317 | 0.0000 | 1829.92× | 0% |
+|▫| np.searchsorted(a, v) (int32) | int32 | 10,000,000 | 22.8202 | 0.0000 | 1215357.45× | 0% |
+|▫| np.searchsorted(a, v) (int64) | int64 | 1,000 | 0.0009 | 0.0000 | 56.27× | 2% |
+|▫| np.searchsorted(a, v) (int64) | int64 | 100,000 | 0.0009 | 0.0000 | 48.81× | 2% |
+|▫| np.searchsorted(a, v) (int64) | int64 | 10,000,000 | 0.0027 | 0.0000 | 140.03× | 1% |
 
 ### LinearAlgebra
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.dot(a, b) (float64) | float64 | 1,000 | 0.0007 | 0.0032 | 4.40x |
-|✅| np.dot(a, b) (float64) | float64 | 100,000 | 0.1106 | 0.0714 | 0.65x |
-|🔴| np.dot(a, b) (float64) | float64 | 10,000,000 | 1.2316 | 16.4598 | 13.36x |
-|🟠| np.matmul(A, B) (float64) | float64 | 1,000 | 0.0026 | 0.0052 | 2.03x |
-|🔴| np.matmul(A, B) (float64) | float64 | 100,000 | 0.6011 | 3.2324 | 5.38x |
-|🔴| np.matmul(A, B) (float64) | float64 | 10,000,000 | 0.7194 | 4.2604 | 5.92x |
-|🟠| np.outer(a, b) (float64) | float64 | 1,000 | 0.0021 | 0.0049 | 2.36x |
-|🟡| np.outer(a, b) (float64) | float64 | 100,000 | 0.0380 | 0.0493 | 1.30x |
-|✅| np.outer(a, b) (float64) | float64 | 10,000,000 | 14.5048 | 11.8529 | 0.82x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.dot(a, b) (float64) | float64 | 1,000 | 0.0007 | 0.0032 | 0.23× | 440% |
+|✅| np.dot(a, b) (float64) | float64 | 100,000 | 0.1106 | 0.0714 | 1.55× | 64% |
+|🔴| np.dot(a, b) (float64) | float64 | 10,000,000 | 1.2316 | 16.4598 | 0.075× | 13× |
+|🟠| np.matmul(A, B) (float64) | float64 | 1,000 | 0.0026 | 0.0052 | 0.49× | 203% |
+|🔴| np.matmul(A, B) (float64) | float64 | 100,000 | 0.6011 | 3.2324 | 0.19× | 538% |
+|🔴| np.matmul(A, B) (float64) | float64 | 10,000,000 | 0.7194 | 4.2604 | 0.17× | 592% |
+|🟠| np.outer(a, b) (float64) | float64 | 1,000 | 0.0021 | 0.0049 | 0.42× | 236% |
+|🟡| np.outer(a, b) (float64) | float64 | 100,000 | 0.0380 | 0.0493 | 0.77× | 130% |
+|✅| np.outer(a, b) (float64) | float64 | 10,000,000 | 14.5048 | 11.8529 | 1.22× | 82% |
 
 ### Selection
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |
-|:-:|-----------|:----:|----:|----------:|-------------:|------:|
-|▫| np.where(cond) (float64) | float64 | 1,000 | 0.0009 | 0.0014 | 1.61x |
-|🟠| np.where(cond) (float64) | float64 | 100,000 | 0.0290 | 0.0596 | 2.06x |
-|🟡| np.where(cond) (float64) | float64 | 10,000,000 | 7.4846 | 9.6489 | 1.29x |
-|🟡| np.where(cond, a, b) (float64) | float64 | 1,000 | 0.0017 | 0.0020 | 1.19x |
-|🟡| np.where(cond, a, b) (float64) | float64 | 100,000 | 0.0408 | 0.0653 | 1.60x |
-|✅| np.where(cond, a, b) (float64) | float64 | 10,000,000 | 18.7539 | 14.8534 | 0.79x |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
+|▫| np.where(cond) (float64) | float64 | 1,000 | 0.0009 | 0.0014 | 0.62× | 161% |
+|🟠| np.where(cond) (float64) | float64 | 100,000 | 0.0290 | 0.0596 | 0.49× | 206% |
+|🟡| np.where(cond) (float64) | float64 | 10,000,000 | 7.4846 | 9.6489 | 0.78× | 129% |
+|🟡| np.where(cond, a, b) (float64) | float64 | 1,000 | 0.0017 | 0.0020 | 0.84× | 118% |
+|🟡| np.where(cond, a, b) (float64) | float64 | 100,000 | 0.0408 | 0.0653 | 0.62× | 160% |
+|✅| np.where(cond, a, b) (float64) | float64 | 10,000,000 | 18.7539 | 14.8534 | 1.26× | 79% |

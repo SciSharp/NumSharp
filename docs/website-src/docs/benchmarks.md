@@ -35,7 +35,9 @@ inner loop.
 Both cards report a single ratio:
 
 ```
-speedup = NumPy time ÷ NumSharp time      (> 1.0  ⇒  NumSharp is faster)
+speedup   = NumPy time ÷ NumSharp time    (> 1.0×  ⇒  NumSharp is faster)
+🕐 %NumPy = NumSharp ÷ NumPy × 100         (share of NumPy's time NumSharp uses;
+                                           30% = takes only 30% as long; <100% = faster)
 ```
 
 The cards intentionally show **ratios only, never absolute milliseconds**. Absolute timings
@@ -50,13 +52,13 @@ These figures come from the iterator benchmark sheet
 ([`benchmark/npyiter/npyiter_results.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/npyiter_results.md)) —
 the source of truth that the cards are rendered from.
 
-| Operation class | Geomean speedup (NumPy ÷ NumSharp) | Reading |
-|---|---:|---|
-| **Reductions** (`sum`, `cumsum`, `any`, axis sums) | **≈ 1.8×** | NumSharp's horizontal-SIMD + tree-reduction kernels lead clearly |
-| **Dtype-specialized loops** (`int8`, `complex`, …) | **≈ 1.6×** | Per-type emitted kernels beat NumPy's generic ufunc loops on narrow types |
-| **Elementwise** (`add`, `sqrt`, copy, broadcast) | **≈ 1.1×** | Roughly parity — both are memory-bandwidth bound at scale |
-| **Copy / cast** (`flatten`, `astype`, `ravel.T`) | **≈ 0.65×** | NumSharp's small-N tax; closes to parity (or wins) by 1M+ |
-| **Index math** (`unravel_index`, `ravel_multi_index`) | **≈ 0.7×** | Scalar-bound; a known laggard, tracked as a canary |
+| Operation class | Speedup (NumPy ÷ NumSharp) | 🕐 %NumPy | Reading |
+|---|---:|---:|---|
+| **Reductions** (`sum`, `cumsum`, `any`, axis sums) | **≈ 1.8×** | ≈ 56% | NumSharp's horizontal-SIMD + tree-reduction kernels lead clearly |
+| **Dtype-specialized loops** (`int8`, `complex`, …) | **≈ 1.6×** | ≈ 63% | Per-type emitted kernels beat NumPy's generic ufunc loops on narrow types |
+| **Elementwise** (`add`, `sqrt`, copy, broadcast) | **≈ 1.1×** | ≈ 89% | Roughly parity — both are memory-bandwidth bound at scale |
+| **Copy / cast** (`flatten`, `astype`, `ravel.T`) | **≈ 0.65×** | ≈ 154% | NumSharp's small-N tax; closes to parity (or wins) by 1M+ |
+| **Index math** (`unravel_index`, `ravel_multi_index`) | **≈ 0.7×** | ≈ 143% | Scalar-bound; a known laggard, tracked as a canary |
 
 Across the whole operation matrix the geomean lands a little above parity (NumPy ÷ NumSharp
 ≈ **1.17×**, a majority of cells in NumSharp's favor). The story is not "uniformly faster" —

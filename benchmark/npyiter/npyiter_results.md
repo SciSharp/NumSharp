@@ -1,30 +1,31 @@
 ```
 NumSharp NpyIter — canonical benchmark · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
 198 measured pairs (35 NA) · best-of-rounds, Release · matched kernels/ids
+🕐 %NumPy = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)
 
 AV POLICY — a NumSharp section that crashes all retries (known intermittent
 AccessViolation, an unmanaged-storage lifetime bug) is reported NA / IGNORED
 and excluded from every geomean below.  THIS RUN: NA across selection.
 
-HEADLINE — operation matrix: 1.17× geomean, 77 win / 53 lose over 130 cells
+HEADLINE — operation matrix: 1.17× geomean · 🕐 85% of NumPy's time · 77 win / 53 lose over 130 cells
 
 OPERATIONS — BY SIZE TIER  (geomean over all families)
         slower ◄───────── 1.0 (parity) ─────────► faster
-scalar     ███████████▍ .......   1.14×   ( 11 win / 15 lose)
-1K         ███████████▍ .......   1.14×   ( 14 win / 12 lose)
-100K       ███████████▏ .......   1.12×   ( 17 win /  9 lose)
-1M         █████████████▍ .....   1.34×   ( 18 win /  8 lose)
-10M        ███████████▎ .......   1.13×   ( 17 win /  9 lose)
-ALL        ███████████▋ .......   1.17×   ( 77 win / 53 lose)
+scalar     ███████████▍ .......   1.14×  🕐  87%  ( 11 win / 15 lose)
+1K         ███████████▍ .......   1.14×  🕐  88%  ( 14 win / 12 lose)
+100K       ███████████▏ .......   1.12×  🕐  89%  ( 17 win /  9 lose)
+1M         █████████████▍ .....   1.34×  🕐  75%  ( 18 win /  8 lose)
+10M        ███████████▎ .......   1.13×  🕐  88%  ( 17 win /  9 lose)
+ALL        ███████████▋ .......   1.17×  🕐  85%  ( 77 win / 53 lose)
 
 OPERATIONS — BY CATEGORY  (geomean over its families, all sizes)
         slower ◄───────── 1.0 (parity) ─────────► faster
-elementwise███████████▏ .......   1.12×   ( 22 win / 18 lose)
-reductions █████████████████▉     1.80×   ( 34 win /  6 lose)
+elementwise███████████▏ .......   1.12×  🕐  89%  ( 22 win / 18 lose)
+reductions █████████████████▉     1.80×  🕐  56%  ( 34 win /  6 lose)
 selection  (no data)
-copy/cast  ██████▌ ............   0.65×   (  9 win / 16 lose)   ◄ SLOWER
-index-math ██████▉ ............   0.70×   (  5 win /  5 lose)   ◄ SLOWER
-dtypes     ███████████████▉ ...   1.59×   (  7 win /  8 lose)
+copy/cast  ██████▌ ............   0.65×  🕐 153%  (  9 win / 16 lose)  ◄ SLOWER
+index-math ██████▉ ............   0.70×  🕐 144%  (  5 win /  5 lose)  ◄ SLOWER
+dtypes     ███████████████▉ ...   1.59×  🕐  63%  (  7 win /  8 lose)
 
 CATEGORY × TIER geomean
 category       scalar       1K     100K       1M      10M
@@ -79,24 +80,24 @@ family        scalar       1K     100K       1M      10M    geomean
 
 CONSTRUCTION — iterator build+dispose vs np.nditer (size-invariant, 1K)
         slower ◄───────── 1.0 (parity) ─────────► faster
-1op          █████████▋ .........   0.96×   (  0 win /  1 lose)   ◄ SLOWER
-3op_exl      ███████████████████▶   2.44×   (  1 win /  0 lose)
-ufunc        ███████████████████▶   2.91×   (  1 win /  0 lose)
-bufcast      ███████████████████▶   7.24×   (  1 win /  0 lose)
-multiindex   ███████████████████▶   3.96×   (  1 win /  0 lose)
-8op          ███████████████████▶   3.78×   (  1 win /  0 lose)
-4d           ███████████████████▶   2.64×   (  1 win /  0 lose)
-8d           ███████████████████▶   2.31×   (  1 win /  0 lose)
-strided2d    ███████████████████▶   3.00×   (  1 win /  0 lose)
-geomean      ███████████████████▶   2.88×   (  8 win /  1 lose)
+1op          █████████▋ .........   0.96×  🕐 104%  (  0 win /  1 lose)  ◄ SLOWER
+3op_exl      ███████████████████▶   2.44×  🕐  41%  (  1 win /  0 lose)
+ufunc        ███████████████████▶   2.91×  🕐  34%  (  1 win /  0 lose)
+bufcast      ███████████████████▶   7.24×  🕐  14%  (  1 win /  0 lose)
+multiindex   ███████████████████▶   3.96×  🕐  25%  (  1 win /  0 lose)
+8op          ███████████████████▶   3.78×  🕐  26%  (  1 win /  0 lose)
+4d           ███████████████████▶   2.64×  🕐  38%  (  1 win /  0 lose)
+8d           ███████████████████▶   2.31×  🕐  43%  (  1 win /  0 lose)
+strided2d    ███████████████████▶   3.00×  🕐  33%  (  1 win /  0 lose)
+geomean      ███████████████████▶   2.88×  🕐  35%  (  8 win /  1 lose)
 
 CHUNK-WIDTH dispatch — strided rows, 2M total, inner width w (NumPy = np.positive)
         slower ◄───────── 1.0 (parity) ─────────► faster
-w=4          ███████▎ ...........   0.73×   (  0 win /  1 lose)   ◄ SLOWER
-w=16         ██████████▉ ........   1.09×   (  1 win /  0 lose)
-w=64         ███████████▍ .......   1.15×   (  1 win /  0 lose)
-w=256        █████████████▎ .....   1.33×   (  1 win /  0 lose)
-w=1024       █████████████▉ .....   1.40×   (  1 win /  0 lose)
+w=4          ███████▎ ...........   0.73×  🕐 136%  (  0 win /  1 lose)  ◄ SLOWER
+w=16         ██████████▉ ........   1.09×  🕐  92%  (  1 win /  0 lose)
+w=64         ███████████▍ .......   1.15×  🕐  87%  (  1 win /  0 lose)
+w=256        █████████████▎ .....   1.33×  🕐  75%  (  1 win /  0 lose)
+w=1024       █████████████▉ .....   1.40×  🕐  71%  (  1 win /  0 lose)
 
 PATHOLOGY canaries — known taxes/losses to track (NumPy ÷ NumSharp)
   bcast_reduce      0.02×   (51.8× slower, SLOWER)

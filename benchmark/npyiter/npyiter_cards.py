@@ -11,7 +11,8 @@
 #                    loop — plus the chunk-width trend and the honest pathology
 #                    canary (machinery NumPy has no equivalent for)
 #
-# Ratios are NumPy ÷ NumSharp (>1 = NumSharp faster). The cards show RATIOS only,
+# Ratios are NumPy ÷ NumSharp (>1 = NumSharp faster); each bar also shows the %NumPy =
+# (NumSharp ÷ NumPy)×100 = the share of NumPy's time NumSharp uses. The cards show RATIOS only,
 # never absolute ms: absolute timings vary by hardware (CI runners drift run to
 # run) but the same-runner ratio stays meaningful. EVERYTHING is computed from
 # the tsv so the cards auto-update every benchmark run; NA ids (a NumSharp
@@ -55,7 +56,7 @@ def hbars(ax, labels, ratios, xmax=None, fontsize=7.6, label_fmt=None):
     for s in ("top", "right", "left", "bottom"):
         ax.spines[s].set_visible(False)
     for i, r in enumerate(ratios):
-        txt = label_fmt(i, r) if label_fmt else f"{r:.2f}×"
+        txt = label_fmt(i, r) if label_fmt else f"{r:.2f}× · {100 / r:.0f}%"
         inside = label_fmt is None and r >= xm * 0.58
         ax.text(r - 0.03 if inside else r + 0.035, i, txt, va="center",
                 ha="right" if inside else "left", fontsize=fontsize,
@@ -105,7 +106,7 @@ def card_operations(SP):
     axb.text(0.0, 1.04, "by operation class", transform=axb.transAxes,
              fontsize=6.6, color=MUTE, va="bottom")
 
-    fig.text(0.5, 0.03, "ratio = NumPy ÷ NumSharp on one runner · >1× = NumSharp faster",
+    fig.text(0.5, 0.03, "ratio = NumPy ÷ NumSharp (>1× = NumSharp faster) · % = share of NumPy's time used",
              fontsize=6.2, color=MUTE, ha="center")
     os.makedirs(CARDS, exist_ok=True)
     fig.savefig(os.path.join(CARDS, "ops.png"), dpi=100)
@@ -142,7 +143,7 @@ def card_dividends(SP):
     xm = max(ratios) * 1.62
     ax = fig.add_axes([0.36, 0.40, 0.60, 0.40])
     hbars(ax, labels, ratios, xmax=xm, fontsize=7.8,
-          label_fmt=lambda i, r: f"{r:.1f}×  ·  up to {peaks[i]:.0f}×")
+          label_fmt=lambda i, r: f"{r:.1f}× · {100 / r:.0f}%")
 
     y0 = 0.255
     if cw:
@@ -154,7 +155,7 @@ def card_dividends(SP):
         fig.text(0.46, y0 - 0.075, f"{worst[0]}  {1 / worst[1]:.0f}× behind NumPy (tracked)",
                  fontsize=6.8, color=RED)
 
-    fig.text(0.5, 0.03, "ratio = NumPy ÷ NumSharp on one runner · >1× = NumSharp faster",
+    fig.text(0.5, 0.03, "ratio = NumPy ÷ NumSharp (>1× = NumSharp faster) · % = share of NumPy's time used",
              fontsize=6.2, color=MUTE, ha="center")
     os.makedirs(CARDS, exist_ok=True)
     fig.savefig(os.path.join(CARDS, "cat.png"), dpi=100)

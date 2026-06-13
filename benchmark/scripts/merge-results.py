@@ -34,8 +34,9 @@ class UnifiedResult:
     n: int
     numpy_ms: float
     numsharp_ms: Optional[float]
-    ratio: Optional[float]  # NumSharp / NumPy
-    status: str  # "faster", "close", "slower", "much_slower", "no_data"
+    ratio: Optional[float]  # NumPy / NumSharp  (>1.0× = NumSharp faster)
+    pct_numpy: Optional[float]  # NumSharp/NumPy × 100 = share of NumPy's time NumSharp uses
+    status: str  # "faster", "close", "slower", "much_slower", "negligible", "no_data"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -176,16 +177,16 @@ def method_to_operation(method: str) -> str:
 
 
 def get_status(ratio: Optional[float]) -> str:
-    """Get status string from ratio."""
+    """Status band from ratio = NumPy ÷ NumSharp (>1.0× = NumSharp faster)."""
     if ratio is None:
         return "no_data"
-    if ratio <= 1.0:
-        return "faster"
-    if ratio <= 2.0:
-        return "close"
-    if ratio <= 5.0:
-        return "slower"
-    return "much_slower"
+    if ratio >= 1.0:
+        return "faster"          # NumSharp ≥ NumPy speed
+    if ratio >= 0.5:
+        return "close"           # within 2× slower
+    if ratio >= 0.2:
+        return "slower"          # 2–5× slower
+    return "much_slower"         # >5× slower
 
 
 # A row is only a CREDIBLE throughput comparison when BOTH sides did measurable work.
@@ -197,7 +198,7 @@ def get_status(ratio: Optional[float]) -> str:
 # reading). Such rows are marked "negligible": kept OUT of the Best/Worst rankings and the
 # geomean, but still listed in the per-suite tables — never showcased as a win.
 WORK_FLOOR_MS = 0.001          # 1 µs — below this an op isn't doing comparable array work
-MAX_CREDIBLE_SPEEDUP = 20.0    # ratio < 1/20 ⇒ "NumSharp >20x faster" ⇒ artifact, not a win
+MAX_CREDIBLE_SPEEDUP = 20.0    # ratio > 20 ⇒ "NumSharp >20x faster" ⇒ artifact, not a win
 CREDIBLE = ("faster", "close", "slower", "much_slower")
 
 
@@ -206,9 +207,22 @@ def classify(numpy_ms: float, numsharp_ms: Optional[float], ratio: Optional[floa
     if numsharp_ms is None or ratio is None:
         return "no_data"
     if (numpy_ms < WORK_FLOOR_MS or numsharp_ms < WORK_FLOOR_MS
-            or ratio < 1.0 / MAX_CREDIBLE_SPEEDUP):
+            or ratio > MAX_CREDIBLE_SPEEDUP):
         return "negligible"
     return get_status(ratio)
+
+
+def pct_fmt(pct: Optional[float]) -> str:
+    """Share of NumPy's time NumSharp uses; compact for the rare huge slowdowns."""
+    if pct is None:
+        return "-"
+    return f"{pct:.0f}%" if pct < 1000 else f"{pct / 100:.0f}×"
+
+
+def ratio_fmt(r: Optional[float]) -> str:
+    if r is None:
+        return "-"
+    return f"{r:.2f}×" if r >= 0.1 else f"{r:.3f}×"
 
 
 def get_status_icon(status: str) -> str:
@@ -289,7 +303,8 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
         cs_result = csharp_index.get(key)
 
         numsharp_ms = cs_result['mean_ms'] if cs_result else None
-        ratio = numsharp_ms / numpy_ms if (numsharp_ms is not None and numpy_ms > 0) else None
+        ratio = numpy_ms / numsharp_ms if (numsharp_ms and numsharp_ms > 0) else None         # NP/NS, >1 = faster
+        pct = numsharp_ms / numpy_ms * 100 if (numsharp_ms is not None and numpy_ms > 0) else None  # share of NumPy time
         status = classify(numpy_ms, numsharp_ms, ratio)
 
         unified.append(UnifiedResult(
@@ -301,6 +316,7 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
             numpy_ms=round(numpy_ms, 4),
             numsharp_ms=round(numsharp_ms, 4) if numsharp_ms is not None else None,
             ratio=round(ratio, 3) if ratio is not None else None,
+            pct_numpy=round(pct, 1) if pct is not None else None,
             status=status
         ))
 
@@ -321,13 +337,14 @@ def generate_csv(results: List[UnifiedResult], output_path: str):
     with open(output_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Operation', 'Suite', 'Category', 'DType', 'N',
-                        'NumPy (ms)', 'NumSharp (ms)', 'Ratio', 'Status'])
+                        'NumPy (ms)', 'NumSharp (ms)', 'Ratio (NumPy/NumSharp)', '%NumPy', 'Status'])
         for r in results:
             writer.writerow([
                 r.operation, r.suite, r.category, r.dtype, r.n,
                 r.numpy_ms,
                 '' if r.numsharp_ms is None else r.numsharp_ms,
                 '' if r.ratio is None else r.ratio,
+                '' if r.pct_numpy is None else r.pct_numpy,
                 r.status
             ])
     print(f"CSV written to: {output_path}")
@@ -350,16 +367,19 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "",
         "**Baseline:** NumPy · measured across all array sizes (per-(op, dtype, N))",
         "",
-        "**Ratio** = NumSharp ÷ NumPy → Lower is better for NumSharp",
+        "**Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)",
         "",
-        "| | Status | Ratio | Meaning |",
-        "|:-:|--------|:-----:|---------|",
-        "|✅| Faster | <1.0 | NumSharp beats NumPy |",
-        "|🟡| Close | 1-2x | Acceptable parity |",
-        "|🟠| Slower | 2-5x | Optimization target |",
-        "|🔴| Slow | >5x | Priority fix |",
-        "|▫| Negligible | <1µs / >20x | Too fast to compare — excluded from rankings |",
-        "|⚪| Pending | - | C# benchmark not run |",
+        "**🕐 %NumPy** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses "
+        "(30% = NumSharp takes only 30% of the time NumPy would; <100% = faster).",
+        "",
+        "| | Status | Ratio | 🕐 %NumPy | Meaning |",
+        "|:-:|--------|:-----:|:------:|---------|",
+        "|✅| Faster | ≥1.0× | ≤100% | NumSharp ≥ NumPy speed |",
+        "|🟡| Close | 0.5–1.0× | 100–200% | within 2× slower |",
+        "|🟠| Slower | 0.2–0.5× | 200–500% | optimization target |",
+        "|🔴| Slow | <0.2× | >500% | priority fix |",
+        "|▫| Negligible | <1µs / >20× | — | too fast to compare — excluded from rankings |",
+        "|⚪| Pending | - | — | C# benchmark not run |",
         "",
         "---",
         "",
@@ -378,12 +398,13 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
 
     lines.append("## Summary by size")
     lines.append("")
-    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean |")
-    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|")
+    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | 🕐 %NP |")
+    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|")
     for n in sizes:
         rs = [r for r in results if r.n == n]
-        gz = _geo([r.ratio for r in rs if r.status in CREDIBLE])   # credible rows only
+        gz = _geo([r.ratio for r in rs if r.status in CREDIBLE])   # credible rows only, NP/NS
         gz_s = f"{gz:.2f}x" if gz else "-"
+        pz_s = pct_fmt(100.0 / gz) if gz else "-"
         lines.append(
             f"| {n:,} | {len(rs)} "
             f"| {sum(1 for r in rs if r.status == 'faster')} "
@@ -391,7 +412,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
             f"| {sum(1 for r in rs if r.status == 'slower')} "
             f"| {sum(1 for r in rs if r.status == 'much_slower')} "
             f"| {sum(1 for r in rs if r.status == 'negligible')} "
-            f"| {sum(1 for r in rs if r.status == 'no_data')} | {gz_s} |")
+            f"| {sum(1 for r in rs if r.status == 'no_data')} | {gz_s} | {pz_s} |")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -404,35 +425,28 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     negligible_n = sum(1 for r in results if r.status == 'negligible')
 
     if with_data:
-        # Sort by ratio - best (lowest = most NumSharp-favorable) first
-        sorted_by_ratio = sorted(with_data, key=lambda r: r.ratio)
+        # Sort by ratio (NumPy ÷ NumSharp) — best (highest = most ahead of NumPy) first
+        sorted_by_ratio = sorted(with_data, key=lambda r: r.ratio, reverse=True)
         note = (f"_Ranked over {len(with_data)} credible comparisons "
-                f"(both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs, speedup ≤{MAX_CREDIBLE_SPEEDUP:.0f}×); "
+                f"(both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs, within {MAX_CREDIBLE_SPEEDUP:.0f}×); "
                 f"{negligible_n} negligible rows excluded as non-comparable (▫). "
-                f"Ratio = NumSharp ÷ NumPy — below 1.0 = NumSharp faster._")
+                f"Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · "
+                f"🕐 %NumPy = share of NumPy's time NumSharp uses._")
+        cols = "| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |"
+        sep = "|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|"
 
-        # Top 15 best (NumSharp faster or closest)
-        best_15 = sorted_by_ratio[:15]
-        lines.append("### 🏆 Top 15 Best (NumSharp closest to / beating NumPy)")
-        lines.append("")
-        lines.append(note)
-        lines.append("")
-        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
-        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
-        for r in best_15:
-            icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.3f} | {r.numsharp_ms:.3f} | {r.ratio:.2f}x |")
+        def trow(r):
+            return (f"|{get_status_icon(r.status)}| {r.operation} | {r.dtype} | {r.n:,} "
+                    f"| {r.numpy_ms:.3f} | {r.numsharp_ms:.3f} | {ratio_fmt(r.ratio)} | {pct_fmt(r.pct_numpy)} |")
+
+        lines.append("### 🏆 Top 15 Best (NumSharp fastest vs NumPy)")
+        lines += ["", note, "", cols, sep]
+        lines += [trow(r) for r in sorted_by_ratio[:15]]
         lines.append("")
 
-        # Top 15 worst (NumPy much faster)
-        worst_15 = sorted_by_ratio[-15:][::-1]  # Reverse to show worst first
         lines.append("### 🔻 Top 15 Worst (Optimization priorities)")
-        lines.append("")
-        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
-        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
-        for r in worst_15:
-            icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.3f} | {r.numsharp_ms:.3f} | {r.ratio:.2f}x |")
+        lines += ["", cols, sep]
+        lines += [trow(r) for r in sorted_by_ratio[-15:][::-1]]   # lowest ratio = slowest, worst first
         lines.append("")
 
         lines.append("---")
@@ -452,14 +466,13 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     for suite_name, suite_results in suites.items():
         lines.append(f"### {suite_name}")
         lines.append("")
-        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
-        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
+        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |")
+        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|")
 
         for r in sorted(suite_results, key=lambda x: (x.operation, x.dtype, x.n)):
             icon = get_status_icon(r.status)
             numsharp_str = f"{r.numsharp_ms:.4f}" if r.numsharp_ms is not None else "-"
-            ratio_str = f"{r.ratio:.2f}x" if r.ratio is not None else "-"
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.4f} | {numsharp_str} | {ratio_str} |")
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.4f} | {numsharp_str} | {ratio_fmt(r.ratio)} | {pct_fmt(r.pct_numpy)} |")
 
         lines.append("")
 
