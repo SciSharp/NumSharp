@@ -519,6 +519,18 @@ sorting/searching, linear algebra, selection (`where`), and unary extras (cbrt/r
 square/negative/positive/trunc) in addition to the original arithmetic/unary/reduction/
 broadcast/creation/manipulation/slicing suites.
 
+After the op matrix, the orchestrator runs the **NpyIter iterator benchmark**
+(`benchmark/npyiter/`, via `npyiter_sheet.py` + `npyiter_cards.py`) and appends its sheet to
+`benchmark-report.md` as its own section (`--skip-npyiter` opts out). That harness has a
+different result model — *aspect × cache-tier* (construction, traversal, reductions, selection,
+dtypes, pathologies, dividends) rather than op/dtype/N — so it is **appended, not merged**: it
+measures the iterator machinery the op matrix cannot isolate. It is file-based and
+section-isolated (each section runs in its own subprocess); a section that hits NumSharp's known
+intermittent AccessViolation across all retries is reported **NA / IGNORED** with a header rather
+than crashing the run. See `benchmark/npyiter/README.md` for the harness internals. Both the
+`.github/workflows/benchmark.yml` post-release workflow and this entry point produce the same
+unified report + the two README cards (`cards/ops.png`, `cards/cat.png`).
+
 ### Quick Start (PowerShell, Windows)
 
 ```powershell
