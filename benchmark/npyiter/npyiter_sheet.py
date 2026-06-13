@@ -94,6 +94,11 @@ NP_TIMEOUT = 240
 def run_ns(section, retries=4):
     with open(CS, encoding="utf-8") as f:
         src = f.read()
+    # Portability: the .cs pins #:project to an absolute Windows path so it can be
+    # run directly with `dotnet run - < file` on the author's box. Rewrite it to
+    # THIS checkout's csproj so the same bench runs unchanged on a Linux CI runner.
+    src = src.replace("K:/source/NumSharp/src/NumSharp.Core/NumSharp.Core.csproj",
+                      CORE_CSPROJ.replace(os.sep, "/"))
     env = {**os.environ, "NPYITER_SECTION": section, **NS_ENV_EXTRA}
     for attempt in range(1, retries + 1):
         try:

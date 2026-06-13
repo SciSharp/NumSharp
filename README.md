@@ -25,6 +25,13 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 * Almost non-effort copy-pasting numpy code from python to C#.
 * Wide support for `System.Drawing.Bitmap`. ([read more](https://github.com/SciSharp/NumSharp/wiki/Bitmap-Extensions))
 
+### Performance vs NumPy
+NumSharp's NumPy-aligned iterator (`NpyIter`) benchmarked against NumPy 2.x across operation classes and array sizes. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster); absolute timings vary by hardware, so only the same-runner ratio is meaningful.
+
+[<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md)
+
+Refreshed automatically after each release. **[Full report →](benchmark/npyiter/npyiter_results.md)**
+
 ### Implemented APIs
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
