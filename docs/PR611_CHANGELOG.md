@@ -2,14 +2,15 @@
 
 **[Major Rewrite] NumPy nditer port, NpyExpr DSL with 3-tier custom-op API, C/F/A/K memory layout support, stride-native matmul**
 
-**272 commits · 519 files · +198,407 / −16,069** (vs `master`, after #612)
+**312 commits · 615 files · +217,949 / −16,402** (vs `master`, after #612)
 
 ---
 
 ## TL;DR
 
 - **`NpyIter` — full port of NumPy 2.4.2's `nditer`** (~12.5K lines): all iteration orders (C/F/A/K), all indexing modes, buffered casting, buffered-reduce double-loop, masking, memory-overlap protection (`COPY_IF_OVERLAP`), windowed buffering (`DELAY_BUFALLOC`), unlimited operands and dimensions. 566+ byte-for-byte NumPy parity scenarios.
-- **`NpyExpr` DSL + three-tier custom-op API** — write your own ufuncs: raw IL (Tier 3A), element-wise scalar/SIMD (Tier 3B), or composable expression trees with operator overloads (Tier 3C). Fused expressions run **2.8–5.4× faster than NumPy** (which can't fuse).
+- **`NpyExpr` DSL + three-tier custom-op API** — write your own ufuncs: raw IL (Tier 3A), element-wise scalar/SIMD (Tier 3B), or composable expression trees with operator overloads (Tier 3C). Now reachable as a public API: **`np.evaluate`** runs fused expressions **3.2–6.1× faster than NumPy** (which can't fuse), with per-node NumPy `result_type` typing and fused reductions.
+- **`out=` / `where=` / `dtype=` ufunc kwargs across the elementwise API** — present on every NumPy ufunc, previously absent from all of NumSharp; now on the binary, unary-math, comparison, predicate, and bitwise families with exact NumPy broadcast/cast/error-text semantics. Plus new `np.bitwise_and/or/xor` and `np.positive` at the `np.*` surface.
 - **NumPy-parity benchmark: geomean 1.00× at 10M elements** across ~409 ops (166 faster / 171 close / 36 slower) — measured by a new official BenchmarkDotNet-vs-NumPy suite committed with the report.
 - **30 new `np.*` APIs** — `pad` (11 modes), `tile`, `median`/`percentile`/`quantile` (all 13 interpolation methods) + their `nan*` variants, `average`, `ptp`, `take`/`put`/`place`, `extract`/`compress`, `diagonal`/`trace`, `argwhere`/`flatnonzero`, `unravel_index`/`ravel_multi_index`/`indices`, `delete`/`insert`/`append`, `diff`/`ediff1d`, `asfortranarray`/`ascontiguousarray`, `np.multithreading`.
 - **C/F/A/K order support wired through the whole API** — `Shape` understands F-contiguity, `OrderResolver` resolves NumPy order modes, ~68 layout bugs fixed across 9 fix groups.
@@ -17,7 +18,49 @@
 - **Deterministic memory management** — atomic reference counting + `IDisposable` on `NDArray`, plus a tcache-style sub-1MiB buffer pool.
 - **Differential fuzzing infrastructure** — 37,445 bit-exact NumPy-comparison cases across 24 corpus tiers, a seeded random fuzzer with shrinker, a CI FuzzMatrix gate, and a nightly soak workflow.
 - **Legacy iterator stack deleted** — `MultiIterator` and the Regen-generated `NDIterator` cast templates are gone (−3,870 LOC); `NDIterator` survives as a thin lazy wrapper over `NpyIter`.
-- **Test suite: 9,447 passed / 0 failed** on net10.0 — +2,219 new test methods, plus the 37,445-case fuzz corpus replayed by the FuzzMatrix gate.
+- **Test suite: 9,709 passed / 0 failed** on net10.0 (+2,500 new test methods), plus the 37,445-case fuzz corpus replayed by the FuzzMatrix gate.
+
+---
+
+## Latest wave (roadmap Waves 1.3–6.1) — added after the first changelog
+
+The 31 commits since the initial changelog turn the proven-but-unreachable machinery into shipped public API, close the ufunc-signature gap with NumPy, and put the iterator under adversarial benchmarking.
+
+### `np.evaluate` — fused expressions as a first-class API
+
+The Tier-3C fusion path (2.8–5.4× in the POC) had **zero production callers**; it's now `np.evaluate(expr[, operands][, out])`.
+
+- **Per-node NumPy `result_type` typing** (`NpyExpr.Typing.cs`) — the old DSL computed every node at the *output* dtype, which is wrong for mixed trees: `(i4*i4)+f8` must wrap the multiply in int32 (→ `1410065408`) before promoting; the old model gave `1e10`. A typing pass now resolves every node to its NumPy 2.4.2 dtype: strong-strong NEP50 (incl. int/float tier crossing), weak python-scalar literals (`i4+2 → i4`, `i4/2 → f8`) with NumPy's exact `OverflowError`, and special resolvers (`true_divide`, `arctan2`, `power`-with-negative-integer-literal `ValueError`, bool `add`=OR/`multiply`=AND).
+- **Fused reductions** — `NpyExpr.Sum/Prod/Min/Max/Mean` compile a one-pass raw inner loop; `sum(a*b)` reads `a` and `b` once and never materializes the product. NumPy reduction dtypes (int→i64, uint→u64, mean→f64); f16/f32 sums accumulate in f64 (documented divergence).
+- **`out=` joins via the ufunc rules** (same_kind validation, reference identity, overlap-safe aliasing through `COPY_IF_OVERLAP`); dtype-mismatched `out` rides the windowed cast flush.
+- **EXTERNAL_LOOP guard** — throws instead of silently running the kernel at `count==1` (the measured ~40× foot-gun).
+- **Measured** (Release, 4M f64, NumPy 2.4.2): `a*b+c` 3.2×, `(a-b)/(a+b)` 6.1×, `sum(a*b)` 3.6×, `sum f32` 2.9×, `i4*2+f8` 3.5×, `a*b+c out=` 2× — all exceeding the POC window. Permanent gate in `benchmark/poc/evaluate_bench.{cs,py}`.
+
+### `out=` / `where=` / `dtype=` across the elementwise ufunc API
+
+The ufunc kwargs on every NumPy ufunc, absent from NumSharp until now, landed across the elementwise core — **all semantics probed against NumPy 2.4.2 before implementation and pinned verbatim by tests**:
+
+- **Families:** binary (`add`, `subtract`, `multiply`, `divide`, `true_divide`, `mod`, `power`, `floor_divide`), unary-math (`sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `abs`/`absolute`, `negative`, `square`), the six comparisons, predicates (`isnan`/`isfinite`/`isinf`), bitwise, `invert`, `arctan2`. Each collapsed to **one NumPy-shaped overload** (not a bare+out pair).
+- `out` joins the broadcast but **never stretches** (mismatched/stretchable `out` raise NumPy's exact texts, trailing space included); loop dtype resolved from inputs (NEP50), `out` only needs a same_kind cast; provided instance returned (reference identity).
+- `where` must be exactly `bool` (NumPy casts the mask under 'safe'); broadcasts over operands **and** participates in output shape; mask-false slots keep prior `out` contents.
+- `out` **aliasing an input is well-defined** via the Wave-1.1 `COPY_IF_OVERLAP` machinery — `add(x[:-1], x[:-1], out=x[1:])` matches NumPy exactly.
+- `dtype=` **computes in the loop dtype**: `subtract(300, 5, dtype=i16) = 295`; fixed an ordering bug where the bool `add`→OR / `multiply`→AND remap keyed off the *promoted* dtype and ran before the `dtype=` override (`add(True, True, dtype=i32)` now correctly returns `2`, not `1`).
+- **New at `np.*`:** `np.bitwise_and` / `np.bitwise_or` / `np.bitwise_xor` (existed only as operators `& | ^` — were `CS0117` despite the docs listing them) and `np.positive` (full ufunc surface).
+
+### Iterator: WRITEMASKED execution + VIRTUAL operands + Wave-1.4 fixes
+
+- **WRITEMASKED / ARRAYMASK now EXECUTE** (Wave 1.3) — a buffered masked write previously landed garbage (`99`s) in exactly the slots NumPy preserves (silent corruption of the elements the caller asked to protect); the window flush now writes back only mask-nonzero elements. **VIRTUAL operands** (null op slots) construct with NumPy 2.x semantics instead of throwing. Architecture settled by probing where NumPy enforces masking (one place: the buffered copy-back) before writing code.
+- **Wave-1.4 correctness** — size-1 stride-0 invariant (a `(1,4)` view with nonzero stride corrupted `RemoveMultiIndex` iteration), `op_axes` out-of-bounds read on stretched size-1 operand axes, write-broadcast validation, `PARALLEL_SAFE` wiring, unit-axis absorption — all reproduced against NumPy 2.4.2 first, fixed by adopting NumPy's constructor structure.
+
+### Allocation (Wave 2.4)
+
+The allocator tax was the **pool window, not the machinery**: `SizeBucketedBufferPool`'s 4 KiB–1 MiB window missed both hot patterns — the small-N ufunc result (1000×f32 = 4000 B, 96 B under the floor) and every 4M+ output (16–32 MiB, above the cap) — so the dominant shapes paid a fresh `VirtualAlloc` + demand-zero faults while the pool idled. Window opened to **1 B – 64 MiB** (≥1 MiB buckets capped at 2 buffers), GC memory pressure moved pool-side tracking live state, and `GC.SuppressFinalize` on free pulls freed blocks out of the finalizer queue.
+
+### NpyIter benchmark suite + DocFX website + honest frontier findings
+
+- **Canonical NpyIter benchmark** — one section-addressable harness, 33 op families × {scalar/1K/100K/1M/10M}, integrated into `run_benchmark.py`, plus a new **post-release CI workflow** (`.github/workflows/benchmark.yml`) that auto-commits report cards to master.
+- **DocFX website pages** — `benchmarks.md` (head-to-head evidence companion to the IL-generation page), `benchmark-iterator.md`, `benchmark-matrix.md`, driven by the auto-committed artifacts.
+- **Adversarial frontier probes recorded losses, not just wins** — surfaced and documented (not hidden): `np.sum` over a `broadcast_to` view **54× slower** than NumPy (falls to a coordinate-walking general path at 7.4 ns/elem), scalar `np.any` **14.5× slower** (scalar scan where `count_nonzero` on the same array runs SIMD), a **P0 AccessViolation** crash on `ForEach` over a `BUFFERED+REDUCE` iterator (repro pinned/skipped — only the buffered-reduce driver handles that config), and iterator `ALLOCATE` zeroing outputs where NumPy leaves them empty (+2.33 ms/4M). Wins too: hand-rolled 8-band parallel iteration **4.7×**. These are tracked as the next optimization frontier.
 
 ---
 
@@ -63,7 +106,7 @@ User-extensible kernel layer on top of `NpyIter` — the public answer to "how d
 - **Tier 3B — `ExecuteElementWise`**: provide scalar + vector IL; the shell supplies a 4×-unrolled SIMD loop, remainder vector, scalar tail, and strided fallback.
 - **Tier 3C — `ExecuteExpression`**: compose `NpyExpr` trees with C# operators (`(a - b) / (a + b)`), 50+ node types (arithmetic, trig, exp/log, rounding, predicates, comparisons, `Min/Max/Clamp/Where`), plus **`Call()`** to splice any delegate/`MethodInfo` into a fused kernel. Compiled once, cached by structural key, ~5 ns dispatch.
 
-This is what powers the 2.8–5.4× fusion wins above — one pass, no temporaries.
+This is what powers the 2.8–5.4× fusion wins above — one pass, no temporaries — and is now exposed publicly as **`np.evaluate`** with per-node NumPy typing (see *Latest wave*).
 
 ## 3. Legacy iterator stack retired
 
@@ -82,10 +125,11 @@ This is what powers the 2.8–5.4× fusion wins above — one pass, no temporari
 
 ## 5. New & completed `np.*` APIs
 
-**New functions (30):**
+**New functions (35):**
 
 | Area | APIs |
 |---|---|
+| Fused / ufunc | `np.evaluate` (fused expressions), `np.bitwise_and`, `np.bitwise_or`, `np.bitwise_xor`, `np.positive` (+ `out=`/`where=`/`dtype=` across the elementwise API — see *Latest wave*) |
 | Manipulation | `np.pad` (all 11 NumPy modes + callable), `np.tile`, `np.delete`, `np.insert`, `np.append` |
 | Indexing/selection | `np.take`, `np.put`, `np.place`, `np.extract`, `np.compress`, `np.argwhere`, `np.flatnonzero`, `np.diagonal`, `np.trace`, `np.unravel_index`, `np.ravel_multi_index`, `np.indices` |
 | Statistics | `np.median`, `np.percentile`, `np.quantile` (**all 13 interpolation methods**, tuple axis, `out=`, `keepdims`, QuickSelect engine), `np.average` (`weights`, `returned`, tuple-axis; fused kernel 1.3–1.6× faster than NumPy at 1M), `np.ptp`, `np.nanmedian`, `np.nanpercentile`, `np.nanquantile` |
@@ -191,10 +235,10 @@ New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation
 
 ## 16. Tests & CI
 
-- **+2,219 test methods**; suite now **9,447 passed / 0 failed / 11 skipped** on net10.0 (also green on net8.0). Zero regressions maintained commit-by-commit.
-- New suites: NpyIter battletests (566 scenarios), order-support sections 41–51, ARC lifecycle, clone regression, np.pad/average/median/percentile/ptp/diff battle tests, IL-kernel battle tests, behavioral audit harness.
-- CI: fuzz gate in `build-and-release.yml`, new nightly `fuzz-soak.yml`.
-- **Known gaps stay visible**: `np.sort` remains unimplemented (tracked `[OpenBugs]`), and small-N (~1K) dispatch overhead is the documented next focus (`docs/ROADMAP.md`) — every open issue found by the audits/fuzzers is checked in as a failing-by-design `[OpenBugs]` test rather than ignored.
+- **+2,500 test methods**; suite now **9,709 passed / 0 failed** on net10.0 (also green on net8.0). Zero regressions maintained commit-by-commit.
+- New suites: `np.evaluate` (per-node wraparound, dtype matrices, weak scalars + overflow, fused-vs-unfused, `out=` identity/cast/aliasing, fused reductions), `out=`/`where=`/`dtype=` parity suites (broadcast/cast/error-text pins), WRITEMASKED/VIRTUAL parity; NpyIter battletests (566 scenarios), order-support sections 41–51, ARC lifecycle, clone regression, np.pad/average/median/percentile/ptp/diff battle tests, IL-kernel battle tests, behavioral audit harness.
+- CI: fuzz gate in `build-and-release.yml`, nightly `fuzz-soak.yml`, **new post-release `benchmark.yml`** (auto-commits NumPy-comparison report cards to master).
+- **Known gaps stay visible**: `np.sort` remains unimplemented (`[OpenBugs]`); the frontier benches' broadcast-reduce (54×), scalar `np.any` (14.5×) losses and the `BUFFERED+REDUCE` `ForEach` P0 crash (pinned/skipped repro) are documented as the next optimization frontier; small-N (~1K) dispatch overhead remains the headline focus (`docs/ROADMAP.md`). Every open issue found by the audits/fuzzers/benches is checked in as a failing-by-design `[OpenBugs]` test or pinned repro rather than ignored.
 
 ---
 
