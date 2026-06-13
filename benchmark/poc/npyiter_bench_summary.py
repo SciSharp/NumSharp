@@ -1,7 +1,12 @@
-# Renders the geomean-ratio bar summary over ALL measured NpyIter benchmark
-# pairs (rounds 1-3, 2026-06-12, NPYITER_CORE_BENCH_RESULTS.md). Ratio is
-# NumSharp_time / NumPy_time: < 1.0 means NumSharp is faster.
-# Bar scale: 10.2 chars per 1.0x (parity = ~10 chars), dotted to 20 chars.
+# Renders the geomean bar summary over ALL measured NpyIter benchmark pairs
+# (rounds 1-3, 2026-06-12, NPYITER_CORE_BENCH_RESULTS.md), in the house style
+# of the official benchmark-report per-size geomean summary:
+#
+#         slower <--------- 1.0 (parity) ---------> faster
+# 1K    ##########.. 1.41x   (17 win / 7 lose)
+#
+# speedup = NumPy_time / NumSharp_time: > 1.0 means NumSharp is FASTER.
+# Bar scale: 10 chars per 1.0x -> the parity tick sits mid-field (20 chars).
 import math
 
 # (id, ns_ms, np_ms, family, tier)
@@ -77,73 +82,61 @@ ROWS = [
 
 # Architecture dividends — no like-for-like NumPy machinery (their best possible shown)
 DIVIDENDS = [
-    ("HR512", "reused iterator N=512 (Reset+ForEach)", 54.7e-6, 383.8e-6),
-    ("PAR8", "8-banded parallel iterators, sin f64 4M", 2.472, 11.672),
-    ("Y1", "ONE-PASS sum of 7 arrays vs 6 chained adds", 7.851, 14.591),
+    ("HR512", "reuse", "iterator reuse N=512 (Reset+ForEach)", 54.7e-6, 383.8e-6),
+    ("PAR8", "parall", "8-band parallel iterators sin 4M", 2.472, 11.672),
+    ("Y1", "fusion", "one-pass 7-array sum vs 6 chained", 7.851, 14.591),
 ]
 
-SCALE = 10.2   # chars per 1.0x; parity ~= 10 chars
-WIDTH = 22     # dotted field width
+SCALE = 10.0   # chars per 1.0x speedup; parity tick = 10 chars (mid-field)
+WIDTH = 20     # bar field width (2.0x max before the ▶ overflow marker)
 EIGHTHS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
 
 
-def bar(ratio):
-    units = ratio * SCALE
+def bar(speedup):
+    units = speedup * SCALE
+    if units >= WIDTH:
+        return "█" * (WIDTH - 1) + "▶"
     full = int(units)
     frac = EIGHTHS[int((units - full) * 8)]
     s = "█" * full + frac
     pad = WIDTH - len(s)
-    return s + (" " + "." * (pad - 1) if pad > 1 else "")
+    return s + (" " + "." * (pad - 1) if pad >= 3 else " " * pad)
 
 
-def geomean(ratios):
-    return math.exp(sum(math.log(r) for r in ratios) / len(ratios))
+def geomean(vals):
+    return math.exp(sum(math.log(v) for v in vals) / len(vals))
 
 
-def line(label, rows, note=""):
-    ratios = [ns / np_ for _, ns, np_, *_ in rows]
-    g = geomean(ratios)
-    win = sum(1 for r in ratios if r < 1.0)
-    lose = len(ratios) - win
-    tag = "  ◄ FASTER" if g < 0.93 else ("  ◄ PARITY" if g <= 1.07 else "  ◄ SLOWER")
-    print(f"{label:<22}{bar(g)} {g:5.2f}×   ({win:3d} win / {lose:3d} lose){tag}{note}")
+def line(label, rows):
+    speedups = [np_ / ns for _, ns, np_, *_ in rows]
+    g = geomean(speedups)
+    win = sum(1 for s in speedups if s > 1.0)
+    lose = len(speedups) - win
+    tag = "   ◄ PARITY" if 0.95 <= g <= 1.05 else ("   ◄ SLOWER" if g < 0.95 else "")
+    print(f"{label:<7}{bar(g)}  {g:4.2f}×   ({win:3d} win / {lose:3d} lose){tag}")
 
 
-print("NpyIter benchmark sweep — 89 measured pairs, rounds 1–3 (i9-13900K, NumPy 2.4.2, Release)")
-print("ratio = NumSharp time / NumPy time · geomean per group")
+HDR = "        slower ◄───────── 1.0 (parity) ─────────► faster"
+print("NpyIter sweep — 89 pairs, rounds 1–3 · speedup = NumPy ÷ NumSharp (>1.0 = NumSharp faster)")
 print()
-print("        faster ◄───────── 1.0 (parity) ─────────► slower")
+print(HDR)
+for tier, label in [("small", "1K"), ("mid", "4M"), ("large", "10M")]:
+    line(label, [r for r in ROWS if r[4] == tier])
+line("ALL", ROWS)
 print()
-print("BY SIZE TIER")
-for tier, label in [("small", "≤4K elems"), ("mid", "32K–8M elems"), ("large", "10M elems")]:
-    line(f"{label:<10}", [r for r in ROWS if r[4] == tier])
-print()
-print("BY FAMILY")
+print(HDR.replace("        ", " " * 8))
 fams = [
-    ("ctor", "construction"),
-    ("smallN", "small-N pipeline"),
-    ("traversal", "chunk traversal"),
-    ("layout", "layout copies"),
-    ("elemwise", "elementwise/bcast"),
-    ("buffered", "buffered cast"),
-    ("where", "where= / masks"),
-    ("reduce", "reductions/scans"),
-    ("select", "selection/indexing"),
-    ("dtypes", "kernel-bound dtypes"),
+    ("ctor", "ctor"), ("layout", "layout"), ("select", "select"), ("where", "where="),
+    ("dtypes", "dtypes"), ("elemwise", "elemwz"), ("traversal", "traver"),
+    ("reduce", "reduce"), ("buffered", "bufcst"), ("smallN", "smallN"),
 ]
 for key, label in fams:
-    line(f"{label:<10}", [r for r in ROWS if r[3] == key])
+    line(label, [r for r in ROWS if r[3] == key])
 print()
-line("ALL (like-for-like)", ROWS)
-ex_outliers = [r for r in ROWS if r[0] not in ("F1", "E1", "AC2")]
-line("ALL excl. 3 outliers", ex_outliers, note="  (drop F1 54×, E1 14.5×, AC2 1.4×)")
+print("ARCHITECTURE DIVIDENDS (no NumPy equivalent — vs their best possible)")
+for _, label, desc, ns, np_ in DIVIDENDS:
+    s = np_ / ns
+    print(f"{label:<7}{bar(s)}  {s:4.2f}×   ({desc})")
 print()
-print("ARCHITECTURE DIVIDENDS (vs NumPy's best possible — no equivalent machinery)")
-for id_, label, ns, np_ in DIVIDENDS:
-    r = ns / np_
-    print(f"{label:<44}{bar(r)} {r:5.2f}×   ({1/r:4.1f}× faster)")
-print()
-worst = sorted(ROWS, key=lambda r: r[1] / r[2], reverse=True)[:5]
-best = sorted(ROWS, key=lambda r: r[1] / r[2])[:5]
-print("WORST 5: " + " · ".join(f"{i} {ns/np_:.2f}×" for i, ns, np_, *_ in worst))
-print("BEST 5:  " + " · ".join(f"{i} {ns/np_:.2f}×" for i, ns, np_, *_ in best))
+print("tiers: 1K = ≤4K elems · 4M = 32K–8M elems · 10M = 10M elems")
+print("10M tier carried by E1 (np.any scalar-scan routing, finding #7); T1 10M memcpy = exact parity")
