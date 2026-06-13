@@ -12,7 +12,7 @@
 #
 # CONVENTION (house default):
 #   speedup = NumPy ÷ NumSharp   ·   >1.0× = NumSharp FASTER · 1.0 = parity · <1.0 = slower
-#   🕐 %NumPy = (NumSharp ÷ NumPy) × 100 = the share of NumPy's time NumSharp uses
+#   %NumPy🕐 = (NumSharp ÷ NumPy) × 100 = the share of NumPy's time NumSharp uses
 #              (30% = NumSharp takes only 30% of the time NumPy would; <100% = faster)
 # Only CREDIBLE comparisons (both sides ≥1µs, within 20×) are charted; negligible /
 # no-data rows are excluded (see merge-results.py classify()).
@@ -82,7 +82,7 @@ def main():
         pct = 100.0 / g                                      # = geomean(NS/NP) × 100
         win = sum(1 for x in sps if x > 1.0)
         tag = "  ◄ PARITY" if 0.97 <= g <= 1.03 else ("  ◄ SLOWER" if g < 0.97 else "")
-        out(f"{label:<{width}}{bar(g)}  {g:5.2f}×  🕐{pct_str(pct)}  ({win:4d} win /{len(sps) - win:4d} lose){tag}")
+        out(f"{label:<{width}}{bar(g)}  {g:5.2f}×  {pct_str(pct)}🕐  ({win:4d} win /{len(sps) - win:4d} lose){tag}")
 
     stamp = os.environ.get("BENCH_STAMP", datetime.date.today().isoformat())
     g_all = geomean([r["sp"] for r in cred])
@@ -90,9 +90,9 @@ def main():
 
     out(f"NumSharp vs NumPy — operation matrix · {stamp} · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)")
     out(f"{len(cred)} credible comparisons of {total} ops · {negligible} negligible + {no_data} no-data excluded · BenchmarkDotNet vs NumPy 2.4.2")
-    out("🕐 %NumPy = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (30% = takes only 30% as long; <100% = faster)")
+    out("%NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (30% = takes only 30% as long; <100% = faster)")
     out()
-    out(f"HEADLINE — {g_all:.2f}× geomean · 🕐 {100.0 / g_all:.0f}% of NumPy's time · over {len(cred)} cells · {win} faster / {len(cred) - win} slower")
+    out(f"HEADLINE — {g_all:.2f}× geomean · {100.0 / g_all:.0f}%🕐 of NumPy's time · over {len(cred)} cells · {win} faster / {len(cred) - win} slower")
     out()
 
     out("BY ARRAY-SIZE TIER  (geomean over all credible ops at that size)")
@@ -136,9 +136,9 @@ def main():
         sp, pct = r["sp"], r["pct"]
         sp_s = f"{sp:6.2f}×" if sp >= 0.1 else f"{sp:6.3f}×"
         op = r["operation"] if len(r["operation"]) <= 30 else r["operation"][:29] + "…"
-        return f"  {op:<30} {r['dtype']:<8} {sizelabel(r['n']):>4}  {r['numpy_ms']:8.3f} →{r['numsharp_ms']:9.3f} ms  {sp_s}  🕐{pct_str(pct)}"
+        return f"  {op:<30} {r['dtype']:<8} {sizelabel(r['n']):>4}  {r['numpy_ms']:8.3f} →{r['numsharp_ms']:9.3f} ms  {sp_s}  {pct_str(pct)}🕐"
 
-    hdr = f"  {'operation':<30} {'dtype':<8} {'N':>4}  {'NumPy':>8}  {'NumSharp':>9}    NP/NS   🕐%NumPy"
+    hdr = f"  {'operation':<30} {'dtype':<8} {'N':>4}  {'NumPy':>8}  {'NumSharp':>9}    NP/NS   %NumPy🕐"
     out("TOP 12 FASTEST  (NumPy ÷ NumSharp — biggest NumSharp wins)")
     out(hdr)
     for r in sorted(cred, key=lambda r: r["sp"], reverse=True)[:12]:
@@ -149,7 +149,7 @@ def main():
     for r in sorted(cred, key=lambda r: r["sp"])[:12]:
         out(row(r))
     out()
-    out("note · speedup = NumPy ÷ NumSharp on one runner (>1.0× = NumSharp faster) · 🕐 %NumPy = share of")
+    out("note · speedup = NumPy ÷ NumSharp on one runner (>1.0× = NumSharp faster) · %NumPy🕐 = share of")
     out("       NumPy's time NumSharp uses · negligible rows (<1µs / >20× = overhead, lazy alloc, views) excluded")
 
     sheet = "\n".join(L)

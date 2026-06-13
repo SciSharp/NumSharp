@@ -36,7 +36,7 @@ Both cards report a single ratio:
 
 ```
 speedup   = NumPy time ÷ NumSharp time    (> 1.0×  ⇒  NumSharp is faster)
-🕐 %NumPy = NumSharp ÷ NumPy × 100         (share of NumPy's time NumSharp uses;
+%NumPy🕐 = NumSharp ÷ NumPy × 100         (share of NumPy's time NumSharp uses;
                                            30% = takes only 30% as long; <100% = faster)
 ```
 
@@ -52,7 +52,7 @@ These figures come from the iterator benchmark sheet
 ([`benchmark/npyiter/npyiter_results.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/npyiter_results.md)) —
 the source of truth that the cards are rendered from.
 
-| Operation class | Speedup (NumPy ÷ NumSharp) | 🕐 %NumPy | Reading |
+| Operation class | Speedup (NumPy ÷ NumSharp) | %NumPy🕐 | Reading |
 |---|---:|---:|---|
 | **Reductions** (`sum`, `cumsum`, `any`, axis sums) | **≈ 1.8×** | ≈ 56% | NumSharp's horizontal-SIMD + tree-reduction kernels lead clearly |
 | **Dtype-specialized loops** (`int8`, `complex`, …) | **≈ 1.6×** | ≈ 63% | Per-type emitted kernels beat NumPy's generic ufunc loops on narrow types |

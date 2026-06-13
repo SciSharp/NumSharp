@@ -7,9 +7,9 @@
 
 **Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)
 
-**🕐 %NumPy** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses (30% = NumSharp takes only 30% of the time NumPy would; <100% = faster).
+**%NumPy🕐** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses (30% = NumSharp takes only 30% of the time NumPy would; <100% = faster).
 
-| | Status | Ratio | 🕐 %NumPy | Meaning |
+| | Status | Ratio | %NumPy🕐 | Meaning |
 |:-:|--------|:-----:|:------:|---------|
 |✅| Faster | ≥1.0× | ≤100% | NumSharp ≥ NumPy speed |
 |🟡| Close | 0.5–1.0× | 100–200% | within 2× slower |
@@ -24,7 +24,7 @@
 
 ## Summary by size
 
-| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | 🕐 %NP |
+| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | %NP🕐 |
 |---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|
 | 500 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
 | 900 | 3 | 0 | 0 | 0 | 0 | 0 | 3 | - | - |
@@ -38,9 +38,9 @@
 
 ### 🏆 Top 15 Best (NumSharp fastest vs NumPy)
 
-_Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 negligible rows excluded as non-comparable (▫). Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · 🕐 %NumPy = share of NumPy's time NumSharp uses._
+_Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 negligible rows excluded as non-comparable (▫). Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · %NumPy🕐 = share of NumPy's time NumSharp uses._
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |✅| np.nansum(a) (float64) | float64 | 100,000 | 0.242 | 0.019 | 12.65× | 8% |
 |✅| np.percentile(a, 50) (float64) | float64 | 1,000 | 0.025 | 0.002 | 10.50× | 10% |
@@ -60,7 +60,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### 🔻 Top 15 Worst (Optimization priorities)
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |🔴| np.zeros (int64) | int64 | 10,000,000 | 0.012 | 10.747 | 0.001× | 880× |
 |🔴| np.zeros (float64) | float64 | 10,000,000 | 0.021 | 10.755 | 0.002× | 508× |
@@ -82,7 +82,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Arithmetic
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |🟡| a % 7 (literal) (float32) | float32 | 1,000 | 0.0141 | 0.0190 | 0.74× | 134% |
 |🟡| a % 7 (literal) (float32) | float32 | 100,000 | 1.6551 | 1.9677 | 0.84× | 119% |
@@ -444,7 +444,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Unary
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.abs (float32) | float32 | 1,000 | 0.0005 | 0.0018 | 0.29× | 349% |
 |🔴| np.abs (float32) | float32 | 100,000 | 0.0063 | 0.0641 | 0.099× | 10× |
@@ -551,7 +551,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Reduction
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.amax (float32) | float32 | 1,000 | 0.0017 | 0.0008 | 2.14× | 47% |
 |🟠| np.amax (float32) | float32 | 100,000 | 0.0060 | 0.0138 | 0.43× | 230% |
@@ -850,7 +850,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Broadcasting
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |⚪| matrix + col_vector (N,M)+(N,1) | float64 | 1,000 | 0.0015 | - | - | - |
 |⚪| matrix + col_vector (N,M)+(N,1) | float64 | 100,000 | 0.0300 | - | - | - |
@@ -867,7 +867,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Creation
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.copy (float32) | float32 | 1,000 | 0.0006 | 0.0097 | 0.061× | 16× |
 |🟠| np.copy (float32) | float32 | 100,000 | 0.0060 | 0.0179 | 0.34× | 299% |
@@ -944,7 +944,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Manipulation
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |⚪| a.T (2D) | float64 | 1,000 | 0.0001 | - | - | - |
 |⚪| a.T (2D) | float64 | 100,000 | 0.0001 | - | - | - |
@@ -973,7 +973,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Slicing
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |⚪| a[100:1000] (contiguous) | float64 | 1,000 | 0.0002 | - | - | - |
 |⚪| a[100:1000] (contiguous) | float64 | 100,000 | 0.0002 | - | - | - |
@@ -993,7 +993,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Comparison
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| a != b (float32) | float32 | 1,000 | 0.0005 | 0.0007 | 0.72× | 138% |
 |🟠| a != b (float32) | float32 | 100,000 | 0.0055 | 0.0161 | 0.34× | 295% |
@@ -1070,7 +1070,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Bitwise
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| a & b (bool) | bool | 1,000 | 0.0004 | 0.0012 | 0.31× | 322% |
 |🔴| a & b (bool) | bool | 100,000 | 0.0033 | 0.0225 | 0.14× | 688% |
@@ -1219,7 +1219,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Logic
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |⚪| np.all(a) (bool) | bool | 1,000 | 0.0014 | - | - | - |
 |⚪| np.all(a) (bool) | bool | 100,000 | 0.0014 | - | - | - |
@@ -1278,7 +1278,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Statistics
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.average(a) (float32) | float32 | 1,000 | 0.0043 | 0.0007 | 6.61× | 15% |
 |✅| np.average(a) (float32) | float32 | 100,000 | 0.0177 | 0.0021 | 8.32× | 12% |
@@ -1319,7 +1319,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Sorting
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |🔴| np.argsort(a) (float32) | float32 | 1,000 | 0.0118 | 0.0691 | 0.17× | 588% |
 |🔴| np.argsort(a) (float32) | float32 | 100,000 | 1.5577 | 12.9884 | 0.12× | 834% |
@@ -1360,7 +1360,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### LinearAlgebra
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.dot(a, b) (float64) | float64 | 1,000 | 0.0007 | 0.0032 | 0.23× | 440% |
 |✅| np.dot(a, b) (float64) | float64 | 100,000 | 0.1106 | 0.0714 | 1.55× | 64% |
@@ -1374,7 +1374,7 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 
 ### Selection
 
-| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |
+| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
 |▫| np.where(cond) (float64) | float64 | 1,000 | 0.0009 | 0.0014 | 0.62× | 161% |
 |🟠| np.where(cond) (float64) | float64 | 100,000 | 0.0290 | 0.0596 | 0.49× | 206% |

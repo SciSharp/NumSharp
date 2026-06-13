@@ -258,12 +258,12 @@ def render(pairs):
         g = geomean(sps)
         win = sum(1 for x in sps if x > 1.0)
         tag = "  ◄ PARITY" if 0.97 <= g <= 1.03 else ("  ◄ SLOWER" if g < 0.97 else "")
-        out(f"{label:<{width}}{bar(g)}  {g:5.2f}×  🕐{pct_str(100.0 / g)}  ({win:3d} win /{len(sps) - win:3d} lose){tag}")
+        out(f"{label:<{width}}{bar(g)}  {g:5.2f}×  {pct_str(100.0 / g)}🕐  ({win:3d} win /{len(sps) - win:3d} lose){tag}")
 
     stamp = os.environ.get("NPYITER_STAMP", datetime.date.today().isoformat())
     out(f"NumSharp NpyIter — canonical benchmark · {stamp} · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)")
     out(f"{len(pairs)} measured pairs ({len(NA)} NA) · best-of-rounds, Release · matched kernels/ids")
-    out("🕐 %NumPy = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)")
+    out("%NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)")
     out()
     ignored = sorted({section_of(k) for k in NA})
     out("AV POLICY — a NumSharp section that crashes all retries (known intermittent")
@@ -276,7 +276,7 @@ def render(pairs):
     if main_sps:
         g = geomean(main_sps)
         win = sum(1 for x in main_sps if x > 1.0)
-        out(f"HEADLINE — operation matrix: {g:.2f}× geomean · 🕐 {100.0 / g:.0f}% of NumPy's time · {win} win / {len(main_sps) - win} lose over {len(main_sps)} cells")
+        out(f"HEADLINE — operation matrix: {g:.2f}× geomean · {100.0 / g:.0f}%🕐 of NumPy's time · {win} win / {len(main_sps) - win} lose over {len(main_sps)} cells")
         out()
 
     out("OPERATIONS — BY SIZE TIER  (geomean over all families)")

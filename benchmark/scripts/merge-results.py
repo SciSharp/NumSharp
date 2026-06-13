@@ -369,10 +369,10 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "",
         "**Ratio** = NumPy ÷ NumSharp → Higher is better (>1.0× = NumSharp faster)",
         "",
-        "**🕐 %NumPy** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses "
+        "**%NumPy🕐** = NumSharp ÷ NumPy × 100 = the share of NumPy's time NumSharp uses "
         "(30% = NumSharp takes only 30% of the time NumPy would; <100% = faster).",
         "",
-        "| | Status | Ratio | 🕐 %NumPy | Meaning |",
+        "| | Status | Ratio | %NumPy🕐 | Meaning |",
         "|:-:|--------|:-----:|:------:|---------|",
         "|✅| Faster | ≥1.0× | ≤100% | NumSharp ≥ NumPy speed |",
         "|🟡| Close | 0.5–1.0× | 100–200% | within 2× slower |",
@@ -398,7 +398,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
 
     lines.append("## Summary by size")
     lines.append("")
-    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | 🕐 %NP |")
+    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean | %NP🕐 |")
     lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|")
     for n in sizes:
         rs = [r for r in results if r.n == n]
@@ -431,8 +431,8 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
                 f"(both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs, within {MAX_CREDIBLE_SPEEDUP:.0f}×); "
                 f"{negligible_n} negligible rows excluded as non-comparable (▫). "
                 f"Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · "
-                f"🕐 %NumPy = share of NumPy's time NumSharp uses._")
-        cols = "| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |"
+                f"%NumPy🕐 = share of NumPy's time NumSharp uses._")
+        cols = "| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |"
         sep = "|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|"
 
         def trow(r):
@@ -466,7 +466,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     for suite_name, suite_results in suites.items():
         lines.append(f"### {suite_name}")
         lines.append("")
-        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | 🕐 %NumPy |")
+        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |")
         lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|")
 
         for r in sorted(suite_results, key=lambda x: (x.operation, x.dtype, x.n)):
