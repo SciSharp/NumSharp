@@ -37,6 +37,8 @@ Console.WriteLine(c);  // [1, 3, 5, 7, 9]
 
 - [Introduction](docs/intro.md) - Learn about NDArray, Shape, and Storage
 - [NumPy Compliance](docs/compliance.md) - Compatibility status and roadmap
+- [IL Generation](docs/il-generation.md) - How NumSharp emits SIMD kernels at runtime
+- [Benchmarks vs NumPy](docs/benchmarks.md) - Head-to-head performance, refreshed every release
 - [API Reference](api/index.md) - Full API documentation
 
 ## Community

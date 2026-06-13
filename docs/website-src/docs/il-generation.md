@@ -48,6 +48,8 @@ To give you a sense of the gains, here's what you can expect when IL kernels kic
 
 These aren't theoretical numbers—they reflect real-world benchmarks on modern CPUs with AVX2 support. If you're processing millions of elements, you'll see the difference immediately.
 
+The table above compares IL kernels against *naive scalar C#*. For the head-to-head comparison that matters more—**NumSharp against NumPy itself**—see the [Benchmarks vs NumPy](benchmarks.md) page, where the same machinery described here is measured against the C/Fortran reference implementation across every operation class and cache tier.
+
 ---
 
 ## Architecture
