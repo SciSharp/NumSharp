@@ -213,10 +213,10 @@ def classify(numpy_ms: float, numsharp_ms: Optional[float], ratio: Optional[floa
 
 
 def pct_fmt(pct: Optional[float]) -> str:
-    """Share of NumPy's time NumSharp uses; compact for the rare huge slowdowns."""
+    """Share of NumPy's time NumSharp uses — always a percentage (e.g. 88000% = 880× as long)."""
     if pct is None:
         return "-"
-    return f"{pct:.0f}%" if pct < 1000 else f"{pct / 100:.0f}×"
+    return f"{pct:.0f}%"
 
 
 def ratio_fmt(r: Optional[float]) -> str:

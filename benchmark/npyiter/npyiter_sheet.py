@@ -197,8 +197,8 @@ def geomean(v):
 
 
 def pct_str(pct):
-    """Share of NumPy's time NumSharp uses; compact for the rare huge slowdowns."""
-    return f"{pct:4.0f}%" if pct < 1000 else f"{pct / 100:3.0f}×NP"
+    """Share of NumPy's time NumSharp uses — always a percentage (e.g. 88000% = 880× as long)."""
+    return f"{pct:4.0f}%"
 
 
 SECTION_FAMS = {

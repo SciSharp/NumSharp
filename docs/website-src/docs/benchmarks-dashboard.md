@@ -66,18 +66,18 @@ TOP 12 FASTEST  (NumPy ÷ NumSharp — biggest NumSharp wins)
 
 TOP 12 SLOWEST  (smallest NumPy ÷ NumSharp = optimization priorities)
   operation                      dtype       N     NumPy   NumSharp    NP/NS   %NumPy🕐
-  np.zeros (int64)               int64     10M     0.012 →   10.747 ms   0.001×  881×NP🕐
-  np.zeros (int32)               int32     10M     0.011 →    5.622 ms   0.002×  521×NP🕐
-  np.zeros (float64)             float64   10M     0.021 →   10.755 ms   0.002×  507×NP🕐
-  np.zeros (float32)             float32   10M     0.017 →    5.673 ms   0.003×  334×NP🕐
-  np.argsort(a) (int64)          int64    100K     0.472 →   12.893 ms   0.037×   27×NP🕐
-  np.argsort(a) (int32)          int32    100K     0.442 →   10.404 ms   0.042×   24×NP🕐
-  np.left_shift(a, 2) (int64)    int64      1K     0.001 →    0.020 ms   0.050×   20×NP🕐
-  np.right_shift(a, 2) (int64)   int64      1K     0.001 →    0.019 ms   0.051×   20×NP🕐
-  a * 2 (literal) (float32)      float32  100K     0.007 →    0.129 ms   0.052×   19×NP🕐
-  np.sum axis=1 (uint8)          uint8     10M     3.115 →   49.741 ms   0.063×   16×NP🕐
-  np.right_shift(a, 2) (int32)   int32      1K     0.001 →    0.017 ms   0.064×   16×NP🕐
-  np.sum axis=0 (uint16)         uint16    10M     4.620 →   71.694 ms   0.064×   16×NP🕐
+  np.zeros (int64)               int64     10M     0.012 →   10.747 ms   0.001×  88087%🕐
+  np.zeros (int32)               int32     10M     0.011 →    5.622 ms   0.002×  52060%🕐
+  np.zeros (float64)             float64   10M     0.021 →   10.755 ms   0.002×  50731%🕐
+  np.zeros (float32)             float32   10M     0.017 →    5.673 ms   0.003×  33368%🕐
+  np.argsort(a) (int64)          int64    100K     0.472 →   12.893 ms   0.037×  2734%🕐
+  np.argsort(a) (int32)          int32    100K     0.442 →   10.404 ms   0.042×  2354%🕐
+  np.left_shift(a, 2) (int64)    int64      1K     0.001 →    0.020 ms   0.050×  1990%🕐
+  np.right_shift(a, 2) (int64)   int64      1K     0.001 →    0.019 ms   0.051×  1950%🕐
+  a * 2 (literal) (float32)      float32  100K     0.007 →    0.129 ms   0.052×  1922%🕐
+  np.sum axis=1 (uint8)          uint8     10M     3.115 →   49.741 ms   0.063×  1597%🕐
+  np.right_shift(a, 2) (int32)   int32      1K     0.001 →    0.017 ms   0.064×  1564%🕐
+  np.sum axis=0 (uint16)         uint16    10M     4.620 →   71.694 ms   0.064×  1552%🕐
 
 note · speedup = NumPy ÷ NumSharp on one runner (>1.0× = NumSharp faster) · %NumPy🕐 = share of
        NumPy's time NumSharp uses · negligible rows (<1µs / >20× = overhead, lazy alloc, views) excluded
