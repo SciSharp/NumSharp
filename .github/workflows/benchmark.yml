@@ -1,0 +1,82 @@
+# =============================================================================
+# Benchmark — decoupled, post-release, semi-manual. Runs the ENTIRE NumSharp-vs-
+# NumPy comparison via benchmark/run_benchmark.py: the official op/dtype/N matrix
+# (BenchmarkDotNet + NumPy across 1K/100K/10M) AND the NpyIter iterator benchmark
+# (benchmark/npyiter, appended as its own report section + README cards).
+#
+# Trigger is the GitHub Release being published (the "after a successful release"
+# signal — 'Build and Release' creates it on a v* tag) or a manual dispatch. It
+# is a SEPARATE workflow from the release pipeline on purpose: a slow/failed
+# benchmark must never gate a release.
+#
+# It commits the refreshed report + cards straight to master with '[skip ci]'
+# (so the push cannot re-trigger anything). GITHUB_TOKEN + contents:write — no PAT.
+#
+# NOTE on numbers: GitHub runners are shared, variable hardware. ABSOLUTE ms are
+# not comparable run-to-run; every ratio is NumPy / NumSharp on the SAME runner,
+# which stays meaningful. numpy is pinned. The NpyIter harness IGNORES NumSharp's
+# known intermittent AccessViolation: a crashing section is reported NA.
+# =============================================================================
+name: Benchmark
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Setup .NET (8 + 10)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps (pin numpy for cross-release comparability)
+        run: pip install "numpy==2.4.2" matplotlib tabulate
+
+      - name: Run full benchmark (official op suites + NpyIter)
+        # run_benchmark.py builds GraphEngine+Core, runs the official suites, then
+        # the NpyIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
+        # the NpyIter section to benchmark-report.md.
+        run: python benchmark/run_benchmark.py
+
+      - name: Commit report + cards to master
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add benchmark/benchmark-report.md \
+                  benchmark/benchmark-report.csv \
+                  benchmark/npyiter/npyiter_results.md \
+                  benchmark/npyiter/npyiter_results.tsv \
+                  benchmark/npyiter/cards/ops.png \
+                  benchmark/npyiter/cards/cat.png
+          if git diff --cached --quiet; then
+            echo "No benchmark changes to commit."
+            exit 0
+          fi
+          git commit -m "bench: refresh benchmark report + NpyIter cards [skip ci]"
+          git push origin HEAD:master

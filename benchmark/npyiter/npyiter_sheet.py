@@ -33,8 +33,8 @@ SHEET = os.path.join(HERE, "npyiter_results.md")
 SECTIONS = ["elementwise", "reductions", "selection", "copycast", "indexmath",
             "dtypes", "dividends", "construction", "chunkwidth", "pathology"]
 
-TIERS = ["1", "1K", "100K", "1M"]
-TIER_LABEL = {"1": "scalar", "1K": "1K", "100K": "100K", "1M": "1M"}
+TIERS = ["1", "1K", "100K", "1M", "10M"]
+TIER_LABEL = {"1": "scalar", "1K": "1K", "100K": "100K", "1M": "1M", "10M": "10M"}
 CATEGORIES = [
     ("elementwise", ["add", "sqrt", "copy", "sadd", "bcast", "frev", "castbuf", "mixbuf"]),
     ("reductions",  ["psum", "sumax0", "sumax1", "sumdt", "amin", "cumsum", "anyff", "anyeh"]),
@@ -110,7 +110,7 @@ def run_ns(section, retries=4):
         if p.returncode == 0:
             return parse(p.stdout)
         log(f"    NS {section}: attempt {attempt}/{retries} crashed (exit {p.returncode}) — retrying")
-    log(f"    NS {section}: FAILED after {retries} attempts — section omitted")
+    log(f"    NS {section}: FAILED after {retries} attempts — marked NA (ignored)")
     return {}
 
 
@@ -131,7 +131,8 @@ def write_tsv(pairs):
     with open(TSV, "w", encoding="utf-8") as f:
         f.write("id\tns_ms\tnp_ms\n")
         for k, (a, b) in pairs.items():
-            f.write(f"{k}\t{a!r}\t{b!r}\n")
+            a_str = "NA" if a is None else repr(a)   # NA = NumSharp AV, ignored
+            f.write(f"{k}\t{a_str}\t{b!r}\n")
 
 
 def collect(sections, skip_build, resume):
@@ -151,12 +152,19 @@ def collect(sections, skip_build, resume):
             log(f"[skip] {s} (already in tsv)")
             continue
         log(f"[run] {s} …")
-        ns = run_ns(s)
-        npp = run_np(s)
-        added = {k: (ns[k], npp[k]) for k in ns if k in npp and ns[k] > 0 and npp[k] > 0}
-        pairs.update(added)
+        npp = run_np(s)            # NumPy first — reliable; gives the expected id set
+        ns = run_ns(s)             # NumSharp — may crash (AV); {} if all retries fail
+        if not ns and npp:
+            # AV policy: a section that crashes all retries is IGNORED — record its
+            # ids NA (NumSharp side absent), excluded from every geomean downstream.
+            for k in npp:
+                pairs[k] = (None, npp[k])
+            log(f"    {s}: NA — NumSharp AccessViolation, ignored ({len(npp)} ids)")
+        else:
+            added = {k: (ns[k], npp[k]) for k in ns if k in npp and ns[k] > 0 and npp[k] > 0}
+            pairs.update(added)
+            log(f"    {s}: +{len(added)} pairs ({len(pairs)} total)")
         write_tsv(pairs)   # persist after EVERY section — partial progress survives
-        log(f"    {s}: +{len(added)} pairs ({len(pairs)} total)")
     log(f"[data] {len(pairs)} pairs -> {os.path.relpath(TSV, REPO)}")
     return pairs
 
@@ -168,7 +176,8 @@ def load_tsv():
         for ln in f:
             p = ln.rstrip("\n").split("\t")
             if len(p) == 3:
-                pairs[p[0]] = (float(p[1]), float(p[2]))
+                ns = None if p[1] == "NA" else float(p[1])
+                pairs[p[0]] = (ns, float(p[2]))
     return pairs
 
 
@@ -187,11 +196,44 @@ def geomean(v):
     return math.exp(sum(math.log(x) for x in v) / len(v)) if v else float("nan")
 
 
+SECTION_FAMS = {
+    "elementwise": ["add", "sqrt", "copy", "sadd", "bcast", "frev", "castbuf", "mixbuf"],
+    "reductions": ["psum", "sumax0", "sumax1", "sumdt", "amin", "cumsum", "anyff", "anyeh"],
+    "selection": ["where", "bread", "bassign", "cnz", "argw", "gather", "scatter"],
+    "copycast": ["flatten", "astype", "ravelT", "inplace", "lessbool"],
+    "indexmath": ["unravel", "ravelmi"],
+    "dtypes": ["cplx", "f16", "i8"],
+    "dividends": ["fuse7", "reuse", "par8"],
+}
+
+
+def section_of(id_):
+    if id_.startswith("ctor."):
+        return "construction"
+    if id_.startswith("cw."):
+        return "chunkwidth"
+    if id_.startswith("path."):
+        return "pathology"
+    fam = id_.split("@")[0]
+    for sec, fams in SECTION_FAMS.items():
+        if fam in fams:
+            return sec
+    return "?"
+
+
 def render(pairs):
-    SP = {k: np_ / ns for k, (ns, np_) in pairs.items()}
+    NA = {k for k, (ns, _) in pairs.items() if ns is None}    # NumSharp AV — ignored
+    SP = {k: np_ / ns for k, (ns, np_) in pairs.items() if ns is not None}
 
     def sp(fam, tier):
         return SP.get(f"{fam}@{tier}")
+
+    def cell(fam, tier):
+        key = f"{fam}@{tier}"
+        if key in NA:
+            return f"{'NA':>9}"
+        v = SP.get(key)
+        return f"{v:>8.2f}×" if v else f"{'-':>9}"
 
     def famsps(fam):
         return [sp(fam, t) for t in TIERS if sp(fam, t) is not None]
@@ -215,7 +257,13 @@ def render(pairs):
 
     stamp = os.environ.get("NPYITER_STAMP", datetime.date.today().isoformat())
     out(f"NumSharp NpyIter — canonical benchmark · {stamp} · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)")
-    out(f"{len(pairs)} measured NumSharp-vs-NumPy pairs · best-of-rounds, Release · matched kernels/ids")
+    out(f"{len(pairs)} measured pairs ({len(NA)} NA) · best-of-rounds, Release · matched kernels/ids")
+    out()
+    ignored = sorted({section_of(k) for k in NA})
+    out("AV POLICY — a NumSharp section that crashes all retries (known intermittent")
+    out("AccessViolation, an unmanaged-storage lifetime bug) is reported NA / IGNORED")
+    out("and excluded from every geomean below."
+        + (f"  THIS RUN: NA across {', '.join(ignored)}." if ignored else "  THIS RUN: none."))
     out()
 
     main_sps = [SP[f"{f}@{t}"] for f in MAIN for t in TIERS if f"{f}@{t}" in SP]
@@ -249,7 +297,7 @@ def render(pairs):
     for name, fams in CATEGORIES:
         out(f"-- {name}")
         for fam in fams:
-            cells = "".join(f"{sp(fam, t):>8.2f}×" if sp(fam, t) else f"{'-':>9}" for t in TIERS)
+            cells = "".join(cell(fam, t) for t in TIERS)
             g = famsps(fam)
             out(f"  {FAM_LABEL.get(fam, fam):<9}{cells}   {geomean(g):>6.2f}×" if g else f"  {FAM_LABEL.get(fam, fam):<9}{cells}")
     out()
@@ -284,7 +332,7 @@ def render(pairs):
     out(f"{'':13}" + "".join(f"{TIER_LABEL[t]:>9}" for t in TIERS) + "   note")
     DIV_NOTE = {"fuse7": "vs chained 6× add", "reuse": "vs rebuild each call", "par8": "vs single-thread"}
     for d in DIVIDENDS:
-        cells = "".join(f"{sp(d, t):>8.2f}×" if sp(d, t) else f"{'-':>9}" for t in TIERS)
+        cells = "".join(cell(d, t) for t in TIERS)
         out(f"{d:<13}{cells}   {DIV_NOTE[d]}")
     out()
 

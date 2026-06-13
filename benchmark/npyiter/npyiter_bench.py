@@ -52,14 +52,17 @@ def pick(n):
         return 80_000, 10_000, 5
     if n <= 100_000:
         return 2_500, 400, 4
-    return 120, 30, 3
+    if n <= 1_000_000:
+        return 120, 30, 3
+    return 30, 8, 3
 
 
 def grid(n):
-    return {1: (1, 1), 1_000: (25, 40), 100_000: (250, 400), 1_000_000: (1_000, 1_000)}[n]
+    return {1: (1, 1), 1_000: (25, 40), 100_000: (250, 400),
+            1_000_000: (1_000, 1_000), 10_000_000: (2_500, 4_000)}[n]
 
 
-SIZES = [("1", 1), ("1K", 1_000), ("100K", 100_000), ("1M", 1_000_000)]
+SIZES = [("1", 1), ("1K", 1_000), ("100K", 100_000), ("1M", 1_000_000), ("10M", 10_000_000)]
 RO, WO = ["readonly"], ["writeonly"]
 want_ops = any(want(s) for s in ("elementwise", "reductions", "selection", "copycast", "indexmath", "dtypes", "dividends"))
 

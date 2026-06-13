@@ -61,7 +61,7 @@ def bar_card(path, title, subtitle, labels, ratios, footer):
 
 def main():
     pairs = load_tsv()
-    SP = {k: np_ / ns for k, (ns, np_) in pairs.items()}
+    SP = {k: np_ / ns for k, (ns, np_) in pairs.items() if ns is not None}   # skip NA (AV)
 
     def tier(t):
         return [SP[f"{f}@{t}"] for f in MAIN if f"{f}@{t}" in SP]

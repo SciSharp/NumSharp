@@ -65,9 +65,10 @@ void Row(string id, double ms) => Console.WriteLine($"{id}\t{ms:G17}");
     n <= 1 ? (200_000, 20_000, 5) :
     n <= 1_000 ? (80_000, 10_000, 5) :
     n <= 100_000 ? (2_500, 400, 4) :
-    (120, 30, 3);
+    n <= 1_000_000 ? (120, 30, 3) :
+    (30, 8, 3);
 
-(int R, int C) Grid(int n) => n == 1 ? (1, 1) : n == 1_000 ? (25, 40) : n == 100_000 ? (250, 400) : (1_000, 1_000);
+(int R, int C) Grid(int n) => n == 1 ? (1, 1) : n == 1_000 ? (25, 40) : n == 100_000 ? (250, 400) : n == 1_000_000 ? (1_000, 1_000) : (2_500, 4_000);
 
 var RO1 = new[] { NpyIterPerOpFlags.READONLY };
 var RO_WO = new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY };
@@ -81,7 +82,7 @@ var f64x3 = new[] { NPTypeCode.Double, NPTypeCode.Double, NPTypeCode.Double };
 
 Console.Error.WriteLine($"[npyiter_bench] section={section}  cores={Environment.ProcessorCount} V256={Vector256.IsHardwareAccelerated}");
 
-var SIZES = new (string tag, int n)[] { ("1", 1), ("1K", 1_000), ("100K", 100_000), ("1M", 1_000_000) };
+var SIZES = new (string tag, int n)[] { ("1", 1), ("1K", 1_000), ("100K", 100_000), ("1M", 1_000_000), ("10M", 10_000_000) };
 bool wantOps = Want("elementwise") || Want("reductions") || Want("selection") || Want("copycast") || Want("indexmath") || Want("dtypes") || Want("dividends");
 
 unsafe
