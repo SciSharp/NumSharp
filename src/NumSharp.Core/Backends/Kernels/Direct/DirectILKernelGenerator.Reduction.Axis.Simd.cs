@@ -996,22 +996,27 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// NaN-propagating Vector256 Min/Max for floating point. Hardware MIN/MAX drop a NaN operand;
-        /// NumPy's (non-nan*) min/max propagate it. Where both lanes are ordered keep the hardware
-        /// result, else fall back to <c>a + b</c> (= NaN). The <c>typeof(T)</c> checks are JIT-time
-        /// constants for value types, so integer instantiations keep the single-instruction path with
-        /// no branch and the float path's <c>a + b</c> is never emitted for them.
+        /// NaN-propagating Vector256 Min/Max for floating point. NumPy's (non-nan*) min/max
+        /// propagate a NaN operand. On <c>net8.0</c> the BCL <c>Vector256.Min/Max</c> lower to the
+        /// hardware vminps/vmaxps, which DROP a NaN operand (they return the second source on an
+        /// unordered compare) — so for float/double we mask: where both lanes are ordered keep the
+        /// hardware result, else fall back to <c>a + b</c> (= NaN). On <c>net9.0+</c> the BCL methods
+        /// are already IEEE-NaN-propagating (verified: <c>Vector128.Max(NaN,5) == NaN</c>), so the
+        /// guard is compiled out and the single-instruction path stands. Integer instantiations never
+        /// reach the guard (the <c>typeof(T)</c> checks are JIT-time constants).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<T> NaNAwareMinMax256<T>(Vector256<T> a, Vector256<T> b, bool isMax)
             where T : unmanaged
         {
             var mm = isMax ? Vector256.Max(a, b) : Vector256.Min(a, b);
+#if NET8_0
             if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
             {
                 var ordered = Vector256.Equals(a, a) & Vector256.Equals(b, b);
                 return Vector256.ConditionalSelect(ordered, mm, a + b);
             }
+#endif
             return mm;
         }
 
@@ -1032,17 +1037,20 @@ namespace NumSharp.Backends.Kernels
             };
         }
 
-        /// <summary>NaN-propagating Vector128 Min/Max for floating point (see NaNAwareMinMax256).</summary>
+        /// <summary>NaN-propagating Vector128 Min/Max for floating point (see NaNAwareMinMax256;
+        /// the float/double mask is compiled only on net8.0, where Vector128.Min/Max drop NaN).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector128<T> NaNAwareMinMax128<T>(Vector128<T> a, Vector128<T> b, bool isMax)
             where T : unmanaged
         {
             var mm = isMax ? Vector128.Max(a, b) : Vector128.Min(a, b);
+#if NET8_0
             if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
             {
                 var ordered = Vector128.Equals(a, a) & Vector128.Equals(b, b);
                 return Vector128.ConditionalSelect(ordered, mm, a + b);
             }
+#endif
             return mm;
         }
 
@@ -1872,25 +1880,25 @@ namespace NumSharp.Backends.Kernels
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public double CombineScalar(double a, double b) => a * b;
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public double Identity() => 1.0;
         }
-        // Min/Max stay on the cross-platform Vector256.Min/Max because the
-        // x86 vminps/vmaxps intrinsics do NOT propagate NaN (they always
-        // return the second operand when either is NaN, by design — see
-        // Intel SDM "MAXPS — Maximum of Packed Single-Precision Floating-
-        // Point Values"). NumPy requires Min(x, NaN) = NaN and similarly
-        // for Max. Vector256.Min/Max use IEEE 754 semantics with proper
-        // NaN propagation. Sum/Prod don't have this issue, so they're
-        // wired through the faster Add256/Mul256 wrappers.
+        // Min/Max route through NaNAwareMinMax256/128 (NOT raw Vector256.Min/Max) so a NaN
+        // operand propagates per NumPy's (non-nan*) min/max contract — Min(x, NaN) = NaN. The
+        // x86 vminps/vmaxps intrinsics drop NaN (return the second operand on an unordered
+        // compare — Intel SDM "MAXPS"); the BCL Vector256.Min/Max only adopted IEEE NaN
+        // propagation in .NET 9, so on net8.0 they exhibit the raw vmaxps behavior. The helper's
+        // float/double mask is compiled only under #if NET8_0, so net9.0+ keeps the single-
+        // instruction path with zero overhead while net8.0 stays NaN-correct. Sum/Prod don't
+        // have this issue, so they're wired through the faster Add/Mul typed structs.
         internal readonly struct MinOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Min(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Min(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: false);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: false);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MinScalar(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MaxValueOf<T>();
         }
         internal readonly struct MaxOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Max(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Max(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: true);
+            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: true);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MaxScalar(a, b);
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MinValueOf<T>();
         }

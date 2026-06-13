@@ -397,17 +397,18 @@ namespace NumSharp.Backends
             => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
 
         /// <summary>
-        ///     <see cref="System.Numerics.Complex.Abs"/> — resolved once and
+        ///     <see cref="NumSharp.Utilities.NpyComplexMath.Abs"/> — resolved once and
         ///     cached. Routes the Complex-magnitude special case in
         ///     <see cref="TryExecuteUnaryOpViaNpyIter"/> without depending on
         ///     <c>DirectILKernelGenerator.CachedMethods</c>, which is private to
-        ///     the kernel partial.
+        ///     the kernel partial. The helper (not <see cref="System.Numerics.Complex.Abs"/>)
+        ///     gives NumPy's <c>npy_cabs</c> infinity semantics on net8.0 — see its docs.
         /// </summary>
         private static readonly MethodInfo s_complexAbs =
-            typeof(System.Numerics.Complex).GetMethod(
+            typeof(NumSharp.Utilities.NpyComplexMath).GetMethod(
                 "Abs", BindingFlags.Public | BindingFlags.Static,
                 new[] { typeof(System.Numerics.Complex) })
-            ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Abs");
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Abs");
 
         /// <summary>
         ///     Try to execute a unary op via NpyIter Tier 3B. Returns the

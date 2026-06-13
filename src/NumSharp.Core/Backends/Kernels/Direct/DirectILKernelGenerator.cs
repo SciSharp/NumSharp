@@ -522,9 +522,13 @@ namespace NumSharp.Backends.Kernels
             public static readonly MethodInfo HalfNegativeInfinity = typeof(Half).GetProperty("NegativeInfinity", BindingFlags.Public | BindingFlags.Static)!.GetGetMethod()
                 ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
 
-            // Complex methods and fields (Complex uses static fields, not properties)
-            public static readonly MethodInfo ComplexAbs = typeof(System.Numerics.Complex).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Abs");
+            // Complex methods and fields (Complex uses static fields, not properties).
+            // ComplexAbs routes through NpyComplexMath.Abs (npy_cabs / C99 hypot semantics) rather
+            // than Complex.Abs directly: the BCL's private Hypot returns NaN for abs(NaN+inf*i) on
+            // net8.0, where NumPy returns +inf. The helper defers to Complex.Abs for every
+            // finite/NaN-only input, so magnitudes that already match NumPy stay bit-identical.
+            public static readonly MethodInfo ComplexAbs = typeof(Utilities.NpyComplexMath).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(Utilities.NpyComplexMath).FullName, "Abs");
             public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Division(Complex, double)");
             public static readonly FieldInfo ComplexZero = typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)
