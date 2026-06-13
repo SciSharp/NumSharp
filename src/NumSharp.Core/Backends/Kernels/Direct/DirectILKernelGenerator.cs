@@ -547,18 +547,24 @@ namespace NumSharp.Backends.Kernels
             // Complex unary operator methods
             public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
-            public static readonly MethodInfo ComplexSqrt = typeof(System.Numerics.Complex).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sqrt");
-            public static readonly MethodInfo ComplexExp = typeof(System.Numerics.Complex).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Exp");
-            public static readonly MethodInfo ComplexLog = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log");
-            public static readonly MethodInfo ComplexSin = typeof(System.Numerics.Complex).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sin");
-            public static readonly MethodInfo ComplexCos = typeof(System.Numerics.Complex).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Cos");
-            public static readonly MethodInfo ComplexTan = typeof(System.Numerics.Complex).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Tan");
+            // Sqrt/Exp/Sin/Cos/Tan route through NpyComplexMath (not Complex.* directly): the BCL
+            // matches NumPy on finite interiors but diverges at the C99 edges (non-finite, branch-cut
+            // signs, signed zeros). NpyComplexMath delegates the interior to the BCL and adds the fixups.
+            public static readonly MethodInfo ComplexSqrt = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sqrt");
+            public static readonly MethodInfo ComplexExp = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Exp");
+            // ComplexLog routes through NpyComplexMath.Log (full npy_clog port): Complex.Log drops the
+            // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
+            // and by NpyComplexMath.Log10/Log1p.
+            public static readonly MethodInfo ComplexLog = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log");
+            public static readonly MethodInfo ComplexSin = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sin");
+            public static readonly MethodInfo ComplexCos = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Cos");
+            public static readonly MethodInfo ComplexTan = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Tan");
             // Hyperbolic and inverse-trig route through NpyComplexMath (not Complex.* directly): the BCL
             // matches NumPy only on finite interiors; NpyComplexMath adds the C99 Annex G non-finite
             // tables and signed-zero/branch-cut fixups so every input matches NumPy.
@@ -576,10 +582,27 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Atan");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
-            public static readonly MethodInfo ComplexLog10 = typeof(System.Numerics.Complex).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log10");
-            // Complex doesn't have Log2/Exp2/Log1p/Expm1 directly — composed via Log(z, 2), Pow(2, z),
-            // Log(1+z), Exp(z)-1 in EmitUnaryComplexOperation.
+            // Log10/Reciprocal/Log1p route through NpyComplexMath (Complex.Log10 drifts past 1 ULP from
+            // NumPy; Complex.op_Division / Complex.One+z drop NumPy's signed zeros).
+            public static readonly MethodInfo ComplexLog10 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log10");
+            public static readonly MethodInfo ComplexReciprocal = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Reciprocal", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Reciprocal");
+            // Square routes through NpyComplexMath (FMA-contracted z*z): Complex.op_Multiply lacks FMA,
+            // so it loses NumPy's square(1e-10+1e-10i).real = -2.275e-37 and turns the 1e300 overflow
+            // into NaN instead of NumPy's -inf.
+            public static readonly MethodInfo ComplexSquare = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Square", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Square");
+            public static readonly MethodInfo ComplexLog1p = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log1p");
+            public static readonly MethodInfo ComplexExp2 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Exp2");
+            // Expm1 routes through NpyComplexMath (nc_expm1 formula); Complex.Exp(z)-1 mis-handles the
+            // non-finite imaginary parts (e.g. expm1(+Inf+0i).imag must be NaN = exp(+Inf)*sin(0)).
+            public static readonly MethodInfo ComplexExpm1 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Expm1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Expm1");
+            // Complex doesn't have Log2/Exp2/Log1p directly — composed via Log(z, 2), Pow(2, z),
+            // NpyComplexMath.Log1p in EmitUnaryComplexOperation.
             public static readonly MethodInfo ComplexLogBase = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log(Complex, double)");
             public static readonly MethodInfo ComplexOpSubtraction = typeof(System.Numerics.Complex).GetMethod("op_Subtraction", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })

@@ -253,24 +253,14 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Square:
-                    // z * z
-                    il.Emit(OpCodes.Dup);
-                    il.EmitCall(OpCodes.Call,
-                        ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), "op_Multiply"), null);
+                    // NpyComplexMath.Square = FMA-contracted z*z (matches NumPy's complex multiply
+                    // overflow/cancellation, which Complex.op_Multiply does not).
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexSquare, null);
                     break;
 
                 case UnaryOp.Reciprocal:
-                    // 1 / z
-                    {
-                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
-                        il.Emit(OpCodes.Stloc, locZ);
-                        il.Emit(OpCodes.Ldc_R8, 1.0);
-                        il.Emit(OpCodes.Ldc_R8, 0.0);
-                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
-                        il.Emit(OpCodes.Ldloc, locZ);
-                        il.EmitCall(OpCodes.Call,
-                            ScalarMethodCache.BinaryOp(typeof(System.Numerics.Complex), "op_Division"), null);
-                    }
+                    // NumPy nc_recip: conj(z)/|z|^2 (signed zeros + overflow match NumPy, unlike 1/z).
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexReciprocal, null);
                     break;
 
                 case UnaryOp.Sign:
@@ -325,69 +315,23 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp2:
-                    // B22: Complex.Pow(Complex(2,0), z) returns NaN+NaNj for z = ±inf+0j because
-                    // the internal exp(z·log(2)) computes (±inf)·0 = NaN in the imaginary
-                    // dimension. NumPy: exp2(-inf+0j) = 0+0j, exp2(+inf+0j) = inf+0j. Both are
-                    // satisfied by Math.Pow(2, r) for pure-real inputs. Pseudo-C#:
-                    //   if (z.Imaginary == 0.0)
-                    //       return new Complex(Math.Pow(2.0, z.Real), 0.0);
-                    //   return Complex.Pow(new Complex(2.0, 0.0), z);
-                    // Bne_Un also branches on NaN, so imag=NaN correctly falls through to
-                    // Complex.Pow (which propagates NaN per NumPy: exp2(r+nanj) = nan+nanj).
-                    {
-                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
-                        var lblImagNonZero = il.DefineLabel();
-                        var lblEnd = il.DefineLabel();
-
-                        il.Emit(OpCodes.Stloc, locZ);
-
-                        // if (z.Imaginary != 0.0 || double.IsNaN(z.Imaginary)) goto general;
-                        il.Emit(OpCodes.Ldloca, locZ);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
-                        il.Emit(OpCodes.Ldc_R8, 0.0);
-                        il.Emit(OpCodes.Bne_Un, lblImagNonZero);
-
-                        // Pure-real: new Complex(Math.Pow(2.0, z.Real), z.Imaginary)
-                        // Preserve input's imag (which is ±0 in this branch, per the Bne_Un
-                        // check above) so NumPy's sign-of-zero propagation is retained:
-                        // exp2(-0-0j) = 1-0j, exp2(r+0j) = 2^r+0j.
-                        il.Emit(OpCodes.Ldc_R8, 2.0);
-                        il.Emit(OpCodes.Ldloca, locZ);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);
-                        il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
-                        il.Emit(OpCodes.Ldloca, locZ);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);
-                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
-                        il.Emit(OpCodes.Br, lblEnd);
-
-                        // General: Complex.Pow(new Complex(2.0, 0.0), z)
-                        il.MarkLabel(lblImagNonZero);
-                        il.Emit(OpCodes.Ldc_R8, 2.0);
-                        il.Emit(OpCodes.Ldc_R8, 0.0);
-                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
-                        il.Emit(OpCodes.Ldloc, locZ);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexPow, null);
-
-                        il.MarkLabel(lblEnd);
-                    }
+                    // NpyComplexMath.Exp2 = Exp(z*ln2). Routing through the C99-correct Exp reproduces
+                    // NumPy's non-finite results (exp2(+-inf+0j), exp2(inf+inf j), ...) that
+                    // Complex.Pow(2, z) turned into NaN+NaNj.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexExp2, null);
                     break;
 
                 case UnaryOp.Log1p:
-                    // Complex.Log(1 + z). NumPy principal branch: log1p(-1+0j) = -inf+0j (matches Complex.Log).
-                    {
-                        il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
-                        // Stack: z, 1.
-                        // op_Addition takes (Complex, Complex), emit in a way that the order is z+1 = 1+z.
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpAddition, null);
-                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog, null);
-                    }
+                    // NpyComplexMath.Log1p = Log((1+re, im)) — preserves a -0 imaginary part that the
+                    // naive Complex.One + z would flip to +0 on the cut.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog1p, null);
                     break;
 
                 case UnaryOp.Expm1:
-                    // Complex.Exp(z) - 1.
-                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexExp, null);
-                    il.Emit(OpCodes.Ldsfld, CachedMethods.ComplexOne);
-                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpSubtraction, null);
+                    // NpyComplexMath.Expm1 = nc_expm1 formula (real = expm1(x)*cos(y) - 2*sin^2(y/2),
+                    // imag = exp(x)*sin(y)). The naive Complex.Exp(z)-1 loses NumPy's non-finite
+                    // imaginary parts and origin signed zeros.
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexExpm1, null);
                     break;
 
                 // Hyperbolic and inverse-trig: NpyComplexMath wraps the BCL with C99 Annex G non-finite

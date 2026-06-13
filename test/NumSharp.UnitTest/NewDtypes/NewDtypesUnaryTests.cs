@@ -419,6 +419,180 @@ namespace NumSharp.UnitTest.NewDtypes
             double.IsNaN(r.Imaginary).Should().BeTrue();
         }
 
+        // ---- Full-port behaviors (csinh/ccosh ladder, Kahan ctanh, npy_clog, npy_catanh, FMA z*z,
+        // Goldberg expm1). All values verified against NumPy 2.4.2. These exercise the large-magnitude,
+        // near-unit-circle, and tiny/subnormal regimes the BCL transcendentals previously got wrong. ----
+
+        [TestMethod]
+        public void Complex_SinCos_HugeImaginary()
+        {
+            // sin/cos of a large *finite* imaginary part. Complex.Sin/Cos return NaN here (cosh(huge)*0);
+            // NumPy's csin/ccos route through csinh/ccosh, which the port now matches: the imaginary
+            // magnitude overflows to +-inf but the other component stays exact.
+            var s = np.sin(np.array(new Complex[] { new(0.0, 1e300) })).GetAtIndex<Complex>(0);
+            s.Real.Should().Be(0.0);              // NOT NaN
+            s.Imaginary.Should().Be(double.PositiveInfinity);
+
+            var c = np.cos(np.array(new Complex[] { new(0.0, 1e300) })).GetAtIndex<Complex>(0);
+            c.Real.Should().Be(double.PositiveInfinity);
+            c.Imaginary.Should().Be(0.0);
+            double.IsNegative(c.Imaginary).Should().BeTrue("NumPy cos(0+1e300 j).imag = -0.0");
+        }
+
+        [TestMethod]
+        public void Complex_SinhCosh_LargeRealOverflow()
+        {
+            // Large finite real part: still finite where cosh(x) is representable (NumPy sinh(700+1j)).
+            var s = np.sinh(np.array(new Complex[] { new(700.0, 1.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(s, 2.7399595892935213e+303, 4.2672342296080034e+303, 1e+289);
+
+            // Past the overflow edge (|x| >= ~710.5) both NumPy and the port go to +-inf, component-wise.
+            var c = np.cosh(np.array(new Complex[] { new(710.5, 2.0) })).GetAtIndex<Complex>(0);
+            c.Real.Should().Be(double.NegativeInfinity);    // cosh*cos(2), cos(2)<0
+            c.Imaginary.Should().Be(double.PositiveInfinity);
+
+            var s2 = np.sinh(np.array(new Complex[] { new(1000.0, 0.5) })).GetAtIndex<Complex>(0);
+            s2.Real.Should().Be(double.PositiveInfinity);
+            s2.Imaginary.Should().Be(double.PositiveInfinity);
+        }
+
+        [TestMethod]
+        public void Complex_Tan_RealAxis_KahanAccuracy()
+        {
+            // tan(1.5+0j) == tan(1.5). The BCL Complex.Tan drifts ~33 ULP (~5.9e-14) here; the Kahan
+            // ctanh port matches NumPy's 14.101419947171719 to the bit. tol smaller than the old error.
+            var t = np.tan(np.array(new Complex[] { new(1.5, 0.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(t, 14.101419947171719, 0.0, 1e-14);
+
+            // tanh(0+1.5j) = (0, tan(1.5)) — the imaginary-axis image of the same value.
+            var th = np.tanh(np.array(new Complex[] { new(0.0, 1.5) })).GetAtIndex<Complex>(0);
+            AssertComplex(th, 0.0, 14.101419947171719, 1e-14);
+        }
+
+        [TestMethod]
+        public void Complex_Log_NearUnitCircle()
+        {
+            // log(z) with |z| ~ 1: the real part is log|z|, which cancels to 0 under the naive
+            // log(hypot(re,im)). NumPy's clog uses a log1p path; the port reproduces 5e-21 (not 0).
+            var l = np.log(np.array(new Complex[] { new(1.0, 1e-10) })).GetAtIndex<Complex>(0);
+            l.Real.Should().BeApproximately(5.0000000000000005e-21, 1e-36);
+            l.Real.Should().NotBe(0.0, "clog's log1p path keeps the tiny real part");
+            l.Imaginary.Should().BeApproximately(1e-10, 1e-25);
+
+            // A point exactly on the unit circle: log(0.6+0.8j).real ~ 0 (|z| == 1).
+            var u = np.log(np.array(new Complex[] { new(0.6, 0.8) })).GetAtIndex<Complex>(0);
+            u.Real.Should().BeApproximately(2.7755575615628914e-17, 1e-30);
+            u.Imaginary.Should().BeApproximately(0.9272952180016123, 1e-15);
+        }
+
+        [TestMethod]
+        public void Complex_Log10_Log2_Log1p()
+        {
+            // log10/log2 = clog * (1/ln10 | 1/ln2); they inherit clog's near-1 accuracy.
+            var l10 = np.log10(np.array(new Complex[] { new(1.0, 1e-10) })).GetAtIndex<Complex>(0);
+            AssertComplex(l10, 2.1714724095162594e-21, 4.342944819032518e-11, 1e-25);
+
+            var l2 = np.log2(np.array(new Complex[] { new(1.0, 1e-10) })).GetAtIndex<Complex>(0);
+            AssertComplex(l2, 7.213475204444818e-21, 1.4426950408889633e-10, 1e-24);
+
+            // Complex log1p is the *naive* clog(1+z) (NumPy does NOT refine it): log1p(1e-10 j).real == 0.
+            var l1p = np.log1p(np.array(new Complex[] { new(0.0, 1e-10) })).GetAtIndex<Complex>(0);
+            l1p.Real.Should().Be(0.0, "NumPy's complex log1p does not apply clog's near-1 refinement");
+            l1p.Imaginary.Should().BeApproximately(1e-10, 1e-25);
+        }
+
+        [TestMethod]
+        public void Complex_Expm1_TinyInput_Goldberg()
+        {
+            // expm1(x) for tiny x: exp(x)-1 cancels ~10 digits and underflows; the Goldberg correction
+            // (e^x-1)*x/log(e^x) recovers it. NumPy expm1(1e-10) = 1.00000000005e-10 (not 1.0000000827e-10).
+            var t = np.expm1(np.array(new Complex[] { new(1e-10, 0.0) })).GetAtIndex<Complex>(0);
+            t.Real.Should().BeApproximately(1.00000000005e-10, 1e-25);
+
+            // No underflow to 0: expm1(1e-300) == 1e-300.
+            var u = np.expm1(np.array(new Complex[] { new(1e-300, 0.0) })).GetAtIndex<Complex>(0);
+            u.Real.Should().Be(1e-300);
+
+            // Interior value unaffected: expm1(2+3j).
+            var m = np.expm1(np.array(new Complex[] { new(2.0, 3.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(m, -8.315110094901103, 1.0427436562359045, 1e-13);
+        }
+
+        [TestMethod]
+        public void Complex_Exp2()
+        {
+            // exp2(z) = exp(z*ln2). Interior + non-finite (the C99-correct Exp keeps the signed zero).
+            var e = np.exp2(np.array(new Complex[] { new(3.0, 1.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(e, 6.153911210911775, 5.111690210509077, 1e-13);
+
+            var inf = np.exp2(np.array(new Complex[] { new(double.NegativeInfinity, double.NegativeInfinity) })).GetAtIndex<Complex>(0);
+            inf.Real.Should().Be(0.0);
+            inf.Imaginary.Should().Be(0.0);
+            double.IsNegative(inf.Imaginary).Should().BeTrue("NumPy exp2(-inf-inf j).imag = -0.0");
+        }
+
+        [TestMethod]
+        public void Complex_Square_FmaContraction()
+        {
+            // np.square(z) == z*z with FMA-contracted multiply. Complex.op_Multiply (no FMA) returns 0
+            // for the real part here (exact 1e-20 - 1e-20); NumPy's fma(re,re,-(im*im)) keeps -2.275e-37.
+            var s = np.square(np.array(new Complex[] { new(1e-10, 1e-10) })).GetAtIndex<Complex>(0);
+            s.Real.Should().BeApproximately(-2.275215372846689e-37, 1e-52);
+            s.Real.Should().NotBe(0.0, "FMA exposes the rounding of im*im");
+            s.Imaginary.Should().BeApproximately(2.0000000000000002e-20, 1e-35);
+
+            // Interior unaffected, and the overflow gives -inf (not NaN from inf-inf).
+            AssertComplex(np.square(np.array(new Complex[] { new(2.0, 3.0) })).GetAtIndex<Complex>(0), -5.0, 12.0, 1e-13);
+            var big = np.square(np.array(new Complex[] { new(1e300, 1e300) })).GetAtIndex<Complex>(0);
+            big.Real.Should().Be(double.NegativeInfinity);
+            big.Imaginary.Should().Be(double.PositiveInfinity);
+        }
+
+        [TestMethod]
+        public void Complex_Reciprocal()
+        {
+            // nc_recip (Smith's algorithm): correct signed zeros + overflow-safe.
+            AssertComplex(np.reciprocal(np.array(new Complex[] { new(3.0, 4.0) })).GetAtIndex<Complex>(0), 0.12, -0.16, 1e-15);
+
+            var one = np.reciprocal(np.array(new Complex[] { new(1.0, 0.0) })).GetAtIndex<Complex>(0);
+            one.Real.Should().Be(1.0);
+            one.Imaginary.Should().Be(0.0);
+            double.IsNegative(one.Imaginary).Should().BeTrue("NumPy reciprocal(1+0j).imag = -0.0");
+
+            // reciprocal(inf+inf j) = nan+nan j (overflow-safe path doesn't flush to 0).
+            var inf = np.reciprocal(np.array(new Complex[] { new(double.PositiveInfinity, double.PositiveInfinity) })).GetAtIndex<Complex>(0);
+            double.IsNaN(inf.Real).Should().BeTrue();
+            double.IsNaN(inf.Imaginary).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Complex_Arctan_TinyAndLarge()
+        {
+            // catanh port: tiny imaginary part is preserved (Complex.Atan cancels/underflows it).
+            var t = np.arctan(np.array(new Complex[] { new(0.0, 1e-10) })).GetAtIndex<Complex>(0);
+            t.Real.Should().Be(0.0);
+            t.Imaginary.Should().BeApproximately(1e-10, 1e-25);
+
+            AssertComplex(np.arctan(np.array(new Complex[] { new(1.0, 1e-10) })).GetAtIndex<Complex>(0),
+                          0.7853981633974483, 5e-11, 1e-25);
+
+            // Large real part: real_part_reciprocal keeps Im = 1/x (not flushed) ~ 0; Re -> pi/2.
+            var big = np.arctan(np.array(new Complex[] { new(1e300, 1.0) })).GetAtIndex<Complex>(0);
+            big.Real.Should().BeApproximately(Math.PI / 2, 1e-15);
+            big.Imaginary.Should().BeApproximately(0.0, 1e-290);
+        }
+
+        [TestMethod]
+        public void Complex_Exp_NegInfinity_SignedZeroImaginary()
+        {
+            // exp(-inf - inf j) = 0 - 0j: the system libm keeps sign(y) on the imaginary zero, which
+            // npy_cexp's flat (0,0) drops. NumPy 2.4.2 -> imag is -0.0.
+            var r = np.exp(np.array(new Complex[] { new(double.NegativeInfinity, double.NegativeInfinity) })).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(0.0);
+            r.Imaginary.Should().Be(0.0);
+            double.IsNegative(r.Imaginary).Should().BeTrue("NumPy exp(-inf-inf j).imag = -0.0");
+        }
+
         #endregion
     }
 }
