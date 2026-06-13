@@ -929,7 +929,10 @@ def run_sorting_benchmarks(n, dtype_name, iterations):
     return [
         _b(lambda: np.argsort(a), n, iterations, "np.argsort(a)", "Sorting", dtype_name),
         _b(lambda: np.nonzero(a), n, iterations, "np.nonzero(a)", "Sorting", dtype_name),
-        _b(lambda: np.searchsorted(srt, n // 2), n, iterations, "np.searchsorted(a, v)", "Sorting", dtype_name),
+        # Query N points (a) into the sorted target → N binary searches (real work that
+        # scales with N), matching the C# benchmark. A single scalar lookup is pure call
+        # overhead, not a throughput comparison.
+        _b(lambda: np.searchsorted(srt, a), n, iterations, "np.searchsorted(a, v)", "Sorting", dtype_name),
     ]
 
 

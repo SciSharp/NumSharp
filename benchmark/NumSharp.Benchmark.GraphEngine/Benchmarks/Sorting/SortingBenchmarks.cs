@@ -46,6 +46,10 @@ public class SortingBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.nonzero(a)")]
     public object NonZero() => np.nonzero(_a);
 
+    // Query N points (the random array a) into the sorted target → N binary searches,
+    // real O(N log N) work that scales with size. (Previously this issued a SINGLE
+    // scalar lookup, ~18ns at every N — pure call overhead, not a throughput benchmark;
+    // against NumPy's ~1µs Python overhead it manufactured a meaningless 50–1000x "win".)
     [Benchmark(Description = "np.searchsorted(a, v)")]
-    public long SearchSorted() => np.searchsorted(_sorted, (double)(N / 2));
+    public NDArray SearchSorted() => np.searchsorted(_sorted, _a);
 }

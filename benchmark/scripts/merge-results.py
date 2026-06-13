@@ -188,6 +188,29 @@ def get_status(ratio: Optional[float]) -> str:
     return "much_slower"
 
 
+# A row is only a CREDIBLE throughput comparison when BOTH sides did measurable work.
+# Sub-microsecond timings are dominated by call overhead — e.g. the historical
+# np.searchsorted benchmark issued a SINGLE scalar binary search (~18ns at every N), so
+# comparing it to NumPy's ~1µs Python overhead manufactured a meaningless 50–1000x "win".
+# An implausible >20x speedup likewise almost always means the NumSharp side did ~no work
+# (a view return, a lazy allocation, or a dead-code-eliminated kernel — or a one-off bad
+# reading). Such rows are marked "negligible": kept OUT of the Best/Worst rankings and the
+# geomean, but still listed in the per-suite tables — never showcased as a win.
+WORK_FLOOR_MS = 0.001          # 1 µs — below this an op isn't doing comparable array work
+MAX_CREDIBLE_SPEEDUP = 20.0    # ratio < 1/20 ⇒ "NumSharp >20x faster" ⇒ artifact, not a win
+CREDIBLE = ("faster", "close", "slower", "much_slower")
+
+
+def classify(numpy_ms: float, numsharp_ms: Optional[float], ratio: Optional[float]) -> str:
+    """Status that also gates credibility (see WORK_FLOOR_MS / MAX_CREDIBLE_SPEEDUP)."""
+    if numsharp_ms is None or ratio is None:
+        return "no_data"
+    if (numpy_ms < WORK_FLOOR_MS or numsharp_ms < WORK_FLOOR_MS
+            or ratio < 1.0 / MAX_CREDIBLE_SPEEDUP):
+        return "negligible"
+    return get_status(ratio)
+
+
 def get_status_icon(status: str) -> str:
     """Get status icon for markdown."""
     icons = {
@@ -195,6 +218,7 @@ def get_status_icon(status: str) -> str:
         "close": "🟡",
         "slower": "🟠",
         "much_slower": "🔴",
+        "negligible": "▫",
         "no_data": "⚪"
     }
     return icons.get(status, "⚪")
@@ -225,7 +249,12 @@ def normalize_op_name(name: str) -> str:
     }
     name = pre.get(name, name)
 
-    name = re.sub(r'\s*\[[^\]]*\]', '', name)                                  # drop [full]/[method]/[columns]/...
+    # Strip a space-separated " [annotation]" ([full]/[method]/[columns]/[asarray equivalent]/…)
+    # but NOT array-indexing brackets attached to an identifier ("a[100:1000]", "a[::2]"): those
+    # are part of the op identity. Stripping them collapsed the Slicing-suite "np.copy(a[100:1000])"
+    # (a 900-element slice copy, ~3.6µs at every N) onto the Creation "np.copy(a)" key, where it
+    # overwrote the real full-array measurement (the bogus "copy float64 = 0.0036ms").
+    name = re.sub(r'\s+\[[^\]]*\]', '', name)
     name = re.sub(r'\(\s*(?:[a-z_][a-z0-9_]*\s*,\s*)?axis\s*=\s*(\d+)\s*\)', r' axis=\1', name)  # (a, axis=0) -> axis=0
     name = re.sub(r'\(\s*[a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*\s*\)', '', name)           # strip ident-only arg lists
     name = re.sub(r'\s+', ' ', name).strip()
@@ -260,8 +289,8 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
         cs_result = csharp_index.get(key)
 
         numsharp_ms = cs_result['mean_ms'] if cs_result else None
-        ratio = numsharp_ms / numpy_ms if (numsharp_ms and numpy_ms > 0) else None
-        status = get_status(ratio)
+        ratio = numsharp_ms / numpy_ms if (numsharp_ms is not None and numpy_ms > 0) else None
+        status = classify(numpy_ms, numsharp_ms, ratio)
 
         unified.append(UnifiedResult(
             operation=name,
@@ -269,9 +298,9 @@ def merge_results(numpy_results: List[dict], csharp_results: List[dict]) -> List
             category=category,
             dtype=dtype,
             n=n,
-            numpy_ms=round(numpy_ms, 3),
-            numsharp_ms=round(numsharp_ms, 3) if numsharp_ms else None,
-            ratio=round(ratio, 2) if ratio else None,
+            numpy_ms=round(numpy_ms, 4),
+            numsharp_ms=round(numsharp_ms, 4) if numsharp_ms is not None else None,
+            ratio=round(ratio, 3) if ratio is not None else None,
             status=status
         ))
 
@@ -296,7 +325,10 @@ def generate_csv(results: List[UnifiedResult], output_path: str):
         for r in results:
             writer.writerow([
                 r.operation, r.suite, r.category, r.dtype, r.n,
-                r.numpy_ms, r.numsharp_ms or '', r.ratio or '', r.status
+                r.numpy_ms,
+                '' if r.numsharp_ms is None else r.numsharp_ms,
+                '' if r.ratio is None else r.ratio,
+                r.status
             ])
     print(f"CSV written to: {output_path}")
 
@@ -309,6 +341,7 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
     close = sum(1 for r in results if r.status == 'close')
     slower = sum(1 for r in results if r.status == 'slower')
     much_slower = sum(1 for r in results if r.status == 'much_slower')
+    negligible = sum(1 for r in results if r.status == 'negligible')
     no_data = sum(1 for r in results if r.status == 'no_data')
     total = len(results)
 
@@ -325,11 +358,12 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
         "|🟡| Close | 1-2x | Acceptable parity |",
         "|🟠| Slower | 2-5x | Optimization target |",
         "|🔴| Slow | >5x | Priority fix |",
+        "|▫| Negligible | <1µs / >20x | Too fast to compare — excluded from rankings |",
         "|⚪| Pending | - | C# benchmark not run |",
         "",
         "---",
         "",
-        f"**Summary:** {total} ops | ✅ {faster} | 🟡 {close} | 🟠 {slower} | 🔴 {much_slower} | ⚪ {no_data}",
+        f"**Summary:** {total} ops | ✅ {faster} | 🟡 {close} | 🟠 {slower} | 🔴 {much_slower} | ▫ {negligible} | ⚪ {no_data}",
         "",
     ]
 
@@ -344,11 +378,11 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
 
     lines.append("## Summary by size")
     lines.append("")
-    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ⚪ n/a | geomean |")
-    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|--------:|")
+    lines.append("| N | ops | ✅ faster | 🟡 close | 🟠 slower | 🔴 much | ▫ negl | ⚪ n/a | geomean |")
+    lines.append("|---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|")
     for n in sizes:
         rs = [r for r in results if r.n == n]
-        gz = _geo([r.ratio for r in rs if r.ratio])
+        gz = _geo([r.ratio for r in rs if r.status in CREDIBLE])   # credible rows only
         gz_s = f"{gz:.2f}x" if gz else "-"
         lines.append(
             f"| {n:,} | {len(rs)} "
@@ -356,38 +390,49 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
             f"| {sum(1 for r in rs if r.status == 'close')} "
             f"| {sum(1 for r in rs if r.status == 'slower')} "
             f"| {sum(1 for r in rs if r.status == 'much_slower')} "
+            f"| {sum(1 for r in rs if r.status == 'negligible')} "
             f"| {sum(1 for r in rs if r.status == 'no_data')} | {gz_s} |")
     lines.append("")
     lines.append("---")
     lines.append("")
 
-    # Get results with valid data (both sides, NumPy >= 0.001ms to avoid division issues)
-    with_data = [r for r in results if r.ratio is not None and r.numpy_ms >= 0.001]
+    # Best/Worst showcase ranks ONLY credible comparisons (see classify): both sides did
+    # >=1µs of work and the speedup is within a believable 20x. This keeps sub-microsecond
+    # call-overhead rows and dead-code-eliminated / lazy-alloc / one-off artifacts out of
+    # the headline (they used to flood "Top Best" as meaningless 0.0 / 0.0x non-results).
+    with_data = [r for r in results if r.status in CREDIBLE]
+    negligible_n = sum(1 for r in results if r.status == 'negligible')
 
     if with_data:
-        # Sort by ratio - best (lowest) first
+        # Sort by ratio - best (lowest = most NumSharp-favorable) first
         sorted_by_ratio = sorted(with_data, key=lambda r: r.ratio)
+        note = (f"_Ranked over {len(with_data)} credible comparisons "
+                f"(both sides ≥{WORK_FLOOR_MS * 1000:.0f}µs, speedup ≤{MAX_CREDIBLE_SPEEDUP:.0f}×); "
+                f"{negligible_n} negligible rows excluded as non-comparable (▫). "
+                f"Ratio = NumSharp ÷ NumPy — below 1.0 = NumSharp faster._")
 
         # Top 15 best (NumSharp faster or closest)
         best_15 = sorted_by_ratio[:15]
-        lines.append("### 🏆 Top 15 Best (NumSharp closest to NumPy)")
+        lines.append("### 🏆 Top 15 Best (NumSharp closest to / beating NumPy)")
         lines.append("")
-        lines.append("| | Operation | Type | N | NumPy | NumSharp | Ratio |")
-        lines.append("|:-:|-----------|:----:|----:|------:|---------:|------:|")
+        lines.append(note)
+        lines.append("")
+        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
+        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
         for r in best_15:
             icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.3f} | {r.numsharp_ms:.3f} | {r.ratio:.2f}x |")
         lines.append("")
 
         # Top 15 worst (NumPy much faster)
         worst_15 = sorted_by_ratio[-15:][::-1]  # Reverse to show worst first
         lines.append("### 🔻 Top 15 Worst (Optimization priorities)")
         lines.append("")
-        lines.append("| | Operation | Type | N | NumPy | NumSharp | Ratio |")
-        lines.append("|:-:|-----------|:----:|----:|------:|---------:|------:|")
+        lines.append("| | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio |")
+        lines.append("|:-:|-----------|:----:|----:|----------:|-------------:|------:|")
         for r in worst_15:
             icon = get_status_icon(r.status)
-            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.1f} | {r.numsharp_ms:.1f} | {r.ratio:.1f}x |")
+            lines.append(f"|{icon}| {r.operation} | {r.dtype} | {r.n:,} | {r.numpy_ms:.3f} | {r.numsharp_ms:.3f} | {r.ratio:.2f}x |")
         lines.append("")
 
         lines.append("---")
@@ -475,6 +520,7 @@ def main():
     print(f"  🟡 Close:  {sum(1 for r in unified if r.status == 'close')}")
     print(f"  🟠 Slower: {sum(1 for r in unified if r.status == 'slower')}")
     print(f"  🔴 Much slower: {sum(1 for r in unified if r.status == 'much_slower')}")
+    print(f"  ▫  Negligible (excluded from rankings): {sum(1 for r in unified if r.status == 'negligible')}")
     print(f"  ⚪ No data: {sum(1 for r in unified if r.status == 'no_data')}")
     print("=" * 60)
 
