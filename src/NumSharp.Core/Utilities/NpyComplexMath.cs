@@ -32,6 +32,14 @@ namespace NumSharp.Utilities
     /// finite interior, where the BCL stays within 3 ULP of NumPy (and ~1e-7 relative for inputs
     /// extremely close to the origin) because .NET's <c>Atan</c> uses a less accurate kernel than
     /// NumPy's <c>log1p</c>-based one — this is the agreed cost of delegating the interior.</para>
+    ///
+    /// <para><b>Perf:</b> each public entry point is a tiny finite-path wrapper marked
+    /// <see cref="MethodImplOptions.AggressiveInlining"/> so the JIT folds it directly into the
+    /// IL-emitted unary kernel (no per-element call frame); the rare non-finite tables live in cold
+    /// helpers marked <see cref="MethodImplOptions.AggressiveOptimization"/> (kept out-of-line so the
+    /// hot wrapper stays inlineable, and fully optimized when hit). A benchmark of an IL-inlined
+    /// variant vs this <c>call</c>-based form showed the per-element cost is dominated by the BCL
+    /// transcendental, so hand-emitting the formula is not worth the duplication.</para>
     /// </summary>
     public static class NpyComplexMath
     {
@@ -64,6 +72,7 @@ namespace NumSharp.Utilities
 
         /// <summary><c>hypot</c> that returns <c>+inf</c> if either part is infinite (C99), used by
         /// the large-value / non-finite inverse-trig paths.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static double HypotInf(double x, double y)
         {
             x = Math.Abs(x);
@@ -75,6 +84,7 @@ namespace NumSharp.Utilities
 
         /// <summary>NumPy <c>_clog_for_large_values</c> reduced to the (possibly-infinite) magnitudes
         /// reached by the inverse-trig non-finite paths: <c>(log hypot(x,y), atan2(y,x))</c>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ClogLarge(double x, double y, out double rr, out double ri)
         {
             rr = Math.Log(HypotInf(x, y));
@@ -89,12 +99,18 @@ namespace NumSharp.Utilities
         /// Complex hyperbolic cosine matching NumPy. Finite inputs defer to <see cref="Complex.Cosh"/>;
         /// non-finite inputs follow C99 Annex G (ported from <c>npy_ccosh</c>).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Cosh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
             if (double.IsFinite(x) && double.IsFinite(y))
                 return Complex.Cosh(z);
+            return CoshSpecial(x, y);
+        }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Complex CoshSpecial(double x, double y)
+        {
             // cosh(+-0 +- I(Inf|NaN)) = NaN + I 0 with an unspecified zero-sign; NumPy's libm
             // takes sign(y) for an infinite y and sign(x) for a NaN y.
             if (x == 0.0)
@@ -120,12 +136,18 @@ namespace NumSharp.Utilities
         /// Complex hyperbolic sine matching NumPy. Finite inputs defer to <see cref="Complex.Sinh"/>;
         /// non-finite inputs follow C99 Annex G (ported from <c>npy_csinh</c>).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Sinh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
             if (double.IsFinite(x) && double.IsFinite(y))
                 return Complex.Sinh(z);
+            return SinhSpecial(x, y);
+        }
 
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Complex SinhSpecial(double x, double y)
+        {
             // sinh(+-0 +- I(Inf|NaN)) = sign(+-0)0 + I NaN  (NumPy: real follows sign(x))
             if (x == 0.0)
                 return new Complex(Math.CopySign(0.0, x), y - y);
@@ -133,7 +155,7 @@ namespace NumSharp.Utilities
             if (y == 0.0)
             {
                 if (double.IsNaN(x))                // sinh(NaN + I0) = NaN + I0
-                    return z;
+                    return new Complex(x, y);
                 return new Complex(x, Math.CopySign(0.0, y));   // sinh(+-Inf + I0) = +-Inf +- I0
             }
             // sinh(finite +- I(Inf|NaN)) = NaN + I NaN
@@ -154,9 +176,18 @@ namespace NumSharp.Utilities
         /// Complex hyperbolic tangent matching NumPy. Finite inputs defer to <see cref="Complex.Tanh"/>;
         /// non-finite inputs follow C99 Annex G (ported from <c>npy_ctanh</c>).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Tanh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
+            if (double.IsFinite(x) && double.IsFinite(y))
+                return Complex.Tanh(z);
+            return TanhSpecial(x, y);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static Complex TanhSpecial(double x, double y)
+        {
             if (!double.IsFinite(x))
             {
                 if (double.IsNaN(x))                // tanh(NaN + I0)=NaN+I0 ; tanh(NaN+Iy)=NaN+INaN
@@ -165,9 +196,8 @@ namespace NumSharp.Utilities
                 // NumPy's libm takes sign(y) (not the msun source's sign(sin(2y))).
                 return new Complex(Math.CopySign(1.0, x), Math.CopySign(0.0, y));
             }
-            if (!double.IsFinite(y))                // tanh(finite +- I(Inf|NaN)) = NaN + I NaN
-                return new Complex(y - y, y - y);
-            return Complex.Tanh(z);
+            // x finite, so y is non-finite here: tanh(finite +- I(Inf|NaN)) = NaN + I NaN
+            return new Complex(y - y, y - y);
         }
 
         #endregion
@@ -179,6 +209,7 @@ namespace NumSharp.Utilities
         /// signed-zero/branch-cut fixups; non-finite inputs use the identity
         /// <c>asin(z) = i*conj(casinh(i*conj z))</c> where <c>i*conj(z) = (y, x)</c>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Asin(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -200,6 +231,7 @@ namespace NumSharp.Utilities
         /// Complex arccosine matching NumPy. Finite inputs defer to <see cref="Complex.Acos"/> with a
         /// branch-cut fixup; non-finite inputs follow C99 (ported from <c>npy_cacos</c>).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Acos(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -218,6 +250,7 @@ namespace NumSharp.Utilities
         /// imaginary-axis and signed-zero fixups; non-finite inputs use the identity
         /// <c>atan(z) = i*conj(catanh(i*conj z))</c> where <c>i*conj(z) = (y, x)</c>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex Atan(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -248,6 +281,7 @@ namespace NumSharp.Utilities
         /// <c>npy_casinh</c> restricted to non-finite arguments (NaN/Inf in either part): the NaN
         /// special-value block plus the large-value <c>clog</c> path. Used by <see cref="Asin"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex CasinhNonFinite(double a, double b)
         {
             if (double.IsNaN(a) || double.IsNaN(b))
@@ -268,6 +302,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// <c>npy_cacos</c> restricted to non-finite arguments. Used by <see cref="Acos"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex CacosNonFinite(double x, double y)
         {
             if (double.IsNaN(x) || double.IsNaN(y))
@@ -291,6 +326,7 @@ namespace NumSharp.Utilities
         /// early <c>x==0</c> / <c>y==0&amp;&amp;|x|&lt;=1</c> returns, the NaN block, and the
         /// large-value path.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex CatanhNonFinite(double a, double b)
         {
             if (b == 0.0 && Math.Abs(a) <= 1.0)
