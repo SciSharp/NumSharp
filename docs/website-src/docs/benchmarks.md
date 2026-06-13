@@ -21,10 +21,16 @@ this page shows *what it buys you* against NumPy, head to head.**
 ## The headline
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" alt="NpyIter vs NumPy — speedup by array-size tier (scalar / 1K / 100K / 1M / 10M)" width="400" height="300">
+  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" alt="NpyIter vs NumPy — operations: geomean speedup by array-size tier and by operation class" width="400" height="300">
   &nbsp;
-  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" alt="NpyIter vs NumPy — speedup by operation class (reductions, elementwise, dtypes, copy/cast, index-math)" width="400" height="300">
+  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" alt="NpyIter — the IL-generation dividends: iterator construction vs np.nditer, expression fusion, kernel reuse, parallel inner loop" width="400" height="300">
 </p>
+
+The **left card** is the head-to-head against NumPy — geomean speedup by array-size
+tier and by operation class. The **right card** is the IL-generation *dividend*:
+iterator machinery NumPy has no structural equivalent for — cheaper construction than
+`np.nditer`, one-pass expression fusion (`np.evaluate`), kernel reuse, and a parallel
+inner loop.
 
 Both cards report a single ratio:
 
@@ -180,9 +186,11 @@ absolute numbers will differ on your hardware; the ratios are what carry over.
 
 ## Read the full reports
 
-- **Iterator benchmark sheet** (drives the cards) →
-  [`benchmark/npyiter/npyiter_results.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/npyiter_results.md)
-- **Operation matrix** (op × dtype × N) →
-  [`benchmark/benchmark-report.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/benchmark-report.md)
-- **How the kernels that produce these numbers are generated** →
-  [IL Generation](il-generation.md)
+Both are rendered as searchable pages on this site, refreshed every release:
+
+- **Iterator benchmark sheet** (drives the cards) → [Iterator sheet (full)](benchmark-iterator.md)
+- **Operation matrix** (op × dtype × N) → [Operation matrix (full)](benchmark-matrix.md)
+- **How the kernels that produce these numbers are generated** → [IL Generation](il-generation.md)
+
+The raw generated files live in the repo under
+[`benchmark/`](https://github.com/SciSharp/NumSharp/tree/master/benchmark) on `master`.

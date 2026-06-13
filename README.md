@@ -26,7 +26,7 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 * Wide support for `System.Drawing.Bitmap`. ([read more](https://github.com/SciSharp/NumSharp/wiki/Bitmap-Extensions))
 
 ### Performance vs NumPy
-NumSharp's NumPy-aligned iterator (`NpyIter`) benchmarked against NumPy 2.x across operation classes and array sizes. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster); absolute timings vary by hardware, so only the same-runner ratio is meaningful.
+NumSharp's NumPy-aligned iterator (`NpyIter`) benchmarked against NumPy 2.x. The **left card** is the head-to-head comparison — geomean speedup by array-size tier and by operation class. The **right card** is the IL-generation *dividend*: iterator machinery NumPy has no equivalent for — cheaper construction than `np.nditer`, one-pass expression fusion, kernel reuse, and a parallel inner loop. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster); absolute timings vary by hardware, so only the same-runner ratio is meaningful.
 
 [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md)
 

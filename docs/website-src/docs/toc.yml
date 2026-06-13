@@ -18,6 +18,12 @@
   href: il-generation.md
 - name: Benchmarks vs NumPy
   href: benchmarks.md
+  expanded: false
+  items:
+  - name: Operation matrix (full report)
+    href: benchmark-matrix.md
+  - name: Iterator sheet (full report)
+    href: benchmark-iterator.md
 - name: NDIter (Kerneling NDArray)
   href: NDIter.md
 - name: Extending Libraries
