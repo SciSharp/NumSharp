@@ -559,6 +559,21 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Cos");
             public static readonly MethodInfo ComplexTan = typeof(System.Numerics.Complex).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Tan");
+            // Hyperbolic and inverse-trig route through NpyComplexMath (not Complex.* directly): the BCL
+            // matches NumPy only on finite interiors; NpyComplexMath adds the C99 Annex G non-finite
+            // tables and signed-zero/branch-cut fixups so every input matches NumPy.
+            public static readonly MethodInfo ComplexSinh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sinh");
+            public static readonly MethodInfo ComplexCosh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Cosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Cosh");
+            public static readonly MethodInfo ComplexTanh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Tanh");
+            public static readonly MethodInfo ComplexAsin = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Asin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Asin");
+            public static readonly MethodInfo ComplexAcos = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Acos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Acos");
+            public static readonly MethodInfo ComplexAtan = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Atan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Atan");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
             public static readonly MethodInfo ComplexLog10 = typeof(System.Numerics.Complex).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })

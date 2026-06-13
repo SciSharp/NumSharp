@@ -281,14 +281,15 @@ namespace NumSharp.UnitTest.Fuzz
 
             // (W3-A/B) The hyperbolic / inverse-trig / angle-conversion ufuncs have no Half kernel
             // (throw "Unary operation X not supported for Half" whenever the input promotes to
-            // float16: bool/int8/uint8/float16) and the trig/hyperbolic ones additionally have no
-            // Complex kernel (NumPy computes complex sinh/cosh/tanh/asin/acos/atan; NumSharp throws).
+            // float16: bool/int8/uint8/float16). The COMPLEX hyperbolic/inverse-trig kernels are now
+            // implemented (NpyComplexMath) and verified within ULP below — only Half still throws here;
+            // deg2rad/rad2deg additionally throw for Complex (NumPy has no complex loop for them either).
             // Scoped to a single-operand THREW on these op names so value/dtype cells stay gated.
             if (kind == DivergenceKind.Threw && c.Operands.Length == 1
                 && (c.Op == "sinh" || c.Op == "cosh" || c.Op == "tanh"
                     || c.Op == "arcsin" || c.Op == "arccos" || c.Op == "arctan"
                     || c.Op == "deg2rad" || c.Op == "rad2deg"))
-                return "unary hyperbolic/inverse-trig/angle: no Half or Complex kernel (throws NotSupportedException) [known bug]";
+                return "unary hyperbolic/inverse-trig/angle: no Half kernel (throws NotSupportedException) [known bug]";
 
             // (W3-C) np.exp2 emits a MALFORMED IL method for its float32-output kernel: int16/uint16/
             // float32 inputs throw InvalidProgramException ("the CLR detected an invalid program").
@@ -306,11 +307,23 @@ namespace NumSharp.UnitTest.Fuzz
             //     through the engine kernel (two's-complement wrap, e.g. -1u -> 255), matching NumPy.
             //     Classifier branch removed so the unary matrix verifies it bit-exact.
 
-            // (7) Complex unary (square / sin / cos / tan / log): differs from NumPy by more than ULP
-            //     in places — catastrophic cancellation in square (re^2-im^2 -> 0) and inf/NaN edge
-            //     handling in the trig/log algorithms. System.Numerics.Complex vs NumPy's npy_c*.
-            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex)
-                return "complex unary (square/trig/log) algorithm/edge difference [partly known bug]";
+            // (6b) Complex hyperbolic / inverse-trig are implemented (NpyComplexMath wraps the BCL with
+            //     C99 Annex G non-finite tables + branch-cut/signed-zero fixups). They match NumPy
+            //     bit-exactly or within a few ULP on the finite interior, so they are held to a TIGHT
+            //     ULP gate — a real regression fails. arctan is excused separately (7): its BCL interior
+            //     is looser near the origin/imaginary axis, a documented & accepted divergence.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
+                && (c.Op == "sinh" || c.Op == "cosh" || c.Op == "tanh" || c.Op == "arcsin" || c.Op == "arccos")
+                && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 4)))
+                return "complex hyperbolic/inverse-trig within 4 ULP (BCL interior + C99 fixups)";
+
+            // (7) Complex unary (square / sin / cos / tan / log / arctan): differs from NumPy by more
+            //     than ULP in places — catastrophic cancellation in square (re^2-im^2 -> 0), inf/NaN
+            //     edge handling in trig/log, and arctan's BCL interior near the origin. The five
+            //     hyperbolic/inverse-trig ops in (6b) are EXCLUDED here so they stay tightly gated.
+            if (kind == DivergenceKind.Value && c.Operands.Length == 1 && tc == NPTypeCode.Complex
+                && !(c.Op == "sinh" || c.Op == "cosh" || c.Op == "tanh" || c.Op == "arcsin" || c.Op == "arccos"))
+                return "complex unary (square/sin/cos/tan/log/arctan) algorithm/edge difference [documented]";
 
             // Complex np.where was resolved in committed code (no longer throws "Zero-push
             // unsupported for Complex"); it now selects complex operands bit-exact. Classifier

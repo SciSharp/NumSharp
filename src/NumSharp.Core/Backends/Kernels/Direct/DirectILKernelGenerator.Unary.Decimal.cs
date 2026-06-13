@@ -390,6 +390,32 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpSubtraction, null);
                     break;
 
+                // Hyperbolic and inverse-trig: NpyComplexMath wraps the BCL with C99 Annex G non-finite
+                // tables and branch-cut/signed-zero fixups so the results match NumPy on every input.
+                case UnaryOp.Sinh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexSinh, null);
+                    break;
+
+                case UnaryOp.Cosh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexCosh, null);
+                    break;
+
+                case UnaryOp.Tanh:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexTanh, null);
+                    break;
+
+                case UnaryOp.ASin:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAsin, null);
+                    break;
+
+                case UnaryOp.ACos:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAcos, null);
+                    break;
+
+                case UnaryOp.ATan:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAtan, null);
+                    break;
+
                 // Note: UnaryOp.Cbrt is deliberately NOT handled for Complex — NumPy's np.cbrt raises
                 // TypeError for complex inputs, so falling through to the default throw keeps parity.
 

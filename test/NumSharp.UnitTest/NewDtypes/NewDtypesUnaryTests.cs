@@ -277,6 +277,148 @@ namespace NumSharp.UnitTest.NewDtypes
             r2.Imaginary.Should().BeApproximately(Math.PI / 4, 0.0001);
         }
 
+        // ---- Complex hyperbolic / inverse-trig (csinh/ccosh/ctanh/casin/cacos/catan) ----
+        // All expected values verified against NumPy 2.4.2. These six previously threw
+        // NotSupportedException for Complex; they now match NumPy including C99 Annex G
+        // special values, branch-cut signs, and signed zeros.
+
+        private static void AssertComplex(Complex actual, double re, double im, double tol = 1e-12)
+        {
+            actual.Real.Should().BeApproximately(re, tol);
+            actual.Imaginary.Should().BeApproximately(im, tol);
+        }
+
+        [TestMethod]
+        public void Complex_Sinh()
+        {
+            // NumPy: np.sinh([1+2j, 3-4j, -5+0j])
+            var z = np.array(new Complex[] { new(1, 2), new(3, -4), new(-5, 0) });
+            var r = np.sinh(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), -0.4890562590412937, 1.4031192506220405);
+            AssertComplex(r.GetAtIndex<Complex>(1), -6.5481200409110025, 7.61923172032141);
+            AssertComplex(r.GetAtIndex<Complex>(2), -74.20321057778875, 0.0);
+        }
+
+        [TestMethod]
+        public void Complex_Cosh()
+        {
+            // NumPy: np.cosh([1+2j, 3-4j, 0+0j])
+            var z = np.array(new Complex[] { new(1, 2), new(3, -4), new(0, 0) });
+            var r = np.cosh(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), -0.64214812471552, 1.0686074213827783);
+            AssertComplex(r.GetAtIndex<Complex>(1), -6.580663040551157, 7.581552742746545);
+            AssertComplex(r.GetAtIndex<Complex>(2), 1.0, 0.0);
+        }
+
+        [TestMethod]
+        public void Complex_Tanh()
+        {
+            // NumPy: np.tanh([1+2j, 3-4j])
+            var z = np.array(new Complex[] { new(1, 2), new(3, -4) });
+            var r = np.tanh(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), 1.16673625724092, -0.24345820118572525);
+            AssertComplex(r.GetAtIndex<Complex>(1), 1.000709536067233, -0.004908258067496059);
+        }
+
+        [TestMethod]
+        public void Complex_Arcsin()
+        {
+            // NumPy: np.arcsin([1+2j, 0.5+0.5j])
+            var z = np.array(new Complex[] { new(1, 2), new(0.5, 0.5) });
+            var r = np.arcsin(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), 0.42707858639247614, 1.5285709194809982);
+            AssertComplex(r.GetAtIndex<Complex>(1), 0.45227844715119064, 0.5306375309525179);
+        }
+
+        [TestMethod]
+        public void Complex_Arccos()
+        {
+            // NumPy: np.arccos([1+2j, 0.5+0.5j])
+            var z = np.array(new Complex[] { new(1, 2), new(0.5, 0.5) });
+            var r = np.arccos(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), 1.1437177404024204, -1.5285709194809982);
+            AssertComplex(r.GetAtIndex<Complex>(1), 1.118517879643706, -0.5306375309525179);
+        }
+
+        [TestMethod]
+        public void Complex_Arctan()
+        {
+            // NumPy: np.arctan([1+2j, 3-4j])
+            var z = np.array(new Complex[] { new(1, 2), new(3, -4) });
+            var r = np.arctan(z);
+            r.typecode.Should().Be(NPTypeCode.Complex);
+            AssertComplex(r.GetAtIndex<Complex>(0), 1.3389725222944935, 0.40235947810852507);
+            AssertComplex(r.GetAtIndex<Complex>(1), 1.4483069952314644, -0.15899719167999918);
+        }
+
+        [TestMethod]
+        public void Complex_InverseTrig_BranchCuts()
+        {
+            // On the real-axis cut |x|>1 the sign of the imaginary output follows the sign of the
+            // (possibly signed-zero) input imaginary part. NumPy 2.4.2:
+            //   arcsin(2+0j) = (pi/2,  1.3169578969248166)   arcsin(2-0j) = (pi/2, -1.3169578969248166)
+            //   arccos(2+0j) = (0,    -1.3169578969248166)
+            //   arctan(0+2j) = (pi/2,  0.5493061443340549)   [imaginary-axis cut |y|>1]
+            var asinPos = np.arcsin(np.array(new Complex[] { new(2, 0.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(asinPos, Math.PI / 2, 1.3169578969248166);
+            var asinNeg = np.arcsin(np.array(new Complex[] { new(2, -0.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(asinNeg, Math.PI / 2, -1.3169578969248166);
+
+            var acos = np.arccos(np.array(new Complex[] { new(2, 0.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(acos, 0.0, -1.3169578969248166);
+
+            var atan = np.arctan(np.array(new Complex[] { new(0.0, 2) })).GetAtIndex<Complex>(0);
+            AssertComplex(atan, Math.PI / 2, 0.5493061443340549);
+        }
+
+        [TestMethod]
+        public void Complex_HyperbolicInverse_SpecialValues()
+        {
+            // C99 Annex G special values, verified against NumPy 2.4.2.
+            var sinh = np.sinh(np.array(new Complex[] {
+                new(double.PositiveInfinity, 0.0),   // (inf, 0)
+                new(double.NegativeInfinity, double.PositiveInfinity), // (-inf, nan)
+            }));
+            AssertComplex(sinh.GetAtIndex<Complex>(0), double.PositiveInfinity, 0.0);
+            sinh.GetAtIndex<Complex>(1).Real.Should().Be(double.NegativeInfinity);
+            double.IsNaN(sinh.GetAtIndex<Complex>(1).Imaginary).Should().BeTrue();
+
+            // cosh(inf+i) = inf+i*inf ; tanh(inf+i*inf) = 1+i0
+            var cosh = np.cosh(np.array(new Complex[] { new(double.NegativeInfinity, 1.0) })).GetAtIndex<Complex>(0);
+            cosh.Real.Should().Be(double.PositiveInfinity);
+            cosh.Imaginary.Should().Be(double.PositiveInfinity);
+
+            var tanh = np.tanh(np.array(new Complex[] { new(double.PositiveInfinity, double.PositiveInfinity) })).GetAtIndex<Complex>(0);
+            AssertComplex(tanh, 1.0, 0.0);
+
+            // arcsin(inf+1j) = pi/2 + i*inf ; arctan(inf+0j) = pi/2 + 0j ; arccos(0+nan*j) = pi/2 + nan*j
+            var asin = np.arcsin(np.array(new Complex[] { new(double.PositiveInfinity, 1.0) })).GetAtIndex<Complex>(0);
+            asin.Real.Should().BeApproximately(Math.PI / 2, 1e-12);
+            asin.Imaginary.Should().Be(double.PositiveInfinity);
+
+            var atan = np.arctan(np.array(new Complex[] { new(double.PositiveInfinity, 0.0) })).GetAtIndex<Complex>(0);
+            AssertComplex(atan, Math.PI / 2, 0.0);
+
+            var acos = np.arccos(np.array(new Complex[] { new(0.0, double.NaN) })).GetAtIndex<Complex>(0);
+            acos.Real.Should().BeApproximately(Math.PI / 2, 1e-12);
+            double.IsNaN(acos.Imaginary).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void Complex_Sinh_PreservesSignedZero()
+        {
+            // NumPy: np.sinh(-0+inf*1j) = (-0, nan) — the real part keeps the sign of the input zero.
+            var r = np.sinh(np.array(new Complex[] { new(-0.0, double.PositiveInfinity) })).GetAtIndex<Complex>(0);
+            r.Real.Should().Be(0.0);
+            double.IsNegative(r.Real).Should().BeTrue("NumPy sinh(-0+inf j).real is -0.0");
+            double.IsNaN(r.Imaginary).Should().BeTrue();
+        }
+
         #endregion
     }
 }
