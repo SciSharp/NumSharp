@@ -1,10 +1,10 @@
 # NpyIter canonical benchmark
 
 The single, maintained NumSharp-vs-NumPy benchmark for **NpyIter** (the
-NumPy-aligned multi-operand iterator). It supersedes the exploratory
-`benchmark/poc/npyiter_*` rounds: every distinct aspect those rounds surfaced
-lives here, swept across cache tiers, and the orchestrator renders it all into
-**one results sheet** (`npyiter_results.md`).
+NumPy-aligned multi-operand iterator). It consolidates every aspect probed
+during development — construction, traversal, reductions, selection, dtypes,
+pathologies, dividends — swept across cache tiers, and the orchestrator renders
+it all into **one results sheet** (`npyiter_results.md`).
 
 ## Run it
 
