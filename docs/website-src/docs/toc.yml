@@ -20,6 +20,8 @@
   href: benchmarks.md
   expanded: false
   items:
+  - name: Dashboard (op matrix)
+    href: benchmarks-dashboard.md
   - name: Operation matrix (full report)
     href: benchmark-matrix.md
   - name: Iterator sheet (full report)
