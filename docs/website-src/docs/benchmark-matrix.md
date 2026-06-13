@@ -20,7 +20,7 @@
 
 ---
 
-**Summary:** 1233 ops | ✅ 305 | 🟡 255 | 🟠 169 | 🔴 103 | ▫ 275 | ⚪ 126
+**Summary:** 1233 ops | ✅ 306 | 🟡 258 | 🟠 170 | 🔴 106 | ▫ 277 | ⚪ 116
 
 ## Summary by size
 
@@ -28,17 +28,17 @@
 |---:|----:|--------:|--------:|---------:|------:|-----:|-----:|--------:|------:|
 | 500 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
 | 900 | 3 | 0 | 0 | 0 | 0 | 0 | 3 | - | - |
-| 1,000 | 409 | 41 | 19 | 28 | 21 | 258 | 42 | 0.73x | 137% |
+| 1,000 | 409 | 41 | 20 | 29 | 21 | 258 | 40 | 0.73x | 138% |
 | 50,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
-| 100,000 | 409 | 104 | 65 | 121 | 69 | 10 | 40 | 0.55x | 182% |
+| 100,000 | 409 | 104 | 65 | 121 | 72 | 11 | 36 | 0.54x | 184% |
 | 5,000,000 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | - | - |
-| 10,000,000 | 409 | 160 | 171 | 20 | 13 | 7 | 38 | 0.98x | 102% |
+| 10,000,000 | 409 | 161 | 173 | 20 | 13 | 8 | 34 | 0.98x | 102% |
 
 ---
 
 ### 🏆 Top 15 Best (NumSharp fastest vs NumPy)
 
-_Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 negligible rows excluded as non-comparable (▫). Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · %NumPy🕐 = share of NumPy's time NumSharp uses._
+_Ranked over 840 credible comparisons (both sides ≥1µs, within 20×); 277 negligible rows excluded as non-comparable (▫). Ratio = NumPy ÷ NumSharp — above 1.0× = NumSharp faster · %NumPy🕐 = share of NumPy's time NumSharp uses._
 
 | | Operation | Type | N | NumPy (ms) | NumSharp (ms) | Ratio | %NumPy🕐 |
 |:-:|-----------|:----:|----:|----------:|-------------:|------:|--------:|
@@ -512,12 +512,12 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 |▫| np.reciprocal(a) (float64) | float64 | 1,000 | 0.0008 | 0.0045 | 0.17× | 581% |
 |🔴| np.reciprocal(a) (float64) | float64 | 100,000 | 0.0380 | 0.2049 | 0.18× | 540% |
 |🟡| np.reciprocal(a) (float64) | float64 | 10,000,000 | 15.6905 | 23.3012 | 0.67× | 148% |
-|⚪| np.round (float32) | float32 | 1,000 | 0.0011 | - | - | - |
-|⚪| np.round (float32) | float32 | 100,000 | 0.0069 | - | - | - |
-|⚪| np.round (float32) | float32 | 10,000,000 | 8.9861 | - | - | - |
-|⚪| np.round (float64) | float64 | 1,000 | 0.0012 | - | - | - |
-|⚪| np.round (float64) | float64 | 100,000 | 0.0118 | - | - | - |
-|⚪| np.round (float64) | float64 | 10,000,000 | 16.6718 | - | - | - |
+|🟡| np.round (float32) | float32 | 1,000 | 0.0011 | 0.0015 | 0.72× | 139% |
+|🔴| np.round (float32) | float32 | 100,000 | 0.0069 | 0.0562 | 0.12× | 819% |
+|🟡| np.round (float32) | float32 | 10,000,000 | 8.9861 | 11.1755 | 0.80× | 124% |
+|🟠| np.round (float64) | float64 | 1,000 | 0.0012 | 0.0028 | 0.41× | 243% |
+|🔴| np.round (float64) | float64 | 100,000 | 0.0118 | 0.1087 | 0.11× | 923% |
+|🟡| np.round (float64) | float64 | 10,000,000 | 16.6718 | 19.6205 | 0.85× | 118% |
 |🟠| np.sign (float32) | float32 | 1,000 | 0.0012 | 0.0042 | 0.28× | 362% |
 |🟡| np.sign (float32) | float32 | 100,000 | 0.2996 | 0.5602 | 0.54× | 187% |
 |🟡| np.sign (float32) | float32 | 10,000,000 | 36.4791 | 60.9430 | 0.60× | 167% |
@@ -950,8 +950,8 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 |⚪| a.T (2D) | float64 | 100,000 | 0.0001 | - | - | - |
 |⚪| a.T (2D) | float64 | 10,000,000 | 0.0001 | - | - | - |
 |⚪| a.flatten | float64 | 1,000 | 0.0005 | - | - | - |
-|⚪| a.flatten | float64 | 100,000 | 0.0113 | - | - | - |
-|⚪| a.flatten | float64 | 10,000,000 | 13.5031 | - | - | - |
+|🔴| a.flatten | float64 | 100,000 | 0.0113 | 0.0892 | 0.13× | 789% |
+|✅| a.flatten | float64 | 10,000,000 | 13.5031 | 11.1948 | 1.21× | 83% |
 |⚪| np.concatenate | float64 | 1,000 | 0.0010 | - | - | - |
 |⚪| np.concatenate | float64 | 100,000 | 0.3073 | - | - | - |
 |⚪| np.concatenate | float64 | 10,000,000 | 39.3042 | - | - | - |
@@ -968,8 +968,8 @@ _Ranked over 832 credible comparisons (both sides ≥1µs, within 20×); 275 neg
 |⚪| reshape 1D->2D | float64 | 100,000 | 0.0002 | - | - | - |
 |⚪| reshape 1D->2D | float64 | 10,000,000 | 0.0002 | - | - | - |
 |⚪| reshape 2D->1D | float64 | 1,000 | 0.0002 | - | - | - |
-|⚪| reshape 2D->1D | float64 | 100,000 | 0.0002 | - | - | - |
-|⚪| reshape 2D->1D | float64 | 10,000,000 | 0.0002 | - | - | - |
+|▫| reshape 2D->1D | float64 | 100,000 | 0.0002 | 0.0005 | 0.33× | 302% |
+|▫| reshape 2D->1D | float64 | 10,000,000 | 0.0002 | 0.0006 | 0.30× | 329% |
 
 ### Slicing
 

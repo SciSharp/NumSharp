@@ -4,17 +4,17 @@
 
 ```
 NumSharp vs NumPy — operation matrix · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
-832 credible comparisons of 1233 ops · 275 negligible + 126 no-data excluded · BenchmarkDotNet vs NumPy 2.4.2
+840 credible comparisons of 1233 ops · 277 negligible + 116 no-data excluded · BenchmarkDotNet vs NumPy 2.4.2
 %NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (30% = takes only 30% as long; <100% = faster)
 
-HEADLINE — 0.74× geomean · 136%🕐 of NumPy's time · over 832 cells · 305 faster / 527 slower
+HEADLINE — 0.73× geomean · 137%🕐 of NumPy's time · over 840 cells · 306 faster / 534 slower
 
 BY ARRAY-SIZE TIER  (geomean over all credible ops at that size)
           slower ◄───────── 1.0 (parity) ─────────► faster
-1K           ███████▎ ...........   0.73×   137%🕐  (  41 win /  68 lose)  ◄ SLOWER
-100K         █████▌ .............   0.55×   182%🕐  ( 104 win / 255 lose)  ◄ SLOWER
-10M          █████████▊ .........   0.98×   102%🕐  ( 160 win / 204 lose)  ◄ PARITY
-ALL          ███████▎ ...........   0.74×   136%🕐  ( 305 win / 527 lose)  ◄ SLOWER
+1K           ███████▎ ...........   0.73×   138%🕐  (  41 win /  70 lose)  ◄ SLOWER
+100K         █████▍ .............   0.54×   184%🕐  ( 104 win / 258 lose)  ◄ SLOWER
+10M          █████████▊ .........   0.98×   102%🕐  ( 161 win / 206 lose)  ◄ PARITY
+ALL          ███████▎ ...........   0.73×   137%🕐  ( 306 win / 534 lose)  ◄ SLOWER
 
 BY SUITE  (geomean, ranked fastest → slowest)
           slower ◄───────── 1.0 (parity) ─────────► faster
@@ -27,7 +27,8 @@ selection    ███████▌ ...........   0.76×   132%🕐  (   1 win
 arithmetic   █████▎ .............   0.53×   190%🕐  (  32 win / 232 lose)  ◄ SLOWER
 sorting      █████ ..............   0.50×   198%🕐  (  10 win /  14 lose)  ◄ SLOWER
 linearalgebra████ ...............   0.40×   247%🕐  (   2 win /   6 lose)  ◄ SLOWER
-unary        ███▊ ...............   0.38×   263%🕐  (   1 win /  79 lose)  ◄ SLOWER
+manipulation ███▉ ...............   0.39×   256%🕐  (   1 win /   1 lose)  ◄ SLOWER
+unary        ███▊ ...............   0.38×   264%🕐  (   1 win /  85 lose)  ◄ SLOWER
 creation     ███▌ ...............   0.35×   283%🕐  (  18 win /  28 lose)  ◄ SLOWER
 
 BY DTYPE  (geomean over all credible ops of that type)
@@ -35,8 +36,8 @@ BY DTYPE  (geomean over all credible ops of that type)
 uint8        ██████████▋ ........   1.07×    93%🕐  (  35 win /  15 lose)
 uint32       ████████▌ ..........   0.85×   118%🕐  (  21 win /  30 lose)  ◄ SLOWER
 int16        ███████▋ ...........   0.77×   130%🕐  (  23 win /  31 lose)  ◄ SLOWER
-float64      ███████▌ ...........   0.75×   133%🕐  (  64 win / 125 lose)  ◄ SLOWER
-float32      ███████▌ ...........   0.75×   133%🕐  (  60 win / 116 lose)  ◄ SLOWER
+float32      ███████▍ ...........   0.74×   134%🕐  (  60 win / 119 lose)  ◄ SLOWER
+float64      ███████▍ ...........   0.74×   136%🕐  (  65 win / 129 lose)  ◄ SLOWER
 uint16       ███████▎ ...........   0.74×   136%🕐  (  22 win /  33 lose)  ◄ SLOWER
 uint64       ███████ ............   0.70×   142%🕐  (  14 win /  36 lose)  ◄ SLOWER
 int32        ██████▋ ............   0.67×   149%🕐  (  36 win /  65 lose)  ◄ SLOWER
@@ -44,10 +45,10 @@ int64        ██████▏ ............   0.62×   161%🕐  (  30 win /
 bool         ██▊ ................   0.28×   356%🕐  (   0 win /   8 lose)  ◄ SLOWER
 
 STATUS MIX  (NumSharp ÷ NumPy bands; credible only)
-✅ faster   ≤100% NumPy  ██████████████████ 305
-🟡 close    100–200%     ███████████████    255
-🟠 slower   200–500%     ██████████         169
-🔴 much     >500%        ██████             103
+✅ faster   ≤100% NumPy  ██████████████████ 306
+🟡 close    100–200%     ███████████████    258
+🟠 slower   200–500%     ██████████         170
+🔴 much     >500%        ██████             106
 
 TOP 12 FASTEST  (NumPy ÷ NumSharp — biggest NumSharp wins)
   operation                      dtype       N     NumPy   NumSharp    NP/NS   %NumPy🕐
