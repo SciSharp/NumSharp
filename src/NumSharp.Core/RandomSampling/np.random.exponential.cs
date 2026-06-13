@@ -27,11 +27,17 @@ namespace NumSharp
             if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(-Math.Log(1 - randomizer.NextDouble()) * scale);
 
-            // x = log(1 - uniform) is an owning intermediate consumed once by
-            // np.negative; the multiplication by `scale` produces the returned
-            // NDArray. Release x atomically rather than queueing it.
-            using var x = np.log(1 - uniform(0, 1, size));
-            return np.negative(x) * scale;
+            // Every step but the final `* scale` is an owning intermediate consumed exactly once.
+            // Release each synchronously (`using`) instead of letting it ride the finalizer queue —
+            // in a tight exponential() loop the un-disposed uniform / (1-u) / negate buffers
+            // (≈400 KB each at 50K float64) accumulated as live allocations until GC, growing the
+            // process working set (np.random.exponential leak guard). The trailing `* scale`
+            // produces the fresh NDArray returned to (and owned by) the caller.
+            using var u = uniform(0, 1, size);   // U(0,1)
+            using var oneMinusU = 1 - u;         // 1 - U
+            using var x = np.log(oneMinusU);     // log(1 - U)
+            using var negX = np.negative(x);     // -log(1 - U)
+            return negX * scale;                 // β · (-log(1 - U))
         }
     }
 }
