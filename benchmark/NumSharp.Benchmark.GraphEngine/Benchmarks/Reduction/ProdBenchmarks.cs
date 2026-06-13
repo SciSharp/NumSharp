@@ -13,11 +13,13 @@ public class ProdBenchmarks : TypedBenchmarkBase
     private NDArray _a1D = null!;
     private NDArray _a2D = null!;
 
-    // Use smaller arrays for prod to avoid overflow
-    [Params(100, 1000, 10000)]
+    // Standard cache-tier sizes (matches every other reduction so the NumPy join lines up).
+    // Overflow is avoided by the value range, not by shrinking N: inputs are in [0.5, 1.0], so
+    // the product stays finite (it underflows toward 0 at large N) at every size.
+    [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
-    // Use types that can hold larger products
+    // Int64 / Double hold the (bounded) product; matches the NumPy run_prod_benchmarks dtypes.
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
@@ -48,15 +50,15 @@ public class ProdBenchmarks : TypedBenchmarkBase
         GC.Collect();
     }
 
-    [Benchmark(Description = "a.prod() [full]")]
+    [Benchmark(Description = "np.prod(a) [full]")]
     [BenchmarkCategory("Full")]
-    public NDArray Prod_Full() => _a1D.prod();
+    public NDArray Prod_Full() => np.prod(_a1D);
 
-    [Benchmark(Description = "a.prod(axis=0)")]
+    [Benchmark(Description = "np.prod(a, axis=0)")]
     [BenchmarkCategory("Axis")]
-    public NDArray Prod_Axis0() => _a2D.prod(axis: 0);
+    public NDArray Prod_Axis0() => np.prod(_a2D, axis: 0);
 
-    [Benchmark(Description = "a.prod(axis=1)")]
+    [Benchmark(Description = "np.prod(a, axis=1)")]
     [BenchmarkCategory("Axis")]
-    public NDArray Prod_Axis1() => _a2D.prod(axis: 1);
+    public NDArray Prod_Axis1() => np.prod(_a2D, axis: 1);
 }

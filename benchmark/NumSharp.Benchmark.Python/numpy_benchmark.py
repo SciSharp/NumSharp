@@ -356,6 +356,55 @@ def run_unary_benchmarks(n: int, dtype_name: str, iterations: int) -> List[Bench
         r.name, r.category, r.suite, r.dtype = f"np.cos ({dtype_name})", "Trig", "Unary", dtype_name
         results.append(r)
 
+        def np_tan(): return np.tan(angles)
+        r = benchmark(np_tan, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.tan ({dtype_name})", "Trig", "Unary", dtype_name
+        results.append(r)
+
+    # Extra exp/log (mirror C# ExpLogBenchmarks: exp2, expm1, log2, log1p) — float only.
+    if np.issubdtype(DTYPES[dtype_name], np.floating):
+        def np_exp2(): return np.exp2(a_small)
+        r = benchmark(np_exp2, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.exp2 ({dtype_name})", "ExpLog", "Unary", dtype_name
+        results.append(r)
+
+        def np_expm1(): return np.expm1(a_small)
+        r = benchmark(np_expm1, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.expm1 ({dtype_name})", "ExpLog", "Unary", dtype_name
+        results.append(r)
+
+        def np_log2(): return np.log2(a_positive)
+        r = benchmark(np_log2, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.log2 ({dtype_name})", "ExpLog", "Unary", dtype_name
+        results.append(r)
+
+        def np_log1p(): return np.log1p(a_positive)
+        r = benchmark(np_log1p, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.log1p ({dtype_name})", "ExpLog", "Unary", dtype_name
+        results.append(r)
+
+    # Clip (mirror C# MathBenchmarks) + scalar Power (mirror C# PowerBenchmarks) — float only.
+    if np.issubdtype(DTYPES[dtype_name], np.floating):
+        def np_clip(): return np.clip(a, -10.0, 10.0)
+        r = benchmark(np_clip, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.clip(a, -10, 10) ({dtype_name})", "Math", "Unary", dtype_name
+        results.append(r)
+
+        def np_power2(): return np.power(a, 2)
+        r = benchmark(np_power2, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.power(a, 2) ({dtype_name})", "Power", "Unary", dtype_name
+        results.append(r)
+
+        def np_power3(): return np.power(a, 3)
+        r = benchmark(np_power3, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.power(a, 3) ({dtype_name})", "Power", "Unary", dtype_name
+        results.append(r)
+
+        def np_power_half(): return np.power(a_positive, 0.5)
+        r = benchmark(np_power_half, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.power(a, 0.5) ({dtype_name})", "Power", "Unary", dtype_name
+        results.append(r)
+
     return results
 
 # =============================================================================
@@ -426,6 +475,45 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
     r = benchmark(np_argmax, n, iterations=iterations)
     r.name, r.category, r.suite, r.dtype = f"np.argmax ({dtype_name})", "ArgMinMax", "Reduction", dtype_name
     results.append(r)
+
+    # Cumulative sum (mirror C# SumBenchmarks.CumSum) — all arithmetic dtypes.
+    def np_cumsum(): return np.cumsum(a)
+    r = benchmark(np_cumsum, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.cumsum ({dtype_name})", "Sum", "Reduction", dtype_name
+    results.append(r)
+
+    # Axis min/max + mean (mirror C# MinMaxBenchmarks / MeanBenchmarks axis variants).
+    def np_amin_axis0(): return np.amin(a_2d, axis=0)
+    r = benchmark(np_amin_axis0, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.amin axis=0 ({dtype_name})", "MinMax", "Reduction", dtype_name
+    results.append(r)
+
+    def np_amax_axis0(): return np.amax(a_2d, axis=0)
+    r = benchmark(np_amax_axis0, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.amax axis=0 ({dtype_name})", "MinMax", "Reduction", dtype_name
+    results.append(r)
+
+    def np_mean_axis0(): return np.mean(a_2d, axis=0)
+    r = benchmark(np_mean_axis0, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.mean axis=0 ({dtype_name})", "Mean", "Reduction", dtype_name
+    results.append(r)
+
+    def np_mean_axis1(): return np.mean(a_2d, axis=1)
+    r = benchmark(np_mean_axis1, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.mean axis=1 ({dtype_name})", "Mean", "Reduction", dtype_name
+    results.append(r)
+
+    # Axis var/std (mirror C# VarStdBenchmarks axis variants) — float only.
+    if np.issubdtype(DTYPES[dtype_name], np.floating):
+        def np_var_axis0(): return np.var(a_2d, axis=0)
+        r = benchmark(np_var_axis0, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.var axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
+        results.append(r)
+
+        def np_std_axis0(): return np.std(a_2d, axis=0)
+        r = benchmark(np_std_axis0, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"np.std axis=0 ({dtype_name})", "VarStd", "Reduction", dtype_name
+        results.append(r)
 
     return results
 
@@ -969,6 +1057,22 @@ def run_cumulative_benchmarks(n, dtype_name, iterations):
     ]
 
 
+def run_prod_benchmarks(n, dtype_name, iterations):
+    """Product reduction (mirror C# ProdBenchmarks): full + axis. Values in [0.5, 1.0] keep the
+    product finite at every size (the C# class uses the same range), so this is overflow-safe
+    even at 10M, unlike a full-range random array."""
+    np.random.seed(42)
+    a = (np.random.rand(n) * 0.5 + 0.5).astype(DTYPES[dtype_name])
+    rows = int(np.sqrt(n)); cols = n // rows
+    np.random.seed(42)
+    a_2d = (np.random.rand(rows * cols) * 0.5 + 0.5).astype(DTYPES[dtype_name]).reshape(rows, cols)
+    return [
+        _b(lambda: np.prod(a), n, iterations, "np.prod", "Reduction", dtype_name),
+        _b(lambda: np.prod(a_2d, axis=0), n, iterations, "np.prod axis=0", "Reduction", dtype_name),
+        _b(lambda: np.prod(a_2d, axis=1), n, iterations, "np.prod axis=1", "Reduction", dtype_name),
+    ]
+
+
 def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) -> List[BenchmarkResult]:
     """Run all selected suites at a single array size N and return the results.
 
@@ -1018,6 +1122,9 @@ def run_suites(n: int, suite: str, dtypes_to_run: List[str], iterations: int) ->
         for dtype in FLOAT_DTYPES:
             results_all.extend(run_nan_reduction_benchmarks(n, dtype, iterations))
             results_all.extend(run_cumulative_benchmarks(n, dtype, iterations))
+        # Product reduction — mirror C# ProdBenchmarks (Int64, Double only, to bound the product).
+        for dtype in ['int64', 'float64']:
+            results_all.extend(run_prod_benchmarks(n, dtype, iterations))
 
     if suite in ["broadcast", "all"]:
         results_all.extend(run_broadcast_benchmarks(n, iterations))

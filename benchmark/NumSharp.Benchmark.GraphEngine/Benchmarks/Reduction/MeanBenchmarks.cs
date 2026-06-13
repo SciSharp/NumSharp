@@ -16,11 +16,13 @@ public class MeanBenchmarks : TypedBenchmarkBase
     [Params(ArraySizeSource.Small, ArraySizeSource.Medium, ArraySizeSource.Large)]
     public override int N { get; set; }
 
-    // Mean typically produces floating-point result
+    // Mean typically produces floating-point result. Full arithmetic dtype coverage (matches
+    // SumBenchmarks/MinMaxBenchmarks) so np.mean on uint*/int16 joins the NumPy run instead of
+    // showing ⚪ "not run" — those cells were blank only because this was CommonTypes-only.
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.CommonTypes;
+    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.ArithmeticTypes;
 
     [GlobalSetup]
     public void Setup()

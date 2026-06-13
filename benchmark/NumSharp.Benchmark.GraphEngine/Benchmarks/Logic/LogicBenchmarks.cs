@@ -6,7 +6,8 @@ namespace NumSharp.Benchmark.GraphEngine.Benchmarks.Logic;
 
 /// <summary>
 /// Logic / predicate ufuncs on floating arrays: isnan, isinf, isfinite, maximum, minimum,
-/// isclose, allclose, array_equal. (all / any live in <see cref="BoolLogicBenchmarks"/>.)
+/// array_equal. (all / any live in <see cref="BoolLogicBenchmarks"/>.) isclose/allclose are
+/// disabled — they segfault NumSharp (see the note on the benchmark methods below).
 /// </summary>
 [BenchmarkCategory("Logic")]
 public class LogicBenchmarks : TypedBenchmarkBase
@@ -20,7 +21,16 @@ public class LogicBenchmarks : TypedBenchmarkBase
     [ParamsSource(nameof(Types))]
     public new NPTypeCode DType { get; set; }
 
-    public static IEnumerable<NPTypeCode> Types => TypeParameterSource.FloatingTypes;
+    // Half/Single/Double only — these are the dtypes NumPy benchmarks logic on (float16/32/64).
+    // Decimal is excluded: it has no NumPy peer (would be discarded anyway) AND its scalar
+    // DecimalMath path reliably triggers the known unmanaged-storage AccessViolation under this
+    // suite's load, which crashes the whole class before BenchmarkDotNet can export a report.
+    public static IEnumerable<NPTypeCode> Types => new[]
+    {
+        NPTypeCode.Half,
+        NPTypeCode.Single,
+        NPTypeCode.Double
+    };
 
     [GlobalSetup]
     public void Setup()
@@ -37,9 +47,15 @@ public class LogicBenchmarks : TypedBenchmarkBase
     [Benchmark(Description = "np.isfinite(a)")] public NDArray IsFinite() => np.isfinite(_a);
     [Benchmark(Description = "np.maximum(a, b)")] public NDArray Maximum() => np.maximum(_a, _b);
     [Benchmark(Description = "np.minimum(a, b)")] public NDArray Minimum() => np.minimum(_a, _b);
-    [Benchmark(Description = "np.isclose(a, b)")] public NDArray IsClose() => np.isclose(_a, _b);
-    [Benchmark(Description = "np.allclose(a, b)")] public bool AllClose() => np.allclose(_a, _b);
     [Benchmark(Description = "np.array_equal(a, b)")] public bool ArrayEqual() => np.array_equal(_a, _b);
+
+    // DISABLED — np.isclose / np.allclose deterministically segfault NumSharp with the
+    // unmanaged-storage AccessViolation (each crashes even when run alone, not just under the
+    // suite's cumulative load). Left in the class, the crash kills the whole LogicBenchmarks
+    // process before BenchmarkDotNet can export ANY report — taking the six working predicates
+    // above down with it. Re-enable once the NumSharp isclose/allclose lifetime bug is fixed.
+    // [Benchmark(Description = "np.isclose(a, b)")] public NDArray IsClose() => np.isclose(_a, _b);
+    // [Benchmark(Description = "np.allclose(a, b)")] public bool AllClose() => np.allclose(_a, _b);
 }
 
 /// <summary>

@@ -3,82 +3,86 @@
 > _Dense, numbers-first view of the full op × dtype × N comparison — companion to the narrative [Benchmarks vs NumPy](benchmarks.md) and the [iterator sheet](benchmark-iterator.md). Auto-generated each release. speedup = NumPy ÷ NumSharp (**>1.0× = NumSharp faster**); %NumPy🕐 = (NumSharp ÷ NumPy)×100 = the share of NumPy's time NumSharp uses (30% = takes only 30% as long)._
 
 ```
-NumSharp vs NumPy — operation matrix · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
-840 credible comparisons of 1233 ops · 277 negligible + 116 no-data excluded · BenchmarkDotNet vs NumPy 2.4.2
+NumSharp vs NumPy — operation matrix · 2026-06-14 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
+1386 credible comparisons of 1851 ops · 389 negligible + 76 no-data excluded · BenchmarkDotNet vs NumPy 2.4.2
 %NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (30% = takes only 30% as long; <100% = faster)
 
-HEADLINE — 0.73× geomean · 137%🕐 of NumPy's time · over 840 cells · 306 faster / 534 slower
+HEADLINE — 1.08× geomean · 93%🕐 of NumPy's time · over 1386 cells · 797 faster / 589 slower
 
 BY ARRAY-SIZE TIER  (geomean over all credible ops at that size)
           slower ◄───────── 1.0 (parity) ─────────► faster
-1K           ███████▎ ...........   0.73×   138%🕐  (  41 win /  70 lose)  ◄ SLOWER
-100K         █████▍ .............   0.54×   184%🕐  ( 104 win / 258 lose)  ◄ SLOWER
-10M          █████████▊ .........   0.98×   102%🕐  ( 161 win / 206 lose)  ◄ PARITY
-ALL          ███████▎ ...........   0.73×   137%🕐  ( 306 win / 534 lose)  ◄ SLOWER
+1K           █████████▎ .........   0.93×   107%🕐  (  96 win / 119 lose)  ◄ SLOWER
+100K         ████████▉ ..........   0.89×   112%🕐  ( 275 win / 311 lose)  ◄ SLOWER
+10M          █████████████▋ .....   1.37×    73%🕐  ( 426 win / 159 lose)
+ALL          ██████████▊ ........   1.08×    93%🕐  ( 797 win / 589 lose)
 
 BY SUITE  (geomean, ranked fastest → slowest)
           slower ◄───────── 1.0 (parity) ─────────► faster
-statistics   ███████████████████▶   2.28×    44%🕐  (  21 win /  11 lose)
-broadcasting ████████████▏ ......   1.22×    82%🕐  (   3 win /   0 lose)
-reduction    ████████████ .......   1.21×    83%🕐  ( 137 win /  86 lose)
-bitwise      █████████▉ .........   0.99×   101%🕐  (  56 win /  43 lose)  ◄ PARITY
-comparison   █████████▌ .........   0.95×   105%🕐  (  24 win /  24 lose)  ◄ SLOWER
-selection    ███████▌ ...........   0.76×   132%🕐  (   1 win /   4 lose)  ◄ SLOWER
-arithmetic   █████▎ .............   0.53×   190%🕐  (  32 win / 232 lose)  ◄ SLOWER
-sorting      █████ ..............   0.50×   198%🕐  (  10 win /  14 lose)  ◄ SLOWER
-linearalgebra████ ...............   0.40×   247%🕐  (   2 win /   6 lose)  ◄ SLOWER
-manipulation ███▉ ...............   0.39×   256%🕐  (   1 win /   1 lose)  ◄ SLOWER
-unary        ███▊ ...............   0.38×   264%🕐  (   1 win /  85 lose)  ◄ SLOWER
-creation     ███▌ ...............   0.35×   283%🕐  (  18 win /  28 lose)  ◄ SLOWER
+reduction    ████████████████▊ ..   1.68×    60%🕐  ( 343 win / 141 lose)
+statistics   ████████████████▍ ..   1.64×    61%🕐  (  31 win /  18 lose)
+broadcasting ███████████▌ .......   1.15×    87%🕐  (   3 win /   0 lose)
+arithmetic   █████████▏ .........   0.92×   109%🕐  ( 183 win / 157 lose)  ◄ SLOWER
+bitwise      █████████ ..........   0.91×   110%🕐  (  56 win /  57 lose)  ◄ SLOWER
+logic        ████████▋ ..........   0.87×   115%🕐  (  22 win /  19 lose)  ◄ SLOWER
+unary        ████████▍ ..........   0.84×   119%🕐  (  92 win / 119 lose)  ◄ SLOWER
+selection    ███████▊ ...........   0.78×   129%🕐  (   2 win /   3 lose)  ◄ SLOWER
+comparison   ███████▋ ...........   0.77×   131%🕐  (  24 win /  24 lose)  ◄ SLOWER
+sorting      ██████ .............   0.61×   165%🕐  (  22 win /  14 lose)  ◄ SLOWER
+linearalgebra█████▊ .............   0.58×   173%🕐  (   2 win /   6 lose)  ◄ SLOWER
+manipulation ███▋ ...............   0.37×   269%🕐  (   1 win /   1 lose)  ◄ SLOWER
+creation     ███▏ ...............   0.32×   315%🕐  (  16 win /  30 lose)  ◄ SLOWER
 
 BY DTYPE  (geomean over all credible ops of that type)
           slower ◄───────── 1.0 (parity) ─────────► faster
-uint8        ██████████▋ ........   1.07×    93%🕐  (  35 win /  15 lose)
-uint32       ████████▌ ..........   0.85×   118%🕐  (  21 win /  30 lose)  ◄ SLOWER
-int16        ███████▋ ...........   0.77×   130%🕐  (  23 win /  31 lose)  ◄ SLOWER
-float32      ███████▍ ...........   0.74×   134%🕐  (  60 win / 119 lose)  ◄ SLOWER
-float64      ███████▍ ...........   0.74×   136%🕐  (  65 win / 129 lose)  ◄ SLOWER
-uint16       ███████▎ ...........   0.74×   136%🕐  (  22 win /  33 lose)  ◄ SLOWER
-uint64       ███████ ............   0.70×   142%🕐  (  14 win /  36 lose)  ◄ SLOWER
-int32        ██████▋ ............   0.67×   149%🕐  (  36 win /  65 lose)  ◄ SLOWER
-int64        ██████▏ ............   0.62×   161%🕐  (  30 win /  68 lose)  ◄ SLOWER
-bool         ██▊ ................   0.28×   356%🕐  (   0 win /   8 lose)  ◄ SLOWER
+uint8        ███████████████████▶   2.52×    40%🕐  (  53 win /   8 lose)
+int8         ███████████████████▶   2.29×    44%🕐  (  50 win /  10 lose)
+int16        ███████████████████▋   1.96×    51%🕐  (  51 win /  13 lose)
+uint16       ██████████████████▍    1.85×    54%🕐  (  50 win /  14 lose)
+uint32       ███████████████▎ ...   1.53×    66%🕐  (  49 win /  17 lose)
+int32        ███████████▏ .......   1.12×    89%🕐  (  69 win /  41 lose)
+float32      ██████████▍ ........   1.04×    96%🕐  ( 126 win / 101 lose)
+float16      █████████▋ .........   0.97×   103%🕐  ( 111 win / 115 lose)  ◄ SLOWER
+float64      █████████▎ .........   0.93×   108%🕐  ( 130 win / 124 lose)  ◄ SLOWER
+uint64       ████████▍ ..........   0.84×   119%🕐  (  29 win /  34 lose)  ◄ SLOWER
+int64        ███████▋ ...........   0.77×   130%🕐  (  57 win /  61 lose)  ◄ SLOWER
+complex128   ████ ...............   0.41×   243%🕐  (  22 win /  43 lose)  ◄ SLOWER
+bool         ██▉ ................   0.29×   342%🕐  (   0 win /   8 lose)  ◄ SLOWER
 
 STATUS MIX  (NumSharp ÷ NumPy bands; credible only)
-✅ faster   ≤100% NumPy  ██████████████████ 306
-🟡 close    100–200%     ███████████████    258
-🟠 slower   200–500%     ██████████         170
-🔴 much     >500%        ██████             106
+✅ faster   ≤100% NumPy  ██████████████████ 797
+🟡 close    100–200%     ███████            289
+🟠 slower   200–500%     █████              219
+🔴 much     >500%        ██                 81
 
 TOP 12 FASTEST  (NumPy ÷ NumSharp — biggest NumSharp wins)
   operation                      dtype       N     NumPy   NumSharp    NP/NS   %NumPy🕐
-  np.nansum(a) (float64)         float64  100K     0.242 →    0.019 ms   12.65×     8%🕐
-  np.percentile(a, 50) (float64) float64    1K     0.025 →    0.002 ms   10.50×    10%🕐
-  np.percentile(a, 50) (float32) float32    1K     0.025 →    0.002 ms   10.30×    10%🕐
-  np.average(a) (float32)        float32   10M     9.598 →    0.937 ms   10.24×    10%🕐
-  np.quantile(a, 0.5) (float32)  float32    1K     0.024 →    0.002 ms   10.01×    10%🕐
-  np.quantile(a, 0.5) (float64)  float64    1K     0.023 →    0.002 ms    9.89×    10%🕐
-  np.nanprod(a) (float32)        float32   10M    18.515 →    1.904 ms    9.72×    10%🕐
-  np.nansum(a) (float32)         float32   10M    14.349 →    1.488 ms    9.64×    10%🕐
-  np.nanprod(a) (float64)        float64  100K     0.287 →    0.032 ms    8.98×    11%🕐
-  np.average(a) (float32)        float32  100K     0.018 →    0.002 ms    8.32×    12%🕐
-  np.count_nonzero(a) (float32)  float32  100K     0.038 →    0.005 ms    8.26×    12%🕐
-  np.nanstd(a) (float32)         float32    1K     0.020 →    0.003 ms    8.08×    12%🕐
+  np.sum axis=1 (uint16)         uint16    10M     8.379 →    0.421 ms   19.88×     5%🕐
+  np.nanstd(a) (float64)         float64    1K     0.030 →    0.002 ms   19.48×     5%🕐
+  np.sum axis=0 (int16)          int16     10M     9.299 →    0.495 ms   18.79×     5%🕐
+  np.sum axis=1 (int16)          int16     10M     7.118 →    0.400 ms   17.79×     6%🕐
+  np.dot(a, b) (float64)         float64  100K     0.108 →    0.007 ms   15.49×     6%🕐
+  np.nanstd(a) (float32)         float32    1K     0.022 →    0.002 ms   14.96×     7%🕐
+  np.nanquantile(a, 0.5) (float… float32    1K     0.036 →    0.002 ms   14.95×     7%🕐
+  np.prod (float64)              float64  100K     2.349 →    0.173 ms   13.60×     7%🕐
+  np.nanpercentile(a, 50) (floa… float64    1K     0.030 →    0.002 ms   12.84×     8%🕐
+  np.quantile(a, 0.5) (float32)  float32    1K     0.029 →    0.002 ms   12.64×     8%🕐
+  np.sum axis=0 (uint8)          uint8     10M     4.488 →    0.363 ms   12.36×     8%🕐
+  np.percentile(a, 50) (float32) float32    1K     0.028 →    0.002 ms   12.23×     8%🕐
 
 TOP 12 SLOWEST  (smallest NumPy ÷ NumSharp = optimization priorities)
   operation                      dtype       N     NumPy   NumSharp    NP/NS   %NumPy🕐
-  np.zeros (int64)               int64     10M     0.012 →   10.747 ms   0.001×  87957%🕐
-  np.zeros (int32)               int32     10M     0.011 →    5.622 ms   0.002×  51820%🕐
-  np.zeros (float64)             float64   10M     0.021 →   10.755 ms   0.002×  50765%🕐
-  np.zeros (float32)             float32   10M     0.017 →    5.673 ms   0.003×  33403%🕐
-  np.argsort(a) (int64)          int64    100K     0.472 →   12.893 ms   0.037×  2734%🕐
-  np.argsort(a) (int32)          int32    100K     0.442 →   10.404 ms   0.042×  2354%🕐
-  a * 2 (literal) (float32)      float32  100K     0.007 →    0.129 ms   0.052×  1937%🕐
-  np.left_shift(a, 2) (int64)    int64      1K     0.001 →    0.020 ms   0.052×  1911%🕐
-  np.right_shift(a, 2) (int64)   int64      1K     0.001 →    0.019 ms   0.052×  1920%🕐
-  np.sum axis=1 (uint8)          uint8     10M     3.115 →   49.741 ms   0.063×  1597%🕐
-  np.sum axis=0 (uint16)         uint16    10M     4.620 →   71.694 ms   0.064×  1552%🕐
-  np.right_shift(a, 2) (int32)   int32      1K     0.001 →    0.017 ms   0.064×  1561%🕐
+  np.zeros (int64)               int64     10M     0.011 →   11.099 ms   0.001×  100153%🕐
+  np.zeros (float64)             float64   10M     0.011 →   11.197 ms   0.001×  97991%🕐
+  np.zeros (int32)               int32     10M     0.011 →    2.966 ms   0.004×  26069%🕐
+  np.zeros (float32)             float32   10M     0.012 →    2.981 ms   0.004×  25357%🕐
+  np.mean axis=0 (complex128)    complex128 100K     0.017 →    1.093 ms   0.016×  6407%🕐
+  np.sum axis=0 (complex128)     complex128 100K     0.015 →    0.808 ms   0.019×  5208%🕐
+  np.mean axis=1 (complex128)    complex128 100K     0.033 →    1.050 ms   0.031×  3203%🕐
+  np.argsort(a) (int64)          int64    100K     0.486 →   13.027 ms   0.037×  2682%🕐
+  np.argsort(a) (int32)          int32    100K     0.407 →   10.562 ms   0.038×  2598%🕐
+  np.sum axis=1 (complex128)     complex128 100K     0.032 →    0.786 ms   0.041×  2460%🕐
+  np.mean axis=0 (complex128)    complex128  10M     7.632 →  185.728 ms   0.041×  2434%🕐
+  np.right_shift(a, 2) (int64)   int64      1K     0.001 →    0.021 ms   0.048×  2084%🕐
 
 note · speedup = NumPy ÷ NumSharp on one runner (>1.0× = NumSharp faster) · %NumPy🕐 = share of
        NumPy's time NumSharp uses · negligible rows (<1µs / >20× = overhead, lazy alloc, views) excluded
