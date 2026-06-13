@@ -63,10 +63,18 @@ def main():
     total = len(data)
     negligible = sum(1 for r in data if r["status"] == "negligible")
     no_data = sum(1 for r in data if r["status"] == "no_data")
-    cred = [r for r in data if r["status"] in CREDIBLE and r.get("numsharp_ms") and r.get("numpy_ms")]
+    cred = [r for r in data if r["status"] in CREDIBLE
+            and r.get("ratio") is not None
+            and r.get("numsharp_ms") is not None and r.get("numpy_ms") is not None]
     for r in cred:
-        r["sp"] = r["numpy_ms"] / r["numsharp_ms"]          # NP/NS — >1 = NumSharp faster
-        r["pct"] = r["numsharp_ms"] / r["numpy_ms"] * 100    # share of NumPy's time NumSharp uses
+        # Consume the merge's CANONICAL ratio/pct (merge-results.py computes them from the
+        # full-precision means, BEFORE rounding numpy_ms/numsharp_ms to 4dp for storage).
+        # Re-deriving them here by dividing the rounded ms drifts from benchmark-report.md by
+        # up to a few % on ~1/6 of rows (e.g. nansum read 12.63× here vs 12.65× there; zeros
+        # 88087% vs 87957%). Reading the stored fields makes the dashboard and the report agree
+        # cell-for-cell, since both now key off the same numbers.
+        r["sp"] = r["ratio"]                                              # NP/NS — >1 = NumSharp faster
+        r["pct"] = r["pct_numpy"] if r.get("pct_numpy") is not None else 100.0 / r["sp"]
 
     L = []
 
