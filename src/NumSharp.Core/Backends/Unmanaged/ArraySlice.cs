@@ -379,23 +379,26 @@ namespace NumSharp.Backends.Unmanaged
             if (!fillDefault)
                 return Allocate(typeCode, count);
 
+            // fillDefault == fill with default(T), whose bit pattern is all-zero
+            // for every supported dtype — so route to the calloc-backed zeroed
+            // allocation (lazy OS demand-zero pages) instead of an explicit fill.
             switch (typeCode)
             {
-                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, default));
-                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, default));
-                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, default));
-                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, default));
-                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, default));
-                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, default));
-                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, default));
-                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, default));
-                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, default));
-                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, default));
-                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, default));
-                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, default));
-                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, default));
-                case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, default));
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>(count, default));
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.AllocateZeroed(count));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.AllocateZeroed(count));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.AllocateZeroed(count));
+                case NPTypeCode.Int16: return new ArraySlice<short>(UnmanagedMemoryBlock<short>.AllocateZeroed(count));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.AllocateZeroed(count));
+                case NPTypeCode.Int32: return new ArraySlice<int>(UnmanagedMemoryBlock<int>.AllocateZeroed(count));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.AllocateZeroed(count));
+                case NPTypeCode.Int64: return new ArraySlice<long>(UnmanagedMemoryBlock<long>.AllocateZeroed(count));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.AllocateZeroed(count));
+                case NPTypeCode.Char: return new ArraySlice<char>(UnmanagedMemoryBlock<char>.AllocateZeroed(count));
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.AllocateZeroed(count));
+                case NPTypeCode.Double: return new ArraySlice<double>(UnmanagedMemoryBlock<double>.AllocateZeroed(count));
+                case NPTypeCode.Single: return new ArraySlice<float>(UnmanagedMemoryBlock<float>.AllocateZeroed(count));
+                case NPTypeCode.Decimal: return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.AllocateZeroed(count));
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.AllocateZeroed(count));
                 default:
                     throw new NotSupportedException();
             }
@@ -456,23 +459,26 @@ namespace NumSharp.Backends.Unmanaged
             if (!fillDefault)
                 return Allocate(elementType, count);
 
+            // fillDefault == fill with default(T), whose bit pattern is all-zero
+            // for every supported dtype — so route to the calloc-backed zeroed
+            // allocation (lazy OS demand-zero pages) instead of an explicit fill.
             switch (elementType.GetTypeCode())
             {
-                case NPTypeCode.Boolean: return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(count, default));
-                case NPTypeCode.SByte: return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>(count, default));
-                case NPTypeCode.Byte: return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(count, default));
-                case NPTypeCode.Int16: return new ArraySlice<short>(new UnmanagedMemoryBlock<short>(count, default));
-                case NPTypeCode.UInt16: return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>(count, default));
-                case NPTypeCode.Int32: return new ArraySlice<int>(new UnmanagedMemoryBlock<int>(count, default));
-                case NPTypeCode.UInt32: return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>(count, default));
-                case NPTypeCode.Int64: return new ArraySlice<long>(new UnmanagedMemoryBlock<long>(count, default));
-                case NPTypeCode.UInt64: return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>(count, default));
-                case NPTypeCode.Char: return new ArraySlice<char>(new UnmanagedMemoryBlock<char>(count, default));
-                case NPTypeCode.Half: return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>(count, default));
-                case NPTypeCode.Double: return new ArraySlice<double>(new UnmanagedMemoryBlock<double>(count, default));
-                case NPTypeCode.Single: return new ArraySlice<float>(new UnmanagedMemoryBlock<float>(count, default));
-                case NPTypeCode.Decimal: return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>(count, default));
-                case NPTypeCode.Complex: return new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>(count, default));
+                case NPTypeCode.Boolean: return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.AllocateZeroed(count));
+                case NPTypeCode.SByte: return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.AllocateZeroed(count));
+                case NPTypeCode.Byte: return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.AllocateZeroed(count));
+                case NPTypeCode.Int16: return new ArraySlice<short>(UnmanagedMemoryBlock<short>.AllocateZeroed(count));
+                case NPTypeCode.UInt16: return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.AllocateZeroed(count));
+                case NPTypeCode.Int32: return new ArraySlice<int>(UnmanagedMemoryBlock<int>.AllocateZeroed(count));
+                case NPTypeCode.UInt32: return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.AllocateZeroed(count));
+                case NPTypeCode.Int64: return new ArraySlice<long>(UnmanagedMemoryBlock<long>.AllocateZeroed(count));
+                case NPTypeCode.UInt64: return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.AllocateZeroed(count));
+                case NPTypeCode.Char: return new ArraySlice<char>(UnmanagedMemoryBlock<char>.AllocateZeroed(count));
+                case NPTypeCode.Half: return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.AllocateZeroed(count));
+                case NPTypeCode.Double: return new ArraySlice<double>(UnmanagedMemoryBlock<double>.AllocateZeroed(count));
+                case NPTypeCode.Single: return new ArraySlice<float>(UnmanagedMemoryBlock<float>.AllocateZeroed(count));
+                case NPTypeCode.Decimal: return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.AllocateZeroed(count));
+                case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.AllocateZeroed(count));
                 default:
                     throw new NotSupportedException();
             }
@@ -520,7 +526,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="fillDefault">Should the newly allocated memory be filled with the default of <typeparamref name="T"/></param>
         /// <returns>A newly allocated array.</returns>
         public static ArraySlice<T> Allocate<T>(long count, bool fillDefault) where T : unmanaged
-            => !fillDefault ? Allocate<T>(count) : new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, default(T)));
+            => !fillDefault ? Allocate<T>(count) : new ArraySlice<T>(UnmanagedMemoryBlock<T>.AllocateZeroed(count));
 
         /// <summary>
         ///     Allocate an array filled with noisy memory.

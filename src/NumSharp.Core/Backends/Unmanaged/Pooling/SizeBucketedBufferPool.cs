@@ -108,6 +108,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         private static long _misses;
         private static long _returns;
         private static long _returnsFreed;
+        private static long _zeroedAllocs;
 
         /// <summary>How many Take calls served from the pool.</summary>
         public static long Hits => Interlocked.Read(ref _hits);
@@ -121,6 +122,9 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         /// <summary>How many Return calls freed the buffer (bucket full / out-of-range).</summary>
         public static long ReturnsFreed => Interlocked.Read(ref _returnsFreed);
 
+        /// <summary>How many TakeZeroed calls went straight to calloc (the np.zeros fast path).</summary>
+        public static long ZeroedAllocs => Interlocked.Read(ref _zeroedAllocs);
+
         /// <summary>Reset all counters. Diagnostic only.</summary>
         public static void ResetCounters()
         {
@@ -128,6 +132,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             Interlocked.Exchange(ref _misses, 0);
             Interlocked.Exchange(ref _returns, 0);
             Interlocked.Exchange(ref _returnsFreed, 0);
+            Interlocked.Exchange(ref _zeroedAllocs, 0);
         }
 
         /// <summary>
@@ -175,6 +180,61 @@ namespace NumSharp.Backends.Unmanaged.Pooling
 
             Interlocked.Increment(ref _misses);
             return (IntPtr)NativeMemory.Alloc((nuint)bytes);
+        }
+
+        /// <summary>
+        ///     Take a ZERO-INITIALIZED buffer of the given byte size. This is
+        ///     the np.zeros / fill-with-default fast path and the analogue of
+        ///     NumPy's <c>npy_alloc_cache_zero</c> / <c>PyDataMem_NEW_ZEROED</c>.
+        ///
+        ///     WHY calloc INSTEAD OF Take + memset
+        ///     -----------------------------------
+        ///     <see cref="NativeMemory.AllocZeroed"/> calls the CRT
+        ///     <c>calloc</c>. For any non-trivial size the CRT/OS serves the
+        ///     request from fresh, copy-on-write zero pages (Windows
+        ///     <c>VirtualAlloc</c> / Linux <c>mmap(MAP_ANONYMOUS)</c>): the
+        ///     pages are only physically committed and zeroed by the kernel
+        ///     lazily, on first write. So zeroing a 10M-element (80 MB) block
+        ///     costs ~0.01 ms instead of the ~14 ms an explicit element fill —
+        ///     or even a <see cref="NativeMemory.Clear"/> memset (~21 ms) —
+        ///     pays to touch every page up front.
+        ///
+        ///     The dirty same-size bucket cache used by <see cref="Take"/> is
+        ///     intentionally NOT consulted: a recycled buffer is dirty and
+        ///     would force a full memset, touching every page and throwing
+        ///     away the entire lazy-zero advantage for exactly the large sizes
+        ///     that matter. NumPy makes the same call — its zero cache only
+        ///     engages below 1 KiB, a regime where the CRT's own low-
+        ///     fragmentation heap already supplies that small-block reuse for
+        ///     our calloc.
+        ///
+        ///     OWNERSHIP &amp; PRESSURE
+        ///     ---------------------
+        ///     The caller owns the returned pointer and must eventually
+        ///     <see cref="Return"/> or free it; a calloc'd pointer is a normal
+        ///     <see cref="NativeMemory"/> allocation, so Return may pool it for
+        ///     later (non-zero) reuse by <see cref="Take"/> or free it via
+        ///     <see cref="NativeMemory.Free"/>. GC memory pressure is registered
+        ///     here exactly as <see cref="Take"/> does, so the paired
+        ///     <see cref="Return"/> balances it (live-state accounting).
+        /// </summary>
+        /// <param name="bytes">Byte size of the buffer. Must be &gt;= 0.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IntPtr TakeZeroed(long bytes)
+        {
+            if (bytes > 0)
+                GC.AddMemoryPressure(bytes);
+
+            // Go straight to calloc — no dirty-bucket reuse. A recycled buffer
+            // would need a full NativeMemory.Clear, which for large sizes throws
+            // away the lazy demand-zero advantage and for small sizes is no
+            // cheaper than calloc itself (while adding a ConcurrentDictionary
+            // probe on every miss). Large sizes don't even reach here: the
+            // caller (UnmanagedMemoryBlock.AllocateZeroed) routes them to
+            // VirtualAlloc on Windows, and on other platforms calloc already
+            // mmaps large blocks lazily.
+            Interlocked.Increment(ref _zeroedAllocs);
+            return (IntPtr)NativeMemory.AllocZeroed((nuint)bytes);
         }
 
         /// <summary>
