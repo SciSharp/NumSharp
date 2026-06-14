@@ -43,6 +43,12 @@ namespace NumSharp.Backends
                 var over = @override.Value;
                 if (over < NPTypeCode.Single)
                     throw new IncorrectTypeException($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
+                // The input must reach the requested loop dtype by a same_kind cast (int->float is
+                // allowed, complex->real is not). Without this guard a complex input + real-float
+                // dtype= (e.g. np.exp(complex128, dtype=float64)) selected a real output buffer half
+                // the width of the complex the kernel writes — a buffer overflow / segfault. NumPy
+                // raises "Cannot cast ufunc '<name>' input from complex128 to float64 ..." instead.
+                ValidateUnaryInputCast(nd.GetTypeCode, over, ufunc);
                 return over;
             }
 

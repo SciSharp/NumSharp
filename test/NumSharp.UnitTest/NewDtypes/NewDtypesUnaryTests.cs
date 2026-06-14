@@ -593,6 +593,39 @@ namespace NumSharp.UnitTest.NewDtypes
             double.IsNegative(r.Imaginary).Should().BeTrue("NumPy exp(-inf-inf j).imag = -0.0");
         }
 
+        [TestMethod]
+        public void Complex_FloatUfunc_NarrowingDtype_RaisesCastError_NotSegfault()
+        {
+            // REGRESSION: np.<floatufunc>(complex, dtype=<real float>) used to SEGFAULT — the float
+            // resolver honored the narrower dtype= and allocated a real output buffer half the width
+            // of the complex the kernel writes (buffer overflow). NumPy 2.4.2 raises a UFuncTypeError:
+            //   "Cannot cast ufunc '<name>' input from dtype('complex128') to dtype('float64') with
+            //    casting rule 'same_kind'".
+            var z = np.array(new Complex[] { new(1, 2), new(3, -1) });
+            foreach (var op in new (string, Func<NPTypeCode?, NDArray>)[]
+            {
+                ("exp",    d => np.exp(z, dtype: d)),
+                ("log",    d => np.log(z, dtype: d)),
+                ("sqrt",   d => np.sqrt(z, dtype: d)),
+                ("sin",    d => np.sin(z, dtype: d)),
+                ("tanh",   d => np.tanh(z, dtype: d)),
+                ("arctan", d => np.arctan(z, dtype: d)),
+            })
+            {
+                // complex input + real-float dtype= -> verbatim NumPy cast error (no crash).
+                Action narrow = () => op.Item2(NPTypeCode.Double);
+                narrow.Should().Throw<ArgumentException>($"{op.Item1}(complex, dtype=float64) must reject the cast")
+                    .WithMessage($"Cannot cast ufunc '{op.Item1}' input from dtype('complex128') to dtype('float64') with casting rule 'same_kind'");
+
+                // complex input + integer dtype= -> no loop exists at all (different NumPy error).
+                Action noloop = () => op.Item2(NPTypeCode.Int64);
+                noloop.Should().Throw<Exception>($"{op.Item1}(complex, dtype=int64) selects no loop");
+
+                // complex input + complex dtype= is a legal no-op loop and must return complex.
+                op.Item2(NPTypeCode.Complex).typecode.Should().Be(NPTypeCode.Complex, $"{op.Item1}(complex, dtype=complex128) is valid");
+            }
+        }
+
         #endregion
     }
 }

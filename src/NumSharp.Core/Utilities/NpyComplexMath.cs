@@ -5,41 +5,49 @@ using System.Runtime.CompilerServices;
 namespace NumSharp.Utilities
 {
     /// <summary>
-    /// Complex-math helpers matching NumPy's complex ufunc edge semantics where the
-    /// .NET BCL diverges.
+    /// Complex-math helpers backing NumSharp's complex (<c>complex128</c>) unary ufuncs. Each entry
+    /// point reproduces NumPy 2.4.2 bit-for-bit (or within 3 ULP on the finite interior), verified by
+    /// a 504-point bit-exact sweep and a layout sweep (contiguous / F-contiguous / strided /
+    /// transposed / reversed / sliced / broadcast / 0-d). Most are direct ports of NumPy's own
+    /// routines in <c>npy_math_complex.c.src</c> (the FreeBSD msun implementations) because
+    /// <c>System.Numerics.Complex</c> diverges on large magnitudes, the unit circle, tiny/subnormal
+    /// values, branch cuts, and signed zeros.
     ///
-    /// <para><see cref="Abs"/> replicates NumPy's <c>npy_cabs</c>
-    /// (<c>= npy_hypot(creal(z), cimag(z))</c>, <c>npy_math_complex.c.src</c>): under C99
-    /// <c>hypot</c>, an infinite component yields <c>+inf</c> <em>even when the other component
-    /// is NaN</em> (the infinity test precedes the NaN test). <see cref="Complex.Abs"/> routes
-    /// through a private <c>Hypot</c> that orders its operands with a NaN-unaware comparison, so on
-    /// <c>net8.0</c> it returns <c>NaN</c> for <c>abs(NaN + inf*i)</c> instead of <c>+inf</c>
-    /// (fixed in the .NET 9+ BCL). Guarding the infinity case explicitly makes every target
-    /// framework agree with NumPy while leaving the finite/NaN-only magnitudes — which already
-    /// match NumPy bit-for-bit — to <see cref="Complex.Abs"/>.</para>
+    /// <para><b>Ported NumPy algorithms.</b>
+    /// <see cref="Log"/> = <c>npy_clog</c> (four-regime rescale incl. the near-|z|=1 <c>log1p</c>
+    /// path; drives <see cref="Log10"/> and the engine's <c>log2</c>); <see cref="Sinh"/>/
+    /// <see cref="Cosh"/> = textbook <c>sinh/cosh(x)·trig(y)</c> with a <c>y==0</c> guard (so a huge
+    /// real part doesn't become <c>inf·0 = NaN</c>) and the C99 Annex G non-finite tables;
+    /// <see cref="Tanh"/> = Kahan's <c>npy_ctanh</c> (markedly more accurate than the BCL near
+    /// <c>±π/2</c>) + the <c>|x|≥22</c> overflow-safe branch; <see cref="Sin"/>/<see cref="Cos"/>/
+    /// <see cref="Tan"/> route through those exactly as NumPy defines <c>csin/ccos/ctan</c>;
+    /// <see cref="Atan"/> = the full <c>npy_catanh</c> (real <c>atanh</c>/<c>atan</c> on the axes, the
+    /// <c>log1p</c> interior, and an exponent-classified <c>real_part_reciprocal</c>);
+    /// <see cref="Exp"/> = <c>npy_cexp</c>; <see cref="Sqrt"/> = <c>npy_csqrt</c>;
+    /// <see cref="Expm1"/> = <c>nc_expm1</c> with a Goldberg real <c>expm1</c>;
+    /// <see cref="Square"/> = FMA-contracted <c>z·z</c> (matches NumPy's complex multiply
+    /// overflow/cancellation); <see cref="Reciprocal"/> = Smith's <c>nc_recip</c>;
+    /// <see cref="Exp2"/>/<see cref="Log1p"/> compose the above; <see cref="Abs"/> = <c>npy_cabs</c>
+    /// (C99 <c>hypot</c>: an infinite component yields <c>+inf</c> even alongside a NaN — the .NET 8
+    /// <c>Complex.Abs</c> returns NaN there).</para>
     ///
-    /// <para><see cref="Sinh"/>/<see cref="Cosh"/>/<see cref="Tanh"/>/<see cref="Asin"/>/
-    /// <see cref="Acos"/>/<see cref="Atan"/> match NumPy's complex hyperbolic and inverse-trig
-    /// ufuncs. For finite inputs the .NET BCL agrees with NumPy to within a few ULP (verified by a
-    /// bit-exact probe over a finite battery), so those delegate straight to <c>System.Numerics.Complex</c>.
-    /// Where the BCL diverges — non-finite inputs (it returns <c>(NaN,NaN)</c> instead of the C99
-    /// Annex G values), branch-cut sign, and dropped signed-zeros — these helpers apply the C99
-    /// fixups. The non-finite paths and the special-value tables are ported faithfully from
-    /// NumPy's <c>npy_math_complex.c.src</c> (the FreeBSD msun <c>ccosh</c>/<c>csinh</c>/<c>ctanh</c>/
-    /// <c>cacos</c>/<c>casinh</c>/<c>catanh</c> implementations); <c>asin</c>/<c>atan</c> reuse
-    /// NumPy's identities <c>asin(z)=i*conj(casinh(i*conj z))</c> and
-    /// <c>atan(z)=i*conj(catanh(i*conj z))</c>. The lone documented divergence is <c>arctan</c>'s
-    /// finite interior, where the BCL stays within 3 ULP of NumPy (and ~1e-7 relative for inputs
-    /// extremely close to the origin) because .NET's <c>Atan</c> uses a less accurate kernel than
-    /// NumPy's <c>log1p</c>-based one — this is the agreed cost of delegating the interior.</para>
+    /// <para><b>Still delegating to the BCL (at parity):</b> <see cref="Asin"/> and <see cref="Acos"/>
+    /// use <see cref="Complex.Asin"/>/<see cref="Complex.Acos"/> on the finite interior with
+    /// signed-zero / branch-cut fixups, and the C99 non-finite tables otherwise.</para>
+    ///
+    /// <para><b>Accepted residuals (pathological inputs only, beyond 3 ULP):</b> <c>cos/sin</c> with a
+    /// NaN imaginary part pick the C99-<em>unspecified</em> sign for the resulting zero; <c>arccos</c>
+    /// with a sub-<c>DBL_MIN</c> imaginary part flushes the denormal real part to 0 where NumPy's
+    /// <c>cacos</c> hard-work kernel keeps it (~5.8e-309); <c>sinh/cosh</c> at the <c>|x|∈[710,710.13]</c>
+    /// overflow edge differ because Windows' CRT <c>sinh</c> overflows where .NET's stays finite.</para>
     ///
     /// <para><b>Perf:</b> each public entry point is a tiny finite-path wrapper marked
-    /// <see cref="MethodImplOptions.AggressiveInlining"/> so the JIT folds it directly into the
-    /// IL-emitted unary kernel (no per-element call frame); the rare non-finite tables live in cold
-    /// helpers marked <see cref="MethodImplOptions.AggressiveOptimization"/> (kept out-of-line so the
-    /// hot wrapper stays inlineable, and fully optimized when hit). A benchmark of an IL-inlined
-    /// variant vs this <c>call</c>-based form showed the per-element cost is dominated by the BCL
-    /// transcendental, so hand-emitting the formula is not worth the duplication.</para>
+    /// <see cref="MethodImplOptions.AggressiveInlining"/> so the JIT folds it into the IL-emitted
+    /// unary kernel (no per-element call frame); the rare non-finite / special-value tables live in
+    /// cold helpers marked <see cref="MethodImplOptions.AggressiveOptimization"/> (kept out-of-line so
+    /// the hot wrapper stays inlineable, fully optimized when hit). A benchmark of an IL-inlined
+    /// variant vs this <c>call</c>-based form showed the per-element cost is dominated by the
+    /// transcendental, so hand-emitting the formulas is not worth the duplication.</para>
     /// </summary>
     public static class NpyComplexMath
     {
