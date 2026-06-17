@@ -383,7 +383,7 @@ namespace NumSharp.Backends.Iteration
         /// would drop the imaginary component. Real -> Complex sets imaginary=0; Complex
         /// -> Real takes the real part (matching NumPy's ComplexWarning truncation).
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void ConvertValue(void* src, void* dst, NPTypeCode srcType, NPTypeCode dstType)
         {
             // Fast path: same type
@@ -450,7 +450,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Read an integer-category source (everything except UInt64/Decimal/floats/Complex) losslessly as long.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ReadAsInt64(void* ptr, NPTypeCode type)
             => type switch
             {
@@ -471,7 +471,7 @@ namespace NumSharp.Backends.Iteration
         /// Complex must be handled by the caller — going through double would silently
         /// drop the imaginary component.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ReadAsDouble(void* ptr, NPTypeCode type)
         {
             return type switch
@@ -495,7 +495,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Integer source (fits in long): integer-&gt;integer wraps (NumPy modular); integer-&gt;float/decimal is a plain conversion.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void WriteFromInt64(void* ptr, long v, NPTypeCode type)
         {
             switch (type)
@@ -519,7 +519,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>UInt64 source: same wrapping rules, but the value can exceed long range.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void WriteFromUInt64(void* ptr, ulong v, NPTypeCode type)
         {
             switch (type)
@@ -547,7 +547,7 @@ namespace NumSharp.Backends.Iteration
         /// int.MinValue/overflow sentinel — delegated to Converts.* for exact parity; float-&gt;float
         /// is plain rounding.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void WriteFromDouble(void* ptr, double value, NPTypeCode type)
         {
             switch (type)
@@ -571,7 +571,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Decimal source: integer destinations truncate via Converts (NumPy parity); float/decimal are plain.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void WriteFromDecimal(void* ptr, decimal value, NPTypeCode type)
         {
             switch (type)

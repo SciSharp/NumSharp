@@ -192,7 +192,7 @@ namespace NumSharp.Backends.Iteration
         /// transfer machinery enforces); anything else keeps the plain nditer
         /// contract where masking belongs to the kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private int ResolveForEachMaskOp()
         {
             int maskOp = _state->MaskOp;
@@ -213,7 +213,7 @@ namespace NumSharp.Backends.Iteration
         /// unmasked SIMD kernel keeps working for dense masks. A stride-0 mask
         /// (fully-broadcast scalar) gates the whole chunk.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void InvokeInner(
             NpyInnerLoopFunc kernel, void** dataptrs, long* strides, long count,
             void* auxdata, int maskOp, int nop)
@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Iteration
         /// while <c>Iternext</c> only advanced by one element — causing the
         /// kernel to over-read past the end of the array.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private long ResolveInnerLoopCount()
         {
             uint f = _state->ItFlags;
@@ -301,7 +301,7 @@ namespace NumSharp.Backends.Iteration
         /// or ONEITERATION) avoids the do/while + delegate call so the JIT can
         /// autovectorize the kernel body.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteGeneric<TKernel>(TKernel kernel) where TKernel : struct, INpyInnerLoop
         {
             EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
@@ -365,7 +365,7 @@ namespace NumSharp.Backends.Iteration
         /// True when the iterator is guaranteed to complete in exactly one
         /// inner-loop kernel invocation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private bool IsSingleInnerLoop()
         {
             uint f = _state->ItFlags;
@@ -938,7 +938,7 @@ namespace NumSharp.Backends.Iteration
         /// jump → refill), regardless of EXTERNAL_LOOP — used by the kernel
         /// drivers, whose kernels always consume entire windows.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private bool BufferedWindowAdvance()
         {
             NpyIterBufferManager.FlushBufferWindow(ref *_state);
@@ -953,7 +953,7 @@ namespace NumSharp.Backends.Iteration
             return true;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void FlushIfBuffered()
         {
             uint f = _state->ItFlags;

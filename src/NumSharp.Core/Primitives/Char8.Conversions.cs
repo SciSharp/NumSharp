@@ -12,58 +12,58 @@ namespace NumSharp
         // ========================================================================
 
         /// <summary>Returns <c>true</c> if the byte is non-zero (C convention).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool ToBoolean() => m_value != 0;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public byte ToByte() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public sbyte ToSByte() => checked((sbyte)m_value);
 
         /// <summary>Returns the underlying byte as a <see cref="short"/>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public short ToInt16() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ushort ToUInt16() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public int ToInt32() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public uint ToUInt32() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long ToInt64() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ulong ToUInt64() => m_value;
 
         /// <summary>Widens to <see cref="char"/> via Latin-1 (0xE9 → 'é').</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public char ToChar() => (char)m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public float ToSingle() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public double ToDouble() => m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public decimal ToDecimal() => m_value;
 
         // ========================================================================
         // FromXxx static factories (narrowing with overflow check)
         // ========================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromBoolean(bool b) => new Char8(b ? (byte)1 : (byte)0);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromByte(byte b) => new Char8(b);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromSByte(sbyte b)
         {
             if (b < 0) throw new OverflowException("Negative sbyte cannot be converted to Char8.");
@@ -76,7 +76,7 @@ namespace NumSharp
             return new Char8((byte)v);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromUInt16(ushort v)
         {
             if (v > 0xFF) throw new OverflowException("UInt16 value out of Char8 range [0, 255].");
@@ -108,7 +108,7 @@ namespace NumSharp
         }
 
         /// <summary>Narrows a <see cref="char"/> to <see cref="Char8"/>. Throws if the char is outside Latin-1 (> 0xFF).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromChar(char c)
         {
             if ((uint)c > 0xFF) throw new OverflowException("Char value " + (int)c + " exceeds Char8 max (0xFF).");
@@ -153,23 +153,23 @@ namespace NumSharp
         }
 
         /// <summary>Truncates to 8 bits by masking (always succeeds).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromInt16Truncating(short v) => new Char8((byte)v);
 
         /// <inheritdoc cref="FromInt16Truncating(short)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromUInt16Truncating(ushort v) => new Char8((byte)v);
 
         /// <inheritdoc cref="FromInt16Truncating(short)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromUInt32Truncating(uint v) => new Char8((byte)v);
 
         /// <inheritdoc cref="FromInt16Truncating(short)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromInt64Truncating(long v) => new Char8((byte)v);
 
         /// <inheritdoc cref="FromInt16Truncating(short)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 FromUInt64Truncating(ulong v) => new Char8((byte)v);
 
         // ========================================================================

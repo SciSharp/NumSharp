@@ -98,7 +98,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>Copy the first <paramref name="count"/> dimensions of <paramref name="shape"/> as long[].</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long[] TakeDims(Shape shape, int count)
         {
             var dims = new long[count];

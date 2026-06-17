@@ -392,7 +392,7 @@ namespace NumSharp.Backends
         ///     Mirror of <c>DirectILKernelGenerator.IsPredicateOp</c> (private to
         ///     that partial) — the routing layer needs the same answer.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsUnaryPredicateOp(UnaryOp op)
             => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
 
@@ -605,7 +605,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Invoke a unary scalar delegate and create the result NDArray.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray InvokeUnaryScalar<TInput>(Delegate func, TInput input, NPTypeCode outputType)
         {
             // Dispatch based on output type to avoid boxing on result
@@ -633,7 +633,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated unary kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void ExecuteUnaryKernel(
             UnaryKernel kernel,
             NDArray input, NDArray result)

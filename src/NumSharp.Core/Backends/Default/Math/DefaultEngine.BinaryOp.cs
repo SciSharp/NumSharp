@@ -608,7 +608,7 @@ namespace NumSharp.Backends
         /// is strictly F-contiguous (IsFContiguous && !IsContiguous).
         /// Scalars (and 1-element shapes, both C and F) do not change the decision.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static bool ShouldProduceFContigOutput(NDArray a, Shape resultShape)
         {
             if (resultShape.NDim <= 1 || resultShape.size <= 1)
@@ -627,7 +627,7 @@ namespace NumSharp.Backends
         ///     neither C nor F (negative strides, partial broadcast, custom view), its
         ///     linear walk doesn't align with the F-output's linear walk → wrong values.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static bool AreAllOperandsStrictFContig(NDArray lhs, NDArray rhs, Shape resultShape)
         {
             if (resultShape.NDim <= 1 || resultShape.size <= 1)
@@ -653,7 +653,7 @@ namespace NumSharp.Backends
         /// Binary variant — require that every non-scalar operand is strictly F-contiguous
         /// and at least one of them is (otherwise the scalar+scalar case is excluded upstream).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static bool ShouldProduceFContigOutput(NDArray lhs, NDArray rhs, Shape resultShape)
         {
             if (resultShape.NDim <= 1 || resultShape.size <= 1)
@@ -698,7 +698,7 @@ namespace NumSharp.Backends
         ///     offset/bufferSize would mis-describe it. Those fall back to building a fresh
         ///     canonical Shape exactly as before.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Shape CanonicalResultShape(Shape src, bool wantF)
         {
             if (src.offset == 0 && src.bufferSize == src.size)
@@ -755,7 +755,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Continue binary scalar dispatch with typed LHS value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray InvokeBinaryScalarLhs<TLhs>(
             Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType, NPTypeCode resultType)
         {
@@ -784,7 +784,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Complete binary scalar dispatch with typed LHS and RHS values.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray InvokeBinaryScalarRhs<TLhs, TRhs>(
             Delegate func, TLhs lhsVal, TRhs rhsVal, NPTypeCode resultType)
         {
@@ -813,7 +813,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Classify execution path based on strides.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe ExecutionPath ClassifyPath(
             long* lhsStrides, long* rhsStrides, long* shape, int ndim, NPTypeCode resultType)
         {
@@ -851,7 +851,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void ExecuteKernel(
             MixedTypeKernel kernel,
             NDArray lhs, NDArray rhs, NDArray result,
@@ -891,7 +891,7 @@ namespace NumSharp.Backends
         ///     kernel ignores strides anyway, so coalescing F-contig N-D to 1-D contig
         ///     is a free win.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void ExecuteKernelCoalesced(
             MixedTypeKernel kernel,
             NDArray lhs, NDArray rhs, NDArray result,
@@ -953,7 +953,7 @@ namespace NumSharp.Backends
         /// </summary>
         private enum MergeMode { None, COrder, FOrder, Trivial }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static MergeMode ClassifyMergePair(long sw, long sr, long strideW, long strideR)
         {
             if (sw == 1 || sr == 1) return MergeMode.Trivial;
@@ -972,7 +972,7 @@ namespace NumSharp.Backends
         ///     "silent transpose" bug (the kernel walks linearly across heterogeneously
         ///     ordered operands — element positions diverge).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe int CoalesceTernaryDimensions(
             long* shape, long* lhsStrides, long* rhsStrides, long* resStrides, int ndim)
         {
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends
         ///     True when the three merge modes are mutually consistent. Trivial pairs
         ///     with anything; COrder and FOrder are mutually exclusive once present.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool AgreeOnOrder(MergeMode a, MergeMode b, MergeMode c)
         {
             bool hasC = a == MergeMode.COrder || b == MergeMode.COrder || c == MergeMode.COrder;
@@ -1031,7 +1031,7 @@ namespace NumSharp.Backends
             return !(hasC && hasF);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long MergeStride(long strideW, long strideR)
         {
             if (strideW == 0 && strideR == 0) return 0;

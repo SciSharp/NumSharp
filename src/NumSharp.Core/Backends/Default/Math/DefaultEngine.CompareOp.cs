@@ -218,7 +218,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Continue comparison scalar dispatch with typed LHS value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray<bool> InvokeComparisonScalarLhs<TLhs>(
             Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType)
         {
@@ -247,7 +247,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated comparison kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void ExecuteComparisonKernel(
             ComparisonKernel kernel,
             NDArray lhs, NDArray rhs, NDArray<bool> result,

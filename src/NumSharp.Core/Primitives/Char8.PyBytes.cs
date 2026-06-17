@@ -14,7 +14,7 @@ namespace NumSharp
         /// <summary>ASCII whitespace bytes used by Python's <c>bytes.strip()</c>: space, tab, LF, VT, FF, CR.</summary>
         private static ReadOnlySpan<byte> AsciiWhitespace => [(byte)' ', (byte)'\t', (byte)'\n', (byte)'\v', (byte)'\f', (byte)'\r'];
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsAsciiWs(byte b) => b == 0x20 || (b >= 0x09 && b <= 0x0D);
 
         // ========================================================================

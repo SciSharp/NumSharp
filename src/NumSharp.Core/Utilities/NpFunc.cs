@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
 
         #region Core Resolve — single type (hot path optimized)
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, NPTypeCode tc) where TDelegate : Delegate
         {
             var handle = method.Method.MethodHandle.Value;
@@ -138,7 +138,7 @@ namespace NumSharp.Utilities
 
         #region Core Resolve — single Type
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, Type t) where TDelegate : Delegate
         {
             var tc = t.GetTypeCode();
@@ -168,28 +168,28 @@ namespace NumSharp.Utilities
 
         #region Core Resolve — multiple types
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, Type t1, Type t2) where TDelegate : Delegate
         {
             var key = (method.Method.MethodHandle.Value, t1.TypeHandle.Value, t2.TypeHandle.Value);
             return _cache2.TryGetValue(key, out var c) ? (TDelegate)c : ResolveSlow(method, _cache2, key, new[] { t1, t2 });
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, Type t1, Type t2, Type t3) where TDelegate : Delegate
         {
             var key = (method.Method.MethodHandle.Value, t1.TypeHandle.Value, t2.TypeHandle.Value, t3.TypeHandle.Value);
             return _cache3.TryGetValue(key, out var c) ? (TDelegate)c : ResolveSlow(method, _cache3, key, new[] { t1, t2, t3 });
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, Type t1, Type t2, Type t3, Type t4) where TDelegate : Delegate
         {
             var key = (method.Method.MethodHandle.Value, t1.TypeHandle.Value, t2.TypeHandle.Value, t3.TypeHandle.Value, t4.TypeHandle.Value);
             return _cache4.TryGetValue(key, out var c) ? (TDelegate)c : ResolveSlow(method, _cache4, key, new[] { t1, t2, t3, t4 });
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TDelegate Resolve<TDelegate>(TDelegate method, Type t1, Type t2, Type t3, Type t4, Type t5) where TDelegate : Delegate
         {
             var key = (method.Method.MethodHandle.Value, t1.TypeHandle.Value, t2.TypeHandle.Value, t3.TypeHandle.Value, t4.TypeHandle.Value, t5.TypeHandle.Value);

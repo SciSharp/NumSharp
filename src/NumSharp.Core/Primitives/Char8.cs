@@ -154,7 +154,7 @@ namespace NumSharp
 
         public override bool Equals([NotNullWhen(true)] object? obj) => obj is Char8 c && c.m_value == m_value;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool Equals(Char8 other) => m_value == other.m_value;
 
         public int CompareTo(object? value)
@@ -225,98 +225,98 @@ namespace NumSharp
         // ========================================================================
 
         /// <summary>Returns true if the value is ASCII (0x00..0x7F).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAscii(Char8 c) => c.m_value <= 0x7F;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsBetween(Char8 c, Char8 minInclusive, Char8 maxInclusive)
             => (uint)(c.m_value - minInclusive.m_value) <= (uint)(maxInclusive.m_value - minInclusive.m_value);
 
         /// <summary>ASCII letter 'A'..'Z' or 'a'..'z'.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiLetter(Char8 c) => (uint)((c.m_value | 0x20) - 'a') <= ('z' - 'a');
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiLetterUpper(Char8 c) => IsBetween(c, (Char8)(byte)'A', (Char8)(byte)'Z');
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiLetterLower(Char8 c) => IsBetween(c, (Char8)(byte)'a', (Char8)(byte)'z');
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiDigit(Char8 c) => IsBetween(c, (Char8)(byte)'0', (Char8)(byte)'9');
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiLetterOrDigit(Char8 c) => IsAsciiLetter(c) | IsAsciiDigit(c);
 
         /// <summary>ASCII hex digit: '0'..'9', 'A'..'F', 'a'..'f'.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiHexDigit(Char8 c) => IsAsciiDigit(c) || (uint)((c.m_value | 0x20) - 'a') <= 'f' - 'a';
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiHexDigitUpper(Char8 c) => IsAsciiDigit(c) || IsBetween(c, (Char8)(byte)'A', (Char8)(byte)'F');
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiHexDigitLower(Char8 c) => IsAsciiDigit(c) || IsBetween(c, (Char8)(byte)'a', (Char8)(byte)'f');
 
         /// <summary>
         /// Returns true for ASCII digits '0'..'9'. <b>Non-ASCII bytes return false</b> — matches NumPy / Python's
         /// <c>bytes.isdigit()</c>. For Latin-1 digit categories use <see cref="IsDigitLatin1"/>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsDigit(Char8 c) => IsAsciiDigit(c);
 
         /// <summary>
         /// Returns true for ASCII letters 'A'..'Z' / 'a'..'z'. <b>Non-ASCII bytes return false</b> — matches
         /// NumPy / Python's <c>bytes.isalpha()</c>. For Latin-1 letters use <see cref="IsLetterLatin1"/>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsLetter(Char8 c) => IsAsciiLetter(c);
 
         /// <summary>ASCII uppercase 'A'..'Z'. Matches Python's <c>bytes.isupper()</c> semantics for a single byte.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsUpper(Char8 c) => IsAsciiLetterUpper(c);
 
         /// <summary>ASCII lowercase 'a'..'z'. Matches Python's <c>bytes.islower()</c> semantics for a single byte.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsLower(Char8 c) => IsAsciiLetterLower(c);
 
         /// <summary>ASCII whitespace: space, tab, LF, VT, FF, CR. Matches Python's <c>bytes.isspace()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsWhiteSpace(Char8 c)
             => c.m_value == 0x20 || (c.m_value >= 0x09 && c.m_value <= 0x0D);
 
         /// <summary>ASCII letter or digit. Matches Python's <c>bytes.isalnum()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsLetterOrDigit(Char8 c) => IsAsciiLetterOrDigit(c);
 
         /// <summary>Alias matching Python's <c>bytes.isalnum()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAlnum(Char8 c) => IsAsciiLetterOrDigit(c);
 
         /// <summary>Alias matching Python's <c>bytes.isalpha()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAlpha(Char8 c) => IsAsciiLetter(c);
 
         /// <summary>Alias matching Python's <c>bytes.isspace()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsSpace(Char8 c) => IsWhiteSpace(c);
 
         /// <summary>Alias matching Python's <c>bytes.isascii()</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsAsciiChar(Char8 c) => IsAscii(c);
 
         /// <summary>
         /// Matches Python's <c>bytes.isprintable()</c>: ASCII 0x20..0x7E are printable; all other bytes are not.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsPrintable(Char8 c) => IsBetween(c, (Char8)(byte)0x20, (Char8)(byte)0x7E);
 
         /// <summary>Control character: ASCII 0x00..0x1F or 0x7F (DEL). Also covers C1 0x80..0x9F for parity with <see cref="char.IsControl(char)"/>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsControl(Char8 c) => (((uint)c.m_value + 1) & ~0x80u) <= 0x20u;
 
         /// <summary>Returns true if the value is 0 (null). Useful for C-string / null-terminated parsing.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsNull(Char8 c) => c.m_value == 0;
 
         // ------------------------------------------------------------------------
@@ -384,13 +384,13 @@ namespace NumSharp
         }
 
         // Always false — a byte cannot be a surrogate (surrogates live in U+D800..U+DFFF).
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsSurrogate(Char8 c) => false;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsHighSurrogate(Char8 c) => false;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsLowSurrogate(Char8 c) => false;
 
         // ========================================================================
@@ -398,21 +398,21 @@ namespace NumSharp
         // ========================================================================
 
         /// <summary>ASCII uppercase (NumPy parity): bit-flips 'a'..'z' to 'A'..'Z'. Non-ASCII bytes unchanged.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 ToUpper(Char8 c)
             => IsAsciiLetterLower(c) ? new Char8((byte)(c.m_value & 0xDF)) : c;
 
         /// <summary>ASCII lowercase (NumPy parity): bit-flips 'A'..'Z' to 'a'..'z'. Non-ASCII bytes unchanged.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 ToLower(Char8 c)
             => IsAsciiLetterUpper(c) ? new Char8((byte)(c.m_value | 0x20)) : c;
 
         /// <inheritdoc cref="ToUpper(Char8)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 ToUpperInvariant(Char8 c) => ToUpper(c);
 
         /// <inheritdoc cref="ToLower(Char8)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 ToLowerInvariant(Char8 c) => ToLower(c);
 
         /// <summary>Latin-1 uppercase: folds 'á'..'þ' (0xE0..0xFE, excluding 0xF7) to 'Á'..'Þ' as well as ASCII letters. Matches <see cref="char.ToUpperInvariant(char)"/> over Latin-1.</summary>
@@ -602,27 +602,27 @@ namespace NumSharp
         // ========================================================================
 
         /// <inheritdoc cref="char.ConvertFromUtf32(int)"/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 CastFrom(byte value) => new Char8(value);
 
         /// <summary>Casts a <see cref="char"/> to <see cref="Char8"/> by truncating to 8 bits.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 CastFrom(char value) => new Char8((byte)value);
 
         /// <summary>Casts an <see cref="int"/> to <see cref="Char8"/> by truncating to 8 bits.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 CastFrom(int value) => new Char8((byte)value);
 
         /// <summary>Casts a <see cref="uint"/> to <see cref="Char8"/> by truncating to 8 bits.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 CastFrom(uint value) => new Char8((byte)value);
 
         /// <summary>Casts a <see cref="ulong"/> to <see cref="Char8"/> by truncating to 8 bits.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Char8 CastFrom(ulong value) => new Char8((byte)value);
 
         /// <summary>Casts a <see cref="Char8"/> to a <see cref="uint"/> (zero-extends).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static uint CastToUInt32(Char8 value) => value.m_value;
 
         // ========================================================================

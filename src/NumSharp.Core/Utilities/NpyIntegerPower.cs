@@ -13,7 +13,7 @@ namespace NumSharp.Utilities
     /// </summary>
     public static class NpyIntegerPower
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static sbyte PowSByte(sbyte a, sbyte b)
         {
             sbyte r = 1, x = a;
@@ -30,7 +30,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static byte PowByte(byte a, byte b)
         {
             byte r = 1, x = a;
@@ -47,7 +47,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static short PowInt16(short a, short b)
         {
             short r = 1, x = a;
@@ -64,7 +64,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ushort PowUInt16(ushort a, ushort b)
         {
             ushort r = 1, x = a;
@@ -81,7 +81,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static char PowChar(char a, char b)
         {
             char r = (char)1;
@@ -99,7 +99,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int PowInt32(int a, int b)
         {
             int r = 1, x = a;
@@ -116,7 +116,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static uint PowUInt32(uint a, uint b)
         {
             uint r = 1, x = a;
@@ -133,7 +133,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static long PowInt64(long a, long b)
         {
             long r = 1, x = a, e = b;
@@ -149,7 +149,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ulong PowUInt64(ulong a, ulong b)
         {
             ulong r = 1, x = a, e = b;

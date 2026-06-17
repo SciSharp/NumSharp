@@ -67,7 +67,7 @@ namespace NumSharp.Backends
         /// kernel in <see cref="Kernels.SimdMatMul"/>, so transposed and
         /// sliced views take the fast path without materializing copies.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
             if (!DirectILKernelGenerator.Enabled)

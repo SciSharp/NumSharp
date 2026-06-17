@@ -165,7 +165,7 @@ namespace NumSharp
         /// <remarks>
         ///     Algorithm from NumPy: Y_i ~ Gamma(alpha_i, 1), X = Y / sum(Y)
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void SampleDirichletUnmanaged(ArraySlice<double> alpha, long k, ArraySlice<double> data, long offset)
         {
             double sum = 0.0;

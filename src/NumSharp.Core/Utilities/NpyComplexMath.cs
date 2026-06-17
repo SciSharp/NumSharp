@@ -74,7 +74,7 @@ namespace NumSharp.Utilities
         /// imaginary part returns <c>+inf</c> regardless of the other part (including NaN).
         /// All other inputs defer to <see cref="Complex.Abs"/>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double Abs(Complex z)
         {
             if (double.IsInfinity(z.Real) || double.IsInfinity(z.Imaginary))
@@ -85,16 +85,16 @@ namespace NumSharp.Utilities
         #region helpers
 
         /// <summary>True when <paramref name="d"/> is negative zero (<c>-0.0</c>).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsNegZero(double d) => d == 0.0 && double.IsNegative(d);
 
         /// <summary>True when <paramref name="d"/> is positive zero (<c>+0.0</c>).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsPosZero(double d) => d == 0.0 && !double.IsNegative(d);
 
         /// <summary><c>hypot</c> that returns <c>+inf</c> if either part is infinite (C99), used by
         /// the large-value / non-finite inverse-trig paths.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double HypotInf(double x, double y)
         {
             x = Math.Abs(x);
@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
 
         /// <summary>NumPy <c>_clog_for_large_values</c> reduced to the (possibly-infinite) magnitudes
         /// reached by the inverse-trig non-finite paths: <c>(log hypot(x,y), atan2(y,x))</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void ClogLarge(double x, double y, out double rr, out double ri)
         {
             rr = Math.Log(HypotInf(x, y));
@@ -124,7 +124,7 @@ namespace NumSharp.Utilities
         /// case is the textbook <c>cosh(x)cos(y) + i sinh(x)sin(y)</c>, which overflows to ±inf exactly
         /// where NumPy's libm does (probed: <c>|x| &gt;= ~710.5</c>). Non-finite inputs follow C99 Annex G.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Cosh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -167,7 +167,7 @@ namespace NumSharp.Utilities
         /// inf*0 = NaN</c>); the general finite case is the textbook <c>sinh(x)cos(y) + i cosh(x)sin(y)</c>,
         /// overflowing to ±inf exactly where NumPy's libm does. Non-finite inputs follow C99 Annex G.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Sinh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -214,7 +214,7 @@ namespace NumSharp.Utilities
         /// <see cref="Complex.Tanh"/> (e.g. <c>tan(1.5)</c> drifts ~33 ULP through the BCL). The
         /// <c>|x| &gt;= 22</c> branch avoids spurious overflow, and non-finite inputs follow C99.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Tanh(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -261,7 +261,7 @@ namespace NumSharp.Utilities
         /// signed-zero/branch-cut fixups; non-finite inputs use the identity
         /// <c>asin(z) = i*conj(casinh(i*conj z))</c> where <c>i*conj(z) = (y, x)</c>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Asin(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -283,7 +283,7 @@ namespace NumSharp.Utilities
         /// Complex arccosine matching NumPy. Finite inputs defer to <see cref="Complex.Acos"/> with a
         /// branch-cut fixup; non-finite inputs follow C99 (ported from <c>npy_cacos</c>).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Acos(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -303,7 +303,7 @@ namespace NumSharp.Utilities
         /// <see cref="Catanh"/> port reproduces NumPy bit-for-bit — including the tiny-imaginary and
         /// subnormal cases where <see cref="Complex.Atan"/> cancels (its internal log) or underflows to 0.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Atan(Complex z)
         {
             Complex w = Catanh(new Complex(z.Imaginary, z.Real));
@@ -403,7 +403,7 @@ namespace NumSharp.Utilities
 
         /// <summary>NumPy <c>_sum_squares</c>: <c>x^2 + y^2</c> with an underflow guard that drops
         /// <c>y^2</c> when <c>y</c> is below <c>sqrt(DBL_MIN)</c> (it would flush to 0 anyway).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double SumSquares(double x, double y)
         {
             if (y < SUMSQ_SQRT_MIN) return x * x;
@@ -443,7 +443,7 @@ namespace NumSharp.Utilities
         /// Complex exponential matching NumPy (<c>npy_cexp</c>). A finite real part defers to
         /// <see cref="Complex.Exp"/> (ULP-identical to NumPy); a non-finite real part follows C99.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Exp(Complex z)
         {
             if (double.IsFinite(z.Real))
@@ -478,7 +478,7 @@ namespace NumSharp.Utilities
         /// (exact arithmetic, not transcendental) so the branch-cut signs and signed zeros that
         /// <see cref="Complex.Sqrt"/> drops are reproduced bit-for-bit.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Sqrt(Complex z)
         {
             double a = z.Real, b = z.Imaginary;
@@ -528,7 +528,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>Overflow-safe finite <c>hypot</c> (BCL lacks <c>Math.Hypot</c> on net8.0).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double Hypot(double x, double y)
         {
             x = Math.Abs(x);
@@ -547,7 +547,7 @@ namespace NumSharp.Utilities
         /// real part doesn't cancel to 0), and 0 (handled by <c>-1/re</c>). The imaginary part is
         /// <c>atan2(im, re)</c>. <see cref="Complex.Log"/> reproduces only the common regime.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Log(Complex z)
         {
             double re = z.Real, im = z.Imaginary;
@@ -595,7 +595,7 @@ namespace NumSharp.Utilities
         /// <summary>Real <c>log1p</c> via the Goldberg identity <c>log1p(u) = u*log(1+u)/((1+u)-1)</c>,
         /// which cancels the rounding error of <c>log(1+u)</c> for small <c>u</c> (BCL has no
         /// <c>Math.Log1p</c> on net8.0).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double MathLog1p(double u)
         {
             double w = 1.0 + u;
@@ -609,7 +609,7 @@ namespace NumSharp.Utilities
         /// <see cref="Log"/> scaled by <c>1/ln(10)</c>. <see cref="Complex.Log10"/> uses a different
         /// scaling that drifts well past 1 ULP from NumPy.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Log10(Complex z)
         {
             Complex l = Log(z);
@@ -624,7 +624,7 @@ namespace NumSharp.Utilities
         /// and <c>square(1e300+1e300i).real = -inf</c> (not NaN) — both of which <see cref="Complex.op_Multiply"/>
         /// (no FMA) turns into <c>0</c> and <c>NaN</c> respectively.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Square(Complex z)
         {
             double re = z.Real, im = z.Imaginary;
@@ -639,7 +639,7 @@ namespace NumSharp.Utilities
         /// <see cref="Complex.op_Division"/> gets right. Bit-identical to NumPy across finite, zero,
         /// and infinite inputs.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Reciprocal(Complex z)
         {
             double re = z.Real, im = z.Imaginary;
@@ -663,7 +663,7 @@ namespace NumSharp.Utilities
         /// <see cref="Sinh"/> reproduces NumPy bit-for-bit — including the large-imaginary case where
         /// <see cref="Complex.Sin"/> returns <c>NaN</c> from <c>cosh(huge)*0</c>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Sin(Complex z)
         {
             Complex s = Sinh(new Complex(-z.Imaginary, z.Real));
@@ -676,7 +676,7 @@ namespace NumSharp.Utilities
         /// NumPy bit-for-bit, including the large-imaginary and signed-zero cases that
         /// <see cref="Complex.Cos"/> mishandles.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Cos(Complex z)
         {
             return Cosh(new Complex(-z.Imaginary, z.Real));
@@ -688,7 +688,7 @@ namespace NumSharp.Utilities
         /// <see cref="Tanh"/> reproduces NumPy bit-for-bit (the BCL <see cref="Complex.Tan"/> drifts
         /// tens of ULP near <c>±π/2</c>).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Tan(Complex z)
         {
             Complex t = Tanh(new Complex(-z.Imaginary, z.Real));
@@ -700,7 +700,7 @@ namespace NumSharp.Utilities
         /// <c>1+z</c> as <c>(1+re, im)</c> so a negative-zero imaginary part survives (the naive
         /// <c>Complex.One + z</c> computes <c>0 + (-0) = +0</c>, dropping the sign on the cut).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Log1p(Complex z)
         {
             // NumPy's complex log1p is the *naive* clog(1+z) — it does NOT apply clog's near-|z|=1
@@ -714,7 +714,7 @@ namespace NumSharp.Utilities
         /// C99-correct <see cref="Exp"/> reproduces NumPy's non-finite results (e.g. exp2(+Inf+Inf i) =
         /// +Inf + I NaN) that <see cref="Complex.Pow"/> turned into (NaN, NaN).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Exp2(Complex z)
         {
             return Exp(new Complex(z.Real * LOGE2, z.Imaginary * LOGE2));
@@ -729,7 +729,7 @@ namespace NumSharp.Utilities
         /// extremely close to the origin, where libm's <c>expm1</c> is more accurate (a documented
         /// divergence, like <c>arctan</c>'s interior).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Expm1(Complex z)
         {
             double x = z.Real, y = z.Imaginary;
@@ -743,7 +743,7 @@ namespace NumSharp.Utilities
         /// (BCL has no <c>Math.Expm1</c>). The naive <c>exp(x)-1</c> loses ~10 digits for small <c>x</c>
         /// (catastrophic cancellation) and underflows tiny <c>x</c> to 0; the correction factor
         /// <c>x/log(u)</c> recovers the lost bits to ≤1 ULP, matching libm's <c>expm1</c>.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double RealExpm1(double x)
         {
             double u = Math.Exp(x);

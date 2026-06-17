@@ -13,27 +13,27 @@ namespace NumSharp
         // Search
         // ========================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int IndexOf(this ReadOnlySpan<Char8> span, Char8 value)
             => MemoryMarshal.Cast<Char8, byte>(span).IndexOf(value.Value);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int LastIndexOf(this ReadOnlySpan<Char8> span, Char8 value)
             => MemoryMarshal.Cast<Char8, byte>(span).LastIndexOf(value.Value);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int IndexOf(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> value)
             => MemoryMarshal.Cast<Char8, byte>(span).IndexOf(MemoryMarshal.Cast<Char8, byte>(value));
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int LastIndexOf(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> value)
             => MemoryMarshal.Cast<Char8, byte>(span).LastIndexOf(MemoryMarshal.Cast<Char8, byte>(value));
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool Contains(this ReadOnlySpan<Char8> span, Char8 value)
             => MemoryMarshal.Cast<Char8, byte>(span).IndexOf(value.Value) >= 0;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool Contains(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> value)
             => span.IndexOf(value) >= 0;
 
@@ -75,7 +75,7 @@ namespace NumSharp
         // Equality / comparison
         // ========================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool SequenceEqual(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> other)
             => MemoryMarshal.Cast<Char8, byte>(span).SequenceEqual(MemoryMarshal.Cast<Char8, byte>(other));
 
@@ -99,11 +99,11 @@ namespace NumSharp
             return true;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool StartsWith(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> value)
             => MemoryMarshal.Cast<Char8, byte>(span).StartsWith(MemoryMarshal.Cast<Char8, byte>(value));
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool EndsWith(this ReadOnlySpan<Char8> span, ReadOnlySpan<Char8> value)
             => MemoryMarshal.Cast<Char8, byte>(span).EndsWith(MemoryMarshal.Cast<Char8, byte>(value));
 
@@ -168,19 +168,19 @@ namespace NumSharp
         // ========================================================================
 
         /// <summary>True for ASCII bytes (0x00..0x7F) — single-byte UTF-8 sequences.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsUtf8SingleByte(Char8 c) => c.m_value <= 0x7F;
 
         /// <summary>True for UTF-8 continuation bytes (0x80..0xBF).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsUtf8ContinuationByte(Char8 c) => (c.m_value & 0xC0) == 0x80;
 
         /// <summary>True for UTF-8 lead bytes of multi-byte sequences (0xC2..0xF4).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsUtf8LeadByte(Char8 c) => (uint)(c.m_value - 0xC2) <= (0xF4 - 0xC2);
 
         /// <summary>True for bytes that are never valid in UTF-8 (0xC0, 0xC1, 0xF5..0xFF).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsUtf8Invalid(Char8 c) => c.m_value == 0xC0 || c.m_value == 0xC1 || c.m_value >= 0xF5;
 
         /// <summary>

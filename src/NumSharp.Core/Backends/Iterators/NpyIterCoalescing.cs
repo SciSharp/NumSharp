@@ -431,7 +431,7 @@ namespace NumSharp.Backends.Iteration
             ReorderAxesForCoalescing(ref state, NPY_ORDER.NPY_KEEPORDER);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long GetMinStride(long* strides, int nop, int axis, int stridesNDim)
         {
             long min = long.MaxValue;

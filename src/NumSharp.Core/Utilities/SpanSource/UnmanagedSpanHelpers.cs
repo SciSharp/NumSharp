@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Copies bytes from source to destination using native memory operations.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void Memmove(ref byte dest, ref byte src, nuint len)
         {
             // Use NativeMemory.Copy which handles overlapping regions correctly
@@ -30,7 +30,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Clears memory without reference handling (for unmanaged types).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void ClearWithoutReferences(ref byte dest, nuint len)
         {
             fixed (byte* pDest = &dest)
@@ -324,7 +324,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void Reverse<T>(ref T elements, nuint length)
         {
             Debug.Assert(length > 1);
@@ -356,7 +356,7 @@ namespace NumSharp.Utilities
             ReverseInner(ref elements, length);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void ReverseInner<T>(ref T elements, nuint length)
         {
             Debug.Assert(length > 1);
@@ -377,7 +377,7 @@ namespace NumSharp.Utilities
         /// Helper method for address comparison - equivalent to !Unsafe.IsAddressGreaterThan
         /// This is needed for .NET 8 compatibility as IsAddressLessThanOrEqualTo was added in .NET 9.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static bool IsAddressLessThanOrEqualTo<T>(ref T left, ref T right)
         {
             return !Unsafe.IsAddressGreaterThan(ref left, ref right);

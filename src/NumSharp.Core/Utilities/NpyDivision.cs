@@ -34,7 +34,7 @@ namespace NumSharp.Utilities
         // a no-op there, which also dodges the .NET OverflowException on MIN / -1.
         // ----------------------------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static sbyte FloorDivSByte(sbyte n, sbyte d)
         {
             if (d == 0) return 0;
@@ -43,7 +43,7 @@ namespace NumSharp.Utilities
             return unchecked((sbyte)r);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static short FloorDivInt16(short n, short d)
         {
             if (d == 0) return 0;
@@ -52,7 +52,7 @@ namespace NumSharp.Utilities
             return unchecked((short)r);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int FloorDivInt32(int n, int d)
         {
             if (d == 0) return 0;
@@ -62,7 +62,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static long FloorDivInt64(long n, long d)
         {
             if (d == 0) return 0;
@@ -76,19 +76,19 @@ namespace NumSharp.Utilities
         // Unsigned integers — floor division == truncating division, divide-by-zero -> 0.
         // ----------------------------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static byte FloorDivByte(byte n, byte d) => d == 0 ? (byte)0 : (byte)(n / d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ushort FloorDivUInt16(ushort n, ushort d) => d == 0 ? (ushort)0 : (ushort)(n / d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static char FloorDivChar(char n, char d) => d == 0 ? (char)0 : (char)(n / d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static uint FloorDivUInt32(uint n, uint d) => d == 0 ? 0u : n / d;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ulong FloorDivUInt64(ulong n, ulong d) => d == 0 ? 0ul : n / d;
 
         // ----------------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ namespace NumSharp.Utilities
         // avoids the MIN % -1 trap).
         // ----------------------------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static sbyte RemSByte(sbyte n, sbyte d)
         {
             if (d == 0) return 0;
@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
             return unchecked((sbyte)r);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static short RemInt16(short n, short d)
         {
             if (d == 0) return 0;
@@ -115,7 +115,7 @@ namespace NumSharp.Utilities
             return unchecked((short)r);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int RemInt32(int n, int d)
         {
             if (d == 0) return 0;
@@ -125,7 +125,7 @@ namespace NumSharp.Utilities
             return r;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static long RemInt64(long n, long d)
         {
             if (d == 0) return 0;
@@ -139,19 +139,19 @@ namespace NumSharp.Utilities
         // Unsigned integers — remainder == C# remainder, divide-by-zero -> 0.
         // ----------------------------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static byte RemByte(byte n, byte d) => d == 0 ? (byte)0 : (byte)(n % d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ushort RemUInt16(ushort n, ushort d) => d == 0 ? (ushort)0 : (ushort)(n % d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static char RemChar(char n, char d) => d == 0 ? (char)0 : (char)(n % d);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static uint RemUInt32(uint n, uint d) => d == 0 ? 0u : n % d;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ulong RemUInt64(ulong n, ulong d) => d == 0 ? 0ul : n % d;
 
         // ----------------------------------------------------------------------------------------
@@ -159,14 +159,14 @@ namespace NumSharp.Utilities
         // never a forced NaN. C# float/double '%' is C fmod (truncated remainder), matching npy_fmod.
         // ----------------------------------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double FloorDivDouble(double a, double b)
         {
             if (b == 0.0) return a / b;
             return DivmodDouble(a, b, out _);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static double RemDouble(double a, double b)
         {
             if (b == 0.0) return a % b; // fmod -> nan
@@ -213,14 +213,14 @@ namespace NumSharp.Utilities
             return floordiv;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static float FloorDivSingle(float a, float b)
         {
             if (b == 0f) return a / b;
             return DivmodSingle(a, b, out _);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static float RemSingle(float a, float b)
         {
             if (b == 0f) return a % b; // fmodf -> nan

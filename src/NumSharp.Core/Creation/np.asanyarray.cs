@@ -131,7 +131,7 @@ namespace NumSharp
         ///     Specialised for List&lt;T&gt; and ICollection&lt;T&gt; to skip the enumerator and to
         ///     use <see cref="GC.AllocateUninitializedArray{T}(int, bool)"/> since we overwrite every slot.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T[] ToArrayFast<T>(IEnumerable<T> source)
         {
             if (source is List<T> list)
@@ -183,7 +183,7 @@ namespace NumSharp
         /// <summary>
         ///     Optimized Span to Array conversion using GC.AllocateUninitializedArray.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T[] SpanToArrayFast<T>(ReadOnlySpan<T> span)
         {
             var arr = GC.AllocateUninitializedArray<T>(span.Length);

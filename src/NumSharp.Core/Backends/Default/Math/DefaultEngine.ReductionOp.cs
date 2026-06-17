@@ -97,7 +97,7 @@ namespace NumSharp.Backends
         ///     can't be set up (e.g. dim > int.MaxValue) so the caller falls
         ///     back to the direct path.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private unsafe TResult? TryExecuteElementReductionViaNpyIter<TResult>(
             NDArray arr, ReductionOp op, NPTypeCode inputType, NPTypeCode accumType)
             where TResult : unmanaged
@@ -123,7 +123,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar reduction - just return the value, possibly converted.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TResult ExecuteScalarReduction<TResult>(NDArray arr, ReductionOp op, NPTypeCode accumType)
             where TResult : unmanaged
         {
@@ -141,7 +141,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated typed reduction kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe TResult ExecuteTypedReductionKernel<TResult>(
             TypedElementReductionKernel<TResult> kernel,
             NDArray input)
@@ -171,7 +171,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise sum reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object sum_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -201,7 +201,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise product reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object prod_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -257,7 +257,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise max reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object max_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -293,7 +293,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise min reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object min_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -460,7 +460,7 @@ namespace NumSharp.Backends
         /// Returns the index of the maximum value.
         /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected long argmax_elementwise_il(NDArray arr)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -591,7 +591,7 @@ namespace NumSharp.Backends
         /// Returns the index of the minimum value.
         /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected long argmin_elementwise_il(NDArray arr)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -628,7 +628,7 @@ namespace NumSharp.Backends
         /// Execute element-wise mean using IL kernels for sum.
         /// Mean = Sum / count
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object mean_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))

@@ -61,12 +61,12 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     virtual memory (demand-zero pages). Returns <see cref="IntPtr.Zero"/>
         ///     if VirtualAlloc fails, so the caller can fall back to calloc.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static IntPtr Alloc(long bytes)
             => VirtualAlloc(IntPtr.Zero, (UIntPtr)(nuint)bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
         /// <summary>Release a region obtained from <see cref="Alloc"/> (MEM_RELEASE).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void Free(IntPtr address)
             => VirtualFree(address, UIntPtr.Zero, MEM_RELEASE);
     }

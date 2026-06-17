@@ -225,7 +225,7 @@ namespace NumSharp
         /// <summary>
         ///     Sample a single multivariate normal vector using SVD transform.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void SampleMultivariateNormalSvd(ArraySlice<double> mean, ArraySlice<double> transform, long n,
             ArraySlice<double> z, ArraySlice<double> data, long offset)
         {

@@ -51,7 +51,7 @@ namespace NumSharp
         ///     X = -log(1 - U) where U ~ Uniform(0, 1)
         ///     Avoids U=0 to prevent -log(1) = 0 and U=1 to prevent -log(0) = infinity.
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private double SampleStandardExponential()
         {
             double U;

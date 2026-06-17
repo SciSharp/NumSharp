@@ -97,7 +97,7 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Convenience: 1-input + 1-output (unary).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteElementWiseUnary(
             NPTypeCode inType, NPTypeCode outType,
             Action<ILGenerator> scalarBody,
@@ -106,7 +106,7 @@ namespace NumSharp.Backends.Iteration
             => ExecuteElementWise(new[] { inType, outType }, scalarBody, vectorBody, cacheKey);
 
         /// <summary>Convenience: 2-input + 1-output (binary).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteElementWiseBinary(
             NPTypeCode lhs, NPTypeCode rhs, NPTypeCode outType,
             Action<ILGenerator> scalarBody,
@@ -115,7 +115,7 @@ namespace NumSharp.Backends.Iteration
             => ExecuteElementWise(new[] { lhs, rhs, outType }, scalarBody, vectorBody, cacheKey);
 
         /// <summary>Convenience: 3-input + 1-output (ternary, FMA-shaped).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteElementWiseTernary(
             NPTypeCode a, NPTypeCode b, NPTypeCode c, NPTypeCode outType,
             Action<ILGenerator> scalarBody,

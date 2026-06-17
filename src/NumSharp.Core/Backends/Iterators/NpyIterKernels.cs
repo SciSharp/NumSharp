@@ -85,7 +85,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Check if the given execution path supports SIMD operations.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool IsSimdPath(NpyIterExecutionPath path)
         {
             return path == NpyIterExecutionPath.Contiguous ||

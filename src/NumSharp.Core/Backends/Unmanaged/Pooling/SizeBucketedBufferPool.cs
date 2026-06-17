@@ -157,7 +157,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         // owned by the pool so the Disposer stays pressure-free.
         // -----------------------------------------------------------------
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static IntPtr Take(long bytes)
         {
             if (bytes > 0)
@@ -219,7 +219,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         ///     <see cref="Return"/> balances it (live-state accounting).
         /// </summary>
         /// <param name="bytes">Byte size of the buffer. Must be &gt;= 0.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static IntPtr TakeZeroed(long bytes)
         {
             if (bytes > 0)
@@ -247,7 +247,7 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         /// </summary>
         /// <param name="ptr">Pointer obtained from <see cref="Take"/> or a paired NativeMemory.Alloc.</param>
         /// <param name="bytes">Size in bytes originally requested.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static void Return(IntPtr ptr, long bytes)
         {
             if (ptr == IntPtr.Zero) return;

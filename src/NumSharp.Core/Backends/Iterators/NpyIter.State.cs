@@ -471,18 +471,18 @@ namespace NumSharp.Backends.Iteration
         // =========================================================================
 
         /// <summary>Get pointer to Shape array.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long* GetShapePointer() => Shape;
 
         /// <summary>Get pointer to Coords array.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long* GetCoordsPointer() => Coords;
 
         /// <summary>
         /// Get pointer to strides for a specific operand.
         /// Uses actual NDim (or StridesNDim if NDim changed after allocation).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long* GetStridesPointer(int operand)
         {
             if ((uint)operand >= (uint)NOp)
@@ -492,70 +492,70 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Get stride for operand at axis.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long GetStride(int axis, int op)
         {
             return Strides[op * StridesNDim + axis];
         }
 
         /// <summary>Set stride for operand at axis.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetStride(int axis, int op, long value)
         {
             Strides[op * StridesNDim + axis] = value;
         }
 
         /// <summary>Get current data pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void* GetDataPtr(int op)
         {
             return (void*)DataPtrs[op];
         }
 
         /// <summary>Set current data pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetDataPtr(int op, void* ptr)
         {
             DataPtrs[op] = (long)ptr;
         }
 
         /// <summary>Get data pointer (legacy interface).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public readonly IntPtr GetDataPointer(int operand)
         {
             return (IntPtr)DataPtrs[operand];
         }
 
         /// <summary>Set data pointer (legacy interface).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetDataPointer(int operand, IntPtr pointer)
         {
             DataPtrs[operand] = (long)pointer;
         }
 
         /// <summary>Get reset data pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void* GetResetDataPtr(int op)
         {
             return (void*)ResetDataPtrs[op];
         }
 
         /// <summary>Set reset data pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetResetDataPtr(int op, void* ptr)
         {
             ResetDataPtrs[op] = (long)ptr;
         }
 
         /// <summary>Get operand dtype.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public NPTypeCode GetOpDType(int op)
         {
             return (NPTypeCode)OpDTypes[op];
         }
 
         /// <summary>Set operand dtype (buffer/target dtype).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetOpDType(int op, NPTypeCode dtype)
         {
             OpDTypes[op] = (byte)dtype;
@@ -563,14 +563,14 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Get source array dtype for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public NPTypeCode GetOpSrcDType(int op)
         {
             return (NPTypeCode)OpSrcDTypes[op];
         }
 
         /// <summary>Set source array dtype for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetOpSrcDType(int op, NPTypeCode dtype)
         {
             OpSrcDTypes[op] = (byte)dtype;
@@ -578,105 +578,105 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>Get source element size for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public int GetSrcElementSize(int op)
         {
             return SrcElementSizes[op];
         }
 
         /// <summary>Check if operand needs casting (source dtype != buffer dtype).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool NeedsCast(int op)
         {
             return GetOpSrcDType(op) != GetOpDType(op);
         }
 
         /// <summary>Get operand flags.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public NpyIterOpFlags GetOpFlags(int op)
         {
             return (NpyIterOpFlags)OpItFlags[op];
         }
 
         /// <summary>Set operand flags.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetOpFlags(int op, NpyIterOpFlags flags)
         {
             OpItFlags[op] = (ushort)flags;
         }
 
         /// <summary>Get element size for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public int GetElementSize(int op)
         {
             return ElementSizes[op];
         }
 
         /// <summary>Get buffer pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void* GetBuffer(int op)
         {
             return (void*)Buffers[op];
         }
 
         /// <summary>Set buffer pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetBuffer(int op, void* ptr)
         {
             Buffers[op] = (long)ptr;
         }
 
         /// <summary>Get buffer stride for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long GetBufStride(int op)
         {
             return BufStrides[op];
         }
 
         /// <summary>Set buffer stride for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetBufStride(int op, long stride)
         {
             BufStrides[op] = stride;
         }
 
         /// <summary>Get reduce outer stride for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long GetReduceOuterStride(int op)
         {
             return ReduceOuterStrides[op];
         }
 
         /// <summary>Set reduce outer stride for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetReduceOuterStride(int op, long stride)
         {
             ReduceOuterStrides[op] = stride;
         }
 
         /// <summary>Get reduce outer pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void* GetReduceOuterPtr(int op)
         {
             return (void*)ReduceOuterPtrs[op];
         }
 
         /// <summary>Set reduce outer pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetReduceOuterPtr(int op, void* ptr)
         {
             ReduceOuterPtrs[op] = (long)ptr;
         }
 
         /// <summary>Get array writeback pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void* GetArrayWritebackPtr(int op)
         {
             return (void*)ArrayWritebackPtrs[op];
         }
 
         /// <summary>Set array writeback pointer for operand.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void SetArrayWritebackPtr(int op, void* ptr)
         {
             ArrayWritebackPtrs[op] = (long)ptr;
@@ -686,7 +686,7 @@ namespace NumSharp.Backends.Iteration
         /// Get inner stride array pointer - returns contiguous array of inner strides for all operands.
         /// Layout: [op0_inner_stride, op1_inner_stride, ...]
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public long* GetInnerStrideArray()
         {
             return InnerStrides;
@@ -696,7 +696,7 @@ namespace NumSharp.Backends.Iteration
         /// Update the InnerStrides array from the main Strides array.
         /// Must be called after coalescing or axis removal.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void UpdateInnerStrides()
         {
             if (NDim == 0)
@@ -725,7 +725,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Advance iterator by one position using ripple carry.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void Advance()
         {
             IterIndex++;

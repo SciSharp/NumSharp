@@ -1123,7 +1123,7 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NpyIterOpFlags TranslateOpFlags(NpyIterPerOpFlags flags)
         {
             var result = NpyIterOpFlags.None;
@@ -4245,7 +4245,7 @@ namespace NumSharp.Backends.Iteration
         ///     because the iterator walks each side using its own strides.
         ///     Only dimension equality matters for "no broadcast needed".
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ShapesMatchExactly(in Shape src, in Shape dst)
         {
             if (src.NDim != dst.NDim) return false;

@@ -80,13 +80,13 @@ namespace NumSharp
         // Equals overloads for mixed-type equality (avoid box in Equals(object))
         // ========================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool Equals(char other) => (char)m_value == other;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool Equals(byte other) => m_value == other;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool Equals(int other) => m_value == other;
 
         // ========================================================================
@@ -121,22 +121,22 @@ namespace NumSharp
         // ========================================================================
 
         /// <summary>Reinterprets a <see cref="ReadOnlySpan{Char8}"/> as <see cref="ReadOnlySpan{Byte}"/>. Zero-copy.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ReadOnlySpan<byte> AsBytes(ReadOnlySpan<Char8> chars)
             => MemoryMarshal.Cast<Char8, byte>(chars);
 
         /// <summary>Reinterprets a <see cref="Span{Char8}"/> as <see cref="Span{Byte}"/>. Zero-copy.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Span<byte> AsBytes(Span<Char8> chars)
             => MemoryMarshal.Cast<Char8, byte>(chars);
 
         /// <summary>Reinterprets a <see cref="ReadOnlySpan{Byte}"/> as <see cref="ReadOnlySpan{Char8}"/>. Zero-copy.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static ReadOnlySpan<Char8> AsChar8s(ReadOnlySpan<byte> bytes)
             => MemoryMarshal.Cast<byte, Char8>(bytes);
 
         /// <summary>Reinterprets a <see cref="Span{Byte}"/> as <see cref="Span{Char8}"/>. Zero-copy.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Span<Char8> AsChar8s(Span<byte> bytes)
             => MemoryMarshal.Cast<byte, Char8>(bytes);
 

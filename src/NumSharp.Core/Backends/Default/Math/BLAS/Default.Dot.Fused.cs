@@ -106,7 +106,7 @@ namespace NumSharp.Backends
         // Contiguous double dot: parallel multiply-accumulate when np.multithreading is on
         // AND the vector is large enough (MultiThread.DegreeOfParallelism gates it), else the
         // single-threaded SIMD kernel.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe double DotContiguousF64(double* a, double* b, long n)
         {
             int p = MultiThread.DegreeOfParallelism(n);
@@ -134,7 +134,7 @@ namespace NumSharp.Backends
         }
 
         // Contiguous float dot: parallel when enabled+large, else single-threaded SIMD.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe float DotContiguousF32(float* a, float* b, long n)
         {
             int p = MultiThread.DegreeOfParallelism(n);

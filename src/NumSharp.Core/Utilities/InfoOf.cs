@@ -14,7 +14,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Get the size in bytes of the given NPTypeCode.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static int GetSize(NPTypeCode typeCode) => typeCode.SizeOf();
     }
 

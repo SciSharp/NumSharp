@@ -60,7 +60,7 @@ namespace NumSharp
         ///     Y = random_gamma(n, (1-p)/p)
         ///     return random_poisson(Y)
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private long SampleNegativeBinomial(double n, double p)
         {
             // Special case: p = 1 means 0 failures before success
@@ -77,7 +77,7 @@ namespace NumSharp
         ///     Sample a single value from the Gamma distribution.
         ///     Uses Marsaglia and Tsang's method.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private double SampleGamma(double shape, double scale)
         {
             if (shape < 1.0)
@@ -99,7 +99,7 @@ namespace NumSharp
         /// <summary>
         ///     Marsaglia and Tsang's method for Gamma sampling.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private double SampleGammaMarsaglia(double d, double c)
         {
             while (true)
@@ -132,7 +132,7 @@ namespace NumSharp
         ///     Sample a single value from the Poisson distribution.
         ///     Uses Knuth's algorithm for small lambda, and rejection for large lambda.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private long SamplePoisson(double lambda)
         {
             if (lambda == 0)
@@ -192,7 +192,7 @@ namespace NumSharp
         /// <summary>
         ///     Compute log(k!) using Stirling's approximation for large k.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double LogFactorial(long k)
         {
             if (k <= 1)

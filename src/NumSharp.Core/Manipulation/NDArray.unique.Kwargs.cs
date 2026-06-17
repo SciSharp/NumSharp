@@ -252,7 +252,7 @@ namespace NumSharp
 
         // ----- Partition helpers (NaN to end via two-pointer swap) -----
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Double(double[] keys, long[] perm, long n)
         {
             long hi = n;
@@ -270,7 +270,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Float(float[] keys, long[] perm, long n)
         {
             long hi = n;
@@ -288,7 +288,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Half(Half[] keys, long[] perm, long n)
         {
             long hi = n;
@@ -306,7 +306,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Complex(Complex[] keys, long[] perm, long n)
         {
             long hi = n;
@@ -432,7 +432,7 @@ namespace NumSharp
 
         // ----- Partition-only helpers (no perm tracking) — used by values-only paths -----
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_DoubleKeysOnly(double[] keys, long n)
         {
             long hi = n;
@@ -445,7 +445,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_FloatKeysOnly(float[] keys, long n)
         {
             long hi = n;
@@ -458,7 +458,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_HalfKeysOnly(Half[] keys, long n)
         {
             long hi = n;
@@ -471,7 +471,7 @@ namespace NumSharp
             return hi;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_ComplexKeysOnly(Complex[] keys, long n)
         {
             long hi = n;
@@ -1045,7 +1045,7 @@ namespace NumSharp
         {
             public T Key;
             public long Perm;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public int CompareTo(KeyPerm<T> other) => Key.CompareTo(other.Key);
         }
 
@@ -1267,7 +1267,7 @@ namespace NumSharp
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool IsNaNKey<T>(T key) where T : unmanaged
         {
             if (typeof(T) == typeof(double)) return double.IsNaN((double)(object)key);

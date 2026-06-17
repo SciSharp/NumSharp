@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
         /// Used as fallback when explicit type pair not found in FindConverter.
         /// Uses NumPy-compatible wrapping behavior for integer overflow (no exceptions).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Func<TIn, TOut> CreateFallbackConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
@@ -55,7 +55,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Creates a converter for integer types using Converts.ToXxx methods with unchecked wrapping.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Func<TIn, TOut> CreateIntegerConverter<TIn, TOut, TIntermediate>(
             NPTypeCode tinCode,
             Func<long, TIntermediate> fromLong,
@@ -81,7 +81,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Returns true if the type code represents an integer type.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsIntegerType(NPTypeCode code) => code switch
         {
             NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
@@ -94,7 +94,7 @@ namespace NumSharp.Utilities
         /// Creates a default converter for non-integer types (Single, Double, Decimal, Boolean).
         /// Routes through Converts.ChangeType which is NumPy-aware for NaN/Inf/overflow/char.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Func<TIn, TOut> CreateDefaultConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
@@ -241,7 +241,7 @@ namespace NumSharp.Utilities
         // timedelta64 semantics: both expose int64 Ticks and route through the numeric Ticks
         // value. The fallback goes through Converts.ToXxx(object) which has explicit
         // DateTime/TimeSpan cases in the object dispatcher.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ToBoolean_NumPy(object value) => value switch
         {
             bool b => b,
@@ -265,7 +265,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToBoolean(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static byte ToByte_NumPy(object value) => value switch
         {
             byte b => b,
@@ -289,7 +289,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToByte(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static sbyte ToSByte_NumPy(object value) => value switch
         {
             sbyte sb => sb,
@@ -313,7 +313,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToSByte(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static short ToInt16_NumPy(object value) => value switch
         {
             short s => s,
@@ -337,7 +337,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt16(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ushort ToUInt16_NumPy(object value) => value switch
         {
             ushort us => us,
@@ -361,7 +361,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt16(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int ToInt32_NumPy(object value) => value switch
         {
             int i => i,
@@ -385,7 +385,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt32(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static uint ToUInt32_NumPy(object value) => value switch
         {
             uint ui => ui,
@@ -409,7 +409,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt32(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ToInt64_NumPy(object value) => value switch
         {
             long l => l,
@@ -433,7 +433,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt64(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ulong ToUInt64_NumPy(object value) => value switch
         {
             ulong ul => ul,
@@ -457,7 +457,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt64(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static float ToSingle_NumPy(object value) => value switch
         {
             float f => f,
@@ -481,7 +481,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToSingle(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ToDouble_NumPy(object value) => value switch
         {
             double d => d,
@@ -505,7 +505,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToDouble(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static decimal ToDecimal_NumPy(object value) => value switch
         {
             decimal m => m,
@@ -529,7 +529,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToDecimal(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Half ToHalf_NumPy(object value) => value switch
         {
             Half h => h,
@@ -553,7 +553,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToHalf(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Complex ToComplex_NumPy(object value) => value switch
         {
             Complex c => c,
@@ -577,7 +577,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToComplex(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ToLong_NumPy(object value) => value switch
         {
             long l => l,

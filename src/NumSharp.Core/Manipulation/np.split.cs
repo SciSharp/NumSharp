@@ -98,7 +98,7 @@ namespace NumSharp
         ///     Normalises a possibly-negative axis to the [0, ndim) range. Throws when
         ///     the array is 0-d (no axes to split on) or the axis is out of range.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int NormalizeSplitAxis(int axis, int ndim)
         {
             if (ndim == 0)
@@ -169,7 +169,7 @@ namespace NumSharp
                 _otherDimsProduct = _axisDim == 0 ? 0 : shp.size / _axisDim;
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             internal static SplitContext FromParent(NDArray ary, int axis) => new SplitContext(ary, axis);
 
             /// <summary>
@@ -307,7 +307,7 @@ namespace NumSharp
             ///     <c>dims[axis] = subLen</c>. Shape stores dims by reference so
             ///     callers can share this array across same-length sub-arrays.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private long[] BuildSubDims(long subLen)
             {
                 var dims = new long[_ndim];
@@ -321,7 +321,7 @@ namespace NumSharp
             ///     size, hash) tuple and a start offset (in elements) along the
             ///     split axis. The Shape uses the no-walk ctor.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private NDArray BuildView(long[] dims, int flags, long size, int hash, long startElems)
             {
                 long newOffset = _baseOffset + startElems * _axisStride;
@@ -341,7 +341,7 @@ namespace NumSharp
             ///       <item>WRITEABLE inherits from parent: read-only views (e.g. <c>np.diagonal</c> output) propagate their non-writeable status to sub-arrays.</item>
             ///     </list>
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private int DeriveSubFlags(long subLen)
             {
                 // NumPy convention: any 0-dim → both C and F contig (vacuously),
@@ -379,7 +379,7 @@ namespace NumSharp
             ///     same XOR formula — so Shape.GetHashCode stays consistent and
             ///     IsEmpty (which checks <c>_hashCode == 0</c>) never misfires.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private static int ComputeHashFromDims(long[] dims, long finalSize)
             {
                 if (dims == null || dims.Length == 0)
@@ -404,7 +404,7 @@ namespace NumSharp
         /// <summary>
         ///     NumPy slice clamping: <c>n &lt; 0 ? max(0, n + N) : min(n, N)</c>.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ClampSlicePoint(long n, long N)
         {
             if (n < 0)

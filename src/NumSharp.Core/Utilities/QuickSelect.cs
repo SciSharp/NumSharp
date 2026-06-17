@@ -142,7 +142,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SwapIfGreater<T>(T* buf, int i, int j) where T : unmanaged, IComparable<T>
         {
             if (LtV(buf[j], buf[i])) Swap(buf, i, j);
@@ -213,7 +213,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SwapIfGreater<T>(T* buf, int i, int j, Comparison<T> cmp) where T : unmanaged
         {
             if (cmp(buf[i], buf[j]) > 0) Swap(buf, i, j);
@@ -265,7 +265,7 @@ namespace NumSharp.Utilities
 
         // ── shared ────────────────────────────────────────────────────────────────
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void Swap<T>(T* buf, int i, int j) where T : unmanaged
         {
             T t = buf[i];
@@ -273,7 +273,7 @@ namespace NumSharp.Utilities
             buf[j] = t;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int Log2(int v)
         {
             int r = 0;
@@ -290,7 +290,7 @@ namespace NumSharp.Utilities
         ///     (prescan on the plain path, compaction on the nan path), so IEEE NaN ordering
         ///     never reaches here and a raw <c>&lt;</c> is safe for floats.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool LtV<T>(T a, T b) where T : unmanaged, IComparable<T>
         {
             if (typeof(T) == typeof(byte))    return *(byte*)&a    < *(byte*)&b;

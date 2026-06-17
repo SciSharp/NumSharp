@@ -194,7 +194,7 @@ namespace NumSharp
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void EnsureNext()
         {
             if (_state->IterIndex >= _state->IterEnd)

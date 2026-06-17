@@ -408,7 +408,7 @@ namespace NumSharp.Backends
         /// as double. JIT eliminates the non-matching branches per call site
         /// when <paramref name="tc"/> is enregistered.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe double ReadAsDouble(void* basePtr, NPTypeCode tc, long idx)
         {
             switch (tc)
@@ -436,7 +436,7 @@ namespace NumSharp.Backends
         /// Reads an element and returns it as Complex. Used by the Complex mixed-type matmul
         /// kernel to preserve imaginary components.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe Complex ReadAsComplex(void* basePtr, NPTypeCode tc, long idx)
         {
             switch (tc)

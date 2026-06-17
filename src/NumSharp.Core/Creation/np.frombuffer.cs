@@ -769,13 +769,13 @@ namespace NumSharp
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ushort BinaryPrimitives_ReverseEndianness(ushort value)
         {
             return (ushort)((value >> 8) | (value << 8));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static uint BinaryPrimitives_ReverseEndianness(uint value)
         {
             return (value >> 24) |
@@ -784,7 +784,7 @@ namespace NumSharp
                    (value << 24);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ulong BinaryPrimitives_ReverseEndianness(ulong value)
         {
             return ((ulong)BinaryPrimitives_ReverseEndianness((uint)value) << 32) |
