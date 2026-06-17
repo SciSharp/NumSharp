@@ -409,11 +409,18 @@ namespace NumSharp.Backends.Kernels
         // the second (the bound), so the `>=` / `<=` tie goes to `a` — matching NumPy.
         // (+0 == -0 numerically, so this only changes the result's sign bit on a zero
         // tie; every non-zero equal pair is bit-identical and unaffected.)
+        //
+        // These per-element helpers run once per element inside the IL kernel's inner loop,
+        // so they carry AggressiveInlining (inline into the kernel where the JIT can) plus
+        // AggressiveOptimization (full tier-1 codegen from the first call when they're
+        // invoked standalone via the kernel's Call, skipping the tier-0 hot-path penalty).
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Half HalfMaxNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
             return a >= b ? a : b;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Half HalfMinNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
@@ -423,7 +430,9 @@ namespace NumSharp.Backends.Kernels
         // Complex: lex ordering on (real, imag). NaN propagation: if either
         // operand contains a NaN component, that operand wins (first-encountered
         // for the Max-then-Min sequence — matches NumPy clip output bit-for-bit).
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ComplexIsNaN(Complex z) => double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Complex ComplexMaxNaN(Complex a, Complex b)
         {
             if (ComplexIsNaN(a)) return a;
@@ -432,6 +441,7 @@ namespace NumSharp.Backends.Kernels
             if (a.Real < b.Real) return b;
             return a.Imaginary > b.Imaginary ? a : b;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Complex ComplexMinNaN(Complex a, Complex b)
         {
             if (ComplexIsNaN(a)) return a;
