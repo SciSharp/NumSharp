@@ -6,9 +6,34 @@ Status legend: ☐ todo ◐ in-progress ☑ done (gated)
 
 ---
 
-## Status & findings (live, post-Phase-0/1/2/3/4)
+## Status & findings (live, post-Phase-0/1/2/3/4, Phase 5a)
 
-**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑, 4 ☑.** Build green; full suite **9786 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑, 4 ☑; Phase 5a ☑ (5b pending).** Build green; full suite **9790 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+
+**Phase 5a (axis-aware fused reductions) — `np.evaluate(Sum(a*b, axis:k))` one pass, no temp.**
+Extended the IL-emitted `ReduceNode` to carry an `axis`/`keepdims` and emit a new
+`CompileAxisReduceKernel`: operands `[inputs…, output]`, the child elementwise tree evaluated
+per element exactly as the flat path, folding into the output operand with two runtime
+branches — **pinned** (reduce axis inner; the flat 4-way-unrolled fold, writing the output
+slot) and **slab** (kept axis inner; `out[c]=fold(out[c], expr)`). Driven by an
+(nIn+1)-operand REDUCE iterator (`DefaultEngine.EvaluateAxisReduce`): seed identity →
+`ForEach` → mean-divide → cast acc→result → keepdims. New API `NpyExpr.{Sum,Prod,Min,Max,Mean}(x, axis, keepdims=false)`.
+
+| 10M, a*b reduce | fused | unfused np.sum(a*b) | NumPy | fused vs NumPy | fused vs unfused |
+|---|---|---|---|---|---|
+| sum axis0 | 7.9 ms | 19.0 ms | 21.2 ms | **0.37×** | 2.4× |
+| sum axis1 | 6.7 ms | 17.8 ms | 23.9 ms | **0.28×** | 2.7× |
+| mean axis0 | 7.3 ms | 19.4 ms | 21.2 ms | **0.34×** | 2.7× |
+| mean axis1 | 6.5 ms | 17.7 ms | 23.1 ms | **0.28×** | 2.7× |
+
+Correctness pinned vs NumPy + unfused across dtypes (f64/f32/i32) × ops (sum/prod/min/max/mean)
+× axes × layouts (C/T/F) × keepdims (`evaluate_axis_reduce.cs`; 4 new MSTest cases). C-contig
+uses identity iteration order (contiguous inner); transposed-fused works correctly (axis
+ordering for fused inputs is a later opt — the no-temp win dominates regardless).
+
+**Phase 5b (pending)** — one-pass `var`/`std` axis via a two-accumulator (sum + sumsq) reduce,
+replacing the two-pass `NpyAxisIter.ReduceDouble`. Separate from np.evaluate (it's the
+`np.var`/`np.std` engine path).
 
 **Phase 4 (strided/transposed) — solved by axis-ordering, NOT gather (better than planned).**
 Root cause (diagnosed, not assumed): the reduce path kept the **logical** axis order (inner = last logical axis), so it was fast only when the input was C-contiguous; a transpose's last logical axis is strided → cache-hostile column gather (~16×). NumPy instead orders iteration axes by the input's **stride** (contiguous axis innermost). Fix is **reduce-local** in `NpyIterRef.NewReduce`: order the `op_axes` iteration axes by descending input |stride| (0/broadcast → outermost), mapping the output back to original order. For C-contig this is the identity (fast path untouched); only non-contiguous inputs reorder. No gather, no copy — access becomes sequential, which beats gather (gather still cache-misses). Isolated 10M (vs NumPy, vs the prior strided path):
@@ -144,7 +169,7 @@ small-N construction **0.40 µs (won)**.
 - **Gate:** strided layouts (`a[:,::2]`, transpose-strided) ≥ parity (NumPy has no strided
   reduce SIMD → expect 1.3–1.9×).
 
-### Phase 5 — Fusion (axis-aware + multi-reduce) ☐
+### Phase 5 — Fusion (axis-aware ☑ 5a / multi-reduce ☐ 5b)
 - **5a** Extend `NpyExpr` root `ReduceNode` from flat scalar-slot → per-output accumulator
   (the output operand under REDUCE), reusing Phase-0 `NewReduce`. → `np.evaluate(sum(a*b),
   axis=k)` one pass, no temp. (`DefaultEngine.Evaluate.EvaluateReduce` + `CompileReduceKernel`.)

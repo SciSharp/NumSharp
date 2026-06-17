@@ -348,6 +348,83 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(254L, np.evaluate(NpyExpr.Sum(NpyExpr.Arr(i1))).GetInt64(0));
         }
 
+        // =====================================================================
+        // Axis-aware fused reductions (Phase 5a) — one pass, no a*b temp.
+        // Expected values from NumPy 2.4.2: np.<op>((a*b), axis=k).
+        // =====================================================================
+
+        [TestMethod]
+        public void Reduce_Axis_SumOfProduct_BothAxes()
+        {
+            // a = arange(12).reshape(3,4); evaluate(Sum(a*a, axis)) == np.sum(a*a, axis)
+            var a = np.arange(12).astype(np.float64).reshape(3, 4);
+            var s0 = np.evaluate(NpyExpr.Sum((NpyExpr)a * a, 0));
+            Assert.AreEqual(1, s0.ndim);
+            Assert.AreEqual(4, (int)s0.size);
+            double[] exp0 = { 80, 107, 140, 179 };       // NumPy
+            for (long i = 0; i < 4; i++) Assert.AreEqual(exp0[i], s0.GetDouble(i), 1e-9);
+
+            var s1 = np.evaluate(NpyExpr.Sum((NpyExpr)a * a, 1));
+            double[] exp1 = { 14, 126, 366 };            // NumPy
+            for (long i = 0; i < 3; i++) Assert.AreEqual(exp1[i], s1.GetDouble(i), 1e-9);
+        }
+
+        [TestMethod]
+        public void Reduce_Axis_Mean_And_Keepdims()
+        {
+            var a = np.arange(12).astype(np.float64).reshape(3, 4);
+            var m = np.evaluate(NpyExpr.Mean((NpyExpr)a * a, 1));
+            double[] expMean1 = { 3.5, 31.5, 91.5 };     // NumPy np.mean(a*a, axis=1)
+            for (long i = 0; i < 3; i++) Assert.AreEqual(expMean1[i], m.GetDouble(i), 1e-9);
+
+            var mk = np.evaluate(NpyExpr.Mean((NpyExpr)a * a, 1, keepdims: true));
+            Assert.AreEqual(2, mk.ndim);
+            Assert.AreEqual(3, (int)mk.shape[0]);
+            Assert.AreEqual(1, (int)mk.shape[1]);
+        }
+
+        [TestMethod]
+        public void Reduce_Axis_MatchesUnfused_AcrossLayouts()
+        {
+            // Fused must equal the unfused np.<op>(a*b, axis) on C / transpose / F layouts.
+            var aBase = np.arange(35).astype(np.float64).reshape(7, 5) * 0.3 - 5.0;
+            var bBase = np.arange(35).astype(np.float64).reshape(7, 5) * -0.2 + 1.0;
+            var layouts = new (NDArray a, NDArray b)[]
+            {
+                (aBase, bBase),
+                (aBase.T, bBase.T),
+                (aBase.copy(order: 'F'), bBase.copy(order: 'F')),
+            };
+            foreach (var (a, b) in layouts)
+                for (int axis = 0; axis < 2; axis++)
+                {
+                    var fused = np.evaluate(NpyExpr.Sum((NpyExpr)a * b, axis));
+                    var unfused = np.sum(a * b, axis: axis);
+                    Assert.AreEqual(unfused.size, fused.size);
+                    for (long i = 0; i < unfused.size; i++)
+                        Assert.AreEqual(unfused.GetDouble(i), fused.GetDouble(i), 1e-9, $"axis {axis} [{i}]");
+                }
+        }
+
+        [TestMethod]
+        public void Reduce_Axis_DtypeRules()
+        {
+            // sum int32 axis → int64; mean int32 axis → float64 (NumPy).
+            var i4 = np.arange(6).astype(np.int32).reshape(2, 3);
+            var s = np.evaluate(NpyExpr.Sum((NpyExpr)i4 * i4, 0));
+            Assert.AreEqual(NPTypeCode.Int64, s.typecode);
+            // (a*a) = [[0,1,4],[9,16,25]]; sum axis0 = [9,17,29]
+            Assert.AreEqual(9L, s.GetInt64(0));
+            Assert.AreEqual(17L, s.GetInt64(1));
+            Assert.AreEqual(29L, s.GetInt64(2));
+
+            var m = np.evaluate(NpyExpr.Mean((NpyExpr)i4 * i4, 1));
+            Assert.AreEqual(NPTypeCode.Double, m.typecode);
+            // rows of a*a: [0,1,4]→5/3, [9,16,25]→50/3
+            Assert.AreEqual(5.0 / 3.0, m.GetDouble(0), 1e-9);
+            Assert.AreEqual(50.0 / 3.0, m.GetDouble(1), 1e-9);
+        }
+
         [TestMethod]
         public void Reduce_MultiChunk_Strided_AndNaN()
         {

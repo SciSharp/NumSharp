@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
@@ -190,6 +191,9 @@ namespace NumSharp.Backends
 
         private unsafe NDArray EvaluateReduce(ReduceNode reduce, NDArray[] ops, NDArray @out)
         {
+            if (reduce.Axis is int ax)
+                return EvaluateAxisReduce(reduce, ops, @out, ax);
+
             var inputTypes = new NPTypeCode[ops.Length];
             for (int i = 0; i < ops.Length; i++)
                 inputTypes[i] = ops[i].typecode;
@@ -280,6 +284,101 @@ namespace NumSharp.Backends
                         + (long)result.Shape.offset * result.typecode.SizeOf();
             NpyIterCasting.ConvertValue(slot, dst, accType, result.typecode);
             return result;
+        }
+
+        // Axis-aware fused reduction: one pass over the inputs, accumulating into a per-output
+        // operand under a REDUCE iterator. evaluate(Sum(a*b, axis:k)) never materializes a*b.
+        private unsafe NDArray EvaluateAxisReduce(ReduceNode reduce, NDArray[] ops, NDArray @out, int axis)
+        {
+            var inputTypes = new NPTypeCode[ops.Length];
+            for (int i = 0; i < ops.Length; i++)
+                inputTypes[i] = ops[i].typecode;
+
+            // Broadcast all inputs to one shape (same rule as the elementwise path).
+            Shape inputShape = ops[0].Shape.Clean();
+            for (int i = 1; i < ops.Length; i++)
+                (inputShape, _) = Broadcast(inputShape, ops[i].Shape);
+            int ndim = inputShape.NDim;
+            axis = NormalizeAxis(axis, ndim);
+
+            var kernel = reduce.CompileAxisReduceKernel(inputTypes, out var accType, out var resultType);
+
+            if (@out is not null)
+                ValidateOutCast(resultType, @out.typecode, "evaluate");
+
+            // Output (reduced) shape = input shape with `axis` removed; reduce-all on 1-D → scalar.
+            long axisSize = inputShape[axis];
+            var reducedDims = new long[ndim - 1];
+            for (int d = 0, rd = 0; d < ndim; d++) if (d != axis) reducedDims[rd++] = inputShape[d];
+            Shape reducedShape = reducedDims.Length > 0 ? new Shape(reducedDims) : Shape.NewScalar();
+
+            var outAcc = new NDArray(accType, reducedShape, false);
+            if (outAcc.size != 0)
+            {
+                // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
+                var seedOp = reduce.Kind switch
+                {
+                    NpyExprReduceKind.Prod => ReductionOp.Prod,
+                    NpyExprReduceKind.Min => ReductionOp.Min,
+                    NpyExprReduceKind.Max => ReductionOp.Max,
+                    _ => ReductionOp.Sum, // Sum / Mean
+                };
+                ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
+
+                if (axisSize != 0)
+                {
+                    // op_axes: identity for every input; output maps reduce axis → -1 (stride 0).
+                    var opAxes = new int[ops.Length + 1][];
+                    for (int i = 0; i < ops.Length; i++)
+                    {
+                        var a = new int[ndim];
+                        for (int d = 0; d < ndim; d++) a[d] = d;
+                        opAxes[i] = a;
+                    }
+                    var outAxes = new int[ndim];
+                    for (int d = 0, oc = 0; d < ndim; d++) outAxes[d] = (d == axis) ? -1 : oc++;
+                    opAxes[ops.Length] = outAxes;
+
+                    var operands = new NDArray[ops.Length + 1];
+                    for (int i = 0; i < ops.Length; i++)
+                    {
+                        bool same = ops[i].ndim == ndim;
+                        if (same)
+                            for (int d = 0; d < ndim; d++)
+                                if (ops[i].shape[d] != inputShape[d]) { same = false; break; }
+                        operands[i] = same ? ops[i] : np.broadcast_to(ops[i], inputShape);
+                    }
+                    operands[ops.Length] = outAcc;
+
+                    var opFlags = new NpyIterPerOpFlags[ops.Length + 1];
+                    for (int i = 0; i < ops.Length; i++) opFlags[i] = NpyIterPerOpFlags.READONLY;
+                    opFlags[ops.Length] = NpyIterPerOpFlags.READWRITE;
+
+                    using var iter = NpyIterRef.AdvancedNew(
+                        operands.Length, operands,
+                        NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.EXTERNAL_LOOP,
+                        NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
+                        opFlags, null, ndim, opAxes);
+                    iter.ForEach(kernel);
+                }
+
+                if (reduce.Kind == NpyExprReduceKind.Mean)
+                    ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
+            }
+
+            // Cast accumulator dtype → result dtype (no-op when equal — e.g. f16/f32 mean
+            // accumulates in double then narrows here).
+            NDArray reduced = accType == resultType ? outAcc : Cast(outAcc, resultType, copy: true);
+
+            if (reduce.Keepdims)
+            {
+                var kd = new long[ndim];
+                for (int d = 0, rd = 0; d < ndim; d++) kd[d] = (d == axis) ? 1 : reduced.shape[rd++];
+                reduced = reduced.reshape(kd);
+            }
+
+            if (@out is not null) { np.copyto(@out, reduced); return @out; }
+            return reduced;
         }
 
         private static unsafe void WriteOne(byte* slot, NPTypeCode accType)

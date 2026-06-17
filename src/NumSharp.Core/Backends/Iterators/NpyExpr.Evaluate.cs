@@ -167,6 +167,23 @@ namespace NumSharp.Backends.Iteration
         /// <summary>One-pass fused arithmetic mean of the expression (ints→float64, floats preserved).</summary>
         public static NpyExpr Mean(NpyExpr x) => new ReduceNode(NpyExprReduceKind.Mean, x);
 
+        // --- axis-aware fused reductions (one pass, no intermediate; e.g. evaluate(Sum(a*b, axis:0))) ---
+
+        /// <summary>One-pass fused sum of the expression along <paramref name="axis"/>.</summary>
+        public static NpyExpr Sum(NpyExpr x, int axis, bool keepdims = false) => new ReduceNode(NpyExprReduceKind.Sum, x, axis, keepdims);
+
+        /// <summary>One-pass fused product of the expression along <paramref name="axis"/>.</summary>
+        public static NpyExpr Prod(NpyExpr x, int axis, bool keepdims = false) => new ReduceNode(NpyExprReduceKind.Prod, x, axis, keepdims);
+
+        /// <summary>One-pass fused minimum of the expression along <paramref name="axis"/> (NaN-propagating).</summary>
+        public static NpyExpr Min(NpyExpr x, int axis, bool keepdims = false) => new ReduceNode(NpyExprReduceKind.Min, x, axis, keepdims);
+
+        /// <summary>One-pass fused maximum of the expression along <paramref name="axis"/> (NaN-propagating).</summary>
+        public static NpyExpr Max(NpyExpr x, int axis, bool keepdims = false) => new ReduceNode(NpyExprReduceKind.Max, x, axis, keepdims);
+
+        /// <summary>One-pass fused arithmetic mean of the expression along <paramref name="axis"/>.</summary>
+        public static NpyExpr Mean(NpyExpr x, int axis, bool keepdims = false) => new ReduceNode(NpyExprReduceKind.Mean, x, axis, keepdims);
+
         // ===================================================================
         // Binding
         // ===================================================================
@@ -370,15 +387,21 @@ namespace NumSharp.Backends.Iteration
     {
         private readonly NpyExprReduceKind _kind;
         private readonly NpyExpr _child;
+        private readonly int? _axis;       // null = flat (reduce-all); else reduce this axis
+        private readonly bool _keepdims;
 
-        public ReduceNode(NpyExprReduceKind kind, NpyExpr child)
+        public ReduceNode(NpyExprReduceKind kind, NpyExpr child, int? axis = null, bool keepdims = false)
         {
             _kind = kind;
             _child = child ?? throw new ArgumentNullException(nameof(child));
+            _axis = axis;
+            _keepdims = keepdims;
         }
 
         internal NpyExprReduceKind Kind => _kind;
         internal NpyExpr Child => _child;
+        internal int? Axis => _axis;
+        internal bool Keepdims => _keepdims;
 
         public override bool SupportsSimd => false;
 
@@ -401,7 +424,7 @@ namespace NumSharp.Backends.Iteration
         internal override NpyExpr BindArrays(NpyExprBindContext ctx)
         {
             var c = _child.BindArrays(ctx);
-            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c);
+            return ReferenceEquals(c, _child) ? this : new ReduceNode(_kind, c, _axis, _keepdims);
         }
 
         internal override bool ContainsReduce => true;
@@ -667,6 +690,196 @@ namespace NumSharp.Backends.Iteration
                 }
 
                 DirectILKernelGenerator.EmitStoreIndirect(il, acc);
+                il.Emit(OpCodes.Ret);
+            }, key);
+        }
+
+        /// <summary>
+        /// Compile the AXIS-aware fused reduce kernel. Operands are [inputs…, output];
+        /// the output operand carries the running accumulator (the host pre-seeds it with
+        /// the reduction identity). Two runtime branches keyed on the output stride:
+        ///   • outStride == 0 → PINNED (reduce axis is the inner loop): fold the whole
+        ///     `count`-element stripe into the single output slot, 4-way unrolled (ILP) —
+        ///     the same shape as the flat <see cref="CompileReduceKernel"/> but writing the
+        ///     output operand instead of a host scalar.
+        ///   • outStride != 0 → SLAB (a kept axis is inner): each element folds into a
+        ///     DISTINCT output slot, `out[c] = fold(out[c], expr(in[c]))`. Revisited across
+        ///     outer iterations, so the pre-seed is what makes the accumulation correct.
+        /// The child elementwise tree is evaluated per element exactly as in the flat path,
+        /// so e.g. evaluate(Sum(a*b, axis:k)) never materializes a*b.
+        /// </summary>
+        internal NpyInnerLoopFunc CompileAxisReduceKernel(
+            NPTypeCode[] inputTypes, out NPTypeCode accType, out NPTypeCode resultType,
+            string? cacheKey = null)
+        {
+            var resolved = ResolveNumPyTypes(inputTypes, out var nodeTypes);
+            resultType = resolved;
+            var acc = ResolveAccType(_kind, resolved);
+            accType = acc;
+            var exprType = nodeTypes[_child];
+            int nIn = inputTypes.Length;
+            var kind = _kind;
+            var child = _child;
+
+            string key = (cacheKey ?? DeriveCacheKey(inputTypes, resolved)) + "|npaxisreduce";
+
+            return DirectILKernelGenerator.CompileRawInnerLoop(il =>
+            {
+                var accClr = DirectILKernelGenerator.GetClrType(acc);
+                var ptrLocals = new LocalBuilder[nIn];
+                var strideLocals = new LocalBuilder[nIn];
+                var inputLocals = new LocalBuilder[nIn];
+                for (int j = 0; j < nIn; j++)
+                {
+                    ptrLocals[j] = il.DeclareLocal(typeof(byte*));
+                    strideLocals[j] = il.DeclareLocal(typeof(long));
+                    inputLocals[j] = il.DeclareLocal(DirectILKernelGenerator.GetClrType(inputTypes[j]));
+                }
+                var outPtr = il.DeclareLocal(typeof(byte*));
+                var outStride = il.DeclareLocal(typeof(long));
+                var locI = il.DeclareLocal(typeof(long));
+                var locN4 = il.DeclareLocal(typeof(long));
+                var accLocals = new LocalBuilder[4];
+                for (int l = 0; l < 4; l++) accLocals[l] = il.DeclareLocal(accClr);
+
+                var ctx = new NpyExprCompileContext(inputTypes, exprType, inputLocals, vectorMode: false, nodeTypes);
+
+                // prologue: unpack input ptrs/strides (0..nIn-1) and the output ptr/stride (nIn).
+                for (int j = 0; j <= nIn; j++)
+                {
+                    il.Emit(OpCodes.Ldarg_0);
+                    if (j > 0) { il.Emit(OpCodes.Ldc_I4, j * sizeof(long)); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); }
+                    il.Emit(OpCodes.Ldind_I);
+                    il.Emit(OpCodes.Stloc, j < nIn ? ptrLocals[j] : outPtr);
+
+                    il.Emit(OpCodes.Ldarg_1);
+                    if (j > 0) { il.Emit(OpCodes.Ldc_I4, j * sizeof(long)); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); }
+                    il.Emit(OpCodes.Ldind_I8);
+                    il.Emit(OpCodes.Stloc, j < nIn ? strideLocals[j] : outStride);
+                }
+
+                void EmitLoadInputs(int lane)
+                {
+                    for (int j = 0; j < nIn; j++)
+                    {
+                        il.Emit(OpCodes.Ldloc, ptrLocals[j]);
+                        if (lane > 0)
+                        {
+                            il.Emit(OpCodes.Ldloc, strideLocals[j]);
+                            il.Emit(OpCodes.Ldc_I4, lane); il.Emit(OpCodes.Conv_I8); il.Emit(OpCodes.Mul);
+                            il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+                        }
+                        DirectILKernelGenerator.EmitLoadIndirect(il, inputTypes[j]);
+                        il.Emit(OpCodes.Stloc, inputLocals[j]);
+                    }
+                }
+
+                void EmitAdvanceInputs(int elements)
+                {
+                    for (int j = 0; j < nIn; j++)
+                    {
+                        il.Emit(OpCodes.Ldloc, ptrLocals[j]);
+                        il.Emit(OpCodes.Ldloc, strideLocals[j]);
+                        if (elements != 1) { il.Emit(OpCodes.Ldc_I4, elements); il.Emit(OpCodes.Conv_I8); il.Emit(OpCodes.Mul); }
+                        il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+                        il.Emit(OpCodes.Stloc, ptrLocals[j]);
+                    }
+                }
+
+                var lblSlab = il.DefineLabel();
+                var lblEnd = il.DefineLabel();
+
+                // if (outStride != 0) goto SLAB
+                il.Emit(OpCodes.Ldloc, outStride);
+                il.Emit(OpCodes.Ldc_I8, 0L);
+                il.Emit(OpCodes.Bne_Un, lblSlab);
+
+                // ===================== PINNED =====================
+                // acc0 = *(Tacc*)outPtr (seeded identity); acc1..3 = per-chunk identity.
+                il.Emit(OpCodes.Ldloc, outPtr);
+                DirectILKernelGenerator.EmitLoadIndirect(il, acc);
+                il.Emit(OpCodes.Stloc, accLocals[0]);
+                for (int l = 1; l < 4; l++)
+                {
+                    switch (kind)
+                    {
+                        case NpyExprReduceKind.Sum:
+                        case NpyExprReduceKind.Mean:
+                            WhereNode.EmitPushZeroPublic(il, acc);
+                            break;
+                        case NpyExprReduceKind.Prod:
+                            il.Emit(OpCodes.Ldc_I4_1);
+                            DirectILKernelGenerator.EmitConvertTo(il, NPTypeCode.Int32, acc);
+                            break;
+                        default:
+                            il.Emit(OpCodes.Ldloc, accLocals[0]);
+                            break;
+                    }
+                    il.Emit(OpCodes.Stloc, accLocals[l]);
+                }
+
+                il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldc_I8, ~3L); il.Emit(OpCodes.And); il.Emit(OpCodes.Stloc, locN4);
+                il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, locI);
+
+                void EmitPinnedLane(int lane)
+                {
+                    EmitLoadInputs(lane);
+                    il.Emit(OpCodes.Ldloc, accLocals[lane]);
+                    child.EmitScalar(il, ctx);
+                    DirectILKernelGenerator.EmitConvertTo(il, exprType, acc);
+                    EmitFold(il, kind, acc);
+                    il.Emit(OpCodes.Stloc, accLocals[lane]);
+                }
+
+                var lblLoop4 = il.DefineLabel();
+                var lblLoop4End = il.DefineLabel();
+                il.MarkLabel(lblLoop4);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldloc, locN4); il.Emit(OpCodes.Bge, lblLoop4End);
+                for (int lane = 0; lane < 4; lane++) EmitPinnedLane(lane);
+                EmitAdvanceInputs(4);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
+                il.Emit(OpCodes.Br, lblLoop4);
+                il.MarkLabel(lblLoop4End);
+
+                var lblTail = il.DefineLabel();
+                var lblTailEnd = il.DefineLabel();
+                il.MarkLabel(lblTail);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Bge, lblTailEnd);
+                EmitPinnedLane(0);
+                EmitAdvanceInputs(1);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
+                il.Emit(OpCodes.Br, lblTail);
+                il.MarkLabel(lblTailEnd);
+
+                // *(Tacc*)outPtr = fold(acc0..3)
+                il.Emit(OpCodes.Ldloc, outPtr);
+                il.Emit(OpCodes.Ldloc, accLocals[0]);
+                for (int l = 1; l < 4; l++) { il.Emit(OpCodes.Ldloc, accLocals[l]); EmitFold(il, kind, acc); }
+                DirectILKernelGenerator.EmitStoreIndirect(il, acc);
+                il.Emit(OpCodes.Br, lblEnd);
+
+                // ===================== SLAB =====================
+                il.MarkLabel(lblSlab);
+                il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, locI);
+                var lblSlabLoop = il.DefineLabel();
+                il.MarkLabel(lblSlabLoop);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Bge, lblEnd);
+                EmitLoadInputs(0);
+                // *(Tacc*)outPtr = fold( *(Tacc*)outPtr, (Tacc)expr )
+                il.Emit(OpCodes.Ldloc, outPtr);                                  // store addr
+                il.Emit(OpCodes.Ldloc, outPtr);
+                DirectILKernelGenerator.EmitLoadIndirect(il, acc);              // cur
+                child.EmitScalar(il, ctx);
+                DirectILKernelGenerator.EmitConvertTo(il, exprType, acc);       // val
+                EmitFold(il, kind, acc);                                         // fold(cur,val)
+                DirectILKernelGenerator.EmitStoreIndirect(il, acc);
+                EmitAdvanceInputs(1);
+                // outPtr += outStride
+                il.Emit(OpCodes.Ldloc, outPtr); il.Emit(OpCodes.Ldloc, outStride); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, outPtr);
+                il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
+                il.Emit(OpCodes.Br, lblSlabLoop);
+
+                il.MarkLabel(lblEnd);
                 il.Emit(OpCodes.Ret);
             }, key);
         }
