@@ -402,15 +402,22 @@ namespace NumSharp.Backends.Kernels
         // Half: comparison ops work natively in .NET 7+, but Math.Max(Half,Half)
         // doesn't exist as a single-precision-aware overload. NumPy semantics:
         // NaN propagates — if either operand is NaN, result is NaN.
+        //
+        // Signed-zero tie-break: NumPy's float16 maximum/minimum return the FIRST
+        // operand when the two compare equal (so maximum(+0,-0)=+0, maximum(-0,+0)=-0,
+        // and likewise for minimum). `a` here is the first operand (clip's src), `b`
+        // the second (the bound), so the `>=` / `<=` tie goes to `a` — matching NumPy.
+        // (+0 == -0 numerically, so this only changes the result's sign bit on a zero
+        // tie; every non-zero equal pair is bit-identical and unaffected.)
         private static Half HalfMaxNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
-            return a > b ? a : b;
+            return a >= b ? a : b;
         }
         private static Half HalfMinNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
-            return a < b ? a : b;
+            return a <= b ? a : b;
         }
 
         // Complex: lex ordering on (real, imag). NaN propagation: if either

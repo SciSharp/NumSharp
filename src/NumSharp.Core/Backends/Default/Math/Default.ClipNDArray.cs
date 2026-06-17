@@ -110,14 +110,38 @@ namespace NumSharp.Backends
             NDArray src, dst;
             bool srcDstSame;
             bool srcContiguous = lhs.Shape.IsContiguous && lhs.Shape.Offset == 0;
+            // Array bounds feed the flat clip kernel, which walks src/dst/lo/hi
+            // linearly and pairs them by C-order (row-major) index. Every operand
+            // must therefore be C-contiguous offset-0; an F-contig / strided buffer
+            // would be read in its raw buffer order and each element mis-paired
+            // with the wrong bound (the W7-A "F-contig/strided wrong pairing" bug).
+            // Scalar bounds are order-insensitive (one value broadcast to every
+            // lane), so this normalization is needed only for array bounds.
+            bool arrayBounds = kind == DirectILKernelGenerator.ClipBoundsKind.Array;
+            // When @out is non-C-contiguous and bounds are arrays we cannot clip
+            // in @out's own buffer (wrong element order vs the C-order bounds).
+            // Clip a C-order temp and copy the logical result back into @out.
+            NDArray copyBackOut = null;
 
             if (@out is not null)
             {
-                // User-supplied @out — copy lhs (possibly cast) into it, run in-place.
-                np.copyto(@out, Cast(lhs, outType, copy: false));
-                dst = @out;
-                src = @out;          // run in place — fused copy already done via copyto above
-                srcDstSame = true;
+                if (arrayBounds && (!@out.Shape.IsContiguous || @out.Shape.Offset != 0))
+                {
+                    // @out is F-contig / strided: clip a C-order copy of lhs, then
+                    // map it back into @out's layout via copyto (which honors strides).
+                    dst = AsCContiguousCopy(lhs, outType);
+                    src = dst;
+                    srcDstSame = true;
+                    copyBackOut = @out;
+                }
+                else
+                {
+                    // User-supplied @out — copy lhs (possibly cast) into it, run in-place.
+                    np.copyto(@out, Cast(lhs, outType, copy: false));
+                    dst = @out;
+                    src = @out;          // run in place — fused copy already done via copyto above
+                    srcDstSame = true;
+                }
             }
             else if (allScalarBounds && srcContiguous && lhs.GetTypeCode == outType)
             {
@@ -131,6 +155,11 @@ namespace NumSharp.Backends
             {
                 // General path: materialize a contiguous outType-typed copy and clip in place.
                 dst = Cast(lhs, outType, copy: true);
+                // Cast keeps the source layout (order='K'); the flat array-bounds
+                // kernel needs C-order, so re-materialize a C-contiguous copy when
+                // lhs (hence dst) is F-contig / strided / offset.
+                if (arrayBounds && (!dst.Shape.IsContiguous || dst.Shape.Offset != 0))
+                    dst = dst.copy('C');
                 src = dst;
                 srcDstSame = true;
             }
@@ -144,6 +173,14 @@ namespace NumSharp.Backends
             DirectILKernelGenerator.Clip(outType, mode, kind, srcPtr, dstPtr, dst.size, loPtr, hiPtr);
 
             _ = srcDstSame;
+            if (copyBackOut is not null)
+            {
+                // Array-bounds path computed into a C-order temp because @out's own
+                // layout (F-contig / strided) can't drive the flat kernel; relay the
+                // logical result into @out (copyto maps C-order → @out's strides).
+                np.copyto(copyBackOut, dst);
+                return copyBackOut;
+            }
             return dst;
         }
 
@@ -186,7 +223,27 @@ namespace NumSharp.Backends
             {
                 return bound;
             }
-            return np.broadcast_to(bound, targetShape).astype(outType);
+            var prepared = np.broadcast_to(bound, targetShape).astype(outType);
+            // The flat clip kernel reads lo/hi linearly in C-order. astype keeps
+            // the source layout (order='K'), so an F-contig / strided / broadcast
+            // bound stays non-C-contiguous and would be mis-paired element-wise
+            // against the C-order src. Force a C-order copy when it isn't already
+            // C-contiguous offset-0.
+            if (!prepared.Shape.IsContiguous || prepared.Shape.Offset != 0)
+                prepared = prepared.copy('C');
+            return prepared;
+        }
+
+        // Materialize lhs as a fresh C-contiguous, offset-0 array of outType whose
+        // element values are in logical (row-major) order. Used when the flat clip
+        // kernel needs a C-order working buffer but the natural source/@out is
+        // F-contig / strided and therefore can't drive the kernel directly.
+        private NDArray AsCContiguousCopy(NDArray lhs, NPTypeCode outType)
+        {
+            var cast = Cast(lhs, outType, copy: true);
+            if (!cast.Shape.IsContiguous || cast.Shape.Offset != 0)
+                cast = cast.copy('C');
+            return cast;
         }
 
         // Returns true when `bound` is a 0-d scalar NDArray whose value is NaN.

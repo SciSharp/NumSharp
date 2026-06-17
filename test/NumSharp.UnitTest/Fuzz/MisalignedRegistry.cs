@@ -164,12 +164,17 @@ namespace NumSharp.UnitTest.Fuzz
                 // it, so it behaves like maximum/minimum. Scoped to a NaN appearing in NumSharp's out.
                 if ((c.Op == "fmax" || c.Op == "fmin") && diffs.Any(d => d.Actual == "NaN"))
                     return "fmax/fmin: propagate NaN instead of ignoring it [known bug]";
-                // (W7-A) on an F-contiguous / strided operand the extrema kernel pairs elements by
-                // memory order, not logical order -> scrambled result. (C-contiguous is bit-exact;
-                // add/sub/mul handle the same F-contig operand correctly, so this is extrema-specific.)
-                return "maximum/minimum/fmax/fmin: wrong element pairing on F-contiguous/strided operand [known bug]";
+                // (W7-A FIXED) the extrema kernel (np.clip) used to read an F-contiguous / strided
+                // bound or source in raw buffer order instead of C-order, scrambling the element
+                // pairing; the float16 scalar path additionally tie-broke signed zero to the wrong
+                // operand. Default.ClipNDArray now normalizes src/dst/lo/hi to C-contiguous offset-0
+                // before the flat kernel (and copies the result back for a non-C-contiguous out=), and
+                // HalfMax/MinNaN tie to the first operand to match NumPy's float16 maximum/minimum.
+                // maximum/minimum are now bit-exact across every layout, so no fallback excuse remains
+                // (fmax/fmin keep only the NaN-propagation excuse above) and the matrix verifies it.
             }
-            // isclose on an F-contiguous complex operand diverges (same strided-pairing family).
+            // isclose on an F-contiguous complex operand diverges — its own comparison kernel (NOT the
+            // now-fixed clip-routed extrema path) still pairs a strided complex operand by buffer order.
             if (c.Op == "isclose" && kind == DivergenceKind.Value)
                 return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
