@@ -291,11 +291,10 @@ namespace NumSharp.UnitTest.Fuzz
                     || c.Op == "deg2rad" || c.Op == "rad2deg"))
                 return "unary hyperbolic/inverse-trig/angle: no Half kernel (throws NotSupportedException) [known bug]";
 
-            // (W3-C) np.exp2 emits a MALFORMED IL method for its float32-output kernel: int16/uint16/
-            // float32 inputs throw InvalidProgramException ("the CLR detected an invalid program").
-            // exp2(float64) and the Half path are fine, so this is isolated to the Single emitter.
-            if (kind == DivergenceKind.Threw && c.Op == "exp2")
-                return "exp2: malformed IL (InvalidProgramException) on the Single/float32-output kernel [known bug]";
+            // (W3-C) FIXED: np.exp2's float32-output IL kernel used to leave the evaluation stack
+            // unbalanced (a spurious Ldc_R8 2.0 in EmitExp2Call's Single branch), throwing
+            // InvalidProgramException for every int16/uint16/char/float32 input. The excuse is removed
+            // so any regression of the malformed-IL crash now fails the fuzz gate.
 
             // (5) Unary transcendental / complex magnitude ~ULP (libm / algorithm differences).
             //     Tight: every differing element within 2 ULP — a gross error still fails.

@@ -380,24 +380,29 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [TestMethod]
-    [OpenBugs] // DirectILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [TestMethod] // was OpenBugs: exp2 Single-output emitter left the stack unbalanced (InvalidProgramException). Fixed.
     public void Exp2_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
         var result = np.exp2(a, typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        // Values must be 2^x = [1, 2, 4], not the old locExp=2.0 artifact (Pow(2,2)=4 everywhere).
+        Assert.AreEqual(1.0f, result.GetSingle(0), 1e-6f);
+        Assert.AreEqual(2.0f, result.GetSingle(1), 1e-6f);
+        Assert.AreEqual(4.0f, result.GetSingle(2), 1e-6f);
     }
 
-    [TestMethod]
-    [OpenBugs] // DirectILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [TestMethod] // was OpenBugs: same exp2 Single-output IL bug via the NPTypeCode overload. Fixed.
     public void Exp2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
         var result = np.exp2(a, NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        Assert.AreEqual(1.0f, result.GetSingle(0), 1e-6f);
+        Assert.AreEqual(2.0f, result.GetSingle(1), 1e-6f);
+        Assert.AreEqual(4.0f, result.GetSingle(2), 1e-6f);
     }
 
     #endregion

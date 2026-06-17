@@ -627,5 +627,73 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         #endregion
+
+        #region Exp2 Single-output (regression: malformed IL emitter)
+
+        // np.exp2's float32-output IL kernel left the evaluation stack unbalanced (a spurious extra
+        // Ldc_R8 2.0 that also clobbered the exponent local with the constant 2.0), so EVERY exp2 call
+        // resolving to a Single output threw InvalidProgramException — and, had it not crashed, would
+        // have returned Pow(2,2)=4 for every element. The Single output is reached by int16/uint16/
+        // char/float32 inputs (ResolveUnaryFloatReturnType) or any input with dtype=float32. These
+        // assert both no-crash AND correct 2^x values, verified against NumPy 2.4.2: exp2([1,2,3])=[2,4,8].
+
+        private static void AssertSingleExp2(NDArray r, params float[] expected)
+        {
+            r.typecode.Should().Be(NPTypeCode.Single);
+            r.size.Should().Be(expected.Length);
+            for (int i = 0; i < expected.Length; i++)
+                r.GetSingle(i).Should().BeApproximately(expected[i], 1e-6f, $"exp2 element {i}");
+        }
+
+        [TestMethod]
+        public void Exp2_SingleOutput_Int16_Uint16_Char()
+        {
+            // int16/uint16/char all promote to a float32 (Single) exp2 output in NumPy. exp2([1,2,3])=[2,4,8].
+            AssertSingleExp2(np.exp2(np.array(new short[] { 1, 2, 3 })), 2f, 4f, 8f);
+            AssertSingleExp2(np.exp2(np.array(new ushort[] { 1, 2, 3 })), 2f, 4f, 8f);
+            AssertSingleExp2(np.exp2(np.array(new char[] { (char)1, (char)2, (char)3 })), 2f, 4f, 8f);
+        }
+
+        [TestMethod]
+        public void Exp2_SingleOutput_Float32_PreservesDtypeAndValues()
+        {
+            // 2^[0,.5,1,-1,3] = [1, sqrt(2), 2, 0.5, 8]; sqrt(2) in float32 = 1.4142135.
+            AssertSingleExp2(np.exp2(np.array(new float[] { 0f, 0.5f, 1f, -1f, 3f })),
+                1f, 1.4142135f, 2f, 0.5f, 8f);
+        }
+
+        [TestMethod]
+        public void Exp2_SingleOutput_DtypeOverride_FromIntAndDouble()
+        {
+            // dtype=float32 forces the Single emitter from a wider input. NumPy: exp2([1,2,3], dtype=f32)=[2,4,8].
+            AssertSingleExp2(np.exp2(np.array(new int[] { 1, 2, 3 }), NPTypeCode.Single), 2f, 4f, 8f);
+            AssertSingleExp2(np.exp2(np.array(new double[] { 1, 2, 3 }), typeof(float)), 2f, 4f, 8f);
+        }
+
+        [TestMethod]
+        public void Exp2_SingleOutput_StridedView()
+        {
+            // The kernel must also be correct on a non-contiguous float32 input (every-other element).
+            var a = np.array(new float[] { 1, 99, 2, 99, 3, 99 });
+            AssertSingleExp2(np.exp2(a["::2"]), 2f, 4f, 8f);   // exp2 of [1, 2, 3]
+        }
+
+        [TestMethod]
+        public void Exp2_DoubleAndHalfOutput_StillCorrect()
+        {
+            // The unaffected branches: int32->float64 and int8->float16 must remain correct.
+            var dbl = np.exp2(np.array(new int[] { 1, 2, 3 }));
+            dbl.typecode.Should().Be(NPTypeCode.Double);
+            dbl.GetDouble(0).Should().Be(2.0);
+            dbl.GetDouble(1).Should().Be(4.0);
+            dbl.GetDouble(2).Should().Be(8.0);
+
+            var half = np.exp2(np.array(new sbyte[] { 1, 2, 3 }));
+            half.typecode.Should().Be(NPTypeCode.Half);
+            ((double)half.GetAtIndex<Half>(0)).Should().Be(2.0);
+            ((double)half.GetAtIndex<Half>(2)).Should().Be(8.0);
+        }
+
+        #endregion
     }
 }

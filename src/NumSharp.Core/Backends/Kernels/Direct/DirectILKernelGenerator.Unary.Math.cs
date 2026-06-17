@@ -417,18 +417,16 @@ namespace NumSharp.Backends.Kernels
         {
             if (type == NPTypeCode.Single)
             {
-                // For float: convert to double, call Pow, convert back
-                il.Emit(OpCodes.Conv_R8);
-                il.Emit(OpCodes.Ldc_R8, 2.0);
-                // Stack: [exponent, base] - but Pow expects (base, exponent)
-                // Need to swap them
+                // 2^x for float32: widen the exponent to double, Pow(2, x), narrow back. Math.Pow
+                // takes (base, exponent), so the exponent must be stashed in a local and pushed AFTER
+                // the base — identical to the Double branch below, just wrapped in Conv_R8/Conv_R4.
+                il.Emit(OpCodes.Conv_R8);            // [x_d]   (exponent widened to double)
                 var locExp = il.DeclareLocal(typeof(double));
-                il.Emit(OpCodes.Stloc, locExp);  // Save exponent
-                // Now push base then exponent
-                il.Emit(OpCodes.Ldc_R8, 2.0);
-                il.Emit(OpCodes.Ldloc, locExp);
-                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
-                il.Emit(OpCodes.Conv_R4);
+                il.Emit(OpCodes.Stloc, locExp);      // []      save exponent
+                il.Emit(OpCodes.Ldc_R8, 2.0);        // [2.0]   base
+                il.Emit(OpCodes.Ldloc, locExp);      // [2.0, x_d]  exponent
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);  // [2^x]
+                il.Emit(OpCodes.Conv_R4);            // [(float)2^x]
             }
             else if (type == NPTypeCode.Double)
             {
