@@ -93,6 +93,12 @@ namespace NumSharp.Backends.Kernels
             if (key.InType == NPTypeCode.Decimal && key.AccType == NPTypeCode.Decimal)
                 return CreateTypedReduceKernel<decimal, decimal>(key.Op);
 
+            // Phase 6 — numeric same-type SIMD. Double Sum (and Mean, which routes through
+            // the Sum kernel + MeanDivideByCount) only for now; float32/integers deferred
+            // (float needs pairwise to match NumPy; ints need widening accumulators).
+            if (key.InType == NPTypeCode.Double && key.AccType == NPTypeCode.Double)
+                return CreateSimdReduceKernel<double>(key.Op);
+
             return null;
         }
 
@@ -115,6 +121,119 @@ namespace NumSharp.Backends.Kernels
                 ReductionOp.Max  => TypedMaxKernel<TIn, TAccum>,
                 _ => null
             };
+        }
+
+        // =====================================================================
+        // Generic SIMD same-type kernels (Phase 6 — numeric: double/float/int…)
+        // =====================================================================
+        //
+        // For TIn == TAccum (no NEP50 widening: float/double Sum, and Min/Max on
+        // every numeric type) one generic Vector256<T> body monomorphizes to the
+        // same machine code the legacy DirectILKernelGenerator emits per dtype.
+        // The proof harness (benchmark/poc/phase6_*.cs) measured this at Direct
+        // parity at scale (10M double sum axis1 1.01×, axis0 1.09×) once the
+        // kernel carries [MethodImpl(AggressiveOptimization)] — without it the
+        // delegate target JITs at tier-0 and looks ~10× slower (a measurement
+        // artifact, NOT the per-chunk model). Sum is NaN-natural (a NaN element
+        // makes the whole reduction NaN, matching NumPy); accumulation order is
+        // identity for C-contiguous input (same as Direct), so values match.
+        //
+        // SCOPE TODAY: Double Sum/Mean only (routed in CreateReduceInnerLoop +
+        // UseNpyIterReduce). float32 sum is deliberately NOT routed here — its
+        // simple 8-way accumulation diverges from NumPy's pairwise summation by
+        // more than float tolerance (proof: 10M axis1 maxdiff ≈ 24). Min/Max and
+        // the widening integer sums are later migration steps.
+
+        /// <summary>
+        /// Builds a generic same-type (<typeparamref name="T"/> == accumulator) SIMD
+        /// per-chunk reduce kernel. The JIT monomorphizes one tight Vector256&lt;T&gt;
+        /// body per (T, op). Currently only Sum is emitted; Min/Max/Prod return null
+        /// (caller falls back to the Direct path) until they are migrated.
+        /// </summary>
+        private static unsafe NpyInnerLoopFunc CreateSimdReduceKernel<T>(ReductionOp op)
+            where T : unmanaged, INumber<T>
+        {
+            return op switch
+            {
+                ReductionOp.Sum => SimdSumSameType<T>,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Same-type SIMD sum: PINNED folds a contiguous stripe into one slot with an
+        /// 8-accumulator horizontal reduce; SLAB does a 4×-unrolled Vector256 elementwise
+        /// add of the contiguous row into the output accumulator row. Strided inner loops
+        /// (non-unit element stride) fall to the scalar tail. NaN propagates naturally.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void SimdSumSameType<T>(void** dataptrs, long* strides, long count, void* auxdata)
+            where T : unmanaged, INumber<T>
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+            int sz = sizeof(T);
+
+            if (outS == 0)
+            {
+                // PINNED: horizontal sum of the contiguous stripe into one slot.
+                T acc = *(T*)outp;
+                if (inS == sz)
+                {
+                    T* d = (T*)inp; long i = 0; int W = Vector256<T>.Count;
+                    if (Vector256.IsHardwareAccelerated && count >= W * 8)
+                    {
+                        Vector256<T> a0 = Vector256<T>.Zero, a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
+                        long lim = count - count % (W * 8);
+                        for (; i < lim; i += W * 8)
+                        {
+                            a0 = Vector256.Add(a0, Vector256.Load(d + i));
+                            a1 = Vector256.Add(a1, Vector256.Load(d + i + W));
+                            a2 = Vector256.Add(a2, Vector256.Load(d + i + W * 2));
+                            a3 = Vector256.Add(a3, Vector256.Load(d + i + W * 3));
+                            a4 = Vector256.Add(a4, Vector256.Load(d + i + W * 4));
+                            a5 = Vector256.Add(a5, Vector256.Load(d + i + W * 5));
+                            a6 = Vector256.Add(a6, Vector256.Load(d + i + W * 6));
+                            a7 = Vector256.Add(a7, Vector256.Load(d + i + W * 7));
+                        }
+                        a0 = Vector256.Add(Vector256.Add(Vector256.Add(a0, a1), Vector256.Add(a2, a3)),
+                                           Vector256.Add(Vector256.Add(a4, a5), Vector256.Add(a6, a7)));
+                        acc += Vector256.Sum(a0);
+                    }
+                    for (; i < count; i++) acc += d[i];
+                }
+                else
+                {
+                    for (long k = 0; k < count; k++) acc += *(T*)(inp + k * inS);
+                }
+                *(T*)outp = acc;
+            }
+            else
+            {
+                // SLAB: out[c] += in[c].
+                if (inS == sz && outS == sz)
+                {
+                    T* id = (T*)inp; T* od = (T*)outp; long i = 0; int W = Vector256<T>.Count;
+                    if (Vector256.IsHardwareAccelerated)
+                    {
+                        long lim = count - count % (W * 4);
+                        for (; i < lim; i += W * 4)
+                        {
+                            Vector256.Store(Vector256.Add(Vector256.Load(od + i),         Vector256.Load(id + i)),         od + i);
+                            Vector256.Store(Vector256.Add(Vector256.Load(od + i + W),     Vector256.Load(id + i + W)),     od + i + W);
+                            Vector256.Store(Vector256.Add(Vector256.Load(od + i + W * 2), Vector256.Load(id + i + W * 2)), od + i + W * 2);
+                            Vector256.Store(Vector256.Add(Vector256.Load(od + i + W * 3), Vector256.Load(id + i + W * 3)), od + i + W * 3);
+                        }
+                        for (; i + W <= count; i += W)
+                            Vector256.Store(Vector256.Add(Vector256.Load(od + i), Vector256.Load(id + i)), od + i);
+                    }
+                    for (; i < count; i++) od[i] += id[i];
+                }
+                else
+                {
+                    for (long k = 0; k < count; k++) *(T*)(outp + k * outS) += *(T*)(inp + k * inS);
+                }
+            }
         }
 
         /// <summary>

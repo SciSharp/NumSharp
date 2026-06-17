@@ -134,6 +134,19 @@ namespace NumSharp.Backends
                        op == ReductionOp.Min || op == ReductionOp.Max ||
                        op == ReductionOp.Mean;
 
+            // Phase 6 — numeric migration onto the per-chunk target architecture.
+            // Double SUM and MEAN (mean = Sum kernel + MeanDivideByCount) only: the
+            // generic Vector256<double> kernel measures at Direct parity at scale
+            // (proof: benchmark/poc/phase6_*.cs) and double's accumulation-order
+            // divergence from NumPy is ~1e-16 (within tolerance). float32 is NOT
+            // here — its simple SIMD sum diverges from NumPy's pairwise summation by
+            // more than float tolerance; integer Sum needs a widening accumulator;
+            // Prod/Min/Max have no per-chunk numeric kernel yet. All those stay on
+            // the Direct path (CreateSimdReduceKernel/GetReduceInnerLoop return null,
+            // so even a stray true here would fall back — but we gate precisely).
+            if (inputType == NPTypeCode.Double && outputType == NPTypeCode.Double)
+                return op == ReductionOp.Sum || op == ReductionOp.Mean;
+
             return false;
         }
 

@@ -8,7 +8,7 @@ Status legend: ☐ todo ◐ in-progress ☑ done (gated)
 
 ## Status & findings (live, post-Phase-0/1/2/3/4, Phase 5a)
 
-**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑, 4 ☑; Phase 5a ☑ (5b pending).** Build green; full suite **9790 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+**Phases 0–4 ☑, 5a ☑, 5b ☒ (PROVEN non-viable — see below), 6 ◐ (step 1: Double Sum/Mean shipped on the per-chunk SIMD path).** Build green; full suite **9790 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2. Both 5b and 6 were re-decided by direct PoC measurement (not reasoning) per the "prove it" directive: 5b is genuinely impossible to make fast-and-correct; 6's "regression" was a JIT-tier + back-to-back-harness artifact and the per-chunk model is at Direct parity.
 
 **Phase 5a (axis-aware fused reductions) — `np.evaluate(Sum(a*b, axis:k))` one pass, no temp.**
 Extended the IL-emitted `ReduceNode` to carry an `axis`/`keepdims` and emit a new
@@ -31,20 +31,52 @@ Correctness pinned vs NumPy + unfused across dtypes (f64/f32/i32) × ops (sum/pr
 uses identity iteration order (contiguous inner); transposed-fused works correctly (axis
 ordering for fused inputs is a later opt — the no-temp win dominates regardless).
 
-**Phase 5b — SKIPPED (premise false, measured).** The plan assumed two-pass var/std was slow.
-It is not: NumSharp's current var/std axis (the SIMD two-pass `CreateAxisVarStdReductionKernel`)
-**already beats NumPy 3.7–7.2×** for double (10M var axis0 7.7 ms vs NumPy 28.2; axis1 4.3 ms
-vs 30.8; 1M 0.32 ms vs 2.26). A one-pass sum+sumsq rewrite would *regress* it twice over:
-(1) perf — it's already faster than NumPy; (2) numerical stability — one-pass sum-of-squares is
-the classic catastrophic-cancellation form NumPy deliberately avoids with its two-pass
-mean-then-squared-diff. So 5b is actively harmful; not implemented.
+**Phase 5b — PROVEN NON-VIABLE (measured, not assumed).** A direct PoC settled it
+(`benchmark/poc/phase5b_proof.cs`, 10M flat var vs a high-precision reference):
 
-**Phase 6 — SKIPPED (would regress).** Migrating the numeric (int/float/double) reductions onto
-the NpyIter generic-`INumber` kernels means trading the SIMD `AxisReductionSimdHelper`
-(`Vector256`) for a scalar generic loop — a guaranteed regression on the already-fast,
-already-at/above-parity numeric path. The plan gated Phase 6 on "zero regression"; that bar
-can't be met without first porting the SIMD reductions to the per-chunk model (large, no perf
-gain). Architectural consolidation only — deferred as not worth the regression risk.
+| algorithm | benign (mean=0) | adversarial (mean=1e8) | time |
+|---|---|---|---|
+| one-pass naive (sum+sumsq) | relerr 1e-13 ✓ | **relerr 2160× ✗** (val 180, true 0.083) | 3.98 ms |
+| one-pass Welford (stable) | relerr 9e-14 ✓ | relerr 5e-9 ✓ | **37.2 ms** |
+| **np.var two-pass (current)** | relerr 1e-13 ✓ | relerr 4e-9 ✓ | **6.53 ms** |
+
+The only *fast* one-pass (naive) catastrophically cancels whenever mean ≫ std (timestamps,
+prices, sensor baselines — real data); the only *stable* one-pass (Welford) is **5.7× slower**
+(scalar, no SIMD). Two-pass is already the optimum. Disqualified by measurement.
+
+**Phase 6 — PROVEN VIABLE; step 1 shipped (Double Sum/Mean).** The earlier "would regress /
+scalar generic loop" claim was wrong on two counts, both caught by direct measurement:
+1. **The kernels are SIMD, not scalar.** `ILKernelGenerator.SimdSumSameType<T>` is one generic
+   `Vector256<T>` body (8-way pinned horizontal + 4-way slab) that monomorphizes to the same
+   machine code the Direct path emits per dtype.
+2. **The "8–12× slower" was a measurement artifact.** `[opt] core=True` only checks
+   *NumSharp.Core*; the PoC's *script-assembly* kernels JIT at tier-0 unless they carry
+   `[MethodImpl(AggressiveOptimization)]`. With it, the micro-probe (`phase6_micro.cs`) shows
+   **delegate-per-row == inlined == monolithic, exactly** (1M 0.146 ms, 10M 3.56 ms). The
+   decompose (`phase6_decompose.cs`) confirms iterator construction (1.3 µs) and the empty-kernel
+   drive (17 µs) are free — 100% of any gap is kernel codegen, not the per-chunk model.
+
+   Clean isolated measurement of the **shipped** path (routed Double sum/mean, `phase6_*.cs`):
+
+   | 10M, vs NumPy | sum C | sum T | mean C | mean T |
+   |---|---|---|---|---|
+   | axis0 | 1.00× | **0.51×** | 1.02× | **0.58×** |
+   | axis1 | **0.56×** | 0.96× | **0.61×** | 1.08× |
+
+   ≤1.08× NumPy in the memory-bound regime (DOD pass), often ~2× faster on contiguous-reduce
+   axes; and **parity with the old Direct path within noise** (3.26 vs 3.18 ms, sometimes
+   faster). The "~12% vs Direct" the back-to-back harness reported is the SAME 256 MB
+   memory-pressure artifact that produced the original bogus "19–64×" — clean per-case isolation
+   is the truth.
+
+**Scope shipped:** Double **Sum** and **Mean** routed through the per-chunk path
+(`UseNpyIterReduce`). **Deferred** (each needs more than the naive port, documented so):
+- **float32 sum** — simple 8-way accumulation diverges from NumPy's *pairwise* summation by more
+  than float tolerance (10M axis1 maxdiff ≈ 24). Needs a pairwise/blocked accumulator.
+- **integer Sum/Prod** — NEP50 widening (int32→int64) breaks single-`Vector256<T>` lanes; needs
+  a widening accumulator (the scalar `CreateTypedReduceKernel<TIn,TAccum>` exists as fallback).
+- **Min/Max** — need NaN-aware SIMD (the `v != v` mask trick) before routing.
+Direct keeps serving all of those (its kernels return for non-routed keys), so no regression.
 
 **Phase 4 (strided/transposed) — solved by axis-ordering, NOT gather (better than planned).**
 Root cause (diagnosed, not assumed): the reduce path kept the **logical** axis order (inner = last logical axis), so it was fast only when the input was C-contiguous; a transpose's last logical axis is strided → cache-hostile column gather (~16×). NumPy instead orders iteration axes by the input's **stride** (contiguous axis innermost). Fix is **reduce-local** in `NpyIterRef.NewReduce`: order the `op_axes` iteration axes by descending input |stride| (0/broadcast → outermost), mapping the output back to original order. For C-contig this is the identity (fast path untouched); only non-contiguous inputs reorder. No gather, no copy — access becomes sequential, which beats gather (gather still cache-misses). Isolated 10M (vs NumPy, vs the prior strided path):
