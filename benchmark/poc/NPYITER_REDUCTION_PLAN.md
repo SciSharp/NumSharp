@@ -6,6 +6,34 @@ Status legend: ☐ todo ◐ in-progress ☑ done (gated)
 
 ---
 
+## Status & findings (live, post-Phase-0/1/2)
+
+**Phases 0 ☑, 1 ☑, 2 ☑ — committed.** Build green; full suite **9769 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+
+**Premise correction (measured, `-c Release`, optimizer-verified, vs the same NumPy 2.4.2):**
+The "complex sum/min/max/prod axis = 19–64× slow" premise was a **measurement artifact** (Debug build / harness contamination in the original probe). Under clean `-c Release` the *legacy scalar* complex sum/min/max/prod were **already ~1.0–1.4× NumPy**. The NpyIter double-pair path is **neutral-to-better** there (sum 0.75–1.02×; min/prod slightly faster; max within ±6% noise) and—critically—**non-regressing on every layout incl. transposed** (both paths ~130–170 ms at 10M; that's Phase 4).
+
+**The genuine bottleneck was `mean`** (the original 24× headline), via `MeanAxisComplex` allocating an NDArray view + iterator *per output row*. Phase 2 replaces it with the one-pass complex Sum kernel + scalar divide:
+
+| case | before | after | vs NumPy | speedup |
+|---|---|---|---|---|
+| 10M mean axis0 | 300.3 ms | **7.81 ms** | 1.01× | **38×** |
+| 10M mean axis1 | 130.0 ms | **7.06 ms** | 0.82× (beats) | **18×** |
+| 1M  mean axis0 | 10.70 ms | 0.31 ms | 1.01× | 35× |
+| 100K mean axis0 | 1.18 ms | 0.045 ms | 1.70×* | 26× |
+
+*small-N is iterator-construction-bound; still 22–26× faster than the old path.
+
+**Bugs collected (out of Phase 1/2 scope — separate paths):**
+- **Flat complex `min`/`max` (axis=None, `min_elementwise_il`)** returns `(NaN, NaN)` where NumPy returns the NaN-containing element verbatim, e.g. `min([1+1j, nan+0j, 2+2j]) → (nan+0j)`. NumSharp synthesizes `(nan, nan)`. The new **axis** path is correct (`min nan axis0 → (nan,0)`); only the flat path diverges.
+
+**Remaining phases — re-validate premise before each (don't repeat the artifact mistake):**
+- Phase 3 (Half/Decimal): check whether their axis sum/mean are *actually* slow first.
+- Phase 4 (strided/transposed): **confirmed genuinely slow** (complex transpose 10M ≈ 130–170 ms on both old & new) — real value, AVX2-gather.
+- Phase 5 (fusion): independent value.
+
+---
+
 ## 0. Objective & success criteria
 
 Bring **axis reductions** to NumPy 2.4.2 parity-or-better on the **NpyIter per-chunk
@@ -63,14 +91,14 @@ small-N construction **0.40 µs (won)**.
 
 ## 3. Phases (each independently shippable + gated)
 
-### Phase 0 — Builder + kernel scaffolding ☐
+### Phase 0 — Builder + kernel scaffolding ☑
 - `NpyIterRef.NewReduce(input, output, axis)` (single + multi-axis), reusing the `op_axes`
   construction; unit-test it constructs REDUCE with the right strides on C/F/sliced/transposed.
 - `ILKernelGenerator.Reduction.cs` skeleton + `GetReduceInnerLoop` cache (ConcurrentDictionary
   keyed by `ReduceKernelKey(op,inType,accType)`).
 - **Gate:** build green; existing tests unchanged; `np.average` still passes (shares template).
 
-### Phase 1 — Complex sum/prod/min/max axis ☐  *(the worst offender)*
+### Phase 1 — Complex sum/prod/min/max axis ☑  *(the worst offender)*
 - Implement the dual-mode complex kernel (double-pair SIMD slab + 2-lane pinned reduce;
   prod via complex multiply; min/max via `ComplexLexPick`).
 - `ExecuteAxisReductionNpyIter`: alloc out, seed identity (0/1/±inf-lex), `NewReduce` + `ForEach`,
@@ -81,7 +109,7 @@ small-N construction **0.40 µs (won)**.
 - **Gate:** all correct; `complex_reduce_poc` + live `reduce_parity_bench` show ≤1.1× NumPy
   both axes (target ~0.8–1.0×).
 
-### Phase 2 — Complex mean axis ☐
+### Phase 2 — Complex mean axis ☑
 - Delete `MeanAxisComplex` + the B2 route in `Default.Reduction.Mean.cs`; mean = complex sum
   kernel + `DivideArrayByCount<Complex>` (fixes the imaginary-drop by construction).
 - **Tests + gate** (mean matrix; NaN/empty → NaN parity).

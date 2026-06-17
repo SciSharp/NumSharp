@@ -63,9 +63,10 @@ namespace NumSharp.Backends
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);
             var inputTc = arr.GetTypeCode;
 
-            // B2: Complex mean axis needs a dedicated path — the Double-based kernel drops imag.
-            if (!typeCode.HasValue && inputTc == NPTypeCode.Complex)
-                return MeanAxisComplex(arr, axis2, keepdims);
+            // B2: Complex mean axis is handled by the NpyIter REDUCE path (ExecuteAxisReduction
+            // → ExecuteAxisReductionNpyIter), which runs a one-pass complex Sum kernel then
+            // divides by the axis length — both components preserved (NumPy parity). This
+            // replaced the per-output-row-allocating MeanAxisComplex (15–45× slower).
 
             // B16: Half mean axis computes in Double then casts back to preserve Half dtype.
             bool needsCast = !typeCode.HasValue && inputTc == NPTypeCode.Half;
@@ -85,35 +86,6 @@ namespace NumSharp.Backends
             if (needsCast)
                 result2 = Cast(result2, inputTc, copy: true);
             return result2;
-        }
-
-        /// <summary>
-        /// B2: NumPy-parity Complex mean along an axis. Iterator-based since the IL kernel path
-        /// routes through Double accumulators and drops the imaginary component.
-        /// </summary>
-        private NDArray MeanAxisComplex(NDArray arr, int axis, bool keepdims)
-        {
-            var shape = arr.Shape;
-            Shape axisedShape = Shape.GetAxis(shape, axis);
-            var ret = new NDArray(NPTypeCode.Complex, axisedShape, false);
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
-            var iterIndex = iterRet.Index;
-            var slices = iterAxis.Slices;
-
-            do
-            {
-                var slice = arr[slices];
-                var sum = System.Numerics.Complex.Zero;
-                var it = slice.AsIterator<System.Numerics.Complex>();
-                long n = 0;
-                while (it.HasNext()) { sum += it.MoveNext(); n++; }
-                var mean = n > 0 ? sum / (double)n : new System.Numerics.Complex(double.NaN, double.NaN);
-                ret.SetAtIndex(mean, iterIndex[0]);
-            } while (iterAxis.Next() != null && iterRet.Next() != null);
-
-            if (keepdims) ret.Storage.ExpandDimension(axis);
-            return ret;
         }
 
         /// <summary>

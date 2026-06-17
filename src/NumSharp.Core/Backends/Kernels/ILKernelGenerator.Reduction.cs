@@ -1,0 +1,308 @@
+using System;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using NumSharp.Backends.Iteration;
+
+// =============================================================================
+// ILKernelGenerator.Reduction.cs — per-chunk axis-reduction kernels (NpyIter-driven)
+// =============================================================================
+//
+// MODEL
+// -----
+// These kernels implement the inner loop of a 2-operand REDUCE iterator built by
+// NpyIterRef.NewReduce ([input, output], REDUCE_OK | EXTERNAL_LOOP). The iterator
+// owns the outer walk and advances the operand pointers between calls; each kernel
+// invocation folds ONE contiguous inner stripe into the output:
+//
+//     do { inner(dataptrs, strides, count, aux); } while (iternext(iter));
+//
+// Two output modes per call, distinguished by the output byte stride:
+//   • outStride == 0  → PINNED: the reduced axis is innermost. Fold the whole
+//     `count`-element stripe into the single output slot (read it, accumulate,
+//     write back once).
+//   • outStride != 0  → SLAB: a kept axis is innermost. Each inner element targets
+//     a distinct output slot; fold `in[c]` into `out[c]`. The same slab is
+//     revisited across outer iterations, so the output MUST be pre-seeded with the
+//     reduction identity (DefaultEngine seeds it via SeedReduceIdentity).
+//
+// COMPLEX (Phase 1)
+// -----------------
+// System.Numerics.Complex is two contiguous doubles [real, imaginary]. A complex
+// Sum slab-fold is therefore a plain f64 elementwise add over 2·count lanes, and a
+// complex Sum pinned-reduce is a 2-lane (re,im) f64 accumulator — both ride the
+// Vector256<double> machinery. Prod uses scalar complex multiply (no SIMD form);
+// Min/Max use lexicographic (Real, Imaginary) pick with NaN-first-wins, matching
+// DirectILKernelGenerator's existing ComplexLexPick semantics exactly.
+//
+// This is the migration TARGET model (see ILKernelGenerator.cs). The legacy
+// whole-array complex path lives in DirectILKernelGenerator.Reduction.Axis.cs and
+// is retired per-dtype as families move here.
+// =============================================================================
+
+namespace NumSharp.Backends.Kernels
+{
+    public static partial class ILKernelGenerator
+    {
+        /// <summary>
+        /// Cache key for a per-chunk reduction kernel: operation + input dtype +
+        /// accumulator (output) dtype. Layout is handled at runtime inside the
+        /// kernel body (pinned vs slab, contiguous vs strided inner loop), so it is
+        /// NOT part of the key.
+        /// </summary>
+        public readonly record struct ReduceKernelKey(ReductionOp Op, NPTypeCode InType, NPTypeCode AccType);
+
+        private static readonly ConcurrentDictionary<ReduceKernelKey, NpyInnerLoopFunc> _reduceCache = new();
+
+        /// <summary>
+        /// Returns the cached per-chunk reduction kernel for the given
+        /// (op, input, accumulator) triple, or null when no NpyIter-driven kernel
+        /// exists yet (caller falls back to the DirectILKernelGenerator path).
+        /// The returned delegate matches <see cref="NpyInnerLoopFunc"/>; hand it to
+        /// an iterator built by <see cref="NpyIterRef.NewReduce(NDArray, NDArray, int, NpyIterGlobalFlags)"/>.
+        /// </summary>
+        public static NpyInnerLoopFunc GetReduceInnerLoop(ReduceKernelKey key) =>
+            _reduceCache.GetOrAdd(key, CreateReduceInnerLoop);
+
+        private static unsafe NpyInnerLoopFunc CreateReduceInnerLoop(ReduceKernelKey key)
+        {
+            // Phase 1: Complex same-type sum/prod/min/max.
+            if (key.InType == NPTypeCode.Complex && key.AccType == NPTypeCode.Complex)
+            {
+                return key.Op switch
+                {
+                    ReductionOp.Sum  => ComplexSumKernel,
+                    ReductionOp.Prod => ComplexProdKernel,
+                    ReductionOp.Min  => ComplexMinKernel,
+                    ReductionOp.Max  => ComplexMaxKernel,
+                    _ => null
+                };
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Pre-fill <paramref name="output"/> with the reduction identity for
+        /// <paramref name="op"/> before driving a REDUCE iterator. Required because
+        /// the per-chunk kernels fold into the existing output slot(s). Writes
+        /// through <see cref="NDArray.SetAtIndex(object, long)"/> so any output
+        /// layout (contiguous fresh alloc or user-supplied view) is honored.
+        /// </summary>
+        public static void SeedReduceIdentity(NDArray output, ReductionOp op)
+        {
+            long n = output.size;
+            if (n == 0) return;
+
+            NPTypeCode tc = output.GetTypeCode;
+            if (tc == NPTypeCode.Complex)
+            {
+                System.Numerics.Complex id = op switch
+                {
+                    ReductionOp.Sum  => System.Numerics.Complex.Zero,
+                    ReductionOp.Prod => System.Numerics.Complex.One,
+                    // (±inf, ±inf) so the first finite element displaces the identity
+                    // under lexicographic comparison — mirrors GetIdentityValueTyped<Complex>.
+                    ReductionOp.Min  => new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity),
+                    ReductionOp.Max  => new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity),
+                    _ => throw new NotSupportedException($"SeedReduceIdentity: op {op} unsupported for Complex")
+                };
+                for (long i = 0; i < n; i++) output.SetAtIndex(id, i);
+                return;
+            }
+
+            throw new NotSupportedException($"SeedReduceIdentity not implemented for {tc}");
+        }
+
+        /// <summary>
+        /// Divide every element of <paramref name="output"/> by <paramref name="count"/> in
+        /// place — the post-pass that turns an accumulated axis Sum into a Mean. For Complex
+        /// this divides both components by the real count (NumPy: <c>mean = sum / n</c>),
+        /// which is exactly what the legacy <c>MeanAxisComplex</c> did per element but without
+        /// its per-output-row NDArray allocation. Writes through
+        /// <see cref="NDArray.SetAtIndex(object, long)"/> so any output layout is honored.
+        /// </summary>
+        public static void MeanDivideByCount(NDArray output, long count)
+        {
+            long n = output.size;
+            if (n == 0 || count == 0) return;
+
+            NPTypeCode tc = output.GetTypeCode;
+            if (tc == NPTypeCode.Complex)
+            {
+                double d = count;
+                for (long i = 0; i < n; i++)
+                {
+                    var c = (System.Numerics.Complex)output.GetAtIndex(i);
+                    output.SetAtIndex(new System.Numerics.Complex(c.Real / d, c.Imaginary / d), i);
+                }
+                return;
+            }
+
+            throw new NotSupportedException($"MeanDivideByCount not implemented for {tc}");
+        }
+
+        // =====================================================================
+        // Complex kernels
+        // =====================================================================
+
+        private const long ComplexBytes = 16; // sizeof(System.Numerics.Complex)
+
+        // out += sum(in)  — double-pair SIMD for the contiguous fast path.
+        private static unsafe void ComplexSumKernel(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+
+            if (outS == 0)
+            {
+                // PINNED: fold the whole stripe into one (re,im) slot.
+                double* o = (double*)outp;
+                double re = o[0], im = o[1];
+
+                if (inS == ComplexBytes)
+                {
+                    double* d = (double*)inp;
+                    long n2 = count * 2;
+                    long i = 0;
+                    if (Vector256.IsHardwareAccelerated && n2 >= 4)
+                    {
+                        var acc = Vector256<double>.Zero;
+                        for (; i + 4 <= n2; i += 4)
+                            acc = Vector256.Add(acc, Vector256.Load(d + i));
+                        double* tmp = stackalloc double[4];
+                        Vector256.Store(acc, tmp);
+                        re += tmp[0] + tmp[2];
+                        im += tmp[1] + tmp[3];
+                    }
+                    for (; i < n2; i += 2) { re += d[i]; im += d[i + 1]; }
+                }
+                else
+                {
+                    for (long k = 0; k < count; k++)
+                    {
+                        double* c = (double*)(inp + k * inS);
+                        re += c[0]; im += c[1];
+                    }
+                }
+
+                o[0] = re; o[1] = im;
+                return;
+            }
+
+            // SLAB: out[c] += in[c].
+            if (inS == ComplexBytes && outS == ComplexBytes)
+            {
+                double* id = (double*)inp;
+                double* od = (double*)outp;
+                long n2 = count * 2;
+                long i = 0;
+                if (Vector256.IsHardwareAccelerated)
+                    for (; i + 4 <= n2; i += 4)
+                        Vector256.Store(Vector256.Add(Vector256.Load(od + i), Vector256.Load(id + i)), od + i);
+                for (; i < n2; i++) od[i] += id[i];
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    double* c = (double*)(inp + k * inS);
+                    double* o = (double*)(outp + k * outS);
+                    o[0] += c[0]; o[1] += c[1];
+                }
+            }
+        }
+
+        // out *= prod(in)  — scalar complex multiply (no SIMD form for complex mul).
+        // Inlined naive (ac-bd, ad+bc) on raw doubles: System.Numerics.Complex's
+        // operator* carries .NET's infinity-rescue branch (Smith-style) and doesn't
+        // inline through `*=` here, which made prod ~5 ns/elem. The naive formula is
+        // also what NumPy uses, so this is closer parity on inf/0 mixes too.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void ComplexProdKernel(void** dataptrs, long* strides, long count, void* auxdata)
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+
+            if (outS == 0)
+            {
+                double* o = (double*)outp;
+                double pr = o[0], pi = o[1];
+                for (long k = 0; k < count; k++)
+                {
+                    double* c = (double*)(inp + k * inS);
+                    double br = c[0], bi = c[1];
+                    double nr = pr * br - pi * bi;
+                    pi = pr * bi + pi * br;
+                    pr = nr;
+                }
+                o[0] = pr; o[1] = pi;
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    double* c = (double*)(inp + k * inS);
+                    double* o = (double*)(outp + k * outS);
+                    double ar = o[0], ai = o[1], br = c[0], bi = c[1];
+                    double nr = ar * br - ai * bi;
+                    o[1] = ar * bi + ai * br;
+                    o[0] = nr;
+                }
+            }
+        }
+
+        private static unsafe void ComplexMinKernel(void** dataptrs, long* strides, long count, void* auxdata)
+            => ComplexMinMax(dataptrs, strides, count, pickGreater: false);
+
+        private static unsafe void ComplexMaxKernel(void** dataptrs, long* strides, long count, void* auxdata)
+            => ComplexMinMax(dataptrs, strides, count, pickGreater: true);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void ComplexMinMax(void** dataptrs, long* strides, long count, bool pickGreater)
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+
+            if (outS == 0)
+            {
+                double* o = (double*)outp;
+                double ar = o[0], ai = o[1];
+                for (long k = 0; k < count; k++)
+                {
+                    double* c = (double*)(inp + k * inS);
+                    LexFold(ref ar, ref ai, c[0], c[1], pickGreater);
+                }
+                o[0] = ar; o[1] = ai;
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    double* c = (double*)(inp + k * inS);
+                    double* o = (double*)(outp + k * outS);
+                    double ar = o[0], ai = o[1];
+                    LexFold(ref ar, ref ai, c[0], c[1], pickGreater);
+                    o[0] = ar; o[1] = ai;
+                }
+            }
+        }
+
+        /// <summary>
+        /// NumPy-parity Complex Min/Max fold on raw (re,im) doubles: a NaN-containing
+        /// accumulator wins (stays), otherwise the incoming value replaces it when it
+        /// is lexicographically more extreme on (Real, Imaginary). Same semantics as
+        /// DirectILKernelGenerator.ComplexLexPick (the legacy path) — NaN tested via
+        /// the branch-light <c>x != x</c> idiom.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static void LexFold(ref double ar, ref double ai, double br, double bi, bool pickGreater)
+        {
+            if (ar != ar || ai != ai) return;           // accumulator is NaN → keep it
+            if (br != br || bi != bi) { ar = br; ai = bi; return; } // incoming NaN → take it
+            bool aGreater = ar > br || (ar == br && ai > bi);
+            bool takeA = pickGreater ? aGreater : !aGreater;
+            if (!takeA) { ar = br; ai = bi; }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -51,6 +52,17 @@ namespace NumSharp.Backends
         {
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
+
+            // NpyIter-driven per-chunk path (the migration target). Currently serves the
+            // (dtype, op) combinations that the legacy DirectILKernelGenerator path covers
+            // only with a slow scalar kernel — Complex sum/prod/min/max. Returns null when
+            // no per-chunk kernel exists yet, so we fall through to the Direct path below.
+            if (UseNpyIterReduce(inputType, outputType, op))
+            {
+                var npyIterResult = ExecuteAxisReductionNpyIter(arr, axis, keepdims, outputType, @out, op);
+                if (npyIterResult is not null) return npyIterResult;
+            }
+
             var key = new AxisReductionKernelKey(inputType, outputType, op, shape.IsContiguous && axis == arr.ndim - 1);
             var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
             if (kernel == null)
@@ -74,6 +86,84 @@ namespace NumSharp.Backends
             {
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
+
+            if (keepdims)
+            {
+                var ks = new long[arr.ndim];
+                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
+                result.Storage.Reshape(new Shape(ks));
+            }
+            return result;
+        }
+
+        /// <summary>
+        ///     Gate for the NpyIter-driven per-chunk reduction path. Returns true only for
+        ///     (dtype, op) combinations that have a kernel in
+        ///     <see cref="Kernels.ILKernelGenerator.GetReduceInnerLoop"/>; everything else
+        ///     stays on the legacy <see cref="Kernels.DirectILKernelGenerator"/> path.
+        ///     Acts as the per-dtype rollback switch (Plan §6).
+        /// </summary>
+        private static bool UseNpyIterReduce(NPTypeCode inputType, NPTypeCode outputType, ReductionOp op)
+        {
+            // Complex same-type sum/prod/min/max/mean. The legacy complex axis paths were:
+            // a scalar axis kernel (sum/prod/min/max — already ~parity under -c Release) and,
+            // for the DEFAULT complex mean, the per-output-row-allocating MeanAxisComplex
+            // (15–45× slower than NumPy — the genuine bottleneck). The NpyIter double-pair
+            // path puts all five on the migration-target architecture at parity-or-better and
+            // collapses mean to a one-pass sum kernel + scalar divide.
+            if (inputType == NPTypeCode.Complex && outputType == NPTypeCode.Complex)
+                return op == ReductionOp.Sum || op == ReductionOp.Prod ||
+                       op == ReductionOp.Min || op == ReductionOp.Max ||
+                       op == ReductionOp.Mean;
+
+            return false;
+        }
+
+        /// <summary>
+        ///     Axis reduction via the 2-operand REDUCE iterator + a per-chunk
+        ///     <see cref="Kernels.ILKernelGenerator"/> kernel. Mirrors
+        ///     <see cref="ExecuteAxisReduction"/>'s output-shape / keepdims / out= handling,
+        ///     but seeds the reduction identity and lets the iterator drive the inner loop.
+        ///     Returns null when no per-chunk kernel exists for the key (caller falls back).
+        /// </summary>
+        private unsafe NDArray ExecuteAxisReductionNpyIter(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
+        {
+            // Mean is computed as a one-pass Sum kernel followed by a scalar divide by the
+            // reduced-axis length — there is no separate "mean" inner loop.
+            var kernelOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+            var key = new ILKernelGenerator.ReduceKernelKey(kernelOp, arr.GetTypeCode, outputType);
+            var kernel = ILKernelGenerator.GetReduceInnerLoop(key);
+            if (kernel is null) return null;
+
+            var shape = arr.Shape;
+            var outputDims = new long[arr.ndim - 1];
+            for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+
+            NDArray result;
+            if (@out is not null)
+            {
+                if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch");
+                result = @out;
+            }
+            else
+            {
+                result = new NDArray(outputType, outputShape, false);
+            }
+
+            // The per-chunk kernel folds into the existing output slot(s), so the output
+            // must carry the reduction identity (0/1/±inf) before the iterator runs.
+            ILKernelGenerator.SeedReduceIdentity(result, kernelOp);
+
+            // COPY_IF_OVERLAP only matters when a user-supplied out= may alias the input; a
+            // fresh allocation can never overlap, so the hot path skips the overlap probe.
+            var extraFlags = @out is not null ? NpyIterGlobalFlags.COPY_IF_OVERLAP : NpyIterGlobalFlags.None;
+            using (var iter = NpyIterRef.NewReduce(arr, result, axis, extraFlags))
+                iter.ForEach(kernel);
+
+            // Mean: divide the accumulated sums by the reduced-axis length (NumPy parity).
+            if (op == ReductionOp.Mean)
+                ILKernelGenerator.MeanDivideByCount(result, shape.dimensions[axis]);
 
             if (keepdims)
             {
