@@ -31,9 +31,20 @@ Correctness pinned vs NumPy + unfused across dtypes (f64/f32/i32) × ops (sum/pr
 uses identity iteration order (contiguous inner); transposed-fused works correctly (axis
 ordering for fused inputs is a later opt — the no-temp win dominates regardless).
 
-**Phase 5b (pending)** — one-pass `var`/`std` axis via a two-accumulator (sum + sumsq) reduce,
-replacing the two-pass `NpyAxisIter.ReduceDouble`. Separate from np.evaluate (it's the
-`np.var`/`np.std` engine path).
+**Phase 5b — SKIPPED (premise false, measured).** The plan assumed two-pass var/std was slow.
+It is not: NumSharp's current var/std axis (the SIMD two-pass `CreateAxisVarStdReductionKernel`)
+**already beats NumPy 3.7–7.2×** for double (10M var axis0 7.7 ms vs NumPy 28.2; axis1 4.3 ms
+vs 30.8; 1M 0.32 ms vs 2.26). A one-pass sum+sumsq rewrite would *regress* it twice over:
+(1) perf — it's already faster than NumPy; (2) numerical stability — one-pass sum-of-squares is
+the classic catastrophic-cancellation form NumPy deliberately avoids with its two-pass
+mean-then-squared-diff. So 5b is actively harmful; not implemented.
+
+**Phase 6 — SKIPPED (would regress).** Migrating the numeric (int/float/double) reductions onto
+the NpyIter generic-`INumber` kernels means trading the SIMD `AxisReductionSimdHelper`
+(`Vector256`) for a scalar generic loop — a guaranteed regression on the already-fast,
+already-at/above-parity numeric path. The plan gated Phase 6 on "zero regression"; that bar
+can't be met without first porting the SIMD reductions to the per-chunk model (large, no perf
+gain). Architectural consolidation only — deferred as not worth the regression risk.
 
 **Phase 4 (strided/transposed) — solved by axis-ordering, NOT gather (better than planned).**
 Root cause (diagnosed, not assumed): the reduce path kept the **logical** axis order (inner = last logical axis), so it was fast only when the input was C-contiguous; a transpose's last logical axis is strided → cache-hostile column gather (~16×). NumPy instead orders iteration axes by the input's **stride** (contiguous axis innermost). Fix is **reduce-local** in `NpyIterRef.NewReduce`: order the `op_axes` iteration axes by descending input |stride| (0/broadcast → outermost), mapping the output back to original order. For C-contig this is the identity (fast path untouched); only non-contiguous inputs reorder. No gather, no copy — access becomes sequential, which beats gather (gather still cache-misses). Isolated 10M (vs NumPy, vs the prior strided path):
