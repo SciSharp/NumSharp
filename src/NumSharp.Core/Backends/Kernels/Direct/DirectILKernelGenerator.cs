@@ -1689,6 +1689,9 @@ namespace NumSharp.Backends.Kernels
         /// For all other cases we defer to the BCL operator — it's ULP-identical to
         /// NumPy for finite inputs.
         /// </summary>
+        // Per-element op called from the binary IL kernel's inner loop — inline where possible,
+        // full tier-1 codegen when invoked standalone via the kernel's Call.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static System.Numerics.Complex ComplexDivideNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
         {
             if (b.Real == 0.0 && b.Imaginary == 0.0)

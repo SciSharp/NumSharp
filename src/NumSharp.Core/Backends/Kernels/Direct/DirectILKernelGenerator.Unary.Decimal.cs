@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 // =============================================================================
@@ -577,6 +578,9 @@ namespace NumSharp.Backends.Kernels
         /// Helper for Half sign: handles NaN properly (returns NaN).
         /// NumPy: sign(NaN) = NaN, sign(0) = 0, sign(+x) = 1, sign(-x) = -1
         /// </summary>
+        // Per-element op called from the unary IL kernel's inner loop — inline where possible,
+        // full tier-1 codegen when invoked standalone via the kernel's Call.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Half HalfSignHelper(Half value)
         {
             if (Half.IsNaN(value))

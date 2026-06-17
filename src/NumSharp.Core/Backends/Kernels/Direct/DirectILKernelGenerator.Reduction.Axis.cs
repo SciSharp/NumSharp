@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 // =============================================================================
@@ -287,6 +288,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Read a value as double from typed memory.
         /// </summary>
+        // Per-element helpers below run once per element inside the axis-reduction loops
+        // (the generic typeof(T) branches constant-fold to a single cast per instantiation),
+        // so inline them where possible and give them full tier-1 codegen otherwise.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe double ReadAsDouble(byte* ptr, NPTypeCode type)
         {
             return type switch
@@ -418,6 +423,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine accumulator with input value, promoting input to accumulator type.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TAccum CombineScalarsPromoted<TInput, TAccum>(TAccum accum, TInput val, ReductionOp op)
             where TInput : unmanaged
             where TAccum : unmanaged
@@ -484,6 +490,7 @@ namespace NumSharp.Backends.Kernels
         /// NumPy-parity pick for Complex Min/Max: NaN-containing operand (first wins) or
         /// lex-compared (Real, Imaginary). Shared with CombineScalarsPromoted's Complex path.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static System.Numerics.Complex ComplexLexPick(System.Numerics.Complex a, System.Numerics.Complex b, bool pickGreater)
         {
             bool aNaN = double.IsNaN(a.Real) || double.IsNaN(a.Imaginary);
@@ -500,6 +507,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Divide accumulator by count (for Mean).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TAccum DivideByCount<TAccum>(TAccum accum, long count) where TAccum : unmanaged
         {
             // Special handling for Complex
@@ -523,6 +531,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Convert any numeric type to double.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ConvertToDouble<T>(T value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)value;
@@ -546,6 +555,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Convert double to target type.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T ConvertFromDouble<T>(double value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (T)(object)(byte)value;
