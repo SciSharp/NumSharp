@@ -75,7 +75,7 @@ namespace NumSharp.Backends.Kernels
         /// Shared body of the contiguous fast path — dispatches simple vs
         /// blocked without re-zeroing C (the stride-aware entry already did).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void MatMulFloatContiguousCore(float* A, float* B, float* C, long M, long N, long K)
         {
             if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
@@ -209,7 +209,7 @@ namespace NumSharp.Backends.Kernels
         /// interleaved panels. Layout matches PackAPanels:
         ///   aPanel[(ip/MR) * kc * MR + k * MR + row].
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void PackAPanelsStrided(
             float* A, long aStride0, long aStride1,
             float* packA, long i0, long k0, int mc, int kc)
@@ -269,7 +269,7 @@ namespace NumSharp.Backends.Kernels
         /// panels. Layout matches PackBPanels:
         ///   bPanel[(jp/NR) * kc * NR + k * NR + col].
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void PackBPanelsStrided(
             float* B, long bStride0, long bStride1,
             float* packB, long N_total, long k0, int kc)

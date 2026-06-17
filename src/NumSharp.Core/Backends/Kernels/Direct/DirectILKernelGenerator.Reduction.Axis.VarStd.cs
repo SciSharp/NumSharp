@@ -323,7 +323,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Seed the per-column accumulator from a single input row, widening TInput → double.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AxisVarStdSeedRowAsDouble<TInput>(TInput* row, double* sums, long n)
             where TInput : unmanaged
         {
@@ -357,7 +357,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Add one input row to the per-column accumulator, widening TInput → double.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AxisVarStdAddRowAsDouble<TInput>(TInput* row, double* sums, long n)
             where TInput : unmanaged
         {
@@ -400,7 +400,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Accumulate (val - mean[col])² per column from one input row.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AxisVarStdAccumulateSqDiff<TInput>(TInput* row, double* means, double* sqdiffs, long n)
             where TInput : unmanaged
         {

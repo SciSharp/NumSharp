@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 // =============================================================================
@@ -315,6 +316,9 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Compare if a > b for numeric types.
         /// </summary>
+        // Per-element compare in the argmax/argmin scan — inline (generic typeof(T) folds to one
+        // comparison per T) and full tier-1 codegen.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool CompareGreater<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)a > (byte)(object)b;
@@ -334,6 +338,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Compare if a < b for numeric types.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool CompareLess<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)a < (byte)(object)b;

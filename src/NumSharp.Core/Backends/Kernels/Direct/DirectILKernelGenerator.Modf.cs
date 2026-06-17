@@ -38,7 +38,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Scalar modf for float following C standard / NumPy behavior.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void ModfScalar(float value, out float fractional, out float integral)
         {
             if (float.IsNaN(value))
@@ -66,7 +66,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Scalar modf for double following C standard / NumPy behavior.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void ModfScalar(double value, out double fractional, out double integral)
         {
             if (double.IsNaN(value))
@@ -99,7 +99,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Input array (will contain fractional parts after)</param>
         /// <param name="integral">Output array for integral parts</param>
         /// <param name="size">Number of elements</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void ModfHelper(float* data, float* integral, long size)
         {
             if (size == 0) return;
@@ -215,7 +215,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Input array (will contain fractional parts after)</param>
         /// <param name="integral">Output array for integral parts</param>
         /// <param name="size">Number of elements</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void ModfHelper(double* data, double* integral, long size)
         {
             if (size == 0) return;

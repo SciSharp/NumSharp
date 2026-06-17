@@ -14,7 +14,7 @@ namespace NumSharp.Backends.Kernels
         /// An array is contiguous if strides match expected C-order values:
         /// strides[n-1] = 1, strides[i] = strides[i+1] * shape[i+1]
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe bool IsContiguous(long* strides, long* shape, int ndim)
         {
             if (ndim == 0) return true;
@@ -34,7 +34,7 @@ namespace NumSharp.Backends.Kernels
         /// Check if array is a scalar (all strides are zero).
         /// A scalar is broadcast to any shape - each element accesses the same value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe bool IsScalar(long* strides, int ndim)
         {
             for (int d = 0; d < ndim; d++)
@@ -49,7 +49,7 @@ namespace NumSharp.Backends.Kernels
         /// Check if inner dimension is suitable for SIMD chunking.
         /// Returns true if both operands have inner stride of 1 (contiguous) or 0 (broadcast).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe bool CanSimdChunk<T>(long* lhsStrides, long* rhsStrides, long* shape, int ndim)
             where T : unmanaged
         {
@@ -78,7 +78,7 @@ namespace NumSharp.Backends.Kernels
         /// 3. SimdChunk - inner dimension is contiguous/broadcast
         /// 4. General - fallback for arbitrary strides
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe ExecutionPath Classify<T>(
             long* lhsStrides,
             long* rhsStrides,

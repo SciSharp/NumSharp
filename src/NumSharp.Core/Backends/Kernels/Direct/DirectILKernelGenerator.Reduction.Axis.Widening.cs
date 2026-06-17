@@ -934,7 +934,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TAcc HorizontalReduceWidened<TAcc, TOp>(Vector256<TAcc> v)
             where TAcc : unmanaged
             where TOp : struct, IWAccOp<TAcc>
@@ -981,7 +981,7 @@ namespace NumSharp.Backends.Kernels
 
         internal readonly struct WAddOp<TAcc> : IWAccOp<TAcc> where TAcc : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<TAcc> Combine(Vector256<TAcc> a, Vector256<TAcc> b)
             {
                 if (typeof(TAcc) == typeof(long) && Avx2.IsSupported)
@@ -993,7 +993,7 @@ namespace NumSharp.Backends.Kernels
                 return Vector256.Add(a, b);
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc CombineScalar(TAcc a, TAcc b)
             {
                 if (typeof(TAcc) == typeof(long)) return (TAcc)(object)((long)(object)a + (long)(object)b);
@@ -1002,13 +1002,13 @@ namespace NumSharp.Backends.Kernels
                 throw new NotSupportedException();
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc Identity() => default;     // 0 / 0UL / 0.0
         }
 
         internal readonly struct WMulOp<TAcc> : IWAccOp<TAcc> where TAcc : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<TAcc> Combine(Vector256<TAcc> a, Vector256<TAcc> b)
             {
                 // No AVX2 64-bit integer multiply; Vector256.Multiply emits the
@@ -1018,7 +1018,7 @@ namespace NumSharp.Backends.Kernels
                 return Vector256.Multiply(a, b);
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc CombineScalar(TAcc a, TAcc b)
             {
                 if (typeof(TAcc) == typeof(long)) return (TAcc)(object)((long)(object)a * (long)(object)b);
@@ -1027,7 +1027,7 @@ namespace NumSharp.Backends.Kernels
                 throw new NotSupportedException();
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc Identity() => OneOf<TAcc>();
         }
 
@@ -1036,10 +1036,10 @@ namespace NumSharp.Backends.Kernels
         // they emit the compare+blend sequence (no native instruction).
         internal readonly struct WMinOp<TAcc> : IWAccOp<TAcc> where TAcc : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<TAcc> Combine(Vector256<TAcc> a, Vector256<TAcc> b) => Vector256.Min(a, b);
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc CombineScalar(TAcc a, TAcc b)
             {
                 if (typeof(TAcc) == typeof(long)) return (TAcc)(object)Math.Min((long)(object)a, (long)(object)b);
@@ -1048,16 +1048,16 @@ namespace NumSharp.Backends.Kernels
                 throw new NotSupportedException();
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc Identity() => MaxValueOf<TAcc>();
         }
 
         internal readonly struct WMaxOp<TAcc> : IWAccOp<TAcc> where TAcc : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<TAcc> Combine(Vector256<TAcc> a, Vector256<TAcc> b) => Vector256.Max(a, b);
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc CombineScalar(TAcc a, TAcc b)
             {
                 if (typeof(TAcc) == typeof(long)) return (TAcc)(object)Math.Max((long)(object)a, (long)(object)b);
@@ -1066,7 +1066,7 @@ namespace NumSharp.Backends.Kernels
                 throw new NotSupportedException();
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static TAcc Identity() => MinValueOf<TAcc>();
         }
 
@@ -1096,66 +1096,66 @@ namespace NumSharp.Backends.Kernels
         /// <summary>short -> long (VPMOVSXWQ).</summary>
         internal readonly unsafe struct WidenI16ToI64 : IWidenLoad<long>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<long> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.CreateScalarUnsafe(*(ulong*)p).AsInt16());
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static long LoadScalar(byte* p) => *(short*)p;
         }
 
         /// <summary>ushort -> ulong (VPMOVZXWQ).</summary>
         internal readonly unsafe struct WidenU16ToU64 : IWidenLoad<ulong>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<ulong> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.CreateScalarUnsafe(*(ulong*)p).AsUInt16()).AsUInt64();
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static ulong LoadScalar(byte* p) => *(ushort*)p;
         }
 
         /// <summary>sbyte -> long (VPMOVSXBQ).</summary>
         internal readonly unsafe struct WidenI8ToI64 : IWidenLoad<long>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<long> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.CreateScalarUnsafe(*(uint*)p).AsSByte());
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static long LoadScalar(byte* p) => *(sbyte*)p;
         }
 
         /// <summary>byte -> ulong (VPMOVZXBQ).</summary>
         internal readonly unsafe struct WidenU8ToU64 : IWidenLoad<ulong>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<ulong> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.CreateScalarUnsafe(*(uint*)p).AsByte()).AsUInt64();
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static ulong LoadScalar(byte* p) => *p;
         }
 
         /// <summary>int -> long (VPMOVSXDQ).</summary>
         internal readonly unsafe struct WidenI32ToI64 : IWidenLoad<long>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<long> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.Load((int*)p));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static long LoadScalar(byte* p) => *(int*)p;
         }
 
         /// <summary>uint -> ulong (VPMOVZXDQ).</summary>
         internal readonly unsafe struct WidenU32ToU64 : IWidenLoad<ulong>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<ulong> Load4(byte* p)
                 => Avx2.ConvertToVector256Int64(Vector128.Load((uint*)p)).AsUInt64();
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static ulong LoadScalar(byte* p) => *(uint*)p;
         }
 
@@ -1164,29 +1164,29 @@ namespace NumSharp.Backends.Kernels
         /// <summary>float -> double (VCVTPS2PD).</summary>
         internal readonly unsafe struct WidenF32ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(Vector128.Load((float*)p));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(float*)p;
         }
 
         /// <summary>int -> double (VCVTDQ2PD).</summary>
         internal readonly unsafe struct WidenI32ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(Vector128.Load((int*)p));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(int*)p;
         }
 
         /// <summary>uint -> double (exact bias trick — no unsigned convert below AVX-512).</summary>
         internal readonly unsafe struct WidenU32ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
             {
                 // (double)(int)(u ^ 0x80000000) + 2^31 == u for all uint32.
@@ -1194,55 +1194,55 @@ namespace NumSharp.Backends.Kernels
                 return Avx.Add(Avx.ConvertToVector256Double(biased), Vector256.Create(2147483648.0));
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(uint*)p;
         }
 
         /// <summary>short -> double (VPMOVSXWD + VCVTDQ2PD).</summary>
         internal readonly unsafe struct WidenI16ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(
                     Sse41.ConvertToVector128Int32(Vector128.CreateScalarUnsafe(*(ulong*)p).AsInt16()));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(short*)p;
         }
 
         /// <summary>ushort -> double (VPMOVZXWD + VCVTDQ2PD).</summary>
         internal readonly unsafe struct WidenU16ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(
                     Sse41.ConvertToVector128Int32(Vector128.CreateScalarUnsafe(*(ulong*)p).AsUInt16()));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(ushort*)p;
         }
 
         /// <summary>sbyte -> double (VPMOVSXBD + VCVTDQ2PD).</summary>
         internal readonly unsafe struct WidenI8ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(
                     Sse41.ConvertToVector128Int32(Vector128.CreateScalarUnsafe(*(uint*)p).AsSByte()));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *(sbyte*)p;
         }
 
         /// <summary>byte -> double (VPMOVZXBD + VCVTDQ2PD).</summary>
         internal readonly unsafe struct WidenU8ToF64 : IWidenLoad<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static Vector256<double> Load4(byte* p)
                 => Avx.ConvertToVector256Double(
                     Sse41.ConvertToVector128Int32(Vector128.CreateScalarUnsafe(*(uint*)p).AsByte()));
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public static double LoadScalar(byte* p) => *p;
         }
     }

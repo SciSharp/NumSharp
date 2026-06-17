@@ -76,7 +76,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Execute where operation using IL-generated kernel or fallback to static helper.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void WhereExecute<T>(bool* cond, T* x, T* y, T* result, long count) where T : unmanaged
         {
             if (count == 0)
@@ -549,7 +549,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Scalar fallback for where operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void WhereScalar<T>(bool* cond, T* x, T* y, T* result, long count) where T : unmanaged
         {
             for (long i = 0; i < count; i++)

@@ -174,7 +174,7 @@ namespace NumSharp.Backends.Kernels
         /// This gives contiguous access pattern: aPanel[k * MR + row]
         /// Uses long for i0, k0, lda to support large matrices.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void PackAPanels(float* A, float* packA, long lda, long i0, long k0, int mc, int kc)
         {
             for (int ip = 0; ip < mc; ip += MR)
@@ -218,7 +218,7 @@ namespace NumSharp.Backends.Kernels
         /// This gives contiguous access pattern: bPanel[k * NR + col]
         /// Uses long for n, k0, ldb to support large matrices.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void PackBPanels(float* B, float* packB, long ldb, long k0, int kc)
         {
             long n = ldb; // N == ldb for row-major B
@@ -260,7 +260,7 @@ namespace NumSharp.Backends.Kernels
         /// - B panel: bPanel[k * NR + col] - 16 floats contiguous per k
         /// Uses long for i, j, ldc to support large matrices.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void Microkernel8x16Packed(float* aPanel, float* bPanel, float* C, long ldc, long i, long j, int kc)
         {
             // Load C accumulators (8 rows x 2 vectors = 16 accumulators)

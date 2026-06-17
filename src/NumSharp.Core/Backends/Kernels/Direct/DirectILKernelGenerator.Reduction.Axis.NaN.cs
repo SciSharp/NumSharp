@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
 // =============================================================================
@@ -896,6 +897,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the identity value for NaN reduction operations.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T GetNanIdentityValue<T>(ReductionOp op)
             where T : unmanaged, IFloatingPoint<T>
         {

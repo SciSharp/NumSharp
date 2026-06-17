@@ -579,6 +579,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get typed identity value for reduction operation.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T GetIdentityValueTyped<T>(ReductionOp op) where T : unmanaged
         {
             // Special handling for Complex

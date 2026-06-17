@@ -277,7 +277,7 @@ namespace NumSharp.Backends.Kernels
         // branch on `op` happens ONCE here, routing to a kernel with the op
         // hard-coded via the zero-sized ITypedReductionOp struct (JIT inlines the
         // combine with no per-element switch).
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DispatchSlabAccumulate<T>(
             T* input, T* output, long* inputStrides, long* inputShape, long* outputStrides,
             int axis, long axisSize, int ndim, long outputSize, ReductionOp op, bool isMean)
@@ -433,7 +433,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Advance a single-offset odometer (innermost dim K-1) by one step.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void AdvanceOdometer(long* idx, long* dSize, long* dStride, int K, ref long off)
         {
             for (int d = K - 1; d >= 0; d--)
@@ -446,7 +446,7 @@ namespace NumSharp.Backends.Kernels
 
         // After consuming a full innermost run (idx[K-1] == dSize[K-1]), carry into
         // the outer dims, advancing both input and output offsets incrementally.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void CarryOdometer(long* idx, long* dSize, long* dIn, long* dOut, int K, ref long inOff, ref long outOff)
         {
             // innermost just wrapped: reset it and carry.
@@ -520,7 +520,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce a contiguous axis using SIMD.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe T ReduceContiguousAxis<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
@@ -830,7 +830,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the identity value for a reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T GetIdentityValue<T>(ReductionOp op) where T : unmanaged
         {
             if (typeof(T) == typeof(float))
@@ -961,7 +961,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Create identity Vector256 for reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector256<T> CreateIdentityVector256<T>(ReductionOp op) where T : unmanaged
         {
             T identity = GetIdentityValue<T>(op);
@@ -971,7 +971,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Create identity Vector128 for reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector128<T> CreateIdentityVector128<T>(ReductionOp op) where T : unmanaged
         {
             T identity = GetIdentityValue<T>(op);
@@ -981,7 +981,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two Vector256 values using reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector256<T> CombineVectors256<T>(Vector256<T> a, Vector256<T> b, ReductionOp op)
             where T : unmanaged
         {
@@ -1005,7 +1005,7 @@ namespace NumSharp.Backends.Kernels
         /// guard is compiled out and the single-instruction path stands. Integer instantiations never
         /// reach the guard (the <c>typeof(T)</c> checks are JIT-time constants).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector256<T> NaNAwareMinMax256<T>(Vector256<T> a, Vector256<T> b, bool isMax)
             where T : unmanaged
         {
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two Vector128 values using reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector128<T> CombineVectors128<T>(Vector128<T> a, Vector128<T> b, ReductionOp op)
             where T : unmanaged
         {
@@ -1039,7 +1039,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>NaN-propagating Vector128 Min/Max for floating point (see NaNAwareMinMax256;
         /// the float/double mask is compiled only on net8.0, where Vector128.Min/Max drop NaN).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Vector128<T> NaNAwareMinMax128<T>(Vector128<T> a, Vector128<T> b, bool isMax)
             where T : unmanaged
         {
@@ -1057,6 +1057,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Horizontal reduce Vector256 to scalar.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T HorizontalReduce256<T>(Vector256<T> vec, ReductionOp op) where T : unmanaged
         {
             // First reduce to Vector128
@@ -1070,6 +1071,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Horizontal reduce Vector128 to scalar.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T HorizontalReduce128<T>(Vector128<T> vec, ReductionOp op) where T : unmanaged
         {
             int count = Vector128<T>.Count;
@@ -1086,7 +1088,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Combine two scalar values using reduction operation.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T CombineScalars<T>(T a, T b, ReductionOp op) where T : unmanaged
         {
             if (typeof(T) == typeof(float))
@@ -1240,7 +1242,7 @@ namespace NumSharp.Backends.Kernels
 
         // Detect C-contiguous from strides+shape: stride[ndim-1] == 1 and
         // stride[i] == stride[i+1] * shape[i+1] for all i in [0, ndim-2].
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool IsCContig(long* strides, long* shape, int ndim)
         {
             if (ndim == 0) return true;
@@ -1252,7 +1254,7 @@ namespace NumSharp.Backends.Kernels
 
         // Detect F-contiguous: stride[0] == 1 and stride[i] == stride[i-1] * shape[i-1]
         // for all i in [1, ndim-1]. Common case: `.T` on a C-contig 2D array.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool IsFContig(long* strides, long* shape, int ndim)
         {
             if (ndim == 0) return true;
@@ -1267,7 +1269,7 @@ namespace NumSharp.Backends.Kernels
         // outer strides to match the C-contig formula, so it covers sliced inputs
         // like a[::2,:], a[::-1,:], or a[100:900, 100:900], whose inner dim is still
         // stride-1 but whose outer stride differs from a fresh C-contig array.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool IsInnerSlabCContig(long* strides, long* shape, int axis, int ndim)
         {
             if (axis >= ndim - 1) return false;
@@ -1280,7 +1282,7 @@ namespace NumSharp.Backends.Kernels
         // Per-op dispatch into the typed kernel. The runtime branch on `op` happens
         // ONCE here (not in the hot loop), and routes to a kernel with the op
         // hard-coded via struct generic — JIT inlines the SIMD intrinsic.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DispatchLeading<T>(
             T* input, T* output, long outerSize, long axisSize, long innerSize, ReductionOp op)
             where T : unmanaged
@@ -1310,7 +1312,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DispatchInnermost<T>(
             T* input, T* output, long outputSize, long axisSize, ReductionOp op)
             where T : unmanaged
@@ -1349,7 +1351,7 @@ namespace NumSharp.Backends.Kernels
         ///     are unused. We still pass real values via <c>stackalloc</c> so the
         ///     kernel is safe if it ever falls into a non-contig branch.
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryDispatchInnermostIL<T>(
             T* input, T* output, long outputSize, long axisSize, ReductionOp op)
             where T : unmanaged
@@ -1385,7 +1387,7 @@ namespace NumSharp.Backends.Kernels
             return true;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void DispatchLeadingStrided<T>(
             T* input, T* output, long axisSize, long innerSize, long axisStride, ReductionOp op)
             where T : unmanaged
@@ -1654,7 +1656,7 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T HorizontalReduceTyped<T, TOp>(Vector128<T> v)
             where T : unmanaged
             where TOp : struct, ITypedReductionOp<T>
@@ -1741,7 +1743,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Per-T identity helpers (one/min/max) — JIT-folded per specialization.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T OneOf<T>() where T : unmanaged
         {
             if (typeof(T) == typeof(float))  return (T)(object)1f;
@@ -1756,7 +1758,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong))  return (T)(object)1UL;
             throw new NotSupportedException();
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T MaxValueOf<T>() where T : unmanaged
         {
             if (typeof(T) == typeof(float))  return (T)(object)float.PositiveInfinity;
@@ -1771,7 +1773,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong))  return (T)(object)ulong.MaxValue;
             throw new NotSupportedException();
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T MinValueOf<T>() where T : unmanaged
         {
             if (typeof(T) == typeof(float))  return (T)(object)float.NegativeInfinity;
@@ -1789,17 +1791,17 @@ namespace NumSharp.Backends.Kernels
 
         internal readonly struct AddOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => AddScalar(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => default;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Add(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T CombineScalar(T a, T b) => AddScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T Identity() => default;
         }
         internal readonly struct MulOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MulScalar(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => OneOf<T>();
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => Vector256.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => Vector128.Multiply(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T CombineScalar(T a, T b) => MulScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T Identity() => OneOf<T>();
         }
 
         // ─── Type-specialized Add/Mul ops for hot-loop SIMD on float/double ──
@@ -1819,66 +1821,66 @@ namespace NumSharp.Backends.Kernels
         // CombineScalar matches AddOp/MulOp.
         internal readonly struct AddOpFloat : ITypedReductionOp<float>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector256<float> Combine256(Vector256<float> a, Vector256<float> b)
                 => System.Runtime.Intrinsics.X86.Avx.IsSupported
                     ? System.Runtime.Intrinsics.X86.Avx.Add(a, b)
                     : Vector256.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector128<float> Combine128(Vector128<float> a, Vector128<float> b)
                 => System.Runtime.Intrinsics.X86.Sse.IsSupported
                     ? System.Runtime.Intrinsics.X86.Sse.Add(a, b)
                     : Vector128.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float CombineScalar(float a, float b) => a + b;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float Identity() => 0f;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public float CombineScalar(float a, float b) => a + b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public float Identity() => 0f;
         }
 
         internal readonly struct AddOpDouble : ITypedReductionOp<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector256<double> Combine256(Vector256<double> a, Vector256<double> b)
                 => System.Runtime.Intrinsics.X86.Avx.IsSupported
                     ? System.Runtime.Intrinsics.X86.Avx.Add(a, b)
                     : Vector256.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector128<double> Combine128(Vector128<double> a, Vector128<double> b)
                 => System.Runtime.Intrinsics.X86.Sse2.IsSupported
                     ? System.Runtime.Intrinsics.X86.Sse2.Add(a, b)
                     : Vector128.Add(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double CombineScalar(double a, double b) => a + b;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double Identity() => 0.0;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public double CombineScalar(double a, double b) => a + b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public double Identity() => 0.0;
         }
 
         internal readonly struct MulOpFloat : ITypedReductionOp<float>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector256<float> Combine256(Vector256<float> a, Vector256<float> b)
                 => System.Runtime.Intrinsics.X86.Avx.IsSupported
                     ? System.Runtime.Intrinsics.X86.Avx.Multiply(a, b)
                     : Vector256.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector128<float> Combine128(Vector128<float> a, Vector128<float> b)
                 => System.Runtime.Intrinsics.X86.Sse.IsSupported
                     ? System.Runtime.Intrinsics.X86.Sse.Multiply(a, b)
                     : Vector128.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float CombineScalar(float a, float b) => a * b;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public float Identity() => 1f;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public float CombineScalar(float a, float b) => a * b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public float Identity() => 1f;
         }
 
         internal readonly struct MulOpDouble : ITypedReductionOp<double>
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector256<double> Combine256(Vector256<double> a, Vector256<double> b)
                 => System.Runtime.Intrinsics.X86.Avx.IsSupported
                     ? System.Runtime.Intrinsics.X86.Avx.Multiply(a, b)
                     : Vector256.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public Vector128<double> Combine128(Vector128<double> a, Vector128<double> b)
                 => System.Runtime.Intrinsics.X86.Sse2.IsSupported
                     ? System.Runtime.Intrinsics.X86.Sse2.Multiply(a, b)
                     : Vector128.Multiply(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double CombineScalar(double a, double b) => a * b;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public double Identity() => 1.0;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public double CombineScalar(double a, double b) => a * b;
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public double Identity() => 1.0;
         }
         // Min/Max route through NaNAwareMinMax256/128 (NOT raw Vector256.Min/Max) so a NaN
         // operand propagates per NumPy's (non-nan*) min/max contract — Min(x, NaN) = NaN. The
@@ -1890,17 +1892,17 @@ namespace NumSharp.Backends.Kernels
         // have this issue, so they're wired through the faster Add/Mul typed structs.
         internal readonly struct MinOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: false);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: false);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MinScalar(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MaxValueOf<T>();
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: false);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: false);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T CombineScalar(T a, T b) => MinScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T Identity() => MaxValueOf<T>();
         }
         internal readonly struct MaxOp<T> : ITypedReductionOp<T> where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: true);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: true);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T CombineScalar(T a, T b) => MaxScalar(a, b);
-            [MethodImpl(MethodImplOptions.AggressiveInlining)] public T Identity() => MinValueOf<T>();
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector256<T> Combine256(Vector256<T> a, Vector256<T> b) => NaNAwareMinMax256(a, b, isMax: true);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public Vector128<T> Combine128(Vector128<T> a, Vector128<T> b) => NaNAwareMinMax128(a, b, isMax: true);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T CombineScalar(T a, T b) => MaxScalar(a, b);
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T Identity() => MinValueOf<T>();
         }
 
         // =====================================================================
@@ -1916,7 +1918,7 @@ namespace NumSharp.Backends.Kernels
         // on Avx2, integer Divide), fall back to Vector{N}.* — keeps the existing
         // behavior.
         // =====================================================================
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by type-specialized AddOpFloat/AddOpDouble structs (commit 435a07e2) which JIT-fold cleanly; the typeof(T) chain here lost 21-30% perf.", error: true)]
         private static Vector256<T> Add256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
@@ -1939,7 +1941,7 @@ namespace NumSharp.Backends.Kernels
             return Vector256.Add(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by type-specialized AddOpFloat/AddOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector128<T> Add128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
@@ -1960,7 +1962,7 @@ namespace NumSharp.Backends.Kernels
             return Vector128.Add(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by type-specialized MulOpFloat/MulOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector256<T> Mul256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
@@ -1981,7 +1983,7 @@ namespace NumSharp.Backends.Kernels
             return Vector256.Multiply(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by type-specialized MulOpFloat/MulOpDouble structs (commit 435a07e2).", error: true)]
         private static Vector128<T> Mul128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
@@ -2001,7 +2003,7 @@ namespace NumSharp.Backends.Kernels
             return Vector128.Multiply(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by direct Vector256.Min usage (NaN-correct for float/double per NumPy semantics).", error: true)]
         private static Vector256<T> Min256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
@@ -2023,7 +2025,7 @@ namespace NumSharp.Backends.Kernels
             return Vector256.Min(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by direct Vector128.Min usage.", error: true)]
         private static Vector128<T> Min128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
@@ -2045,7 +2047,7 @@ namespace NumSharp.Backends.Kernels
             return Vector128.Min(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by direct Vector256.Max usage (NaN-correct for float/double per NumPy semantics).", error: true)]
         private static Vector256<T> Max256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
         {
@@ -2066,7 +2068,7 @@ namespace NumSharp.Backends.Kernels
             return Vector256.Max(a, b);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [Obsolete("Unused. Superseded by direct Vector128.Max usage.", error: true)]
         private static Vector128<T> Max128<T>(Vector128<T> a, Vector128<T> b) where T : unmanaged
         {
@@ -2090,7 +2092,7 @@ namespace NumSharp.Backends.Kernels
 
         // Per-T scalar helpers. The typeof(T)==typeof(X) chain JIT-folds to a single
         // branch per specialization.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T AddScalar<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)(x + y); }
@@ -2105,7 +2107,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)(x + y); }
             throw new NotSupportedException();
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T MulScalar<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)(x * y); }
@@ -2120,7 +2122,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)(x * y); }
             throw new NotSupportedException();
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T MinScalar<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)Math.Min(x, y); }
@@ -2135,7 +2137,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong))  { ulong  x = (ulong) (object)a, y = (ulong) (object)b; return (T)(object)Math.Min(x, y); }
             throw new NotSupportedException();
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T MaxScalar<T>(T a, T b) where T : unmanaged
         {
             if (typeof(T) == typeof(float))  { float  x = (float) (object)a, y = (float) (object)b; return (T)(object)Math.Max(x, y); }

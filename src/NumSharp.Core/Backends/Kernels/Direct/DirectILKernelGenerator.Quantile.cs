@@ -464,13 +464,13 @@ namespace NumSharp.Backends.Kernels
             if (nextIdx > n - 1) nextIdx = n - 1;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double AB(int n, double q, double alpha, double beta) =>
             n * q + (alpha + q * (1.0 - alpha - beta)) - 1.0;
 
         // ── per-cell write (JIT-specialized) ────────────────────────────────────
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void WriteNaNCell<TOut>(TOut* dst) where TOut : unmanaged
         {
             if (typeof(TOut) == typeof(double))     *(double*)dst  = double.NaN;
@@ -551,7 +551,7 @@ namespace NumSharp.Backends.Kernels
             WriteAsTOut(dr, dst);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void WriteAsTOut<TOut>(double v, TOut* dst) where TOut : unmanaged
         {
             if (typeof(TOut) == typeof(double))      { *(double*)dst  = v; return; }
@@ -571,7 +571,7 @@ namespace NumSharp.Backends.Kernels
             throw new NotSupportedException(typeof(TOut).Name);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ToDouble<T>(T value) where T : unmanaged
         {
             // Same JIT-folded chain pattern. The CLR ABI lets us re-interpret the
