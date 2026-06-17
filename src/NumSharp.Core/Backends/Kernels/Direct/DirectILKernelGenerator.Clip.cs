@@ -234,7 +234,7 @@ namespace NumSharp.Backends.Kernels
                     EmitOffsetAddrFromLocal(il, 3, locByteOff);
                     EmitVectorLoad(il, dtype);
                 }
-                EmitVectorMinOrMax(il, isMax: true, dtype);    // vec = Max(vec, lo)
+                EmitVectorMinOrMax(il, isMax: true, dtype, propagateNaN: true);    // vec = Max(vec, lo)
             }
 
             if (needHi)
@@ -246,7 +246,7 @@ namespace NumSharp.Backends.Kernels
                     EmitOffsetAddrFromLocal(il, 4, locByteOff);
                     EmitVectorLoad(il, dtype);
                 }
-                EmitVectorMinOrMax(il, isMax: false, dtype);   // vec = Min(vec, hi)
+                EmitVectorMinOrMax(il, isMax: false, dtype, propagateNaN: true);   // vec = Min(vec, hi)
             }
 
             // Store at dst+byteOff

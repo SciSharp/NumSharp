@@ -173,16 +173,14 @@ namespace NumSharp.UnitTest.Fuzz
             if (c.Op == "isclose" && kind == DivergenceKind.Value)
                 return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
-            // (W11-A) maximum/minimum must PROPAGATE NaN (NumPy: maximum(NaN,x)=NaN) but NumSharp
-            // returns the non-NaN operand — it behaves like fmax/fmin (the NaN semantics are swapped
-            // with W7-B). Surfaced by the out= test where b=roll(a) places a finite opposite the NaN;
-            // the out= write mechanism itself is sound (only the NaN element diverges).
-            if ((c.Op == "maximum_out" || c.Op == "minimum_out") && kind == DivergenceKind.Value
-                && diffs.All(d => d.Expected == "NaN"))
-                return "maximum/minimum: do not propagate NaN (return the non-NaN operand; swapped with fmax/fmin) [known bug]";
-            // clip(NaN) clamps to a_min on the out= path too (same as W6-D).
-            if (c.Op == "clip_out" && kind == DivergenceKind.Value && diffs.All(d => d.Expected == "NaN"))
-                return "clip(NaN): clamps NaN to a_min instead of preserving it (out= path) [known bug]";
+            // (W11-A / clip_out FIXED) maximum/minimum/clip now PROPAGATE NaN on the out= path
+            // (NumPy: maximum(NaN,x)=NaN, clip(NaN,lo,hi)=NaN). Root cause: the clip SIMD kernel used
+            // the hardware MAXPS/MINPD intrinsics (Avx.Max/Min), which return the SECOND operand on an
+            // unordered (NaN) compare and so silently dropped the NaN; the scalar path already
+            // propagated. EmitVectorMinOrMax(propagateNaN: true) now restores it via
+            // ConditionalSelect(Equals(a,a), hwMinMax, a) for the float lanes
+            // (DirectILKernelGenerator.cs). The classifier branches are removed so the matrix verifies
+            // maximum_out / minimum_out / clip_out NaN propagation bit-exact.
 
             // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) diverge on
             //     non-finite slices and on the integer axis path; average has summation-order drift.
@@ -206,11 +204,9 @@ namespace NumSharp.UnitTest.Fuzz
             if (c.Op == "average" && kind == DivergenceKind.Value)
                 return "average: summation-order precision divergence (pairwise vs naive) [known bug]";
 
-            // (W6-D) np.clip propagates NaN in NumPy (clip(NaN,lo,hi)=NaN) but NumSharp clamps it to
-            // a_min — its min/max comparisons sort NaN below the lower bound. Scoped to a clip whose
-            // every divergent element is a NumPy NaN.
-            if (c.Op == "clip" && kind == DivergenceKind.Value && diffs.All(d => d.Expected == "NaN"))
-                return "clip(NaN): clamps NaN to a_min instead of preserving it [known bug]";
+            // (W6-D FIXED) np.clip propagates NaN (clip(NaN,lo,hi)=NaN) — fixed together with W11-A by
+            // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
+            // classifier branch is removed so the matrix verifies clip(NaN) bit-exact.
 
             // --- NaN-aware reductions (T10 / W4): the nan* family is broadly broken ---
             if (NanReduceOps.Contains(c.Op))

@@ -1753,11 +1753,73 @@ namespace NumSharp.Backends.Kernels
         /// result is one vector. Prefers Avx/Avx2/Sse2 intrinsics on x86; falls back
         /// to the cross-platform <c>Vector{N}.Min/Max</c> for unsupported (op, T) — e.g.
         /// int64 on Avx2.
+        /// <para>
+        /// When <paramref name="propagateNaN"/> is set (and the element type is a float),
+        /// the result propagates NaN per NumPy <c>maximum</c>/<c>minimum</c>/<c>clip</c>
+        /// semantics: a lane is NaN whenever <em>either</em> operand is NaN. The hardware
+        /// MAXPS/MAXPD (and <c>Avx.Max</c>/<c>Sse.Max</c>) instructions return the SECOND
+        /// operand on an unordered (NaN) compare — i.e. <c>Max(NaN, finite)</c> yields the
+        /// finite value, silently dropping the NaN. See the wrapper below for the fix.
+        /// </para>
         /// </summary>
-        internal static void EmitVectorMinOrMax(ILGenerator il, bool isMax, NPTypeCode type)
+        internal static void EmitVectorMinOrMax(ILGenerator il, bool isMax, NPTypeCode type, bool propagateNaN = false)
         {
             string methodName = isMax ? "Max" : "Min";
             var clrType = GetClrType(type);
+
+            // Integer lanes have no NaN, and callers that don't opt in keep the raw
+            // hardware semantics — emit the bare min/max and return.
+            bool nanAware = propagateNaN && (type == NPTypeCode.Single || type == NPTypeCode.Double);
+            if (!nanAware)
+            {
+                EmitRawVectorMinOrMax(il, methodName, clrType);
+                return;
+            }
+
+            // NaN-propagating float min/max (NumPy maximum/minimum/clip semantics).
+            //
+            //   Stack in : [a, b]      a = value vector, b = bound vector
+            //   Stack out: [result]    result lane = isNaN(a) ? a : hwMinMax(a, b)
+            //
+            // hwMinMax returns the SECOND operand (b) on any NaN lane, so:
+            //   * b is NaN   -> hwMinMax = b = NaN            (already propagates)
+            //   * a is NaN   -> hwMinMax = b (finite)          (WRONG — restored below)
+            //   * neither    -> hwMinMax = true min/max        (correct)
+            // Selecting `a` back into exactly the a-is-NaN lanes restores propagation.
+            // Robust even if the underlying min/max already propagates (then a is NaN
+            // anyway, so the select is a no-op). Verified against Avx.Max/Min and the
+            // cross-platform Vector{N}.Max/Min fallback.
+            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            var locA = il.DeclareLocal(vecType);
+            var locB = il.DeclareLocal(vecType);
+            var locHw = il.DeclareLocal(vecType);
+
+            il.Emit(OpCodes.Stloc, locB);                       // [a]
+            il.Emit(OpCodes.Stloc, locA);                       // []
+
+            // hw = hwMinMax(a, b)
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+            EmitRawVectorMinOrMax(il, methodName, clrType);     // [hw]
+            il.Emit(OpCodes.Stloc, locHw);                      // []
+
+            // equalMask = Equals(a, a) -> all-ones in non-NaN lanes, zero in NaN lanes
+            // (ordered compare: NaN == NaN is false). This IS the lane-wise "not NaN" mask.
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locA);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(VectorBits, clrType), null);       // [equalMask]
+
+            // result = ConditionalSelect(equalMask, hw, a) -> non-NaN ? hw : NaN(=a)
+            il.Emit(OpCodes.Ldloc, locHw);                     // [equalMask, hw]
+            il.Emit(OpCodes.Ldloc, locA);                      // [equalMask, hw, a]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [result]
+        }
+
+        // Bare width-adaptive Vector min/max: x86 intrinsic when available, else the
+        // cross-platform Vector{N}.Min/Max. Consumes two vectors, leaves one. Does NOT
+        // propagate NaN (hardware MAXPS/MINPD return the second operand on NaN).
+        private static void EmitRawVectorMinOrMax(ILGenerator il, string methodName, Type clrType)
+        {
             var x86 = VectorMethodCache.BinaryX86(VectorBits, methodName, clrType);
             if (x86 != null)
             {
