@@ -155,6 +155,10 @@ namespace NumSharp.Backends
         private static double ReadScalarAsDouble(NDArray nd)
         {
             object v = nd.GetAtIndex(0);
+            // System.Half does not implement IConvertible, so Convert.ToDouble(object) throws for it
+            // (the scalar-exponent fast paths support Half — see ScalarEqualsExact). Cast it directly.
+            if (v is Half h)
+                return (double)h;
             return Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture);
         }
 

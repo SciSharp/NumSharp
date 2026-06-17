@@ -77,16 +77,16 @@ namespace NumSharp.UnitTest.Fuzz
                 && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
                 return "floor_divide/mod(float16): NpyDivision has no Half path (wrong value/NaN) [known bug]";
 
-            // (W1-B/C) power throws on two newly-covered cells:
-            //   * any float16 operand on the scalar-broadcast path: System.Half is not IConvertible,
-            //     so the scalar power helper throws InvalidCastException.
-            //   * (uint64,int64): NumPy promotes to float64 (NEP50), but NumSharp keeps the integer
-            //     power path -> ArgumentException "Integers to negative integer powers" or a bounds
-            //     DebugAssert ("index < Count, Memory corruption") in the kernel.
+            // (W1-B FIXED) power(float16) on the scalar-broadcast path used to throw
+            // InvalidCastException because ReadScalarAsDouble called Convert.ToDouble on a boxed
+            // System.Half (not IConvertible); it now casts Half directly, so the excuse is removed and
+            // any regression of the crash fails the fuzz gate.
+            //
+            // (W1-C) power(uint64,int64): NumPy promotes to float64 (NEP50), but NumSharp keeps the
+            // integer power path -> ArgumentException "Integers to negative integer powers" (the
+            // negative-exponent cell) in the kernel.
             if (c.Op == "power" && kind == DivergenceKind.Threw)
             {
-                if (c.Operands.Any(o => o.Dtype == "float16"))
-                    return "power(float16): Half scalar path InvalidCast (Half is not IConvertible) [known bug]";
                 if (c.Operands.Any(o => o.Dtype == "uint64") && c.Operands.Any(o => o.Dtype == "int64"))
                     return "power(uint64,int64): NEP50 uint64+int64->float64 not applied; integer-power path throws/corrupts [known bug]";
             }
