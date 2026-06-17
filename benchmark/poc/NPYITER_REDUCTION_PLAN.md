@@ -6,9 +6,15 @@ Status legend: ☐ todo ◐ in-progress ☑ done (gated)
 
 ---
 
-## Status & findings (live, post-Phase-0/1/2)
+## Status & findings (live, post-Phase-0/1/2/3)
 
-**Phases 0 ☑, 1 ☑, 2 ☑ — committed.** Build green; full suite **9769 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑.** Build green; full suite **9786 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+
+**Phase 3 (Half & Decimal) — premise re-validated, then scoped to the real wins:**
+- **Decimal: routed ALL ops** — the legacy path is both cache-hostile AND lossy (accumulates through a double bridge). The NpyIter kernels are full-precision Decimal on contiguous stripes: **5–13× faster** (10M sum axis1 172→22 ms; mean axis0 271→54 ms) AND more accurate (new test pins `sum(30×0.1m)=3.0m` exactly). No NumPy reference type.
+- **Half: routed MEAN only** — it accumulates in Double (hardware-fast): **10M mean axis0 57.7→15.4 ms (3.7×), axis1 23.8→14.5 ms**. Half sum/prod **must** accumulate in Half to reproduce NumPy's f16 *sequential* rounding (verified: `sum(4096 ones)=2048`, a saturation NOT reproducible with a double/float-tree accumulator) — a serial software-arithmetic chain .NET can't beat the legacy path on for the pinned/last axis (~+30%). So Half sum/prod/min/max stay on the Direct path (no regression). Generic `INumber<T>` kernels (`CreateTypedReduceKernel<TIn,TAccum>`, `ConvIn` same-type fast read) back both Decimal and Half-mean and are ready for Phase 6 numeric.
+
+
 
 **Premise correction (measured, `-c Release`, optimizer-verified, vs the same NumPy 2.4.2):**
 The "complex sum/min/max/prod axis = 19–64× slow" premise was a **measurement artifact** (Debug build / harness contamination in the original probe). Under clean `-c Release` the *legacy scalar* complex sum/min/max/prod were **already ~1.0–1.4× NumPy**. The NpyIter double-pair path is **neutral-to-better** there (sum 0.75–1.02×; min/prod slightly faster; max within ±6% noise) and—critically—**non-regressing on every layout incl. transposed** (both paths ~130–170 ms at 10M; that's Phase 4).
@@ -114,7 +120,7 @@ small-N construction **0.40 µs (won)**.
   kernel + `DivideArrayByCount<Complex>` (fixes the imaginary-drop by construction).
 - **Tests + gate** (mean matrix; NaN/empty → NaN parity).
 
-### Phase 3 — Half & Decimal axis (+ wide accumulator) ☐
+### Phase 3 — Half & Decimal axis (+ wide accumulator) ☑
 - Half: `<Half,double>` kernel (accumulate in double, cast back — NumPy precision parity).
   Decimal: same-type scalar (no SIMD). Route both through the new path for sum/prod/min/max/mean.
 - **Tests + gate** (correct + faster than baseline; Decimal already ~5–12× in POC).

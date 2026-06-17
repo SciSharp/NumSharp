@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using NumSharp.Backends.Iteration;
@@ -66,7 +67,7 @@ namespace NumSharp.Backends.Kernels
 
         private static unsafe NpyInnerLoopFunc CreateReduceInnerLoop(ReduceKernelKey key)
         {
-            // Phase 1: Complex same-type sum/prod/min/max.
+            // Complex: dedicated double-pair kernels (SIMD sum, lex min/max).
             if (key.InType == NPTypeCode.Complex && key.AccType == NPTypeCode.Complex)
             {
                 return key.Op switch
@@ -79,7 +80,41 @@ namespace NumSharp.Backends.Kernels
                 };
             }
 
+            // Half mean / Decimal: generic INumber scalar kernels fed CONTIGUOUS stripes by the
+            // per-chunk iterator (no cache-hostile column gather like the legacy coordinate walk).
+            //   - Half MEAN accumulates in Double (input Half → Double); ReduceMean casts back to
+            //     Half. (Half sum/prod/min/max stay on the Direct path — see UseNpyIterReduce:
+            //     their Half-accumulator serial chain can't beat it on the pinned axis.)
+            //   - Decimal accumulates in full-precision Decimal (no NumPy reference type).
+            //     CreateTypedReduceKernel can build a same-type Half kernel too; it just isn't
+            //     routed here today.
+            if (key.InType == NPTypeCode.Half && key.AccType == NPTypeCode.Double)
+                return key.Op == ReductionOp.Sum ? CreateTypedReduceKernel<Half, double>(ReductionOp.Sum) : null;
+            if (key.InType == NPTypeCode.Decimal && key.AccType == NPTypeCode.Decimal)
+                return CreateTypedReduceKernel<decimal, decimal>(key.Op);
+
             return null;
+        }
+
+        /// <summary>
+        /// Builds a scalar per-chunk reduce kernel over arbitrary numeric
+        /// <typeparamref name="TIn"/> → <typeparamref name="TAccum"/> via .NET generic math.
+        /// The JIT monomorphizes one tight body per (TIn,TAccum,op); CreateTruncating folds to
+        /// a reinterpret/convert and the arithmetic to native ops. Min/Max propagate NaN
+        /// (NumPy parity) via <c>TAccum.IsNaN</c>; Decimal has no NaN so those checks fold away.
+        /// </summary>
+        private static unsafe NpyInnerLoopFunc CreateTypedReduceKernel<TIn, TAccum>(ReductionOp op)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+        {
+            return op switch
+            {
+                ReductionOp.Sum  => TypedSumKernel<TIn, TAccum>,
+                ReductionOp.Prod => TypedProdKernel<TIn, TAccum>,
+                ReductionOp.Min  => TypedMinKernel<TIn, TAccum>,
+                ReductionOp.Max  => TypedMaxKernel<TIn, TAccum>,
+                _ => null
+            };
         }
 
         /// <summary>
@@ -103,6 +138,7 @@ namespace NumSharp.Backends.Kernels
                     ReductionOp.Prod => System.Numerics.Complex.One,
                     // (±inf, ±inf) so the first finite element displaces the identity
                     // under lexicographic comparison — mirrors GetIdentityValueTyped<Complex>.
+                    // (GetIdentity's GetMaxValue gives (+inf,0), which is NOT the lex-largest.)
                     ReductionOp.Min  => new System.Numerics.Complex(double.PositiveInfinity, double.PositiveInfinity),
                     ReductionOp.Max  => new System.Numerics.Complex(double.NegativeInfinity, double.NegativeInfinity),
                     _ => throw new NotSupportedException($"SeedReduceIdentity: op {op} unsupported for Complex")
@@ -111,7 +147,10 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            throw new NotSupportedException($"SeedReduceIdentity not implemented for {tc}");
+            // Scalar numerics (Half/Double/Decimal/...): the shared identity table is correct
+            // for total-ordering min/max (min seed = +inf/MaxValue, max seed = -inf/MinValue).
+            object scalarId = op.GetIdentity(tc);
+            for (long i = 0; i < n; i++) output.SetAtIndex(scalarId, i);
         }
 
         /// <summary>
@@ -128,18 +167,35 @@ namespace NumSharp.Backends.Kernels
             if (n == 0 || count == 0) return;
 
             NPTypeCode tc = output.GetTypeCode;
-            if (tc == NPTypeCode.Complex)
+            switch (tc)
             {
-                double d = count;
-                for (long i = 0; i < n; i++)
+                case NPTypeCode.Complex:
                 {
-                    var c = (System.Numerics.Complex)output.GetAtIndex(i);
-                    output.SetAtIndex(new System.Numerics.Complex(c.Real / d, c.Imaginary / d), i);
+                    double d = count;
+                    for (long i = 0; i < n; i++)
+                    {
+                        var c = (System.Numerics.Complex)output.GetAtIndex(i);
+                        output.SetAtIndex(new System.Numerics.Complex(c.Real / d, c.Imaginary / d), i);
+                    }
+                    return;
                 }
-                return;
+                case NPTypeCode.Double: // Half mean accumulates here (Half→Double); ReduceMean casts back.
+                {
+                    double d = count;
+                    for (long i = 0; i < n; i++)
+                        output.SetAtIndex((double)output.GetAtIndex(i) / d, i);
+                    return;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    decimal d = count;
+                    for (long i = 0; i < n; i++)
+                        output.SetAtIndex((decimal)output.GetAtIndex(i) / d, i);
+                    return;
+                }
+                default:
+                    throw new NotSupportedException($"MeanDivideByCount not implemented for {tc}");
             }
-
-            throw new NotSupportedException($"MeanDivideByCount not implemented for {tc}");
         }
 
         // =====================================================================
@@ -303,6 +359,117 @@ namespace NumSharp.Backends.Kernels
             bool aGreater = ar > br || (ar == br && ai > bi);
             bool takeA = pickGreater ? aGreater : !aGreater;
             if (!takeA) { ar = br; ai = bi; }
+        }
+
+        // =====================================================================
+        // Generic scalar kernels (Half / Decimal — and any INumber numeric)
+        // =====================================================================
+
+        /// <summary>
+        /// Read one input element and promote to the accumulator type. When TIn==TAccum the
+        /// <c>typeof</c> test is a JIT constant and this folds to a plain reinterpret read —
+        /// avoiding a per-element CreateTruncating static-virtual call on the hot same-type
+        /// path (the difference between Half pinned-reduce at ~parity vs +30%).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe TAccum ConvIn<TIn, TAccum>(byte* p)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+            => typeof(TIn) == typeof(TAccum) ? *(TAccum*)p : TAccum.CreateTruncating(*(TIn*)p);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void TypedSumKernel<TIn, TAccum>(void** dataptrs, long* strides, long count, void* auxdata)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+            if (outS == 0)
+            {
+                TAccum acc = *(TAccum*)outp;
+                for (long k = 0; k < count; k++) acc += ConvIn<TIn, TAccum>(inp + k * inS);
+                *(TAccum*)outp = acc;
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    TAccum* o = (TAccum*)(outp + k * outS);
+                    *o += ConvIn<TIn, TAccum>(inp + k * inS);
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void TypedProdKernel<TIn, TAccum>(void** dataptrs, long* strides, long count, void* auxdata)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+            if (outS == 0)
+            {
+                TAccum acc = *(TAccum*)outp;
+                for (long k = 0; k < count; k++) acc *= ConvIn<TIn, TAccum>(inp + k * inS);
+                *(TAccum*)outp = acc;
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    TAccum* o = (TAccum*)(outp + k * outS);
+                    *o *= ConvIn<TIn, TAccum>(inp + k * inS);
+                }
+            }
+        }
+
+        private static unsafe void TypedMinKernel<TIn, TAccum>(void** dataptrs, long* strides, long count, void* auxdata)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+            => TypedMinMax<TIn, TAccum>(dataptrs, strides, count, pickGreater: false);
+
+        private static unsafe void TypedMaxKernel<TIn, TAccum>(void** dataptrs, long* strides, long count, void* auxdata)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+            => TypedMinMax<TIn, TAccum>(dataptrs, strides, count, pickGreater: true);
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void TypedMinMax<TIn, TAccum>(void** dataptrs, long* strides, long count, bool pickGreater)
+            where TIn : unmanaged, INumberBase<TIn>
+            where TAccum : unmanaged, INumber<TAccum>
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+            if (outS == 0)
+            {
+                TAccum acc = *(TAccum*)outp;
+                for (long k = 0; k < count; k++)
+                    acc = MinMaxFold(acc, ConvIn<TIn, TAccum>(inp + k * inS), pickGreater);
+                *(TAccum*)outp = acc;
+            }
+            else
+            {
+                for (long k = 0; k < count; k++)
+                {
+                    TAccum* o = (TAccum*)(outp + k * outS);
+                    *o = MinMaxFold(*o, ConvIn<TIn, TAccum>(inp + k * inS), pickGreater);
+                }
+            }
+        }
+
+        /// <summary>
+        /// NaN-propagating min/max fold (NumPy parity): a NaN accumulator wins (stays); an
+        /// incoming NaN replaces a finite accumulator. For types without NaN (Decimal) the
+        /// <c>IsNaN</c> calls fold to false and this is a plain comparison.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static TAccum MinMaxFold<TAccum>(TAccum acc, TAccum v, bool pickGreater)
+            where TAccum : unmanaged, INumber<TAccum>
+        {
+            if (TAccum.IsNaN(acc)) return acc;
+            if (TAccum.IsNaN(v)) return v;
+            bool takeV = pickGreater ? (v > acc) : (v < acc);
+            return takeV ? v : acc;
         }
     }
 }

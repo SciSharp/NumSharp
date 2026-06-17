@@ -116,6 +116,24 @@ namespace NumSharp.Backends
                        op == ReductionOp.Min || op == ReductionOp.Max ||
                        op == ReductionOp.Mean;
 
+            // Half MEAN only: it accumulates in Double (hardware-fast), a clean win on both
+            // axes (10M: 57→15 ms axis0, 24→13 ms axis1) and the analog of the complex-mean
+            // fix. Half SUM/PROD must accumulate in Half to reproduce NumPy's f16 SEQUENTIAL
+            // rounding (the 2048-saturation on 4096 ones) — a serial software-arithmetic chain
+            // .NET cannot beat the legacy path on for the pinned (last-axis) case (~+30%), so
+            // those (and min/max) stay on the Direct path. outputType==Double for Half mean
+            // (ReduceMean casts the result back to Half).
+            if (inputType == NPTypeCode.Half)
+                return op == ReductionOp.Mean && outputType == NPTypeCode.Double;
+
+            // Decimal: the legacy path is both cache-hostile AND lossy (it accumulates through
+            // a double bridge). The NpyIter kernels are full-precision Decimal on contiguous
+            // stripes — 7–12× faster everywhere AND more accurate. No NumPy reference type.
+            if (inputType == NPTypeCode.Decimal && outputType == NPTypeCode.Decimal)
+                return op == ReductionOp.Sum || op == ReductionOp.Prod ||
+                       op == ReductionOp.Min || op == ReductionOp.Max ||
+                       op == ReductionOp.Mean;
+
             return false;
         }
 
