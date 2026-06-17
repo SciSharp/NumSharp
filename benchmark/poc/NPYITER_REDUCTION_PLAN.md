@@ -6,9 +6,22 @@ Status legend: ☐ todo ◐ in-progress ☑ done (gated)
 
 ---
 
-## Status & findings (live, post-Phase-0/1/2/3)
+## Status & findings (live, post-Phase-0/1/2/3/4)
 
-**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑.** Build green; full suite **9786 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+**Phases 0 ☑, 1 ☑, 2 ☑, 3 ☑, 4 ☑.** Build green; full suite **9786 passed / 0 failed / 11 skipped** (net10.0, excl OpenBugs/HighMemory); correctness matrix (C/F/T/sliced/3-D, axis 0/1/2, keepdims, out=, NaN) matches NumPy 2.4.2.
+
+**Phase 4 (strided/transposed) — solved by axis-ordering, NOT gather (better than planned).**
+Root cause (diagnosed, not assumed): the reduce path kept the **logical** axis order (inner = last logical axis), so it was fast only when the input was C-contiguous; a transpose's last logical axis is strided → cache-hostile column gather (~16×). NumPy instead orders iteration axes by the input's **stride** (contiguous axis innermost). Fix is **reduce-local** in `NpyIterRef.NewReduce`: order the `op_axes` iteration axes by descending input |stride| (0/broadcast → outermost), mapping the output back to original order. For C-contig this is the identity (fast path untouched); only non-contiguous inputs reorder. No gather, no copy — access becomes sequential, which beats gather (gather still cache-misses). Isolated 10M (vs NumPy, vs the prior strided path):
+
+| transposed case | before | after | NumPy | verdict |
+|---|---|---|---|---|
+| sum axis0 | 119 ms | **7.0 ms** | 8.6 ms | beats |
+| sum axis1 | 130 ms | **7.4 ms** | 7.8 ms | parity |
+| mean axis0/1 | 300/130 ms | **6.6/7.7 ms** | 7.7/8.6 | beats |
+| min/max axis* | 145–170 ms | **15–17 ms** | 20–22 ms | beats |
+| prod axis* | 130–140 ms | **12–17 ms** | 19–25 ms | beats |
+
+(The `reduce_parity_bench.cs` back-to-back harness reported ~47 ms for these — a 256 MB-arrays memory-pressure artifact; the isolated per-case bench with GC between cases is the truth. Same artifact class as the original "19–64×" premise.) Blast radius: `NewReduce` only feeds the NpyIter-routed dtypes (complex all-ops, half-mean, decimal all-ops); numeric stays on the Direct path. Suite green confirms no regression.
 
 **Phase 3 (Half & Decimal) — premise re-validated, then scoped to the real wins:**
 - **Decimal: routed ALL ops** — the legacy path is both cache-hostile AND lossy (accumulates through a double bridge). The NpyIter kernels are full-precision Decimal on contiguous stripes: **5–13× faster** (10M sum axis1 172→22 ms; mean axis0 271→54 ms) AND more accurate (new test pins `sum(30×0.1m)=3.0m` exactly). No NumPy reference type.
@@ -125,7 +138,7 @@ small-N construction **0.40 µs (won)**.
   Decimal: same-type scalar (no SIMD). Route both through the new path for sum/prod/min/max/mean.
 - **Tests + gate** (correct + faster than baseline; Decimal already ~5–12× in POC).
 
-### Phase 4 — Strided gather fast path ☐
+### Phase 4 — Strided fast path (axis-ordering, not gather) ☑
 - Add gather-based per-chunk for `GATHER_ELIGIBLE` (f32/f64/i32/i64) reusing the
   `npyiter_parity_poc` technique (index vector hoisted); insert-gather/scalar fallback.
 - **Gate:** strided layouts (`a[:,::2]`, transpose-strided) ≥ parity (NumPy has no strided

@@ -67,16 +67,9 @@ namespace NumSharp.Backends.Iteration
                 throw new ArgumentOutOfRangeException(nameof(axis),
                     $"axis {axis} is out of bounds for array of dimension {ndim}");
 
-            int[] inAxes = new int[ndim];
-            int[] outAxes = new int[ndim];
-            int oc = 0;
-            for (int i = 0; i < ndim; i++)
-            {
-                inAxes[i] = i;
-                outAxes[i] = (i == axis) ? -1 : oc++;
-            }
-
-            return BuildReduce(input, output, ndim, inAxes, outAxes, extraFlags);
+            var reduced = new bool[ndim];
+            reduced[axis] = true;
+            return BuildStrideOrdered(input, output, ndim, reduced, extraFlags);
         }
 
         /// <summary>
@@ -94,23 +87,58 @@ namespace NumSharp.Backends.Iteration
             if (axes is null) throw new ArgumentNullException(nameof(axes));
 
             int ndim = input.ndim;
-            int[] inAxes = new int[ndim];
-            int[] outAxes = new int[ndim];
-            int oc = 0;
-            for (int i = 0; i < ndim; i++)
-            {
-                inAxes[i] = i;
-                bool reduced = Array.IndexOf(axes, i) >= 0;
-                outAxes[i] = reduced ? -1 : oc++;
-            }
-
-            return BuildReduce(input, output, ndim, inAxes, outAxes, extraFlags);
+            var reduced = new bool[ndim];
+            for (int i = 0; i < axes.Length; i++) reduced[axes[i]] = true;
+            return BuildStrideOrdered(input, output, ndim, reduced, extraFlags);
         }
 
-        private static NpyIterRef BuildReduce(
-            NDArray input, NDArray output, int ndim,
-            int[] inAxes, int[] outAxes, NpyIterGlobalFlags extraFlags)
+        /// <summary>
+        /// Build the REDUCE iterator with the iteration axes ORDERED BY THE INPUT'S STRIDE
+        /// (largest → outer, smallest non-zero → inner), matching NumPy's best-axis-ordering.
+        /// This is what makes the kernel see a CONTIGUOUS inner stripe on non-C-contiguous
+        /// inputs (transpose / F-order / strided): without it the reduce path keeps the logical
+        /// axis order and a transposed input's last logical axis is strided → cache-hostile
+        /// column gather (measured ~16× slower). For a C-contiguous input this ordering is the
+        /// identity, so the already-fast path is unchanged. Reordering only changes the
+        /// accumulation order within each output cell (same elements) → fp-rounding only.
+        /// </summary>
+        private static NpyIterRef BuildStrideOrdered(
+            NDArray input, NDArray output, int ndim, bool[] reduced, NpyIterGlobalFlags extraFlags)
         {
+            var strides = input.Shape.strides; // element strides
+
+            // Iteration order = input axes by descending |stride|; a 0 stride (broadcast)
+            // carries no locality and sorts OUTERMOST. Stable insertion sort (ndim is tiny),
+            // so equal strides keep ascending axis order.
+            int[] order = new int[ndim];
+            for (int i = 0; i < ndim; i++) order[i] = i;
+            for (int i = 1; i < ndim; i++)
+            {
+                int a = order[i];
+                long ka = StrideKey(strides[a]);
+                int j = i - 1;
+                while (j >= 0 && StrideKey(strides[order[j]]) < ka)
+                {
+                    order[j + 1] = order[j];
+                    j--;
+                }
+                order[j + 1] = a;
+            }
+
+            // Output index for each kept input axis, in the ORIGINAL (output) axis order.
+            int[] outIndexOf = new int[ndim];
+            int oc = 0;
+            for (int i = 0; i < ndim; i++) outIndexOf[i] = reduced[i] ? -1 : oc++;
+
+            int[] inAxes = new int[ndim];
+            int[] outAxes = new int[ndim];
+            for (int k = 0; k < ndim; k++)
+            {
+                int a = order[k];
+                inAxes[k] = a;
+                outAxes[k] = reduced[a] ? -1 : outIndexOf[a];
+            }
+
             return AdvancedNew(
                 2,
                 new[] { input, output },
@@ -122,5 +150,8 @@ namespace NumSharp.Backends.Iteration
                 ndim,
                 new[] { inAxes, outAxes });
         }
+
+        // Sort key for axis ordering: stride 0 (broadcast) → outermost (MaxValue); else |stride|.
+        private static long StrideKey(long stride) => stride == 0 ? long.MaxValue : Math.Abs(stride);
     }
 }
