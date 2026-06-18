@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
@@ -93,11 +94,17 @@ namespace NumSharp.Backends.Kernels
             if (key.InType == NPTypeCode.Decimal && key.AccType == NPTypeCode.Decimal)
                 return CreateTypedReduceKernel<decimal, decimal>(key.Op);
 
-            // Phase 6 — numeric same-type SIMD. Double Sum (and Mean, which routes through
-            // the Sum kernel + MeanDivideByCount) only for now; float32/integers deferred
-            // (float needs pairwise to match NumPy; ints need widening accumulators).
-            if (key.InType == NPTypeCode.Double && key.AccType == NPTypeCode.Double)
-                return CreateSimdReduceKernel<double>(key.Op);
+            // Phase 6 — numeric same-type Sum (and Mean, via the Sum kernel + MeanDivideByCount).
+            // Double AND float32 now route here: the PINNED path uses PairwiseFold, which is
+            // bit-for-bit identical to NumPy's pairwise_sum, so float32 is exact (its earlier
+            // exclusion was a flat-accumulator divergence the pairwise leaf removes). Integer
+            // widening sums and Min/Max/Prod stay on the Direct path (CreateSimdReduceKernel
+            // returns null for those → caller falls back).
+            if (key.InType == key.AccType)
+            {
+                if (key.InType == NPTypeCode.Double) return CreateSimdReduceKernel<double>(key.Op);
+                if (key.InType == NPTypeCode.Single) return CreateSimdReduceKernel<float>(key.Op);
+            }
 
             return null;
         }
@@ -124,50 +131,102 @@ namespace NumSharp.Backends.Kernels
         }
 
         // =====================================================================
-        // Generic SIMD same-type kernels (Phase 6 — numeric: double/float/int…)
+        // Generic same-type SUM kernels (Phase 6 — numeric: double/float/…)
         // =====================================================================
         //
-        // For TIn == TAccum (no NEP50 widening: float/double Sum, and Min/Max on
-        // every numeric type) one generic Vector256<T> body monomorphizes to the
-        // same machine code the legacy DirectILKernelGenerator emits per dtype.
-        // The proof harness (benchmark/poc/phase6_*.cs) measured this at Direct
-        // parity at scale (10M double sum axis1 1.01×, axis0 1.09×) once the
-        // kernel carries [MethodImpl(AggressiveOptimization)] — without it the
-        // delegate target JITs at tier-0 and looks ~10× slower (a measurement
-        // artifact, NOT the per-chunk model). Sum is NaN-natural (a NaN element
-        // makes the whole reduction NaN, matching NumPy); accumulation order is
-        // identity for C-contiguous input (same as Direct), so values match.
+        // For TIn == TAccum (no NEP50 widening: float/double Sum/Mean) one generic
+        // body monomorphizes per dtype. The two reduce orientations map exactly onto
+        // NumPy's two summation behaviors (loops_arithm_fp.dispatch.c.src reduce
+        // branch + loops_utils.h.src pairwise_sum):
+        //   • PINNED (reduced axis is the contiguous inner loop): NumPy folds the
+        //     stripe with pairwise_sum. We do the same — PairwiseFold below is ported
+        //     1:1 and is BIT-FOR-BIT identical to np.add.reduce for float/double
+        //     (validated, benchmark/poc/pairwise_parity.{cs,py}).
+        //   • SLAB (a kept axis is the contiguous inner loop; reduced axis is outer):
+        //     NumPy accumulates rows sequentially (out[c] += in[c]); so do we (the
+        //     Vector256 streaming add), which already bit-matches NumPy on that
+        //     orientation. Accuracy is orientation-dependent — exactly like NumPy.
+        // NaN propagates naturally (a NaN element makes the whole reduction NaN).
         //
-        // SCOPE TODAY: Double Sum/Mean only (routed in CreateReduceInnerLoop +
-        // UseNpyIterReduce). float32 sum is deliberately NOT routed here — its
-        // simple 8-way accumulation diverges from NumPy's pairwise summation by
-        // more than float tolerance (proof: 10M axis1 maxdiff ≈ 24). Min/Max and
-        // the widening integer sums are later migration steps.
+        // The pairwise PINNED path is what makes float32 sum/mean SAFE to route
+        // (its earlier exclusion was due to a flat 8-accumulator divergence of ~24;
+        // pairwise removes that — exact parity). NpyIter supplies the substrate:
+        // NewReduce orders the contiguous axis innermost (→ PINNED for a contiguous
+        // reduced axis), EXTERNAL_LOOP delivers the full stripe as (ptr, count,
+        // stride), and the +0 identity seed + slot-accumulate reproduce NumPy's
+        // `*acc += pairwise_sum(...)` (so buffered/chunked stripes stay correct).
+
+        private const int PairwiseBlock = 128; // NumPy PW_BLOCKSIZE
 
         /// <summary>
-        /// Builds a generic same-type (<typeparamref name="T"/> == accumulator) SIMD
-        /// per-chunk reduce kernel. The JIT monomorphizes one tight Vector256&lt;T&gt;
-        /// body per (T, op). Currently only Sum is emitted; Min/Max/Prod return null
-        /// (caller falls back to the Direct path) until they are migrated.
+        /// NumPy's pairwise_sum (loops_utils.h.src) ported 1:1; <paramref name="stride"/>
+        /// is in ELEMENTS. n&lt;8 naive (seed -0 to preserve signed zero); n≤128 eight
+        /// independent accumulators unrolled by 8 (+ software prefetch on the contiguous
+        /// path) then the exact tree-combine; n&gt;128 split (kept a multiple of 8) and
+        /// recurse. Bit-for-bit identical to <c>np.add.reduce</c> for float/double.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe T PairwiseFold<T>(T* a, long n, long stride)
+            where T : unmanaged, INumber<T>
+        {
+            if (n < 8)
+            {
+                T res = -T.Zero; // preserve -0.0 (NumPy: summing only -0 must stay -0)
+                for (long i = 0; i < n; i++) res += a[i * stride];
+                return res;
+            }
+            if (n <= PairwiseBlock)
+            {
+                // 8 independent accumulators (NumPy's r[0..7]); they break the FP-add
+                // dependency chain for ILP. The JIT schedules the 8 independent adds; for the
+                // routed axis case the stripe recurses into many small leaves so the cost is
+                // recursion + combine, not this inner loop (an explicit Vector256 lane form
+                // measured identical, so we keep the simpler scalar body). Stride is in elements.
+                T r0 = a[0],          r1 = a[stride],     r2 = a[2 * stride], r3 = a[3 * stride],
+                  r4 = a[4 * stride], r5 = a[5 * stride], r6 = a[6 * stride], r7 = a[7 * stride];
+                long i;
+                bool pf = stride == 1 && Sse.IsSupported;
+                long ahead = 512 / sizeof(T);
+                for (i = 8; i < n - (n % 8); i += 8)
+                {
+                    if (pf) Sse.Prefetch0((void*)(a + i + ahead)); // NPY_PREFETCH equivalent
+                    r0 += a[(i + 0) * stride]; r1 += a[(i + 1) * stride];
+                    r2 += a[(i + 2) * stride]; r3 += a[(i + 3) * stride];
+                    r4 += a[(i + 4) * stride]; r5 += a[(i + 5) * stride];
+                    r6 += a[(i + 6) * stride]; r7 += a[(i + 7) * stride];
+                }
+                T res = ((r0 + r1) + (r2 + r3)) + ((r4 + r5) + (r6 + r7));
+                for (; i < n; i++) res += a[i * stride];
+                return res;
+            }
+            long n2 = n / 2; n2 -= n2 % 8;
+            return PairwiseFold(a, n2, stride) + PairwiseFold(a + n2 * stride, n - n2, stride);
+        }
+
+        /// <summary>
+        /// Builds a generic same-type (<typeparamref name="T"/> == accumulator) per-chunk
+        /// reduce kernel. Currently only Sum is emitted (PairwiseSumSameType); Min/Max/Prod
+        /// return null so the caller falls back to the Direct path until they are migrated.
         /// </summary>
         private static unsafe NpyInnerLoopFunc CreateSimdReduceKernel<T>(ReductionOp op)
             where T : unmanaged, INumber<T>
         {
             return op switch
             {
-                ReductionOp.Sum => SimdSumSameType<T>,
+                ReductionOp.Sum => PairwiseSumSameType<T>,
                 _ => null
             };
         }
 
         /// <summary>
-        /// Same-type SIMD sum: PINNED folds a contiguous stripe into one slot with an
-        /// 8-accumulator horizontal reduce; SLAB does a 4×-unrolled Vector256 elementwise
-        /// add of the contiguous row into the output accumulator row. Strided inner loops
-        /// (non-unit element stride) fall to the scalar tail. NaN propagates naturally.
+        /// Same-type sum, dual mode. PINNED (reduced axis inner): pairwise-fold the stripe
+        /// and accumulate into the slot — bit-for-bit NumPy parity. SLAB (kept axis inner):
+        /// a 4×-unrolled Vector256 elementwise add of the contiguous row into the output
+        /// accumulator row (sequential over the outer reduced axis, matching NumPy). Strided
+        /// inner loops fall to the scalar/pairwise-with-stride path. NaN propagates naturally.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void SimdSumSameType<T>(void** dataptrs, long* strides, long count, void* auxdata)
+        private static unsafe void PairwiseSumSameType<T>(void** dataptrs, long* strides, long count, void* auxdata)
             where T : unmanaged, INumber<T>
         {
             byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
@@ -176,37 +235,10 @@ namespace NumSharp.Backends.Kernels
 
             if (outS == 0)
             {
-                // PINNED: horizontal sum of the contiguous stripe into one slot.
-                T acc = *(T*)outp;
-                if (inS == sz)
-                {
-                    T* d = (T*)inp; long i = 0; int W = Vector256<T>.Count;
-                    if (Vector256.IsHardwareAccelerated && count >= W * 8)
-                    {
-                        Vector256<T> a0 = Vector256<T>.Zero, a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
-                        long lim = count - count % (W * 8);
-                        for (; i < lim; i += W * 8)
-                        {
-                            a0 = Vector256.Add(a0, Vector256.Load(d + i));
-                            a1 = Vector256.Add(a1, Vector256.Load(d + i + W));
-                            a2 = Vector256.Add(a2, Vector256.Load(d + i + W * 2));
-                            a3 = Vector256.Add(a3, Vector256.Load(d + i + W * 3));
-                            a4 = Vector256.Add(a4, Vector256.Load(d + i + W * 4));
-                            a5 = Vector256.Add(a5, Vector256.Load(d + i + W * 5));
-                            a6 = Vector256.Add(a6, Vector256.Load(d + i + W * 6));
-                            a7 = Vector256.Add(a7, Vector256.Load(d + i + W * 7));
-                        }
-                        a0 = Vector256.Add(Vector256.Add(Vector256.Add(a0, a1), Vector256.Add(a2, a3)),
-                                           Vector256.Add(Vector256.Add(a4, a5), Vector256.Add(a6, a7)));
-                        acc += Vector256.Sum(a0);
-                    }
-                    for (; i < count; i++) acc += d[i];
-                }
-                else
-                {
-                    for (long k = 0; k < count; k++) acc += *(T*)(inp + k * inS);
-                }
-                *(T*)outp = acc;
+                // PINNED: pairwise-fold the stripe into the slot. The slot is seeded to the
+                // +0 identity, so a single stripe gives *out = pairwise(stripe) == NumPy;
+                // chunked/buffered stripes accumulate (NumPy's `*acc += pairwise_sum(...)`).
+                *(T*)outp += PairwiseFold((T*)inp, count, inS / sz);
             }
             else
             {
@@ -303,6 +335,13 @@ namespace NumSharp.Backends.Kernels
                     double d = count;
                     for (long i = 0; i < n; i++)
                         output.SetAtIndex((double)output.GetAtIndex(i) / d, i);
+                    return;
+                }
+                case NPTypeCode.Single: // mean(float32) stays float32 (NumPy: f32 sum / count → f32).
+                {
+                    float d = count;
+                    for (long i = 0; i < n; i++)
+                        output.SetAtIndex((float)output.GetAtIndex(i) / d, i);
                     return;
                 }
                 case NPTypeCode.Decimal:

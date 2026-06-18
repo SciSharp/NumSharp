@@ -69,14 +69,31 @@ scalar generic loop" claim was wrong on two counts, both caught by direct measur
    memory-pressure artifact that produced the original bogus "19–64×" — clean per-case isolation
    is the truth.
 
-**Scope shipped:** Double **Sum** and **Mean** routed through the per-chunk path
-(`UseNpyIterReduce`). **Deferred** (each needs more than the naive port, documented so):
-- **float32 sum** — simple 8-way accumulation diverges from NumPy's *pairwise* summation by more
-  than float tolerance (10M axis1 maxdiff ≈ 24). Needs a pairwise/blocked accumulator.
+**Scope shipped:** Double **and float32** **Sum** and **Mean** routed through the per-chunk path
+(`UseNpyIterReduce`), the PINNED orientation now using a **pairwise leaf** (below). **Deferred**:
 - **integer Sum/Prod** — NEP50 widening (int32→int64) breaks single-`Vector256<T>` lanes; needs
   a widening accumulator (the scalar `CreateTypedReduceKernel<TIn,TAccum>` exists as fallback).
 - **Min/Max** — need NaN-aware SIMD (the `v != v` mask trick) before routing.
 Direct keeps serving all of those (its kernels return for non-routed keys), so no regression.
+
+**Pairwise summation — NumPy's add-reduce core, ported onto NpyIter (unblocks float32).**
+NumPy's `pairwise_sum` (loops_utils.h.src) backs the entire additive-float family (sum/mean/var/
+std/average/nan*) via `add.reduce`. The two NpyIter reduce orientations map onto NumPy's two
+behaviors exactly: **PINNED** (reduced axis is the contiguous inner loop) → NumPy folds the stripe
+with `pairwise_sum`; **SLAB** (kept axis inner) → NumPy accumulates rows sequentially. NewReduce's
+stride-ordering already produces those orientations, EXTERNAL_LOOP delivers the full stripe as
+`(ptr, count, stride)`, and the +0 identity seed + slot-accumulate reproduce NumPy's
+`*acc += pairwise_sum(...)`. So only a kernel was needed: `ILKernelGenerator.PairwiseFold<T>`,
+ported 1:1 (n<8 naive seed -0; n≤128 eight accumulators unrolled-by-8 + prefetch + the exact
+tree-combine; n>128 split `n2-=n2%8` recurse). **Validated BIT-FOR-BIT vs `np.add.reduce`** across
+13 sizes (`pairwise_parity.{cs,py}`) and live (`np.sum`/`np.mean` axis0/1, f32+f64). This is what
+made **float32 exact** — its earlier exclusion (10M axis1 maxdiff ≈ 24) was the flat-accumulator
+order; pairwise removes it. Perf: PINNED axis at 10M is **0.88–0.92× NumPy (faster)**; the exact
+recursive structure costs vs a flat pass at cache-resident 1M (~1.3× NumPy, sub-ms) — the accepted
+price of bit-exactness (SLAB unchanged; an explicit Vector256-lane leaf measured identical, so the
+clean scalar body is kept). Tests: `PairwiseSumParityTests` (4, incl. the large-value regression).
+Note: only the per-chunk path is pairwise; flat `axis=None` float sum still uses `sum_elementwise_il`
+(could be routed onto the same leaf later for flat NumPy parity too).
 
 **Parallelism (NpyIter RANGE / PARALLEL_SAFE) — PROVEN 2–6× but DECLINED by design.**
 The single-threaded migration is only ~parity because Direct is already SIMD-optimal. The one
