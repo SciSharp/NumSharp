@@ -360,7 +360,8 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as tie-break).
-        /// NaN in either component returns a NaN Complex.
+        /// A NaN in either component propagates: the first NaN-bearing element is returned VERBATIM
+        /// (matching NumPy's minimum/maximum, which return the NaN operand as-is — not (nan,nan)).
         /// </summary>
         private object MaxElementwiseComplexFallback(NDArray arr)
         {
@@ -371,7 +372,10 @@ namespace NumSharp.Backends
             {
                 var v = iter.MoveNext();
                 if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return new System.Numerics.Complex(double.NaN, double.NaN);
+                    return v; // NumPy parity: the NaN-bearing operand is returned VERBATIM (not a
+                              // synthesized (nan,nan)); in a left-fold the FIRST NaN element wins and
+                              // stays, so returning v on the first NaN matches np.min/np.max exactly
+                              // (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan, 0), not (nan, nan)).
                 if (!seenAny
                     || v.Real > best.Real
                     || (v.Real == best.Real && v.Imaginary > best.Imaginary))
@@ -392,7 +396,10 @@ namespace NumSharp.Backends
             {
                 var v = iter.MoveNext();
                 if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return new System.Numerics.Complex(double.NaN, double.NaN);
+                    return v; // NumPy parity: the NaN-bearing operand is returned VERBATIM (not a
+                              // synthesized (nan,nan)); in a left-fold the FIRST NaN element wins and
+                              // stays, so returning v on the first NaN matches np.min/np.max exactly
+                              // (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan, 0), not (nan, nan)).
                 if (!seenAny
                     || v.Real < best.Real
                     || (v.Real == best.Real && v.Imaginary < best.Imaginary))

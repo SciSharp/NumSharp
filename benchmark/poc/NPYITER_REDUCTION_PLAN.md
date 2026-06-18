@@ -131,7 +131,17 @@ The "complex sum/min/max/prod axis = 19–64× slow" premise was a **measurement
 *small-N is iterator-construction-bound; still 22–26× faster than the old path.
 
 **Bugs collected (out of Phase 1/2 scope — separate paths):**
-- **Flat complex `min`/`max` (axis=None, `min_elementwise_il`)** returns `(NaN, NaN)` where NumPy returns the NaN-containing element verbatim, e.g. `min([1+1j, nan+0j, 2+2j]) → (nan+0j)`. NumSharp synthesizes `(nan, nan)`. The new **axis** path is correct (`min nan axis0 → (nan,0)`); only the flat path diverges.
+- **Flat complex `min`/`max` (axis=None, `min_elementwise_il`)** returned `(NaN, NaN)` where NumPy
+  returns the NaN-containing element verbatim, e.g. `min([1+1j, nan+0j, 2+2j]) → (nan+0j)`.
+  **FIXED** — `Min/MaxElementwiseComplexFallback` now `return v` (the NaN operand) instead of a
+  synthesized `(nan,nan)`; the first NaN in iteration order wins, matching NumPy's left-fold.
+  Verified vs NumPy 2.4.2 across 8 cases (incl. NaN-in-imag, two-NaN first-wins); regression test
+  `ComplexAxisReductionTests.Flat_MinMax_NaN_ReturnsElementVerbatim`; corrected the test that had
+  pinned the old buggy `(nan,nan)` (`NewDtypesCoverageSweep_Reductions_Tests.B8_*`). The axis path
+  (`LexFold`) was already correct.
+- **`np.prod` on `decimal` throws `OverflowException`** when the product exceeds decimal's ~7.9e28
+  range (both flat and axis paths; .NET `decimal` has no infinity, unlike float/complex → `inf`).
+  Pre-existing, not yet addressed — surfaced by the parity bench.
 
 **Remaining phases — re-validate premise before each (don't repeat the artifact mistake):**
 - Phase 3 (Half/Decimal): check whether their axis sum/mean are *actually* slow first.

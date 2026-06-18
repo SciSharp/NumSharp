@@ -101,6 +101,27 @@ public class ComplexAxisReductionTests
     }
 
     [TestMethod]
+    public void Flat_MinMax_NaN_ReturnsElementVerbatim()
+    {
+        // Regression: flat (axis=None) complex min/max went through min_elementwise_il →
+        // Min/MaxElementwiseComplexFallback, which synthesized (nan,nan) on the first NaN.
+        // NumPy returns the NaN-bearing element VERBATIM (first NaN in iteration order wins).
+        // Values verified against NumPy 2.4.2 (np.array(...).min()/.max()).
+        AssertClose(new Complex(double.NaN, 0), (Complex)np.amin(np.array(new[] { C(1, 1), new Complex(double.NaN, 0), C(2, 2) })).GetAtIndex(0), "min [1+1j,nan+0j,2+2j]");
+        AssertClose(new Complex(double.NaN, 0), (Complex)np.amax(np.array(new[] { C(1, 1), new Complex(double.NaN, 0), C(2, 2) })).GetAtIndex(0), "max [1+1j,nan+0j,2+2j]");
+        // NaN in the imaginary component only → real part preserved.
+        AssertClose(new Complex(0, double.NaN), (Complex)np.amin(np.array(new[] { C(1, 1), new Complex(0, double.NaN), C(2, 2) })).GetAtIndex(0), "min [1+1j,0+nanj,2+2j]");
+        // Two NaN elements → the FIRST in iteration order wins (left-fold), verbatim.
+        AssertClose(new Complex(double.NaN, 5), (Complex)np.amin(np.array(new[] { new Complex(double.NaN, 5), C(1, 1), new Complex(double.NaN, 0) })).GetAtIndex(0), "min [nan+5j,1+1j,nan+0j]");
+        AssertClose(new Complex(double.NaN, 5), (Complex)np.amax(np.array(new[] { new Complex(double.NaN, 5), C(1, 1), new Complex(double.NaN, 0) })).GetAtIndex(0), "max [nan+5j,1+1j,nan+0j]");
+        // Genuinely (nan,nan) element is returned as-is.
+        AssertClose(new Complex(double.NaN, double.NaN), (Complex)np.amin(np.array(new[] { C(1, 1), C(2, 2), new Complex(double.NaN, double.NaN) })).GetAtIndex(0), "min [1+1j,2+2j,nan+nanj]");
+        // No-NaN flat path stays lexicographic (real, then imag).
+        AssertClose(C(3, 1), (Complex)np.amin(np.array(new[] { C(3, 1), C(3, 9) })).GetAtIndex(0), "min [3+1j,3+9j]");
+        AssertClose(C(3, 9), (Complex)np.amax(np.array(new[] { C(3, 1), C(3, 9) })).GetAtIndex(0), "max [3+1j,3+9j]");
+    }
+
+    [TestMethod]
     public void Keepdims_Shape()
     {
         var a = Known3x4();
