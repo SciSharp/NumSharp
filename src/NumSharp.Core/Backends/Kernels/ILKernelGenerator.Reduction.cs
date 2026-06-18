@@ -71,6 +71,14 @@ namespace NumSharp.Backends.Kernels
             // Complex: dedicated double-pair kernels (SIMD sum, lex min/max).
             if (key.InType == NPTypeCode.Complex && key.AccType == NPTypeCode.Complex)
             {
+                // Sum: prefer the IL-emitted Vector128 pairwise kernel (bit-exact NumPy
+                // complex128; the hand-written ComplexSumKernel is a flat accumulator that
+                // diverges in the low bits). Fall back to it only when emission is unavailable.
+                if (key.Op == ReductionOp.Sum)
+                {
+                    var emitted = TryEmitPairwiseSumKernel(NPTypeCode.Complex);
+                    if (emitted != null) return emitted;
+                }
                 return key.Op switch
                 {
                     ReductionOp.Sum  => ComplexSumKernel,

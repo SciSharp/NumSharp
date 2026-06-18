@@ -54,7 +54,26 @@ namespace NumSharp.Backends.Kernels
         internal static unsafe NpyInnerLoopFunc TryEmitPairwiseSumKernel(NPTypeCode tc)
         {
             if (!DirectILKernelGenerator.Enabled) return null;
-            if (tc != NPTypeCode.Double && tc != NPTypeCode.Single) return null; // float family only (NumPy pairwise dtypes)
+            if (DirectILKernelGenerator.VectorBits < 128) return null; // no SIMD host → keep generic fold
+
+            // Complex128: NumPy pairwise-sums the interleaved (re,im) stream. A complex is two
+            // contiguous doubles, so one Vector128<double> per complex carries (re,im) through
+            // the 4-accumulator block — bit-exact with np.add.reduce, for any complex stride.
+            if (tc == NPTypeCode.Complex)
+            {
+                try
+                {
+                    DynamicMethod cfold = _pwFolds.GetOrAdd(tc, _ => EmitComplexPairwiseFold());
+                    return EmitComplexPairwiseSumKernel(cfold);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ILKernel] TryEmitPairwiseSumKernel(Complex): {ex.GetType().Name}: {ex.Message}");
+                    return null;
+                }
+            }
+
+            if (tc != NPTypeCode.Double && tc != NPTypeCode.Single) return null; // IEEE binary floats
 
             Type clrType = DirectILKernelGenerator.GetClrType(tc);
             int elemSize = DirectILKernelGenerator.GetTypeSize(tc);
@@ -375,6 +394,213 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add); il.Emit(stT);
             il.Emit(OpCodes.Ldloc, locI); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, locI);
             il.Emit(OpCodes.Br, ksL); il.MarkLabel(ksE);
+            il.Emit(OpCodes.Ret);
+
+            return dm.CreateDelegate<NpyInnerLoopFunc>();
+        }
+
+        // =====================================================================
+        // Complex128 pairwise (NumPy CDOUBLE pairwise_sum, loops_utils.h.src)
+        // =====================================================================
+
+        /// <summary>
+        /// Emit NumPy's complex128 pairwise_sum as a self-recursive DynamicMethod returning
+        /// Vector128&lt;double&gt; = [reSum, imSum]. A complex is two contiguous doubles [re,im],
+        /// so ONE Vector128 per complex carries (re,im) in lockstep through the 4-accumulator
+        /// block ((v0+v1)+(v2+v3)) and the n2-=n2%8 recursion split — bit-identical to
+        /// np.add.reduce(complex128) for any complex stride (Load128 of a complex is [re,im]
+        /// regardless of the stride BETWEEN complexes). Signature:
+        /// <c>Vector128&lt;double&gt; foldC(void* a, long nComplex, long cstrideBytes)</c>.
+        /// </summary>
+        private static DynamicMethod EmitComplexPairwiseFold()
+        {
+            Type pV = typeof(void).MakePointerType();
+            Type clr = typeof(double);
+            Type v128 = VectorMethodCache.V(128, clr);
+            var dm = new DynamicMethod("PwFoldC", v128, new[] { pV, typeof(long), typeof(long) },
+                typeof(ILKernelGenerator), skipVisibility: true);
+            var il = dm.GetILGenerator();
+            MethodInfo mLoad = VectorMethodCache.LoadX86(128, clr) ?? VectorMethodCache.Load(128, clr);
+            MethodInfo mAdd = VectorMethodCache.BinaryX86(128, "Add", clr) ?? VectorMethodCache.Generic(128, "Add", clr, paramCount: 2);
+            MethodInfo mBcast = VectorMethodCache.CreateBroadcast(128, clr);
+
+            var c = il.DeclareLocal(typeof(long));
+            var lim = il.DeclareLocal(typeof(long));
+            var n2 = il.DeclareLocal(typeof(long));
+            var v0 = il.DeclareLocal(v128); var v1 = il.DeclareLocal(v128);
+            var v2 = il.DeclareLocal(v128); var v3 = il.DeclareLocal(v128);
+            var res = il.DeclareLocal(v128);
+
+            // push Load128(a + idxExpr * cstrideBytes)  — idxExpr is a complex index
+            void LoadAt(Action pushIdx)
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                pushIdx(); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Call, mLoad);
+            }
+
+            var LBASE = il.DefineLabel(); var LLEAF = il.DefineLabel(); var LREC = il.DefineLabel();
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Blt, LBASE);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 64L); il.Emit(OpCodes.Ble, LLEAF);
+            il.Emit(OpCodes.Br, LREC);
+
+            // BASE nc<4: acc=[-0,-0]; for c in [0,nc): acc += complex[c]
+            il.MarkLabel(LBASE);
+            il.Emit(OpCodes.Ldc_R8, -0.0); il.Emit(OpCodes.Call, mBcast); il.Emit(OpCodes.Stloc, res);
+            il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, c);
+            var bL = il.DefineLabel(); var bE = il.DefineLabel();
+            il.MarkLabel(bL);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Bge, bE);
+            il.Emit(OpCodes.Ldloc, res); LoadAt(() => il.Emit(OpCodes.Ldloc, c)); il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Stloc, res);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, c);
+            il.Emit(OpCodes.Br, bL); il.MarkLabel(bE);
+            il.Emit(OpCodes.Ldloc, res); il.Emit(OpCodes.Ret);
+
+            // LEAF nc<=64: v0..v3 = complexes 0..3; loop c+=4 accumulating; res=(v0+v1)+(v2+v3); tail
+            il.MarkLabel(LLEAF);
+            LoadAt(() => il.Emit(OpCodes.Ldc_I8, 0L)); il.Emit(OpCodes.Stloc, v0);
+            LoadAt(() => il.Emit(OpCodes.Ldc_I8, 1L)); il.Emit(OpCodes.Stloc, v1);
+            LoadAt(() => il.Emit(OpCodes.Ldc_I8, 2L)); il.Emit(OpCodes.Stloc, v2);
+            LoadAt(() => il.Emit(OpCodes.Ldc_I8, 3L)); il.Emit(OpCodes.Stloc, v3);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Rem); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, lim);
+            il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Stloc, c);
+            var lL = il.DefineLabel(); var lE = il.DefineLabel();
+            il.MarkLabel(lL);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldloc, lim); il.Emit(OpCodes.Bge, lE);
+            void Acc(LocalBuilder vv, int m)
+            {
+                il.Emit(OpCodes.Ldloc, vv);
+                LoadAt(() => { il.Emit(OpCodes.Ldloc, c); if (m != 0) { il.Emit(OpCodes.Ldc_I8, (long)m); il.Emit(OpCodes.Add); } });
+                il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Stloc, vv);
+            }
+            Acc(v0, 0); Acc(v1, 1); Acc(v2, 2); Acc(v3, 3);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldc_I8, 4L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, c);
+            il.Emit(OpCodes.Br, lL); il.MarkLabel(lE);
+            il.Emit(OpCodes.Ldloc, v0); il.Emit(OpCodes.Ldloc, v1); il.Emit(OpCodes.Call, mAdd);
+            il.Emit(OpCodes.Ldloc, v2); il.Emit(OpCodes.Ldloc, v3); il.Emit(OpCodes.Call, mAdd);
+            il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Stloc, res);
+            var tL = il.DefineLabel(); var tE = il.DefineLabel();
+            il.MarkLabel(tL);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Bge, tE);
+            il.Emit(OpCodes.Ldloc, res); LoadAt(() => il.Emit(OpCodes.Ldloc, c)); il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Stloc, res);
+            il.Emit(OpCodes.Ldloc, c); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, c);
+            il.Emit(OpCodes.Br, tL); il.MarkLabel(tE);
+            il.Emit(OpCodes.Ldloc, res); il.Emit(OpCodes.Ret);
+
+            // REC nc>64: n2=nc; n2-=n2%8; left=n2/2; foldC(a,left,cs) + foldC(a+left*cs, nc-left, cs)
+            il.MarkLabel(LREC);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Stloc, n2);
+            il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Rem); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Stloc, n2);
+            il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Ldc_I8, 2L); il.Emit(OpCodes.Div); il.Emit(OpCodes.Stloc, n2); // n2 := left
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Call, dm);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldloc, n2); il.Emit(OpCodes.Sub); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Call, dm);
+            il.Emit(OpCodes.Call, mAdd); il.Emit(OpCodes.Ret);
+
+            return dm;
+        }
+
+        /// <summary>
+        /// Emit the complex128 NpyInnerLoopFunc. PINNED: <c>*out += foldC(in, count, inS)</c>
+        /// as one Vector128 add. SLAB: <c>out[k] += in[k]</c> per complex (Vector128).
+        /// </summary>
+        private static NpyInnerLoopFunc EmitComplexPairwiseSumKernel(DynamicMethod fold)
+        {
+            Type pVV = typeof(void).MakePointerType().MakePointerType();
+            Type pL = typeof(long).MakePointerType();
+            Type pV = typeof(void).MakePointerType();
+            Type clr = typeof(double);
+            var dm = new DynamicMethod("PwSumC", typeof(void), new[] { pVV, pL, typeof(long), pV },
+                typeof(ILKernelGenerator), skipVisibility: true);
+            var il = dm.GetILGenerator();
+            MethodInfo mLoad = VectorMethodCache.LoadX86(128, clr) ?? VectorMethodCache.Load(128, clr);
+            MethodInfo mAdd = VectorMethodCache.BinaryX86(128, "Add", clr) ?? VectorMethodCache.Generic(128, "Add", clr, paramCount: 2);
+            MethodInfo mStore = VectorMethodCache.Store(128, clr); // Vector128.Store(V, ptr) — [V, ptr]
+            // contiguous SLAB streams the interleaved (re,im) doubles at full width (Vector256 on AVX2)
+            int slabBits = DirectILKernelGenerator.VectorBits;
+            int laneD = DirectILKernelGenerator.GetVectorCount(NPTypeCode.Double);
+            MethodInfo mAddD = VectorMethodCache.BinaryX86(slabBits, "Add", clr) ?? VectorMethodCache.Generic(slabBits, "Add", clr, paramCount: 2);
+
+            var locIn = il.DeclareLocal(pV); var locOut = il.DeclareLocal(pV);
+            var locInS = il.DeclareLocal(typeof(long)); var locOutS = il.DeclareLocal(typeof(long));
+            var k = il.DeclareLocal(typeof(long));
+            var nD = il.DeclareLocal(typeof(long));
+
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldind_I); il.Emit(OpCodes.Stloc, locIn);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldc_I8, (long)IntPtr.Size); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldind_I); il.Emit(OpCodes.Stloc, locOut);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stloc, locInS);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldind_I8); il.Emit(OpCodes.Stloc, locOutS);
+
+            var LSLAB = il.DefineLabel();
+            il.Emit(OpCodes.Ldloc, locOutS); il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Bne_Un, LSLAB);
+            // PINNED: Store(out, Add(Load(out), foldC(in, count, inS)))
+            il.Emit(OpCodes.Ldloc, locOut); il.Emit(OpCodes.Call, mLoad);
+            il.Emit(OpCodes.Ldloc, locIn); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldloc, locInS); il.Emit(OpCodes.Call, fold);
+            il.Emit(OpCodes.Call, mAdd);
+            il.Emit(OpCodes.Ldloc, locOut); il.Emit(OpCodes.Call, mStore);
+            il.Emit(OpCodes.Ret);
+
+            // SLAB
+            il.MarkLabel(LSLAB);
+            var LCStrided = il.DefineLabel();
+            // contiguous (inS==outS==16)? stream the 2*count interleaved doubles with a
+            // full-width (Vector256) 4x-unrolled add — bit-identical to per-complex add.
+            il.Emit(OpCodes.Ldloc, locInS); il.Emit(OpCodes.Ldc_I8, 16L); il.Emit(OpCodes.Bne_Un, LCStrided);
+            il.Emit(OpCodes.Ldloc, locOutS); il.Emit(OpCodes.Ldc_I8, 16L); il.Emit(OpCodes.Bne_Un, LCStrided);
+            il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Ldc_I8, 2L); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Stloc, nD); // nD = 2*count doubles
+            il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, k);
+            if (slabBits >= 128 && laneD > 1)
+            {
+                void PushD(LocalBuilder bas, int off)
+                {
+                    il.Emit(OpCodes.Ldloc, bas); il.Emit(OpCodes.Ldloc, k);
+                    if (off != 0) { il.Emit(OpCodes.Ldc_I8, (long)off); il.Emit(OpCodes.Add); }
+                    il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+                }
+                void StepD(int off)
+                {
+                    PushD(locOut, off); DirectILKernelGenerator.EmitVectorLoad(il, NPTypeCode.Double);
+                    PushD(locIn, off); DirectILKernelGenerator.EmitVectorLoad(il, NPTypeCode.Double);
+                    il.Emit(OpCodes.Call, mAddD);
+                    PushD(locOut, off); DirectILKernelGenerator.EmitVectorStore(il, NPTypeCode.Double);
+                }
+                var u4L = il.DefineLabel(); var u4E = il.DefineLabel();
+                il.MarkLabel(u4L);
+                il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, (long)laneD * 4); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldloc, nD); il.Emit(OpCodes.Bgt, u4E);
+                StepD(0); StepD(laneD); StepD(laneD * 2); StepD(laneD * 3);
+                il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, (long)laneD * 4); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, k);
+                il.Emit(OpCodes.Br, u4L); il.MarkLabel(u4E);
+                var u1L = il.DefineLabel(); var u1E = il.DefineLabel();
+                il.MarkLabel(u1L);
+                il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, (long)laneD); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldloc, nD); il.Emit(OpCodes.Bgt, u1E);
+                StepD(0);
+                il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, (long)laneD); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, k);
+                il.Emit(OpCodes.Br, u1L); il.MarkLabel(u1E);
+            }
+            // scalar double tail: for(; k<nD; k++) outd[k] += ind[k]
+            var dtL = il.DefineLabel(); var dtE = il.DefineLabel();
+            il.MarkLabel(dtL);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldloc, nD); il.Emit(OpCodes.Bge, dtE);
+            il.Emit(OpCodes.Ldloc, locOut); il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Dup); il.Emit(OpCodes.Ldind_R8);
+            il.Emit(OpCodes.Ldloc, locIn); il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 8L); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Ldind_R8);
+            il.Emit(OpCodes.Add); il.Emit(OpCodes.Stind_R8);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, k);
+            il.Emit(OpCodes.Br, dtL); il.MarkLabel(dtE);
+            il.Emit(OpCodes.Ret);
+
+            // strided SLAB: for(k=0;k<count;k++) out[k] += in[k]  (Vector128 per complex)
+            il.MarkLabel(LCStrided);
+            il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, k);
+            var sL = il.DefineLabel(); var sE = il.DefineLabel();
+            il.MarkLabel(sL);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Bge, sE);
+            il.Emit(OpCodes.Ldloc, locOut); il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldloc, locOutS); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, mLoad);
+            il.Emit(OpCodes.Ldloc, locIn); il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldloc, locInS); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, mLoad);
+            il.Emit(OpCodes.Call, mAdd);
+            il.Emit(OpCodes.Ldloc, locOut); il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldloc, locOutS); il.Emit(OpCodes.Mul); il.Emit(OpCodes.Conv_I); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, mStore);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, k);
+            il.Emit(OpCodes.Br, sL); il.MarkLabel(sE);
             il.Emit(OpCodes.Ret);
 
             return dm.CreateDelegate<NpyInnerLoopFunc>();

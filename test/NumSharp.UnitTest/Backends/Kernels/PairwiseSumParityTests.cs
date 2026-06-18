@@ -1,3 +1,4 @@
+using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
@@ -99,5 +100,42 @@ public class PairwiseSumParityTests
         for (int i = 0; i < 4; i++)
             Assert.AreEqual((float)s_contig.GetAtIndex(i), (float)s_strided.GetAtIndex(i),
                 $"row {i}: strided leaf must bit-match the contiguous SIMD leaf");
+    }
+
+    // Complex128 sum is the IL-emitted Vector128-per-complex pairwise (NumPy CDOUBLE
+    // pairwise_sum). Expected values produced by NumPy 2.4.2 for:
+    //   k=arange(N); a=((k%17)*0.25-2 + 1j*((k%13)*0.5-3)).reshape(R,C)
+    //     np.sum(a,axis=1):  (2,200)->[(-6.5,-10),(-2.5,2.5)]  (2,1000)->[(-5.25,-3),(-3,-2.5)]
+    private static NDArray MakeComplex(int R, int C)
+    {
+        long N = (long)R * C;
+        var re = (np.arange(N) % 17).astype(NPTypeCode.Double) * 0.25 - 2.0;
+        var im = (np.arange(N) % 13).astype(NPTypeCode.Double) * 0.5 - 3.0;
+        return (re.astype(NPTypeCode.Complex) + im.astype(NPTypeCode.Complex) * new Complex(0, 1)).reshape(R, C);
+    }
+
+    [TestMethod]
+    public void Complex128_Sum_Axis1_ExactNumPy()
+    {
+        var a = MakeComplex(2, 200); // 200 > 64 → recursion
+        var s = np.sum(a, axis: 1);
+        Assert.AreEqual(new Complex(-6.5, -10.0), (Complex)s.GetAtIndex(0));
+        Assert.AreEqual(new Complex(-2.5, 2.5), (Complex)s.GetAtIndex(1));
+
+        var b = MakeComplex(2, 1000);
+        var s2 = np.sum(b, axis: 1);
+        Assert.AreEqual(new Complex(-5.25, -3.0), (Complex)s2.GetAtIndex(0));
+        Assert.AreEqual(new Complex(-3.0, -2.5), (Complex)s2.GetAtIndex(1));
+    }
+
+    [TestMethod]
+    public void Complex128_StridedReducedAxis_BitEqualsContiguous()
+    {
+        var a = MakeComplex(20, 30);
+        var t = a.T;                       // (30,20) axis1 strided
+        var sStrided = np.sum(t, axis: 1);
+        var sContig = np.sum(t.copy(), axis: 1);
+        for (int i = 0; i < 30; i++)
+            Assert.AreEqual((Complex)sContig.GetAtIndex(i), (Complex)sStrided.GetAtIndex(i), $"row {i}");
     }
 }
