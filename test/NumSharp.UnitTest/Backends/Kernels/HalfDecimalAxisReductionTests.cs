@@ -53,14 +53,15 @@ public class HalfDecimalAxisReductionTests
     }
 
     [TestMethod]
-    public void Half_Sum_StillCorrect_LegacyPath()
+    public void Half_Sum_AccumulatesInFloat32_NotFloat16()
     {
-        // Half sum stays on the legacy path; verify it still matches NumPy.
+        // NumPy accumulates float16 reductions in float32, NOT float16. np.sum(ones(4096,f16))
+        // == 4096 — an f16 accumulator would saturate at ~2048 (2048 + 1 == 2048 in float16).
+        // NumSharp routes Half sum through a Double accumulator and casts back, matching NumPy.
         var b = HalfB();
         AssertHalf(np.sum(b, axis: 0), new[] { 5f, 8f, 11f, 7f }, "half sum axis0");
-        // f16 sequential saturation: 4096 ones sum → 2048 (NumPy parity).
         var ones = np.ones(new Shape(4096, 2), NPTypeCode.Half);
-        AssertHalf(np.sum(ones, axis: 0), new[] { 2048f, 2048f }, "half sum 4096 ones");
+        AssertHalf(np.sum(ones, axis: 0), new[] { 4096f, 4096f }, "half sum 4096 ones (float32 accumulate)");
     }
 
     // ---- Decimal (full-precision; no NumPy reference type) ----

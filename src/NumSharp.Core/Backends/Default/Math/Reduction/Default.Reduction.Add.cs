@@ -35,6 +35,22 @@ namespace NumSharp.Backends
             if (shape[axis] == 1)
                 return HandleTrivialAxisReduction(arr, axis, keepdims, outputType, @out);
 
+            // Half AXIS sum: NumPy accumulates float16 sums in float32 (NOT float16 — e.g.
+            // np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator saturates to).
+            // The legacy Direct axis kernel accumulated in Half (a real ~3.5% error). Accumulate
+            // in the wider Double (>= NumPy's float32, so the float16 result rounds identically)
+            // and cast back — the same accumulate-wide-then-cast policy Half MEAN uses. The flat
+            // (axis=None) path already accumulates in Double (SumElementwiseHalfFallback); an
+            // explicit dtype request is honored verbatim by the normal path below.
+            if (arr.typecode == NPTypeCode.Half && typeCode == null)
+            {
+                var wide = ExecuteAxisReduction(arr, axis, keepdims, NPTypeCode.Double, null, ReductionOp.Sum);
+                var halfResult = wide.astype(NPTypeCode.Half);
+                if (@out is null) return halfResult;
+                for (long i = 0; i < halfResult.size; i++) @out.SetAtIndex(halfResult.GetAtIndex(i), i);
+                return @out;
+            }
+
             return ExecuteAxisReduction(arr, axis, keepdims, outputType, @out, ReductionOp.Sum);
         }
 
@@ -116,15 +132,14 @@ namespace NumSharp.Backends
                        op == ReductionOp.Min || op == ReductionOp.Max ||
                        op == ReductionOp.Mean;
 
-            // Half MEAN only: it accumulates in Double (hardware-fast), a clean win on both
-            // axes (10M: 57→15 ms axis0, 24→13 ms axis1) and the analog of the complex-mean
-            // fix. Half SUM/PROD must accumulate in Half to reproduce NumPy's f16 SEQUENTIAL
-            // rounding (the 2048-saturation on 4096 ones) — a serial software-arithmetic chain
-            // .NET cannot beat the legacy path on for the pinned (last-axis) case (~+30%), so
-            // those (and min/max) stay on the Direct path. outputType==Double for Half mean
-            // (ReduceMean casts the result back to Half).
+            // Half SUM and MEAN accumulate in Double then cast back to Half (ReduceAdd's axis
+            // branch / ReduceMean do the cast). NumPy accumulates float16 reductions in float32,
+            // NOT float16 — np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator
+            // saturates to; the wider Double matches NumPy's float16 result. outputType==Double
+            // is the in-flight accumulator dtype here (the Direct axis kernel for Half accumulated
+            // in Half — a real ~3.5% error this routes around). Half PROD/MIN/MAX stay on Direct.
             if (inputType == NPTypeCode.Half)
-                return op == ReductionOp.Mean && outputType == NPTypeCode.Double;
+                return (op == ReductionOp.Mean || op == ReductionOp.Sum) && outputType == NPTypeCode.Double;
 
             // Decimal: the legacy path is both cache-hostile AND lossy (it accumulates through
             // a double bridge). The NpyIter kernels are full-precision Decimal on contiguous
