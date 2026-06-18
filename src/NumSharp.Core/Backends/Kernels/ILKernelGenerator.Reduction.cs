@@ -100,10 +100,19 @@ namespace NumSharp.Backends.Kernels
             // exclusion was a flat-accumulator divergence the pairwise leaf removes). Integer
             // widening sums and Min/Max/Prod stay on the Direct path (CreateSimdReduceKernel
             // returns null for those → caller falls back).
-            if (key.InType == key.AccType)
+            if (key.InType == key.AccType && (key.InType == NPTypeCode.Double || key.InType == NPTypeCode.Single))
             {
+                // Sum: prefer the IL-EMITTED SIMD pairwise kernel — bit-for-bit identical to
+                // NumPy's pairwise_sum yet width-native SIMD (the scalar PairwiseFold below
+                // forfeits vectorization; see ILKernelGenerator.Reduction.Pairwise.cs). Falls
+                // back to the generic scalar fold only if emission is unavailable (IL disabled).
+                if (key.Op == ReductionOp.Sum)
+                {
+                    var emitted = TryEmitPairwiseSumKernel(key.InType);
+                    if (emitted != null) return emitted;
+                }
                 if (key.InType == NPTypeCode.Double) return CreateSimdReduceKernel<double>(key.Op);
-                if (key.InType == NPTypeCode.Single) return CreateSimdReduceKernel<float>(key.Op);
+                return CreateSimdReduceKernel<float>(key.Op);
             }
 
             return null;

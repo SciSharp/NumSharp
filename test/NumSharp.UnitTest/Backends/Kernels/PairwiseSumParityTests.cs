@@ -69,4 +69,35 @@ public class PairwiseSumParityTests
         Assert.AreEqual(1149.5499267578125f, (float)s.GetAtIndex(0));
         Assert.AreEqual(2049.550048828125f, (float)s.GetAtIndex(1));
     }
+
+    // The IL-emitted SIMD pairwise kernel folds a CONTIGUOUS reduced axis with the
+    // vector leaf and a STRIDED reduced axis with the scalar 8-accumulator leaf. Both
+    // must reproduce NumPy's pairwise_sum, which depends only on (values, order, n) —
+    // so a strided view and its contiguous .copy() (identical values, identical order)
+    // must sum BIT-FOR-BIT identically. This pins the strided IL leaf against the SIMD leaf.
+    [TestMethod]
+    public void Float64_StridedReducedAxis_BitEqualsContiguousLeaf()
+    {
+        var b = (np.arange(4 * 512).astype(NPTypeCode.Double) % 31) * 0.125 + 0.3;
+        var full = b.reshape(4, 512);
+        var strided = full[":, ::2"]; // (4,256) reduced axis stride 2
+        var s_strided = np.sum(strided, axis: 1);       // scalar 8-acc pairwise leaf (strided)
+        var s_contig = np.sum(strided.copy(), axis: 1); // SIMD pairwise leaf (contiguous)
+        for (int i = 0; i < 4; i++)
+            Assert.AreEqual((double)s_contig.GetAtIndex(i), (double)s_strided.GetAtIndex(i),
+                $"row {i}: strided leaf must bit-match the contiguous SIMD leaf");
+    }
+
+    [TestMethod]
+    public void Float32_StridedReducedAxis_BitEqualsContiguousLeaf()
+    {
+        var b = (np.arange(4 * 600).astype(NPTypeCode.Single) % 17) * 0.3f + 0.5f;
+        var full = b.reshape(4, 600);
+        var strided = full[":, ::3"];                    // (4,200) reduced axis stride 3
+        var s_strided = np.sum(strided, axis: 1);
+        var s_contig = np.sum(strided.copy(), axis: 1);
+        for (int i = 0; i < 4; i++)
+            Assert.AreEqual((float)s_contig.GetAtIndex(i), (float)s_strided.GetAtIndex(i),
+                $"row {i}: strided leaf must bit-match the contiguous SIMD leaf");
+    }
 }
