@@ -78,6 +78,25 @@ scalar generic loop" claim was wrong on two counts, both caught by direct measur
 - **Min/Max** — need NaN-aware SIMD (the `v != v` mask trick) before routing.
 Direct keeps serving all of those (its kernels return for non-routed keys), so no regression.
 
+**Parallelism (NpyIter RANGE / PARALLEL_SAFE) — PROVEN 2–6× but DECLINED by design.**
+The single-threaded migration is only ~parity because Direct is already SIMD-optimal. The one
+NpyIter technique that *beats* the baseline is parallelism: both Direct AND NumPy reduce
+single-threaded, so range-splitting the reduce across cores is a real win. Prototype
+(`phase6_parallel.cs`, 32-core box, double sum):
+
+| | PAR vs Direct | PAR vs NumPy |
+|---|---|---|
+| axis1 1M / 10M | 3.8× / 3.7× | 6.5× / 5.9× |
+| axis0 1M / 10M | 1.8× / 2.9× | 1.7× / 2.6× |
+| axis* 100M | 2.4–2.8× | — |
+
+**Decision: NOT adopted.** Held to NumSharp's stated design principle ("Parallelization is
+minimal. Most operations use SIMD") — keeps results bit-stable vs NumPy (parallel partials
+shift fp summation order ~1e-9 and would be machine-dependent without a fixed partition) and
+avoids a threading dependency in the reduction core. The prototype is kept as evidence only;
+if the project ever revises the no-threading stance, this is the lever (size-gated, fixed
+partition count for determinism). The 2–6× is left on the table deliberately.
+
 **Phase 4 (strided/transposed) — solved by axis-ordering, NOT gather (better than planned).**
 Root cause (diagnosed, not assumed): the reduce path kept the **logical** axis order (inner = last logical axis), so it was fast only when the input was C-contiguous; a transpose's last logical axis is strided → cache-hostile column gather (~16×). NumPy instead orders iteration axes by the input's **stride** (contiguous axis innermost). Fix is **reduce-local** in `NpyIterRef.NewReduce`: order the `op_axes` iteration axes by descending input |stride| (0/broadcast → outermost), mapping the output back to original order. For C-contig this is the identity (fast path untouched); only non-contiguous inputs reorder. No gather, no copy — access becomes sequential, which beats gather (gather still cache-misses). Isolated 10M (vs NumPy, vs the prior strided path):
 
