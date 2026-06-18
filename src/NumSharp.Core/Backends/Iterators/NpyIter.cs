@@ -399,7 +399,17 @@ namespace NumSharp.Backends.Iteration
                     var arrStrides = arrShape.strides;
                     var arrDims = arrShape.dimensions;
 
-                    basePtr = (byte*)arr.Address;
+                    // Operand base must point to the view's LOGICAL origin: add
+                    // Shape.offset (in elements). The standard-broadcast branch below
+                    // already does this (lines ~473/481); the op_axes branch did not,
+                    // so any op_axes reduction over a view whose offset lives in
+                    // Shape.offset (sliced a[1:3,1:3], negative-stride a[::-1] / a[:,::-1])
+                    // read from the buffer base instead — wrong cells, and after
+                    // FlipNegativeStrides moved the pointer, out-of-bounds reads/writes
+                    // (garbage / NaN). Views with offset==0 (C-/F-contig, transpose,
+                    // positive strided) were unaffected, which is why it hid so long.
+                    // Use NPTypeCode.SizeOf() (1 byte for bool) NOT arr.dtypesize.
+                    basePtr = (byte*)arr.Address + (arrShape.offset * arr.GetTypeCode.SizeOf());
 
                     for (int d = 0; d < _state->NDim; d++)
                     {

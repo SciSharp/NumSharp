@@ -27,9 +27,9 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 8 | unary | `negative(uint*)` throws (NumPy wraps modulo) | **FIXED** | F4 |
 | 9 | unary | `reciprocal(int)` wrong; non-contig throws (**float non-contig FIXED**; int value/non-contig pending F3b) | BUG | F3b |
 | 10 | unary | complex `square` cancellation; complex `sin/cos/tan/log` inf/NaN edge | BUG | #9 |
-| 11 | reduction | `min/max` skip NaN (NumPy propagates) | **FIXED (flat)** / axis SIMD pending | F2-red |
+| 11 | reduction | `min/max` skip NaN (NumPy propagates) | **FIXED** (flat + axis, float32/double) | F2-red |
 | 12 | reduction | complex axis reduction throws (**2-D+ FIXED**; 1-D vector-shape pending) | BUG | #10 |
-| 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | BUG | #10 |
+| 13 | reduction | bool `min/max` along an axis returns True where NumPy → False | **FIXED** | F8 |
 | 14 | reduction | `sum/mean/std/var` accumulation order (vs NumPy pairwise/two-pass) | BUG | #10 |
 | 15 | reduction | result dtype (NEP50 accumulator width / complex→real) | BUG | #10 |
 | 16 | where | complex `np.where` throws ("Zero-push unsupported for Complex") | **FIXED** | F4 |
@@ -39,6 +39,8 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 20 | promotion | 0-D array operand promoted weakly (NEP50: full participant) | INTENDED | — |
 | 21 | divide | complex division ~1 ULP (`npy_cdivide` vs `System.Numerics.Complex`) | INTENDED | — |
 | 22 | views | ops ignore raw NumPy `offset!=0` / junk size-1 strides | SCOPING | #11 |
+| 23 | reduction | NpyIter reduce path ignored `Shape.offset` → sliced/negative-stride views read wrong cells / OOB garbage | **FIXED** | F8 |
+| 24 | reduction | non-contiguous flat `prod(char)` overflows (uint16 accumulator) while contiguous promotes to uint64 | BUG | — |
 
 ---
 
@@ -189,7 +191,7 @@ NumPy retains precision). `sin/cos/tan/log` of complex differ on inf/NaN-involvi
 (NumPy `(NaN, +inf)` vs NumSharp `(NaN, NaN)`). `System.Numerics.Complex` vs NumPy's `npy_c*`.
 Task **#9**.
 
-### 11. Reductions skip NaN (NumPy propagates) — **FIXED (flat min/max)** / axis SIMD pending
+### 11. Reductions skip NaN (NumPy propagates) — **FIXED (flat + axis min/max)**
 
 `sum/mean/std/var` already propagated NaN (arithmetic: `NaN op x == NaN`). Only `min/max` skipped it,
 because the SIMD path used hardware `Vector.Min/Max` (MINPS/MAXPS drop a NaN operand). The **flat**
@@ -199,12 +201,12 @@ NaN-propagating form `ConditionalSelect(Equals(a,a) & Equals(b,b), MinMax(a,b), 
 double — verified across every size (3..257) and NaN position, double + float32. The scalar tail
 already used `Math.Min/Max` (propagates).
 
-**Still pending:** the **axis** (vertical/strided) SIMD min/max kernel in `CreateAxisReductionKernelTyped`
-has an additional combine site that still drops NaN (e.g. `np.min(arr2d, axis=0)`); the classifier now
-excuses only `axis != null` NaN-propagation so a flat regression fails the gate.
+The **axis** (vertical/strided) SIMD min/max kernel now also propagates NaN — verified bit-exact for
+float32 and double, `axis=0` and `axis=1` (`np.amin(m, 1)` over a row containing NaN → `nan`).
 
 ```python
-np.min(np.array([np.nan, -np.inf, 1.0]))   # nan  (NumSharp now: nan ✓)
+np.min(np.array([np.nan, -np.inf, 1.0]))      # nan  (NumSharp: nan ✓)
+np.amin(np.array([[np.nan,-1,2],[3,4,5]]), 1) # [nan, 3]  (NumSharp: [nan, 3] ✓)
 ```
 Found by T5 `Reduce`. Task **#10** / F2-reductions.
 
@@ -216,10 +218,55 @@ array along its only axis still throws `InvalidOperationException: Can't constru
 NDCoordinatesAxisIncrementor with a vector shape`. The classifier excuses only the 1-D Threw case;
 the 2-D matrix cases are gate-verified (value diffs fall to the summation-precision branch).
 
-### 13. bool `min`/`max` along an axis is wrong
+### 13. bool `min`/`max` along an axis is wrong — **FIXED (F8)**
 
-`max`/`min` of a bool array reduced along an axis returns `True` at positions where NumPy returns
-`False`. Task **#10**.
+`max`/`min` of a bool array reduced along an axis returned `True` at every position where NumPy
+returns `False` (all-False group). Root cause: the axis scalar reducer
+(`CreateAxisReductionKernelScalar<bool,bool>`) seeded its accumulator from
+`GetIdentityValueTyped<bool>`, which computed a `double` identity (`Max → double.NegativeInfinity`)
+and funneled it through `ConvertFromDouble<bool>` (`value != 0`). `double.NegativeInfinity != 0` is
+**True**, so the Max accumulator started `True` and `Math.Max(1.0, ≤1.0)` never dropped below 1 →
+every group reduced to True. `amin` was coincidentally correct (its `PositiveInfinity → True` seed is
+the correct Min identity); integer/byte/char were correct (their `(int)NegInf`/`(byte)NegInf` casts
+are valid Max seeds — only bool's `!= 0` test corrupted it). Fixed by an explicit bool identity block
+in `GetIdentityValueTyped` (`Max → false`, `Min → true`). The double-bridge combine is correct once
+the seed is right. Verified bit-exact vs NumPy across axis 0/1 incl. all-False groups.
+
+```python
+np.max(np.array([[True,False,True],[False,False,True]]), axis=0)  # [T,F,T]  (NumSharp: [T,F,T] ✓)
+```
+Found by T5 `Reduce` / re-confirmed by the min/max parity sweep (`benchmark/poc/minmax_*`).
+
+### 23. NpyIter reduce path ignored `Shape.offset` — **FIXED (F8)**
+
+Any reduction routed through the NpyIter REDUCE path (`ExecuteAxisReductionNpyIter` →
+`NpyIterRef.NewReduce`, which serves double/single `sum`+`mean`, and complex/decimal `sum`/`prod`/
+`min`/`max`/`mean`, half `sum`+`mean`) read from the **buffer base** instead of the view's logical
+origin for any input whose offset lives in `Shape.offset`: sliced views (`a[1:3,1:3]`) and
+negative-stride views (`a[::-1]`, `a[:,::-1]`). Root cause: in `NpyIter.cs` the **op_axes** operand
+base-pointer branch set `basePtr = (byte*)arr.Address` without adding `arrShape.offset * elemBytes`,
+while the standard-broadcast branch did add it. So a strided reduce read the wrong cells; and once
+`FlipNegativeStrides` moved the (already-wrong) pointer by the flip offset, it read/wrote **out of
+bounds** → garbage / NaN / denormals. Contiguous, transpose, F-order and positive-strided
+(offset-in-`Address`) views all have `Shape.offset == 0`, so they were unaffected — which is why the
+bug hid. Fixed by adding the offset in the op_axes branch (matching the standard branch), using
+`NPTypeCode.SizeOf()` (1 byte for bool, never `arr.dtypesize`).
+
+```python
+a = np.arange(12).reshape(3,4)
+np.sum(a[::-1], axis=0)      # [12,15,18,21]   (was [0,1,2,3])
+np.sum(a[1:3,1:3], axis=0)   # [14,16]          (was [4,6])
+```
+Pinned by `ReduceOffsetStrideParityTests` + the sum/prod/mean parity sweep
+(`benchmark/poc/reduce_*`, 1616/1620 — the 4 are #24).
+
+### 24. non-contiguous flat `prod(char)` overflows
+
+`np.prod` of a **non-contiguous** char view (`a.T`, `a[::-1]`, …) over the whole array accumulates in
+the 16-bit char width and overflows (e.g. `24⁶ → 0`), whereas the **contiguous** flat path promotes
+to `uint64` and the **axis** path is fine. `int16` (and all other narrow ints) promote correctly on
+the same non-contiguous flat path — only `char` is wrong. char has no NumPy analog (modelled as
+`uint16`); pre-existing and unrelated to the reduce-offset fix. Not yet fixed.
 
 ### 14. Reduction accumulation order
 

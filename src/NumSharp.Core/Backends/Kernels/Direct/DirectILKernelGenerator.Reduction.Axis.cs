@@ -613,6 +613,26 @@ namespace NumSharp.Backends.Kernels
                 return (T)(object)identity;
             }
 
+            // Special handling for Boolean — the double-bridge identity is WRONG for Max:
+            // double.NegativeInfinity funneled through ConvertFromDouble<bool> (value != 0)
+            // yields TRUE, so an all-False reduction group wrongly reduces to True (Math.Max
+            // never drops below the seeded 1.0). Min coincidentally works because its
+            // PositiveInfinity→True seed is the correct Min identity. Seed explicitly to match
+            // NumPy: Max→false, Min→true. (Sum/Mean→false, Prod→true for completeness; bool
+            // Sum/Prod promote to int64 per NEP50 and never reach this bool branch.)
+            if (typeof(T) == typeof(bool))
+            {
+                bool identity = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => false,
+                    ReductionOp.Prod => true,
+                    ReductionOp.Min => true,
+                    ReductionOp.Max => false,
+                    _ => false
+                };
+                return (T)(object)identity;
+            }
+
             double dIdentity = op switch
             {
                 ReductionOp.Sum or ReductionOp.Mean => 0.0,

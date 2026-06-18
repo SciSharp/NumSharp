@@ -1,0 +1,175 @@
+using System;
+using System.Numerics;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp;
+
+namespace NumSharp.UnitTest.Backends.Kernels;
+
+/// <summary>
+/// Pins two reduction correctness fixes against NumPy 2.4.2:
+///
+/// 1. Boolean <c>amax</c>/<c>amin</c> along an axis (FUZZ_FINDINGS #13). The axis
+///    scalar reducer seeded the Boolean Max accumulator from a double bridge
+///    (double.NegativeInfinity → ConvertFromDouble&lt;bool&gt; → <c>!= 0</c> → True),
+///    so any all-False group reduced to True. Fixed by an explicit bool identity.
+///
+/// 2. Reductions over a view whose offset lives in <c>Shape.offset</c> — sliced
+///    (a[1:3,1:3]) and negative-stride (a[::-1], a[:,::-1]) views. The NpyIter
+///    REDUCE path (op_axes branch) did not add Shape.offset to the operand base
+///    pointer, so it read from the buffer base — wrong cells, and after
+///    FlipNegativeStrides moved the pointer, out-of-bounds (garbage / NaN). This
+///    silently corrupted sum/mean/prod/min/max for every NpyIter-routed dtype
+///    (double/single sum+mean, complex & decimal all ops, half sum+mean) on any
+///    offset!=0 view. Contiguous / transpose / F-order / positive-strided views
+///    (offset==0) were unaffected, which is why it hid so long.
+/// </summary>
+[TestClass]
+public class ReduceOffsetStrideParityTests
+{
+    private static bool[] BoolArr(NDArray a)
+    {
+        var r = new bool[a.size];
+        for (long i = 0; i < a.size; i++) r[i] = (bool)a.GetAtIndex(i);
+        return r;
+    }
+
+    // Half is not IConvertible, so Convert.ToDouble(boxedHalf) throws — bridge it explicitly.
+    private static double D(object o) => o is Half h ? (double)h : Convert.ToDouble(o);
+
+    [TestMethod]
+    public void Bool_AmaxAmin_AlongAxis_MatchesNumPy()
+    {
+        // [[T,F,T],[F,F,T]] — col1 is all-False (the bug: amax returned True there).
+        var b = np.array(new bool[] { true, false, true, false, false, true }).reshape(2, 3);
+        CollectionAssert.AreEqual(new[] { true, false, true }, BoolArr(np.amax(b, 0)), "amax axis0");
+        CollectionAssert.AreEqual(new[] { false, false, true }, BoolArr(np.amin(b, 0)), "amin axis0");
+        CollectionAssert.AreEqual(new[] { true, true }, BoolArr(np.amax(b, 1)), "amax axis1");
+        CollectionAssert.AreEqual(new[] { false, false }, BoolArr(np.amin(b, 1)), "amin axis1");
+
+        // [[F,F,F],[T,F,T]] — row0 all-False along axis1.
+        var c = np.array(new bool[] { false, false, false, true, false, true }).reshape(2, 3);
+        CollectionAssert.AreEqual(new[] { false, true }, BoolArr(np.amax(c, 1)), "amax axis1 (all-False row)");
+        CollectionAssert.AreEqual(new[] { true, false, true }, BoolArr(np.amax(c, 0)), "amax axis0");
+
+        // flat bool min/max were always correct — pin them so the fix can't regress them.
+        Assert.AreEqual(true, (bool)np.amax(b).GetAtIndex(0), "amax flat");
+        Assert.AreEqual(false, (bool)np.amin(b).GetAtIndex(0), "amin flat");
+    }
+
+    private static void AssertD(NDArray got, double[] expected, string ctx)
+    {
+        Assert.AreEqual(expected.Length, (int)got.size, $"{ctx}: size");
+        for (long i = 0; i < expected.Length; i++)
+            Assert.AreEqual(expected[i], D(got.GetAtIndex(i)), 1e-9, $"{ctx}[{i}]");
+    }
+
+    [TestMethod]
+    public void Double_NegativeStride_And_OffsetSlice_Reduce_MatchesNumPy()
+    {
+        // a = [[0,1,2,3],[4,5,6,7],[8,9,10,11]]
+        var a = np.arange(12).astype(NPTypeCode.Double).reshape(3, 4);
+
+        var rev = a["::-1, :"]; // [[8,9,10,11],[4,5,6,7],[0,1,2,3]] (offset 8, stride -4)
+        AssertD(np.sum(rev, 0), new double[] { 12, 15, 18, 21 }, "sum(rev,0)");
+        AssertD(np.sum(rev, 1), new double[] { 38, 22, 6 }, "sum(rev,1)");
+        AssertD(np.amax(rev, 0), new double[] { 8, 9, 10, 11 }, "amax(rev,0)");
+        AssertD(np.amin(rev, 0), new double[] { 0, 1, 2, 3 }, "amin(rev,0)");
+        AssertD(np.mean(rev, 0), new double[] { 4, 5, 6, 7 }, "mean(rev,0)");
+
+        var revc = a[":, ::-1"]; // each row reversed (offset 3, stride -1 on axis1)
+        AssertD(np.sum(revc, 0), new double[] { 21, 18, 15, 12 }, "sum(revcol,0)");
+        AssertD(np.sum(revc, 1), new double[] { 6, 22, 38 }, "sum(revcol,1)");
+
+        var sl = a["1:3, 1:3"]; // [[5,6],[9,10]] (offset 5, positive strides)
+        AssertD(np.sum(sl, 0), new double[] { 14, 16 }, "sum(slice,0)");
+        AssertD(np.sum(sl, 1), new double[] { 11, 19 }, "sum(slice,1)");
+        AssertD(np.amax(sl, 0), new double[] { 9, 10 }, "amax(slice,0)");
+        AssertD(np.mean(sl, 1), new double[] { 5.5, 9.5 }, "mean(slice,1)");
+
+        // flat (axis=None) over the offset views
+        Assert.AreEqual(66.0, D(np.sum(rev).GetAtIndex(0)), 1e-9, "sum(rev) flat");
+        Assert.AreEqual(30.0, D(np.sum(sl).GetAtIndex(0)), 1e-9, "sum(slice) flat");
+    }
+
+    [TestMethod]
+    public void Complex_NegativeStride_Reduce_MatchesContiguousCopy()
+    {
+        var data = new Complex[12];
+        for (int i = 0; i < 12; i++) data[i] = new Complex(((i * 5) % 13) - 6, ((i * 3) % 11) - 5);
+        var a = np.array(data).reshape(3, 4);
+        foreach (var view in new[] { a["::-1, :"], a[":, ::-1"], a["1:3, 1:3"] })
+        {
+            for (int axis = 0; axis <= 1; axis++)
+            {
+                var g = np.sum(view, axis);
+                var e = np.sum(view.copy(), axis);
+                for (long i = 0; i < g.size; i++)
+                {
+                    var cg = (Complex)g.GetAtIndex(i);
+                    var ce = (Complex)e.GetAtIndex(i);
+                    Assert.AreEqual(ce.Real, cg.Real, 1e-9, $"complex sum axis{axis} [{i}] re");
+                    Assert.AreEqual(ce.Imaginary, cg.Imaginary, 1e-9, $"complex sum axis{axis} [{i}] im");
+                }
+            }
+        }
+    }
+
+    [DataTestMethod]
+    [DataRow(NPTypeCode.Double)]
+    [DataRow(NPTypeCode.Single)]
+    [DataRow(NPTypeCode.Int32)]
+    [DataRow(NPTypeCode.Int64)]
+    [DataRow(NPTypeCode.Decimal)]
+    [DataRow(NPTypeCode.Half)]
+    public void Reduce_OverOffsetAndNegativeStrideViews_EqualsContiguousCopy(NPTypeCode dt)
+    {
+        // distinct positive values (1..24) so prod has no zero short-circuit and
+        // every group's min/max/sum/prod is unambiguous.
+        var a = (np.arange(24) + 1).astype(dt).reshape(4, 6);
+        var views = new (string name, NDArray v)[]
+        {
+            ("rev", a["::-1, :"]),
+            ("revcol", a[":, ::-1"]),
+            ("slice", a["1:4, 1:5"]),
+            ("transpose", a.T),
+            ("forder", a.copy(order: 'F')),
+        };
+        string[] ops = { "sum", "min", "max", "mean", "prod" };
+        double tol = dt == NPTypeCode.Half ? 5e-2 : dt == NPTypeCode.Single ? 1e-3 : 1e-9;
+
+        foreach (var (name, v) in views)
+        {
+            var baseline = v.copy(); // C-contiguous, offset 0 — independently-correct reference
+            for (int axis = 0; axis <= 1; axis++)
+            {
+                foreach (var op in ops)
+                {
+                    NDArray g = Reduce(op, v, axis);
+                    NDArray e = Reduce(op, baseline, axis);
+                    Assert.AreEqual(e.size, g.size, $"{dt} {op} {name} axis{axis}: size");
+                    for (long i = 0; i < g.size; i++)
+                    {
+                        double dg = D(g.GetAtIndex(i));
+                        double de = D(e.GetAtIndex(i));
+                        // Half prod(1..24) overflows to inf — view and copy must agree
+                        // on the SAME inf/NaN; finite values compare within tolerance.
+                        bool eq = (double.IsNaN(de) && double.IsNaN(dg))
+                               || (double.IsInfinity(de) && double.IsInfinity(dg) && Math.Sign(de) == Math.Sign(dg))
+                               || Math.Abs(dg - de) <= tol * (1 + Math.Abs(de));
+                        Assert.IsTrue(eq, $"{dt} {op} {name} axis{axis} [{i}]: view {dg} != copy {de}");
+                    }
+                }
+            }
+        }
+    }
+
+    private static NDArray Reduce(string op, NDArray a, int axis) => op switch
+    {
+        "sum" => np.sum(a, axis),
+        "min" => np.amin(a, axis),
+        "max" => np.amax(a, axis),
+        "mean" => np.mean(a, axis),
+        "prod" => np.prod(a, axis),
+        _ => throw new ArgumentException(op),
+    };
+}
