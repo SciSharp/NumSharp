@@ -423,6 +423,22 @@ Create issues on `SciSharp/NumSharp` via `gh issue create`. `GH_TOKEN` is availa
 - **Root cause** (if known): File, line, why it happens
 - **Related issues**: Link duplicates or upstream causes
 
+## Performance Convention
+
+All NumSharp-vs-NumPy benchmark ratios are reported as **NPY/NS**:
+
+> **ratio = NumPy_ms / NumSharp_ms** — **`>1` = NumSharp FASTER, `<1` = NumSharp slower, `=1` = parity.**
+
+**Higher is better.** Equivalently `speedup = NumPy_time / NumSharp_time`. A cell of
+`0.5` means NumSharp takes 2× NumPy's time; `2.0` means NumSharp is 2× faster. Use this
+direction **everywhere** — matrices, geomeans, commit messages, the `npyiter` sheet, and
+the `benchmark/poc/*_merge.py` outputs — so one glance answers "are we faster?".
+
+- Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
+- Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
+- best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
+- The canonical harness is `benchmark/npyiter/` (NpyIter aspects) + `benchmark/poc/reduce_layout_*` (reduction × layout × dtype). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
+
 ## Build & Test
 
 ```bash

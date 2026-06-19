@@ -472,7 +472,15 @@ class BenchmarkResult:
 
 ### Status Icons
 
-| Ratio | Icon | Meaning |
+> ⚠️ **Convention note.** The **canonical Performance Convention** (project `.claude/CLAUDE.md`)
+> is **NPY/NS**: `ratio = NumPy_ms / NumSharp_ms`, **`>1` = NumSharp faster** (higher is better) —
+> used by the `npyiter` sheet and `benchmark/poc/*_merge.py`. The legacy `run-benchmarks.ps1`
+> table BELOW is the **inverse** (NS/NPY, lower is better). Prefer the canonical NPY/NS direction
+> for any new reporting.
+
+Legacy `run-benchmarks.ps1` icons (NS/NPY — NumSharp_ms / NumPy_ms, **lower is better**):
+
+| Ratio (NS/NPY) | Icon | Meaning |
 |-------|------|---------|
 | ≤ 1.0 | ✅ | NumSharp faster or equal |
 | 1.0 - 2.0 | 🟡 | Close to NumPy |
