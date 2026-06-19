@@ -226,6 +226,69 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Fast path 3: 2-D non-C-contiguous inputs with a stride-1 axis
+            // (F-order, transposed, sliced-along-the-strided-axis). The leading/
+            // innermost SIMD kernels above already handle an arbitrary axisStride
+            // with a contiguous inner slab (WideningLeading) or consecutive
+            // contiguous blocks (WideningInnermost) — they were simply never
+            // REACHED because the gates above key off C-contiguity / axis position.
+            // Reading the orientation from the strides instead lets F-order axis0/
+            // axis1 and a.T stop falling to the scalar path: the int32->int64
+            // widening-sum layout cliff (F-order/transposed measured 14-20x slower
+            // than NumPy, while C-contig wins ~10x — same kernel, just not routed).
+            if (ndim == 2)
+            {
+                int other = 1 - axis;
+                long axisStride = inputStrides[axis];
+
+                // SLAB: the non-reduced axis is contiguous (stride 1) → it is the
+                // inner output slab and the reduced axis is streamed with axisStride.
+                // Covers F-order reduce-last-axis (inner = the leading contiguous
+                // axis). One 2-D slab ⇒ outerSize = 1. axisStride may be 0
+                // (broadcast reduce) — WideningLeading folds it correctly.
+                if (inputStrides[other] == 1L)
+                {
+                    long innerSize = inputShape[other];
+                    if (loopOp == ReductionOp.Sum &&
+                        TrySumLeadingConcrete<TIn, TAcc>(input, output, 1, axisSize, innerSize, axisStride))
+                    {
+                        // handled by the concrete sum kernel
+                    }
+                    else switch (loopOp)
+                    {
+                        case ReductionOp.Sum:  WideningLeading<TIn, TAcc, TW, WAddOp<TAcc>>(input, output, 1, axisSize, innerSize, axisStride); break;
+                        case ReductionOp.Prod: WideningLeading<TIn, TAcc, TW, WMulOp<TAcc>>(input, output, 1, axisSize, innerSize, axisStride); break;
+                        case ReductionOp.Min:  WideningLeading<TIn, TAcc, TW, WMinOp<TAcc>>(input, output, 1, axisSize, innerSize, axisStride); break;
+                        case ReductionOp.Max:  WideningLeading<TIn, TAcc, TW, WMaxOp<TAcc>>(input, output, 1, axisSize, innerSize, axisStride); break;
+                    }
+                    if (op == ReductionOp.Mean) DivideOutputByCount(output, outputSize, axisSize);
+                    return;
+                }
+
+                // PINNED: the reduced axis is contiguous (stride 1) AND tiles into
+                // CONSECUTIVE blocks (stride[other] == axisSize), so each output
+                // cell reduces a contiguous run of axisSize elements. Covers F-order
+                // reduce-axis0 and a.T reduce-axis0. The block-consecutive guard
+                // rejects sliced F-order views (block gaps) — they stay scalar.
+                if (axisStride == 1L && inputStrides[other] == axisSize)
+                {
+                    if (loopOp == ReductionOp.Sum &&
+                        TrySumInnermostConcrete<TIn, TAcc>(input, output, outputSize, axisSize))
+                    {
+                        // handled by the concrete sum kernel
+                    }
+                    else switch (loopOp)
+                    {
+                        case ReductionOp.Sum:  WideningInnermost<TIn, TAcc, TW, WAddOp<TAcc>>(input, output, outputSize, axisSize); break;
+                        case ReductionOp.Prod: WideningInnermost<TIn, TAcc, TW, WMulOp<TAcc>>(input, output, outputSize, axisSize); break;
+                        case ReductionOp.Min:  WideningInnermost<TIn, TAcc, TW, WMinOp<TAcc>>(input, output, outputSize, axisSize); break;
+                        case ReductionOp.Max:  WideningInnermost<TIn, TAcc, TW, WMaxOp<TAcc>>(input, output, outputSize, axisSize); break;
+                    }
+                    if (op == ReductionOp.Mean) DivideOutputByCount(output, outputSize, axisSize);
+                    return;
+                }
+            }
+
             // General layout (strided axis, transposed, sliced inner dim):
             // typed scalar with promotion — handles Mean's divide internally.
             AxisReductionScalarHelper<TIn, TAcc>(
