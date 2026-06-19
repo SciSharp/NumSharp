@@ -3995,8 +3995,10 @@ namespace NumSharp.Backends.Iteration
 
                 // General path (strided / broadcast): route through the IL StridedCastKernel —
                 // detects unit-stride innermost axis and uses Buffer.MemoryCopy per row; falls
-                // back to scalar incremental-coord inner loop when inner is also strided.
-                // This replaces the old CopyGeneralSameType (mod/div per element per axis).
+                // back to scalar incremental-coord inner loop when inner is also strided. Returns
+                // null for the Vector-less dtypes (Char/Half/Decimal/Complex/Boolean), which then
+                // take the CopyGeneralSameType fallback below — same row-memcpy + incremental-coord
+                // shape, just without the SIMD cast body they can't use anyway for a same-type copy.
                 var stridedKernel = DirectILKernelGenerator.TryGetStridedCastKernel(dst.TypeCode, dst.TypeCode);
                 if (stridedKernel != null)
                 {
@@ -4010,7 +4012,9 @@ namespace NumSharp.Backends.Iteration
                     return true;
                 }
 
-                // Final fallback: legacy IL copy kernel (still used for unsupported types like Decimal/Complex).
+                // Fallback for the dtypes the StridedCastKernel rejects (Char/Half/Decimal/
+                // Complex/Boolean): CopyGeneralSameType — row-memcpy + incremental-coord, dtype-
+                // agnostic byte movement that matches the StridedCastKernel's wall time.
                 var fallbackKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.General));
                 if (fallbackKernel == null)
                     return false;
