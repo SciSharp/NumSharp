@@ -603,6 +603,10 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitVectorNaNPropagatingMinMax(ILGenerator il, ReductionOp op, int simdBits, Type clrType)
         {
+#if NET8_0
+            // net8.0: the BCL Vector{N}.Min/Max lower to raw MINPS/MAXPS, which DROP a NaN
+            // operand (return the other lane) — so NaN must be re-introduced explicitly.
+            // Stack on entry: [acc, v].
             var vecType = VectorMethodCache.V(simdBits, clrType);
             var locV = il.DeclareLocal(vecType);
             var locAcc = il.DeclareLocal(vecType);
@@ -631,6 +635,16 @@ namespace NumSharp.Backends.Kernels
 
             // ConditionalSelect(ordered, MinMax, acc+v)
             il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(simdBits, clrType), null);
+#else
+            // net9.0+: Vector{N}.Min/Max PROPAGATE NaN (the JIT lowers them to vminp{s,d}/
+            // vmaxp{s,d} PLUS the IEEE-754 NaN fixup — verified: Vector256.Min(<.,NaN,.>) keeps
+            // the NaN). The whole self-equality + acc+v + ConditionalSelect wrapper the net8.0
+            // path needs is pure overhead here (it ~tripled the per-combine op count and made
+            // float axis min/max ~2x slower than NumPy). Emit the single intrinsic call: stack
+            // is already [acc, v], so Min/Max consumes both. Matches NaNAwareMinMax256's #if.
+            il.EmitCall(OpCodes.Call,
+                VectorMethodCache.Generic(simdBits, op == ReductionOp.Min ? "Min" : "Max", clrType, paramCount: 2), null);
+#endif
         }
 
         /// <summary>

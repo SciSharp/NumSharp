@@ -114,6 +114,36 @@ public class ReduceOffsetStrideParityTests
         }
     }
 
+    // Flat (axis=None) reduction of a BROADCAST view (stride-0 axis). The coordinate-walk
+    // kernel was ~50× NumPy here (the bcast_reduce pathology canary); the fix materializes
+    // the broadcast once and takes the fast contiguous kernel. Result must equal reducing the
+    // materialized contiguous copy (and, for the integer/min/max cases, be exact).
+    [TestMethod]
+    public void Flat_Reduce_OverBroadcastView_MatchesMaterializedCopy()
+    {
+        // a (1,8) broadcast up to (64,8): every row identical → axis0 is stride-0.
+        var row = (np.arange(8).astype(NPTypeCode.Double) % 5) + 1;        // [1,2,3,4,5,1,2,3]
+        var bc = np.broadcast_to(row.reshape(1, 8), new Shape(64, 8));
+        Assert.IsTrue(bc.Shape.IsBroadcasted, "precondition: view must be broadcasted");
+
+        double sExp = 64.0 * (double)np.sum(row);
+        Assert.AreEqual(sExp, D(np.sum(bc).GetAtIndex(0)), 1e-9, "broadcast flat sum");
+        Assert.AreEqual((double)np.amin(row), D(np.amin(bc).GetAtIndex(0)), 0, "broadcast flat min (exact)");
+        Assert.AreEqual((double)np.amax(row), D(np.amax(bc).GetAtIndex(0)), 0, "broadcast flat max (exact)");
+        Assert.AreEqual((double)np.mean(row), D(np.mean(bc).GetAtIndex(0)), 1e-9, "broadcast flat mean");
+
+        // every op must equal reducing the materialized contiguous copy, across dtypes
+        var copy = bc.copy();
+        foreach (var dt in new[] { NPTypeCode.Double, NPTypeCode.Single, NPTypeCode.Int32, NPTypeCode.Int64 })
+        {
+            var bcd = np.broadcast_to(((np.arange(8) % 5) + 1).astype(dt).reshape(1, 8), new Shape(64, 8));
+            var cpy = bcd.copy();
+            Assert.AreEqual(D(np.sum(cpy).GetAtIndex(0)), D(np.sum(bcd).GetAtIndex(0)), 1e-6, $"{dt} bcast sum");
+            Assert.AreEqual(D(np.amin(cpy).GetAtIndex(0)), D(np.amin(bcd).GetAtIndex(0)), 0, $"{dt} bcast min");
+            Assert.AreEqual(D(np.amax(cpy).GetAtIndex(0)), D(np.amax(bcd).GetAtIndex(0)), 0, $"{dt} bcast max");
+        }
+    }
+
     [DataTestMethod]
     [DataRow(NPTypeCode.Double)]
     [DataRow(NPTypeCode.Single)]

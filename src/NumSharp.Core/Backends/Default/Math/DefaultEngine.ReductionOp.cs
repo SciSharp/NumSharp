@@ -39,6 +39,19 @@ namespace NumSharp.Backends
                 return ExecuteScalarReduction<TResult>(arr, op, accumType);
             }
 
+            // Broadcast views (a stride-0 axis with dim>1) are the worst flat-reduction
+            // case: the coordinate-walk kernel visits every one of the D×N logical
+            // elements computing coordinates per element, while only N are unique —
+            // ~50× NumPy on the bcast-reduce canary (np.sum(broadcast_to(a,(1024,8192)))).
+            // NumPy reduces the SAME element multiset as the materialized contiguous copy,
+            // so materialize once and take the fast contiguous kernel. (Bit-exact for the
+            // canary; the residual is ULP-level summation-order divergence — NumPy itself
+            // reduces a broadcast in stride order, not C-order, and the codebase already
+            // accepts such ULP differences in its pairwise reductions.) min/max are
+            // order-independent → exact regardless.
+            if (arr.Shape.IsBroadcasted)
+                arr = arr.copy();
+
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
 
