@@ -44,7 +44,7 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 25 | reduction | broadcast-reduce FOLD (`sum`/`prod`/`min`/`max`/`mean` over stride-0 views) — **VERIFIED CORRECT**, ~6,600 fuzz cases (15 dtypes × layouts × axes × keepdims) vs NumPy & materialized copy | **OK** | — |
 | 26 | nan-reduction | `nansum`/`nanmax`/`nanmin`/`nanprod` AXIS reduction on NON-contiguous **half** views (transpose/broadcast/reversed) reads wrong cells (float32/float64 correct on identical layout) | BUG | — |
 | 27 | nan-reduction | `nanmax`/`nanmin` on **complex** do NOT skip NaN — gated to float only, fall through to `ReduceAMax`/`AMin` which propagate NaN (even contiguous) | BUG | — |
-| 28 | nan-reduction | `nansum` **complex** AXIS reduction for ndim≥3 reads UNINITIALIZED memory (incrementor writes only a 1-D subset of the multi-D `new NDArray(...,false)` output; even contiguous) | BUG | — |
+| 28 | nan-reduction | `nansum` **complex** AXIS reduction for ndim≥3 read UNINITIALIZED memory (incrementor wrote only a 1-D subset of the multi-D `new NDArray(...,false)` output; even contiguous) | **FIXED** | — |
 | 29 | arg-reduction | `argmax`/`argmin` on **decimal** return a boundary index not the extreme (even contiguous); on **char** throw `NotSupportedException` (NumPy uint16 supports it) | BUG | — |
 
 ---
@@ -67,6 +67,15 @@ The 48 broadcast-vs-copy divergences + the NumPy-parity failures all fall into t
 fold-disjoint families #26–#29 (NaN-aware engine `Default.Reduction.Nan.cs` + the arg dtype switch).
 None are introduced by the fold (which only edits `ExecuteElementReduction`). Edge left unfiled:
 2 cases of float/double `nanmin` over an all-NaN broadcast slice returning ±inf vs NaN (layout-dependent).
+
+**#28 FIXED** (`NanSumComplex` axis branch): wrote `ret.SetAtIndex(sum, iterIndex[0])`, using only the
+first coordinate of the multi-D output as a flat index, so any ndim≥3 reduction left every position
+past the first row as uninitialized `new NDArray(...,false)` heap bytes. Now resolves the full output
+coordinate: `ret.SetAtIndex(sum, ret.Shape.GetOffset(iterIndex))`. Verified: complex `nansum` over
+broadcast/strided/contiguous now matches NumPy across the sweep (0 failures; was 8). The twin in
+`ArgReductionAxisFallback` (argmax/argmin Half/Complex/SByte over ndim≥3, same `iterIndex[0]` pattern)
+is NOT exercised by the common-dtype IL path but carries the identical latent defect — flagged for a
+follow-up.
 
 ---
 

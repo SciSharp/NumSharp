@@ -82,18 +82,21 @@ namespace NumSharp.UnitTest
         }
 
         // =====================================================================
-        // BUG: Complex np.nansum AXIS reduction reads UNINITIALIZED memory for ndim >= 3.
+        // FIXED: Complex np.nansum AXIS reduction read UNINITIALIZED memory for ndim >= 3.
         //
-        // NanSumComplex's axis branch allocates `new NDArray(..., false)` (uninitialized)
-        // and writes ret.SetAtIndex(sum, iterIndex[0]) — using only the FIRST coordinate
-        // of the result incrementor as a flat index. For a >=3-D input the reduced output
-        // is multi-D, so only a 1-D subset of positions is ever written; the rest retain
-        // uninitialized heap bytes (observed as ~6.95E-310 denormals). The 2-D->1-D case
-        // happens to work because the single coordinate IS the flat index. NOT
-        // broadcast-specific — reproduces on a contiguous 3-D array.
+        // NanSumComplex's axis branch wrote ret.SetAtIndex(sum, iterIndex[0]) — using only
+        // the FIRST coordinate of the result incrementor as a flat index. For a >=3-D input
+        // the reduced output is multi-D, so only a 1-D subset of positions was ever written;
+        // the rest retained uninitialized `new NDArray(...,false)` heap bytes (observed as
+        // ~6.95E-310 denormals). The 2-D->1-D case happened to work because the single
+        // coordinate IS the flat index. NOT broadcast-specific — reproduced on a contiguous
+        // 3-D array.
+        //
+        // Fix (Default.Reduction.Nan.cs): resolve the FULL output coordinate to its C-order
+        // flat offset — ret.SetAtIndex(sum, ret.Shape.GetOffset(iterIndex)).
         // =====================================================================
         [TestMethod]
-        [OpenBugs]
+        [TestCategory("Fixed")]
         public void Bug_NanSum_Complex_Axis_3D_UninitializedMemory()
         {
             var data = new Complex[24];

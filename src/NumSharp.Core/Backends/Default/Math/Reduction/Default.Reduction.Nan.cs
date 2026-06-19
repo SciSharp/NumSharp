@@ -712,7 +712,12 @@ namespace NumSharp.Backends
                     if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) continue;
                     sum += v;
                 }
-                ret.SetAtIndex(sum, iterIndex[0]);
+                // iterIndex is the FULL output coordinate (length == ret.ndim). Writing to
+                // iterIndex[0] alone only addressed the first axis, so for a >=3-D input the
+                // multi-D output left every position past the first row uninitialized
+                // (B28: reads of `new NDArray(...,false)` junk). Resolve the whole coordinate
+                // to its C-order flat offset.
+                ret.SetAtIndex(sum, ret.Shape.GetOffset(iterIndex));
             } while (iterAxis.Next() != null && iterRet.Next() != null);
 
             if (keepdims) ret.Storage.ExpandDimension(ax);
