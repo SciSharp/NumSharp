@@ -41,6 +41,32 @@ Char and Decimal are excluded from the differential corpus (no NumPy analog).
 | 22 | views | ops ignore raw NumPy `offset!=0` / junk size-1 strides | SCOPING | #11 |
 | 23 | reduction | NpyIter reduce path ignored `Shape.offset` → sliced/negative-stride views read wrong cells / OOB garbage | **FIXED** | F8 |
 | 24 | reduction | non-contiguous flat `prod(char)` overflows (uint16 accumulator) while contiguous promotes to uint64 | BUG | — |
+| 25 | reduction | broadcast-reduce FOLD (`sum`/`prod`/`min`/`max`/`mean` over stride-0 views) — **VERIFIED CORRECT**, ~6,600 fuzz cases (15 dtypes × layouts × axes × keepdims) vs NumPy & materialized copy | **OK** | — |
+| 26 | nan-reduction | `nansum`/`nanmax`/`nanmin`/`nanprod` AXIS reduction on NON-contiguous **half** views (transpose/broadcast/reversed) reads wrong cells (float32/float64 correct on identical layout) | BUG | — |
+| 27 | nan-reduction | `nanmax`/`nanmin` on **complex** do NOT skip NaN — gated to float only, fall through to `ReduceAMax`/`AMin` which propagate NaN (even contiguous) | BUG | — |
+| 28 | nan-reduction | `nansum` **complex** AXIS reduction for ndim≥3 reads UNINITIALIZED memory (incrementor writes only a 1-D subset of the multi-D `new NDArray(...,false)` output; even contiguous) | BUG | — |
+| 29 | arg-reduction | `argmax`/`argmin` on **decimal** return a boundary index not the extreme (even contiguous); on **char** throw `NotSupportedException` (NumPy uint16 supports it) | BUG | — |
+
+---
+
+## Broadcast-reduce adversarial sweep (2026-06-20)
+
+Stress-test of the broadcast-reduce fold (commit `878240c3`) and every adjacent reduction family
+over broadcast/strided views. Harness: `benchmark/poc/bcast_ref.py`+`bcast_check.cs` (flat fold,
+1,009 cases vs NumPy), `bcast_ax_ref.py`+`bcast_ax_check.cs` (axis/arg/var/nan/all/any/ptp/median,
+7,614 cases vs NumPy), `bcast_consistency.cs` (broadcast-vs-materialized-copy, 4,727 cases, self-contained).
+Reproductions: `test/NumSharp.UnitTest/OpenBugs.BroadcastReduce.cs`.
+
+**Fold verdict (#25): bug-free.** `sum`/`prod`/`min`/`max`/`mean` over every broadcast layout
+(prepend / inner / interleaved / scalar-collapse / 3-D / 5-D / non-contiguous remainder), every axis,
+keepdims on/off, all 15 dtypes — **0 divergences** vs NumPy AND vs the materialized copy. `var`/`std`
+(compose on the same infra), `all`/`any`/`count_nonzero`, `ptp`/`median`, and non-decimal
+`argmax`/`argmin` over broadcast are likewise consistent.
+
+The 48 broadcast-vs-copy divergences + the NumPy-parity failures all fall into the PRE-EXISTING,
+fold-disjoint families #26–#29 (NaN-aware engine `Default.Reduction.Nan.cs` + the arg dtype switch).
+None are introduced by the fold (which only edits `ExecuteElementReduction`). Edge left unfiled:
+2 cases of float/double `nanmin` over an all-NaN broadcast slice returning ±inf vs NaN (layout-dependent).
 
 ---
 
