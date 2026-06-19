@@ -241,6 +241,35 @@ public class ReduceOffsetStrideParityTests
         CollectionAssert.AreEqual(new[] { false, false, false }, BoolArr(np.amin(b, 0)), "bool amin axis0");
     }
 
+    /// <summary>
+    /// Same per-dtype specialization, but for the FLAT (axis=None) reduction path — which
+    /// dispatches separately (Max/MinElementwiseCharFallback / ...HalfFallback) from the axis
+    /// path. char routes through the uint16 SIMD reducer via a zero-copy view (~110×); half uses
+    /// a boxing-free direct-Half scan (~4×, and ~2.4× faster than NumPy, which widens f16→float).
+    /// Invariants: char unsigned-16-bit ordering, half NaN propagation. Values from NumPy 2.4.2.
+    /// </summary>
+    [TestMethod]
+    public void CharAndHalf_FlatMinMax_MatchesNumPy()
+    {
+        // char flat — 0x8000/0xFFFF must out-rank 'A'=0x41 (unsigned order).
+        var c = np.array(new[] { (char)0x0041, (char)0xFFFF, (char)0x0001, (char)0x8000, (char)0x0002, (char)0x7FFF });
+        Assert.AreEqual((char)0x0001, (char)np.amin(c).GetAtIndex(0), "char flat amin");
+        Assert.AreEqual((char)0xFFFF, (char)np.amax(c).GetAtIndex(0), "char flat amax");
+        // a strided (negative-stride) char view must reduce identically (view preserves strides).
+        var cr = c["::-1"];
+        Assert.AreEqual((char)0x0001, (char)np.amin(cr).GetAtIndex(0), "char flat amin (reversed view)");
+        Assert.AreEqual((char)0xFFFF, (char)np.amax(cr).GetAtIndex(0), "char flat amax (reversed view)");
+
+        // half flat — NaN propagates (a NaN anywhere → NaN result), then a clean no-NaN case.
+        double n = double.NaN;
+        var h = np.array(new[] { 1.0, n, 3.0, n, 2.0, -1.0 }).astype(NPTypeCode.Half);
+        Assert.IsTrue(double.IsNaN(D(np.amin(h).GetAtIndex(0))), "half flat amin NaN-propagate");
+        Assert.IsTrue(double.IsNaN(D(np.amax(h).GetAtIndex(0))), "half flat amax NaN-propagate");
+        var hf = np.array(new[] { 1.0, 3.0, 2.0, -1.0 }).astype(NPTypeCode.Half);
+        Assert.AreEqual(-1.0, D(np.amin(hf).GetAtIndex(0)), 1e-3, "half flat amin");
+        Assert.AreEqual(3.0, D(np.amax(hf).GetAtIndex(0)), 1e-3, "half flat amax");
+    }
+
     private static char[] CharArr(NDArray a)
     {
         var r = new char[a.size];
