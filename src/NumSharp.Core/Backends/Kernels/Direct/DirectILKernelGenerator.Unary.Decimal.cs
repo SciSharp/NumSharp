@@ -406,11 +406,26 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit unary operation for Half type.
         /// </summary>
+        /// <summary>
+        /// NumPy-faithful float16 negation: flip the IEEE sign bit (<c>h ^ 0x8000</c>). The BCL
+        /// <c>Half</c> unary <c>operator -</c> evaluates <c>(Half)(-(float)h)</c> — a float
+        /// roundtrip measured 7.3× slower than this bit flip (and 7.3× slower than
+        /// <see cref="Half.Abs"/>'s sign-bit mask, which is why f16 abs was fast and f16 negate
+        /// was the worst cell in the elementwise matrix at ~0.14× NumPy). Bit-exact with NumPy's
+        /// npy_half negate across normals, ±0, ±inf, and NaN (sign flips, payload preserved).
+        /// </summary>
+        internal static Half NegateHalf(Half value)
+        {
+            ushort bits = BitConverter.HalfToUInt16Bits(value);
+            return BitConverter.UInt16BitsToHalf((ushort)(bits ^ 0x8000));
+        }
+
         private static void EmitUnaryHalfOperation(ILGenerator il, UnaryOp op)
         {
             switch (op)
             {
                 case UnaryOp.Negate:
+                    // NumPy sign-bit flip, NOT Half.op_UnaryNegation's float roundtrip (7.3× slower).
                     il.EmitCall(OpCodes.Call, CachedMethods.HalfNegate, null);
                     break;
 

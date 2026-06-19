@@ -622,9 +622,11 @@ namespace NumSharp.Backends.Kernels
                 .GetField(nameof(DirectILKernelGenerator.LogE_Inv_Ln2), BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new MissingFieldException(typeof(DirectILKernelGenerator).FullName, nameof(DirectILKernelGenerator.LogE_Inv_Ln2));
 
-            // Half unary operator methods
-            public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
-                ?? throw new MissingMethodException(typeof(Half).FullName, "op_UnaryNegation");
+            // Half unary operator methods. Negate is OUR sign-bit-flip helper, not
+            // Half.op_UnaryNegation (that operator does a (Half)(-(float)h) roundtrip measured
+            // 7.3× slower — it made f16 negate the worst cell in the elementwise matrix, ~0.14×).
+            public static readonly MethodInfo HalfNegate = typeof(DirectILKernelGenerator).GetMethod(nameof(DirectILKernelGenerator.NegateHalf), BindingFlags.NonPublic | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(DirectILKernelGenerator).FullName, "NegateHalf");
             public static readonly MethodInfo HalfSqrt = typeof(Half).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
                 ?? throw new MissingMethodException(typeof(Half).FullName, "Sqrt");
             public static readonly MethodInfo HalfSin = typeof(Half).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
