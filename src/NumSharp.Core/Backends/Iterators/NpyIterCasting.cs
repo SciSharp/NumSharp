@@ -699,8 +699,147 @@ namespace NumSharp.Backends.Iteration
         /// Handles broadcast on the source via stride=0 dimensions and arbitrary
         /// destination strides. Strides are in element counts (not bytes); element
         /// size multiplication happens internally via <see cref="InfoOf.GetSize"/>.
+        ///
+        /// Primitive (non-Complex/Decimal) pairs resolve a typed
+        /// <see cref="Converts.FindConverter{TIn,TOut}"/> delegate ONCE and run a typed
+        /// inner loop — no per-element type dispatch. Complex/Decimal endpoints keep the
+        /// scalar <see cref="ConvertValue"/> path: it encodes their exact NumPy semantics
+        /// (complex real-part drop / truthy-bool) and their FindConverter converters can box;
+        /// both are 16-byte so the per-element scalar cost amortizes either way.
         /// </summary>
         public static void CopyStridedToStridedWithCast(
+            void* src, long* srcStrides, NPTypeCode srcType,
+            void* dst, long* dstStrides, NPTypeCode dstType,
+            long* shape, int ndim, long count)
+        {
+            if (count == 0)
+                return;
+
+            if (IsComplexOrDecimal(srcType) || IsComplexOrDecimal(dstType))
+                CastStridedScalar(src, srcStrides, srcType, dst, dstStrides, dstType, shape, ndim, count);
+            else
+                CastStridedTypedDst(src, srcStrides, srcType, dst, dstStrides, dstType, shape, ndim, count);
+        }
+
+        private static bool IsComplexOrDecimal(NPTypeCode t)
+            => t == NPTypeCode.Complex || t == NPTypeCode.Decimal;
+
+        // ---- Typed fast path (primitive↔primitive). Two nested switches resolve TOut then
+        //      TIn (13 arms each), reaching CastStridedTyped<TIn,TOut> which hoists the
+        //      converter out of the loop. -------------------------------------------------
+        private static void CastStridedTypedDst(
+            void* src, long* ss, NPTypeCode srcType,
+            void* dst, long* ds, NPTypeCode dstType,
+            long* shape, int ndim, long count)
+        {
+            switch (dstType)
+            {
+                case NPTypeCode.Boolean: CastStridedTypedSrc<bool>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Byte: CastStridedTypedSrc<byte>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.SByte: CastStridedTypedSrc<sbyte>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int16: CastStridedTypedSrc<short>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt16: CastStridedTypedSrc<ushort>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int32: CastStridedTypedSrc<int>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt32: CastStridedTypedSrc<uint>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int64: CastStridedTypedSrc<long>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt64: CastStridedTypedSrc<ulong>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Char: CastStridedTypedSrc<char>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Half: CastStridedTypedSrc<Half>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Single: CastStridedTypedSrc<float>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Double: CastStridedTypedSrc<double>(src, ss, srcType, dst, ds, shape, ndim, count); break;
+                default: CastStridedScalar(src, ss, srcType, dst, ds, dstType, shape, ndim, count); break;
+            }
+        }
+
+        private static void CastStridedTypedSrc<TOut>(
+            void* src, long* ss, NPTypeCode srcType,
+            void* dst, long* ds, long* shape, int ndim, long count) where TOut : unmanaged
+        {
+            switch (srcType)
+            {
+                case NPTypeCode.Boolean: CastStridedTyped<bool, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Byte: CastStridedTyped<byte, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.SByte: CastStridedTyped<sbyte, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int16: CastStridedTyped<short, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt16: CastStridedTyped<ushort, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int32: CastStridedTyped<int, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt32: CastStridedTyped<uint, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Int64: CastStridedTyped<long, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.UInt64: CastStridedTyped<ulong, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Char: CastStridedTyped<char, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Half: CastStridedTyped<Half, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Single: CastStridedTyped<float, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                case NPTypeCode.Double: CastStridedTyped<double, TOut>(src, ss, dst, ds, shape, ndim, count); break;
+                default: throw new NotSupportedException($"primitive cast source {srcType}");
+            }
+        }
+
+        /// <summary>
+        /// Typed strided cast. <see cref="Converts.FindConverter{TIn,TOut}"/> is resolved ONCE
+        /// (a non-boxing <c>Converts.{Src}To{Dst}</c> method-group delegate for every primitive
+        /// pair) and applied with the same incremental-coord + tight-inner-run addressing as the
+        /// scalar path — but with zero per-element type dispatch.
+        /// </summary>
+        private static void CastStridedTyped<TIn, TOut>(
+            void* src, long* srcStrides, void* dst, long* dstStrides,
+            long* shape, int ndim, long count) where TIn : unmanaged where TOut : unmanaged
+        {
+            // FindConverter resolves a non-boxing Converts.{Src}To{Dst} method-group delegate
+            // ONCE; it stays uniform across all primitive pairs (0.65-0.71x NumPy). Converts.
+            // ChangeType<TIn,TOut> called per element is faster for bool/char (~0.86x) but
+            // FALLS TO A BOXING DEFAULT for Half inputs (~0.23x — worse than the scalar path),
+            // so the resolved delegate is the safe, landmine-free choice.
+            var convert = Converts.FindConverter<TIn, TOut>();
+            var srcBase = (TIn*)src;
+            var dstBase = (TOut*)dst;
+
+            if (ndim == 0)
+            {
+                dstBase[0] = convert(srcBase[0]);
+                return;
+            }
+
+            int last = ndim - 1;
+            long inner = shape[last];
+            long srcInner = srcStrides[last]; // element strides; TIn*/TOut* index handles sizing
+            long dstInner = dstStrides[last];
+
+            long outerCount = count / inner;
+            long* coords = stackalloc long[ndim];
+            for (int d = 0; d < ndim; d++)
+                coords[d] = 0;
+
+            long srcRunOff = 0, dstRunOff = 0;
+            for (long r = 0; r < outerCount; r++)
+            {
+                long s = srcRunOff, dd = dstRunOff;
+                for (long i = 0; i < inner; i++)
+                {
+                    dstBase[dd] = convert(srcBase[s]);
+                    s += srcInner;
+                    dd += dstInner;
+                }
+
+                for (int d = last - 1; d >= 0; d--)
+                {
+                    srcRunOff += srcStrides[d];
+                    dstRunOff += dstStrides[d];
+                    if (++coords[d] < shape[d])
+                        break;
+                    coords[d] = 0;
+                    srcRunOff -= srcStrides[d] * shape[d];
+                    dstRunOff -= dstStrides[d] * shape[d];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Scalar strided cast via <see cref="ConvertValue"/> — incremental-coord + tight-inner-run
+        /// addressing (no per-element Σ coords·strides recompute), conversion kept verbatim. Used
+        /// for Complex/Decimal endpoints (exact NumPy semantics, box-free) and as the safety
+        /// fallback for any unmapped dst.
+        /// </summary>
+        private static void CastStridedScalar(
             void* src, long* srcStrides, NPTypeCode srcType,
             void* dst, long* dstStrides, NPTypeCode dstType,
             long* shape, int ndim, long count)
@@ -711,32 +850,43 @@ namespace NumSharp.Backends.Iteration
             byte* srcBase = (byte*)src;
             byte* dstBase = (byte*)dst;
 
-            var coords = stackalloc long[Math.Max(1, ndim)];
+            if (ndim == 0)
+            {
+                ConvertValue(srcBase, dstBase, srcType, dstType);
+                return;
+            }
+
+            int last = ndim - 1;
+            long inner = shape[last];
+            long srcInnerB = srcStrides[last] * srcElemSize; // inner byte step (may be 0/neg)
+            long dstInnerB = dstStrides[last] * dstElemSize;
+
+            long outerCount = count / inner; // == product(shape[0..last-1])
+            long* coords = stackalloc long[ndim];
             for (int d = 0; d < ndim; d++)
                 coords[d] = 0;
 
-            for (long i = 0; i < count; i++)
+            long srcRunOff = 0, dstRunOff = 0;
+            for (long r = 0; r < outerCount; r++)
             {
-                long srcOffset = 0;
-                long dstOffset = 0;
-                for (int d = 0; d < ndim; d++)
+                byte* sp = srcBase + srcRunOff * srcElemSize;
+                byte* dp = dstBase + dstRunOff * dstElemSize;
+                for (long i = 0; i < inner; i++)
                 {
-                    srcOffset += coords[d] * srcStrides[d];
-                    dstOffset += coords[d] * dstStrides[d];
+                    ConvertValue(sp, dp, srcType, dstType);
+                    sp += srcInnerB;
+                    dp += dstInnerB;
                 }
 
-                ConvertValue(
-                    srcBase + srcOffset * srcElemSize,
-                    dstBase + dstOffset * dstElemSize,
-                    srcType, dstType);
-
-                // Advance coordinates (innermost-first for C-order traversal).
-                for (int d = ndim - 1; d >= 0; d--)
+                for (int d = last - 1; d >= 0; d--)
                 {
-                    coords[d]++;
-                    if (coords[d] < shape[d])
+                    srcRunOff += srcStrides[d];
+                    dstRunOff += dstStrides[d];
+                    if (++coords[d] < shape[d])
                         break;
                     coords[d] = 0;
+                    srcRunOff -= srcStrides[d] * shape[d];
+                    dstRunOff -= dstStrides[d] * shape[d];
                 }
             }
         }
