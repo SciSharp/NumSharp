@@ -270,6 +270,31 @@ public class ReduceOffsetStrideParityTests
         Assert.AreEqual(3.0, D(np.amax(hf).GetAtIndex(0)), 1e-3, "half flat amax");
     }
 
+    /// <summary>
+    /// Half mean must accumulate the sum in double, not in Half. The previous path summed in
+    /// Half (ExecuteElementReduction&lt;Half&gt;), which saturated on large arrays — np.mean of
+    /// 100k copies of 2.5 returned 0.08 instead of 2.5 (a silent correctness bug the small-array
+    /// fuzz never reached). sum() itself DOES saturate to ±inf in Half, matching NumPy's float16
+    /// reduce; only mean upcasts (NumPy does the same). Values from NumPy 2.4.2.
+    /// </summary>
+    [TestMethod]
+    public void Half_Mean_LargeArray_AccumulatesInDouble_MatchesNumPy()
+    {
+        var big = new double[100_000];
+        for (int i = 0; i < big.Length; i++) big[i] = 2.5;
+        var h = np.array(big).astype(NPTypeCode.Half);
+
+        Assert.AreEqual(2.5, D(np.mean(h).GetAtIndex(0)), 1e-2, "mean([2.5]x100k) must be 2.5, not the overflowed 0.08");
+        Assert.IsTrue(double.IsPositiveInfinity(D(np.sum(h).GetAtIndex(0))), "sum overflows Half to +inf (NumPy parity)");
+
+        // mixed values over a contiguous + a reversed (non-contig) view — both reduce in double.
+        var mixed = new double[20_000];
+        for (int i = 0; i < mixed.Length; i++) mixed[i] = (i % 2 == 0) ? 2.0 : 8.0; // mean 5.0
+        var hm = np.array(mixed).astype(NPTypeCode.Half);
+        Assert.AreEqual(5.0, D(np.mean(hm).GetAtIndex(0)), 1e-2, "contiguous half mean");
+        Assert.AreEqual(5.0, D(np.mean(hm["::-1"]).GetAtIndex(0)), 1e-2, "reversed-view half mean (iterator path)");
+    }
+
     private static char[] CharArr(NDArray a)
     {
         var r = new char[a.size];

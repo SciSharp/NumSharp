@@ -260,11 +260,15 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback product for Half using iterator (double accumulator for precision).
-        /// Matches NumPy: product of empty array is 1.0.
+        /// Fallback product for Half (double accumulator for precision). Contiguous buffers take
+        /// the boxing-free pointer scan (no AsIterator dispatch, ~Nx); empty/non-contig keep the
+        /// iterator. Matches NumPy: product of empty array is 1.0.
         /// </summary>
-        private object ProdElementwiseHalfFallback(NDArray arr)
+        private unsafe object ProdElementwiseHalfFallback(NDArray arr)
         {
+            if (TryHalfAccumulateContiguous(arr, isProd: true, out double p))
+                return (Half)p;
+
             double prod = 1.0;
             var iter = arr.AsIterator<Half>();
             while (iter.HasNext())
@@ -698,11 +702,21 @@ namespace NumSharp.Backends
                 return sum / count;
             }
 
-            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean
+            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean.
+            // NumPy upcasts float16 for the mean accumulation. Accumulating the sum in Half
+            // (the previous ExecuteElementReduction<Half> path) overflowed to garbage on large
+            // arrays — mean([2.5]×100k) returned 0.08 instead of 2.5 — and was also the slowest
+            // half reduction (~32 ms/4M). Accumulate in double (the precision NumPy uses for the
+            // f16 mean), then narrow: correct AND faster.
             if (sumType == NPTypeCode.Half)
             {
-                var sum = ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType);
-                return (Half)((double)sum / count);
+                if (!TryHalfAccumulateContiguous(arr, isProd: false, out double hsum))
+                {
+                    hsum = 0.0;
+                    var it = arr.AsIterator<Half>();
+                    while (it.HasNext()) hsum += (double)it.MoveNext();
+                }
+                return (Half)(hsum / count);
             }
 
             // NumPy 2.x: mean preserves float types, promotes int to float64
@@ -736,15 +750,49 @@ namespace NumSharp.Backends
         #region Half/Complex Fallback Methods
 
         /// <summary>
-        /// Fallback sum for Half type using iterator.
+        /// Fallback sum for Half (double accumulator). Contiguous buffers take the boxing-free
+        /// pointer scan (no AsIterator dispatch, ~Nx); empty/non-contig keep the iterator. The
+        /// double accumulate then narrows to Half — so a large sum saturates to ±inf exactly like
+        /// NumPy's float16 reduce (e.g. sum([2.5]×100k) → inf).
         /// </summary>
-        private object SumElementwiseHalfFallback(NDArray arr)
+        private unsafe object SumElementwiseHalfFallback(NDArray arr)
         {
+            if (TryHalfAccumulateContiguous(arr, isProd: false, out double s))
+                return (Half)s;
+
             double sum = 0.0;
             var iter = arr.AsIterator<Half>();
             while (iter.HasNext())
                 sum += (double)iter.MoveNext();
             return (Half)sum;
+        }
+
+        /// <summary>
+        /// Boxing-free contiguous Half sum/product accumulated in <see cref="double"/> — the
+        /// precision NumSharp's f16 reductions already use (and NumPy uses for the f16 mean). Half
+        /// has no Vector&lt;Half&gt; in the BCL, but reading the raw buffer and widening each element
+        /// avoids the legacy NDIterator's virtual MoveNext/HasNext per element, which dominated
+        /// these reductions (sum/prod ~14×, mean ~53× the double path). Returns false for empty or
+        /// non-contiguous inputs so the caller keeps its iterator path. Offset-contiguous (sliced)
+        /// views are honored via <see cref="Shape.offset"/>.
+        /// </summary>
+        private static unsafe bool TryHalfAccumulateContiguous(NDArray arr, bool isProd, out double result)
+        {
+            long n = arr.size;
+            if (!arr.Shape.IsContiguous || n <= 0)
+            {
+                result = isProd ? 1.0 : 0.0;
+                return false;
+            }
+
+            Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
+            double acc = isProd ? 1.0 : 0.0;
+            if (isProd)
+                for (long i = 0; i < n; i++) acc *= (double)p[i];
+            else
+                for (long i = 0; i < n; i++) acc += (double)p[i];
+            result = acc;
+            return true;
         }
 
         /// <summary>
