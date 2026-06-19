@@ -40,17 +40,34 @@ namespace NumSharp.Backends
             }
 
             // Broadcast views (a stride-0 axis with dim>1) are the worst flat-reduction
-            // case: the coordinate-walk kernel visits every one of the D×N logical
-            // elements computing coordinates per element, while only N are unique —
-            // ~50× NumPy on the bcast-reduce canary (np.sum(broadcast_to(a,(1024,8192)))).
-            // NumPy reduces the SAME element multiset as the materialized contiguous copy,
-            // so materialize once and take the fast contiguous kernel. (Bit-exact for the
-            // canary; the residual is ULP-level summation-order divergence — NumPy itself
-            // reduces a broadcast in stride order, not C-order, and the codebase already
-            // accepts such ULP differences in its pairwise reductions.) min/max are
-            // order-independent → exact regardless.
-            if (arr.Shape.IsBroadcasted)
-                arr = arr.copy();
+            // case: the coordinate-walk kernel visits every one of the D×N logical elements
+            // computing coordinates per element, though only N are unique — ~50× NumPy on the
+            // bcast-reduce canary (np.sum(broadcast_to(a,(1024,8192)))). NumPy never copies a
+            // broadcast to reduce it; it folds the stride-0 axis in place, cache-hot. Match
+            // that: fold each broadcast axis with the fast per-chunk axis kernel — O(unique)
+            // memory (NOT the O(D×N) a full materialize would allocate, which OOMs on a large
+            // broadcast the coordinate walk merely handled slowly), and cache-hot like NumPy.
+            // Folding a stride-0 axis with the SAME op collapses its D identical copies
+            // (sum→×D, prod→^D, min/max→identity, exact); accumType matches the op (widened
+            // for sum/prod, preserved for min/max), so the fold dtype is correct. The
+            // remainder is a small contiguous array → fast flat finish. (Residual vs NumPy is
+            // ULP-level summation-order, which the codebase's pairwise reductions already
+            // accept; min/max are order-independent → exact.) ArgMin/ArgMax opt out — their
+            // result index must address the full broadcast, which folding would destroy.
+            if (arr.Shape.IsBroadcasted && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
+            {
+                while (arr.Shape.IsBroadcasted)
+                {
+                    int ax = -1;
+                    for (int d = arr.ndim - 1; d >= 0; d--)
+                        if (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1) { ax = d; break; }
+                    if (ax < 0) break;
+                    arr = ExecuteAxisReduction(arr, ax, false, accumType, null, op);
+                    if (arr.Shape.IsScalar || arr.size == 1)
+                        return ExecuteScalarReduction<TResult>(arr, op, accumType);
+                }
+                inputType = arr.GetTypeCode; // collapse output dtype == accumType (may have widened)
+            }
 
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
