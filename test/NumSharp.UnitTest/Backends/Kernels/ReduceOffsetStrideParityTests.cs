@@ -202,4 +202,62 @@ public class ReduceOffsetStrideParityTests
         "prod" => np.prod(a, axis),
         _ => throw new ArgumentException(op),
     };
+
+    /// <summary>
+    /// Pins the per-dtype amin/amax-along-axis specialization (catastrophic-slowness fix):
+    /// bool/char have no fractional/NaN domain and a total order identical to their unsigned
+    /// integer bit pattern, so they reinterpret to the byte / uint16 SIMD reducer instead of
+    /// the scalar double-bridge (~76× bool, ~219× char). Half routes to a boxing-free direct
+    /// loop (no double round-trip). All three previously went through CombineScalarsPromoted's
+    /// per-element ConvertToDouble → Math.Min → ConvertFromDouble bridge.
+    ///
+    /// This guards the two correctness invariants the speed path must preserve:
+    ///   • char compares as UNSIGNED 16-bit (0x8000 &gt; 0x41, 0xFFFF is the max) — a signed
+    ///     reinterpret would invert the top half of the range.
+    ///   • half PROPAGATES NaN (a group containing NaN reduces to NaN), matching NumPy.
+    /// Expected values are from NumPy 2.4.2.
+    /// </summary>
+    [TestMethod]
+    public void CharAndHalf_AxisMinMax_PerDtypeSpecialization_MatchesNumPy()
+    {
+        // char spanning the uint16 range - 0x8000/0xFFFF must out-rank 'A' (0x41).
+        var c = np.array(new[] { (char)0x0041, (char)0xFFFF, (char)0x0001, (char)0x8000, (char)0x0002, (char)0x7FFF }).reshape(2, 3);
+        CollectionAssert.AreEqual(new[] { (char)0x8000, (char)0xFFFF, (char)0x7FFF }, CharArr(np.amax(c, 0)), "char amax axis0");
+        CollectionAssert.AreEqual(new[] { (char)0x0041, (char)0x0002, (char)0x0001 }, CharArr(np.amin(c, 0)), "char amin axis0");
+        CollectionAssert.AreEqual(new[] { (char)0xFFFF, (char)0x8000 }, CharArr(np.amax(c, 1)), "char amax axis1");
+        CollectionAssert.AreEqual(new[] { (char)0x0001, (char)0x0002 }, CharArr(np.amin(c, 1)), "char amin axis1");
+
+        // half NaN propagation: any group containing NaN reduces to NaN (NumPy parity).
+        double n = double.NaN;
+        var h = np.array(new[] { 1.0, n, 3.0, n, 2.0, -1.0 }).astype(NPTypeCode.Half).reshape(2, 3);
+        AssertHalf(np.amax(h, 0), new[] { n, n, 3.0 }, "half amax axis0");
+        AssertHalf(np.amin(h, 0), new[] { n, n, -1.0 }, "half amin axis0");
+        AssertHalf(np.amax(h, 1), new[] { n, n }, "half amax axis1");
+        AssertHalf(np.amin(h, 1), new[] { n, n }, "half amin axis1");
+
+        // bool reinterpret-to-byte path: all-False group → False (no double-bridge True bug).
+        var b = np.array(new bool[] { true, false, true, false, false, false }).reshape(2, 3);
+        CollectionAssert.AreEqual(new[] { true, false, true }, BoolArr(np.amax(b, 0)), "bool amax axis0");
+        CollectionAssert.AreEqual(new[] { false, false, false }, BoolArr(np.amin(b, 0)), "bool amin axis0");
+    }
+
+    private static char[] CharArr(NDArray a)
+    {
+        var r = new char[a.size];
+        for (long i = 0; i < a.size; i++) r[i] = (char)a.GetAtIndex(i);
+        return r;
+    }
+
+    private static void AssertHalf(NDArray got, double[] expected, string ctx)
+    {
+        Assert.AreEqual(expected.Length, (int)got.size, $"{ctx}: size");
+        for (long i = 0; i < expected.Length; i++)
+        {
+            double g = D(got.GetAtIndex(i));
+            if (double.IsNaN(expected[i]))
+                Assert.IsTrue(double.IsNaN(g), $"{ctx}[{i}]: expected NaN, got {g}");
+            else
+                Assert.AreEqual(expected[i], g, 1e-3, $"{ctx}[{i}]");
+        }
+    }
 }
