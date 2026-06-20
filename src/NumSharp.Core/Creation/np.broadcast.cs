@@ -68,6 +68,13 @@ namespace NumSharp
 
             public int ndim => shape.NDim;
             public long size => shape.size;
+
+            /// <summary>
+            ///     Number of operands being broadcast together (NumPy's <c>broadcast.numiter</c>,
+            ///     equal to <c>len(iters)</c>). NumSharp's <see cref="np.broadcast(NDArray, NDArray)"/>
+            ///     always combines exactly two operands, so this is 2 (NumPy itself accepts 1..32).
+            /// </summary>
+            public int numiter => 2;
         }
     }
 }
