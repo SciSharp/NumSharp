@@ -166,6 +166,12 @@ namespace NumSharp.Backends.Kernels
             // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
             var fnStrided = TryGetFloatToNarrowIntStridedKernel(srcType, dstType);
             if (fnStrided != null) return fnStrided;
+            // {i32,u32,i64,u64}->narrower int strided: whole-array fused VPGATHER + truncating
+            // Vector.Narrow (no cvtt). ss==1 rows run contig Load+Narrow; ss!=1 rows gather. Keyed
+            // by (srcSize,dstSize); strictly-narrowing only (src==dst returns null, so same-type
+            // copy that also calls this resolver is unaffected).
+            var inStrided = TryGetIntToNarrowStridedKernel(srcType, dstType);
+            if (inStrided != null) return inStrided;
             // Complex->int strided: contiguous-inner rows run the deinterleave Bulk, else scalar.
             var complexStrided = TryGetComplexToIntStridedKernel(srcType, dstType);
             if (complexStrided != null) return complexStrided;
