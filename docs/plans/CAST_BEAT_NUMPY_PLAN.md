@@ -558,12 +558,13 @@ every sub-word dtype.
 | 16  | same-type sub-word copy (x→x, x∈{bool,u8,i8,i16,u16,char,f16}), `strided`+`negcol` | 0.53–1.30 | 1.10–2.67 |
 | 16b | same-size cross bit-reinterpret (i8↔u8, i16↔u16↔char, bool→{u8,i8}), `strided`+`negcol` | 0.59–0.98 | 1.21–7.9 |
 | 16c | 2B-int → {1B,bool} narrow ({i16,u16,char}→{i8,u8,bool}), all 4 strided layouts | 0.65–0.89 | 1.19–5.8 |
+| 16d | 1B-int → 2B widen ({bool,u8,i8}→{i16,u16,char}), all 4 strided layouts | 0.55–0.92 | 1.9–7.0 |
 
 - **Kernels:** `DirectILKernelGenerator.Cast.SubwordCopy.cs` (deinterleave `[:, ::2]` via
   VPACKUSWB/VPACKUSDW+VPERMQ; reverse `[:, ::-1]` via VPSHUFB+VPERMQ; per-row memcpy `ss==1`),
-  `.Cast.SubwordNarrow.cs` (the above + low-byte / `!=0` narrow). Routed first in
-  `TryGetStridedCastKernel`, gated to the byte-copy/narrow pairs. C-contig is untouched (it goes
-  through `TryGetCastKernel`).
+  `.Cast.SubwordNarrow.cs` (the above + low-byte / `!=0` narrow), `.Cast.SubwordWiden.cs` (the
+  above + sign/zero `Vector256.WidenLower/Upper`). Routed first in `TryGetStridedCastKernel`, gated
+  to the byte-copy/narrow/widen pairs. C-contig is untouched (it goes through `TryGetCastKernel`).
 - **PERF gotcha (pinned):** the inner SIMD loop **must be inlined in the odometer body** — a per-row
   helper method costs **~6×** (0.020→0.125 ms stride-2 1B); the JIT won't inline a method with a
   loop even with `[AggressiveInlining]`. (`benchmark/poc/subword_structure_poc.cs`.)

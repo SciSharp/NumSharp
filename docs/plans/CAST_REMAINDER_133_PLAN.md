@@ -9,11 +9,13 @@
 ## 0. Where we are
 
 > **UPDATE — Wave 16 (done): §2 is CLOSED.** The "one large SIMD-shuffle opportunity" below
-> (sub-word `strided`/`negcol`) was implemented and shipped — `DirectILKernelGenerator.Cast.SubwordCopy.cs`
-> (same-type + same-size bit-reinterpret copies) and `.Cast.SubwordNarrow.cs` (2B-int → {1B,bool}
-> narrow), via VPACKUS deinterleave / VPSHUFB reverse lane shuffles (NO gather, NO staging). All ~65
-> sub-word strided/negcol/sliced/negrow cells now win **1.1–7.9×** (best-of-7), bit-exact vs NumPy
-> (208/208 hashes), full suite green. See `CAST_BEAT_NUMPY_PLAN.md` §12. The §6 noise hypothesis was
+> (sub-word `strided`/`negcol`) was implemented and shipped across the WHOLE sub-word family —
+> `DirectILKernelGenerator.Cast.SubwordCopy.cs` (same-type + same-size bit-reinterpret copies),
+> `.Cast.SubwordNarrow.cs` (2B-int → {1B,bool} narrow), and `.Cast.SubwordWiden.cs` (1B-int → 2B
+> widen, sign/zero-extend) — all via VPACKUS deinterleave / VPSHUFB reverse lane shuffles (NO gather,
+> NO staging). All ~100 sub-word strided/negcol/sliced/negrow cells now win **1.1–7.9×** (best-of-7),
+> bit-exact vs NumPy (280/280 hashes), full suite green. See `CAST_BEAT_NUMPY_PLAN.md` §12. The §6
+> noise hypothesis was
 > also **confirmed**: clean best-of-7 spot checks show most borderline 0.8–0.89 large-type cells
 > (`f32/f64/c128 → i64/u64`) measure ≥0.93–0.99 → true ≥0.9 is **~96%**, not the sweep's 91–93%.
 > **Remaining real laggards:** §3 (alloc-bound contig, the lone 🔴 `bool|F|bool`), §4 (`i64/u64→f16`,
