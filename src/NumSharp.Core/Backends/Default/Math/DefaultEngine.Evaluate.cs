@@ -138,11 +138,30 @@ namespace NumSharp.Backends
             for (int i = 1; i < ops.Length; i++)
                 (inputShape, _) = Broadcast(inputShape, ops[i].Shape);
 
-            var iterShape = ResolveUfuncIterationShape(inputShape.Clean(), ops, @out, null);
+            var iterShape = ResolveUfuncIterationShape(inputShape.Clean(), ops, @out, null).Clean();
 
-            var target = @out ?? new NDArray(resolvedType, iterShape.Clean(), false);
+            // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNpyIter):
+            // when every input operand is strictly F-contiguous, allocate the result
+            // column-major and iterate F-order so the iterator coalesces to ONE
+            // contiguous inner loop. Forcing C-order here made np.evaluate stride across
+            // rows on F/transposed operands — ~16x slower than the unfused chain (the
+            // fused F/T cliff). Only the fresh-alloc case re-orders; a provided out keeps
+            // its own layout.
+            bool allStrictFContig = AreAllInputsStrictFContig(ops, iterShape);
+            Shape targetShape = (@out is null && allStrictFContig)
+                ? new Shape((long[])iterShape.dimensions.Clone(), 'F')
+                : iterShape;
+
+            var target = @out ?? new NDArray(resolvedType, targetShape, false);
             if (target.size == 0)
                 return target;
+
+            // F-order iteration only when the result buffer is actually F-contig (fresh
+            // F-alloc above, or a provided F-contig out); else the output writes would
+            // themselves stride. C-order everywhere else (unchanged default).
+            var order = (allStrictFContig && target.Shape.IsFContiguous && !target.Shape.IsContiguous)
+                ? NPY_ORDER.NPY_FORTRANORDER
+                : NPY_ORDER.NPY_CORDER;
 
             bool outNeedsCast = target.typecode != resolvedType;
             var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
@@ -168,12 +187,42 @@ namespace NumSharp.Backends
 
             using var iter = NpyIterRef.MultiNew(
                 operands.Length, operands,
-                globalFlags, NPY_ORDER.NPY_CORDER, casting,
+                globalFlags, order, casting,
                 EvalElementwiseFlags(ops.Length),
                 opDtypes);
 
             iter.ForEach(kernel);
             return target;
+        }
+
+        /// <summary>
+        /// N-input analogue of <see cref="AreAllOperandsStrictFContig"/> for the fused
+        /// elementwise path: true when the result is multi-dimensional (NDim &gt; 1,
+        /// size &gt; 1) and every NON-scalar input operand is strictly F-contiguous
+        /// (<c>IsFContiguous &amp;&amp; !IsContiguous</c>), with at least one such operand.
+        /// Scalars / size-1 operands don't force the decision. When true, np.evaluate
+        /// allocates the result column-major and iterates F-order so the iterator
+        /// coalesces to one contiguous inner loop instead of striding across rows (the
+        /// F/transpose cliff). Broadcast (stride-0), strided and C-contig inputs all
+        /// return false → the C-order default.
+        /// </summary>
+        internal static bool AreAllInputsStrictFContig(NDArray[] ops, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+
+            bool anyPureF = false;
+            for (int i = 0; i < ops.Length; i++)
+            {
+                var s = ops[i].Shape;
+                if (s.IsScalar || s.size <= 1)
+                    continue;                                   // scalars don't force a preference
+                if (!(s.IsFContiguous && !s.IsContiguous))
+                    return false;                               // a non-scalar non-pure-F input → C default
+                anyPureF = true;
+            }
+
+            return anyPureF;
         }
 
         // =====================================================================
