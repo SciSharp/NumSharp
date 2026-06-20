@@ -156,6 +156,11 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
+            // f32->i32 strided: whole-array fused VPGATHERDD+cvtt (no Narrow). Same 4->4 same-width
+            // path the contig f32->i32 kernel covers, for strided rows. (u32 stays scalar — its NumPy
+            // modular-wrap semantics need a float->i64 convert / AVX512 to vectorize faithfully.)
+            var fwiStrided = TryGetFloatToWideIntStridedKernel(srcType, dstType);
+            if (fwiStrided != null) return fwiStrided;
             // cvtt+truncating-Narrow strided for float->{i8,u8,i16,u16,char} (incl. char, which the
             // generic strided emitter rejects). Inner-contig rows run the Bulk; strided rows stage to
             // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
