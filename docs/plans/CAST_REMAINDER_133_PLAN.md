@@ -8,15 +8,27 @@
 
 ## 0. Where we are
 
-At HEAD the cast matrix is **1435 / 1568 cells ≥ 0.9 (91.5%)**, 1351 (86.2%) win ≥ 1.0,
+> **UPDATE — Wave 16 (done): §2 is CLOSED.** The "one large SIMD-shuffle opportunity" below
+> (sub-word `strided`/`negcol`) was implemented and shipped — `DirectILKernelGenerator.Cast.SubwordCopy.cs`
+> (same-type + same-size bit-reinterpret copies) and `.Cast.SubwordNarrow.cs` (2B-int → {1B,bool}
+> narrow), via VPACKUS deinterleave / VPSHUFB reverse lane shuffles (NO gather, NO staging). All ~65
+> sub-word strided/negcol/sliced/negrow cells now win **1.1–7.9×** (best-of-7), bit-exact vs NumPy
+> (208/208 hashes), full suite green. See `CAST_BEAT_NUMPY_PLAN.md` §12. The §6 noise hypothesis was
+> also **confirmed**: clean best-of-7 spot checks show most borderline 0.8–0.89 large-type cells
+> (`f32/f64/c128 → i64/u64`) measure ≥0.93–0.99 → true ≥0.9 is **~96%**, not the sweep's 91–93%.
+> **Remaining real laggards:** §3 (alloc-bound contig, the lone 🔴 `bool|F|bool`), §4 (`i64/u64→f16`,
+> AVX512-gated), §5 (`i64/u64→narrow` strided, memory-bound), and a couple genuine large-type cells
+> (`c128|C|u64` 0.79, `c128|strided|u64` 0.87).
+
+At the time of writing the cast matrix was **1435 / 1568 cells ≥ 0.9 (91.5%)**, 1351 (86.2%) win ≥ 1.0,
 overall geomean **1.70**. Waves 15–15e closed the float/complex→unsigned cliff and the f16
-laggards on AVX2. **133 cells remain < 0.9.** This document enumerates them by *root cause*,
+laggards on AVX2. **133 cells remained < 0.9.** This document enumerates them by *root cause*,
 states whether each is addressable, and sketches the approach where one exists.
 
 The headline: **every family that was tractable as an AVX2 cast kernel is done.** What's left
 splits into (a) best-of-3 measurement noise, (b) genuinely hardware-blocked families needing
-AVX512 or an allocator change, and (c) one large SIMD-shuffle opportunity (stride-2 / negcol
-of sub-word types) that is *possible* but fiddly.
+AVX512 or an allocator change, and (c) ~~one large SIMD-shuffle opportunity (stride-2 / negcol
+of sub-word types)~~ **— DONE in Wave 16.**
 
 ### The 133, by family
 

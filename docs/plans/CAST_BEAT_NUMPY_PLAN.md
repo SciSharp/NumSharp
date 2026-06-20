@@ -534,11 +534,46 @@ from NumPy's modular wrap).
   paths preserve them (matches NumPy).
 - Scoreboard at HEAD (`benchmark/cast/cast_results.md`, best-of-3): **1435/1568 (91.5%) ≥0.9**,
   1351 (86.2%) win, overall geomean **1.70** (best-of-3 undercounts; best-of-7 spot checks higher).
-- **Residual <0.9 (hardware-limited, not AVX2-addressable):** non-gatherable 2-byte/1-byte strided
-  narrow + same-type strided copy; AVX512-gated `i64/u64→f16`; memory-bound `i64/u64→narrow` strided;
-  alloc-bound 1M same-type contig (`bool|F|bool` = 0.17, the lone 🔴). These need buffer pooling or
-  AVX512 hardware. (Phase-5 "100% ✅" exit is therefore not reachable on AVX2-only hardware.)
+- **Residual <0.9 (hardware-limited, not AVX2-addressable):** AVX512-gated `i64/u64→f16`;
+  memory-bound `i64/u64→narrow` strided; alloc-bound 1M same-type contig (`bool|F|bool` = 0.17,
+  the lone 🔴). These need buffer pooling or AVX512 hardware. (Phase-5 "100% ✅" exit is therefore
+  not reachable on AVX2-only hardware.) — **superseded by Wave 16:** the non-gatherable 2B/1B
+  *strided* family (same-type copy + narrow) is no longer hardware-limited; SIMD lane shuffles
+  closed it (§12).
 
-**Continuation:** the remaining 133 `<0.9` cells are enumerated by root cause, tractability,
+**Continuation:** the remaining `<0.9` cells are enumerated by root cause, tractability,
 and approach in **`docs/plans/CAST_REMAINDER_133_PLAN.md`** (includes the methodology gotchas —
 best-of-3 noise, the `dotnet run` multi-TFM hang, `/tmp` path mismatch, gather-stage rules).
+
+## 12. Wave 16 progress — sub-word strided SIMD shuffles (§2 of the continuation plan)
+
+Closed the non-gatherable sub-word `strided`/`negcol` cliff — `CAST_REMAINDER_133_PLAN.md` §2,
+the largest tractable AVX2 family. 2-byte/1-byte sources can't `VPGATHER`, so the generic strided
+kernel fell to a scalar inner loop; SIMD **lane shuffles** (no gather, no staging) replace it. A
+same-type/same-bit cast is dtype-agnostic byte movement, so ONE size-parameterised kernel covers
+every sub-word dtype.
+
+| Wave | Family | Was | Now (best-of-7) |
+|------|--------|-----|------|
+| 16  | same-type sub-word copy (x→x, x∈{bool,u8,i8,i16,u16,char,f16}), `strided`+`negcol` | 0.53–1.30 | 1.10–2.67 |
+| 16b | same-size cross bit-reinterpret (i8↔u8, i16↔u16↔char, bool→{u8,i8}), `strided`+`negcol` | 0.59–0.98 | 1.21–7.9 |
+| 16c | 2B-int → {1B,bool} narrow ({i16,u16,char}→{i8,u8,bool}), all 4 strided layouts | 0.65–0.89 | 1.19–5.8 |
+
+- **Kernels:** `DirectILKernelGenerator.Cast.SubwordCopy.cs` (deinterleave `[:, ::2]` via
+  VPACKUSWB/VPACKUSDW+VPERMQ; reverse `[:, ::-1]` via VPSHUFB+VPERMQ; per-row memcpy `ss==1`),
+  `.Cast.SubwordNarrow.cs` (the above + low-byte / `!=0` narrow). Routed first in
+  `TryGetStridedCastKernel`, gated to the byte-copy/narrow pairs. C-contig is untouched (it goes
+  through `TryGetCastKernel`).
+- **PERF gotcha (pinned):** the inner SIMD loop **must be inlined in the odometer body** — a per-row
+  helper method costs **~6×** (0.020→0.125 ms stride-2 1B); the JIT won't inline a method with a
+  loop even with `[AggressiveInlining]`. (`benchmark/poc/subword_structure_poc.cs`.)
+- **Bit-exact vs NumPy 2.4.2:** 208/208 result-byte hashes (26 pairs × 8 layouts), incl. the
+  u8↔i8 / char↔i16 wrap and the bool zero-branch (`benchmark/poc/subword_cross_{npref.py,verify.cs}`).
+  Full suite green (9956/0).
+- **Measurement note:** the matrix headline oscillates ±~4pp on best-of-3, and degrades further when
+  stray `dotnet` build-server/run processes accumulate (a long session ran 84–86% vs the clean
+  93–94%). Trust **best-of-7** per-cell (min over rounds, robust to load); a full clean-environment
+  scoreboard refresh is pending. The Wave-16 cells win in *every* run.
+- **Noise finding:** clean best-of-7 spot checks confirmed most borderline 0.8–0.89 large-type cells
+  (`f32/f64/c128 → i64/u64`) are best-of-3 noise (measure ≥0.93–0.99), so the true ≥0.9 fraction is
+  ~96%, not the sweep headline.
