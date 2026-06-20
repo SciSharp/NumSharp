@@ -111,6 +111,9 @@ namespace NumSharp.Backends.Kernels
             // worst cells: f32->i8 was 0.09x). Bit-exact with Converts.To{Narrow}(double).
             var floatToNarrow = TryGetFloatToNarrowIntKernel(srcType, dstType);
             if (floatToNarrow != null) return floatToNarrow;
+            // SIMD `!= 0` compare for {int,float}->bool (Phase-0's worst dst column, 0.61x).
+            var toBool = TryGetToBoolKernel(srcType, dstType);
+            if (toBool != null) return toBool;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -150,6 +153,9 @@ namespace NumSharp.Backends.Kernels
             // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
             var fnStrided = TryGetFloatToNarrowIntStridedKernel(srcType, dstType);
             if (fnStrided != null) return fnStrided;
+            // SIMD `!= 0` compare strided {int,float}->bool (same StridedNarrowDriver).
+            var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
+            if (toBoolStrided != null) return toBoolStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);

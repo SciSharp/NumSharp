@@ -376,15 +376,15 @@ namespace NumSharp.Backends.Kernels
                     {
                         long c = Math.Min((long)CHUNK, innerN - j);
                         byte* sp = sRow + j * ss * srcSize;
-                        if (srcSize == 4)
+                        // Tight typed strided load -> contiguous staging buffer. Must match srcSize
+                        // exactly (1/2/4/8); a wider move would read past each element (the i16->bool
+                        // strided bug: srcSize==2 must NOT fall into the 8-byte path).
+                        switch (srcSize)
                         {
-                            int* b = (int*)buf; int* s0 = (int*)sp;
-                            for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; }
-                        }
-                        else
-                        {
-                            long* b = (long*)buf; long* s0 = (long*)sp;
-                            for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; }
+                            case 1: { byte* b = buf;            byte* s0 = sp;          for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; } break; }
+                            case 2: { short* b = (short*)buf;   short* s0 = (short*)sp; for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; } break; }
+                            case 4: { int* b = (int*)buf;       int* s0 = (int*)sp;     for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; } break; }
+                            default:{ long* b = (long*)buf;     long* s0 = (long*)sp;   for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; } break; }
                         }
                         long done = bulk(buf, dRow + j * dstSize, c);
                         for (long k = done; k < c; k++) conv(buf + k * srcSize, dRow + (j + k) * dstSize);
