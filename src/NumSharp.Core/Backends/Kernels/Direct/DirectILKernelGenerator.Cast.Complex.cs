@@ -42,6 +42,7 @@ namespace NumSharp.Backends.Kernels
             switch (dstType)
             {
                 case NPTypeCode.Int32:  return CastComplexToInt32Contig;
+                case NPTypeCode.UInt32: return CastComplexToUInt32Contig;
                 case NPTypeCode.SByte:  return CastComplexToSByteContig;
                 case NPTypeCode.Byte:   return CastComplexToByteContig;
                 case NPTypeCode.Int16:  return CastComplexToInt16Contig;
@@ -50,6 +51,25 @@ namespace NumSharp.Backends.Kernels
             }
             return null;
         }
+
+        // c128 -> u32: deinterleave reals (a double) then the AVX2 f64->u32 kernel. NumPy drops
+        // the imaginary part (ComplexWarning); bit-exact with Converts.ToUInt32(Complex).
+        private static unsafe long BulkComplexToUInt32(double* p, uint* dst, long count)
+        {
+            long i = 0;
+            if (Avx2.IsSupported)
+                for (; i + 4 <= count; i += 4)
+                    Vector128.Store(DoubleToU32x4(ComplexReals4(p, i)).AsUInt32(), dst + i);
+            return i;
+        }
+        private static unsafe void CastComplexToUInt32Contig(void* s, void* d, long n)
+        {
+            double* p = (double*)s; uint* dst = (uint*)d; Complex* c = (Complex*)s;
+            long i = BulkComplexToUInt32(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToUInt32(c[i]);
+        }
+        private static unsafe long BulkComplexToUInt32V(void* s, void* d, long n) => BulkComplexToUInt32((double*)s, (uint*)d, n);
+        private static unsafe void ConvComplexToUInt32(void* s, void* d) => *(uint*)d = Converts.ToUInt32(*(Complex*)s);
 
         // Deinterleave the real parts of 4 consecutive complex (at complex index ci)
         // into a Vector128<int> via cvttpd2dq. Requires Avx2 (vpermq).
@@ -300,6 +320,7 @@ namespace NumSharp.Backends.Kernels
             switch (dstType)
             {
                 case NPTypeCode.Int32:  return StridedComplexToInt32;
+                case NPTypeCode.UInt32: return StridedComplexToUInt32;
                 case NPTypeCode.SByte:  return StridedComplexToSByte;
                 case NPTypeCode.Byte:   return StridedComplexToByte;
                 case NPTypeCode.Int16:  return StridedComplexToInt16;
@@ -316,6 +337,8 @@ namespace NumSharp.Backends.Kernels
         // via StridedComplexDriver; ds!=1 / no-AVX2 stay scalar there too.
         private static unsafe void StridedComplexToInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToInt32(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToInt32V, &ConvComplexToInt32); }
+        private static unsafe void StridedComplexToUInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToUInt32(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToUInt32V, &ConvComplexToUInt32); }
         private static unsafe void StridedComplexToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToByte(s, d, ss, ds, sh, nd, false); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV, &ConvComplexToSByte); }
         private static unsafe void StridedComplexToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
@@ -346,6 +369,29 @@ namespace NumSharp.Backends.Kernels
                     p += 4 * rs;
                 }
                 for (; i < innerN; i++) dr[i] = Converts.ToInt32(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
+        // Same as FusedComplexToInt32 but feeds the gathered reals through the AVX2 f64->u32
+        // kernel (DoubleToU32x4) instead of plain cvttpd2dq, so the u32 modular-wrap is faithful.
+        private static unsafe void FusedComplexToUInt32(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); uint* dr = (uint*)(dst + dstOff * 4); long i = 0;
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    Vector128.Store(DoubleToU32x4(Avx2.GatherVector256(p, idx, 8)).AsUInt32(), dr + i);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++) dr[i] = Converts.ToUInt32(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
                 AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
             }
         }
