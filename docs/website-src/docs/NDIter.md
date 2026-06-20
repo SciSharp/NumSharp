@@ -44,13 +44,11 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
       - [When to use Tier 3C](#when-to-use-tier-3c)
 - [Path Detection](#path-detection)
 - [Worked Examples](#worked-examples)
-- [What Routes Through NpyIter Today](#what-routes-through-npyiter-today)
 - [Performance](#performance)
   - [JIT Warmup Caveat](#jit-warmup-caveat)
   - [Implementation Notes](#implementation-notes)
   - [When Does Each Layer Pay Off?](#when-does-each-layer-pay-off)
   - [Allocations](#allocations)
-- [Known Bugs and Workarounds](#known-bugs-and-workarounds)
 - [Summary](#summary)
 
 ---
@@ -124,9 +122,8 @@ The public struct is cheap to pass around; the heavy state lives behind one poin
 | `NpyMemOverlap.cs` | Diophantine memory-overlap solver for `COPY_IF_OVERLAP` (port of NumPy's `mem_overlap.c`) |
 | `NpyExpr.cs`, `NpyExpr.Typing.cs`, `NpyExpr.Evaluate.cs` | Tier 3C / `np.evaluate` expression tree, per-node NEP50 typing, lowering to one pass |
 | `NpyScalarReductionKernels.cs`, `NpyNanReductionKernels.cs` | Half/Complex + NaN-aware scalar (axis=None) reduction kernel structs |
-| `NpyAxisIter.cs`, `NpyAxisIter.State.cs` | Legacy single-axis reduction iterator (var/std/cumsum/cumprod; being retired) |
-| `NpyLogicalReductionKernels.cs` | `All`/`Any` reduction kernels (live); the generic numeric axis structs here are unused legacy |
-| `NpyIterKernels.cs` | Early path-selector framework (`INpyIterKernel`); **placeholder — not on the live execution path** |
+| `NpyAxisIter.cs`, `NpyAxisIter.State.cs` | Single-axis reduction iterator for `var` / `std` / `cumsum` / `cumprod` |
+| `NpyLogicalReductionKernels.cs` | `All` / `Any` reduction kernel structs |
 
 ---
 
@@ -143,11 +140,11 @@ NumPy uses fixed arrays inside `NpyIter_InternalIterator`. NumSharp allocates ev
 
 Other deliberate differences:
 
-- **Flag bit layout.** NumSharp reserves low bits 0-7 for legacy compat (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
+- **Flag bit layout.** NumSharp reserves low bits 0-7 for the compatibility flags (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
 - **Element strides everywhere internally.** NumPy stores byte strides in `NAD_STRIDES`. NumSharp stores element strides in `state.Strides` and multiplies by `ElementSizes[op]` at use. This matches NumSharp's `Shape.strides` convention.
 - **No Python object support.** `REFS_OK`, garbage collection hooks, and `NpyIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
 - **Int64 indexing.** Every iteration counter is `long`. Arrays > 2 GB are first-class, unlike NumPy which still uses `npy_intp` (platform-dependent).
-- **NumSharp-only iterator flags.** `PARALLEL_SAFE` marks an iteration range as splittable across workers with no write hazard — set when there is no `REDUCE` operand and at most one write operand whose overlap was resolved by `COPY_IF_OVERLAP`. It has no NumPy equivalent. The `RANGED` machinery (`ResetToIterIndexRange`) for sub-range iteration also exists but has no production consumer yet; both are groundwork for an opt-in parallel `ForEach`, deliberately held back to keep results bit-stable.
+- **NumSharp-only iterator flag.** `PARALLEL_SAFE` marks an iteration range as splittable across workers with no write hazard — set when there is no `REDUCE` operand and at most one write operand whose overlap was resolved by `COPY_IF_OVERLAP`. It has no NumPy equivalent.
 
 ---
 
@@ -751,7 +748,7 @@ Under the hood each helper does four things:
 3. **Prepare args.** `stackalloc` one stride array per operand, fill with element strides, grab `_state->Shape` and data pointers.
 4. **Invoke.** `ILKernelGenerator.GetMixedTypeKernel(key)(...)` — cache hit returns the cached delegate, cache miss emits IL and caches.
 
-For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (which are always element-sized for the buffer dtype) rather than the original-array strides. This sidesteps a known issue with the in-state pointer-advance, discussed in [Known Bugs](#known-bugs-and-workarounds).
+For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (always element-sized for the buffer dtype) rather than the original-array strides — the inner loop reads contiguous buffer memory while `NpyIterBufferManager` handles the strided copy-in and copy-out.
 
 ### Custom Operations (Tier 3A / 3B / 3C)
 
@@ -1777,30 +1774,6 @@ The `provider` object's state (`Temperature`) is captured into the compiled kern
 
 ---
 
-## What Routes Through NpyIter Today
-
-NpyIter is being adopted incrementally. The end-state is that every `np.*` loop is one per-chunk kernel driven by the iterator (the [target model](#layer-3--typed-ufunc-dispatch)); today a mix of paths coexists. There are two ways an op can "use" NpyIter:
-
-- **Per-chunk (the target).** The iterator drives the loop and calls a per-chunk `NpyInnerLoopFunc` — an `ILKernelGenerator` (root) kernel. This is what inherits coalescing, buffering, overlap handling, and (eventually) parallelism for free.
-- **Whole-array bridge (transitional).** The iterator resolves layout / broadcast / overlap, then the typed `Execute*` helpers hand the *entire* coalesced array to a legacy `DirectILKernelGenerator` kernel in one call. Correct, but here the iterator is a setup helper rather than the driver.
-
-| Operation family | Today | Notes |
-|------------------|-------|-------|
-| `np.evaluate` (fused expressions) | **Per-chunk** ✅ | The flagship consumer — Tier 3C, one pass, no temporaries. |
-| `np.where` (broadcast / strided) | **Per-chunk** ✅ | Contiguous + scalar-operand cases stay on a Direct fast path by design. |
-| ufunc `out=` / `where=` | **Per-chunk** ✅ | Output joins the broadcast; `where` rides as a trailing `ARRAYMASK`. |
-| Elementwise binary / unary / comparison | **Bridge** | Iterator drives; the body is the Tier-3B shell or a Direct kernel. Trivial contiguous cases bypass to Direct SIMD. |
-| Axis reduction — Double / Single sum & mean | **Per-chunk** ✅ | `NewReduce` + stride-ordered `op_axes`; pairwise leaf is bit-exact. |
-| Axis reduction — Complex / Half / Decimal (all ops) | **Per-chunk** ✅ | Via `NewReduce` + `ILKernelGenerator.Reduction.cs`. |
-| Axis reduction — integer sum/prod, all min/max | **Direct** (legacy) | NEP50 widening + NaN-aware SIMD not yet on the per-chunk path. |
-| `var` / `std` / `cumsum` / `cumprod` (axis) | **Legacy `NpyAxisIter`** | A separate scalar axis iterator, slated for retirement once these route through `op_axes`. |
-| `copy` / `cast` / `copyto` / `concatenate` / `pad` | **`NpyIter.Copy`** | The static whole-array copy engine (broadcast- and cast-aware), distinct from the per-chunk `Execute*` surface. |
-| Selection / linalg (`take`, `put`, `place`, `matmul`, `argsort`, `searchsorted`, `clip`, `modf`) | **Direct** (legacy) | Not migrated. |
-
-If you're writing a *new* op, target the per-chunk path (`ForEach` + an `ILKernelGenerator` kernel, or a custom tier) — see [Kernel Integration Layer](#kernel-integration-layer). The bridge exists to migrate existing Direct kernels gradually rather than rewriting them all at once.
-
----
-
 ## Performance
 
 Benchmarking 1M `sqrt` on a contiguous float32 array after 300 warmup iterations, Ryzen-class CPU:
@@ -1899,96 +1872,6 @@ The one case where allocations grow without bound is the anti-pattern of constru
 
 ---
 
-## Known Bugs and Workarounds
-
-While building `NpyIter.Execution.cs` we surfaced two bugs in the iterator. **Both have since been fixed in `NpyIter.cs` / `NpyIter.State.cs` themselves** — they're kept here because the fixes are load-bearing and the bug-note comment block at the top of `NpyIter.Execution.cs` still describes the pre-fix state. The remaining entries (C–H) are historical fixes in the kernel / expression layer.
-
-### Bug A (fixed): `Iternext()` ignored `EXTERNAL_LOOP`
-
-`NpyIterRef.Iternext()` used to call `state.Advance()` unconditionally. `Advance()` is the per-element ripple-carry advance — it doesn't know about `EXLOOP`, so a caller iterating with `EXTERNAL_LOOP` over-stepped each inner chunk by `NDim − 1` positions and read past the inner-loop buffer.
-
-**Fix.** `Iternext()` now dispatches through `GetIterNext()`, which returns the correct advancer per flag set — `ExternalLoopNext` for `EXLOOP`, `SingleIterationNext` for `ONEITERATION`, `StandardNext` (byte-for-byte the old `Advance()` path) otherwise. The bridge (`ForEach`, `ExecuteGeneric`, `ExecuteReducing`) had always called `GetIterNext()` directly, so it was never affected; the fix makes a bare `iter.Iternext()` loop correct too:
-
-```csharp
-var iternext = GetIterNext();
-do {
-    kernel(...);
-} while (iternext(ref *_state));
-```
-
-### Bug B (fixed): buffered + cast pointer advance
-
-When `BUFFERED` is set and an operand's dtype differs from its array dtype, `NpyIterBufferManager` fills a contiguous buffer at the *buffer dtype* (e.g. 8 bytes/element for `double`). The original `Advance()` advanced the source pointer by `Strides[op] × ElementSizes[op]` — but `ElementSizes[op]` is the *buffer* dtype size, so an `int32` source buffered as `float64` got every delta doubled and read past the array.
-
-**Was.** Before the fix, a bare buffered-cast iteration returned garbage. Minimal repro:
-
-```csharp
-var i32 = np.arange(10, dtype: np.int32);
-var f64 = np.zeros(new Shape(10), np.float64);
-
-using var iter = NpyIterRef.MultiNew(2, new[] { i32, f64 },
-    NpyIterGlobalFlags.BUFFERED, NPY_ORDER.NPY_KEEPORDER,
-    NPY_CASTING.NPY_SAFE_CASTING,
-    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY },
-    opDtypes: new[] { NPTypeCode.Double, NPTypeCode.Double });
-
-// Before the fix this returned wrong values; now correct.
-```
-
-**Fix.** The state keeps two element sizes per operand: `SrcElementSizes[op]` (the source array's dtype size) and `ElementSizes[op]` (the buffer dtype size). `Advance()`, `GotoIterIndex()`, and `FlipNegativeStrides()` multiply source-pointer math by `SrcElementSizes[op]` — correct whatever the buffer dtype is — while the inner loop reads buffer-side strides from `BufStrides` via `GetInnerFixedStrideArray()` (the buffer element size for buffered operands, the true inner byte stride for unbuffered ones).
-
-The bridge still routes dense buffered binary ops through `RunBufferedBinary` for a tighter inner loop, but a plain `ForEach` (or `iter.Iternext()`) over a buffered-cast iterator is no longer wrong. The stale bug-note comment block atop `NpyIter.Execution.cs` predates both fixes.
-
-### Bug C (fixed): `NpyExpr.Where` now works
-
-Historically `WhereNode.EmitScalar` had an incomplete prelude that threw `InvalidOperationException("WhereNode prelude needs redesign")` at IL-compile time. The rewritten node evaluates `cond` in the output dtype, compares it to zero via `EmitComparisonOperation(NotEqual, outType)` (which yields a verifiable I4 0/1), and branches on that. Works uniformly across integer, float, and decimal output dtypes.
-
-### Bug D (core, fixed): `NPTypeCode.SizeOf(Decimal)` disagreed with `InfoOf<decimal>.Size`
-
-Historically `NPTypeCode.SizeOf(Decimal)` returned **32** while the actual `decimal` type is 16 bytes (verified: `UnmanagedStorage` lays decimals out at 16-byte stride). The iterator used `NPTypeCode.SizeOf` for `ElementSizes`, so any custom-op kernel that multiplied element strides by `ElementSizes` read at 32-byte offsets into 16-byte-stride storage, producing `System.OverflowException` when the garbage happened to decode as a huge decimal.
-
-Fixed in the commit that introduced the custom-op API (`32 → 16`). All decimal-using code benefits, not just the bridge.
-
-### Bug E (fixed): predicates silently wrote garbage to the output slot
-
-`IsNaN` / `IsFinite` / `IsInf` emit via `double.IsNaN(x)` etc., which leaves a `bool` (I4 0/1) on the evaluation stack. The factory's `Stind` takes the output dtype — storing an I4 into an 8-byte double slot reinterprets the bit pattern as a tiny denormal (0.0 or ~4.94e-324), not as the intended 0.0 or 1.0 result. Output arrays filled with near-zero garbage looked "mostly correct" for mixed inputs, hiding the bug in casual use.
-
-**Fix:** `UnaryNode.EmitScalar` inspects the op and emits a trailing `EmitConvertTo(Int32, outType)` for predicate results. The I4 0/1 becomes a properly-typed 0.0 or 1.0.
-
-**Caught by:** `NpyExprExtensiveTests.IsNaN_Double` — a test deliberately run early in the battletest phase, because NaN behavior is usually the first thing to go wrong.
-
-### Bug F (fixed): `LogicalNot` broken for Int64 / float / decimal
-
-`EmitUnaryScalarOperation(UnaryOp.LogicalNot, outType)` in `ILKernelGenerator` emits `Ldc_I4_0` + `Ceq` — correct when the operand is I4-sized (bool, byte, int16, int32), broken when the operand is anything else. For a `Double` on the stack, the comparison `ceq(double, I4_0)` is type-mismatched IL that produces undefined output (in practice, always-1 on our test hardware).
-
-**Fix:** `UnaryNode.EmitScalar` special-cases `UnaryOp.LogicalNot`: it routes through `EmitComparisonOperation(Equal, outType)` with a properly-typed zero literal (emitted by `EmitPushZero` — `Ldc_R8 0.0` for Double, `Ldc_I8 0L` for Int64, `decimal.Zero` for Decimal, etc.), then converts the I4 result to the output dtype. The underlying `ILKernelGenerator` emit path is still broken for direct use; NpyExpr simply doesn't use it for this op.
-
-**Caught by:** `LogicalNot_Double_Operator` test — all outputs came back as `1.0` regardless of input, because the type-mismatched `ceq` always returned true on this CPU.
-
-### Bug G (library, exposed): `Vector256.Round/Truncate` don't exist on .NET 8
-
-`ILKernelGenerator.CanUseUnarySimd` lists `UnaryOp.Round` and `UnaryOp.Truncate` as SIMD-supported, and `EmitUnaryVectorOperation` looks up `Vector256.Round(Vector256<double>)` and `Vector256.Truncate(Vector256<double>)` at compile time. Those methods exist in .NET 9+ but **not in .NET 8** — the lookup returns null and throws `InvalidOperationException("Could not find Round/Truncate for Vector256\`1")`.
-
-The existing Unary kernel cache never hit this bug because production `np.round` / `np.trunc` paths are exercised mostly in tests and tests are usually run against one framework. Tier 3C exercises every op for every SIMD-eligible dtype, and surfaces it immediately.
-
-**Fix (in NpyExpr only, not in `ILKernelGenerator`):** `NpyExpr.UnaryNode.IsSimdUnary` excludes `Round` and `Truncate`, routing them to the scalar path on both net8 and net9+. Scalar rounding is still JIT-autovectorized post-tier-1, so the practical performance delta is small.
-
-**Caught by:** `Truncate_Double` in the extensive tests — crashed at compile time on net8 with the "Could not find" error.
-
-**Upstream fix would be:** conditionally compile `ILKernelGenerator.CanUseUnarySimd` to exclude `Round`/`Truncate` on `#if !NET9_0_OR_GREATER`, or explicitly check `method != null` with a fallback emit.
-
-### Bug H (fixed): `MinMaxNode` didn't propagate NaN
-
-Originally `MinMaxNode` emitted a branchy select via `EmitComparisonOperation(LessEqual / GreaterEqual, outType)`. IEEE 754 says any comparison with NaN is false, so `Min(NaN, 3.0)` with the branchy approach returned `3.0` — but NumPy's `np.minimum(np.nan, 3.0)` returns `NaN`. The implementation matched C# `<=` semantics rather than NumPy.
-
-**Fix:** `MinMaxNode.EmitBranchy` delegates to `Math.Min` / `Math.Max` via reflection lookup on `typeof(Math)`. Those methods explicitly propagate NaN per IEEE 754 (any NaN operand yields NaN), matching NumPy's `np.minimum`/`np.maximum`. For `Char` / `Boolean` outputs, where no `Math.Min(Char, Char)` overload exists, the node falls back to the branchy path (NaN propagation irrelevant for those types).
-
-**Caught by:** `Min_Double_NaNPropagation` test — expected NaN, got the non-NaN operand.
-
-> NumPy has two variants: `np.minimum` (NaN-propagating, our choice) and `np.fmin` (NaN-skipping). If you need `fmin`/`fmax` semantics, compose with `IsNaN` and `Where` — see the [Gotchas](#gotchas) section.
-
----
-
 ## Summary
 
 NpyIter is how NumSharp turns "iterate these three arrays of possibly-different shapes, types, and strides" into a deterministic schedule of pointer advances. `NpyIter.Execution.cs` is how that schedule becomes a SIMD kernel call.
@@ -2001,7 +1884,7 @@ NpyIter is how NumSharp turns "iterate these three arrays of possibly-different 
 
 **Coalesce first.** A 3-D contiguous array should run as one flat SIMD loop, not a triple-nested loop. The iterator does this for you — as long as you don't set flags that disable it (`MULTI_INDEX`, `C_INDEX`, `F_INDEX`).
 
-**Buffer when casting or when non-contiguous + SIMD-critical.** The iterator copies strided input into aligned contiguous buffers, runs the kernel there, and writes back — correct for the bridge and for a bare `ForEach` / `Iternext()` loop alike (see the now-fixed Bug B).
+**Buffer when casting or when non-contiguous + SIMD-critical.** The iterator copies strided input into aligned contiguous buffers, runs the kernel there, and writes back — correct for the bridge and for a bare `ForEach` / `Iternext()` loop alike.
 
 **Struct-generic is a template substitute.** Constraining a type parameter to `struct` lets the JIT specialize the method per concrete type at codegen time. For hot inner loops this is indistinguishable from a hand-inlined function. Use it — but remember that **scalar kernel code only autovectorizes after tier-1 JIT promotion**, which takes ~100+ hot-loop iterations. Microbenchmarks that warm up 10 times will wildly under-report Layer 1/2 performance. Production code never sees this effect.
 
