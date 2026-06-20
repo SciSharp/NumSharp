@@ -57,6 +57,15 @@ namespace NumSharp.Backends.Kernels
             if (totalSize == 0)
                 return true; // NumPy: all([]) == True (vacuous truth)
 
+            // bool / char are NOT JIT-vectorizable (Vector256<bool>/<char>.IsSupported == false),
+            // so without this redirect they fall through to the scalar per-element loop below.
+            // Both are bitwise identical to an unsigned integer for a zero/non-zero test
+            // (bool: 0/1; char: UTF-16 code unit), so reinterpret and run the vectorized path.
+            if (typeof(T) == typeof(bool))
+                return AllSimdHelper<byte>(input, totalSize);
+            if (typeof(T) == typeof(char))
+                return AllSimdHelper<ushort>(input, totalSize);
+
             T* src = (T*)input;
 
             if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count)
@@ -131,6 +140,16 @@ namespace NumSharp.Backends.Kernels
             if (totalSize == 0)
                 return false; // NumPy: any([]) == False
 
+            // bool / char are NOT JIT-vectorizable (Vector256<bool>/<char>.IsSupported == false),
+            // so without this redirect they fall through to the scalar per-element loop below — the
+            // any(all-false) cliff (no SIMD → ~10x slower than NumPy at scale). Both are bitwise
+            // identical to an unsigned integer for a zero/non-zero test (bool: 0/1; char: UTF-16
+            // code unit), so reinterpret and run the vectorized path.
+            if (typeof(T) == typeof(bool))
+                return AnySimdHelper<byte>(input, totalSize);
+            if (typeof(T) == typeof(char))
+                return AnySimdHelper<ushort>(input, totalSize);
+
             T* src = (T*)input;
 
             if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count)
@@ -138,7 +157,7 @@ namespace NumSharp.Backends.Kernels
                 int vectorCount = Vector256<T>.Count;
                 long vectorEnd = totalSize - vectorCount;
                 var zero = Vector256<T>.Zero;
-                uint allZeroMask = (1u << vectorCount) - 1;
+                uint allZeroMask = (uint)((1UL << vectorCount) - 1); // 1u<<32 overflows to 0 for Vector256<byte>/<sbyte> (32 lanes)
                 long i = 0;
 
                 // SIMD loop with early exit
@@ -167,7 +186,7 @@ namespace NumSharp.Backends.Kernels
                 int vectorCount = Vector128<T>.Count;
                 long vectorEnd = totalSize - vectorCount;
                 var zero = Vector128<T>.Zero;
-                uint allZeroMask = (1u << vectorCount) - 1;
+                uint allZeroMask = (uint)((1UL << vectorCount) - 1); // 1u<<32 overflows to 0 for Vector256<byte>/<sbyte> (32 lanes)
                 long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
