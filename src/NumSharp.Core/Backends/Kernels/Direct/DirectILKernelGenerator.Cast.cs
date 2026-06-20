@@ -107,16 +107,6 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
             var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);
             if (floatToInt32 != null) return floatToInt32;
-            // NumPy-faithful cvtt+truncating-Narrow for float->{i8,u8,i16,u16,char} (Phase-0's
-            // worst cells: f32->i8 was 0.09x). Bit-exact with Converts.To{Narrow}(double).
-            var floatToNarrow = TryGetFloatToNarrowIntKernel(srcType, dstType);
-            if (floatToNarrow != null) return floatToNarrow;
-            // SIMD `!= 0` compare for {int,float}->bool (Phase-0's worst dst column, 0.61x).
-            var toBool = TryGetToBoolKernel(srcType, dstType);
-            if (toBool != null) return toBool;
-            // Vectorized Half widen (bit-fiddle vcvtph2ps) -> {bool,narrow,i32} (f16 src was 0.69x).
-            var halfToX = TryGetHalfToXKernel(srcType, dstType);
-            if (halfToX != null) return halfToX;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -151,17 +141,6 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
-            // cvtt+truncating-Narrow strided for float->{i8,u8,i16,u16,char} (incl. char, which the
-            // generic strided emitter rejects). Inner-contig rows run the Bulk; strided rows stage to
-            // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
-            var fnStrided = TryGetFloatToNarrowIntStridedKernel(srcType, dstType);
-            if (fnStrided != null) return fnStrided;
-            // SIMD `!= 0` compare strided {int,float}->bool (same StridedNarrowDriver).
-            var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
-            if (toBoolStrided != null) return toBoolStrided;
-            // Vectorized Half widen -> {bool,narrow,i32} strided (same StridedNarrowDriver, srcSize=2).
-            var halfToXStrided = TryGetHalfToXStridedKernel(srcType, dstType);
-            if (halfToXStrided != null) return halfToXStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
