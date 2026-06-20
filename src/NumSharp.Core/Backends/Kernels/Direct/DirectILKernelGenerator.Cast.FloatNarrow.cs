@@ -298,6 +298,214 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ConvDoubleToUInt16(void* s, void* d) => *(ushort*)d = Converts.ToUInt16(*(double*)s);
         private static unsafe void ConvDoubleToChar(void* s, void* d)   => *(char*)d   = Converts.ToChar(*(double*)s);
 
+        // =====================================================================
+        // FUSED gather strided-source kernels — WHOLE ARRAY in one call.
+        //
+        // VPGATHERDD/VPGATHERQQ loads the strided inner lanes directly into cvtt ->
+        // truncating Narrow -> contiguous store, in ONE pass (no staging buffer).
+        // Gather is bit-agnostic (loads the raw 4/8-byte word), so the same gather
+        // feeds f32/f64 cvtt identically to the contiguous Vector256.Load — bit-exact
+        // with the contig Bulk (same cvtt+Narrow).
+        //
+        // CRITICAL — these process EVERY row inside ONE function with `idx` hoisted
+        // OUTSIDE the outer odometer. The earlier design called a per-row gather
+        // helper through a function-pointer once per row; that call boundary blocked
+        // the JIT from pipelining the gathers across rows and re-built `idx` per row,
+        // pinning f32->i8 strided at 0.70x NumPy (proven: identical body, idx hoisted
+        // 1.68x vs per-row NoInlining call 0.70x). Folding the row loop in lifts it to
+        // ~1.6-1.9x. Reversed inner ([:, ::-1]) rides the same signed-stride gather.
+        //
+        // Chosen only for inner ss!=1 && inner ds==1 (contig dst row) && Avx2 — see the
+        // Strided* entry points; every other layout keeps the StridedNarrowDriver path.
+        // The scalar drain uses (narrow)Converts.ToInt32(val) — the SAME audited NumPy-
+        // faithful convert as the contiguous tail. Do NOT shortcut it to (narrow)(int)val:
+        // C#'s float/double->int conversion SATURATES since .NET Core 3.0 (Inf/overflow ->
+        // int.MaxValue 0x7FFFFFFF, low byte 0xFF), but the vector cvttps2dq/cvttpd2dq and
+        // Converts.ToInt32 give the INT_MIN sentinel (0x80000000, low byte 0x00 == NumPy).
+        // The two diverge exactly on Inf/NaN/out-of-int-range, so a (int)val tail mismatches
+        // the vector body (proven: f32->u8 of +Inf gave 255 vs NumPy's 0).
+        // `vec=false` (pathological |stride| > int.MaxValue/8) drains fully through Converts.
+        // =====================================================================
+
+        // f32 -> i8/u8: 32-wide (4x VPGATHERDD+cvtt -> 2-level Narrow) + 8-wide mop-up + cvtt tail.
+        private static unsafe void FusedGatherSingleToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1;
+            long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            bool vec = ss >= int.MinValue / 8 && ss <= int.MaxValue / 8;
+            int si = (int)ss;
+            var idx = Vector256.Create(0, si, 2 * si, 3 * si, 4 * si, 5 * si, 6 * si, 7 * si);
+            long g = 8L * ss;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                int* p = (int*)(src + srcOff * 4); byte* dr = dst + dstOff; long i = 0;
+                if (vec)
+                {
+                    for (; i + 32 <= innerN; i += 32)
+                    {
+                        var a = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p,         idx, 4).AsSingle());
+                        var b = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p + g,     idx, 4).AsSingle());
+                        var c = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p + 2 * g, idx, 4).AsSingle());
+                        var e = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p + 3 * g, idx, 4).AsSingle());
+                        Vector256.Store(Vector256.Narrow(Vector256.Narrow(a, b), Vector256.Narrow(c, e)).AsByte(), dr + i);
+                        p += 4 * g;
+                    }
+                    for (; i + 8 <= innerN; i += 8)
+                    {
+                        var v = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p, idx, 4).AsSingle());
+                        dr[i] = (byte)v.GetElement(0); dr[i + 1] = (byte)v.GetElement(1);
+                        dr[i + 2] = (byte)v.GetElement(2); dr[i + 3] = (byte)v.GetElement(3);
+                        dr[i + 4] = (byte)v.GetElement(4); dr[i + 5] = (byte)v.GetElement(5);
+                        dr[i + 6] = (byte)v.GetElement(6); dr[i + 7] = (byte)v.GetElement(7);
+                        p += g;
+                    }
+                }
+                for (; i < innerN; i++) { dr[i] = (byte)Converts.ToInt32(*(float*)p); p += ss; }
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
+
+        // f32 -> i16/u16/char: 16-wide (2x VPGATHERDD+cvtt -> 1x Narrow) + 8-wide mop-up + cvtt tail.
+        private static unsafe void FusedGatherSingleToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1;
+            long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            bool vec = ss >= int.MinValue / 8 && ss <= int.MaxValue / 8;
+            int si = (int)ss;
+            var idx = Vector256.Create(0, si, 2 * si, 3 * si, 4 * si, 5 * si, 6 * si, 7 * si);
+            long g = 8L * ss;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                int* p = (int*)(src + srcOff * 4); short* dr = (short*)(dst + dstOff * 2); long i = 0;
+                if (vec)
+                {
+                    for (; i + 16 <= innerN; i += 16)
+                    {
+                        var a = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p,     idx, 4).AsSingle());
+                        var b = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p + g, idx, 4).AsSingle());
+                        Vector256.Store(Vector256.Narrow(a, b), dr + i);
+                        p += 2 * g;
+                    }
+                    for (; i + 8 <= innerN; i += 8)
+                    {
+                        var v = Avx.ConvertToVector256Int32WithTruncation(Avx2.GatherVector256(p, idx, 4).AsSingle());
+                        dr[i] = (short)v.GetElement(0); dr[i + 1] = (short)v.GetElement(1);
+                        dr[i + 2] = (short)v.GetElement(2); dr[i + 3] = (short)v.GetElement(3);
+                        dr[i + 4] = (short)v.GetElement(4); dr[i + 5] = (short)v.GetElement(5);
+                        dr[i + 6] = (short)v.GetElement(6); dr[i + 7] = (short)v.GetElement(7);
+                        p += g;
+                    }
+                }
+                for (; i < innerN; i++) { dr[i] = (short)Converts.ToInt32(*(float*)p); p += ss; }
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
+
+        // f64 -> i8/u8: 16-wide (4x VPGATHERQQ+cvttpd -> 2-level Narrow) + 4-wide mop-up + cvtt tail.
+        private static unsafe void FusedGatherDoubleToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1;
+            long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            var idx = Vector256.Create(0L, ss, 2 * ss, 3 * ss);
+            long g = 4L * ss;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                long* p = (long*)(src + srcOff * 8); byte* dr = dst + dstOff; long i = 0;
+                for (; i + 16 <= innerN; i += 16)
+                {
+                    var a = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p,         idx, 8).AsDouble());
+                    var b = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + g,     idx, 8).AsDouble());
+                    var c = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 2 * g, idx, 8).AsDouble());
+                    var e = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 3 * g, idx, 8).AsDouble());
+                    var s0 = Vector128.Narrow(a, b); var s1 = Vector128.Narrow(c, e);
+                    Vector128.Store(Vector128.Narrow(s0, s1).AsByte(), dr + i);
+                    p += 4 * g;
+                }
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    var v = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8).AsDouble());
+                    dr[i] = (byte)v.GetElement(0); dr[i + 1] = (byte)v.GetElement(1);
+                    dr[i + 2] = (byte)v.GetElement(2); dr[i + 3] = (byte)v.GetElement(3);
+                    p += g;
+                }
+                for (; i < innerN; i++) { dr[i] = (byte)Converts.ToInt32(*(double*)p); p += ss; }
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
+
+        // f64 -> i16/u16/char: 8-wide (2x VPGATHERQQ+cvttpd -> 1x Narrow) + 4-wide mop-up + cvtt tail.
+        private static unsafe void FusedGatherDoubleToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1;
+            long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            var idx = Vector256.Create(0L, ss, 2 * ss, 3 * ss);
+            long g = 4L * ss;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                long* p = (long*)(src + srcOff * 8); short* dr = (short*)(dst + dstOff * 2); long i = 0;
+                for (; i + 8 <= innerN; i += 8)
+                {
+                    var a = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p,     idx, 8).AsDouble());
+                    var b = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + g, idx, 8).AsDouble());
+                    Vector128.Store(Vector128.Narrow(a, b), dr + i);
+                    p += 2 * g;
+                }
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    var v = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8).AsDouble());
+                    dr[i] = (short)v.GetElement(0); dr[i + 1] = (short)v.GetElement(1);
+                    dr[i + 2] = (short)v.GetElement(2); dr[i + 3] = (short)v.GetElement(3);
+                    p += g;
+                }
+                for (; i < innerN; i++) { dr[i] = (short)Converts.ToInt32(*(double*)p); p += ss; }
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
+
         /// <summary>
         /// Returns the strided <see cref="StridedCastKernel"/> for float|double -&gt;
         /// {i8,u8,i16,u16,char}, or null. Bit-exact with the contiguous kernels.
@@ -329,16 +537,33 @@ namespace NumSharp.Backends.Kernels
             return null;
         }
 
-        private static unsafe void StridedSingleToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 1, &BulkSingleToByteV,  &ConvSingleToSByte);
-        private static unsafe void StridedSingleToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 1, &BulkSingleToByteV,  &ConvSingleToByte);
-        private static unsafe void StridedSingleToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToInt16);
-        private static unsafe void StridedSingleToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToUInt16);
-        private static unsafe void StridedSingleToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToChar);
-        private static unsafe void StridedDoubleToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 1, &BulkDoubleToByteV,  &ConvDoubleToSByte);
-        private static unsafe void StridedDoubleToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 1, &BulkDoubleToByteV,  &ConvDoubleToByte);
-        private static unsafe void StridedDoubleToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToInt16);
-        private static unsafe void StridedDoubleToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToUInt16);
-        private static unsafe void StridedDoubleToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToChar);
+        // Inner-strided + contig dst row + AVX2 -> the whole-array fused gather (idx hoisted, rows
+        // pipelined). Everything else (inner-contig sliced/negrow rows, strided dst, no-AVX2) keeps
+        // the StridedNarrowDriver bulk/staging path. SByte/Byte share the byte fused kernel (identical
+        // truncating low byte); Int16/UInt16/Char share the short fused kernel.
+        private static unsafe bool UseFusedGather(long* ss, long* ds, int nd)
+            => nd >= 1 && ss[nd - 1] != 1 && ds[nd - 1] == 1 && Avx2.IsSupported;
+
+        private static unsafe void StridedSingleToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherSingleToByte(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 1, &BulkSingleToByteV, &ConvSingleToSByte); }
+        private static unsafe void StridedSingleToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherSingleToByte(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 1, &BulkSingleToByteV, &ConvSingleToByte); }
+        private static unsafe void StridedSingleToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherSingleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToInt16); }
+        private static unsafe void StridedSingleToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherSingleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToUInt16); }
+        private static unsafe void StridedSingleToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherSingleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkSingleToShortV, &ConvSingleToChar); }
+        private static unsafe void StridedDoubleToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherDoubleToByte(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 1, &BulkDoubleToByteV, &ConvDoubleToSByte); }
+        private static unsafe void StridedDoubleToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherDoubleToByte(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 1, &BulkDoubleToByteV, &ConvDoubleToByte); }
+        private static unsafe void StridedDoubleToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherDoubleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToInt16); }
+        private static unsafe void StridedDoubleToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherDoubleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToUInt16); }
+        private static unsafe void StridedDoubleToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedGatherDoubleToShort(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToShortV, &ConvDoubleToChar); }
 
         private static unsafe void StridedNarrowDriver(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim,
@@ -374,6 +599,9 @@ namespace NumSharp.Backends.Kernels
                 else if (ds == 1)
                 {
                     // strided/reversed source -> stage to contig buf in chunks, vectorize the convert.
+                    // Reached for non-gatherable srcSize 1/2 (Half, i8/u8/i16/u16/char->bool) or no-AVX2;
+                    // the gatherable f32/f64 inner-strided case is routed to the fused-gather whole-array
+                    // kernels by the Strided* entry points (no per-row call, idx hoisted) before here.
                     long j = 0;
                     while (j < innerN)
                     {
@@ -381,7 +609,9 @@ namespace NumSharp.Backends.Kernels
                         byte* sp = sRow + j * ss * srcSize;
                         // Tight typed strided load -> contiguous staging buffer. Must match srcSize
                         // exactly (1/2/4/8); a wider move would read past each element (the i16->bool
-                        // strided bug: srcSize==2 must NOT fall into the 8-byte path).
+                        // strided bug: srcSize==2 must NOT fall into the 8-byte path). Only reached for
+                        // non-gatherable srcSize 1/2 (Half, i16/u16/char/i8/u8->bool) or when AVX2 is
+                        // absent — the gatherable 4/8-byte sources take the fused-gather path above.
                         switch (srcSize)
                         {
                             case 1: { byte* b = buf;            byte* s0 = sp;          for (long k = 0; k < c; k++) { b[k] = *s0; s0 += ss; } break; }
