@@ -410,6 +410,78 @@ namespace NumSharp.Backends.Kernels
         { if (UseFusedGather(ss, ds, nd)) FusedGatherInt64ToBool(s, d, ss, ds, sh, nd); else StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 1, &BulkInt64ToBoolV, &ConvInt64ToBool); }
         private static unsafe void StridedInt16ToBool(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkInt16ToBoolV, &ConvInt16ToBool);
         private static unsafe void StridedByteToBool(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 1, 1, &BulkByteToBoolV, &ConvByteToBool);
-        private static unsafe void StridedHalfToBool(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkHalfToBoolV, &ConvHalfToBool);
+
+        // f16 -> bool strided: f16 is 2-byte (not VPGATHER-eligible), so the generic
+        // StridedNarrowDriver scalars the ss==2 (`[:, ::2]`) and ss==-1 (`[:, ::-1]`) inner rows
+        // -> the f16|strided|bool 0.14x cliff. Apply the SubwordNarrow deinterleave (ss==2) /
+        // reverse (ss==-1) shuffles, then NumPy's half-truthiness `(bits & 0x7fff) != 0` (so +-0.0
+        // -> False, NaN/inf -> True). Inner ss==1 rows (sliced/negrow/bcast) run the contiguous
+        // magnitude compare; arbitrary strides (F/T column-gather) and the tail keep the scalar
+        // test. Inlined inner loops (a per-row helper costs ~6x — see the SubwordCopy PERF NOTE).
+        private static unsafe void StridedHalfToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            short* src = (short*)srcV;
+            byte* dst = (byte*)dstV;
+            if (ndim == 0) { dst[0] = (byte)((src[0] & 0x7fff) != 0 ? 1 : 0); return; }
+
+            int outer = ndim - 1;
+            long innerN = shape[outer], ss = srcStrides[outer], ds = dstStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+
+            var one = _shortOne;
+            var zero = Vector256<short>.Zero;
+            var mag = Vector256.Create((short)0x7fff);
+            var revw = _revWords;
+
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                short* s = src + srcOff;
+                byte* d = dst + dstOff;
+                long i = 0;
+                if (ds == 1)
+                {
+                    if (ss == 1)
+                    {
+                        for (; i + 32 <= innerN; i += 32)
+                        {
+                            var na = Avx2.AndNot(Avx2.CompareEqual(Avx2.And(Vector256.Load(s + i), mag), zero), one);
+                            var nb = Avx2.AndNot(Avx2.CompareEqual(Avx2.And(Vector256.Load(s + i + 16), mag), zero), one);
+                            Vector256.Store(Vector256.Narrow(na, nb).AsByte(), d + i);
+                        }
+                    }
+                    else if (ss == 2)
+                    {
+                        for (; i + 16 <= innerN; i += 16)
+                        {
+                            var v0 = Vector256.Load((int*)(s + 2 * i));
+                            var v1 = Vector256.Load((int*)(s + 2 * i + 16));
+                            var evens = Avx2.Permute4x64(Avx2.PackUnsignedSaturate(Avx2.And(v0, _evenWordMask), Avx2.And(v1, _evenWordMask)).AsInt64(), 0xD8).AsInt16();
+                            var nz = Avx2.AndNot(Avx2.CompareEqual(Avx2.And(evens, mag), zero), one);
+                            Vector128.Store(Avx2.Permute4x64(Avx2.PackUnsignedSaturate(nz, nz).AsInt64(), 0xD8).GetLower().AsByte(), d + i);
+                        }
+                    }
+                    else if (ss == -1)
+                    {
+                        for (; i + 16 <= innerN; i += 16)
+                        {
+                            var v = Vector256.Load(s - i - 15);
+                            var rev = Avx2.Permute4x64(Avx2.Shuffle(v.AsByte(), revw).AsInt64(), 0x4E).AsInt16();
+                            var nz = Avx2.AndNot(Avx2.CompareEqual(Avx2.And(rev, mag), zero), one);
+                            Vector128.Store(Avx2.Permute4x64(Avx2.PackUnsignedSaturate(nz, nz).AsInt64(), 0xD8).GetLower().AsByte(), d + i);
+                        }
+                    }
+                }
+                for (; i < innerN; i++) d[i * ds] = (byte)((s[i * ss] & 0x7fff) != 0 ? 1 : 0);
+
+                for (int ax = outer - 1; ax >= 0; ax--)
+                {
+                    coord[ax]++; srcOff += srcStrides[ax]; dstOff += dstStrides[ax];
+                    if (coord[ax] < shape[ax]) break;
+                    coord[ax] = 0; srcOff -= srcStrides[ax] * shape[ax]; dstOff -= dstStrides[ax] * shape[ax];
+                }
+            }
+        }
     }
 }
