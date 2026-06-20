@@ -8,6 +8,43 @@
 
 ## 0. Where we are
 
+> **UPDATE — Wave 17 (done): §4 CLOSED, §5 mostly closed, §3/§6 characterized.**
+> Worked the remaining laggards bucket-by-bucket (A–E), each clean best-of-7 + bit-exact:
+>
+> - **A — `i64/u64 → f16` (was §4, AVX512-gated → SOLVED on AVX2).** f16 saturates to ±inf at
+>   65520, so every *finite* result fits in i32 exactly; clamp `|v|≥65520` to a ±70000 sentinel
+>   (VPCMPGTQ+VPBLENDVB; u64 via sign-bias compare), pack the low 32 bits of 8 lanes
+>   (PermuteVar8x32), `cvtdq2ps`, then the proven Giesen narrow. No `cvtqq2ps` needed. **All 16
+>   cells 1.2–2.7× (geomean 1.91); 190K i64 + 120K u64 values + 16 layout hashes bit-exact.**
+>   (`DirectILKernelGenerator.Cast.ToHalf.cs`, commit 750059a7.)
+> - **B — `float/c128 → i64/u64` (§5 + §6).** Clean best-of-7 of all 6×8 cells: **25 of ~30 were
+>   best-of-3 jitter** (now 0.9–2.5×). The 5 genuine laggards were all `→u64` on negcol/strided
+>   falling to a gather even on contiguous data: negcol→contiguous-load+VPERMQ reverse, `::2`→
+>   2-load deinterleave (2nd load at `2i+3`, no over-read), c128 negcol→UnpackLow+VPERMQ-0x72.
+>   **f32/f64/c128|negcol|u64 and f64|strided|u64 now 0.93–0.97;** c128|strided|u64 ~0.87 is
+>   memory-bound (gather of every-4th double is already near-optimal). 24/24 layout hashes
+>   bit-exact (wrap/sentinel/NaN/inf). (`Cast.FloatToUInt.cs`, `Cast.Complex.cs`, commit faa27549.)
+> - **E — `f16 → bool` strided (§2/§6).** Genuine 0.14× cliff (scoreboard's 0.87 was a lucky
+>   best-of-3). f16 is 2-byte/non-gatherable and SubwordNarrow had excluded it; gave it the
+>   deinterleave/reverse shuffles + NumPy half-truthiness `(bits & 0x7fff)!=0`. **All 8 layouts
+>   now 3.9–7.3× (strided 0.14→5.27); 8/8 bit-exact incl. ±0/NaN/inf.** The other 6 scoreboard
+>   singletons (f64→u8/i32/char, u64→f32, c128→u8, u64→u8) were all jitter (1.08–1.87× clean).
+>   (`Cast.ToBool.cs`, commit 0a0a42f1.)
+> - **C/D — same-type small-dtype contig (`x|C/T/sliced/negrow/bcast|x`, §3): NOT a kernel
+>   deficiency — a cache-residency micro-benchmark artifact.** Proven: a *warm* `Buffer.MemoryCopy`
+>   of 1M = 0.0138ms = **exactly NumPy's 0.014ms (145 GB/s)**. The copy is already optimal. The
+>   <0.9 at 1M is purely a cold destination: CPython refcounting frees+reuses ONE warm buffer each
+>   astype iteration (137 GB/s, fits in cache); .NET GC doesn't reclaim the discarded result in
+>   time, so the pool hands back cold buffers (37 GB/s). **At every cache-busting size NumSharp
+>   WINS 1.9–3.5× (4M 1.93, 16M 3.46, 64M 3.22)** — and NumSharp's *cold* copy (37 GB/s) already
+>   beats NumPy's *cold* copy (15.8 GB/s). NumPy only wins at exactly-1M-fits-in-cache. This is the
+>   structural GC-vs-refcount difference, unwinnable without deterministic disposal and not worth
+>   gaming; the kernel is left as-is (correct + faster at scale). The bucket-D `bool|F|bool 0.19`
+>   from the old scoreboard was noise — clean best-of-7 is **2.97×** (NumPy is slow on F bool→bool).
+>
+> Net: the only families still genuinely <0.9 are `i64/u64→narrow` strided (§5, memory-bound),
+> `c128|strided|u64` (~0.87, memory-bound), and the 1M same-type cache artifact above (not real).
+
 > **UPDATE — Wave 16 (done): §2 is CLOSED.** The "one large SIMD-shuffle opportunity" below
 > (sub-word `strided`/`negcol`) was implemented and shipped across the WHOLE sub-word family —
 > `DirectILKernelGenerator.Cast.SubwordCopy.cs` (same-type + same-size bit-reinterpret copies),
