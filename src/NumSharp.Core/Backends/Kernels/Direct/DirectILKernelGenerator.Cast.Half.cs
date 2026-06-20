@@ -1,0 +1,193 @@
+using System;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using NumSharp.Utilities;
+
+namespace NumSharp.Backends.Kernels
+{
+    public static partial class DirectILKernelGenerator
+    {
+        // =====================================================================
+        // DirectILKernelGenerator.Cast.Half.cs
+        //   Half (float16) -> int (i32/i8/u8/i16/u16/char) contiguous + strided casts.
+        //
+        //   Phase-0: f16->narrow geomean 0.48 (f16->i32 was ~0.69x) — Half casts fall
+        //   to the scalar path. There is NO F16C in this .NET (verified: Avx512FP16
+        //   absent, no Vector256<Half>, no vectorized ConvertToSingle(Half)), and the
+        //   scalar (float)half is a TRAP (measured SLOWER than the current scalar — it
+        //   double-converts). So widen with a vectorized IEEE bit-fiddle:
+        //
+        //     GIESEN half->float (branchless, exact for finite incl. subnormals):
+        //       widen 8 halves (vpmovzxwd) -> 8x i32 bit patterns
+        //       expmant = bits & 0x7fff;  scaled = (expmant << 13)_as_f32 * MAGIC
+        //         (MAGIC = (254-15)<<23 as float; the multiply rescales the exponent
+        //          and reconstructs subnormals exactly)
+        //       inf/nan (expmant > 0x7bff) -> OR in the f32 inf/nan exponent (0xff<<23)
+        //       sign = (bits & 0x8000) << 16
+        //     then cvttps2dq -> i32 (INT_MIN sentinel on the inf/nan we just built),
+        //     and truncating Vector.Narrow i32->i16[->i8] for the narrow targets.
+        //
+        //   Bit-exact with Converts.To{X}(Half) (NaN/inf -> INT_MIN -> low bits;
+        //   finite Half max is 65504 so cvtt never overflows int32 -> (int)value),
+        //   hence NumPy 2.4.2 (proven 0-diff; f16->i32 1.85x, f16->i8 1.42x).
+        //   NOTE: f16->f32/f64 are intentionally NOT here — Giesen's NaN payload bits
+        //   differ from the BCL's, harmless for ->int but a user-visible divergence for
+        //   ->float, which stays on the already-even (~1.0x) scalar path.
+        //
+        //   Strided reuses StridedNarrowDriver (srcSize=2): inner-contig rows run the
+        //   Bulk, inner-strided rows stage to a contig u16 buffer then vectorize.
+        // =====================================================================
+
+        /// <summary>
+        /// Returns the contiguous <see cref="CastKernel"/> for Half -&gt;
+        /// {i32,i8,u8,i16,u16,char}, or null. Bit-exact with <see cref="Converts"/>.
+        /// </summary>
+        internal static unsafe CastKernel TryGetHalfToXKernel(NPTypeCode srcType, NPTypeCode dstType)
+        {
+            if (srcType != NPTypeCode.Half || !Avx2.IsSupported) return null;
+            switch (dstType)
+            {
+                case NPTypeCode.Int32:  return CastHalfToInt32Contig;
+                case NPTypeCode.SByte:  return CastHalfToSByteContig;
+                case NPTypeCode.Byte:   return CastHalfToByteContig;
+                case NPTypeCode.Int16:  return CastHalfToInt16Contig;
+                case NPTypeCode.UInt16: return CastHalfToUInt16Contig;
+                case NPTypeCode.Char:   return CastHalfToCharContig;
+            }
+            return null;
+        }
+
+        // Giesen branchless half->float over 8 widened half-bit-patterns (Vector256<int>).
+        private static Vector256<float> HalfBitsToFloat(Vector256<int> h)
+        {
+            var maskNoSign = Vector256.Create(0x7fff);
+            var magic = Vector256.Create((254 - 15) << 23).AsSingle();
+            var wasInfNan = Vector256.Create(0x7bff);
+            var expInfNan = Vector256.Create(255 << 23).AsSingle();
+            var expmant = Avx2.And(maskNoSign, h);
+            var scaled = Avx.Multiply(Avx2.ShiftLeftLogical(expmant, 13).AsSingle(), magic);
+            var infnan = Avx2.CompareGreaterThan(expmant, wasInfNan);
+            var sign = Avx2.ShiftLeftLogical(Avx2.AndNot(maskNoSign, h), 16);
+            var signInf = Avx.Or(sign.AsSingle(), Avx.And(infnan.AsSingle(), expInfNan));
+            return Avx.Or(scaled, signInf);
+        }
+
+        // 8 halves at p+ci -> widen (vpmovzxwd) -> Giesen -> cvttps2dq -> 8x i32.
+        private static unsafe Vector256<int> HalfToInt32x8(ushort* p, long ci)
+        {
+            var hbits = Avx2.ConvertToVector256Int32(Sse2.LoadVector128(p + ci)); // zero-extend 8 u16 -> 8 i32
+            return Avx.ConvertToVector256Int32WithTruncation(HalfBitsToFloat(hbits));
+        }
+
+        // 8 halves -> 8 i32.
+        private static unsafe long BulkHalfToInt32(ushort* p, int* dst, long count)
+        {
+            long i = 0;
+            for (; i + 8 <= count; i += 8)
+                Vector256.Store(HalfToInt32x8(p, i), dst + i);
+            return i;
+        }
+
+        // 16 halves -> 2x (8xi32) -> Narrow -> 16 i16.
+        private static unsafe long BulkHalfToShort(ushort* p, short* dst, long count)
+        {
+            long i = 0;
+            for (; i + 16 <= count; i += 16)
+            {
+                var a = HalfToInt32x8(p, i);
+                var b = HalfToInt32x8(p, i + 8);
+                Vector256.Store(Vector256.Narrow(a, b), dst + i);   // 16x i16
+            }
+            return i;
+        }
+
+        // 32 halves -> 4x (8xi32) -> 2x Narrow(i32->i16) -> 1x Narrow(i16->i8) -> 32 i8.
+        private static unsafe long BulkHalfToByte(ushort* p, byte* dst, long count)
+        {
+            long i = 0;
+            for (; i + 32 <= count; i += 32)
+            {
+                var a = HalfToInt32x8(p, i);
+                var b = HalfToInt32x8(p, i + 8);
+                var c = HalfToInt32x8(p, i + 16);
+                var d = HalfToInt32x8(p, i + 24);
+                var s0 = Vector256.Narrow(a, b);
+                var s1 = Vector256.Narrow(c, d);
+                Vector256.Store(Vector256.Narrow(s0, s1).AsByte(), dst + i);  // 32x i8
+            }
+            return i;
+        }
+
+        // Typed contiguous kernels: SIMD bulk + NumPy-faithful scalar tail (Converts.To{X}(Half)).
+        private static unsafe void CastHalfToInt32Contig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; int* dst = (int*)d; Half* h = (Half*)s;
+            long i = BulkHalfToInt32(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToInt32(h[i]);
+        }
+        private static unsafe void CastHalfToSByteContig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; sbyte* dst = (sbyte*)d; Half* h = (Half*)s;
+            long i = BulkHalfToByte(p, (byte*)dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToSByte(h[i]);
+        }
+        private static unsafe void CastHalfToByteContig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; byte* dst = (byte*)d; Half* h = (Half*)s;
+            long i = BulkHalfToByte(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToByte(h[i]);
+        }
+        private static unsafe void CastHalfToInt16Contig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; short* dst = (short*)d; Half* h = (Half*)s;
+            long i = BulkHalfToShort(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToInt16(h[i]);
+        }
+        private static unsafe void CastHalfToUInt16Contig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; ushort* dst = (ushort*)d; Half* h = (Half*)s;
+            long i = BulkHalfToShort(p, (short*)dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToUInt16(h[i]);
+        }
+        private static unsafe void CastHalfToCharContig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; char* dst = (char*)d; Half* h = (Half*)s;
+            long i = BulkHalfToShort(p, (short*)dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToChar(h[i]);
+        }
+
+        // STRIDED: reuse StridedNarrowDriver (srcSize=2). Bulk void* trampolines + scalar convs.
+        private static unsafe long BulkHalfToInt32V(void* s, void* d, long n) => BulkHalfToInt32((ushort*)s, (int*)d, n);
+        private static unsafe long BulkHalfToShortV(void* s, void* d, long n) => BulkHalfToShort((ushort*)s, (short*)d, n);
+        private static unsafe long BulkHalfToByteV(void* s, void* d, long n)  => BulkHalfToByte((ushort*)s, (byte*)d, n);
+
+        private static unsafe void ConvHalfToInt32(void* s, void* d)  => *(int*)d    = Converts.ToInt32(*(Half*)s);
+        private static unsafe void ConvHalfToSByte(void* s, void* d)  => *(sbyte*)d  = Converts.ToSByte(*(Half*)s);
+        private static unsafe void ConvHalfToByte(void* s, void* d)   => *(byte*)d   = Converts.ToByte(*(Half*)s);
+        private static unsafe void ConvHalfToInt16(void* s, void* d)  => *(short*)d  = Converts.ToInt16(*(Half*)s);
+        private static unsafe void ConvHalfToUInt16(void* s, void* d) => *(ushort*)d = Converts.ToUInt16(*(Half*)s);
+        private static unsafe void ConvHalfToChar(void* s, void* d)   => *(char*)d   = Converts.ToChar(*(Half*)s);
+
+        internal static unsafe StridedCastKernel TryGetHalfToXStridedKernel(NPTypeCode srcType, NPTypeCode dstType)
+        {
+            if (srcType != NPTypeCode.Half || !Avx2.IsSupported) return null;
+            switch (dstType)
+            {
+                case NPTypeCode.Int32:  return StridedHalfToInt32;
+                case NPTypeCode.SByte:  return StridedHalfToSByte;
+                case NPTypeCode.Byte:   return StridedHalfToByte;
+                case NPTypeCode.Int16:  return StridedHalfToInt16;
+                case NPTypeCode.UInt16: return StridedHalfToUInt16;
+                case NPTypeCode.Char:   return StridedHalfToChar;
+            }
+            return null;
+        }
+
+        private static unsafe void StridedHalfToInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 4, &BulkHalfToInt32V, &ConvHalfToInt32);
+        private static unsafe void StridedHalfToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkHalfToByteV,  &ConvHalfToSByte);
+        private static unsafe void StridedHalfToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkHalfToByteV,  &ConvHalfToByte);
+        private static unsafe void StridedHalfToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 2, &BulkHalfToShortV, &ConvHalfToInt16);
+        private static unsafe void StridedHalfToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 2, &BulkHalfToShortV, &ConvHalfToUInt16);
+        private static unsafe void StridedHalfToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 2, &BulkHalfToShortV, &ConvHalfToChar);
+    }
+}

@@ -115,6 +115,10 @@ namespace NumSharp.Backends.Kernels
             // imaginary (NumPy ComplexWarning); bit-exact with Converts.To{X}(Complex).
             var complexToInt = TryGetComplexToIntKernel(srcType, dstType);
             if (complexToInt != null) return complexToInt;
+            // Half -> int via Giesen bit-fiddle widen + cvtt (no F16C in this .NET; f16->i32
+            // was ~0.69x). Bit-exact with Converts.To{X}(Half).
+            var halfToX = TryGetHalfToXKernel(srcType, dstType);
+            if (halfToX != null) return halfToX;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -157,6 +161,9 @@ namespace NumSharp.Backends.Kernels
             // Complex->int strided: contiguous-inner rows run the deinterleave Bulk, else scalar.
             var complexStrided = TryGetComplexToIntStridedKernel(srcType, dstType);
             if (complexStrided != null) return complexStrided;
+            // Half->int strided (Giesen widen): reuses StridedNarrowDriver (srcSize=2).
+            var halfStrided = TryGetHalfToXStridedKernel(srcType, dstType);
+            if (halfStrided != null) return halfStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
