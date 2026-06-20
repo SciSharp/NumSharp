@@ -180,6 +180,10 @@ namespace NumSharp.Backends.Kernels
             // ->bool (!=0) via deinterleave/reverse + narrow (2-byte src is not gatherable).
             var subwordNarrow = TryGetSubwordNarrowStridedKernel(srcType, dstType);
             if (subwordNarrow != null) return subwordNarrow;
+            // 1-byte-int -> 2-byte strided: {bool,u8,i8}->{i16,u16,char} via deinterleave/reverse
+            // + sign/zero widen (1-byte src is not gatherable). Inverse of SubwordNarrow.
+            var subwordWiden = TryGetSubwordWidenStridedKernel(srcType, dstType);
+            if (subwordWiden != null) return subwordWiden;
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;

@@ -22,6 +22,9 @@ PAIRS = [
     # 2B-int -> 1B narrowing (low-byte truncate) + ->bool (!=0): SubwordNarrow kernel
     ("i16","i8"),("i16","u8"),("u16","i8"),("u16","u8"),("char","i8"),("char","u8"),
     ("i16","bool"),("u16","bool"),("char","bool"),
+    # 1B-int -> 2B widening (sign-extend i8 / zero-extend u8,bool): SubwordWiden kernel
+    ("i8","i16"),("i8","u16"),("i8","char"),("u8","i16"),("u8","u16"),("u8","char"),
+    ("bool","i16"),("bool","u16"),("bool","char"),
 ]
 LAY = ["C","F","T","sliced","negrow","negcol","strided","bcast"]
 
