@@ -99,6 +99,71 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void StridedComplexToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd)
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToHalf(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToHalfV, &ConvComplexToHalf); }
 
+        // ---- Complex -> bool: nonzero(z) = (re != 0) | (im != 0). OrderedEqual against 0 treats
+        // +-0 as zero and NaN as nonzero (NaN is unordered -> not-equal), matching NumPy. ----
+        private static unsafe Vector256<long> ComplexNonzero4(double* p, long ci)
+        {
+            var a = Avx.LoadVector256(p + 2 * ci);       // re0 im0 re1 im1
+            var b = Avx.LoadVector256(p + 2 * ci + 4);   // re2 im2 re3 im3
+            var reals = Avx2.Permute4x64(Avx.UnpackLow(a, b), 0xD8);   // re0 re1 re2 re3
+            var imags = Avx2.Permute4x64(Avx.UnpackHigh(a, b), 0xD8);  // im0 im1 im2 im3
+            var er = Avx.Compare(reals, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+            var ei = Avx.Compare(imags, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+            return Avx2.AndNot(Avx.And(er, ei).AsInt64(), Vector256.Create(1L)); // ~(re==0 & im==0) & 1 -> 0/1
+        }
+        private static unsafe long BulkComplexToBool(double* p, byte* dst, long count)
+        {
+            long i = 0;
+            if (Avx2.IsSupported)
+                for (; i + 4 <= count; i += 4)
+                {
+                    var nz = ComplexNonzero4(p, i);
+                    dst[i] = (byte)nz.GetElement(0); dst[i + 1] = (byte)nz.GetElement(1);
+                    dst[i + 2] = (byte)nz.GetElement(2); dst[i + 3] = (byte)nz.GetElement(3);
+                }
+            return i;
+        }
+        private static unsafe long BulkComplexToBoolV(void* s, void* d, long n) => BulkComplexToBool((double*)s, (byte*)d, n);
+        private static unsafe void ConvComplexToBool(void* s, void* d)
+        { var c = *(Complex*)s; *(byte*)d = (byte)((c.Real != 0.0 || c.Imaginary != 0.0) ? 1 : 0); }
+
+        internal static unsafe void CastComplexToBoolContig(void* s, void* d, long n)
+        {
+            double* p = (double*)s; byte* dst = (byte*)d; Complex* c = (Complex*)s;
+            long i = BulkComplexToBool(p, dst, n);
+            for (; i < n; i++) { var z = c[i]; dst[i] = (byte)((z.Real != 0.0 || z.Imaginary != 0.0) ? 1 : 0); }
+        }
+        internal static unsafe void StridedComplexToBool(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToBool(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToBoolV, &ConvComplexToBool); }
+
+        // Inner-strided: gather reals (idx) and imags (idx, base+1 double) per 4 logical complex.
+        private static unsafe void FusedComplexToBool(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); byte* dr = dst + dstOff; long i = 0;
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    var reals = Avx2.GatherVector256(p, idx, 8);
+                    var imags = Avx2.GatherVector256(p + 1, idx, 8);
+                    var er = Avx.Compare(reals, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                    var ei = Avx.Compare(imags, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                    var nz = Avx2.AndNot(Avx.And(er, ei).AsInt64(), Vector256.Create(1L));
+                    dr[i] = (byte)nz.GetElement(0); dr[i + 1] = (byte)nz.GetElement(1);
+                    dr[i + 2] = (byte)nz.GetElement(2); dr[i + 3] = (byte)nz.GetElement(3);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++) { var z = *(Complex*)(src + (srcOff + i * ss) * 16); dr[i] = (byte)((z.Real != 0.0 || z.Imaginary != 0.0) ? 1 : 0); }
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
         // 8 strided complex -> 2x VPGATHERQQ-reals -> round-to-odd double->f16 -> 8 u16; scalar mop-up.
         // (NaN in a gather group -> the 8 elements take the scalar DoubleToHalfBits fallback.)
         private static unsafe void FusedComplexToHalf(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)

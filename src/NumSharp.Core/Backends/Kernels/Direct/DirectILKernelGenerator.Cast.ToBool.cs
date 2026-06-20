@@ -46,6 +46,7 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.SByte:   return CastByteToBoolContig;
                 case NPTypeCode.Byte:    return CastByteToBoolContig;
                 case NPTypeCode.Half:    return CastHalfToBoolContig;
+                case NPTypeCode.Complex: return CastComplexToBoolContig;
             }
             return null;
         }
@@ -391,6 +392,7 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Int16: case NPTypeCode.UInt16: case NPTypeCode.Char: return StridedInt16ToBool;
                 case NPTypeCode.SByte: case NPTypeCode.Byte: return StridedByteToBool;
                 case NPTypeCode.Half: return StridedHalfToBool;
+                case NPTypeCode.Complex: return StridedComplexToBool;
             }
             return null;
         }
