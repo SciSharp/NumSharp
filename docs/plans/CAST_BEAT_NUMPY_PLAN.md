@@ -538,3 +538,7 @@ from NumPy's modular wrap).
   narrow + same-type strided copy; AVX512-gated `i64/u64→f16`; memory-bound `i64/u64→narrow` strided;
   alloc-bound 1M same-type contig (`bool|F|bool` = 0.17, the lone 🔴). These need buffer pooling or
   AVX512 hardware. (Phase-5 "100% ✅" exit is therefore not reachable on AVX2-only hardware.)
+
+**Continuation:** the remaining 133 `<0.9` cells are enumerated by root cause, tractability,
+and approach in **`docs/plans/CAST_REMAINDER_133_PLAN.md`** (includes the methodology gotchas —
+best-of-3 noise, the `dotnet run` multi-TFM hang, `/tmp` path mismatch, gather-stage rules).
