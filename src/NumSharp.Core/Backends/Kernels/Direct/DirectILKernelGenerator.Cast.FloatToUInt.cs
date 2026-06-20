@@ -145,6 +145,27 @@ namespace NumSharp.Backends.Kernels
             {
                 double* sRow = src + srcOff; ulong* dRow = dst + dstOff; long i = 0;
                 if (ds == 1 && ss == 1) i = BulkDoubleToUInt64(sRow, dRow, innerN);
+                else if (ds == 1 && ss == -1 && Avx2.IsSupported)
+                {
+                    // negcol ([:, ::-1]): the row is contiguous in reverse, so a contiguous load +
+                    // VPERMQ lane-reverse beats a -1-stride gather. Load [L(i+3)..L(i)] (4 doubles
+                    // ending at sRow-i), reverse to logical order. Reads stay inside the row.
+                    for (; i + 4 <= innerN; i += 4)
+                        Vector256.Store(DoubleToU64x4(Avx2.Permute4x64(Vector256.Load(sRow - i - 3), 0x1B)).AsUInt64(), dRow + i);
+                }
+                else if (ds == 1 && ss == 2 && Avx2.IsSupported)
+                {
+                    // strided ([:, ::2]): deinterleave even doubles from two contiguous loads instead
+                    // of a stride-2 gather. Load b at 2i+3 (not 2i+4) so the max read is 2i+6 = the
+                    // last needed element L(i+3) -> no over-read past the row. v = [a0,a2,b1,b3].
+                    for (; i + 4 <= innerN; i += 4)
+                    {
+                        var a = Vector256.Load(sRow + 2 * i);
+                        var b = Vector256.Load(sRow + 2 * i + 3);
+                        var v = Avx.Blend(Avx2.Permute4x64(a, 0x08), Avx2.Permute4x64(b, 0xDD), 0x0C);
+                        Vector256.Store(DoubleToU64x4(v).AsUInt64(), dRow + i);
+                    }
+                }
                 else if (gatherable)
                 {
                     long off = 0;
@@ -183,6 +204,18 @@ namespace NumSharp.Backends.Kernels
             {
                 float* sRow = src + srcOff; ulong* dRow = dst + dstOff; long i = 0;
                 if (ds == 1 && ss == 1) i = BulkSingleToUInt64(sRow, dRow, innerN);
+                else if (ds == 1 && ss == -1 && Avx2.IsSupported)
+                {
+                    // negcol ([:, ::-1]): contiguous-reversed row -> contiguous load + VPERMD reverse
+                    // (8 floats), widen each half to f64, convert. Beats a -1-stride gather.
+                    var rev8 = Vector256.Create(7, 6, 5, 4, 3, 2, 1, 0);
+                    for (; i + 8 <= innerN; i += 8)
+                    {
+                        var v = Avx2.PermuteVar8x32(Vector256.Load(sRow - i - 7), rev8);
+                        Vector256.Store(DoubleToU64x4(Avx.ConvertToVector256Double(v.GetLower())).AsUInt64(), dRow + i);
+                        Vector256.Store(DoubleToU64x4(Avx.ConvertToVector256Double(v.GetUpper())).AsUInt64(), dRow + i + 4);
+                    }
+                }
                 else if (gatherable)
                 {
                     long off = 0;

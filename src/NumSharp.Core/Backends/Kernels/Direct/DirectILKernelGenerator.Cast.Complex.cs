@@ -430,11 +430,24 @@ namespace NumSharp.Backends.Kernels
             for (long o = 0; o < outerCount; o++)
             {
                 double* p = (double*)(src + srcOff * 16); ulong* dr = (ulong*)(dst + dstOff * 8); long i = 0;
-                for (; i + 4 <= innerN; i += 4)
+                if (ss == -1)
                 {
-                    Vector256.Store(DoubleToU64x4(Avx2.GatherVector256(p, idx, 8)).AsUInt64(), dr + i);
-                    p += 4 * rs;
+                    // negcol ([:, ::-1]): the 8 doubles around p are contiguous-reversed
+                    // (re3,im3,re2,im2,re1,im1,re0,im0). Two loads + UnpackLow + VPERMQ extract the
+                    // 4 reals in logical order, beating a -2-stride real gather. Reads stay in the row.
+                    for (; i + 4 <= innerN; i += 4)
+                    {
+                        var reals = Avx2.Permute4x64(Avx.UnpackLow(Vector256.Load(p - 2), Vector256.Load(p - 6)), 0x72);
+                        Vector256.Store(DoubleToU64x4(reals).AsUInt64(), dr + i);
+                        p -= 8;
+                    }
                 }
+                else
+                    for (; i + 4 <= innerN; i += 4)
+                    {
+                        Vector256.Store(DoubleToU64x4(Avx2.GatherVector256(p, idx, 8)).AsUInt64(), dr + i);
+                        p += 4 * rs;
+                    }
                 for (; i < innerN; i++) dr[i] = Converts.ToUInt64(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
                 AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
             }
