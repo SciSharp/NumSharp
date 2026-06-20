@@ -68,7 +68,7 @@ namespace NumSharp
         /// <summary>
         /// Scalar fallback for nanvar - computes variance of all elements ignoring NaN.
         /// </summary>
-        private static NDArray nanvar_scalar(NDArray arr, bool keepdims, int ddof)
+        private static unsafe NDArray nanvar_scalar(NDArray arr, bool keepdims, int ddof)
         {
             object result;
 
@@ -116,39 +116,22 @@ namespace NumSharp
                 case NPTypeCode.Half:
                 {
                     // Half nanvar returns Half (NumPy parity).
-                    // Two-pass: compute mean, then mean(|x - mean|²).
-                    var iter = arr.AsIterator<Half>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                        {
-                            sum += (double)val;
-                            count++;
-                        }
-                    }
+                    // Two-pass (two iterators, mirrors the Float/Double paths above):
+                    // mean, then mean(|x - mean|²). Accumulate in double, narrow result.
+                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter1.ExecuteReducing<NanMeanHalfKernel, NanMeanAccumulator>(default, default);
 
-                    if (count <= ddof)
+                    if (accum.Count <= ddof)
                     {
                         result = Half.NaN;
                     }
                     else
                     {
-                        double mean = sum / count;
-                        iter.Reset();
-                        double sumSq = 0.0;
-                        while (iter.HasNext())
-                        {
-                            Half val = iter.MoveNext();
-                            if (!Half.IsNaN(val))
-                            {
-                                double diff = (double)val - mean;
-                                sumSq += diff * diff;
-                            }
-                        }
-                        result = (Half)(sumSq / (count - ddof));
+                        double mean = accum.Sum / accum.Count;
+                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        double sumSq = iter2.ExecuteReducing<NanSquaredDeviationHalfKernel, double>(
+                            new NanSquaredDeviationHalfKernel(mean), 0.0);
+                        result = (Half)(sumSq / (accum.Count - ddof));
                     }
                     break;
                 }
@@ -156,41 +139,21 @@ namespace NumSharp
                 {
                     // Complex nanvar returns float64 (NumPy parity).
                     // Variance = mean(|z - mean(z)|²). NaN-containing = Re or Im is NaN.
-                    var iter = arr.AsIterator<Complex>();
-                    double sumR = 0.0, sumI = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        Complex val = iter.MoveNext();
-                        if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
-                        {
-                            sumR += val.Real;
-                            sumI += val.Imaginary;
-                            count++;
-                        }
-                    }
+                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter1.ExecuteReducing<NanMeanComplexKernel, NanMeanComplexAccumulator>(default, default);
 
-                    if (count <= ddof)
+                    if (accum.Count <= ddof)
                     {
                         result = double.NaN;
                     }
                     else
                     {
-                        double meanR = sumR / count;
-                        double meanI = sumI / count;
-                        iter.Reset();
-                        double sumSq = 0.0;
-                        while (iter.HasNext())
-                        {
-                            Complex val = iter.MoveNext();
-                            if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
-                            {
-                                double dR = val.Real - meanR;
-                                double dI = val.Imaginary - meanI;
-                                sumSq += dR * dR + dI * dI;
-                            }
-                        }
-                        result = sumSq / (count - ddof);
+                        double meanR = accum.Sum.Real / accum.Count;
+                        double meanI = accum.Sum.Imaginary / accum.Count;
+                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        double sumSq = iter2.ExecuteReducing<NanSquaredDeviationComplexKernel, double>(
+                            new NanSquaredDeviationComplexKernel(meanR, meanI), 0.0);
+                        result = sumSq / (accum.Count - ddof);
                     }
                     break;
                 }

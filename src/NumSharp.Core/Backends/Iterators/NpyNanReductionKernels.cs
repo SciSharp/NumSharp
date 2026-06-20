@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace NumSharp.Backends.Iteration
 {
@@ -335,6 +336,234 @@ namespace NumSharp.Backends.Iteration
                 {
                     double diff = val - mean;
                     total += diff * diff;
+                }
+            }
+            sumSq = total;
+            return true;
+        }
+    }
+
+    // =========================================================================
+    // Half NaN kernels — widen each element to double (the precision NumSharp's
+    // f16 reductions already use); the caller narrows the result back to Half.
+    // Mirror the Float/Double kernels above. NaN = Half.IsNaN(val).
+    // =========================================================================
+
+    public readonly struct NanSumHalfKernel : INpyReducingInnerLoop<double>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double sum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double acc = sum;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                    acc += val;
+            }
+            sum = acc;
+            return true;
+        }
+    }
+
+    public readonly struct NanProdHalfKernel : INpyReducingInnerLoop<double>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double prod)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double acc = prod;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                    acc *= val;
+            }
+            prod = acc;
+            return true;
+        }
+    }
+
+    public readonly struct NanMinHalfKernel : INpyReducingInnerLoop<NanMinMaxDoubleAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref NanMinMaxDoubleAccumulator accum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double minVal = accum.Value;
+            bool found = accum.Found;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                {
+                    if (!found || val < minVal)
+                        minVal = val;
+                    found = true;
+                }
+            }
+            accum.Value = minVal;
+            accum.Found = found;
+            return true;
+        }
+    }
+
+    public readonly struct NanMaxHalfKernel : INpyReducingInnerLoop<NanMinMaxDoubleAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref NanMinMaxDoubleAccumulator accum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double maxVal = accum.Value;
+            bool found = accum.Found;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                {
+                    if (!found || val > maxVal)
+                        maxVal = val;
+                    found = true;
+                }
+            }
+            accum.Value = maxVal;
+            accum.Found = found;
+            return true;
+        }
+    }
+
+    public readonly struct NanMeanHalfKernel : INpyReducingInnerLoop<NanMeanAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref NanMeanAccumulator accum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double sum = accum.Sum;
+            long n = accum.Count;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                {
+                    sum += val;
+                    n++;
+                }
+            }
+            accum.Sum = sum;
+            accum.Count = n;
+            return true;
+        }
+    }
+
+    public struct NanSquaredDeviationHalfKernel : INpyReducingInnerLoop<double>
+    {
+        private readonly double _mean;
+
+        public NanSquaredDeviationHalfKernel(double mean)
+        {
+            _mean = mean;
+        }
+
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double sumSq)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double mean = _mean;
+            double total = sumSq;
+            for (long i = 0; i < count; i++)
+            {
+                double val = (double)*(Half*)(p + i * stride);
+                if (!double.IsNaN(val))
+                {
+                    double diff = val - mean;
+                    total += diff * diff;
+                }
+            }
+            sumSq = total;
+            return true;
+        }
+    }
+
+    // =========================================================================
+    // Complex NaN kernels — "NaN" = real OR imaginary is NaN (NumPy parity).
+    // nansum keeps the Complex sum; nanmean tracks Complex sum + non-NaN count;
+    // nanvar/nanstd's second pass accumulates |z - mean|² as a double.
+    // =========================================================================
+
+    /// <summary>nanmean accumulator for Complex: running Complex sum and non-NaN count.</summary>
+    public struct NanMeanComplexAccumulator
+    {
+        public Complex Sum;
+        public long Count;
+    }
+
+    public readonly struct NanSumComplexKernel : INpyReducingInnerLoop<Complex>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref Complex sum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            Complex acc = sum;
+            for (long i = 0; i < count; i++)
+            {
+                Complex val = *(Complex*)(p + i * stride);
+                if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
+                    acc += val;
+            }
+            sum = acc;
+            return true;
+        }
+    }
+
+    public readonly struct NanMeanComplexKernel : INpyReducingInnerLoop<NanMeanComplexAccumulator>
+    {
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref NanMeanComplexAccumulator accum)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            Complex sum = accum.Sum;
+            long n = accum.Count;
+            for (long i = 0; i < count; i++)
+            {
+                Complex val = *(Complex*)(p + i * stride);
+                if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
+                {
+                    sum += val;
+                    n++;
+                }
+            }
+            accum.Sum = sum;
+            accum.Count = n;
+            return true;
+        }
+    }
+
+    public struct NanSquaredDeviationComplexKernel : INpyReducingInnerLoop<double>
+    {
+        private readonly double _meanR;
+        private readonly double _meanI;
+
+        public NanSquaredDeviationComplexKernel(double meanR, double meanI)
+        {
+            _meanR = meanR;
+            _meanI = meanI;
+        }
+
+        public unsafe bool Execute(void** dataptrs, long* strides, long count, ref double sumSq)
+        {
+            byte* p = (byte*)dataptrs[0];
+            long stride = strides[0];
+            double meanR = _meanR, meanI = _meanI;
+            double total = sumSq;
+            for (long i = 0; i < count; i++)
+            {
+                Complex val = *(Complex*)(p + i * stride);
+                if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
+                {
+                    double dR = val.Real - meanR;
+                    double dI = val.Imaginary - meanI;
+                    total += dR * dR + dI * dI;
                 }
             }
             sumSq = total;

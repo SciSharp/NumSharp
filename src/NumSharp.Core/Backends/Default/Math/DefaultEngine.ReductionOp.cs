@@ -391,81 +391,58 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as tie-break).
-        /// A NaN in either component propagates: the first NaN-bearing element is returned VERBATIM
-        /// (matching NumPy's minimum/maximum, which return the NaN operand as-is — not (nan,nan)).
+        /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as
+        /// tie-break). A NaN in either component propagates — the FIRST NaN-bearing element (in
+        /// memory/iteration order) is returned VERBATIM, matching NumPy's minimum/maximum, which
+        /// return the NaN operand as-is (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan,0), not (nan,nan)).
+        ///
+        /// Routed through <see cref="ComplexMinMaxViaNpyIter"/> (struct-generic ExecuteReducing,
+        /// NPY_KEEPORDER) instead of the old per-element AsIterator: ~3.6× contiguous / ~8.6×
+        /// strided, AND a NumPy-parity fix — KEEPORDER visits elements in MEMORY order, so the NaN
+        /// element returned for a non-C-contiguous (e.g. transposed) array now matches NumPy's
+        /// reduce, which also propagates the memory-order-first NaN. The old AsIterator forced
+        /// C-order and returned the wrong NaN element for transposed multi-NaN inputs
+        /// (np.min(a.T) where a=[[1+1j,nan+5j,3+3j],[nan+7j,2+2j,4+4j]]: NumPy → (nan,5), old → (nan,7)).
         /// </summary>
-        private object MaxElementwiseComplexFallback(NDArray arr)
-        {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            var best = System.Numerics.Complex.Zero;
-            bool seenAny = false;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return v; // NumPy parity: the NaN-bearing operand is returned VERBATIM (not a
-                              // synthesized (nan,nan)); in a left-fold the FIRST NaN element wins and
-                              // stays, so returning v on the first NaN matches np.min/np.max exactly
-                              // (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan, 0), not (nan, nan)).
-                if (!seenAny
-                    || v.Real > best.Real
-                    || (v.Real == best.Real && v.Imaginary > best.Imaginary))
-                {
-                    best = v;
-                    seenAny = true;
-                }
-            }
-            return best;
-        }
+        private unsafe object MaxElementwiseComplexFallback(NDArray arr)
+            => ComplexMinMaxViaNpyIter(arr, isMin: false);
 
-        private object MinElementwiseComplexFallback(NDArray arr)
+        private unsafe object MinElementwiseComplexFallback(NDArray arr)
+            => ComplexMinMaxViaNpyIter(arr, isMin: true);
+
+        /// <summary>
+        /// Complex min/max via NpyIter's chunked EXTERNAL_LOOP in NPY_KEEPORDER. The accumulator's
+        /// Best holds either the lexicographic extremum or — once a NaN-bearing element is seen —
+        /// that element verbatim (the kernel aborts on the first NaN). Empty → (0,0), preserving the
+        /// prior AsIterator fallback (np.max/np.min of an empty array is guarded upstream).
+        /// </summary>
+        private static unsafe System.Numerics.Complex ComplexMinMaxViaNpyIter(NDArray arr, bool isMin)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            var best = System.Numerics.Complex.Zero;
-            bool seenAny = false;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return v; // NumPy parity: the NaN-bearing operand is returned VERBATIM (not a
-                              // synthesized (nan,nan)); in a left-fold the FIRST NaN element wins and
-                              // stays, so returning v on the first NaN matches np.min/np.max exactly
-                              // (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan, 0), not (nan, nan)).
-                if (!seenAny
-                    || v.Real < best.Real
-                    || (v.Real == best.Real && v.Imaginary < best.Imaginary))
-                {
-                    best = v;
-                    seenAny = true;
-                }
-            }
-            return best;
+            if (arr.size == 0) return System.Numerics.Complex.Zero;
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            var acc = isMin
+                ? iter.ExecuteReducing<ComplexMinKernel, ComplexMinMaxAccumulator>(default, default)
+                : iter.ExecuteReducing<ComplexMaxKernel, ComplexMinMaxAccumulator>(default, default);
+            return acc.Best;
         }
 
         /// <summary>
         ///     Boolean max == "any true" (logical OR). NumPy parity:
-        ///     <c>np.max([T,F,T])</c> → <c>True</c>. Short-circuits on first true.
+        ///     <c>np.max([T,F,T])</c> → <c>True</c>. Delegates to <see cref="Any(NDArray)"/>
+        ///     (the SIMD ReduceBool path, contig + strided) instead of a per-element
+        ///     AsIterator scan. Empty → False (np.max guards empty upstream).
         /// </summary>
         private object MaxElementwiseBooleanFallback(NDArray arr)
-        {
-            var iter = arr.AsIterator<bool>();
-            while (iter.HasNext())
-                if (iter.MoveNext()) return true;
-            return false;
-        }
+            => Any(arr);
 
         /// <summary>
         ///     Boolean min == "all true" (logical AND). NumPy parity:
-        ///     <c>np.min([T,F,T])</c> → <c>False</c>. Short-circuits on first false.
+        ///     <c>np.min([T,F,T])</c> → <c>False</c>. Delegates to <see cref="All(NDArray)"/>
+        ///     (the SIMD ReduceBool path, contig + strided) instead of a per-element
+        ///     AsIterator scan. Empty → True (np.min guards empty upstream).
         /// </summary>
         private object MinElementwiseBooleanFallback(NDArray arr)
-        {
-            var iter = arr.AsIterator<bool>();
-            while (iter.HasNext())
-                if (!iter.MoveNext()) return false;
-            return true;
-        }
+            => All(arr);
 
         /// <summary>
         /// Char max/min via uint16 min/max. char is unsigned 16-bit with a total order
@@ -522,96 +499,60 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback argmax for Half (IL kernel uses Bgt which doesn't work on Half struct).
-        /// NumPy: first occurrence of max; NaN propagates (argmax of array with NaN returns index of first NaN).
+        /// Fallback argmax/argmin for Half (the IL kernel uses OpCodes.Bgt/Blt which don't apply to
+        /// the Half struct). NumPy: first occurrence of the extremum; NaN propagates (argmax/argmin
+        /// of an array containing NaN returns the index of the first NaN).
+        ///
+        /// Routed through struct-generic ExecuteReducing with a running C-order index (~2× the old
+        /// per-element AsIterator). NPY_CORDER (NOT the KEEPORDER default) is mandatory: the
+        /// returned index must be the C-order flat position even for transposed/strided views.
         /// </summary>
-        private long ArgMaxHalfFallback(NDArray arr)
+        private unsafe long ArgMaxHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            long bestIdx = 0;
-            long idx = 0;
-            double best = (double)iter.MoveNext();
-            if (double.IsNaN(best)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return idx;
-                if (v > best) { best = v; bestIdx = idx; }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<HalfArgMaxKernel, HalfArgAccumulator>(
+                default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
-        private long ArgMinHalfFallback(NDArray arr)
+        private unsafe long ArgMinHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            long bestIdx = 0;
-            long idx = 0;
-            double best = (double)iter.MoveNext();
-            if (double.IsNaN(best)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return idx;
-                if (v < best) { best = v; bestIdx = idx; }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<HalfArgMinKernel, HalfArgAccumulator>(
+                default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
         /// <summary>
-        /// Fallback argmax for Complex using lexicographic comparison (real, then imag).
-        /// Returns index of first occurrence of the maximum (NumPy tiebreak semantics).
-        /// NaN propagates: a Complex value with NaN in either component "wins" argmax at its first occurrence.
+        /// Fallback argmax/argmin for Complex using lexicographic comparison (real, then imag).
+        /// Returns the C-order flat index of the first occurrence of the extremum (NumPy tiebreak
+        /// semantics). NaN propagates: a Complex value with NaN in either component "wins" at its
+        /// first occurrence.
+        ///
+        /// Routed through struct-generic ExecuteReducing with a running C-order index (~2× the old
+        /// per-element AsIterator). The iterator is built with NPY_CORDER (NOT the KEEPORDER
+        /// default): the returned index must be the C-order position, so traversal must follow
+        /// C-order even on transposed/strided views — matching the contract the IL arg kernels
+        /// already honor for the other dtypes, and NumPy (argmax(a.T) returns a C-order index).
         /// </summary>
-        private long ArgMaxComplexFallback(NDArray arr)
+        private unsafe long ArgMaxComplexFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            long bestIdx = 0;
-            long idx = 0;
-            var best = iter.MoveNext();
-            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
-                if (v.Real > best.Real || (v.Real == best.Real && v.Imaginary > best.Imaginary))
-                {
-                    best = v;
-                    bestIdx = idx;
-                }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<ComplexArgMaxKernel, ComplexArgAccumulator>(
+                default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
-        /// <summary>
-        /// Fallback argmin for Complex using lexicographic comparison (real, then imag).
-        /// NaN propagates: a Complex value with NaN in either component "wins" argmin at its first occurrence.
-        /// </summary>
-        private long ArgMinComplexFallback(NDArray arr)
+        private unsafe long ArgMinComplexFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            long bestIdx = 0;
-            long idx = 0;
-            var best = iter.MoveNext();
-            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
-                if (v.Real < best.Real || (v.Real == best.Real && v.Imaginary < best.Imaginary))
-                {
-                    best = v;
-                    bestIdx = idx;
-                }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<ComplexArgMinKernel, ComplexArgAccumulator>(
+                default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
         /// <summary>
@@ -671,10 +612,14 @@ namespace NumSharp.Backends
             long count = arr.size;
             var sumType = arr.GetTypeCode.GetAccumulatingType();
 
-            // Handle Complex separately - mean is Complex, not double
+            // Handle Complex separately - mean is Complex, not double.
+            // Reuse the one-pass SIMD Complex sum (ComplexReduceViaNpyIter, the
+            // same path np.sum takes) then divide — unifies the Complex sum path
+            // and picks up the Vector256 contiguous-chunk kernel. mean of a
+            // single element is handled by the scalar guard above.
             if (sumType == NPTypeCode.Complex)
             {
-                var sum = ExecuteElementReduction<System.Numerics.Complex>(arr, ReductionOp.Sum, sumType);
+                var sum = ComplexReduceViaNpyIter(arr, isProd: false);
                 return sum / count;
             }
 
@@ -778,23 +723,18 @@ namespace NumSharp.Backends
             double acc = isProd ? 1.0 : 0.0;
             if (arr.size == 0) return acc;
 
+            // Struct-generic ExecuteReducing — the accumulator stays in a register
+            // instead of the per-element *aux memory round-trip the ForEach delegate
+            // forced (~1.6× on 4M, both layouts). Half has no Vector<Half> in the BCL
+            // and the f16→f64 widen is the wall, so there is no SIMD/unroll win here;
+            // the gain is purely devirtualization + register accumulation. sum/prod
+            // are commutative ⇒ KEEPORDER's permuted traversal is value-equivalent
+            // modulo ULP. Contiguous inputs take TryHalfAccumulateContiguous upstream.
             using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
-            if (isProd)
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; double* a = (double*)aux;
-                    for (long i = 0; i < count; i++) *a *= (double)*(Half*)(p + i * st);
-                }, &acc);
-            else
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; double* a = (double*)aux;
-                    for (long i = 0; i < count; i++) *a += (double)*(Half*)(p + i * st);
-                }, &acc);
-            return acc;
+            return isProd
+                ? iter.ExecuteReducing<HalfProdKernel, double>(default, acc)
+                : iter.ExecuteReducing<HalfSumKernel, double>(default, acc);
         }
-
-        private struct HalfExtremaAccum { public double best; public bool seen; public bool nan; }
 
         /// <summary>
         /// Non-contiguous Half min/max via NpyIter's chunked EXTERNAL_LOOP. The min/max VALUE is
@@ -802,40 +742,24 @@ namespace NumSharp.Backends
         /// traversal is safe here — unlike argmin/argmax, whose returned index would shift under the
         /// permutation. Empty → ±inf (matching the prior iterator fallback); any NaN → NaN.
         /// Contiguous inputs take the direct-pointer scan upstream.
+        ///
+        /// Struct-generic ExecuteReducing (HalfMaxKernel/HalfMinKernel) replaces the ForEach
+        /// delegate: a 4-accumulator unroll on the contiguous inner chunk breaks the per-element
+        /// dependency chain (~1.3× on 4M) and the JIT inlines the kernel.
         /// </summary>
         private static unsafe object HalfMinMaxViaNpyIter(NDArray arr, bool isMin)
         {
             if (arr.size == 0)
                 return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
 
-            HalfExtremaAccum acc = default;
             using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
-            if (isMin)
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; var a = (HalfExtremaAccum*)aux;
-                    for (long i = 0; i < count; i++)
-                    {
-                        double v = (double)*(Half*)(p + i * st);
-                        if (double.IsNaN(v)) a->nan = true;
-                        else if (!a->seen || v < a->best) { a->best = v; a->seen = true; }
-                    }
-                }, &acc);
-            else
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; var a = (HalfExtremaAccum*)aux;
-                    for (long i = 0; i < count; i++)
-                    {
-                        double v = (double)*(Half*)(p + i * st);
-                        if (double.IsNaN(v)) a->nan = true;
-                        else if (!a->seen || v > a->best) { a->best = v; a->seen = true; }
-                    }
-                }, &acc);
+            var acc = isMin
+                ? iter.ExecuteReducing<HalfMinKernel, HalfMinMaxAccumulator>(default, default)
+                : iter.ExecuteReducing<HalfMaxKernel, HalfMinMaxAccumulator>(default, default);
 
-            if (acc.nan) return Half.NaN;
-            if (!acc.seen) return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
-            return (Half)acc.best;
+            if (acc.SawNaN) return Half.NaN;
+            if (!acc.Seen) return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
+            return (Half)acc.Best;
         }
 
         /// <summary>
@@ -849,20 +773,19 @@ namespace NumSharp.Backends
             var acc = isProd ? System.Numerics.Complex.One : System.Numerics.Complex.Zero;
             if (arr.size == 0) return acc;
 
+            // Struct-generic ExecuteReducing (devirtualized + inlined; the
+            // accumulator stays in a register instead of the per-element memory
+            // round-trip the ForEach delegate forced, and sum adds a
+            // Vector256<double> contiguous-chunk fast path) — measured ~2.4×
+            // (sum) / ~1.5× (prod) the prior ForEach(delegate) fold on 4M
+            // elements, both layouts. KEEPORDER (NpyIterRef.New default) keeps
+            // the inner chunk contiguous for transposed views too. Both ops are
+            // commutative, so the permuted traversal is value-equivalent modulo
+            // ULP-level rounding (same class as the codebase's pairwise sums).
             using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
-            if (isProd)
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; var a = (System.Numerics.Complex*)aux;
-                    for (long i = 0; i < count; i++) *a *= *(System.Numerics.Complex*)(p + i * st);
-                }, &acc);
-            else
-                iter.ForEach((dataptrs, strides, count, aux) =>
-                {
-                    byte* p = (byte*)dataptrs[0]; long st = strides[0]; var a = (System.Numerics.Complex*)aux;
-                    for (long i = 0; i < count; i++) *a += *(System.Numerics.Complex*)(p + i * st);
-                }, &acc);
-            return acc;
+            return isProd
+                ? iter.ExecuteReducing<ComplexProdKernel, System.Numerics.Complex>(default, acc)
+                : iter.ExecuteReducing<ComplexSumKernel, System.Numerics.Complex>(default, acc);
         }
 
         /// <summary>

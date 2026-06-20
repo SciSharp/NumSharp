@@ -321,62 +321,35 @@ namespace NumSharp.Backends
             }
         }
 
-        private static Half NanReduceScalarHalf(NDArray arr, ReductionOp op)
+        private static unsafe Half NanReduceScalarHalf(NDArray arr, ReductionOp op)
         {
-            var iter = arr.AsIterator<Half>();
+            // Struct-generic ExecuteReducing (NaN-skipping kernels), accumulating
+            // in double for precision then narrowing to Half — same semantics as
+            // the Float/Double scalar paths above, ~2.4× the old per-element
+            // AsIterator. min/max return Half.NaN when every element was NaN.
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
-                    double sum = 0.0; // Use double for precision
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                            sum += (double)val;
-                    }
-                    return (Half)sum;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return (Half)iter.ExecuteReducing<NanSumHalfKernel, double>(default, 0.0);
                 }
                 case ReductionOp.NanProd:
                 {
-                    double prod = 1.0; // Use double for precision
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                            prod *= (double)val;
-                    }
-                    return (Half)prod;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    return (Half)iter.ExecuteReducing<NanProdHalfKernel, double>(default, 1.0);
                 }
                 case ReductionOp.NanMin:
                 {
-                    Half minVal = Half.PositiveInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                        {
-                            if (val < minVal) minVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? minVal : Half.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMinHalfKernel, NanMinMaxDoubleAccumulator>(default, default);
+                    return accum.Found ? (Half)accum.Value : Half.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    Half maxVal = Half.NegativeInfinity;
-                    bool foundNonNaN = false;
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                        {
-                            if (val > maxVal) maxVal = val;
-                            foundNonNaN = true;
-                        }
-                    }
-                    return foundNonNaN ? maxVal : Half.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMaxHalfKernel, NanMinMaxDoubleAccumulator>(default, default);
+                    return accum.Found ? (Half)accum.Value : Half.NaN;
                 }
                 default:
                     throw new NotSupportedException($"Unsupported NaN reduction: {op}");
@@ -666,21 +639,17 @@ namespace NumSharp.Backends
         /// B15: NumPy-parity Complex nansum. Treats any element with NaN in real OR imag
         /// as zero (skipped). Sum type is Complex.
         /// </summary>
-        private NDArray NanSumComplex(NDArray arr, int? axis, bool keepdims)
+        private unsafe NDArray NanSumComplex(NDArray arr, int? axis, bool keepdims)
         {
             var shape = arr.Shape;
             if (shape.IsEmpty) return arr;
 
             if (axis == null)
             {
-                var sum = System.Numerics.Complex.Zero;
-                var iter = arr.AsIterator<System.Numerics.Complex>();
-                while (iter.HasNext())
-                {
-                    var v = iter.MoveNext();
-                    if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) continue;
-                    sum += v;
-                }
+                // Struct-generic NaN-skip Complex sum (~2.6× the old per-element AsIterator).
+                System.Numerics.Complex sum;
+                using (var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP))
+                    sum = iter.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
                 var r = NDArray.Scalar(sum);
                 if (keepdims)
                 {
@@ -704,14 +673,9 @@ namespace NumSharp.Backends
             do
             {
                 var slice = arr[slices];
-                var sum = System.Numerics.Complex.Zero;
-                var it = slice.AsIterator<System.Numerics.Complex>();
-                while (it.HasNext())
-                {
-                    var v = it.MoveNext();
-                    if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) continue;
-                    sum += v;
-                }
+                System.Numerics.Complex sum;
+                using (var it = NpyIterRef.New(slice, NpyIterGlobalFlags.EXTERNAL_LOOP))
+                    sum = it.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
                 // iterIndex is the FULL output coordinate (length == ret.ndim). Writing to
                 // iterIndex[0] alone only addressed the first axis, so for a >=3-D input the
                 // multi-D output left every position past the first row uninitialized

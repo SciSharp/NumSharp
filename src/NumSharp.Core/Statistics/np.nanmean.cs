@@ -44,7 +44,7 @@ namespace NumSharp
         /// <summary>
         /// Scalar fallback for nanmean - computes mean of all elements ignoring NaN.
         /// </summary>
-        private static NDArray nanmean_scalar(NDArray arr, bool keepdims)
+        private static unsafe NDArray nanmean_scalar(NDArray arr, bool keepdims)
         {
             object result;
 
@@ -68,39 +68,18 @@ namespace NumSharp
                 {
                     // Half nanmean returns Half (NumPy parity: np.nanmean(float16) -> float16).
                     // Accumulate in double for precision, convert result to Half.
-                    var iter = arr.AsIterator<Half>();
-                    double sum = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        Half val = iter.MoveNext();
-                        if (!Half.IsNaN(val))
-                        {
-                            sum += (double)val;
-                            count++;
-                        }
-                    }
-                    result = count > 0 ? (Half)(sum / count) : Half.NaN;
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMeanHalfKernel, NanMeanAccumulator>(default, default);
+                    result = accum.Count > 0 ? (Half)(accum.Sum / accum.Count) : Half.NaN;
                     break;
                 }
                 case NPTypeCode.Complex:
                 {
                     // Complex nanmean returns Complex. "NaN" = either real or imag is NaN.
-                    var iter = arr.AsIterator<Complex>();
-                    double sumR = 0.0, sumI = 0.0;
-                    long count = 0;
-                    while (iter.HasNext())
-                    {
-                        Complex val = iter.MoveNext();
-                        if (!double.IsNaN(val.Real) && !double.IsNaN(val.Imaginary))
-                        {
-                            sumR += val.Real;
-                            sumI += val.Imaginary;
-                            count++;
-                        }
-                    }
-                    result = count > 0
-                        ? new Complex(sumR / count, sumI / count)
+                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    var accum = iter.ExecuteReducing<NanMeanComplexKernel, NanMeanComplexAccumulator>(default, default);
+                    result = accum.Count > 0
+                        ? accum.Sum / accum.Count
                         : new Complex(double.NaN, double.NaN);
                     break;
                 }

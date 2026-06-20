@@ -65,13 +65,10 @@ namespace NumSharp.Backends
             }
             else
             {
-                using var iter = nd.AsIterator<Half>();
-                while (iter.HasNext())
-                {
-                    if (iter.MoveNext() == Half.Zero)
-                        return false;
-                }
-                return true;
+                // Struct-generic early-exit (~13× the old per-element AsIterator on
+                // strided inputs); NaN is truthy (== Half.Zero is false for NaN).
+                using var iter = NpyIterRef.New(nd, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                return iter.ExecuteReducing<HalfAllKernel, bool>(default, true);
             }
         }
 
@@ -95,13 +92,8 @@ namespace NumSharp.Backends
             }
             else
             {
-                using var iter = nd.AsIterator<System.Numerics.Complex>();
-                while (iter.HasNext())
-                {
-                    if (iter.MoveNext() == System.Numerics.Complex.Zero)
-                        return false;
-                }
-                return true;
+                using var iter = NpyIterRef.New(nd, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                return iter.ExecuteReducing<ComplexAllKernel, bool>(default, true);
             }
         }
 
