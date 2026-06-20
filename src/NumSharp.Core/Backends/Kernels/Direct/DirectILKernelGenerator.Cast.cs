@@ -107,6 +107,11 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
             var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);
             if (floatToInt32 != null) return floatToInt32;
+            // {f32,f64}->u32: AVX2 mod-2^32 reduce + range-shift (no AVX512). Bit-exact with
+            // NumPy's modular wrap (5e9->705032704, -1->4294967295, NaN/Inf/overflow->0). Was
+            // the deferred float->u32 "stays scalar" cell (~0.5-0.6x).
+            var floatToUInt32 = TryGetFloatToUInt32Kernel(srcType, dstType);
+            if (floatToUInt32 != null) return floatToUInt32;
             // NumPy-faithful cvtt+truncating-Narrow for float->{i8,u8,i16,u16,char} (Phase-0's
             // worst cells: f32->i8 was 0.09x). Bit-exact with Converts.To{Narrow}(double).
             var floatToNarrow = TryGetFloatToNarrowIntKernel(srcType, dstType);
@@ -166,10 +171,13 @@ namespace NumSharp.Backends.Kernels
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
             // f32->i32 strided: whole-array fused VPGATHERDD+cvtt (no Narrow). Same 4->4 same-width
-            // path the contig f32->i32 kernel covers, for strided rows. (u32 stays scalar — its NumPy
-            // modular-wrap semantics need a float->i64 convert / AVX512 to vectorize faithfully.)
+            // path the contig f32->i32 kernel covers, for strided rows.
             var fwiStrided = TryGetFloatToWideIntStridedKernel(srcType, dstType);
             if (fwiStrided != null) return fwiStrided;
+            // {f32,f64}->u32 strided: ss==1 contig bulk, ss!=1 VPGATHER + the AVX2 mod-2^32 kernel,
+            // scalar Converts tail. Bit-exact with the contig float->u32 kernel (same helpers).
+            var fuStrided = TryGetFloatToUInt32StridedKernel(srcType, dstType);
+            if (fuStrided != null) return fuStrided;
             // cvtt+truncating-Narrow strided for float->{i8,u8,i16,u16,char} (incl. char, which the
             // generic strided emitter rejects). Inner-contig rows run the Bulk; strided rows stage to
             // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
