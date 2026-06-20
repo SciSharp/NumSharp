@@ -58,21 +58,30 @@ namespace NumSharp.Backends.Kernels
                   14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
 
         /// <summary>
-        /// Strided <see cref="StridedCastKernel"/> for a SAME-TYPE 1-byte / 2-byte copy
-        /// (the sub-word <c>strided</c>/<c>negcol</c> cliff), or null. Cross-type and
-        /// 4/8/16-byte same-type copies return null and keep their existing fast paths
-        /// (4/8-byte are VPGATHER-eligible and already win; 16-byte dec/c128 already win).
+        /// Strided <see cref="StridedCastKernel"/> for a 1-byte / 2-byte cast that NumPy
+        /// performs as a pure BYTE COPY (so the deinterleave/reverse SIMD shuffle applies
+        /// verbatim), or null. Covers:
+        ///   * same-type sub-word (bool,u8,i8,i16,u16,char,f16) — the strided/negcol cliff;
+        ///   * same-size cross-type bit reinterprets: int↔int / char↔int16 (e.g. u8→i8,
+        ///     char→u16) and bool→{u8,i8} (bool is stored 0/1, so the int read == the cast).
+        /// Excluded (kept on their existing paths, value casts not bit copies): anything
+        /// touching Half cross-type (f16→int / int→f16 truncate), and X→bool (a !=0 compare,
+        /// except bool→bool). 4/8/16-byte copies return null (VPGATHER-eligible / already win).
         /// </summary>
         internal static unsafe StridedCastKernel TryGetSubwordCopyStridedKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Avx2.IsSupported) return null;
-            if (srcType != dstType) return null;
-            switch (GetTypeSize(srcType))
+            int sz = GetTypeSize(srcType);
+            if (sz != GetTypeSize(dstType)) return null;        // same byte width only
+            if (sz != 1 && sz != 2) return null;
+            if (srcType != dstType)
             {
-                case 1: return SubwordCopyStrided1B;
-                case 2: return SubwordCopyStrided2B;
-                default: return null;
+                // Cross-type: only same-size pure bit reinterprets. Half↔int is a value
+                // cast; X→bool (src≠bool) is a !=0 compare — both keep their own kernels.
+                if (srcType == NPTypeCode.Half || dstType == NPTypeCode.Half) return null;
+                if (dstType == NPTypeCode.Boolean) return null;
             }
+            return sz == 1 ? SubwordCopyStrided1B : SubwordCopyStrided2B;
         }
 
         // Outer-dim odometer (innermost-first incremental offset, element strides) — same
