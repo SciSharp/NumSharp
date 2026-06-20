@@ -127,16 +127,13 @@ namespace NumSharp.Backends
                 slices[d] = (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1)
                     ? Slice.Index(0)
                     : Slice.All;
-            var unique = arr[slices];
 
-            // Reduce on CONTIGUOUS data. When the broadcast wraps a strided/offset view
-            // (e.g. broadcast_to(a["1:-1,1:-1"], …)), the unique slice is itself strided, and
-            // some flat-reduction kernels mishandle strided inputs (a pre-existing sub-word
-            // prod bug: np.prod over a strided view returns 0). The prior per-axis fold always
-            // finished on a fresh contiguous intermediate; preserve that invariant with an
-            // O(unique) copy — cheap, and a no-op for the common case (the canary's unique row
-            // is already contiguous, so this never copies on the hot path).
-            return unique.Shape.IsContiguous ? unique : unique.copy();
+            // No copy: the unique slice may be strided (e.g. broadcast_to(a["1:-1,1:-1"], …)),
+            // but the reduction below routes a non-contiguous input through NpyIter, which
+            // handles strided/offset views correctly and fast (coalesce + axis-permute by
+            // stride). The sub-word strided-prod overflow a copy used to dodge is now fixed at
+            // its root (NpyIter.DetermineAccumulatorType delegates to GetAccumulatingType).
+            return arr[slices];
         }
 
         /// <summary>

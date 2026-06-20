@@ -837,18 +837,16 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         private static NPTypeCode DetermineAccumulatorType(NPTypeCode src, ReductionOp op, Type result)
         {
-            // Sum/Prod/CumSum widen integer inputs to int64/uint64.
+            // Sum/Prod/CumSum/CumProd widen integers to int64/uint64. Delegate to the canonical
+            // GetAccumulatingType (NumPy 2.x widening) — the SAME map the direct reduction path
+            // uses — so this NpyIter path can never drift from it. A hand-rolled switch here had
+            // drifted: it dropped SByte and Char entirely (they fell through to the input dtype,
+            // so a strided sub-word PROD accumulated in 1/2 bytes and OVERFLOWED — np.prod over a
+            // strided sbyte/char view returned garbage/0), and mis-widened Byte to Int64 instead
+            // of UInt64.
             if (op == ReductionOp.Sum || op == ReductionOp.Prod ||
                 op == ReductionOp.CumSum || op == ReductionOp.CumProd)
-            {
-                return src switch
-                {
-                    NPTypeCode.Boolean => NPTypeCode.Int64,
-                    NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.Int32 => NPTypeCode.Int64,
-                    NPTypeCode.UInt16 or NPTypeCode.UInt32 => NPTypeCode.UInt64,
-                    _ => src,
-                };
-            }
+                return src.GetAccumulatingType();
             // Mean/Var/Std always compute in double.
             if (op == ReductionOp.Mean || op == ReductionOp.Var || op == ReductionOp.Std)
                 return NPTypeCode.Double;
