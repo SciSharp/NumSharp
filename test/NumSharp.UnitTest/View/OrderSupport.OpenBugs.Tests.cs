@@ -1973,13 +1973,25 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [OpenBugs] // np.sort is missing from NumSharp (listed in docs/CLAUDE.md Missing Functions).
-                   // NumPy: np.sort(arr) returns a sorted copy; axis=-1 by default.
-                   // Workaround: argsort + fancy-index, but layout semantics diverge.
+        [TestCategory("Fixed")] // np.sort implemented (NpyIter IterAllButAxis + radix line kernel).
         public void Sort_ApiGap()
         {
-            // NumPy: np.sort(np.array([3,1,2])) == [1,2,3]
-            false.Should().BeTrue("np.sort is not implemented — only argsort exists");
+            // NumPy: np.sort(np.array([3,1,2])) == [1,2,3] (returns a sorted COPY; axis=-1 default).
+            var a = np.array(new[] { 3, 1, 2 });
+            var s = np.sort(a);
+            s.GetInt32(0).Should().Be(1);
+            s.GetInt32(1).Should().Be(2);
+            s.GetInt32(2).Should().Be(3);
+            // original is unchanged (copy semantics)
+            a.GetInt32(0).Should().Be(3, "np.sort returns a copy, leaving the input untouched");
+
+            // axis sort: np.sort([[3,1,2],[6,5,4]], axis=1) == [[1,2,3],[4,5,6]]
+            var m = np.array(new[,] { { 3, 1, 2 }, { 6, 5, 4 } });
+            var ms = np.sort(m, 1);
+            ms.GetInt32(0, 0).Should().Be(1);
+            ms.GetInt32(0, 2).Should().Be(3);
+            ms.GetInt32(1, 0).Should().Be(4);
+            ms.GetInt32(1, 2).Should().Be(6);
         }
 
         // ============================================================================
