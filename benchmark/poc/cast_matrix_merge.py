@@ -71,7 +71,11 @@ if _lag:
           "(`[:, ::2]`) layout + 1M per-call overhead, not the kernel.\n")
 else:
     print("All float/complex→narrow families now win geomean — the SIMD cvtt+`Vector.Narrow` kernels "
-          "(Waves 1-3) closed the cliff across every layout.\n")
+          "closed that cliff across every layout. The f16 DST column (Giesen float→f16 narrow + "
+          "round-to-odd double→f16, Waves 11/11b) went from the matrix's only losing column (0.78) to a "
+          "top winner; c128→{narrow,bool} (Waves 10/14) and the F-contig same-type copy double-transpose "
+          "(Wave 12) are likewise closed. Residual lag is float/c128→u32/u64 (AVX512-gated), u64→f16 "
+          "(no AVX2 i64→f32), 1M-allocation-bound same-type copies, and 2-byte→bool/narrow strided.\n")
 
 print("## Geomean by layout (all src×dst, excl. Decimal)\n")
 print("| " + " | ".join(LAYS) + " |")
