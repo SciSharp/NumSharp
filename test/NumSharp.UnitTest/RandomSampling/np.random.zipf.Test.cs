@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.zipf(2, 10000);
 
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
             {
                 Assert.IsTrue(val >= 1L, $"Zipf values should be >= 1, got {val}");
             }
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.zipf(2, 10000);
             long min = long.MaxValue;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
             {
                 if (val < min) min = val;
             }
@@ -75,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.zipf(2000, 100);
 
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
             {
                 Assert.AreEqual(1L, val, "For large a, all values should be 1");
             }
@@ -174,7 +174,7 @@ namespace NumSharp.UnitTest.RandomSampling
             // From NumPy: sample = mt19937.zipf(10000, size=n); assert_array_equal(sample, np.ones(n, dtype=np.int64))
             int n = 8;
             var sample = np.random.zipf(10000, n);
-            foreach (var val in sample.AsIterator<long>())
+            foreach (var val in sample.AsElements<long>())
             {
                 Assert.AreEqual(1L, val, "zipf(10000) should return all 1s");
             }
@@ -206,11 +206,11 @@ namespace NumSharp.UnitTest.RandomSampling
 
             // Small a should have larger mean (more big values)
             double smallMean = 0;
-            foreach (var v in smallA.AsIterator<long>()) smallMean += v;
+            foreach (var v in smallA.AsElements<long>()) smallMean += v;
             smallMean /= smallA.size;
 
             double largeMean = 0;
-            foreach (var v in largeA.AsIterator<long>()) largeMean += v;
+            foreach (var v in largeA.AsElements<long>()) largeMean += v;
             largeMean /= largeA.size;
 
             // Large a distribution should be more concentrated near 1

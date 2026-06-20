@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.wald(0.1, 0.1, 10000);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThan(0.0);
             }

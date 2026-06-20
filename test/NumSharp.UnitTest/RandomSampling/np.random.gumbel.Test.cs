@@ -80,7 +80,7 @@ namespace NumSharp.UnitTest.RandomSampling
             double loc = 5.0;
             var samples = np.random.gumbel(loc, 0.0, 5);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.AreEqual(loc, val, $"All values should be {loc} when scale=0");
             }
@@ -147,7 +147,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.gumbel(0, 1, 10000);
 
             bool hasNegative = false;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 if (val < 0)
                 {

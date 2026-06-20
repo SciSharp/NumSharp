@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.standard_exponential(10000L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.IsTrue(val > 0.0, $"Standard exponential values should be > 0, got {val}");
             }
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.standard_exponential(100000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
                 mean += val;
             mean /= samples.size;
 
@@ -77,12 +77,12 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.standard_exponential(100000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
                 mean += val;
             mean /= samples.size;
 
             double variance = 0;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
                 variance += (val - mean) * (val - mean);
             variance /= samples.size;
 
@@ -144,7 +144,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.standard_exponential(100000L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.IsFalse(double.IsInfinity(val), "Should not produce infinity");
                 Assert.IsFalse(double.IsNaN(val), "Should not produce NaN");
@@ -174,7 +174,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.standard_exponential(1000L);
 
             var minVal = double.MaxValue;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 if (val < minVal) minVal = val;
             }

@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             var samples = np.random.rayleigh(0.0, 5L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.AreEqual(0.0, val, "All values should be 0 when scale=0");
             }
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.rayleigh(1, 10000L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.IsTrue(val >= 0.0, $"Rayleigh values should be non-negative, got {val}");
             }

@@ -90,7 +90,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.f(5, 10, 10000);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
                 Assert.IsTrue(val > 0, $"Value {val} should be positive");
         }
 

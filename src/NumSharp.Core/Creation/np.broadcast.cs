@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -18,7 +19,7 @@ namespace NumSharp
         {
             private readonly NDArray _op1;
             private readonly NDArray _op2;
-            private NDIterator[] _iters;
+            private NpyFlatIterator[] _iters;
 
             /// <summary>
             ///     Parameterless constructor retained for source/binary compatibility
@@ -41,16 +42,21 @@ namespace NumSharp
             public int index => throw new NotSupportedException("NumSharp does not implement iterators exactly like numpy does.");
 
             /// <summary>
-            ///     Per-operand iterators (NumPy's <c>broadcast.iters</c>). Built lazily
-            ///     on first access: <see cref="broadcast"/> only resolves the broadcast
-            ///     <see cref="shape"/> eagerly, so the common shape/size/ndim usage
-            ///     allocates no iterators at all. Each entry is an <see cref="NDIterator"/>
-            ///     (itself NpyIter-backed).
+            ///     Per-operand flat iterators (NumPy's <c>broadcast.iters</c>): one entry per input,
+            ///     each iterating that operand broadcast to the result <see cref="shape"/> in C-order
+            ///     (e.g. np.broadcast([1,2,3], [[10],[20]]).iters[0] yields 1,2,3,1,2,3). Built lazily
+            ///     on first access — np.broadcast() only resolves the shape eagerly — and backed by
+            ///     <see cref="np.broadcast_to(NDArray, Shape)"/> + <see cref="NpyFlatIterator"/>, the
+            ///     NpyIter-aligned replacement for the removed NDIterator.
             /// </summary>
-            public NDIterator[] iters
+            public NpyFlatIterator[] iters
             {
                 get => _iters ??= (_op1 is not null && _op2 is not null)
-                    ? new[] { _op1.AsIterator(), _op2.AsIterator() }
+                    ? new[]
+                    {
+                        new NpyFlatIterator(broadcast_to(_op1, shape)),
+                        new NpyFlatIterator(broadcast_to(_op2, shape)),
+                    }
                     : null;
                 internal set => _iters = value;
             }
@@ -62,14 +68,6 @@ namespace NumSharp
 
             public int ndim => shape.NDim;
             public long size => shape.size;
-
-            void reset()
-            {
-                if (_iters == null)
-                    return;
-                for (int i = 0; i < ndim; i++)
-                    _iters[i].Reset();
-            }
         }
     }
 }

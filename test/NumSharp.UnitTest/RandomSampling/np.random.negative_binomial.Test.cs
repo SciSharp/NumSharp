@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.negative_binomial(10, 0.5, 10000L);
 
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
             {
                 Assert.IsTrue(val >= 0L, $"Negative binomial values should be >= 0, got {val}");
             }
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.negative_binomial(10, 0.5, 100000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
                 mean += val;
             mean /= samples.size;
 
@@ -80,12 +80,12 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.negative_binomial(10, 0.5, 100000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
                 mean += val;
             mean /= samples.size;
 
             double variance = 0;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
                 variance += (val - mean) * (val - mean);
             variance /= samples.size;
 
@@ -99,7 +99,7 @@ namespace NumSharp.UnitTest.RandomSampling
             // p=1 means immediate success, so 0 failures
             var samples = np.random.negative_binomial(10, 1.0, 10L);
 
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
             {
                 Assert.AreEqual(0L, val, "p=1 should produce all 0s (0 failures)");
             }
@@ -113,7 +113,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.negative_binomial(10, 0.9, 1000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
                 mean += val;
             mean /= samples.size;
 
@@ -129,7 +129,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.negative_binomial(10, 0.1, 1000L);
 
             double mean = 0;
-            foreach (var val in samples.AsIterator<long>())
+            foreach (var val in samples.AsElements<long>())
                 mean += val;
             mean /= samples.size;
 

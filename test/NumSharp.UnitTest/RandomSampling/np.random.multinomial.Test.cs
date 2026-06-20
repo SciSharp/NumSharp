@@ -71,7 +71,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var result = rng.multinomial(100, DicePvals, 100);
 
-            foreach (var val in result.AsIterator<int>())
+            foreach (var val in result.AsElements<int>())
             {
                 val.Should().BeGreaterThanOrEqualTo(0);
             }
@@ -103,7 +103,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var result = rng.multinomial(0, DicePvals);
 
-            foreach (var val in result.AsIterator<int>())
+            foreach (var val in result.AsElements<int>())
             {
                 val.Should().Be(0);
             }

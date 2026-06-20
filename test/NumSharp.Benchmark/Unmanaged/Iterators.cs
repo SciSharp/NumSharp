@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using NumSharp.Backends;
@@ -11,16 +11,21 @@ namespace NumSharp.Benchmark.Unmanaged
 {
     //|            Method |       Mean |    Error |   StdDev |     Median |        Min |        Max | Ratio | RatioSD |
     //|------------------ |-----------:|---------:|---------:|-----------:|-----------:|-----------:|------:|--------:|
-    //| OffsetIncrementor | 1,049.5 us | 6.060 us | 82.25 us | 1,030.6 us | 1,006.9 us | 2,119.3 us |  1.42 |    0.15 |
+    //|        GetAtIndex |        ... |      ... |      ... |        ... |        ... |        ... |   ... |     ... |
     //|         GetOffset |   745.3 us | 6.163 us | 83.64 us |   728.0 us |   685.1 us | 2,746.7 us |  1.00 |    0.00 |
 
+    // NDIterator (the legacy per-element offset incrementor benchmarked here as
+    // "OffsetIncrementor") has been removed in favor of NpyIter/NpyIterRef. NpyIterRef
+    // is a ref struct and cannot be held in a [GlobalSetup] field, so the flat walk is
+    // now measured through NDArray.GetAtIndex — the public C-order element accessor that
+    // replaced AsIterator in ToString and np.broadcast(...).iters — against coordinate
+    // GetOffset access.
     [SimpleJob(RunStrategy.ColdStart, targetCount: 2000)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     [HtmlExporter]
     public class Iterators
     {
         private Shape shape;
-        private NDIterator<int> iter;
         private NDArray ndarray;
 
         [GlobalSetup]
@@ -30,22 +35,14 @@ namespace NumSharp.Benchmark.Unmanaged
             var __ = InfoOf<byte>.Size;
             shape = new Shape(2, 1, 50_000);
             ndarray = np.array(Enumerable.Range(0, 100_000).ToArray()).reshape(ref shape);
-            iter = new NDIterator<int>((IMemoryBlock<int>)ndarray.Array, shape, null);
-        }
-
-        [IterationCleanup]
-        public void Reset()
-        {
-            iter.Reset();
         }
 
         [Benchmark]
-        public void OffsetIncrementor()
+        public void GetAtIndex()
         {
-            var next = iter.MoveNext;
-            for (int i = 0; i < 100_000; i++)
+            for (long i = 0; i < 100_000; i++)
             {
-                next();
+                ndarray.GetAtIndex(i);
             }
         }
 

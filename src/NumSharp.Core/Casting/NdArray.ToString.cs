@@ -56,11 +56,18 @@ namespace NumSharp
                 if (typecode == NPTypeCode.Char)
                 {
                     s.Append("\"");
-                    s.Append(string.Join("", this.AsIterator<char>()));
+                    for (long i = 0; i < this.size; i++)
+                        s.Append((char)GetAtIndex(i));
                     s.Append("\"");
                 }
                 else
-                    s.Append(string.Join(", ", this.AsIterator().Cast<object>().Select(v => v.ToString())));
+                {
+                    for (long i = 0; i < this.size; i++)
+                    {
+                        if (i > 0) s.Append(", ");
+                        s.Append(GetAtIndex(i)?.ToString());
+                    }
+                }
 
                 s.Append("]");
                 return;

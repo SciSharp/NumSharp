@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
+            ret.flat.AsElements<int>().ToArray().Should().BeEquivalentTo(new long[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
         }
 
         [TestMethod]
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var b = np.full(new Shape(3, 3), 2);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(12).And.HaveCount(1);
+            ret.flat.AsElements().Cast<object>().Distinct().ToArray().Should().Contain(12).And.HaveCount(1);
         }
 
         [TestMethod]
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 5, 14, 23 });
+            ret.flat.AsElements<int>().ToArray().Should().BeEquivalentTo(new long[] { 5, 14, 23 });
         }
 
         [TestMethod]
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var b = np.full(new Shape(3), 3);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(18).And.HaveCount(1);
+            ret.flat.AsElements().Cast<object>().Distinct().ToArray().Should().Contain(18).And.HaveCount(1);
         }
 
         [TestMethod]
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
+            ret.flat.AsElements<int>().ToArray().Should().BeEquivalentTo(new long[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
         }
 
         [TestMethod]
@@ -99,7 +99,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             var b = np.full(new Shape(1, 3), 2);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(4).And.HaveCount(1);
+            ret.flat.AsElements().Cast<object>().Distinct().ToArray().Should().Contain(4).And.HaveCount(1);
         }
 
         [TestMethod]

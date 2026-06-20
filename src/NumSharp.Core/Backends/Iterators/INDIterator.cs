@@ -7,10 +7,13 @@ namespace NumSharp
     public delegate ref T MoveNextReferencedDelegate<T>() where T : unmanaged;
 
     /// <summary>
-    /// Non-generic NDIterator surface, preserved so that <see cref="np.Broadcast.iters"/>
-    /// can expose iterators of mixed element types as a single array. Concrete
-    /// implementations live in <see cref="NDIterator{TOut}"/>.
+    ///     REMOVED. The legacy per-element NDIterator has been retired. Kernel iteration now
+    ///     goes through <c>NpyIter</c>/<c>NpyIterRef</c>, and <see cref="np.Broadcast.iters"/> is
+    ///     backed by <see cref="NumSharp.Backends.Iteration.NpyFlatIterator"/>. This interface is
+    ///     kept only as an <see cref="ObsoleteAttribute"/> tombstone for source/binary compatibility;
+    ///     the sole implementation (<see cref="NDIterator{TOut}"/>) throws on every member.
     /// </summary>
+    [Obsolete("NDIterator has been removed. Use NpyIter/NpyIterRef for kernels, iterate the NDArray directly, or np.broadcast(...).iters (NpyFlatIterator).", false)]
     public interface NDIterator : IEnumerable
     {
         IMemoryBlock Block { get; }

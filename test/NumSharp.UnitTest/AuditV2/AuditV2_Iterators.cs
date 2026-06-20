@@ -280,50 +280,27 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.25 — NDIterator broadcast constructor produces wrong strides → OOM
-    // or reads past source storage.
-    // File: src/NumSharp.Core/Backends/Iterators/NDIterator.cs:85-112
-    //
-    // Calls UnmanagedStorage.CreateBroadcastedUnsafe(srcSlice, effShape) which
-    // sets shape=effShape but strides=C-order strides for effShape (not stride=0
-    // for broadcast axes). The iterator then reads effShape.size elements off a
-    // buffer that only has shape.size elements.
+    // T1.25 — FIXED. The old NDIterator broadcast constructor produced wrong
+    // strides (C-order on the broadcast shape instead of stride=0), reading
+    // past the source buffer. NDIterator has been removed; the broadcast
+    // iterator is now np.broadcast_to + NpyFlatIterator (np.broadcast(...).iters),
+    // which yields the correct cyclic broadcast.
     // =====================================================================
     /// <summary>
-    /// T1.25 — NDIterator broadcast constructor must produce a broadcast view
-    /// with stride=0 on the broadcast dimensions, NOT C-order strides on the
-    /// effective shape (which would read past the source buffer).
-    ///
-    /// NumPy 2.4.2: np.broadcast_to([1,2,3], (4,3)).flatten() == [1,2,3,1,2,3,1,2,3,1,2,3].
-    /// NumSharp: reads random/uninitialized memory after element 3 because
-    /// the iterator strides are C-order on the broadcast shape (12, 24) instead
-    /// of (0, 8) for the broadcast.
+    /// T1.25 — Broadcasting [1,2,3] to (4,3) and iterating flat must yield 4
+    /// cycles of [1,2,3] (stride=0 on the broadcast axis), per NumPy 2.4.2:
+    /// np.broadcast_to([1,2,3], (4,3)).flatten() == [1,2,3,1,2,3,1,2,3,1,2,3].
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.25")]
-    public void T1_25_NDIterator_Broadcast_Constructor_Must_Produce_Cyclic_Values()
+    [TestMethod]
+    public void T1_25_Broadcast_Iter_Must_Produce_Cyclic_Values()
     {
         var smaller = np.array(new long[] { 1, 2, 3 });
-        var bigger = new Shape(new int[] { 4, 3 });
+        var view = np.broadcast_to(smaller, new Shape(4, 3));
 
-        using var it = new NDIterator<long>(
-            smaller.Storage.InternalArray,
-            smaller.Shape,
-            bigger,
-            autoReset: false);
-
-        it.size.Should().Be(12L);
-
-        var observed = new List<long>();
-        int safety = 0;
-        while (it.HasNext())
-        {
-            observed.Add(it.MoveNext());
-            if (++safety > 20) break;
-        }
-
-        observed.Should().Equal(
+        view.size.Should().Be(12L);
+        view.AsElements<long>().Should().Equal(
             new long[] { 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3 },
-            "NDIterator over broadcast shape (4,3) of [1,2,3] must yield 4 cycles of [1,2,3] (NumPy semantics)");
+            "broadcast_to((4,3)) of [1,2,3] must yield 4 cycles of [1,2,3] (NumPy semantics)");
     }
 
     // =====================================================================

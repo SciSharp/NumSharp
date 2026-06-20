@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.standard_t(10, 100000L);
 
             int negCount = 0, posCount = 0;
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 if (val < 0) negCount++;
                 else if (val > 0) posCount++;

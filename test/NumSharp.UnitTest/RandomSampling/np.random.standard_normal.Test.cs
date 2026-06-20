@@ -166,7 +166,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.standard_normal(1000);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.IsTrue(val > -10 && val < 10,
                     $"Value {val} is outside reasonable range for standard normal");
