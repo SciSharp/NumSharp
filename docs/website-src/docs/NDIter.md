@@ -377,13 +377,15 @@ This is also the link to `PARALLEL_SAFE`: the same forced-copy machinery that ma
 
 ## Iteration Mechanics
 
-Three flavors of `iternext` exist, and `GetIterNext()` returns the right one for the current flag set:
+`GetIterNext()` returns the advance function for the current flag set. For unbuffered iteration there are three:
 
 | Flavor | Picked when | Behavior |
 |--------|-------------|----------|
 | `SingleIterationNext` | `ONEITERATION` | One shot, done |
 | `ExternalLoopNext` | `EXLOOP` | Advance *outer* coords only; inner dim is the caller's problem |
 | `StandardNext` | otherwise | Full ripple-carry advance, one element at a time |
+
+Buffered iteration adds two more: `BufferedNext` (windowed, with `EXTERNAL_LOOP`) jumps a whole buffer fill per call, and `BufferedElementNext` (without `EXTERNAL_LOOP`) walks the buffer one element at a time, refilling at the window edge. A buffered reduction uses the double-loop advance instead — see [Buffering](#buffering) and [Buffered Reduction](#buffered-reduction-the-double-loop).
 
 `state.Advance()` is the ripple-carry primitive. For each axis from innermost to outermost:
 
@@ -409,7 +411,8 @@ Ideally the inner loop processes many elements per `iternext` call. The iterator
 long* size = iter.GetInnerLoopSizePtr();
 ```
 
-- When `BUFFER` is set: returns `&state.BufIterEnd` (whatever fit in the current buffer fill).
+- Windowed buffered (`BUFFER`, no `REDUCE`): returns `&state.BufTransferSize` — the element count of the current buffer fill (NumPy's `NBF_SIZE`).
+- Buffered reduction (`BUFFER + REDUCE`): returns `&state.BufIterEnd`, which the double-loop uses as the inner-loop count.
 - Otherwise: returns `&state.Shape[NDim-1]` (the innermost dimension size).
 
 With `EXTERNAL_LOOP` set and the array coalesced to 1-D, one `iternext` call returns the entire array size — a single kernel invocation processes everything.
