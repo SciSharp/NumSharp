@@ -238,9 +238,8 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static bool DivergesFromNumpyCast(NPTypeCode src, NPTypeCode dst)
         {
-            if (dst == NPTypeCode.UInt64 &&
-                (src == NPTypeCode.SByte || src == NPTypeCode.Int16 || src == NPTypeCode.Int32))
-                return true;
+            // (Probing whether the signed->UInt64 widen rejection is stale — generic widen
+            // sign-extends via the source-typed Vector.WidenLower/Upper, identical bits to ->Int64.)
             return false;
         }
 
