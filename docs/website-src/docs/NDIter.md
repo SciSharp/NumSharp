@@ -15,6 +15,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 - [Iterator State](#iterator-state)
 - [Construction](#construction)
 - [Coalescing, Reordering, and Flipping](#coalescing-reordering-and-flipping)
+- [Memory Overlap and COPY_IF_OVERLAP](#memory-overlap-and-copy_if_overlap)
 - [Iteration Mechanics](#iteration-mechanics)
 - [Buffering](#buffering)
 - [Buffered Reduction: The Double Loop](#buffered-reduction-the-double-loop)
@@ -43,6 +44,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
       - [When to use Tier 3C](#when-to-use-tier-3c)
 - [Path Detection](#path-detection)
 - [Worked Examples](#worked-examples)
+- [What Routes Through NpyIter Today](#what-routes-through-npyiter-today)
 - [Performance](#performance)
   - [JIT Warmup Caveat](#jit-warmup-caveat)
   - [Implementation Notes](#implementation-notes)
@@ -117,9 +119,14 @@ The public struct is cheap to pass around; the heavy state lives behind one poin
 | `NpyIterCoalescing.cs` | `CoalesceAxes`, `ReorderAxesForCoalescing`, `FlipNegativeStrides` |
 | `NpyIterCasting.cs` | Safe/same-kind/unsafe cast rules, `ConvertValue`, `FindCommonDtype` |
 | `NpyIterBufferManager.cs` | Aligned buffer allocation, copy-in/copy-out, `GROWINNER`, `BUF_REUSABLE` |
-| `NpyIterKernels.cs` | Abstract kernel interfaces (`INpyIterKernel`, path selectors) |
-| `NpyAxisIter.cs`, `NpyAxisIter.State.cs` | Specialized axis-reduction iterator (simpler API, fewer features) |
-| `NpyLogicalReductionKernels.cs` | Generic boolean/numeric axis-reduction kernel structs |
+| `NpyIter.Reduce.cs` | `NewReduce` — builds the reduction iterator (stride-ordered `op_axes`, stride-0 output axis) |
+| `NpyIter.Execution.Custom.cs` | Custom-op tiers: `ExecuteRawIL` (3A), `ExecuteElementWise` (3B), `ExecuteExpression` (3C) |
+| `NpyMemOverlap.cs` | Diophantine memory-overlap solver for `COPY_IF_OVERLAP` (port of NumPy's `mem_overlap.c`) |
+| `NpyExpr.cs`, `NpyExpr.Typing.cs`, `NpyExpr.Evaluate.cs` | Tier 3C / `np.evaluate` expression tree, per-node NEP50 typing, lowering to one pass |
+| `NpyScalarReductionKernels.cs`, `NpyNanReductionKernels.cs` | Half/Complex + NaN-aware scalar (axis=None) reduction kernel structs |
+| `NpyAxisIter.cs`, `NpyAxisIter.State.cs` | Legacy single-axis reduction iterator (var/std/cumsum/cumprod; being retired) |
+| `NpyLogicalReductionKernels.cs` | `All`/`Any` reduction kernels (live); the generic numeric axis structs here are unused legacy |
+| `NpyIterKernels.cs` | Early path-selector framework (`INpyIterKernel`); **placeholder — not on the live execution path** |
 
 ---
 
@@ -140,6 +147,7 @@ Other deliberate differences:
 - **Element strides everywhere internally.** NumPy stores byte strides in `NAD_STRIDES`. NumSharp stores element strides in `state.Strides` and multiplies by `ElementSizes[op]` at use. This matches NumSharp's `Shape.strides` convention.
 - **No Python object support.** `REFS_OK`, garbage collection hooks, and `NpyIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
 - **Int64 indexing.** Every iteration counter is `long`. Arrays > 2 GB are first-class, unlike NumPy which still uses `npy_intp` (platform-dependent).
+- **NumSharp-only iterator flags.** `PARALLEL_SAFE` marks an iteration range as splittable across workers with no write hazard — set when there is no `REDUCE` operand and at most one write operand whose overlap was resolved by `COPY_IF_OVERLAP`. It has no NumPy equivalent. The `RANGED` machinery (`ResetToIterIndexRange`) for sub-range iteration also exists but has no production consumer yet; both are groundwork for an opt-in parallel `ForEach`, deliberately held back to keep results bit-stable.
 
 ---
 
@@ -332,6 +340,41 @@ The effect: a reversed slice still iterates contiguous memory in ascending order
 ### Interaction with MULTI_INDEX and HASINDEX
 
 If `MULTI_INDEX` is set we **reorder but don't coalesce** — coalescing would lose the mapping from internal to original axes. Same for `C_INDEX`/`F_INDEX`, which need original axis structure to compute the flat index.
+
+---
+
+## Memory Overlap and COPY_IF_OVERLAP
+
+When an output operand shares memory with an input — `np.add(a, a, out=a)`, `b[1:] += b[:-1]`, a transposed view written back over its source — a naive iterator can clobber input elements before they're read, producing undefined results. NumPy guards this with `NPY_ITER_COPY_IF_OVERLAP`; NumSharp ports the guard, solver and all.
+
+### The flag's contract
+
+Pass `NpyIterGlobalFlags.COPY_IF_OVERLAP` and, for each **write** operand, the constructor checks it against every **read** operand. If they may share memory, the write operand is replaced with a fresh C-order temporary; the kernel writes into the temp, and the temp is copied back over the original when the iterator is disposed. Read operands are never copied — only the writers that would corrupt a reader. This runs in `Initialize` *before* the ALLOCATE step, so an iterator-allocated output can never be made to overlap an input.
+
+### The overlap solver (`NpyMemOverlap.cs`)
+
+"May these two views share memory?" is not the bounding-box question it looks like. `a[::2]` and `a[1::2]` occupy the *same* address range yet never touch the same byte. The exact test is a bounded Diophantine equation — the two arrays overlap iff
+
+```
+Σ strideₐ·xₐ − Σ strideᵦ·xᵦ = baseᵦ − baseₐ      (0 ≤ x[i] < shape[i])
+```
+
+has an integer solution. `NpyMemOverlap` is a faithful port of NumPy's `numpy/_core/src/common/mem_overlap.c` (Pauli Virtanen's solver), with `System.Int128` standing in for NumPy's `npy_extint128.h`:
+
+1. **Bounds quick-check.** `GetMemoryExtents` computes each array's half-open `[start, end)` byte range. Disjoint ranges → `No` overlap, no further work (this is NumPy's `MAY_SHARE_BOUNDS`, i.e. `maxWork == 0`).
+2. **Diophantine solve.** Overlapping bounds fall through to `SolveDiophantine` (an extended-Euclid GCD chain plus a depth-first bounded search), which decides whether a *real* shared element exists. The search is **work-capped** by `maxWork`: if the cap is hit the result is `TooHard`, which callers conservatively treat as "may share."
+
+`SolveMayShareMemory(a, b, maxWork)` answers the two-array question; `SolveMayHaveInternalOverlap(a, maxWork)` answers "does one array alias itself?" (a stride-0 dim over a non-unit axis). The result enum is `{ No, Yes, TooHard, Overflow }` — anything but `No` means "copy to be safe."
+
+### Resolution and writeback
+
+`ComputeCopyIfOverlap` runs the write-vs-read matrix with `maxWork = 1` — exactly NumPy's budget. Operands flagged for copy go through `MaterializeForcedCopies`: each is swapped for a C-order temp (copied in first if it's also read), tagged `FORCECOPY | HAS_WRITEBACK`, and the original recorded in `_writebackOriginals`. On `Dispose()`, `ResolveWritebacks` copies each temp back over its original — but only *after* `FlushBufferWindow`, so buffered writes reach the temp before the temp lands in the user's array. Get that ordering wrong and a buffered in-place op silently drops its last window.
+
+### The elementwise short-circuit
+
+Forcing a copy for *every* in-place `out=` would be wasteful — `np.add(a, a, out=a)` is perfectly safe because the inner loop reads each element before it writes the same slot. The per-operand flag `OVERLAP_ASSUME_ELEMENTWISE` encodes that promise: when both operands carry it, are the same dtype, and have identical base/shape/strides with no internal self-overlap, `AssumeElementwiseExactAlias` skips the copy. Every ufunc `out=` path sets this flag, so the common in-place case pays nothing.
+
+This is also the link to `PARALLEL_SAFE`: the same forced-copy machinery that makes a single in-place writer correct is what certifies that writer for parallel range-splitting (see [Divergences from NumPy](#divergences-from-numpy)).
 
 ---
 
@@ -1734,6 +1777,30 @@ The `provider` object's state (`Temperature`) is captured into the compiled kern
 
 ---
 
+## What Routes Through NpyIter Today
+
+NpyIter is being adopted incrementally. The end-state is that every `np.*` loop is one per-chunk kernel driven by the iterator (the [target model](#layer-3--typed-ufunc-dispatch)); today a mix of paths coexists. There are two ways an op can "use" NpyIter:
+
+- **Per-chunk (the target).** The iterator drives the loop and calls a per-chunk `NpyInnerLoopFunc` — an `ILKernelGenerator` (root) kernel. This is what inherits coalescing, buffering, overlap handling, and (eventually) parallelism for free.
+- **Whole-array bridge (transitional).** The iterator resolves layout / broadcast / overlap, then the typed `Execute*` helpers hand the *entire* coalesced array to a legacy `DirectILKernelGenerator` kernel in one call. Correct, but here the iterator is a setup helper rather than the driver.
+
+| Operation family | Today | Notes |
+|------------------|-------|-------|
+| `np.evaluate` (fused expressions) | **Per-chunk** ✅ | The flagship consumer — Tier 3C, one pass, no temporaries. |
+| `np.where` (broadcast / strided) | **Per-chunk** ✅ | Contiguous + scalar-operand cases stay on a Direct fast path by design. |
+| ufunc `out=` / `where=` | **Per-chunk** ✅ | Output joins the broadcast; `where` rides as a trailing `ARRAYMASK`. |
+| Elementwise binary / unary / comparison | **Bridge** | Iterator drives; the body is the Tier-3B shell or a Direct kernel. Trivial contiguous cases bypass to Direct SIMD. |
+| Axis reduction — Double / Single sum & mean | **Per-chunk** ✅ | `NewReduce` + stride-ordered `op_axes`; pairwise leaf is bit-exact. |
+| Axis reduction — Complex / Half / Decimal (all ops) | **Per-chunk** ✅ | Via `NewReduce` + `ILKernelGenerator.Reduction.cs`. |
+| Axis reduction — integer sum/prod, all min/max | **Direct** (legacy) | NEP50 widening + NaN-aware SIMD not yet on the per-chunk path. |
+| `var` / `std` / `cumsum` / `cumprod` (axis) | **Legacy `NpyAxisIter`** | A separate scalar axis iterator, slated for retirement once these route through `op_axes`. |
+| `copy` / `cast` / `copyto` / `concatenate` / `pad` | **`NpyIter.Copy`** | The static whole-array copy engine (broadcast- and cast-aware), distinct from the per-chunk `Execute*` surface. |
+| Selection / linalg (`take`, `put`, `place`, `matmul`, `argsort`, `searchsorted`, `clip`, `modf`) | **Direct** (legacy) | Not migrated. |
+
+If you're writing a *new* op, target the per-chunk path (`ForEach` + an `ILKernelGenerator` kernel, or a custom tier) — see [Kernel Integration Layer](#kernel-integration-layer). The bridge exists to migrate existing Direct kernels gradually rather than rewriting them all at once.
+
+---
+
 ## Performance
 
 Benchmarking 1M `sqrt` on a contiguous float32 array after 300 warmup iterations, Ryzen-class CPU:
@@ -1834,15 +1901,13 @@ The one case where allocations grow without bound is the anti-pattern of constru
 
 ## Known Bugs and Workarounds
 
-While building `NpyIter.Execution.cs` we surfaced two bugs in the iterator that callers should know about. Both are documented in the source of `NpyIter.Execution.cs` and both are worked around by the bridge.
+While building `NpyIter.Execution.cs` we surfaced two bugs in the iterator. **Both have since been fixed in `NpyIter.cs` / `NpyIter.State.cs` themselves** — they're kept here because the fixes are load-bearing and the bug-note comment block at the top of `NpyIter.Execution.cs` still describes the pre-fix state. The remaining entries (C–H) are historical fixes in the kernel / expression layer.
 
-### Bug A: `Iternext()` ignores `EXTERNAL_LOOP`
+### Bug A (fixed): `Iternext()` ignored `EXTERNAL_LOOP`
 
-`NpyIterRef.Iternext()` calls `state.Advance()` unconditionally. `Advance()` is the per-element ripple-carry advance — it doesn't know about `EXLOOP`. The correct advance for `EXLOOP` is `ExternalLoopNext`, which `GetIterNext()` returns based on flags but `Iternext()` bypasses.
+`NpyIterRef.Iternext()` used to call `state.Advance()` unconditionally. `Advance()` is the per-element ripple-carry advance — it doesn't know about `EXLOOP`, so a caller iterating with `EXTERNAL_LOOP` over-stepped each inner chunk by `NDim − 1` positions and read past the inner-loop buffer.
 
-**Symptom.** A caller using `Iternext()` with `EXTERNAL_LOOP` set reads past the end of each inner chunk and iterates `NDim - 1` extra times.
-
-**Workaround in the bridge.** `ForEach`, `ExecuteGeneric`, and `ExecuteReducing` call `GetIterNext()` directly:
+**Fix.** `Iternext()` now dispatches through `GetIterNext()`, which returns the correct advancer per flag set — `ExternalLoopNext` for `EXLOOP`, `SingleIterationNext` for `ONEITERATION`, `StandardNext` (byte-for-byte the old `Advance()` path) otherwise. The bridge (`ForEach`, `ExecuteGeneric`, `ExecuteReducing`) had always called `GetIterNext()` directly, so it was never affected; the fix makes a bare `iter.Iternext()` loop correct too:
 
 ```csharp
 var iternext = GetIterNext();
@@ -1851,11 +1916,11 @@ do {
 } while (iternext(ref *_state));
 ```
 
-### Bug B: Buffered + Cast pointer advance
+### Bug B (fixed): buffered + cast pointer advance
 
-When `BUFFERED` is set and the operand dtype differs from the array dtype, `NpyIterBufferManager.CopyToBuffer` fills a contiguous buffer at the *buffer dtype* (e.g. 8 bytes per element for `double`). But `state.Strides[op]` still contains the array's element-count strides — `Advance()` then computes `Strides[op] * ElementSizes[op]`, where `ElementSizes[op]` is now the buffer dtype's size. The product is the wrong byte delta.
+When `BUFFERED` is set and an operand's dtype differs from its array dtype, `NpyIterBufferManager` fills a contiguous buffer at the *buffer dtype* (e.g. 8 bytes/element for `double`). The original `Advance()` advanced the source pointer by `Strides[op] × ElementSizes[op]` — but `ElementSizes[op]` is the *buffer* dtype size, so an `int32` source buffered as `float64` got every delta doubled and read past the array.
 
-**Symptom.** Buffered casts silently return garbage. A minimal repro:
+**Was.** Before the fix, a bare buffered-cast iteration returned garbage. Minimal repro:
 
 ```csharp
 var i32 = np.arange(10, dtype: np.int32);
@@ -1867,12 +1932,12 @@ using var iter = NpyIterRef.MultiNew(2, new[] { i32, f64 },
     new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY },
     opDtypes: new[] { NPTypeCode.Double, NPTypeCode.Double });
 
-// Iterating with iter.Iternext() returns wrong values.
+// Before the fix this returned wrong values; now correct.
 ```
 
-**Workaround in the bridge.** `ExecuteBinary` routes buffered paths through `RunBufferedBinary`, which uses `_state->BufStrides` (which `NpyIterBufferManager` correctly sets to `GetElementSize(op)` = buffer-dtype size) instead of `state.Strides`. The bridge also uses `GetInnerLoopByteStrides()` for Layer 1/2 — it returns `BufStrides` when `BUFFER` is set and converts element strides to byte strides otherwise.
+**Fix.** The state keeps two element sizes per operand: `SrcElementSizes[op]` (the source array's dtype size) and `ElementSizes[op]` (the buffer dtype size). `Advance()`, `GotoIterIndex()`, and `FlipNegativeStrides()` multiply source-pointer math by `SrcElementSizes[op]` — correct whatever the buffer dtype is — while the inner loop reads buffer-side strides from `BufStrides` via `GetInnerFixedStrideArray()` (the buffer element size for buffered operands, the true inner byte stride for unbuffered ones).
 
-Both bugs are fixable inside `NpyIter.cs`. Until they are, the bridge is the only way to use buffered iteration correctly — any direct use of `iter.Iternext()` with these flag combinations will be wrong.
+The bridge still routes dense buffered binary ops through `RunBufferedBinary` for a tighter inner loop, but a plain `ForEach` (or `iter.Iternext()`) over a buffered-cast iterator is no longer wrong. The stale bug-note comment block atop `NpyIter.Execution.cs` predates both fixes.
 
 ### Bug C (fixed): `NpyExpr.Where` now works
 
@@ -1936,7 +2001,7 @@ NpyIter is how NumSharp turns "iterate these three arrays of possibly-different 
 
 **Coalesce first.** A 3-D contiguous array should run as one flat SIMD loop, not a triple-nested loop. The iterator does this for you — as long as you don't set flags that disable it (`MULTI_INDEX`, `C_INDEX`, `F_INDEX`).
 
-**Buffer when casting or when non-contiguous + SIMD-critical.** The iterator will copy strided input into aligned contiguous buffers, run the kernel there, and write back. Just be aware of Bug B above if you're working around the bridge.
+**Buffer when casting or when non-contiguous + SIMD-critical.** The iterator copies strided input into aligned contiguous buffers, runs the kernel there, and writes back — correct for the bridge and for a bare `ForEach` / `Iternext()` loop alike (see the now-fixed Bug B).
 
 **Struct-generic is a template substitute.** Constraining a type parameter to `struct` lets the JIT specialize the method per concrete type at codegen time. For hot inner loops this is indistinguishable from a hand-inlined function. Use it — but remember that **scalar kernel code only autovectorizes after tier-1 JIT promotion**, which takes ~100+ hot-loop iterations. Microbenchmarks that warm up 10 times will wildly under-report Layer 1/2 performance. Production code never sees this effect.
 
