@@ -46,8 +46,8 @@ not swept, and are the most likely place additional lagging cells hide.
 
 ## 0.1 Phase 0 RESULTS (measured 2026-06-20) — the matrix reprioritizes the plan
 
-Full sweep checked in: **`benchmark/poc/cast_matrix.md`** (15 src × 8 layouts × 15 dst, 1M,
-NumPy 2.4.2; harness `cast_matrix_bench.{cs,py}` + `cast_matrix_merge.py`). **716 / 1568
+Full sweep checked in: **`benchmark/cast/cast_results.md`** (15 src × 8 layouts × 15 dst, 1M,
+NumPy 2.4.2; the `benchmark/cast` subsystem — `cast_matrix_bench.{cs,py}` + `cast_sheet.py`). **716 / 1568
 comparable cells lag (<1.0); 852 win.** The sweep **overturns the §3 framing**: `float→i32` is
 *already won* (contiguous cvtt kernel: f32→i32 **1.69**, f64→i32 **1.56**) — only **strided**
 `f32→i32` (**0.24**, 4 cells) remains of old "Cliff 1". The real fire is one family:
@@ -318,7 +318,7 @@ Sweep **all 15 src × 15 dst × {C, F, T, sliced, negrow, negcol, `[:, ::2]`, br
 NumPy vs NumSharp, and emit the complete ✅/🟡/🟠/🔴 matrix + a sorted list of every `<1.0` cell.
 This converts "the 3 cliffs" into the *authoritative* worklist (the `→f16`, `→i8/i16/i64`,
 `→complex` columns are unswept). Harness: extend `benchmark/poc/` (model on the cast matrix already
-used this session). **Exit:** a checked-in `cast_matrix.md` that every later phase is measured
+used this session). **Exit:** a checked-in `benchmark/cast/cast_results.md` that every later phase is measured
 against.
 
 ### Phase 1 — `float → int32` strided cvtt+gather kernel  *(Cliff 1, widest win)*
@@ -448,7 +448,7 @@ floor 1.07× the legacy Clone+CastTo, so the legacy branch is safe to retire).
    {0, ±1, max, min, 2^k boundaries, NaN, ±inf, overflow, subnormal} × all targets, on a strided
    view, diffed against NumPy 2.4.2 (re+im for complex). **0 diverge** is the gate.
 3. **Perf:** the Phase-0 full matrix re-run; **no cell may regress** and the targeted cells must
-   reach ✅. Geomean per dtype tracked in `cast_matrix.md`.
+   reach ✅. Geomean per dtype tracked in `benchmark/cast/cast_results.md`.
 4. **Suite:** `dotnet test` net8.0 + net10.0, `TestCategory!=OpenBugs&!=HighMemory`, 0 fail.
 
 ---
@@ -484,7 +484,7 @@ floor 1.07× the legacy Clone+CastTo, so the legacy branch is safe to retire).
 
 | Phase | Deliverable | Exit |
 |-------|-------------|------|
-| 0 | `cast_matrix.md` full sweep + lagging-cell worklist | every `<1.0` cell enumerated |
+| 0 | `benchmark/cast/cast_results.md` full sweep + lagging-cell worklist | every `<1.0` cell enumerated |
 | 1 | `float→int32` strided cvtt+gather kernel | f32/f64→i32 strided ✅; harness 0-diff |
 | 2 | `float→{i8,i16,i64,u*}` faithful SIMD or confirmed IL-✅ | all float→int cells ✅ |
 | 3 | Half F16C (or bit-fiddle) widen/narrow | all f16↔ cells ✅; rounding 0-diff |

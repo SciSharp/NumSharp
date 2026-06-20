@@ -1,8 +1,10 @@
 # =============================================================================
 # Benchmark — decoupled, post-release, semi-manual. Runs the ENTIRE NumSharp-vs-
 # NumPy comparison via benchmark/run_benchmark.py: the official op/dtype/N matrix
-# (BenchmarkDotNet + NumPy across 1K/100K/10M) AND the NpyIter iterator benchmark
-# (benchmark/npyiter, appended as its own report section + README cards).
+# (BenchmarkDotNet + NumPy across 1K/100K/10M), the NpyIter iterator benchmark
+# (benchmark/npyiter, + README cards), and the matrix subsystems that fill the
+# axes the op matrix omits — layout (benchmark/layout), cast (benchmark/cast),
+# fusion (benchmark/fusion) — each appended as its own report section.
 #
 # Trigger is the GitHub Release being published (the "after a successful release"
 # signal — 'Build and Release' creates it on a v* tag) or a manual dispatch. It
@@ -93,6 +95,11 @@ jobs:
                   benchmark/npyiter/npyiter_results.tsv \
                   benchmark/npyiter/cards/ops.png \
                   benchmark/npyiter/cards/cat.png \
+                  benchmark/layout/layout_results.md \
+                  benchmark/layout/layout_results.tsv \
+                  benchmark/cast/cast_results.md \
+                  benchmark/cast/cast_results.tsv \
+                  benchmark/fusion/fusion_results.md \
                   docs/website-src/docs/benchmark-matrix.md \
                   docs/website-src/docs/benchmark-iterator.md
           if git diff --cached --quiet; then

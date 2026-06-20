@@ -11,8 +11,8 @@
 // in the same sweep).
 //   Output key:  1M|{src}|{layout}|{dst}\t{ms}
 //   Companion:   cast_matrix_bench.py (NumPy astype baseline, identical keys).
-//   Merge:       cast_matrix_merge.py  →  cast_matrix.md
-// Run ONLY with:  dotnet run -c Release - < benchmark/poc/cast_matrix_bench.cs
+//   Driven by:   cast_sheet.py  →  cast_results.md (the benchmark/cast subsystem of run_benchmark.py)
+// Run ONLY with:  dotnet run -c Release - < benchmark/cast/cast_matrix_bench.cs
 // =============================================================================
 using System.Diagnostics;
 using NumSharp;

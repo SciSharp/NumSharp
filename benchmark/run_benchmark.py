@@ -4,9 +4,14 @@ Official NumSharp-vs-NumPy benchmark orchestrator (cross-platform).
 
 Runs the C# BenchmarkDotNet suite and the NumPy suite across the three cache-tier sizes
 (Small=1K / Medium=100K / Large=10M), then merges them into a single per-(op, dtype, N)
-ratio report. Finally runs the NpyIter iterator benchmark (benchmark/npyiter) and appends
-its sheet to the report as a dedicated section (different result model — aspect x tier —
-so it is appended, not merged). The single entry point for the whole NumSharp-vs-NumPy
+ratio report. Then appends, as dedicated sections, the complementary harnesses whose result
+models the op/dtype/N matrix cannot express:
+  * NpyIter iterator benchmark (benchmark/npyiter)  — iterator machinery, aspect × tier
+  * Layout suite              (benchmark/layout)    — reduction/copy/elementwise × memory layout
+  * Cast matrix               (benchmark/cast)      — astype src→dst × layout × dtype
+  * Fusion gate               (benchmark/fusion)    — np.evaluate fused vs unfused chains
+Each owns a *_sheet.py driver+renderer; this orchestrator runs them and folds their
+*_results.md into the report. The single entry point for the whole NumSharp-vs-NumPy
 comparison.
 
 Design notes
@@ -31,7 +36,8 @@ Usage
   python run_benchmark.py --skip-build            # reuse the existing Release build
   python run_benchmark.py --skip-csharp           # NumPy only
   python run_benchmark.py --skip-python           # C# only (reuse existing numpy JSON)
-  python run_benchmark.py --skip-npyiter          # official op suites only (no NpyIter)
+  python run_benchmark.py --skip-npyiter          # no NpyIter section
+  python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NpyIter) only
   python run_benchmark.py --quick                 # dev: 10 NumPy iterations (C# config fixed)
 """
 import argparse
@@ -58,6 +64,20 @@ NPYITER_SHEET = NPYITER_DIR / "npyiter_sheet.py"
 NPYITER_CARDS = NPYITER_DIR / "npyiter_cards.py"
 NPYITER_REPORT = NPYITER_DIR / "npyiter_results.md"
 NPYITER_TSV = NPYITER_DIR / "npyiter_results.tsv"
+
+# Matrix subsystems — each fills an axis the op/dtype/N matrix omits and owns a
+# *_sheet.py driver+renderer (mirroring npyiter): a NumSharp `*_bench.cs` + its
+# NumPy `*_bench.py` twin -> a rendered `*_results.md` section appended to the
+# report. Layout = memory-layout axis (op-matrix is C-contiguous only); Cast =
+# astype src→dst matrix (no op-matrix coverage); Fusion = np.evaluate vs unfused.
+MATRIX_SUBSYSTEMS = [
+    ("layout", HERE / "layout" / "layout_sheet.py", HERE / "layout" / "layout_results.md",
+     "Layout suite — reduction / copy / elementwise × memory layout × dtype"),
+    ("cast", HERE / "cast" / "cast_sheet.py", HERE / "cast" / "cast_results.md",
+     "Cast matrix — astype src→dst × layout × dtype"),
+    ("fusion", HERE / "fusion" / "fusion_sheet.py", HERE / "fusion" / "fusion_results.md",
+     "Fusion — np.evaluate vs unfused chains"),
+]
 
 # Comparison suites only (the experimental Dispatch/Fusion/DynamicEmission/SimdVsScalar
 # benchmarks have no NumPy counterpart). suite -> BenchmarkDotNet class/namespace filter.
@@ -86,6 +106,41 @@ def run(cmd, cwd=None, check=False):
     return subprocess.run([str(c) for c in cmd], cwd=str(cwd) if cwd else None, check=check)
 
 
+def append_section(report_md, src_md, title):
+    """Append a subsystem's rendered *_results.md to the unified report as one
+    section. The source's leading H1 (if any) is dropped so the report keeps a
+    single title hierarchy; ``title`` becomes the section's H2. No-op if the
+    source is missing/empty (subsystem skipped or its build/run failed)."""
+    if not src_md.exists():
+        return
+    body = src_md.read_text(encoding="utf-8").strip()
+    lines = body.splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+    body = "\n".join(lines).strip()
+    if not body:
+        return
+    existing = report_md.read_text(encoding="utf-8") if report_md.exists() else ""
+    report_md.write_text(f"{existing}\n\n---\n\n## {title}\n\n{body}\n", encoding="utf-8")
+
+
+def run_matrix_subsystem(name, sheet, results_md, title, report_md, results_dir, skip_build):
+    """Run one matrix subsystem's *_sheet.py and append its rendered section to
+    the unified report. Crash-resilient: a failing subsystem just omits its
+    section (the sheet itself never raises into the orchestrator)."""
+    print(f"\n=== {name} subsystem (benchmark/{name}) ===", flush=True)
+    cmd = [sys.executable, str(sheet)]
+    if skip_build:
+        cmd.append("--skip-build")
+    run(cmd, check=False)
+    if results_md.exists():
+        shutil.copy(results_md, results_dir / results_md.name)
+        tsv = results_md.with_suffix(".tsv")
+        if tsv.exists():
+            shutil.copy(tsv, results_dir / tsv.name)
+    append_section(report_md, results_md, title)
+
+
 def main():
     ap = argparse.ArgumentParser(description="NumSharp vs NumPy official benchmark")
     ap.add_argument("--suites", nargs="*", default=list(SUITES), choices=list(SUITES),
@@ -96,6 +151,12 @@ def main():
     ap.add_argument("--quick", action="store_true", help="Dev: fewer NumPy iterations")
     ap.add_argument("--skip-npyiter", action="store_true",
                     help="Skip the NpyIter iterator benchmark (benchmark/npyiter)")
+    ap.add_argument("--skip-layout", action="store_true",
+                    help="Skip the Layout suite (benchmark/layout)")
+    ap.add_argument("--skip-cast", action="store_true",
+                    help="Skip the Cast matrix (benchmark/cast)")
+    ap.add_argument("--skip-fusion", action="store_true",
+                    help="Skip the Fusion gate (benchmark/fusion)")
     args = ap.parse_args()
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -148,6 +209,10 @@ def main():
     run([sys.executable, str(MERGE), "--numpy", str(numpy_json),
          "--csharp", str(csharp_out), "--output", str(out_base)], check=False)
 
+    # The unified report the op-matrix merge just wrote; the iterator + matrix
+    # subsystems below each append one section to it.
+    report_md = results_dir / "benchmark-report.md"
+
     # 4b. NpyIter iterator benchmark — complementary harness (file-based, section-
     #     isolated, crash-resilient: a NumSharp AccessViolation is IGNORED and the
     #     section reported NA). Its result model is aspect x tier, not op/dtype/N,
@@ -166,7 +231,6 @@ def main():
         cards_src = NPYITER_DIR / "cards"
         if cards_src.exists():
             shutil.copytree(cards_src, results_dir / "npyiter_cards", dirs_exist_ok=True)
-        report_md = results_dir / "benchmark-report.md"
         if NPYITER_REPORT.exists():
             section = ("\n\n---\n\n## NpyIter iterator benchmark\n\n"
                        "_Complementary harness: measures the iterator machinery itself "
@@ -177,6 +241,14 @@ def main():
             existing = report_md.read_text(encoding="utf-8") if report_md.exists() else ""
             report_md.write_text(existing + section + NPYITER_REPORT.read_text(encoding="utf-8"),
                                  encoding="utf-8")
+
+    # 4c. Matrix subsystems — layout / cast / fusion. Each fills an axis the
+    #     op/dtype/N matrix cannot express and appends its own rendered section.
+    skip_matrix = {"layout": args.skip_layout, "cast": args.skip_cast, "fusion": args.skip_fusion}
+    for name, sheet, results, title in MATRIX_SUBSYSTEMS:
+        if skip_matrix[name]:
+            continue
+        run_matrix_subsystem(name, sheet, results, title, report_md, results_dir, args.skip_build)
 
     # 5. Copy the headline artifacts to the benchmark/ root for convenience.
     for name in ["benchmark-report.md", "benchmark-report.json", "benchmark-report.csv",

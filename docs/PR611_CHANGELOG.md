@@ -69,7 +69,7 @@ This is what powers the fusion wins — one pass, no temporaries — and it is e
 - **Per-node NumPy `result_type` typing** — every node resolves to its NumPy 2.4.2 dtype, so mixed trees wrap correctly: `(i4*i4)+f8` wraps the multiply in int32 (→ `1410065408`) before promoting. Strong-strong NEP50 (incl. int/float tier crossing), weak python-scalar literals (`i4+2 → i4`, `i4/2 → f8`) with NumPy's exact `OverflowError`, and special resolvers (`true_divide`, `arctan2`, negative-integer-literal `power` → `ValueError`, bool `add`=OR/`multiply`=AND).
 - **Fused reductions** — `NpyExpr.Sum/Prod/Min/Max/Mean` compile a one-pass inner loop; `sum(a*b)` reads `a` and `b` once and never materializes the product. NumPy reduction dtypes (int→i64, uint→u64, mean→f64).
 - **`out=` joins via the ufunc rules** (same_kind validation, reference identity, overlap-safe aliasing through `COPY_IF_OVERLAP`); an `EXTERNAL_LOOP` guard prevents the silent `count==1` slow path.
-- **Measured** (Release, 4M f64, NumPy 2.4.2): `a*b+c` **3.2×**, `(a-b)/(a+b)` **6.1×**, `sum(a*b)` **3.6×**, `sum f32` 2.9×, `i4*2+f8` 3.5× faster. Permanent gate in `benchmark/poc/evaluate_bench.{cs,py}`.
+- **Measured** (Release, 4M f64, NumPy 2.4.2): `a*b+c` **3.2×**, `(a-b)/(a+b)` **6.1×**, `sum(a*b)` **3.6×**, `sum f32` 2.9×, `i4*2+f8` 3.5× faster. Permanent gate in `benchmark/fusion/evaluate_bench.{cs,py}`.
 
 ## 3. Legacy iterator stack retired
 

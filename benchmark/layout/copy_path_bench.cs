@@ -9,7 +9,7 @@
 // Companion: copy_path_bench.py (NumPy np.positive baseline, identical keys).
 // Answers "how does the NpyIter copy path compare to NumPy across all
 // dtypes/layout variations" — and how much the routing would change vs today.
-// Run ONLY with:  dotnet run -c Release - < benchmark/poc/copy_path_bench.cs
+// Run ONLY with:  dotnet run -c Release - < benchmark/layout/copy_path_bench.cs
 // =============================================================================
 using System.Diagnostics;
 using NumSharp;

@@ -290,7 +290,7 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `compress`, `extract`, `indices`, `place`, `put`, `ravel_multi_index`, `take`, `unravel_index`, `where`
 
 ### Fused Expressions (NumSharp extension)
-`evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NpyExpr` tree to ONE NpyIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: `benchmark/poc/evaluate_bench.{cs,py}`).
+`evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NpyExpr` tree to ONE NpyIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
 
 ```csharp
 NDArray r = np.evaluate((NpyExpr)a * b + 2);                          // fused a*b+2
@@ -434,7 +434,7 @@ the `benchmark/poc/*_merge.py` outputs — so one glance answers "are we faster?
 - Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
 - Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
 - best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
-- The canonical harness is `benchmark/npyiter/` (NpyIter aspects) + `benchmark/poc/reduce_layout_*` (reduction × layout × dtype). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
+- The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus four appended subsystems: `benchmark/npyiter/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
 
 ## Build & Test
 

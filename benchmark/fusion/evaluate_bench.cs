@@ -1,11 +1,13 @@
-#:project ../../src/NumSharp.Core
+#:project K:/source/NumSharp/src/NumSharp.Core/NumSharp.Core.csproj
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 // =============================================================================
-// evaluate_bench.cs — Wave 6.1 gate: fused np.evaluate vs unfused np.* chains
-// Run ONLY with: dotnet run -c Release evaluate_bench.cs   (Debug invalidates)
-// Companion: evaluate_bench.py (NumPy absolutes on the same box)
+// evaluate_bench.cs — fusion gate: fused np.evaluate vs unfused np.* chains.
+// NumSharp side of the benchmark/fusion subsystem (driven by fusion_sheet.py,
+// which rewrites the #:project path above to the running checkout). The absolute
+// path lets it also run directly:  dotnet run -c Release - < benchmark/fusion/evaluate_bench.cs
+// Companion: evaluate_bench.py (NumPy absolutes on the same box).
 // =============================================================================
 using System.Diagnostics;
 using NumSharp;

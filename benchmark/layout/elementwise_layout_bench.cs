@@ -7,7 +7,7 @@
 // dtype matrix. Companion: elementwise_layout_bench.py (identical keys).
 // Probes whether binary / unary / comparison / copy kernels have the same
 // "SIMD only on C-contiguous, scalar otherwise" cliff the reductions had.
-// Run ONLY with:  dotnet run -c Release - < benchmark/poc/elementwise_layout_bench.cs
+// Run ONLY with:  dotnet run -c Release - < benchmark/layout/elementwise_layout_bench.cs
 // =============================================================================
 using System.Diagnostics;
 using NumSharp;

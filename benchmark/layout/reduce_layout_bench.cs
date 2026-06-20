@@ -4,15 +4,15 @@
 #:property AllowUnsafeBlocks=true
 // =============================================================================
 // reduce_layout_bench.cs — NumSharp side of the reduction x LAYOUT x dtype x op
-// parity matrix. Companion: reduce_layout_bench.py (identical keys). Merge with
-// reduce_layout_merge.py.
+// parity matrix. Companion: reduce_layout_bench.py (identical keys). Driven +
+// rendered by layout_sheet.py (the benchmark/layout subsystem of run_benchmark.py).
 //
 // COVERAGE GAP THIS FILLS: prior reduction benches only measured contiguous (and
 // complex C/T). Reductions over OFFSET / NEGATIVE-STRIDE / SLICED views were
 // broken (NpyIter op_axes ignored Shape.offset) until the fix, so were never
 // benchmarked. This sweeps every layout x the NpyIter-routed dtypes x ops.
 //
-// Run ONLY with:  dotnet run -c Release - < benchmark/poc/reduce_layout_bench.cs
+// Run ONLY with:  dotnet run -c Release - < benchmark/layout/reduce_layout_bench.cs
 // =============================================================================
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
