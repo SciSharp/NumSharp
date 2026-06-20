@@ -30,9 +30,12 @@ namespace NumSharp.Backends.Kernels
         //   Bit-exact with Converts.To{X}(Half) (NaN/inf -> INT_MIN -> low bits;
         //   finite Half max is 65504 so cvtt never overflows int32 -> (int)value),
         //   hence NumPy 2.4.2 (proven 0-diff; f16->i32 1.85x, f16->i8 1.42x).
-        //   NOTE: f16->f32/f64 are intentionally NOT here — Giesen's NaN payload bits
-        //   differ from the BCL's, harmless for ->int but a user-visible divergence for
-        //   ->float, which stays on the already-even (~1.0x) scalar path.
+        //   f16->f32 IS here (HalfBitsToFloatExact): Giesen widens finite exactly, and the
+        //   inf/nan lanes are overridden with the IEEE widen (sign | 0x7f800000 | mant<<13) so
+        //   the NaN payload — and sNaN — are preserved, matching NumPy (proven 0-diff over all
+        //   65536 f16 values). The BCL (float)Half cast QUIETS sNaN, so this also fixes that
+        //   latent divergence. f16->f64 stays scalar (already >=0.9; a 2-step f16->f32->f64
+        //   widen would re-quiet sNaN via cvtps2pd, so it needs its own direct widen later).
         //
         //   Strided reuses StridedNarrowDriver (srcSize=2): inner-contig rows run the
         //   Bulk, inner-strided rows stage to a contig u16 buffer then vectorize.
@@ -49,6 +52,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return CastHalfToInt32Contig;
                 case NPTypeCode.UInt32: return CastHalfToUInt32Contig;
+                case NPTypeCode.Single: return CastHalfToFloatContig;
                 case NPTypeCode.SByte:  return CastHalfToSByteContig;
                 case NPTypeCode.Byte:   return CastHalfToByteContig;
                 case NPTypeCode.Int16:  return CastHalfToInt16Contig;
@@ -81,6 +85,43 @@ namespace NumSharp.Backends.Kernels
         }
         private static unsafe long BulkHalfToUInt32V(void* s, void* d, long n) => BulkHalfToUInt32((ushort*)s, (uint*)d, n);
         private static unsafe void ConvHalfToUInt32(void* s, void* d) => *(uint*)d = Converts.ToUInt32(*(Half*)s);
+
+        // f16 -> f32 WIDEN, bit-exact incl. NaN payload (proven 0-diff over all 65536 f16 values).
+        // Giesen widens finite (normal/subnormal/zero) exactly; the inf/nan lanes are overridden
+        // with the IEEE widen sign | 0x7f800000 | (mant<<13) (preserves the NaN payload AND sNaN,
+        // which the BCL (float)Half cast QUIETS — the same latent bug the X->Half wave fixed, here
+        // for the widen direction). Was the reason f16->f32 stayed on the scalar path.
+        private static Vector256<float> HalfBitsToFloatExact(Vector256<int> h)
+        {
+            var giesen = HalfBitsToFloat(h);
+            var isInfNan = Avx2.CompareGreaterThan(Avx2.And(Vector256.Create(0x7fff), h), Vector256.Create(0x7bff));
+            var sign = Avx2.ShiftLeftLogical(Avx2.AndNot(Vector256.Create(0x7fff), h), 16);
+            var mant = Avx2.And(Vector256.Create(0x3ff), h);
+            var nanv = Avx2.Or(Avx2.Or(sign, Vector256.Create(0x7f800000)), Avx2.ShiftLeftLogical(mant, 13));
+            return Avx2.BlendVariable(giesen.AsInt32(), nanv, isInfNan).AsSingle();
+        }
+        // Scalar widen matching the SIMD path (finite via BCL; inf/nan via the bit formula).
+        private static float HalfToFloatScalarExact(ushort h)
+        {
+            if ((h & 0x7fff) > 0x7bff)
+                return BitConverter.UInt32BitsToSingle(((uint)(h & 0x8000) << 16) | 0x7f800000u | ((uint)(h & 0x3ff) << 13));
+            return (float)BitConverter.UInt16BitsToHalf(h);
+        }
+        private static unsafe long BulkHalfToFloat(ushort* p, float* dst, long count)
+        {
+            long i = 0;
+            for (; i + 8 <= count; i += 8)
+                Vector256.Store(HalfBitsToFloatExact(Avx2.ConvertToVector256Int32(Sse2.LoadVector128(p + i))), dst + i);
+            return i;
+        }
+        private static unsafe void CastHalfToFloatContig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; float* dst = (float*)d;
+            long i = BulkHalfToFloat(p, dst, n);
+            for (; i < n; i++) dst[i] = HalfToFloatScalarExact(p[i]);
+        }
+        private static unsafe long BulkHalfToFloatV(void* s, void* d, long n) => BulkHalfToFloat((ushort*)s, (float*)d, n);
+        private static unsafe void ConvHalfToFloat(void* s, void* d) => *(float*)d = HalfToFloatScalarExact(*(ushort*)s);
 
         // Giesen branchless half->float over 8 widened half-bit-patterns (Vector256<int>).
         private static Vector256<float> HalfBitsToFloat(Vector256<int> h)
@@ -200,6 +241,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return StridedHalfToInt32;
                 case NPTypeCode.UInt32: return StridedHalfToUInt32;
+                case NPTypeCode.Single: return StridedHalfToFloat;
                 case NPTypeCode.SByte:  return StridedHalfToSByte;
                 case NPTypeCode.Byte:   return StridedHalfToByte;
                 case NPTypeCode.Int16:  return StridedHalfToInt16;
@@ -211,6 +253,7 @@ namespace NumSharp.Backends.Kernels
 
         private static unsafe void StridedHalfToInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 4, &BulkHalfToInt32V, &ConvHalfToInt32);
         private static unsafe void StridedHalfToUInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 4, &BulkHalfToUInt32V, &ConvHalfToUInt32);
+        private static unsafe void StridedHalfToFloat(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 4, &BulkHalfToFloatV, &ConvHalfToFloat);
         private static unsafe void StridedHalfToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkHalfToByteV,  &ConvHalfToSByte);
         private static unsafe void StridedHalfToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 1, &BulkHalfToByteV,  &ConvHalfToByte);
         private static unsafe void StridedHalfToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 2, &BulkHalfToShortV, &ConvHalfToInt16);
