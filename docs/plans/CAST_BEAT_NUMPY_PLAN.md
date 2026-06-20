@@ -61,15 +61,27 @@ comparable cells lag (<1.0); 852 win.** The sweep **overturns the §3 framing**:
 **`float/complex → narrow-int` geomean by src: f32→narrow `0.21`, c128→narrow `0.40`, f64→narrow
 `0.38`, f16→narrow `0.48`.** f32→i8 bottoms the whole matrix at **0.09** (10.8× slower: 2.6 ms vs
 0.24 ms) — no SIMD kernel exists for narrowing float→sub-word, so it falls to the IL scalar
-(`Converts.ToSByte((float)x)` per element) while NumPy does `cvttps2dq` + vector **pack**
-(`vpackssdw`/`vpackuswb`), 8–16 elems per few instructions.
+(`Converts.ToSByte((float)x)` per element). **NumPy does *not* vectorize these casts either** —
+its generic cast loop is scalar-speed (measured 4M: f32→i8 **1.31 ms**, f64→i32 **3.26 ms**), which
+is precisely the headroom: a SIMD `cvtt`+narrow kernel beats NumPy outright.
+
+> **⚠ Correction (proven 2026-06-20, supersedes earlier framing):** the back-end is **NOT a
+> saturating pack** (`vpackssdw`/`vpackuswb`). NumPy float→narrow-int **WRAPS** (low bits), it does
+> **not** saturate — oracle: f32→i8 `128.5 → -128` (wrap), a saturating pack gives `+127` (wrong).
+> Benchmarked head-to-head at 4M: a `cvtt`+**saturate-pack** kernel produced **3.47 M diffs** vs
+> NumPy. The correct primitive is `cvtt` + **truncating narrow** = mask-to-width (`&0xFF`/`&0xFFFF`)
+> + unsigned-pack (saturation becomes a *no-op* because masked values are already in-range) +
+> cross-lane permute. See §0.2 for the measured shootout.
 
 ### Reprioritized phase order (supersedes §4 sequencing)
 
-1. **P1′ (was P2) — `float/complex → narrow-int` SIMD `cvtt + pack`.** *Highest value: 45/46 reds,
-   ~183 cells.* Extends §3's insight: `f32→i8` = `cvttps2dq` (W1 core) **then vector narrow/pack**
-   to the target width. Same cvtt core; the missing piece is the pack. f16 front-ends via F16C/
-   bit-fiddle (P3 dep), c128 via deinterleave (P4 dep) — so build the f32/f64→narrow pack first.
+1. **P1′ (was P2) — `float/complex → narrow-int` SIMD `cvtt + truncating-narrow`.** *Highest value:
+   45/46 reds, ~183 cells.* **Mechanism proven in §0.2** (f32/f64 source already benchmarked
+   3.4–4.1× / 1.9–2.0× vs NumPy, 0-diff): `f32→i8` = `cvttps2dq` (W1 core) **then mask-to-width +
+   unsigned-pack + per-width permute** (`vpermd` for 8-bit, `vpermq` for 16-bit) — **NOT** a
+   saturating pack. Same cvtt core; the missing piece is the truncating narrow, now designed and
+   measured. f16 front-ends via F16C/bit-fiddle (P3 dep), c128 via deinterleave (P4 dep) — so build
+   the f32/f64→narrow kernel first (the §0.2 prototypes drop straight into the kernel family).
 2. **P2′ (was P1) — strided `f32→i32` cvtt+gather.** Now only ~4 amber cells (contiguous won).
 3. **`*→bool`** (≈79 cells, mild 🟡): `v != 0` vector compare → packed bool. Cheap, broad.
 4. **`int→sub-word (narrow)`** (160 🟡): int→{u8/i8/i16/u16/char} vector pack (no cvtt — direct
@@ -78,8 +90,56 @@ comparable cells lag (<1.0); 852 win.** The sweep **overturns the §3 framing**:
    `astype(copy)` same-type path isn't hitting cpblk for 1-byte at 1M — audit the routing.
 6. **f16 (F16C/bit-fiddle)** and **c128 (deinterleave)** front-ends feed P1′ for their narrow targets.
 
-The unifying core (`cvtt`) is unchanged — but the **pack back-end** (int32→int16→int8) is the new
-shared primitive every narrowing cast needs, and is built once in P1′.
+The unifying core (`cvtt`) is unchanged — but the **truncating-narrow back-end** (int32 → low
+bytes of int16/int8) is the new shared primitive every narrowing cast needs, and is built once
+in P1′. It is a **mask + unsigned-pack + permute**, NOT a saturating pack (see §0.2).
+
+---
+
+## 0.2 float→narrow-int implementation shootout (PROVEN, 2026-06-20)
+
+Five implementations of the worst cell (`f32→i8`, 4M, best-of-7) benchmarked for **both**
+correctness (vs the NumPy-faithful `Converts` scalar, which the parity suite pins to NumPy 2.4.2)
+**and** speed. Harness: `/tmp/cast_f32i8*.cs` style (reproducible; uses `Avx`/`Avx2` intrinsics,
+`#:project NumSharp.Core`). This is the empirical proof the SIMD back-end is sound:
+
+| # | Implementation | ms | ×scalar | diffs vs NumPy | verdict |
+|---|----------------|----|---------|----------------|---------|
+| V1 | scalar `Converts.ToSByte((float)x)` (current IL kernel) | 10.9 | 1.0 | 0 (baseline) | correct, **the 0.09× cliff** |
+| V2 | `cvttps2dq` (SIMD) + **scalar** low-byte narrow | 1.52 | 7.0 | 0 | correct; cvtt alone clears the cliff |
+| V3 | `cvttps2dq` + `&0xFF` + 2×`vpackuswb` + **`vpermd`** | 0.38 | 18–29 | **0** | **correct + production** |
+| V5 | `cvttps2dq` + `vpshufb` low-byte gather + 64-bit moves | 0.58 | 19 | 0 | correct alt |
+| V4 | `cvttps2dq` + **saturating** `vpackssdw`/`vpacksswb` | 0.32 | 34 | **3.47 M** | **WRONG** (saturates `128.5→127`) |
+
+**Per-dtype optimization is real and measured** (each target validated 0-diff vs NumPy, NPY/NS):
+
+| cast | kernel (per width) | NS ms (4M) | NumPy ms | NPY/NS |
+|------|--------------------|-----------|----------|--------|
+| f32→i8  | `&0xFF`  + 2×`vpackuswb` + **`vpermd`** | 0.378 | 1.305 | **3.45×** |
+| f32→u8  | *(same kernel — bit-identical)*        | 0.378 | 1.565 | **4.14×** |
+| f32→i16 | `&0xFFFF` + 1×`vpackusdw` + **`vpermq 0xD8`** *(cheaper)* | 0.595 | 2.110 | **3.55×** |
+| f32→u16 | *(same kernel — bit-identical)*        | 0.595 | 2.008 | **3.37×** |
+| f64→i32 | `cvttpd2dq` + store *(no narrow)*       | 1.750 | 3.256 | **1.86×** |
+| f64→i16 | `cvttpd2dq` + 128-bit `vpackusdw` *(no lane cross)* | 1.321 | 2.633 | **1.99×** |
+
+**Findings that drive the implementation:**
+- **`cvtt` is the engine; the narrow is cheap.** Even V2 (scalar narrow) is 7× — but only the full
+  SIMD narrow (V3) beats NumPy with margin. The cliff is the *absence* of `cvtt`, not the narrow.
+- **8-bit vs 16-bit need different lane fixups** (the per-dtype win): the 2-level pack for i8/u8
+  interleaves at 4-byte granularity → needs **`vpermd`** (`[0,4,1,5,2,6,3,7]`); the 1-level pack
+  for i16/u16 interleaves at 8-byte granularity → needs only **`vpermq 0xD8`** (cheaper cross-lane
+  op). `Permute4x64` on the 2-level result is *insufficient* (1.99 M diffs — it cannot split a
+  quadword that holds two operands' bytes).
+- **i8≡u8 and i16≡u16 share one kernel** (low-bytes are bit-identical; only the C# element type
+  differs) → 4 targets, 2 kernels.
+- **f64 source** uses `cvttpd2dq` (4 doubles→4 i32, INT_MIN sentinel for out-of-i32 range — matches
+  NumPy: `3e9→i16→0` is low-16 of INT_MIN); its narrow uses **128-bit** packs (no lane crossing).
+- **Memory-bound ceiling:** f32→i8 writes 4 MB + reads 16 MB; at ~0.38 ms that is ~52 GB/s — near
+  the bandwidth floor, so further kernel tuning yields little. The win is already captured.
+
+**The saturate-pack trap (V4) is the single most important correction to this plan** — it is the
+fastest *and wrongest* option; any implementer reaching for the "obvious" `vpackss` must use the
+mask+`vpackus` truncate instead.
 
 ---
 
@@ -186,10 +246,12 @@ front-end for W2/W3.
 - NumPy float→int8/16 = truncate-to-int then wrap; float→int64 = `cvttpd2qq` (AVX-512) or scalar;
   float→unsigned has its own saturation rules. **These are NOT the i32 cvtt sentinel** — verify
   each against NumPy before SIMD-izing.
-- **Cheapest correct path:** `cvtt → i32` (SIMD) then **vector narrow/wrap** to the target width
-  for i8/i16; for i64/u64 confirm whether NumPy truncates via 64-bit cvtt and only then SIMD-ize,
-  else keep the IL scalar (which already matches NumPy bit-exactly and may already be ✅ — Phase 0
-  decides).
+- **Cheapest correct path (PROVEN — §0.2):** `cvtt → i32` (SIMD) then **truncating narrow** =
+  mask-to-width + unsigned-pack + `vpermd`(8-bit)/`vpermq`(16-bit). f32→{i8,u8,i16,u16} and
+  f64→{i32,i16} are already benchmarked 0-diff and 1.9–4.1× vs NumPy; these prototypes are the
+  kernel bodies. For i64/u64 confirm whether NumPy truncates via 64-bit cvtt (`cvttpd2qq` is
+  AVX-512 only — **unavailable here**, Avx512F=False) and only then SIMD-ize, else keep the IL
+  scalar (which already matches NumPy bit-exactly and may already be ✅ — Phase 0 decides).
 - **Also retire the legacy `{i8,i16,i32}→u64` path:** these 3 pairs are the *only* ones still on
   `CastCrossType`'s `DivergesFromNumpyCast` Clone+CastTo branch. Measure in Phase 0; route them
   through `NpyIter.Copy` → IL kernel (already bit-exact via `Converts.ToUInt64`), deleting the
