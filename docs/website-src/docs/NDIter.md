@@ -1,4 +1,4 @@
-# NDIter but with IL generation — kerneling your NDArray
+# NpyIter — kerneling your NDArray with IL generation
 
 NumPy's `nditer` is the unsung workhorse of NumPy. Every ufunc, every reduction, every broadcasted operation is scheduled by `nditer` under the covers. It decides which axes to iterate, which to coalesce, whether to buffer, how to walk strided memory — then it hands those decisions to a typed C inner loop generated from C++ templates.
 
@@ -9,6 +9,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 ## Table of Contents
 
 - [Overview](#overview)
+- [Public Iteration Surface](#public-iteration-surface)
 - [What NpyIter Is](#what-npyiter-is)
 - [Divergences from NumPy](#divergences-from-numpy)
 - [Iterator State](#iterator-state)
@@ -65,6 +66,22 @@ An array is just a pointer plus a shape plus strides. Iterating "through" it mea
 NumPy's `nditer` is C99 with templates mixed in through macro expansion. We can't take it verbatim. At the same time we want every one of its capabilities: coalescing, reordering, negative-stride flipping, ALLOCATE, COPY_IF_OVERLAP, buffered casting, buffered reduction with the double-loop trick, C/F/K ordering, per-operand flags, op_axes with explicit reduction encoding. These are features users rely on without realizing it — `np.sum(a, axis=0)` quietly benefits from four of them.
 
 NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` for unmanaged state and `ILKernelGenerator` for the typed inner loops. The bridge that wires them together is `NpyIter.Execution.cs`, which this page centers on.
+
+---
+
+## Public Iteration Surface
+
+`NpyIterRef` is the kernel-author engine — the rest of this page is about it. Most application code never constructs one directly. The public, user-facing ways to walk an array are:
+
+| You want | Use | Notes |
+|----------|-----|-------|
+| Every element of one array, C-order | `foreach (var x in ndarray)` or `ndarray.GetAtIndex(i)` | Resolves slices, strides, offset, and stride-0 broadcast; no intermediate copy. |
+| Each operand of a broadcast, flattened | `np.broadcast(a, b, …).iters[i]` — a `NpyFlatIterator` | One flat C-order stream per operand, each stretched to the broadcast shape (e.g. `np.broadcast([1,2,3], [[10],[20]]).iters[0]` yields `1,2,3,1,2,3`). |
+| The broadcast itself, as tuples | `foreach (object[] vals in np.broadcast(a, b, …))` | NumPy's `np.broadcast` object: one per-operand value tuple per step, with a live `.index` cursor, `.numiter`, `.size`, and `.reset()`. |
+
+There is **no separate per-element iterator class** — `NpyIter` drives every kernel, and the element-level surface above is built on the same `Shape`/stride machinery (`GetAtIndex`). `NpyFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
+
+Like NumSharp's `NpyIter`, `np.broadcast(...)` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp does not (see [Divergences from NumPy](#divergences-from-numpy)).
 
 ---
 

@@ -26,7 +26,7 @@
     href: benchmark-matrix.md
   - name: Iterator sheet (full report)
     href: benchmark-iterator.md
-- name: NDIter (Kerneling NDArray)
+- name: NpyIter (Kerneling NDArray)
   href: NDIter.md
 - name: Extending Libraries
   href: extensions/index.md

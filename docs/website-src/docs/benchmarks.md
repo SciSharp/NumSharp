@@ -126,7 +126,7 @@ better than "the closest thing NumPy can do."
 
 The iterator itself is also cheap to stand up: building and tearing down an `NpyIter` runs
 roughly **2–3× faster than constructing `np.nditer`** in NumPy (see the **Construction**
-section). For more on the iterator, see [NDIter](NDIter.md).
+section). For more on the iterator, see [NpyIter](NDIter.md).
 
 ---
 
