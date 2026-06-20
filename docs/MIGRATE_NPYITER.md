@@ -4,8 +4,7 @@
 
 This is the per-migration log for moving `np.where`'s non-contiguous path off the scalar
 `NpyExpr.Where` fallback and onto a dedicated **multi-operand per-chunk kernel** driven by
-`NpyIterRef` — the canonical "selection" item on the migration priority list in
-`docs/NPYITER_PERF_HANDOVER.md` (§8 / Phase 3).
+`NpyIterRef` — the canonical "selection" item on the NpyIter migration priority list.
 
 > One migration at a time, with measured before/after perf **and** GC. This document is the
 > evidence + design record for the `where` migration. The sibling candidate (narrow-int axis
@@ -24,8 +23,7 @@ This is the per-migration log for moving `np.where`'s non-contiguous path off th
 **Measured (clean same-binary A/B, [§4](#4-measurements-perf--gc)):** every non-contiguous
 `where` shape got **1.19×–2.06× faster** with **7–48 % less GC**, and **small-N improved too**
 (no setup-tax regression). The contiguous + scalar-operand fast paths were **left untouched**
-(they already hit a fused whole-array SIMD kernel; routing them through NpyIter only ties — see
-HANDOVER §4.1).
+(they already hit a fused whole-array SIMD kernel; routing them through NpyIter only ties).
 
 ---
 
@@ -162,7 +160,7 @@ strided-1d-step2     f64     3.6066    2.7498   1.31x    3173 → 1632   (−48%
 **Untouched fast paths (not in the A/B because they don't route through `WhereImpl`):** the
 all-contiguous case (`DirectILKernelGenerator.WhereExecute`) and the scalar-operand case
 (`WhereScalarX/Y/XY`) are byte-identical before/after. Routing them through NpyIter would only
-tie at large N and risk a small-N setup-tax regression (HANDOVER §4.1 / §4.7), so they were
+tie at large N and risk a small-N setup-tax regression, so they were
 deliberately left on the whole-array kernels.
 
 ---
@@ -196,12 +194,12 @@ the contiguous Direct kernel already ships, and the scalar path uses the shared
    `cond-row-bcast` SIMD number (e.g. f32 1.67 → ~1.1 ms, ~1.5× more). Gated on
    `sc==0 && sx==sy==sr==elemSize`; falls back to the current scalar path otherwise. ~80 lines of
    IL + re-run the §5 matrix.
-2. **Place / masked-assign** can now reuse this multi-operand machinery (the HANDOVER calls out
-   `WRITEMASKED`/`VIRTUAL` operand flags — `np.place` is the next selection op).
+2. **Place / masked-assign** can now reuse this multi-operand machinery (`WRITEMASKED`/`VIRTUAL`
+   operand flags — `np.place` is the next selection op).
 3. **Full unification (optional).** Routing the contiguous + scalar-operand cases through this
    kernel too would retire `Direct/DirectILKernelGenerator.Where.cs` and `.Where.Scalar.cs`. Do
    **not** until Phase 1 (setup-tax) lands — today it would tie large-N and risk small-N
-   regression (HANDOVER §4.1/§4.7). Keep the hybrid until then.
+   regression. Keep the hybrid until then.
 
 ---
 
@@ -211,15 +209,14 @@ Both were on the table. `where` was taken because it is the higher-confidence, l
 *NpyIter-shaped* migration:
 
 - The axis-reduction gap (narrow-int `sum(axis=…)`, the 25–57× row) is fixed by a **widening
-  SIMD kernel**, not by the iterator — `NpyAxisIter` is itself scalar (HANDOVER §4.5/§4.6). It
-  doesn't fit a "migrate to an NpyIter multi-operand kernel" framing, and HANDOVER flags a likely
-  pre-existing regression to bisect first (§4.9, §13).
+  SIMD kernel**, not by the iterator — `NpyAxisIter` is itself scalar. It
+  doesn't fit a "migrate to an NpyIter multi-operand kernel" framing, and there is a likely
+  pre-existing regression to bisect first.
 - `where` is the canonical multi-operand (3-in/1-out) NpyIter case, already half-on-NpyIter, with
   a concrete scalar-vs-SIMD gap that the per-chunk model closes cleanly — and it unlocks
   `place`/masked-assign next.
 
-The axis-reduction lever remains documented in `NPYITER_PERF_HANDOVER.md` §7/§13 for a separate,
-single-focus session.
+The axis-reduction lever remains a separate, single-focus session.
 
 ---
 

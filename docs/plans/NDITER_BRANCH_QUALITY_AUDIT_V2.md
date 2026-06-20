@@ -768,7 +768,7 @@ See V9.
 6. **MatMul gap to OpenBLAS** — 8-190× depending on size; expected without native BLAS link but could be improved 3-5× via multi-threading + AVX-512 + better cache blocking.
 7. **`Iternext()` ignores EXLOOP + buffered-non-reduce** — single root cause of buffer overruns AND 20× perf gap in iterator-driven user code; the bridge layer avoids both bugs but they remain in the public API.
 
-**Audit V1 ("NDITER_BRANCH_QUALITY_AUDIT.md") corrections summary:**
+**Audit V1 corrections summary:**
 
 | V1 claim | V2 measurement | Status |
 |---|---|---|
@@ -783,4 +783,4 @@ See V9.
 
 **Reference reports:** `docs/plans/audit_v2/01_iterators.md` through `08_casting_random_utilities.md` — full per-file, per-function detail with line numbers and reproductions.
 
-**Prior audit:** `docs/plans/NDITER_BRANCH_QUALITY_AUDIT.md` (V1) — see "Audit V1 corrections" section above for findings the V2 audit revised.
+**Prior audit (V1):** removed/superseded by this V2 audit — see the "Audit V1 corrections" section above for the findings it revised.

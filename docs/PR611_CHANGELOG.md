@@ -206,15 +206,15 @@ New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation
 
 - **NpyIter/NDIter book**: `docs/website-src/docs/NDIter.md` (7-technique quick reference, decision tree, memory model, gotchas) + `ndarray.md`.
 - **DocFX website — Benchmarks vs NumPy**: `benchmarks.md` (head-to-head evidence companion to the IL-generation page), `benchmark-iterator.md`, `benchmark-matrix.md`, driven by the auto-committed report artifacts.
-- **Engineering ledgers**: `PERF_LEDGER.md` (every optimization with before/after), `ROADMAP.md`, `NPYITER_GAPS_AND_ROADMAP.md` (gap analysis vs NumPy 2.4.2 + prioritized roadmap), `NPYITER_PARITY_ANALYSIS.md`, `NPYITER_PERF_HANDOVER.md`, `MIGRATE_NPYITER.md`, IL-kernel playbook + rulebook, fuzz findings/coverage/next-plan.
-- **Branch quality audits** V1+V2 (8 chapter reviews under `docs/plans/audit_v2/`) with every Tier-1 finding either fixed or reproduced as an `[OpenBugs]` test.
+- **Engineering ledgers**: `PERF_LEDGER.md` (every optimization with before/after), `NPYITER_GAPS_AND_ROADMAP.md` (gap analysis vs NumPy 2.4.2 + prioritized roadmap), `MIGRATE_NPYITER.md`, IL-kernel playbook, fuzz findings/coverage.
+- **Branch quality audit** V2 (8 chapter reviews under `docs/plans/audit_v2/`) with every Tier-1 finding either fixed or reproduced as an `[OpenBugs]` test.
 
 ## 16. Tests & CI
 
 - **+2,500 test methods**; suite now **9,709 passed / 0 failed** on net10.0 (also green on net8.0). Zero regressions maintained commit-by-commit.
 - New suites: `np.evaluate` (per-node wraparound, dtype matrices, weak scalars + overflow, fused-vs-unfused, `out=` identity/cast/aliasing, fused reductions), `out=`/`where=`/`dtype=` parity suites (broadcast/cast/error-text pins), WRITEMASKED/VIRTUAL parity; NpyIter battletests (566 scenarios), order-support sections 41–51, ARC lifecycle, clone regression, np.pad/average/median/percentile/ptp/diff battle tests, IL-kernel battle tests, behavioral audit harness.
 - CI: fuzz gate in `build-and-release.yml`, nightly `fuzz-soak.yml`, **new post-release `benchmark.yml`** (auto-commits NumPy-comparison report cards to master).
-- **Known gaps stay visible**: `np.sort` remains unimplemented (`[OpenBugs]`); the frontier benches' broadcast-reduce (54×), scalar `np.any` (14.5×) losses and the `BUFFERED+REDUCE` `ForEach` P0 crash (pinned/skipped repro) are documented as the next optimization frontier; small-N (~1K) dispatch overhead remains the headline focus (`docs/ROADMAP.md`). Every open issue found by the audits/fuzzers/benches is checked in as a failing-by-design `[OpenBugs]` test or pinned repro rather than ignored.
+- **Known gaps stay visible**: `np.sort` remains unimplemented (`[OpenBugs]`); the frontier benches' broadcast-reduce (54×), scalar `np.any` (14.5×) losses and the `BUFFERED+REDUCE` `ForEach` P0 crash (pinned/skipped repro) are documented as the next optimization frontier; small-N (~1K) dispatch overhead remains the headline focus (`docs/NPYITER_GAPS_AND_ROADMAP.md`). Every open issue found by the audits/fuzzers/benches is checked in as a failing-by-design `[OpenBugs]` test or pinned repro rather than ignored.
 
 ---
 

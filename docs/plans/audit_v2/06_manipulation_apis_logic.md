@@ -451,7 +451,7 @@ Functions correctly using iterators / IL:
 
 ## 8. Documentation / commit-history concerns
 
-The branch documentation file `docs/plans/NDITER_BRANCH_QUALITY_AUDIT.md` (the V1 audit) states that `np.where` was migrated to `NpyIter` on this branch — verified accurate (§ 1.4 of that doc). The new `WhereImpl` is concise and routes correctly.
+The V1 branch-quality audit stated that `np.where` was migrated to `NpyIter` on this branch — verified accurate. The new `WhereImpl` is concise and routes correctly.
 
 The branch docs do not mention:
 - `np.finfo` precision bug (§ 1.1)

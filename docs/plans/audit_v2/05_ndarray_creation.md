@@ -1,8 +1,8 @@
 # Audit v2 — Group 5: NDArray core + Creation APIs
 
 Audited on `nditer` branch. All claims independently verified with NumPy 2.x +
-`dotnet_run` reproductions. The companion document
-`docs/plans/NDITER_BRANCH_QUALITY_AUDIT.md` was used only as a starting point —
+`dotnet_run` reproductions. The companion V1 branch-quality audit (now
+superseded) was used only as a starting point —
 several of its claims (linspace 10-30× perf, eye boxing dominant cost) are
 overstated and corrected below.
 
@@ -923,7 +923,7 @@ Added `Half` and `Complex` branches to the per-dtype switch (originally only
 - `linspace(0,5,11,int32)` → `[0,0,1,1,2,2,3,3,4,4,5]`. ✓
 
 ### Audit's "10-30× perf" claim — CORRECTED (Severity: MEDIUM, not HIGH)
-The audit at `NDITER_BRANCH_QUALITY_AUDIT.md` Perf 3 claimed integer linspace
+The V1 audit's Perf 3 claimed integer linspace
 is 10-30× slower because of `Converts.ToInt32` "virtual call per element /
 boxing". Reality:
 - `Converts.ToInt32(double)` is a **static method overload** that takes `double`
