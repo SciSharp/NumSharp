@@ -33,9 +33,16 @@ namespace NumSharp.Backends.Kernels
         //   (Half) cast which QUIETS signaling NaNs (0x7f..->0x7e..); NumPy does NOT, and
         //   Giesen matches NumPy (sNaN 0x7f800001 -> 0x7c01, not 0x7e00).
         //
-        //   Deferred (kept on the correct-but-scalar path, no regression): u32 (i32-reinterpret
-        //   flips sign for vals >= 2^31), i64/u64 (no AVX2 i64->f32 — needs AVX512), f64
-        //   (f64->f32->f16 genuinely double-rounds), c128, f16->f16 (same-type copy family).
+        //   i64/u64 -> f16 (Wave 17, AVX2-only): there is no AVX2 i64->f32 (cvtqq2ps is AVX512DQ),
+        //   but f16 saturates to +-inf at 65520, so any |v| >= 65520 is inf and every FINITE
+        //   result fits in i32 exactly (|v| < 2^17 << 2^24). Clamp |v| >= 65520 to a +-70000
+        //   sentinel (-> +-inf), pack the low 32 bits of 8 lanes via PermuteVar8x32(RtoSel), then
+        //   the exact cvtdq2ps + the proven Giesen FloatToHalfBits. u64 clamps with the sign-bias
+        //   unsigned-compare trick. Proven 0-diff vs NumPy 2.4.2 over the full +-70010 boundary
+        //   region + 2^16..2^63 magnitudes + 50K randoms (190K i64 / 120K u64 cases).
+        //
+        //   Deferred (kept on the correct-but-scalar path, no regression): f16->f16 (same-type
+        //   copy family, handled elsewhere).
         // =====================================================================
 
         // Giesen branchless float -> half over 8 lanes; result low 16 bits = f16 pattern.
@@ -87,6 +94,49 @@ namespace NumSharp.Backends.Kernels
             if (x > f16max - 1) res = infnan;
             res |= (int)((uint)sign >> 16);
             return (ushort)res;
+        }
+
+        // ---- i64/u64 -> f16 (Wave 17): clamp out-of-f16-range lanes to a +-70000 sentinel so the
+        // low-32-bit narrow is exact, then cvtdq2ps + Giesen. See the file header for the proof. ----
+
+        // 8 i64 (two 4-lane vectors) -> 8 f16 bit patterns (low 16 bits of each Vector256<int> lane).
+        private static Vector256<int> Int64x8ToHalfBits(Vector256<long> a, Vector256<long> b)
+        {
+            var c = Vector256.Create(65519L); var cm = Vector256.Create(-65519L);
+            var hi = Vector256.Create(70000L); var lo = Vector256.Create(-70000L);
+            a = Avx2.BlendVariable(a.AsByte(), hi.AsByte(), Avx2.CompareGreaterThan(a, c).AsByte()).AsInt64();   // v >= 65520 -> +70000
+            a = Avx2.BlendVariable(a.AsByte(), lo.AsByte(), Avx2.CompareGreaterThan(cm, a).AsByte()).AsInt64();  // v <= -65520 -> -70000
+            b = Avx2.BlendVariable(b.AsByte(), hi.AsByte(), Avx2.CompareGreaterThan(b, c).AsByte()).AsInt64();
+            b = Avx2.BlendVariable(b.AsByte(), lo.AsByte(), Avx2.CompareGreaterThan(cm, b).AsByte()).AsInt64();
+            var ai = Avx2.PermuteVar8x32(a.AsInt32(), RtoSel).GetLower();   // [a0 a1 a2 a3] low-32 (exact, |clamped| < 2^31)
+            var bi = Avx2.PermuteVar8x32(b.AsInt32(), RtoSel).GetLower();   // [b0 b1 b2 b3]
+            return FloatToHalfBits(Avx.ConvertToVector256Single(Vector256.Create(ai, bi)));
+        }
+        // 8 u64 -> 8 f16 bit patterns (unsigned clamp via the sign-bias compare trick).
+        private static Vector256<int> UInt64x8ToHalfBits(Vector256<ulong> a, Vector256<ulong> b)
+        {
+            var bias = Vector256.Create(long.MinValue);
+            var thr = Vector256.Create(65519L ^ long.MinValue);
+            var hi = Vector256.Create(70000UL);
+            var ga = Avx2.CompareGreaterThan(Avx2.Xor(a.AsInt64(), bias), thr);   // unsigned a > 65519
+            var gb = Avx2.CompareGreaterThan(Avx2.Xor(b.AsInt64(), bias), thr);
+            a = Avx2.BlendVariable(a.AsByte(), hi.AsByte(), ga.AsByte()).AsUInt64();
+            b = Avx2.BlendVariable(b.AsByte(), hi.AsByte(), gb.AsByte()).AsUInt64();
+            var ai = Avx2.PermuteVar8x32(a.AsInt32(), RtoSel).GetLower();
+            var bi = Avx2.PermuteVar8x32(b.AsInt32(), RtoSel).GetLower();
+            return FloatToHalfBits(Avx.ConvertToVector256Single(Vector256.Create(ai, bi)));
+        }
+        // Scalar ports (the < 16 tail + strided scalar conv); finite |v| < 2^24 so (float) is exact.
+        internal static ushort Int64ToHalfBits(long v)
+        {
+            if (v >= 65520) return 0x7C00;            // +inf
+            if (v <= -65520) return 0xFC00;           // -inf
+            return SingleToHalfBits((float)v);
+        }
+        internal static ushort UInt64ToHalfBits(ulong v)
+        {
+            if (v >= 65520) return 0x7C00;            // +inf (u64 has no -inf)
+            return SingleToHalfBits((float)v);
         }
 
         // ---- double -> f16 (Wave 11b): no F16C and cvtpd2ps double-ROUNDS, so narrow via
@@ -175,6 +225,29 @@ namespace NumSharp.Backends.Kernels
             return i;
         }
 
+        private static unsafe long BulkInt64ToHalf(void* s, void* d, long n)
+        {
+            long* src = (long*)s; ushort* dst = (ushort*)d; long i = 0;
+            for (; i + 16 <= n; i += 16)
+            {
+                var lo = Int64x8ToHalfBits(Vector256.Load(src + i), Vector256.Load(src + i + 4));
+                var hi = Int64x8ToHalfBits(Vector256.Load(src + i + 8), Vector256.Load(src + i + 12));
+                Vector256.Store(Vector256.Narrow(lo, hi).AsUInt16(), dst + i);
+            }
+            return i;
+        }
+        private static unsafe long BulkUInt64ToHalf(void* s, void* d, long n)
+        {
+            ulong* src = (ulong*)s; ushort* dst = (ushort*)d; long i = 0;
+            for (; i + 16 <= n; i += 16)
+            {
+                var lo = UInt64x8ToHalfBits(Vector256.Load(src + i), Vector256.Load(src + i + 4));
+                var hi = UInt64x8ToHalfBits(Vector256.Load(src + i + 8), Vector256.Load(src + i + 12));
+                Vector256.Store(Vector256.Narrow(lo, hi).AsUInt16(), dst + i);
+            }
+            return i;
+        }
+
         // ---- SIMD bulks: read N contiguous src elements, write N contiguous f16. ----
         // Each processes 16-at-a-time (two 8-lane Giesen -> truncating Narrow -> 16 u16) and
         // returns the count handled (multiple of 16); the caller scalar-converts the tail.
@@ -254,6 +327,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ConvByteToHalf(void* s, void* d) => *(ushort*)d = SingleToHalfBits((float)*(byte*)s);
         private static unsafe void ConvSByteToHalf(void* s, void* d) => *(ushort*)d = SingleToHalfBits((float)*(sbyte*)s);
         private static unsafe void ConvUInt32ToHalf(void* s, void* d) => *(ushort*)d = SingleToHalfBits((float)*(uint*)s);
+        private static unsafe void ConvInt64ToHalf(void* s, void* d) => *(ushort*)d = Int64ToHalfBits(*(long*)s);
+        private static unsafe void ConvUInt64ToHalf(void* s, void* d) => *(ushort*)d = UInt64ToHalfBits(*(ulong*)s);
         private static unsafe void ConvDoubleToHalf(void* s, void* d) => *(ushort*)d = DoubleToHalfBits(*(double*)s);
 
         // ---- contiguous kernels: bulk + NumPy-faithful scalar tail ----
@@ -271,6 +346,10 @@ namespace NumSharp.Backends.Kernels
         { long i = BulkSByteToHalf(s, d, n); sbyte* p = (sbyte*)s; ushort* o = (ushort*)d; for (; i < n; i++) o[i] = SingleToHalfBits((float)p[i]); }
         private static unsafe void CastUInt32ToHalfContig(void* s, void* d, long n)
         { long i = BulkUInt32ToHalf(s, d, n); uint* p = (uint*)s; ushort* o = (ushort*)d; for (; i < n; i++) o[i] = SingleToHalfBits((float)p[i]); }
+        private static unsafe void CastInt64ToHalfContig(void* s, void* d, long n)
+        { long i = BulkInt64ToHalf(s, d, n); long* p = (long*)s; ushort* o = (ushort*)d; for (; i < n; i++) o[i] = Int64ToHalfBits(p[i]); }
+        private static unsafe void CastUInt64ToHalfContig(void* s, void* d, long n)
+        { long i = BulkUInt64ToHalf(s, d, n); ulong* p = (ulong*)s; ushort* o = (ushort*)d; for (; i < n; i++) o[i] = UInt64ToHalfBits(p[i]); }
         private static unsafe void CastDoubleToHalfContig(void* s, void* d, long n)
         { long i = BulkDoubleToHalf(s, d, n); double* p = (double*)s; ushort* o = (ushort*)d; for (; i < n; i++) o[i] = DoubleToHalfBits(p[i]); }
 
@@ -291,6 +370,8 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Char: return CastUInt16ToHalfContig;
                 case NPTypeCode.Int32: return CastInt32ToHalfContig;
                 case NPTypeCode.UInt32: return CastUInt32ToHalfContig;
+                case NPTypeCode.Int64: return CastInt64ToHalfContig;
+                case NPTypeCode.UInt64: return CastUInt64ToHalfContig;
                 case NPTypeCode.Single: return CastSingleToHalfContig;
                 case NPTypeCode.Double: return CastDoubleToHalfContig;
                 case NPTypeCode.Complex: return CastComplexToHalfContig;
@@ -307,6 +388,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void StridedByteToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 1, 2, &BulkByteToHalf, &ConvByteToHalf);
         private static unsafe void StridedSByteToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 1, 2, &BulkSByteToHalf, &ConvSByteToHalf);
         private static unsafe void StridedUInt32ToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 4, 2, &BulkUInt32ToHalf, &ConvUInt32ToHalf);
+        private static unsafe void StridedInt64ToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkInt64ToHalf, &ConvInt64ToHalf);
+        private static unsafe void StridedUInt64ToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkUInt64ToHalf, &ConvUInt64ToHalf);
         private static unsafe void StridedDoubleToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 8, 2, &BulkDoubleToHalf, &ConvDoubleToHalf);
 
         /// <summary>
@@ -325,6 +408,8 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Char: return StridedUInt16ToHalf;
                 case NPTypeCode.Int32: return StridedInt32ToHalf;
                 case NPTypeCode.UInt32: return StridedUInt32ToHalf;
+                case NPTypeCode.Int64: return StridedInt64ToHalf;
+                case NPTypeCode.UInt64: return StridedUInt64ToHalf;
                 case NPTypeCode.Single: return StridedSingleToHalf;
                 case NPTypeCode.Double: return StridedDoubleToHalf;
                 case NPTypeCode.Complex: return StridedComplexToHalf;
