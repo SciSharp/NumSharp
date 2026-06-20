@@ -19,6 +19,9 @@ PAIRS = [
     ("bool","bool"),("u8","u8"),("i8","i8"),("bool","u8"),("bool","i8"),("u8","i8"),("i8","u8"),
     ("i16","i16"),("u16","u16"),("char","char"),("f16","f16"),
     ("i16","u16"),("i16","char"),("u16","i16"),("u16","char"),("char","i16"),("char","u16"),
+    # 2B-int -> 1B narrowing (low-byte truncate) + ->bool (!=0): SubwordNarrow kernel
+    ("i16","i8"),("i16","u8"),("u16","i8"),("u16","u8"),("char","i8"),("char","u8"),
+    ("i16","bool"),("u16","bool"),("char","bool"),
 ]
 LAY = ["C","F","T","sliced","negrow","negcol","strided","bcast"]
 
@@ -35,7 +38,7 @@ def layout(b, l):
 
 lines = []
 for sn, dn in PAIRS:
-    base = ((np.arange(R*C) % 251) + 1).astype(DT[sn]).reshape(R, C)
+    base = (np.arange(R*C) % 65521).astype(DT[sn]).reshape(R, C)   # incl 0 + diverse high bytes
     for l in LAY:
         v = layout(base, l)
         r = v.astype(DT[dn], copy=True)

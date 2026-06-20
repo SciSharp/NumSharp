@@ -42,7 +42,7 @@ int ok = 0, fail = 0;
 foreach (var key in refs.Keys)
 {
     var p = key.Split('|'); var sn = p[0]; var lay = p[1]; var dn = p[2];
-    var baseArr = ((np.arange(R * C) % 251) + 1).astype(TC[sn]).reshape(R, C);
+    var baseArr = (np.arange(R * C) % 65521).astype(TC[sn]).reshape(R, C);
     var v = Layout(baseArr, lay);
     var r = v.astype(TC[dn], copy: true);
     var h = Hash(r);

@@ -176,6 +176,10 @@ namespace NumSharp.Backends.Kernels
             // cross-type and 4/8/16-byte same-type fall through to the existing fast paths.
             var subwordCopy = TryGetSubwordCopyStridedKernel(srcType, dstType);
             if (subwordCopy != null) return subwordCopy;
+            // 2-byte-int -> 1-byte strided: {i16,u16,char}->{i8,u8} (low-byte truncate) /
+            // ->bool (!=0) via deinterleave/reverse + narrow (2-byte src is not gatherable).
+            var subwordNarrow = TryGetSubwordNarrowStridedKernel(srcType, dstType);
+            if (subwordNarrow != null) return subwordNarrow;
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
