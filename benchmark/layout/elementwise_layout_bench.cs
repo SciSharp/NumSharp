@@ -37,12 +37,14 @@ var DTYPES = new (string name, NPTypeCode tc)[]
     ("f16", NPTypeCode.Half), ("i32", NPTypeCode.Int32), ("i64", NPTypeCode.Int64),
 };
 string[] OPS = { "add", "mul", "neg", "abs", "sqrt", "less", "copy" };
-string[] LAYOUTS = { "C", "F", "T", "strided", "sliced" };
+string[] LAYOUTS = { "C", "F", "T", "strided", "sliced", "negrow", "negcol", "bcast" };
 
 NDArray Layout(NDArray b, string l) => l switch
 {
     "C" => b, "F" => b.copy(order: 'F'), "T" => b.T,
     "strided" => b[":, ::2"], "sliced" => b["1:" + (b.shape[0]-1) + ", 1:" + (b.shape[1]-1)],
+    "negrow" => b["::-1, :"], "negcol" => b[":, ::-1"],
+    "bcast" => np.broadcast_to(b["0:1, :"], new Shape((int)b.shape[0], (int)b.shape[1])),
     _ => throw new Exception(l),
 };
 NDArray Op(string op, NDArray v) => op switch

@@ -50,7 +50,7 @@ var DTYPES = new (string name, NPTypeCode tc)[]
     ("dec", NPTypeCode.Decimal), ("f16", NPTypeCode.Half), ("i32", NPTypeCode.Int32), ("i64", NPTypeCode.Int64),
 };
 string[] OPS = { "sum", "min", "max", "prod" };
-string[] LAYOUTS = { "C", "F", "T", "strided", "negstride", "sliced" };
+string[] LAYOUTS = { "C", "F", "T", "strided", "negrow", "negcol", "sliced", "bcast" };
 
 NDArray Layout(NDArray baseArr, string layout) => layout switch
 {
@@ -58,8 +58,10 @@ NDArray Layout(NDArray baseArr, string layout) => layout switch
     "F" => baseArr.copy(order: 'F'),
     "T" => baseArr.T,
     "strided" => baseArr[":, ::2"],
-    "negstride" => baseArr["::-1, :"],
+    "negrow" => baseArr["::-1, :"],
+    "negcol" => baseArr[":, ::-1"],
     "sliced" => baseArr["1:" + (baseArr.shape[0] - 1) + ", 1:" + (baseArr.shape[1] - 1)],
+    "bcast" => np.broadcast_to(baseArr["0:1, :"], new Shape((int)baseArr.shape[0], (int)baseArr.shape[1])),
     _ => throw new Exception(layout),
 };
 NDArray Reduce(string op, NDArray a, int axis) => op switch

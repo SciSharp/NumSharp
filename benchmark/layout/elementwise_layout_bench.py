@@ -13,13 +13,16 @@ def pick(n): return (200,30,3) if n<=100_000 else (30,6,3)
 SIZES=[("100K",316,316),("1M",1000,1000)]
 DTYPES=[("f64",np.float64),("f32",np.float32),("c128",np.complex128),
         ("f16",np.float16),("i32",np.int32),("i64",np.int64)]
-LAYOUTS=["C","F","T","strided","sliced"]
+LAYOUTS=["C","F","T","strided","sliced","negrow","negcol","bcast"]
 def layout(a,l):
     if l=="C": return a
     if l=="F": return np.asfortranarray(a)
     if l=="T": return a.T
     if l=="strided": return a[:, ::2]
     if l=="sliced": return a[1:a.shape[0]-1, 1:a.shape[1]-1]
+    if l=="negrow": return a[::-1, :]
+    if l=="negcol": return a[:, ::-1]
+    if l=="bcast": return np.broadcast_to(a[0:1, :], (a.shape[0], a.shape[1]))
     raise ValueError(l)
 def op(name,v):
     if name=="add": return v+v

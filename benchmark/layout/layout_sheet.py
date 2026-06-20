@@ -98,8 +98,9 @@ def main():
 
     head = ("# Layout suite — reduction / copy / elementwise × memory layout × dtype\n\n"
             "ratio = NumPy_ms / NumSharp_ms — **>1.0 = NumSharp faster**. ✅≥1.0 🟡≥0.5 🟠≥0.2 🔴<0.2.\n"
-            "Layouts: `C`, `F` (Fortran), `T` (transpose), `strided` `[:, ::2]`, `sliced` (offset), "
-            "`negstride` `[::-1]`. Fills the op-matrix's blind spot (it measures C-contiguous only). "
+            "Layouts (8, harmonized with the cast subsystem): `C`, `F` (Fortran), `T` (transpose), "
+            "`strided` `[:, ::2]`, `sliced` (offset), `negrow` `[::-1,:]`, `negcol` `[:,::-1]`, "
+            "`bcast` (stride-0). Fills the op-matrix's blind spot (it measures C-contiguous only). "
             "100K + 1M elements, best-of-rounds.\n")
     md = head + "\n" + "\n".join(blocks)
     with open(MD, "w", encoding="utf-8") as f:

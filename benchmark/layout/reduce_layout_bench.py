@@ -16,15 +16,17 @@ SIZES = [("100K",316,316), ("1M",1000,1000)]
 DTYPES = [("f64",np.float64),("f32",np.float32),("c128",np.complex128),
           ("dec",np.float64),("f16",np.float16),("i32",np.int32),("i64",np.int64)]  # dec modelled as f64
 OPS = {"sum":np.sum,"min":np.amin,"max":np.amax,"prod":np.prod}
-LAYOUTS = ["C","F","T","strided","negstride","sliced"]
+LAYOUTS = ["C","F","T","strided","negrow","negcol","sliced","bcast"]
 
 def layout(a, name):
     if name=="C": return a
     if name=="F": return np.asfortranarray(a)
     if name=="T": return a.T
     if name=="strided": return a[:, ::2]
-    if name=="negstride": return a[::-1, :]
+    if name=="negrow": return a[::-1, :]
+    if name=="negcol": return a[:, ::-1]
     if name=="sliced": return a[1:a.shape[0]-1, 1:a.shape[1]-1]
+    if name=="bcast": return np.broadcast_to(a[0:1, :], (a.shape[0], a.shape[1]))
     raise ValueError(name)
 
 out = []

@@ -36,13 +36,13 @@ var DTYPES = new (string name, NPTypeCode tc)[]
     ("char", NPTypeCode.Char), ("f16", NPTypeCode.Half), ("f32", NPTypeCode.Single),
     ("f64", NPTypeCode.Double), ("dec", NPTypeCode.Decimal), ("c128", NPTypeCode.Complex),
 };
-string[] LAYOUTS = { "C", "F", "T", "strided", "sliced", "negstride", "bcast" };
+string[] LAYOUTS = { "C", "F", "T", "strided", "sliced", "negrow", "negcol", "bcast" };
 
 NDArray Layout(NDArray b, string l) => l switch
 {
     "C" => b, "F" => b.copy(order: 'F'), "T" => b.T,
     "strided" => b[":, ::2"], "sliced" => b["1:" + (b.shape[0]-1) + ", 1:" + (b.shape[1]-1)],
-    "negstride" => b["::-1, :"],
+    "negrow" => b["::-1, :"], "negcol" => b[":, ::-1"],
     "bcast" => np.broadcast_to(b["0:1, :"], new Shape((int)b.shape[0], (int)b.shape[1])),
     _ => throw new Exception(l),
 };

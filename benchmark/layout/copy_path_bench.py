@@ -15,14 +15,15 @@ SIZES=[("100K",316,316),("1M",1000,1000)]
 DTYPES=[("u8",np.uint8),("i8",np.int8),("i16",np.int16),("u16",np.uint16),("i32",np.int32),
         ("u32",np.uint32),("i64",np.int64),("u64",np.uint64),("char",np.uint16),
         ("f16",np.float16),("f32",np.float32),("f64",np.float64),("c128",np.complex128)]
-LAYOUTS=["C","F","T","strided","sliced","negstride","bcast"]
+LAYOUTS=["C","F","T","strided","sliced","negrow","negcol","bcast"]
 def layout(a,l):
     if l=="C": return a
     if l=="F": return np.asfortranarray(a)
     if l=="T": return a.T
     if l=="strided": return a[:, ::2]
     if l=="sliced": return a[1:a.shape[0]-1, 1:a.shape[1]-1]
-    if l=="negstride": return a[::-1, :]
+    if l=="negrow": return a[::-1, :]
+    if l=="negcol": return a[:, ::-1]
     if l=="bcast": return np.broadcast_to(a[0:1, :], (a.shape[0], a.shape[1]))
     raise ValueError(l)
 
