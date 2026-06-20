@@ -20,8 +20,8 @@ namespace NumSharp.UnitTest.Creation
     ///     i.e. each iters[i] yields its operand stretched to the broadcast result shape, walked
     ///     in C-order of the RESULT (not the operand's own memory order).
     ///
+    ///     np.broadcast accepts 0..64 operands like NumPy (see the N-operand tests).
     ///     Divergences from NumPy that are deliberately documented (see the [Misaligned] tests):
-    ///       - NumSharp's np.broadcast takes exactly two operands (NumPy: 1..32).
     ///       - <c>iters</c> are re-enumerable (NumPy's flatiter is one-shot / exhausts).
     ///       - <c>index</c> throws (NumPy returns the live flat index).
     /// </summary>
@@ -64,6 +64,17 @@ namespace NumSharp.UnitTest.Creation
                 $"iters[0] for {typeof(T).Name} must cycle the row and stay typed as {typeof(T).Name}");
             Iter<long>(bc, 1).Should().Equal(new long[] { 0, 0, 0, 10, 10, 10 },
                 "iters[1] (int64 column) must broadcast across the row axis");
+        }
+
+        /// <summary>Assert an N-operand broadcast's shape, numiter, and every int64 iters sequence.</summary>
+        private static void AssertItersN(np.Broadcast bc, int[] shape, params long[][] expected)
+        {
+            bc.shape.dimensions.Should().Equal(shape.Select(d => (long)d), "broadcast result shape must match NumPy");
+            bc.ndim.Should().Be(shape.Length);
+            bc.numiter.Should().Be(expected.Length, "numiter == number of operands");
+            bc.iters.Length.Should().Be(expected.Length);
+            for (int i = 0; i < expected.Length; i++)
+                Iter<long>(bc, i).Should().Equal(expected[i], $"iters[{i}] must equal broadcast_to(op_{i}, shape).ravel(C)");
         }
 
         #endregion
@@ -338,6 +349,128 @@ namespace NumSharp.UnitTest.Creation
             bc.nd.Should().Be(2);
             bc.size.Should().Be(6);
             bc.numiter.Should().Be(2);
+        }
+
+        // ================================================================
+        // N operands (NumPy accepts 0..64; NumSharp now matches)
+        // ================================================================
+
+        /// <summary>
+        ///     Single operand: np.broadcast(arange(3)) -> shape (3,), numiter 1, one iterator.
+        /// </summary>
+        [TestMethod]
+        public void Iters_SingleOperand_MatchNumPy()
+        {
+            AssertItersN(np.broadcast(np.arange(3)), new[] { 3 },
+                new long[] { 0, 1, 2 });
+        }
+
+        /// <summary>
+        ///     Single transposed operand still iterates in C-order of its (own) shape.
+        ///       np.broadcast(arange(6).reshape(2,3).T).iters[0] -> 0,3,1,4,2,5
+        /// </summary>
+        [TestMethod]
+        public void Iters_SingleTransposedOperand_COrder()
+        {
+            AssertItersN(np.broadcast(np.arange(6).reshape(2, 3).T), new[] { 3, 2 },
+                new long[] { 0, 3, 1, 4, 2, 5 });
+        }
+
+        /// <summary>
+        ///     Three operands: np.broadcast(arange(3), [[0],[10]], 100) -> (2,3), numiter 3.
+        ///       iters[0] -> 0,1,2,0,1,2 ; iters[1] -> 0,0,0,10,10,10 ; iters[2] -> 100 x6
+        /// </summary>
+        [TestMethod]
+        public void Iters_ThreeOperands_MatchNumPy()
+        {
+            AssertItersN(
+                np.broadcast(np.arange(3), np.array(new long[,] { { 0 }, { 10 } }), NDArray.Scalar(100L)),
+                new[] { 2, 3 },
+                new long[] { 0, 1, 2, 0, 1, 2 },
+                new long[] { 0, 0, 0, 10, 10, 10 },
+                new long[] { 100, 100, 100, 100, 100, 100 });
+        }
+
+        /// <summary>
+        ///     Three operands with prepended dims (each operand stretches a different axis).
+        ///       np.broadcast([[0],[1]], arange(3), [[100],[200]]) -> (2,3), numiter 3
+        /// </summary>
+        [TestMethod]
+        public void Iters_ThreeOperands_PrependDims_MatchNumPy()
+        {
+            AssertItersN(
+                np.broadcast(np.arange(2).reshape(2, 1), np.arange(3), np.array(new long[,] { { 100 }, { 200 } })),
+                new[] { 2, 3 },
+                new long[] { 0, 0, 0, 1, 1, 1 },
+                new long[] { 0, 1, 2, 0, 1, 2 },
+                new long[] { 100, 100, 100, 200, 200, 200 });
+        }
+
+        /// <summary>
+        ///     Four operands of differing ndim broadcast to a common shape (NumPy docs example).
+        ///       np.broadcast(ones(6,7), ones(5,6,1), ones(7), ones(5,1,7)) -> (5,6,7), numiter 4
+        /// </summary>
+        [TestMethod]
+        public void Iters_FourOperands_Shape()
+        {
+            var bc = np.broadcast(
+                np.ones(new Shape(6, 7)),
+                np.ones(new Shape(5, 6, 1)),
+                np.ones(new Shape(7)),
+                np.ones(new Shape(5, 1, 7)));
+
+            bc.shape.dimensions.Should().Equal(new long[] { 5, 6, 7 });
+            bc.ndim.Should().Be(3);
+            bc.size.Should().Be(210);
+            bc.numiter.Should().Be(4);
+            bc.iters.Length.Should().Be(4);
+            foreach (var it in bc.iters)
+            {
+                it.size.Should().Be(210);
+                it.Cast<double>().ToArray().Should().HaveCount(210).And.OnlyContain(x => x == 1.0);
+            }
+        }
+
+        /// <summary>
+        ///     Zero operands: np.broadcast() -> 0-d (shape ()), size 1, numiter 0, empty iters.
+        /// </summary>
+        [TestMethod]
+        public void Iters_ZeroOperands_ScalarBroadcast()
+        {
+            var bc = np.broadcast();
+
+            bc.ndim.Should().Be(0);
+            bc.size.Should().Be(1);
+            bc.numiter.Should().Be(0);
+            bc.iters.Should().NotBeNull();
+            bc.iters.Length.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     More than 64 operands raises ValueError ("Need at least 0 and at most 64 array objects.").
+        /// </summary>
+        [TestMethod]
+        public void Broadcast_TooManyOperands_Throws()
+        {
+            var sixtyFive = Enumerable.Range(0, 65).Select(_ => np.ones(new Shape(1))).ToArray();
+
+            new Action(() => np.broadcast(sixtyFive))
+                .Should().Throw<ValueError>("NumPy caps np.broadcast at 64 operands");
+
+            // exactly 64 is allowed
+            var sixtyFour = Enumerable.Range(0, 64).Select(_ => np.ones(new Shape(1))).ToArray();
+            np.broadcast(sixtyFour).numiter.Should().Be(64);
+        }
+
+        /// <summary>
+        ///     Three-way incompatible shapes raise (mismatch surfaces while folding the operands).
+        ///       np.broadcast(ones(3), ones(3), ones(4)) -> ValueError/shape mismatch
+        /// </summary>
+        [TestMethod]
+        public void Broadcast_ThreeWayIncompatible_Throws()
+        {
+            new Action(() => np.broadcast(np.ones(new Shape(3)), np.ones(new Shape(3)), np.ones(new Shape(4))))
+                .Should().Throw<IncorrectShapeException>("(3,) and (4,) cannot broadcast");
         }
 
         // ================================================================
