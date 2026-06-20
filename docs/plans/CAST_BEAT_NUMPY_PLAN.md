@@ -509,3 +509,32 @@ At that point NumSharp beats NumPy at **every** cast execution.
 | Bit-exact conversion table | `Utilities/Converts.cs` (all 225 `To{Dst}({Src})`) |
 | Parity tests | `test/…/Backends/Kernels/StridedCastParityTests.cs`, `StridedCopySameTypeParityTests.cs` |
 | Same-type copy (DONE) | `…/DirectILKernelGenerator.Copy.cs` (`CopyGeneralSameType`) |
+| float/c128 → u32/u64 (Wave 15/15b/15d) | `…/DirectILKernelGenerator.Cast.FloatToUInt.cs` (`DoubleToU32x4`, `DoubleToU64x4`, contig+strided; routed from `.Cast.Half.cs` / `.Cast.Complex.cs` for f16/c128) |
+| f16 → f32 widen / f16 → i64 (Wave 15c/15e) | `…/DirectILKernelGenerator.Cast.Half.cs` (`HalfBitsToFloatExact`, `BulkHalfToInt64`) |
+
+---
+
+## 11. Wave 15 progress (HEAD)
+
+Resolved the historical "float/complex → unsigned" cliff **on AVX2 only** (this CPU has no
+AVX512; the direct `cvttps2udq`/`cvttpd2udq` instructions would *saturate* anyway, diverging
+from NumPy's modular wrap).
+
+| Wave | Family | Was | Now (NPY/NS best-of-7) |
+|------|--------|-----|------|
+| 15  | `f32/f64 → u32` (AVX2 mod-2³² reduce + range-shift) | 0.46–0.85 | 1.04–2.22 |
+| 15b | `f16/c128 → u32` (Giesen widen / real deinterleave → above) | 0.59–0.72 | 1.13–2.20 |
+| 15c | `f16 → f32` widen (Giesen + IEEE NaN-payload blend) | 0.64–0.89 | 0.92–3.75 |
+| 15d | `{f16,f32,f64,c128} → u64` (hi/lo split, no `cvttpd2qq`) | 0.73–0.90 | 13/16 win; 0.84–1.62 |
+| 15e | `f16 → i64` (cvtt+sign-extend, inf/nan→int64.min blend) | 0.73–0.81 | 2.0–3.1 |
+
+- Bit-exact vs NumPy 2.4.2: `f16→f32` proven **exhaustively** (all 65536 f16 values); `f64→u32/u64`
+  over 400K–500K random+edge; every wave validated through the real `astype` path × all 8 layouts.
+- **Latent bug fixed:** BCL `(float)Half` / `(Half)` **quiet signaling NaNs**; the Giesen/blend
+  paths preserve them (matches NumPy).
+- Scoreboard at HEAD (`benchmark/cast/cast_results.md`, best-of-3): **1435/1568 (91.5%) ≥0.9**,
+  1351 (86.2%) win, overall geomean **1.70** (best-of-3 undercounts; best-of-7 spot checks higher).
+- **Residual <0.9 (hardware-limited, not AVX2-addressable):** non-gatherable 2-byte/1-byte strided
+  narrow + same-type strided copy; AVX512-gated `i64/u64→f16`; memory-bound `i64/u64→narrow` strided;
+  alloc-bound 1M same-type contig (`bool|F|bool` = 0.17, the lone 🔴). These need buffer pooling or
+  AVX512 hardware. (Phase-5 "100% ✅" exit is therefore not reachable on AVX2-only hardware.)

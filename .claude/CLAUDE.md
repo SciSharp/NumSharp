@@ -41,8 +41,6 @@ Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, S
 - Edge case tests (empty, scalar, broadcast, strided)
 - Dtype coverage tests
 
-**Full audit tracking:** See `docs/KERNEL_API_AUDIT.md`
-
 ## Supported Types (15)
 
 | NPTypeCode | C# Type | NPTypeCode | C# Type |
@@ -88,13 +86,13 @@ np                Static API class (like `import numpy as np`)
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 59 partials in `Direct/`). Supersedes Regen templates. |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 60 partials in `Direct/`). Supersedes Regen templates. |
 
 ## ILKernelGenerator + DirectILKernelGenerator
 
 Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels. **Two physically distinct classes**, each encoding its kernel-driving contract in the type name:
 
-### `DirectILKernelGenerator` — whole-array kernels (59 partials)
+### `DirectILKernelGenerator` — whole-array kernels (60 partials)
 
 **Location:** `src/NumSharp.Core/Backends/Kernels/Direct/DirectILKernelGenerator.*.cs`
 
@@ -109,7 +107,7 @@ delegate void DirectKernel(
 
 Carries the bulk of NumSharp's elementwise, reduction, scan, cast, and selection kernels.
 
-**Partial files in `Direct/` (59):**
+**Partial files in `Direct/` (60):**
 | Category | Files |
 |----------|-------|
 | Core | `DirectILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
@@ -120,7 +118,7 @@ Carries the bulk of NumSharp's elementwise, reduction, scan, cast, and selection
 | Reduction (axis) | `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Boolean.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs`, `.Reduction.Axis.Widening.cs` |
 | Scan | `.Scan.cs` (CumSum, CumProd) |
 | Masking | `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
-| Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Cast.Scalar.cs`, `.Cast.Half.cs`, `.Cast.ToHalf.cs`, `.Cast.FloatNarrow.cs`, `.Cast.FloatWideInt.cs`, `.Cast.IntNarrow.cs`, `.Cast.ToBool.cs`, `.Cast.Complex.cs`, `.Copy.cs` |
+| Cast & Copy | `.Cast.cs`, `.Cast.Masked.cs`, `.Cast.Scalar.cs`, `.Cast.Half.cs`, `.Cast.ToHalf.cs`, `.Cast.FloatNarrow.cs`, `.Cast.FloatWideInt.cs`, `.Cast.FloatToUInt.cs`, `.Cast.IntNarrow.cs`, `.Cast.ShortNarrow.cs`, `.Cast.ToBool.cs`, `.Cast.Complex.cs`, `.Copy.cs` |
 | Selection | `.Where.cs`, `.Where.Scalar.cs`, `.Place.cs`, `.Put.cs`, `.Take.cs`, `.NonZero.cs`, `.Argwhere.cs`, `.Indices.cs`, `.Filter.cs`, `.Search.cs` |
 | Linear algebra | `.MatMul.cs`, `.Trace.cs` |
 | Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs`, `.StorageAlias.cs` |
@@ -176,6 +174,7 @@ Both classes use these helpers at `src/NumSharp.Core/Backends/Kernels/` (root, o
 | Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual |
 | Clip/Modf | Clip, Modf (SIMD helpers) |
 | Axis reductions | Sum, Prod, Min, Max, Mean, Std, Var (iterator path) |
+| Cast (SIMD, contig+strided) | float→int32 (cvtt); **float/c128→u32, →u64 (AVX2 mod-2³² reduce + hi/lo split — no AVX512, bit-exact incl. NumPy modular wrap)**; float→{i8,u8,i16,u16,char} (cvtt+Narrow); int→narrower-int (Narrow); Half↔ via Giesen bit-fiddle: **f16→f32 widen (NaN-payload exact), f16→i64, f16→{i32,u32,u64,narrow}**; X→Half (Giesen narrow, sNaN-preserving); c128→{int,bool} (real deinterleave); *→bool (!=0). Strided rows gather (4/8-byte) or stage gather→buffer→convert; 2-byte/1-byte strided stay scalar (non-gatherable). |
 
 ## Shape Architecture (NumPy-Aligned)
 
@@ -344,7 +343,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 | Iterators | `Backends/Iterators/NpyIter.cs` |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NpyExpr.cs` (nodes + emission), `NpyExpr.Typing.cs` (per-node NumPy result_type pass), `NpyExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
-| DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 59 partials) |
+| DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 60 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
@@ -428,8 +427,8 @@ All NumSharp-vs-NumPy benchmark ratios are reported as **NPY/NS**:
 
 **Higher is better.** Equivalently `speedup = NumPy_time / NumSharp_time`. A cell of
 `0.5` means NumSharp takes 2× NumPy's time; `2.0` means NumSharp is 2× faster. Use this
-direction **everywhere** — matrices, geomeans, commit messages, the `npyiter` sheet, and
-the `benchmark/poc/*_merge.py` outputs — so one glance answers "are we faster?".
+direction **everywhere** — matrices, geomeans, commit messages, and the per-subsystem
+`*_sheet.py` outputs (`npyiter`/`layout`/`cast`/`fusion`) — so one glance answers "are we faster?".
 
 - Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
 - Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
@@ -633,7 +632,7 @@ A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed mem
 A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator/DirectILKernelGenerator which use runtime IL emission.
 
 **Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
-A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (59 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NpyIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.
+A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (60 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NpyIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.
 
 **Q: When should I write kernels in `ILKernelGenerator` vs `DirectILKernelGenerator`?**
 A: Match the driving contract. A kernel that runs as the inner loop of an NpyIter pass (the iterator advances the operand pointers, the kernel handles one chunk) belongs in `ILKernelGenerator`. A kernel that takes the whole array plus its shape/strides and walks it itself belongs in `DirectILKernelGenerator`.
