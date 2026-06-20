@@ -8,6 +8,7 @@ ratio report. Then appends, as dedicated sections, the complementary harnesses w
 models the op/dtype/N matrix cannot express:
   * NpyIter iterator benchmark (benchmark/npyiter)  — iterator machinery, aspect × tier
   * Layout suite              (benchmark/layout)    — reduction/copy/elementwise × memory layout
+  * Operand layouts           (benchmark/operand)   — 1-D / scalar / mixed-operand / broadcast
   * Cast matrix               (benchmark/cast)      — astype src→dst × layout × dtype
   * Fusion gate               (benchmark/fusion)    — np.evaluate fused vs unfused chains
 Each owns a *_sheet.py driver+renderer; this orchestrator runs them and folds their
@@ -73,6 +74,8 @@ NPYITER_TSV = NPYITER_DIR / "npyiter_results.tsv"
 MATRIX_SUBSYSTEMS = [
     ("layout", HERE / "layout" / "layout_sheet.py", HERE / "layout" / "layout_results.md",
      "Layout suite — reduction / copy / elementwise × memory layout × dtype"),
+    ("operand", HERE / "operand" / "operand_sheet.py", HERE / "operand" / "operand_results.md",
+     "Operand & broadcast layouts — 1-D / scalar / mixed-operand / broadcast"),
     ("cast", HERE / "cast" / "cast_sheet.py", HERE / "cast" / "cast_results.md",
      "Cast matrix — astype src→dst × layout × dtype"),
     ("fusion", HERE / "fusion" / "fusion_sheet.py", HERE / "fusion" / "fusion_results.md",
@@ -157,6 +160,8 @@ def main():
                     help="Skip the Cast matrix (benchmark/cast)")
     ap.add_argument("--skip-fusion", action="store_true",
                     help="Skip the Fusion gate (benchmark/fusion)")
+    ap.add_argument("--skip-operand", action="store_true",
+                    help="Skip the Operand-layout subsystem (benchmark/operand)")
     args = ap.parse_args()
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -244,7 +249,8 @@ def main():
 
     # 4c. Matrix subsystems — layout / cast / fusion. Each fills an axis the
     #     op/dtype/N matrix cannot express and appends its own rendered section.
-    skip_matrix = {"layout": args.skip_layout, "cast": args.skip_cast, "fusion": args.skip_fusion}
+    skip_matrix = {"layout": args.skip_layout, "operand": args.skip_operand,
+                   "cast": args.skip_cast, "fusion": args.skip_fusion}
     for name, sheet, results, title in MATRIX_SUBSYSTEMS:
         if skip_matrix[name]:
             continue

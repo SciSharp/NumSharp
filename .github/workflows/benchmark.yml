@@ -97,6 +97,8 @@ jobs:
                   benchmark/npyiter/cards/cat.png \
                   benchmark/layout/layout_results.md \
                   benchmark/layout/layout_results.tsv \
+                  benchmark/operand/operand_results.md \
+                  benchmark/operand/operand_results.tsv \
                   benchmark/cast/cast_results.md \
                   benchmark/cast/cast_results.tsv \
                   benchmark/fusion/fusion_results.md \

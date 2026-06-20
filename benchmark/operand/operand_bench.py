@@ -1,5 +1,5 @@
 import numpy as np, time, sys
-# opnd_layout_bench.py — NumPy twin of opnd_layout_bench.cs (identical keys).
+# operand_bench.py — NumPy twin of operand_bench.cs (identical keys).
 # Layout classes the op×layout×dtype matrix omits: 1-D contig/strided/reversed,
 # scalar operand, mixed operand layouts (C+F, C+T), binary broadcast (row+col),
 # column-broadcast unary.

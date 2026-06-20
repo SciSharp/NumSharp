@@ -89,6 +89,9 @@ benchmark/
 ├── layout/                                # Subsystem: reduction/copy/elementwise × memory layout × dtype
 │   ├── {reduce_layout,copy_path,elementwise_layout}_bench.{cs,py}
 │   └── layout_sheet.py → layout_results.md (+ .tsv)
+├── operand/                               # Subsystem: 1-D / scalar / mixed-operand / broadcast
+│   ├── operand_bench.{cs,py}
+│   └── operand_sheet.py → operand_results.md (+ .tsv)
 ├── cast/                                  # Subsystem: astype src→dst × layout × dtype
 │   ├── cast_matrix_bench.{cs,py}
 │   └── cast_sheet.py → cast_results.md (+ .tsv)
@@ -553,13 +556,14 @@ than crashing the run. See `benchmark/npyiter/README.md` for the harness interna
 `.github/workflows/benchmark.yml` post-release workflow and this entry point produce the same
 unified report + the two README cards (`cards/ops.png`, `cards/cat.png`).
 
-After NpyIter, the orchestrator runs three more **matrix subsystems** that fill axes the
+After NpyIter, the orchestrator runs four more **matrix subsystems** that fill axes the
 op/dtype/N matrix cannot express, each appended as its own report section (and `--skip-layout`
-/ `--skip-cast` / `--skip-fusion` opt out):
+/ `--skip-operand` / `--skip-cast` / `--skip-fusion` opt out):
 
 | Subsystem | Dir | What it adds | Result model |
 |-----------|-----|--------------|--------------|
-| **Layout** | `benchmark/layout/` | reduction / copy / elementwise across C/F/T/strided/sliced/negstride — the op matrix is C-contiguous only | op × layout × dtype ratio matrix |
+| **Layout** | `benchmark/layout/` | reduction / copy / elementwise across the 8 layouts (C/F/T/sliced/strided/negrow/negcol/bcast) — the op matrix is C-contiguous only | op × layout × dtype ratio matrix |
+| **Operand** | `benchmark/operand/` | 1-D (contig/strided/reversed), scalar operand, mixed operand layouts (C+F, C+T), binary broadcast (row/col) — classes the per-operand grid can't express | case × dtype ratio table |
 | **Cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout ratio matrices |
 | **Fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report (fenced) |
 

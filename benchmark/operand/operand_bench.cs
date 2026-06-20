@@ -3,11 +3,12 @@
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 // =============================================================================
-// opnd_layout_bench.cs — POC for the layout classes the op×layout×dtype matrix
-// omits (NumSharp side; companion opnd_layout_bench.py, identical keys):
+// operand_bench.cs — NumSharp side of the benchmark/operand subsystem: the layout
+// classes the per-operand layout grid (benchmark/layout) can't express. Companion:
+// operand_bench.py (identical keys). Driven + rendered by operand_sheet.py.
 //   1-D contiguous/strided/reversed · scalar operand (lhs/rhs) · mixed operand
 //   layouts (C+F, C+T) · binary broadcast (row + col) · column-broadcast unary.
-// Key: {case}|{dt}\t{ms}.  Run: dotnet run -c Release - < benchmark/poc/opnd_layout_bench.cs
+// Key: {case}|{dt}\t{ms}.  Run: dotnet run -c Release - < benchmark/operand/operand_bench.cs
 // =============================================================================
 using System.Diagnostics;
 using NumSharp;
