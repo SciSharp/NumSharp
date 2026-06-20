@@ -52,6 +52,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return CastHalfToInt32Contig;
                 case NPTypeCode.UInt32: return CastHalfToUInt32Contig;
+                case NPTypeCode.Int64:  return CastHalfToInt64Contig;
                 case NPTypeCode.UInt64: return CastHalfToUInt64Contig;
                 case NPTypeCode.Single: return CastHalfToFloatContig;
                 case NPTypeCode.SByte:  return CastHalfToSByteContig;
@@ -146,6 +147,35 @@ namespace NumSharp.Backends.Kernels
         private static unsafe long BulkHalfToUInt64V(void* s, void* d, long n) => BulkHalfToUInt64((ushort*)s, (ulong*)d, n);
         private static unsafe void ConvHalfToUInt64(void* s, void* d) => *(ulong*)d = Converts.ToUInt64(*(Half*)s);
         private static unsafe void StridedHalfToUInt64(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 8, &BulkHalfToUInt64V, &ConvHalfToUInt64);
+
+        // f16 -> i64: every finite f16 (|v| <= 65504) fits in i32, so Giesen widen -> cvttps2dq ->
+        // sign-extend i32->i64 is exact; inf/nan (cvtt -> 0x80000000, would sign-extend wrong) is
+        // blended to int64.MinValue, matching NumPy / Converts.ToInt64(Half).
+        private static unsafe long BulkHalfToInt64(ushort* p, long* dst, long count)
+        {
+            long i = 0;
+            var minv = Vector256.Create(long.MinValue);
+            for (; i + 8 <= count; i += 8)
+            {
+                var hb = Avx2.ConvertToVector256Int32(Sse2.LoadVector128(p + i));
+                var i32 = Avx.ConvertToVector256Int32WithTruncation(HalfBitsToFloat(hb));
+                var infnan = Avx2.CompareGreaterThan(Avx2.And(Vector256.Create(0x7fff), hb), Vector256.Create(0x7bff));
+                var lo = Avx2.BlendVariable(Avx2.ConvertToVector256Int64(i32.GetLower()), minv, Avx2.ConvertToVector256Int64(infnan.GetLower()));
+                var hi = Avx2.BlendVariable(Avx2.ConvertToVector256Int64(i32.GetUpper()), minv, Avx2.ConvertToVector256Int64(infnan.GetUpper()));
+                Vector256.Store(lo, dst + i);
+                Vector256.Store(hi, dst + i + 4);
+            }
+            return i;
+        }
+        private static unsafe void CastHalfToInt64Contig(void* s, void* d, long n)
+        {
+            ushort* p = (ushort*)s; long* dst = (long*)d; Half* h = (Half*)s;
+            long i = BulkHalfToInt64(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToInt64(h[i]);
+        }
+        private static unsafe long BulkHalfToInt64V(void* s, void* d, long n) => BulkHalfToInt64((ushort*)s, (long*)d, n);
+        private static unsafe void ConvHalfToInt64(void* s, void* d) => *(long*)d = Converts.ToInt64(*(Half*)s);
+        private static unsafe void StridedHalfToInt64(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedNarrowDriver(s, d, ss, ds, sh, nd, 2, 8, &BulkHalfToInt64V, &ConvHalfToInt64);
 
         // Giesen branchless half->float over 8 widened half-bit-patterns (Vector256<int>).
         private static Vector256<float> HalfBitsToFloat(Vector256<int> h)
@@ -265,6 +295,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return StridedHalfToInt32;
                 case NPTypeCode.UInt32: return StridedHalfToUInt32;
+                case NPTypeCode.Int64:  return StridedHalfToInt64;
                 case NPTypeCode.UInt64: return StridedHalfToUInt64;
                 case NPTypeCode.Single: return StridedHalfToFloat;
                 case NPTypeCode.SByte:  return StridedHalfToSByte;
