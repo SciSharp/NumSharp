@@ -114,6 +114,9 @@ namespace NumSharp.Backends.Kernels
             // SIMD `!= 0` compare for {int,float}->bool (Phase-0's worst dst column, 0.61x).
             var toBool = TryGetToBoolKernel(srcType, dstType);
             if (toBool != null) return toBool;
+            // Vectorized Half widen (bit-fiddle vcvtph2ps) -> {bool,narrow,i32} (f16 src was 0.69x).
+            var halfToX = TryGetHalfToXKernel(srcType, dstType);
+            if (halfToX != null) return halfToX;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -156,6 +159,9 @@ namespace NumSharp.Backends.Kernels
             // SIMD `!= 0` compare strided {int,float}->bool (same StridedNarrowDriver).
             var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
             if (toBoolStrided != null) return toBoolStrided;
+            // Vectorized Half widen -> {bool,narrow,i32} strided (same StridedNarrowDriver, srcSize=2).
+            var halfToXStrided = TryGetHalfToXStridedKernel(srcType, dstType);
+            if (halfToXStrided != null) return halfToXStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
