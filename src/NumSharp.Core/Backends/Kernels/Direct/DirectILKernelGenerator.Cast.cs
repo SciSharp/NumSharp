@@ -124,6 +124,10 @@ namespace NumSharp.Backends.Kernels
             // incl. sNaN payload (the BCL (Half) cast quiets sNaN — this fixes that latent bug).
             var xToHalf = TryGetXToHalfKernel(srcType, dstType);
             if (xToHalf != null) return xToHalf;
+            // Char -> {i8,u8} contig via 32-wide truncating Vector.Narrow (the generic emitter
+            // SIMD-narrows i16/u16 but treats Char as non-arithmetic -> scalar). i16/u16 keep generic.
+            var charToByte = TryGetCharToByteContigKernel(srcType, dstType);
+            if (charToByte != null) return charToByte;
             // {int,float,half,char} -> bool via SIMD `!= 0` compare (Phase-0's worst dst column).
             var toBool = TryGetToBoolKernel(srcType, dstType);
             if (toBool != null) return toBool;
