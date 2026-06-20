@@ -61,6 +61,75 @@ namespace NumSharp.Backends.Kernels
             return Avx.ConvertToVector128Int32WithTruncation(reals); // 4x i32
         }
 
+        // Deinterleave the real parts of 4 consecutive complex into a Vector256<double>.
+        private static unsafe Vector256<double> ComplexReals4(double* p, long ci)
+        {
+            var a = Avx.LoadVector256(p + 2 * ci);       // re0 im0 re1 im1
+            var b = Avx.LoadVector256(p + 2 * ci + 4);   // re2 im2 re3 im3
+            return Avx2.Permute4x64(Avx.UnpackLow(a, b), 0xD8); // re0 re1 re2 re3
+        }
+
+        // 16 complex -> reals -> 16 f16 via the shared round-to-odd double->f16 (NaN -> scalar
+        // fallback over the block). c128->f16 = realpart (NumPy ComplexWarning) then double->f16.
+        private static unsafe long BulkComplexToHalf(double* p, ushort* dst, long count)
+        {
+            long i = 0;
+            if (Avx2.IsSupported)
+                for (; i + 16 <= count; i += 16)
+                {
+                    var r0 = ComplexReals4(p, i); var r1 = ComplexReals4(p, i + 4);
+                    var r2 = ComplexReals4(p, i + 8); var r3 = ComplexReals4(p, i + 12);
+                    if (AnyNaN(r0) || AnyNaN(r1) || AnyNaN(r2) || AnyNaN(r3))
+                    { for (int k = 0; k < 16; k++) dst[i + k] = DoubleToHalfBits(p[2 * (i + k)]); continue; }
+                    var lo = FloatToHalfBits(Vector256.Create(RoundToOdd4(r0), RoundToOdd4(r1)));
+                    var hi = FloatToHalfBits(Vector256.Create(RoundToOdd4(r2), RoundToOdd4(r3)));
+                    Vector256.Store(Vector256.Narrow(lo, hi).AsUInt16(), dst + i);
+                }
+            return i;
+        }
+        private static unsafe long BulkComplexToHalfV(void* s, void* d, long n) => BulkComplexToHalf((double*)s, (ushort*)d, n);
+        private static unsafe void ConvComplexToHalf(void* s, void* d) => *(ushort*)d = DoubleToHalfBits((*(Complex*)s).Real);
+
+        private static unsafe void CastComplexToHalfContig(void* s, void* d, long n)
+        {
+            double* p = (double*)s; ushort* dst = (ushort*)d; Complex* c = (Complex*)s;
+            long i = BulkComplexToHalf(p, dst, n);
+            for (; i < n; i++) dst[i] = DoubleToHalfBits(c[i].Real);
+        }
+        private static unsafe void StridedComplexToHalf(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToHalf(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToHalfV, &ConvComplexToHalf); }
+
+        // 8 strided complex -> 2x VPGATHERQQ-reals -> round-to-odd double->f16 -> 8 u16; scalar mop-up.
+        // (NaN in a gather group -> the 8 elements take the scalar DoubleToHalfBits fallback.)
+        private static unsafe void FusedComplexToHalf(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); ushort* dr = (ushort*)(dst + dstOff * 2); long i = 0;
+                for (; i + 8 <= innerN; i += 8)
+                {
+                    var r0 = Avx2.GatherVector256(p, idx, 8);
+                    var r1 = Avx2.GatherVector256(p + 4 * rs, idx, 8);
+                    if (AnyNaN(r0) || AnyNaN(r1))
+                        for (int k = 0; k < 8; k++) dr[i + k] = DoubleToHalfBits(((Complex*)(src + (srcOff + (i + k) * ss) * 16))->Real);
+                    else
+                    {
+                        var h = FloatToHalfBits(Vector256.Create(RoundToOdd4(r0), RoundToOdd4(r1)));
+                        Vector128.Store(Vector256.Narrow(h, h).GetLower().AsUInt16(), dr + i);
+                    }
+                    p += 8 * rs;
+                }
+                for (; i < innerN; i++) dr[i] = DoubleToHalfBits(((Complex*)(src + (srcOff + i * ss) * 16))->Real);
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
         // 4 complex -> 4 i32.
         private static unsafe long BulkComplexToInt32(double* p, int* dst, long count)
         {
