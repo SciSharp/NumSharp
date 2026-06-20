@@ -664,7 +664,7 @@ namespace NumSharp
             // Materialize via Storage.ToArray<T>() which already handles contig,
             // sliced, and strided layouts (Buffer.MemoryCopy fast path or
             // coordinate walk as appropriate). Foreach over a flat T[] avoids
-            // the legacy NDIterator delegate overhead and lets the JIT inline.
+            // per-element iterator/delegate overhead and lets the JIT inline.
             switch (GetTypeCode)
             {
                 case NPTypeCode.Boolean: return _iter1D<bool>().GetEnumerator();
