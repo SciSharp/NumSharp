@@ -44,6 +44,45 @@ not swept, and are the most likely place additional lagging cells hide.
 
 ---
 
+## 0.1 Phase 0 RESULTS (measured 2026-06-20) — the matrix reprioritizes the plan
+
+Full sweep checked in: **`benchmark/poc/cast_matrix.md`** (15 src × 8 layouts × 15 dst, 1M,
+NumPy 2.4.2; harness `cast_matrix_bench.{cs,py}` + `cast_matrix_merge.py`). **716 / 1568
+comparable cells lag (<1.0); 852 win.** The sweep **overturns the §3 framing**: `float→i32` is
+*already won* (contiguous cvtt kernel: f32→i32 **1.69**, f64→i32 **1.56**) — only **strided**
+`f32→i32` (**0.24**, 4 cells) remains of old "Cliff 1". The real fire is one family:
+
+| Severity | Cells | Dominant family |
+|----------|-------|-----------------|
+| 🔴 `<0.2` | 46 | **45 = `float/cplx → narrow-int` (→bool/u8/i8/i16/u16/char)** + 1 bcast u8→u8 |
+| 🟠 `0.2–0.5` | 120 | 72 = float/cplx→narrow · 12 = `*→bool` · 9 = same-type diag · 8 = bool→f16 · **4 = f32→i32 strided** |
+| 🟡 `0.5–1.0` | 550 | 160 = `int→sub-word (narrow)` · 67 = `*→bool` · 66 = float/cplx→narrow |
+
+**`float/complex → narrow-int` geomean by src: f32→narrow `0.21`, c128→narrow `0.40`, f64→narrow
+`0.38`, f16→narrow `0.48`.** f32→i8 bottoms the whole matrix at **0.09** (10.8× slower: 2.6 ms vs
+0.24 ms) — no SIMD kernel exists for narrowing float→sub-word, so it falls to the IL scalar
+(`Converts.ToSByte((float)x)` per element) while NumPy does `cvttps2dq` + vector **pack**
+(`vpackssdw`/`vpackuswb`), 8–16 elems per few instructions.
+
+### Reprioritized phase order (supersedes §4 sequencing)
+
+1. **P1′ (was P2) — `float/complex → narrow-int` SIMD `cvtt + pack`.** *Highest value: 45/46 reds,
+   ~183 cells.* Extends §3's insight: `f32→i8` = `cvttps2dq` (W1 core) **then vector narrow/pack**
+   to the target width. Same cvtt core; the missing piece is the pack. f16 front-ends via F16C/
+   bit-fiddle (P3 dep), c128 via deinterleave (P4 dep) — so build the f32/f64→narrow pack first.
+2. **P2′ (was P1) — strided `f32→i32` cvtt+gather.** Now only ~4 amber cells (contiguous won).
+3. **`*→bool`** (≈79 cells, mild 🟡): `v != 0` vector compare → packed bool. Cheap, broad.
+4. **`int→sub-word (narrow)`** (160 🟡): int→{u8/i8/i16/u16/char} vector pack (no cvtt — direct
+   truncate/pack). Mild lag; vector pack closes it.
+5. **same-type 1-byte copy** (u8/i8/bool diagonal 0.23–0.31; `bcast u8→u8` 0.15🔴): the contiguous
+   `astype(copy)` same-type path isn't hitting cpblk for 1-byte at 1M — audit the routing.
+6. **f16 (F16C/bit-fiddle)** and **c128 (deinterleave)** front-ends feed P1′ for their narrow targets.
+
+The unifying core (`cvtt`) is unchanged — but the **pack back-end** (int32→int16→int8) is the new
+shared primitive every narrowing cast needs, and is built once in P1′.
+
+---
+
 ## 1. Definition of Done
 
 A cast execution is "done" when, for the 1M-element benchmark:
