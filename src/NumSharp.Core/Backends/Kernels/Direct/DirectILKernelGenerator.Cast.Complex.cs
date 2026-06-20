@@ -43,6 +43,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return CastComplexToInt32Contig;
                 case NPTypeCode.UInt32: return CastComplexToUInt32Contig;
+                case NPTypeCode.UInt64: return CastComplexToUInt64Contig;
                 case NPTypeCode.SByte:  return CastComplexToSByteContig;
                 case NPTypeCode.Byte:   return CastComplexToByteContig;
                 case NPTypeCode.Int16:  return CastComplexToInt16Contig;
@@ -70,6 +71,24 @@ namespace NumSharp.Backends.Kernels
         }
         private static unsafe long BulkComplexToUInt32V(void* s, void* d, long n) => BulkComplexToUInt32((double*)s, (uint*)d, n);
         private static unsafe void ConvComplexToUInt32(void* s, void* d) => *(uint*)d = Converts.ToUInt32(*(Complex*)s);
+
+        // c128 -> u64: deinterleave reals then the AVX2 f64->u64 kernel. Bit-exact with Converts.ToUInt64(Complex).
+        private static unsafe long BulkComplexToUInt64(double* p, ulong* dst, long count)
+        {
+            long i = 0;
+            if (Avx2.IsSupported)
+                for (; i + 4 <= count; i += 4)
+                    Vector256.Store(DoubleToU64x4(ComplexReals4(p, i)).AsUInt64(), dst + i);
+            return i;
+        }
+        private static unsafe void CastComplexToUInt64Contig(void* s, void* d, long n)
+        {
+            double* p = (double*)s; ulong* dst = (ulong*)d; Complex* c = (Complex*)s;
+            long i = BulkComplexToUInt64(p, dst, n);
+            for (; i < n; i++) dst[i] = Converts.ToUInt64(c[i]);
+        }
+        private static unsafe long BulkComplexToUInt64V(void* s, void* d, long n) => BulkComplexToUInt64((double*)s, (ulong*)d, n);
+        private static unsafe void ConvComplexToUInt64(void* s, void* d) => *(ulong*)d = Converts.ToUInt64(*(Complex*)s);
 
         // Deinterleave the real parts of 4 consecutive complex (at complex index ci)
         // into a Vector128<int> via cvttpd2dq. Requires Avx2 (vpermq).
@@ -321,6 +340,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Int32:  return StridedComplexToInt32;
                 case NPTypeCode.UInt32: return StridedComplexToUInt32;
+                case NPTypeCode.UInt64: return StridedComplexToUInt64;
                 case NPTypeCode.SByte:  return StridedComplexToSByte;
                 case NPTypeCode.Byte:   return StridedComplexToByte;
                 case NPTypeCode.Int16:  return StridedComplexToInt16;
@@ -339,6 +359,8 @@ namespace NumSharp.Backends.Kernels
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToInt32(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToInt32V, &ConvComplexToInt32); }
         private static unsafe void StridedComplexToUInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToUInt32(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToUInt32V, &ConvComplexToUInt32); }
+        private static unsafe void StridedComplexToUInt64(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToUInt64(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 8, &BulkComplexToUInt64V, &ConvComplexToUInt64); }
         private static unsafe void StridedComplexToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
         { if (UseFusedGather(ss, ds, nd)) FusedComplexToByte(s, d, ss, ds, sh, nd, false); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV, &ConvComplexToSByte); }
         private static unsafe void StridedComplexToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
@@ -392,6 +414,28 @@ namespace NumSharp.Backends.Kernels
                     p += 4 * rs;
                 }
                 for (; i < innerN; i++) dr[i] = Converts.ToUInt32(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
+        // Gather reals then the AVX2 f64->u64 kernel (DoubleToU64x4) for inner-strided c128->u64.
+        private static unsafe void FusedComplexToUInt64(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); ulong* dr = (ulong*)(dst + dstOff * 8); long i = 0;
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    Vector256.Store(DoubleToU64x4(Avx2.GatherVector256(p, idx, 8)).AsUInt64(), dr + i);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++) dr[i] = Converts.ToUInt64(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
                 AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
             }
         }

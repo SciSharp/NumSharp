@@ -112,6 +112,10 @@ namespace NumSharp.Backends.Kernels
             // the deferred float->u32 "stays scalar" cell (~0.5-0.6x).
             var floatToUInt32 = TryGetFloatToUInt32Kernel(srcType, dstType);
             if (floatToUInt32 != null) return floatToUInt32;
+            // {f32,f64}->u64: AVX2 hi/lo 32-bit split + f64->u32 halves (no AVX512 cvttpd2qq).
+            // Bit-exact with NumPy (trunc mod 2^64; NaN/Inf/overflow -> 2^63).
+            var floatToUInt64 = TryGetFloatToUInt64Kernel(srcType, dstType);
+            if (floatToUInt64 != null) return floatToUInt64;
             // NumPy-faithful cvtt+truncating-Narrow for float->{i8,u8,i16,u16,char} (Phase-0's
             // worst cells: f32->i8 was 0.09x). Bit-exact with Converts.To{Narrow}(double).
             var floatToNarrow = TryGetFloatToNarrowIntKernel(srcType, dstType);
@@ -178,6 +182,9 @@ namespace NumSharp.Backends.Kernels
             // scalar Converts tail. Bit-exact with the contig float->u32 kernel (same helpers).
             var fuStrided = TryGetFloatToUInt32StridedKernel(srcType, dstType);
             if (fuStrided != null) return fuStrided;
+            // {f32,f64}->u64 strided: ss==1 contig bulk; f64 gathers 4 inline, f32 stages.
+            var fu64Strided = TryGetFloatToUInt64StridedKernel(srcType, dstType);
+            if (fu64Strided != null) return fu64Strided;
             // cvtt+truncating-Narrow strided for float->{i8,u8,i16,u16,char} (incl. char, which the
             // generic strided emitter rejects). Inner-contig rows run the Bulk; strided rows stage to
             // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
