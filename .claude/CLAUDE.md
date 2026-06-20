@@ -59,7 +59,7 @@ Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Half, S
 All operations must handle all 15 types via type switch pattern.
 
 **Perf notes:**
-- SByte / Byte / Int*/UInt* / Single / Double — full SIMD via `MixedTypeKernel.SimdFull` (V128/V256/V512 detected at startup).
+- SByte / Byte / Int*/UInt* / Single / Double — full SIMD via the mixed-type kernel's `SimdFull` execution path (V128/V256/V512 detected at startup).
 - Half — scalar path (no `Vector<Half>` arithmetic in .NET BCL). Routes through `Half→double→Math.Pow→Half` for `np.power`; ~2× slower than NumPy.
 - Complex — scalar path via `System.Numerics.Complex` operators / `Complex.Pow`. ~2× slower than NumPy.
 - Decimal — scalar path via `DecimalMath.Pow`. Highest precision, slowest.
@@ -307,7 +307,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 `diagonal`, `dot`, `matmul`, `outer`, `trace`
 
 ### Random (`np.random.*`)
-`bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `exponential`, `gamma`, `geometric`, `lognormal`, `normal`, `permutation`, `poisson`, `rand`, `randint`, `randn`, `seed`, `shuffle`, `standard_normal`, `uniform`
+`bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
 ### File I/O
 `fromfile`, `load`, `save`, `tofile`
@@ -338,7 +338,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 | TensorEngine | `Backends/TensorEngine.cs` |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `NpyIter.cs` |
+| Iterators | `Backends/Iterators/NpyIter.cs` |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NpyExpr.cs` (nodes + emission), `NpyExpr.Typing.cs` (per-node NumPy result_type pass), `NpyExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 59 partials) |
@@ -375,6 +375,7 @@ switch (nd.typecode)
 {
     case NPTypeCode.Boolean: return Process<bool>(nd);
     case NPTypeCode.Byte: return Process<byte>(nd);
+    case NPTypeCode.SByte: return Process<sbyte>(nd);
     case NPTypeCode.Int16: return Process<short>(nd);
     case NPTypeCode.UInt16: return Process<ushort>(nd);
     case NPTypeCode.Int32: return Process<int>(nd);
@@ -382,9 +383,11 @@ switch (nd.typecode)
     case NPTypeCode.Int64: return Process<long>(nd);
     case NPTypeCode.UInt64: return Process<ulong>(nd);
     case NPTypeCode.Char: return Process<char>(nd);
-    case NPTypeCode.Double: return Process<double>(nd);
+    case NPTypeCode.Half: return Process<Half>(nd);
     case NPTypeCode.Single: return Process<float>(nd);
+    case NPTypeCode.Double: return Process<double>(nd);
     case NPTypeCode.Decimal: return Process<decimal>(nd);
+    case NPTypeCode.Complex: return Process<Complex>(nd);
     default: throw new NotSupportedException();
 }
 ```
@@ -673,9 +676,6 @@ A: The `Slice` class parses Python notation (e.g., "1:5:2") into `Start`, `Stop`
 **Q: What are the special Slice instances?**
 A: `Slice.All` (`:` - all elements), `Slice.Ellipsis` (`...` - fill dimensions), `Slice.NewAxis` (insert dimension), `Slice.Index(n)` (single element, reduces dimensionality).
 
-**Q: What is NDIterator used for?**
-A: Legacy typed traversal surface over `NpyIter`. It keeps the existing `MoveNext()`, `HasNext()`, and `Reset()` API while delegating stride, broadcast, and view traversal to the NpyIter state machinery.
-
 **Q: What is NpyIter?**
 A: The NumPy-aligned multi-operand iterator. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Copy and multi-operand execution go through `NpyIter.Copy` and the multi-operand iterator.
 
@@ -705,7 +705,7 @@ A: Element-wise comparisons (`==`, `!=`, `>`, `<`, etc.) return `NDArray<bool>`.
 A: Integer indices, string slices (`"1:3, :"`), Slice objects, boolean masks, fancy indexing (NDArray<int> indices), and mixed combinations. All in `Selection/NDArray.Indexing*.cs`.
 
 **Q: How is linear algebra implemented?**
-A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv`, `qr`, `svd`, `lstsq`) are stub methods that return null/default — the LAPACK native bindings they depended on have been removed.
+A: Core ops (`dot`, `matmul`, `outer`) in `LinearAlgebra/`; `trace`/`diagonal` in `Indexing/`. Advanced decompositions (`inv`, `qr`, `svd`, `lstsq`) are stub methods that return null/default — there is no LAPACK backend.
 
 ---
 
@@ -727,7 +727,7 @@ A: TensorFlow.NET, ML.NET integrations, Gym.NET, Pandas.NET, and various scienti
 A: Yes. `np.save()` writes `.npy` files, `np.load()` reads both `.npy` and `.npz` archives. Compatible with Python NumPy files.
 
 **Q: What random distributions are supported?**
-A: Uniform, normal (randn), integers, beta, binomial, gamma, poisson, exponential, geometric, lognormal, chi-square, bernoulli. All in `RandomSampling/`.
+A: An extensive NumPy-matching set (40+ distributions and samplers — see the Supported np.* APIs → Random list), all on the `NumPyRandom` class in `RandomSampling/`, with 1-to-1 seed/state parity to NumPy.
 
 ---
 
