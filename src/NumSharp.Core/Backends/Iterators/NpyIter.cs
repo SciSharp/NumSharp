@@ -3957,6 +3957,23 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        // True when src and dst occupy a single gap-free buffer with the SAME layout: same shape,
+        // identical strides, and contiguous in C OR F order. Then every logical index maps to the
+        // same byte offset in both, so the whole copy is one flat cpblk regardless of C/F order.
+        // (Differing orders — e.g. F-contig transpose src into a C-contig dst — have non-identical
+        // strides and are correctly excluded, keeping the transpose copy on its strided path.)
+        private static bool IsSameFlatLayout(Shape a, Shape b)
+        {
+            int nd = a.NDim;
+            if (nd != b.NDim) return false;
+            if (!(a.IsContiguous || a.IsFContiguous)) return false;
+            var ad = a.dimensions; var bd = b.dimensions;
+            var asr = a.strides; var bsr = b.strides;
+            for (int i = 0; i < nd; i++)
+                if (ad[i] != bd[i] || asr[i] != bsr[i]) return false;
+            return true;
+        }
+
         /// <inheritdoc cref="TryCopySameType(UnmanagedStorage, UnmanagedStorage)"/>
         public static bool TryCopySameType(NDArray dst, NDArray src)
             => TryCopySameType(dst.Storage, src.Storage);
@@ -3976,7 +3993,14 @@ namespace NumSharp.Backends.Iteration
 
                 // Contiguous fast path: existing IL CopyKernel uses cpblk — single block copy,
                 // minimal overhead. Cross-platform memcpy is the cheapest possible.
-                if (state.IsContiguousCopy)
+                //
+                // IsContiguousCopy keys off C-contiguity only. A same-type copy whose src and dst
+                // share an identical-stride GAP-FREE buffer (C- OR F-contiguous) is equally a single
+                // flat cpblk — the i-th logical element sits at the same byte offset in both. astype
+                // preserves order (F-src -> F-dst), so this is the common F-contiguous case; without
+                // it the Vector-less dtypes (Boolean/Char/Half/Complex) the strided cast kernel
+                // rejects fall to the slow per-element CopyGeneralSameType (the bool|F 0.18x cliff).
+                if (state.IsContiguousCopy || IsSameFlatLayout(src.Shape, dst.Shape))
                 {
                     var copyKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.Contiguous));
                     if (copyKernel != null)

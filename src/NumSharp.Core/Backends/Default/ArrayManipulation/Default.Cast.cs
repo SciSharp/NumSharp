@@ -70,8 +70,17 @@ namespace NumSharp.Backends
             //regular clone
             if (nd.GetTypeCode == dtype)
             {
-                //casting not needed
-                return copy ? clone() : nd;
+                if (!copy)
+                    return nd;
+                //An F-contiguous (non-C) source must clone KEEPORDER (NumPy astype order='K').
+                //The legacy Clone() produces a C-order buffer, so astype then runs a SECOND
+                //copy('F') — two cache-hostile transposes (the bool|F 0.18x cliff). Route just this
+                //case through CastCrossType: it allocates an F-order dst and NpyIter.Copy collapses
+                //to TryCopySameType's identical-layout flat cpblk — one pass, no reorder. C-contig /
+                //1-D / strided sources keep the lean direct Clone() (no CreateCopyState overhead).
+                if (nd.Shape.NDim > 1 && nd.Shape.IsFContiguous && !nd.Shape.IsContiguous)
+                    return CastCrossType(nd, dtype, engine);
+                return clone();
             }
             else
             {
