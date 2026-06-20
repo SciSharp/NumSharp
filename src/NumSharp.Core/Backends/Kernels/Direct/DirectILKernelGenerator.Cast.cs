@@ -119,6 +119,9 @@ namespace NumSharp.Backends.Kernels
             // was ~0.69x). Bit-exact with Converts.To{X}(Half).
             var halfToX = TryGetHalfToXKernel(srcType, dstType);
             if (halfToX != null) return halfToX;
+            // {int,float,half,char} -> bool via SIMD `!= 0` compare (Phase-0's worst dst column).
+            var toBool = TryGetToBoolKernel(srcType, dstType);
+            if (toBool != null) return toBool;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -164,6 +167,9 @@ namespace NumSharp.Backends.Kernels
             // Half->int strided (Giesen widen): reuses StridedNarrowDriver (srcSize=2).
             var halfStrided = TryGetHalfToXStridedKernel(srcType, dstType);
             if (halfStrided != null) return halfStrided;
+            // {int,float,half,char}->bool strided (!= 0 compare): reuses StridedNarrowDriver (dstSize=1).
+            var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
+            if (toBoolStrided != null) return toBoolStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
