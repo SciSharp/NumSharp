@@ -143,6 +143,57 @@ mask+`vpackus` truncate instead.
 
 ---
 
+## 0.3 ALL remaining cliff families — PROVEN (2026-06-20)
+
+Every lagging family the Phase-0 matrix flagged has now been prototyped, **correctness-gated
+0-diff** vs the NumPy-faithful `Converts` scalar (which the parity suite pins to NumPy 2.4.2), and
+timed at 4M best-of-7. Harnesses checked in under `benchmark/poc/cast_*.cs`. **Result: a SIMD
+kernel beats NumPy on every family** — NumPy does not vectorize any of these casts (all its
+baselines are scalar-speed, the headroom).
+
+| Family | Technique (new primitive) | cast | NS ms | NumPy ms | NPY/NS | diffs |
+|--------|---------------------------|------|-------|----------|--------|-------|
+| **float→narrow** (§0.2) | `cvtt` + mask + `vpackus` + `vpermd`/`vpermq` | f32→i8 | 0.33 | 1.31 | **3.95** | 0 |
+| | | f32→i16 | 0.42 | 2.11 | **5.04** | 0 |
+| | | f64→i32 | 1.56 | 3.26 | **2.09** | 0 |
+| **complex→int** | **deinterleave** (`vunpcklpd`+`vpermq`) + `cvtt` | c128→i32 | 3.24 | 5.03 | **1.55** | 0 |
+| `benchmark/poc/cast_complex_deinterleave.cs` | | c128→i8 | 2.51 | 3.46 | **1.38** | 0 |
+| **int→sub-word narrow** | mask + `vpackus` + permute (**no cvtt**) | i32→i8 | 0.34 | 1.24 | **3.69** | 0 |
+| `benchmark/poc/cast_int_narrow.cs` | + i64→i32 **dword-extract** (`vpermd [0,2,4,6]`) | i32→i16 | 0.44 | 1.61 | **3.67** | 0 |
+| | | i64→i32 | 1.48 | 3.47 | **2.35** | 0 |
+| | | i64→i16 | 1.43 | 2.36 | **1.65** | 0 |
+| **\*→bool** | `~CompareEqual(v,0) & 1` (`AndNot`) + narrow | f32→bool | 0.33 | 1.93 | **5.89** | 0 |
+| `benchmark/poc/cast_to_bool.cs` | IEEE: `-0.0→False`, `NaN→True` (Ordered eq) | f64→bool | 1.02 | 2.36 | **2.31** | 0 |
+| | | i32→bool | 0.34 | 1.14 | **3.36** | 0 |
+| **f16→narrow** | **Giesen** half→float bit-fiddle (F16C-free) + `cvtt` | f16→i32 | 2.76 | 5.10 | **1.85** | 0 |
+| `benchmark/poc/cast_half_giesen.cs` | `vpmovzxwd` + magic-mul + inf/nan `cmpgt` | f16→i8 | 2.85 | 4.04 | **1.42** | 0 |
+| | | f16→f32 | 2.69 | 4.12 | **1.53** | 0* |
+
+**Technique notes (each a reusable kernel primitive):**
+- **Complex deinterleave:** `Complex[N]` is `double[2N]` `(re,im,…)`; `vunpcklpd(a,b)` + `vpermq 0xD8`
+  extracts 4 contiguous reals → `cvttpd2dq`. `c128→narrow` = deinterleave then the §0.2 narrow.
+  Modest margin (1.4×) because 16-byte elements are memory-bound (64 MB read at 4M).
+- **int→narrow = §0.2 minus the cvtt** (input is already int). i64 sources add a **dword-extract**
+  front-end: `vpermd [0,2,4,6]` picks each long's low dword → i32, then the standard narrow.
+- **\*→bool:** `boolmask = AndNot(CompareEqual(v,0), one)` → 0/1 ints, then the §0.2 narrow to bytes.
+  Float uses **OrderedEqualNonSignaling** so `-0.0` equals `0` (→False) and `NaN` is unordered
+  (→True) — bit-exact NumPy `!= 0`. f64→bool needs the i64→i32 dword-extract (8:1 narrow).
+- **f16 (no F16C in this .NET — verified: `Avx512FP16` absent, no `Vector256<Half>`, no vectorized
+  `ConvertToSingle`):** use **Giesen's** branchless half→float (`expmant<<13` × magic reconstructs
+  normals *and* subnormals exactly; `cmpgt` injects inf/nan exponent) over `vpmovzxwd`-widened
+  halves, then `cvtt`. **Scalar `(float)half` is a trap** — measured *slower* than the current
+  scalar (10.9 ms, it double-converts). `*` f16→f32 has **NaN-payload-only** diffs (Giesen's NaN
+  bits ≠ BCL's; both are NaN) — irrelevant for →int (NaN→`cvtt`→INT_MIN→0), but f16→f32 should
+  stay on the already-even (1.00×) scalar path **or** get a NaN-canonicalize before it ships as a
+  user-facing float cast.
+
+**Net:** all five flagged families (≈1568-cell matrix's entire `<1.0` population except the
+1-byte same-type copy / `bcast u8→u8` routing issue, §4 P5) have a proven, correctness-gated SIMD
+design that beats NumPy. The implementation is now de-risked end-to-end; what remains is wiring
+these prototypes into `TryGetStridedCastKernel`/`TryGetCastKernel` (§5 routing).
+
+---
+
 ## 1. Definition of Done
 
 A cast execution is "done" when, for the 1M-element benchmark:
