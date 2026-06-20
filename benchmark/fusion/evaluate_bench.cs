@@ -3,7 +3,9 @@
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 // =============================================================================
-// evaluate_bench.cs — fusion gate: fused np.evaluate vs unfused np.* chains.
+// evaluate_bench.cs — fusion gate: fused np.evaluate vs unfused np.* chains, plus
+// an operand-layout sweep of a*b+c (C/F/T/strided/bcast) checking the fused
+// single-pass advantage survives non-contiguous operands.
 // NumSharp side of the benchmark/fusion subsystem (driven by fusion_sheet.py,
 // which rewrites the #:project path above to the running checkout). The absolute
 // path lets it also run directly:  dotnet run -c Release - < benchmark/fusion/evaluate_bench.cs
@@ -125,3 +127,38 @@ np.evaluate((NpyExpr)ai * 2 + c);
 double tFusedMixed = Best(() => Time(() => np.evaluate((NpyExpr)ai * 2 + c)));
 double tUnfusedMixed = Best(() => Time(() => { var _ = ai * 2 + c; }));
 Console.WriteLine($"  i4*2+f8     fused {tFusedMixed,7:F2} ms   unfused {tUnfusedMixed,7:F2} ms   ({tUnfusedMixed / tFusedMixed:F2}x)");
+
+// -------- operand-layout sweep ------------------------------------------------
+// The fusion premise is "read each operand once in ONE NpyIter pass". That is
+// most stressed on NON-contiguous operands: does the fused advantage survive a
+// strided / F / broadcast operand, or does the fused kernel fall back/buffer and
+// collapse to the unfused chain? The 1-D cases above never answer this. Here the
+// flagship a*b+c runs 2-D (2000x2000 = 4M) with all three operands in the SAME
+// layout. The unfused÷fused ratio is self-normalizing per layout, so strided's
+// (2M) / bcast's (stride-0) differing element counts don't distort the headline.
+const int LR = 2000, LC = 2000;
+var a2 = (np.arange(LR * LC).astype(np.float64) + 1.0).reshape(LR, LC);
+var b2 = (np.arange(LR * LC).astype(np.float64) % 977.0 + 2.0).reshape(LR, LC);
+var c2 = (np.arange(LR * LC).astype(np.float64) * 0.5).reshape(LR, LC);
+NDArray Lay(NDArray x, string l) => l switch
+{
+    "C" => x, "F" => x.copy(order: 'F'), "T" => x.T,
+    "strided" => x[":, ::2"],
+    "bcast" => np.broadcast_to(x["0:1, :"], new Shape(LR, LC)),
+    _ => throw new Exception(l),
+};
+Console.WriteLine($"\n  a*b+c across operand layouts (2-D {LR}x{LC}, all 3 operands same layout):");
+foreach (var l in new[] { "C", "F", "T", "strided", "bcast" })
+{
+    NDArray al, bl, cl;
+    try { al = Lay(a2, l); bl = Lay(b2, l); cl = Lay(c2, l); }
+    catch (Exception e) { Console.WriteLine($"    [{l,-7}] build: {e.GetType().Name}: {e.Message.Split('\n')[0]}"); continue; }
+    try
+    {
+        np.evaluate((NpyExpr)al * bl + cl);                                  // warm + throw gate
+        double tf = Best(() => Time(() => np.evaluate((NpyExpr)al * bl + cl)));
+        double tu = Best(() => Time(() => { var _ = al * bl + cl; }));
+        Console.WriteLine($"    [{l,-7}] fused {tf,7:F2} ms   unfused {tu,7:F2} ms   ({tu / tf:F2}x)");
+    }
+    catch (Exception e) { Console.WriteLine($"    [{l,-7}] {e.GetType().Name}: {e.Message.Split('\n')[0]}"); }
+}

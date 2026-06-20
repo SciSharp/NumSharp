@@ -8,9 +8,11 @@
 # np.evaluate vs unfused np.* chains (NumSharp-internal speedups), and
 # evaluate_bench.py reports the NumPy absolutes on the same box for context.
 #
-# Result model is a fixed expression report (not a dtype/layout ratio matrix),
-# so it is rendered as a fenced block -> fusion_results.md. Driven by
-# run_benchmark.py; also standalone:
+# Result model is a fixed expression report (the chain gate plus an operand-layout
+# sweep of the flagship a*b+c — C/F/T/strided/bcast — that checks the fused
+# single-pass advantage survives non-contiguous operands), not a dtype/layout
+# ratio matrix, so it is rendered as a fenced block -> fusion_results.md. Driven
+# by run_benchmark.py; also standalone:
 #   python benchmark/fusion/fusion_sheet.py [--skip-build]
 # =============================================================================
 import argparse
@@ -48,7 +50,9 @@ def main():
             + py_out)
     md = ("# Fusion — np.evaluate vs unfused chains (and NumPy context)\n\n"
           "`np.evaluate` runs a whole expression tree in one NpyIter pass (no intermediates). "
-          "Fixed-expression gate, not a dtype/layout matrix — so reported as-is.\n\n"
+          "Fixed-expression gate plus an operand-layout sweep of the flagship `a*b+c` "
+          "(C/F/T/strided/bcast — does the fused single-pass win survive non-contiguous "
+          "operands?), not a dtype/layout matrix — so reported as-is.\n\n"
           "```\n" + body + "\n```\n")
     with open(MD, "w", encoding="utf-8") as f:
         f.write(md)
