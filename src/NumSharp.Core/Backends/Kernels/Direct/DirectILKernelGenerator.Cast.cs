@@ -107,6 +107,14 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
             var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);
             if (floatToInt32 != null) return floatToInt32;
+            // NumPy-faithful cvtt+truncating-Narrow for float->{i8,u8,i16,u16,char} (Phase-0's
+            // worst cells: f32->i8 was 0.09x). Bit-exact with Converts.To{Narrow}(double).
+            var floatToNarrow = TryGetFloatToNarrowIntKernel(srcType, dstType);
+            if (floatToNarrow != null) return floatToNarrow;
+            // Complex -> int via real-part deinterleave + cvtt (c128->i8 was 0.61x). Drops
+            // imaginary (NumPy ComplexWarning); bit-exact with Converts.To{X}(Complex).
+            var complexToInt = TryGetComplexToIntKernel(srcType, dstType);
+            if (complexToInt != null) return complexToInt;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
@@ -141,6 +149,14 @@ namespace NumSharp.Backends.Kernels
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
+            // cvtt+truncating-Narrow strided for float->{i8,u8,i16,u16,char} (incl. char, which the
+            // generic strided emitter rejects). Inner-contig rows run the Bulk; strided rows stage to
+            // a contig buffer then vectorize. Bit-exact with the contiguous float->narrow kernels.
+            var fnStrided = TryGetFloatToNarrowIntStridedKernel(srcType, dstType);
+            if (fnStrided != null) return fnStrided;
+            // Complex->int strided: contiguous-inner rows run the deinterleave Bulk, else scalar.
+            var complexStrided = TryGetComplexToIntStridedKernel(srcType, dstType);
+            if (complexStrided != null) return complexStrided;
             if (DivergesFromNumpyCast(srcType, dstType)) return null;
 
             var key = new CastKernelKey(srcType, dstType);
