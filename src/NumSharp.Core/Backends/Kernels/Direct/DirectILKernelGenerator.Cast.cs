@@ -119,6 +119,11 @@ namespace NumSharp.Backends.Kernels
             // was ~0.69x). Bit-exact with Converts.To{X}(Half).
             var halfToX = TryGetHalfToXKernel(srcType, dstType);
             if (halfToX != null) return halfToX;
+            // {bool,u8,i8,i16,u16,char,i32,f32} -> Half via Giesen vectorized float->f16 narrow
+            // (no F16C in this .NET; f16 was the only losing dst column). Bit-exact with NumPy 2.4.2
+            // incl. sNaN payload (the BCL (Half) cast quiets sNaN — this fixes that latent bug).
+            var xToHalf = TryGetXToHalfKernel(srcType, dstType);
+            if (xToHalf != null) return xToHalf;
             // {int,float,half,char} -> bool via SIMD `!= 0` compare (Phase-0's worst dst column).
             var toBool = TryGetToBoolKernel(srcType, dstType);
             if (toBool != null) return toBool;
@@ -178,6 +183,11 @@ namespace NumSharp.Backends.Kernels
             // Half->int strided (Giesen widen): reuses StridedNarrowDriver (srcSize=2).
             var halfStrided = TryGetHalfToXStridedKernel(srcType, dstType);
             if (halfStrided != null) return halfStrided;
+            // {bool,u8,i8,i16,u16,char,i32,f32}->Half strided (Giesen narrow): reuses
+            // StridedNarrowDriver (dstSize=2). Inner-contig rows run the bulk; inner-strided rows
+            // stage to a contig buffer then vectorize. Bit-exact with the contiguous X->Half kernels.
+            var xToHalfStrided = TryGetXToHalfStridedKernel(srcType, dstType);
+            if (xToHalfStrided != null) return xToHalfStrided;
             // {int,float,half,char}->bool strided (!= 0 compare): reuses StridedNarrowDriver (dstSize=1).
             var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
             if (toBoolStrided != null) return toBoolStrided;
