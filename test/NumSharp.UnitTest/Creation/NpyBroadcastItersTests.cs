@@ -467,13 +467,33 @@ namespace NumSharp.UnitTest.Creation
             b65.iters.Length.Should().Be(65);
             b65.shape.dimensions.Should().Equal(new long[] { 1 });
 
-            // Well beyond NumPy's cap — every operand still broadcasts correctly.
-            var many = Enumerable.Range(0, 200).Select(i => np.array(new long[] { i })).ToArray();
+            // Thousands of operands (NpyIter allocates per-operand state dynamically, so there is
+            // no cap) — every operand still broadcasts to its own iters stream correctly.
+            var many = Enumerable.Range(0, 1000).Select(i => np.array(new long[] { i })).ToArray();
             var bm = np.broadcast(many);
-            bm.numiter.Should().Be(200);
+            bm.numiter.Should().Be(1000);
+            bm.iters.Length.Should().Be(1000);
             bm.size.Should().Be(1);
             bm.iters[0].Cast<long>().Single().Should().Be(0L);
-            bm.iters[199].Cast<long>().Single().Should().Be(199L);
+            bm.iters[999].Cast<long>().Single().Should().Be(999L);
+
+            // N operands that genuinely broadcast: 1000 x (1,) against (4,) -> (4,). Shape
+            // resolution and the live cursor both scale — each step yields a numiter-wide tuple.
+            var stretch = Enumerable.Range(0, 1000).Select(_ => np.ones(new Shape(1)))
+                                    .Append(np.arange(4)).ToArray();
+            var bs = np.broadcast(stretch);
+            bs.numiter.Should().Be(1001);
+            bs.shape.dimensions.Should().Equal(new long[] { 4 });
+
+            int steps = 0, width = -1;
+            foreach (var v in bs)
+            {
+                if (width < 0) width = v.Length;
+                steps++;
+            }
+            steps.Should().Be(4);
+            width.Should().Be(1001, "each iteration tuple has one value per operand (numiter)");
+            bs.index.Should().Be(4);
         }
 
         /// <summary>
