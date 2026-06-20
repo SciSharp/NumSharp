@@ -119,7 +119,11 @@ Console.WriteLine($"  sum(af*bf)  fused {tFusedSumF4,7:F2} ms   unfused {tUnfuse
 var outArr = np.empty_like(a);
 np.evaluate((NpyExpr)a * b + c, @out: outArr);
 double tFusedOut = Best(() => Time(() => np.evaluate((NpyExpr)a * b + c, @out: outArr)));
-Console.WriteLine($"  a*b+c out=  fused {tFusedOut,7:F2} ms");
+// NOTE: this is ONE fused pass into out=; the NumPy twin's "a*b+c out=" is a
+// deliberately-handicapped TWO-pass (multiply→out, add→out) since NumPy has no
+// native fusion — the two absolute-ms columns are NOT apples-to-apples. The
+// allocating "a*b+c" rows above are the fair fused-vs-unfused comparison.
+Console.WriteLine($"  a*b+c out=  fused {tFusedOut,7:F2} ms   [1-pass fused-into-out]");
 
 // mixed dtype: i4 inputs promoting to f8 inside the kernel (no buffering)
 var ai = np.arange(N).astype(np.int32);

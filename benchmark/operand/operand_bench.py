@@ -54,4 +54,4 @@ for dn, dt in DTYPES:
             sys.stderr.write(f"{k}|{dn}: {type(e).__name__}: {e}\n")
 
 print("\n".join(out))
-sys.stderr.write(f"[opnd_layout_bench.py] {len(out)} rows; numpy {np.__version__}\n")
+sys.stderr.write(f"[operand_bench.py] {len(out)} rows; numpy {np.__version__}\n")

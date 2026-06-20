@@ -33,7 +33,7 @@ var DTYPES = new (string name, NPTypeCode tc)[]
     ("i32", NPTypeCode.Int32), ("i64", NPTypeCode.Int64), ("c128", NPTypeCode.Complex),
 };
 
-Console.Error.WriteLine($"[opnd_layout_bench] cores={Environment.ProcessorCount}");
+Console.Error.WriteLine($"[operand_bench] cores={Environment.ProcessorCount}");
 foreach (var (dn, tc) in DTYPES)
 {
     NDArray a1, a1s, a1r, a2, a2F, a2T, row, col, colb, sc;
@@ -68,4 +68,4 @@ foreach (var (dn, tc) in DTYPES)
     Case("bcast_col",      () => { var _ = a2 + col; });
     Case("colbcast_unary", () => { var _ = np.positive(colb); });
 }
-Console.Error.WriteLine("[opnd_layout_bench] done");
+Console.Error.WriteLine("[operand_bench] done");
