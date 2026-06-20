@@ -187,17 +187,36 @@ namespace NumSharp.Backends.Kernels
             for (long o = 0; o < outerCount; o++)
             {
                 double* p = (double*)(src + srcOff * 16); byte* dr = dst + dstOff; long i = 0;
-                for (; i + 4 <= innerN; i += 4)
+                if (ss == -1)
                 {
-                    var reals = Avx2.GatherVector256(p, idx, 8);
-                    var imags = Avx2.GatherVector256(p + 1, idx, 8);
-                    var er = Avx.Compare(reals, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
-                    var ei = Avx.Compare(imags, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
-                    var nz = Avx2.AndNot(Avx.And(er, ei).AsInt64(), Vector256.Create(1L));
-                    dr[i] = (byte)nz.GetElement(0); dr[i + 1] = (byte)nz.GetElement(1);
-                    dr[i + 2] = (byte)nz.GetElement(2); dr[i + 3] = (byte)nz.GetElement(3);
-                    p += 4 * rs;
+                    // negcol: the 8 doubles around p are contiguous-reversed (re3,im3,..,re0,im0);
+                    // deinterleave reals (UnpackLow+VPERMQ-0x72) and imags (UnpackHigh+VPERMQ-0x72)
+                    // in logical order instead of a -2-stride double gather. Over-read-safe.
+                    for (; i + 4 <= innerN; i += 4)
+                    {
+                        var A = Vector256.Load(p - 6); var B = Vector256.Load(p - 2);
+                        var reals = Avx2.Permute4x64(Avx.UnpackLow(B, A), 0x72);
+                        var imags = Avx2.Permute4x64(Avx.UnpackHigh(B, A), 0x72);
+                        var er = Avx.Compare(reals, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                        var ei = Avx.Compare(imags, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                        var nz = Avx2.AndNot(Avx.And(er, ei).AsInt64(), Vector256.Create(1L));
+                        dr[i] = (byte)nz.GetElement(0); dr[i + 1] = (byte)nz.GetElement(1);
+                        dr[i + 2] = (byte)nz.GetElement(2); dr[i + 3] = (byte)nz.GetElement(3);
+                        p -= 8;
+                    }
                 }
+                else
+                    for (; i + 4 <= innerN; i += 4)
+                    {
+                        var reals = Avx2.GatherVector256(p, idx, 8);
+                        var imags = Avx2.GatherVector256(p + 1, idx, 8);
+                        var er = Avx.Compare(reals, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                        var ei = Avx.Compare(imags, Vector256<double>.Zero, FloatComparisonMode.OrderedEqualNonSignaling);
+                        var nz = Avx2.AndNot(Avx.And(er, ei).AsInt64(), Vector256.Create(1L));
+                        dr[i] = (byte)nz.GetElement(0); dr[i + 1] = (byte)nz.GetElement(1);
+                        dr[i + 2] = (byte)nz.GetElement(2); dr[i + 3] = (byte)nz.GetElement(3);
+                        p += 4 * rs;
+                    }
                 for (; i < innerN; i++) { var z = *(Complex*)(src + (srcOff + i * ss) * 16); dr[i] = (byte)((z.Real != 0.0 || z.Imaginary != 0.0) ? 1 : 0); }
                 AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
             }
