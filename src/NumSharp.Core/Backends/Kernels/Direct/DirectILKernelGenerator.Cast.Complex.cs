@@ -175,12 +175,115 @@ namespace NumSharp.Backends.Kernels
             return null;
         }
 
-        private static unsafe void StridedComplexToInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToInt32V, &ConvComplexToInt32);
-        private static unsafe void StridedComplexToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV,  &ConvComplexToSByte);
-        private static unsafe void StridedComplexToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV,  &ConvComplexToByte);
-        private static unsafe void StridedComplexToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)  => StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToInt16);
-        private static unsafe void StridedComplexToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd) => StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToUInt16);
-        private static unsafe void StridedComplexToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)   => StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToChar);
+        // Inner-strided ([:, ::2]) / reversed-inner ([:, ::-1]) complex rows: the real part of the
+        // strided complex[i] lives at double-offset i*(2*ss), so VPGATHERQQ over the reals (double
+        // stride 2*ss) feeds cvttpd2dq directly — killing the 0.17-0.24x scalar cliff (whole-array,
+        // idx hoisted; proven c128->i8 strided 1.12x). ss==1 (contig inner) keeps the UnpackLow Bulk
+        // via StridedComplexDriver; ds!=1 / no-AVX2 stay scalar there too.
+        private static unsafe void StridedComplexToInt32(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToInt32(s, d, ss, ds, sh, nd); else StridedComplexDriver(s, d, ss, ds, sh, nd, 4, &BulkComplexToInt32V, &ConvComplexToInt32); }
+        private static unsafe void StridedComplexToSByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToByte(s, d, ss, ds, sh, nd, false); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV, &ConvComplexToSByte); }
+        private static unsafe void StridedComplexToByte(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToByte(s, d, ss, ds, sh, nd, true); else StridedComplexDriver(s, d, ss, ds, sh, nd, 1, &BulkComplexToByteV, &ConvComplexToByte); }
+        private static unsafe void StridedComplexToInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToShort(s, d, ss, ds, sh, nd, 0); else StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToInt16); }
+        private static unsafe void StridedComplexToUInt16(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToShort(s, d, ss, ds, sh, nd, 1); else StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToUInt16); }
+        private static unsafe void StridedComplexToChar(void* s, void* d, long* ss, long* ds, long* sh, int nd)
+        { if (UseFusedGather(ss, ds, nd)) FusedComplexToShort(s, d, ss, ds, sh, nd, 2); else StridedComplexDriver(s, d, ss, ds, sh, nd, 2, &BulkComplexToShortV, &ConvComplexToChar); }
+
+        // Whole-array gather-real deinterleave for inner-strided complex->int. p points at re0 of the
+        // row; idx steps by rs = 2*ss doubles so VPGATHERQQ pulls the reals of logical complex 0..3.
+        private static unsafe void FusedComplexToInt32(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); int* dr = (int*)(dst + dstOff * 4); long i = 0;
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    Vector128.Store(Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8)), dr + i);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++) dr[i] = Converts.ToInt32(*(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16));
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
+        // 16 strided complex -> 4x VPGATHERQQ-reals+cvttpd (4xi32) -> 2-level Narrow -> 16 i8; 4-wide mop-up.
+        private static unsafe void FusedComplexToByte(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim, bool unsignedDst)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); byte* dr = dst + dstOff; long i = 0;
+                for (; i + 16 <= innerN; i += 16)
+                {
+                    var a = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8));
+                    var b = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 4 * rs, idx, 8));
+                    var c = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 8 * rs, idx, 8));
+                    var e = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 12 * rs, idx, 8));
+                    var s0 = Vector128.Narrow(a, b); var s1 = Vector128.Narrow(c, e);
+                    Vector128.Store(Vector128.Narrow(s0, s1).AsByte(), dr + i);
+                    p += 16 * rs;
+                }
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    var v = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8));
+                    dr[i] = (byte)v.GetElement(0); dr[i + 1] = (byte)v.GetElement(1);
+                    dr[i + 2] = (byte)v.GetElement(2); dr[i + 3] = (byte)v.GetElement(3);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++) { var z = *(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16); dr[i] = unsignedDst ? Converts.ToByte(z) : (byte)Converts.ToSByte(z); }
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
+
+        // 8 strided complex -> 2x VPGATHERQQ-reals+cvttpd (4xi32) -> 1x Narrow -> 8 i16; 4-wide mop-up.
+        private static unsafe void FusedComplexToShort(void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim, int kind)
+        {
+            byte* src = (byte*)srcV; byte* dst = (byte*)dstV;
+            int outer = ndim - 1; long innerN = shape[outer], ss = srcStrides[outer];
+            long outerCount = 1; for (int a = 0; a < outer; a++) outerCount *= shape[a];
+            long* coord = stackalloc long[ndim]; for (int a = 0; a < ndim; a++) coord[a] = 0;
+            long rs = 2L * ss; var idx = Vector256.Create(0L, rs, 2 * rs, 3 * rs);
+            long srcOff = 0, dstOff = 0;
+            for (long o = 0; o < outerCount; o++)
+            {
+                double* p = (double*)(src + srcOff * 16); short* dr = (short*)(dst + dstOff * 2); long i = 0;
+                for (; i + 8 <= innerN; i += 8)
+                {
+                    var a = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8));
+                    var b = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p + 4 * rs, idx, 8));
+                    Vector128.Store(Vector128.Narrow(a, b), dr + i);
+                    p += 8 * rs;
+                }
+                for (; i + 4 <= innerN; i += 4)
+                {
+                    var v = Avx.ConvertToVector128Int32WithTruncation(Avx2.GatherVector256(p, idx, 8));
+                    dr[i] = (short)v.GetElement(0); dr[i + 1] = (short)v.GetElement(1);
+                    dr[i + 2] = (short)v.GetElement(2); dr[i + 3] = (short)v.GetElement(3);
+                    p += 4 * rs;
+                }
+                for (; i < innerN; i++)
+                {
+                    var z = *(System.Numerics.Complex*)(src + (srcOff + i * ss) * 16);
+                    dr[i] = kind == 0 ? Converts.ToInt16(z) : kind == 1 ? (short)Converts.ToUInt16(z) : (short)Converts.ToChar(z);
+                }
+                AdvanceOdometer(coord, srcStrides, dstStrides, shape, outer, ref srcOff, ref dstOff);
+            }
+        }
 
         private static unsafe void StridedComplexDriver(
             void* srcV, void* dstV, long* srcStrides, long* dstStrides, long* shape, int ndim,
