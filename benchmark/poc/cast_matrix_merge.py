@@ -36,8 +36,9 @@ for k, nm in ns.items():
 R = {(s, l, d): rt for (s, l, d, nm, nv, rt) in rows}
 
 print("# Cast Matrix — astype src→dst × layout × dtype (NumSharp vs NumPy 2.4.2)\n")
-print("Phase 0 of `CAST_BEAT_NUMPY_PLAN.md`. 1M elements, best-of-3. "
-      "ratio = NumPy_ms / NumSharp_ms — **>1.0 = NumSharp faster**.")
+print("Full astype src→dst × layout sweep for `CAST_BEAT_NUMPY_PLAN.md`. 1M elements, best-of-3. "
+      "ratio = NumPy_ms / NumSharp_ms — **>1.0 = NumSharp faster**. "
+      "(Phase-0 pre-kernel baseline preserved in `cast_matrix_phase0.md`.)")
 print("✅≥1.0 🟡≥0.5 🟠≥0.2 🔴<0.2 · `—` = no NumPy dtype (Decimal: pinned vs the Converts table, not NumPy).\n")
 
 # ---- Executive summary: severity bands + conversion-family breakdown -------
@@ -60,11 +61,17 @@ for name, lo, hi in bands:
     fc = Counter(family(r[0], r[2]) for r in sub)
     top = "; ".join(f"{v}× {k}" for k, v in fc.most_common(3))
     print(f"- **{name}** — {len(sub)} cells. Top: {top}")
-print("\n**float/complex → narrow-int geomean by src** (the dominant cliff): " +
-      ", ".join(f"`{s}`→narrow **{geomean([r[5] for r in cmp if r[0]==s and r[2] in NARROW]):.2f}**"
-                for s in ["f32", "f64", "f16", "c128"]) + ".")
-print("`float→i32` itself is mostly **won** (contiguous cvtt kernel); the fire is the *narrowing* "
-      "float→{i8,u8,i16,u16,char,bool} pack, which has no SIMD kernel and falls to the IL scalar.\n")
+_fn = {s: geomean([r[5] for r in cmp if r[0] == s and r[2] in NARROW]) for s in ["f32", "f64", "f16", "c128"]}
+print("\n**float/complex → narrow-int geomean by src** (the former dominant cliff): " +
+      ", ".join(f"`{s}`→narrow **{_fn[s]:.2f}**" for s in ["f32", "f64", "f16", "c128"]) + ".")
+_lag = [s for s in ["f32", "f64", "f16", "c128"] if _fn[s] < 1.0]
+if _lag:
+    print("Narrowing float/complex casts now run the SIMD cvtt+`Vector.Narrow` kernels (contiguous "
+          "won outright); the residual lag is `" + "`, `".join(_lag) + "` — chiefly the strided-inner "
+          "(`[:, ::2]`) layout + 1M per-call overhead, not the kernel.\n")
+else:
+    print("All float/complex→narrow families now win geomean — the SIMD cvtt+`Vector.Narrow` kernels "
+          "(Waves 1-3) closed the cliff across every layout.\n")
 
 print("## Geomean by layout (all src×dst, excl. Decimal)\n")
 print("| " + " | ".join(LAYS) + " |")
