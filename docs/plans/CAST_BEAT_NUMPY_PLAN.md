@@ -188,9 +188,59 @@ baselines are scalar-speed, the headroom).
   user-facing float cast.
 
 **Net:** all five flagged families (≈1568-cell matrix's entire `<1.0` population except the
-1-byte same-type copy / `bcast u8→u8` routing issue, §4 P5) have a proven, correctness-gated SIMD
+1-byte same-type copy / `bcast u8→u8` routing issue, §0.4) have a proven, correctness-gated SIMD
 design that beats NumPy. The implementation is now de-risked end-to-end; what remains is wiring
 these prototypes into `TryGetStridedCastKernel`/`TryGetCastKernel` (§5 routing).
+
+---
+
+## 0.4 Last cliff — same-type 1-byte copy & broadcast: ROOT CAUSE + FIX (PROVEN 2026-06-20)
+
+The only non-SIMD-kernel `<1.0` cells. **Not a missing kernel — a routing/overhead issue.** The
+same-type `astype(copy)` path is `Cast` → `nd.Clone()` → `Storage.Clone()` →
+{`InternalArray.Clone()` for raw-layout | `CloneData()`→`NpyIter.Copy` for broadcast/sliced}.
+Harnesses: `benchmark/poc/cast_sametype_breakdown.cs`, `cast_bcast_fill.cs`.
+
+**Decomposition (proven by component breakdown, 1M u8):**
+
+| Component | ms (warm) | finding |
+|-----------|-----------|---------|
+| `Buffer.MemoryCopy` 1 MB | 0.0142 | ≈ NumPy's own 0.015 — **the copy itself is already at parity** |
+| pool `Take(1MB)` (warm) | 0.0001 | free |
+| `new Shape(_shape)` | ~0 | free |
+| ideal clone (Take+Copy+Return) | 0.0159 | ≈ NumPy |
+| **full `astype(same)` (warm)** | **0.034** | +0.018 ms = **~5 managed-object allocs** (`UnmanagedMemoryBlock`+`Disposer`+`Storage`+`Shape`+`NDArray`) |
+
+So the contiguous cliff is **two small, size-independent taxes**, only visible when the copy is
+tiny: (a) **buffer-pool cold-start** — a *fresh* 1 MB+ buffer faults on first touch (a best-of-N
+loop allocating a new output each rep hits cold buffers → the 0.15 ms "10×" the Phase-0 matrix saw;
+warm steady-state is 0.034 ms); (b) **~5 managed-object allocations** per clone (NumPy returns one
+C struct). At **4M these vanish — same-type 1-byte already WINS** (u8→u8 1.20×, bool→bool 3.87×,
+i8→i8 2.95×). **Verdict: low priority** — the copy is at parity; only the per-call tax lags, and
+only sub-0.05 ms. Optional micro-fix: a same-type contiguous clone fast-path that takes the pool
+buffer + `Buffer.MemoryCopy` + minimal wrapper, skipping the general `Storage.Clone` machinery.
+
+**The broadcast cell is the real, cleanly-fixable one.** `bcast u8→u8` routes a *broadcast source*
+(stride-0) through `CloneData()` → `NpyIter.Copy` (general strided iterator) to materialize — but a
+same-type broadcast clone is just a **fill** (replicate the scalar / tile the broadcast row).
+**Proven** (`InitBlock` memset for the scalar-broadcast case):
+
+| N | current (`NpyIter.Copy`) | direct fill (`InitBlock`) | speedup | NPY/NS current → fill |
+|---|--------------------------|---------------------------|---------|------------------------|
+| 1M | 0.215 ms | 0.035 ms | **6.1×** | 0.06 → 0.34 |
+| 4M | 0.859 ms | 0.126 ms | **6.8×** | 0.83 → **5.69** |
+
+At 4M the fill (32 GB/s) crushes NumPy's own broadcast-materialize (5.6 GB/s); at 1M NumPy's
+0.012 ms is cache-resident (near-unbeatable at 1 MB) but the fill is still 6× the current path.
+
+**Fix (broadcast):** in `UnmanagedStorage.CloneData()`, before the `NpyIter.Copy` fallback, detect
+`_shape.IsBroadcasted` **and** same-type and dispatch a **broadcast-aware fill**:
+- scalar-broadcast (all strides 0) → `Unsafe.InitBlockUnaligned` per element-width (1/2/4/8-byte
+  splat; for >1-byte, fill one element then exponentially double-copy, or splat a `Vector<T>`).
+- partial/row broadcast (some stride 0) → materialize the non-broadcast tile once, then
+  exponentially double-copy (`memcpy` the filled prefix to itself) to cover N — O(N) bytes, one
+  pass, no per-element iteration.
+Keep `NpyIter.Copy` as the fallback for the genuinely strided (non-broadcast) sliced case.
 
 ---
 
@@ -349,6 +399,11 @@ front-end for W2/W3.
 - **Broadcast-source casts** (stride-0): materialize-once-then-cast, or cast-then-broadcast. Verify
   Phase 0; the incremental-coord walk already handles stride-0 (the inner kernel re-reads the same
   element), which is correct but may redo work — if flagged, cast the unique row once.
+- **Same-type 1-byte copy & broadcast (ROOT-CAUSED — see §0.4):** the diagonal 1-byte cells are
+  per-call overhead (cold pool + ~5 object allocs), invisible at 4M (already ✅); low priority. The
+  `bcast u8→u8` 🔴 is the real fix: route same-type broadcast clones through a direct fill
+  (`InitBlock`/tiled-copy) in `UnmanagedStorage.CloneData()` instead of `NpyIter.Copy` — **proven
+  6–8× (4M: 0.83→5.69 NPY/NS)**.
 
 ---
 
