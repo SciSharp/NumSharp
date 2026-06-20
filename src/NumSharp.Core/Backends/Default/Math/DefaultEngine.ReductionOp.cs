@@ -39,34 +39,32 @@ namespace NumSharp.Backends
                 return ExecuteScalarReduction<TResult>(arr, op, accumType);
             }
 
-            // Broadcast views (a stride-0 axis with dim>1) are the worst flat-reduction
-            // case: the coordinate-walk kernel visits every one of the D×N logical elements
-            // computing coordinates per element, though only N are unique — ~50× NumPy on the
-            // bcast-reduce canary (np.sum(broadcast_to(a,(1024,8192)))). NumPy never copies a
-            // broadcast to reduce it; it folds the stride-0 axis in place, cache-hot. Match
-            // that: fold each broadcast axis with the fast per-chunk axis kernel — O(unique)
-            // memory (NOT the O(D×N) a full materialize would allocate, which OOMs on a large
-            // broadcast the coordinate walk merely handled slowly), and cache-hot like NumPy.
-            // Folding a stride-0 axis with the SAME op collapses its D identical copies
-            // (sum→×D, prod→^D, min/max→identity, exact); accumType matches the op (widened
-            // for sum/prod, preserved for min/max), so the fold dtype is correct. The
-            // remainder is a small contiguous array → fast flat finish. (Residual vs NumPy is
-            // ULP-level summation-order, which the codebase's pairwise reductions already
-            // accept; min/max are order-independent → exact.) ArgMin/ArgMax opt out — their
-            // result index must address the full broadcast, which folding would destroy.
+            // Broadcast views (a stride-0 axis with dim>1) are the worst flat-reduction case for
+            // the coordinate-walk kernel: it visits every one of the D×N logical elements though
+            // only N are unique — ~50× NumPy on the bcast-reduce canary
+            // (np.sum(broadcast_to(a,(1024,8192)))). A stride-0 axis repeats its data EXACTLY, so
+            // reducing over it is CLOSED-FORM — there is nothing to iterate:
+            //     sum → ×D,  prod → ^D,  min/max → identity   (mean = sum/count, in the caller).
+            // Drop every broadcast axis to a non-broadcast view of the UNIQUE data (index 0 along
+            // each stride-0 axis — an O(1) view), reduce THAT once via the fast contiguous/NpyIter
+            // path, then apply the collapsed multiplicity to the scalar. O(unique), not the prior
+            // O(D×unique) per-copy fold: ~960× NumPy here vs the fold's ~1.0× (measured, Release).
+            // Integer and min/max are BIT-EXACT (modular ×/pow; min/max order-independent); float
+            // sum/prod differ only ULP-level — the summation-order class the codebase already
+            // accepts here, and one multiply is fewer roundings than D adds. ArgMin/ArgMax opt
+            // out — their result index must address the full broadcast, which collapsing destroys.
+            long bcastMult = 1;
             if (arr.Shape.IsBroadcasted && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
             {
-                while (arr.Shape.IsBroadcasted)
-                {
-                    int ax = -1;
-                    for (int d = arr.ndim - 1; d >= 0; d--)
-                        if (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1) { ax = d; break; }
-                    if (ax < 0) break;
-                    arr = ExecuteAxisReduction(arr, ax, false, accumType, null, op);
-                    if (arr.Shape.IsScalar || arr.size == 1)
-                        return ExecuteScalarReduction<TResult>(arr, op, accumType);
-                }
-                inputType = arr.GetTypeCode; // collapse output dtype == accumType (may have widened)
+                for (int d = 0; d < arr.ndim; d++)
+                    if (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1)
+                        bcastMult *= arr.Shape.dimensions[d];
+
+                arr = DropBroadcastAxes(arr);            // O(1) view of the unique data
+                inputType = arr.GetTypeCode;
+
+                if (arr.Shape.IsScalar || arr.size == 1)
+                    return CombineWithCount(ExecuteScalarReduction<TResult>(arr, op, accumType), bcastMult, op);
             }
 
             // Determine if array is contiguous
@@ -93,7 +91,7 @@ namespace NumSharp.Backends
             if (!isContiguous && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
             {
                 var routed = TryExecuteElementReductionViaNpyIter<TResult>(arr, op, inputType, accumType);
-                if (routed.HasValue) return routed.Value;
+                if (routed.HasValue) return CombineWithCount(routed.Value, bcastMult, op);
             }
 
             // Get kernel key
@@ -104,7 +102,7 @@ namespace NumSharp.Backends
 
             if (kernel != null)
             {
-                return ExecuteTypedReductionKernel<TResult>(kernel, arr);
+                return CombineWithCount(ExecuteTypedReductionKernel<TResult>(kernel, arr), bcastMult, op);
             }
             else
             {
@@ -113,6 +111,90 @@ namespace NumSharp.Backends
                     $"IL kernel not available for {op}({inputType}) -> {accumType}. " +
                     "Please report this as a bug.");
             }
+        }
+
+        /// <summary>
+        ///     Build a non-broadcast view of the UNIQUE data by indexing 0 along every stride-0
+        ///     (dim&gt;1) axis. Those axes repeat their data exactly, so index 0 (offset unchanged,
+        ///     axis dropped) yields the unique slice with zero copy. Size-1 and real (stride≠0)
+        ///     axes are kept. The result is never broadcast, so the reduction below runs the fast
+        ///     contiguous / NpyIter path over O(unique) elements.
+        /// </summary>
+        private static NDArray DropBroadcastAxes(NDArray arr)
+        {
+            var slices = new Slice[arr.ndim];
+            for (int d = 0; d < arr.ndim; d++)
+                slices[d] = (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1)
+                    ? Slice.Index(0)
+                    : Slice.All;
+            var unique = arr[slices];
+
+            // Reduce on CONTIGUOUS data. When the broadcast wraps a strided/offset view
+            // (e.g. broadcast_to(a["1:-1,1:-1"], …)), the unique slice is itself strided, and
+            // some flat-reduction kernels mishandle strided inputs (a pre-existing sub-word
+            // prod bug: np.prod over a strided view returns 0). The prior per-axis fold always
+            // finished on a fresh contiguous intermediate; preserve that invariant with an
+            // O(unique) copy — cheap, and a no-op for the common case (the canary's unique row
+            // is already contiguous, so this never copies on the hot path).
+            return unique.Shape.IsContiguous ? unique : unique.copy();
+        }
+
+        /// <summary>
+        ///     Apply a collapsed broadcast multiplicity to a flat-reduction scalar in closed form:
+        ///     sum → v×count, prod → v^count, min/max/arg → v (identity). <paramref name="count"/>==1
+        ///     is a no-op, so non-broadcast reductions pass straight through. Arithmetic runs in the
+        ///     accumulator type so integer wraparound matches a materialized per-copy reduction
+        ///     EXACTLY (modular × / pow compose under truncation); float is ULP-equivalent.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe TResult CombineWithCount<TResult>(TResult v, long count, ReductionOp op)
+            where TResult : unmanaged
+        {
+            if (count <= 1 || op == ReductionOp.Min || op == ReductionOp.Max ||
+                op == ReductionOp.ArgMax || op == ReductionOp.ArgMin)
+                return v;
+
+            bool isProd = op == ReductionOp.Prod;
+            switch (InfoOf<TResult>.NPTypeCode)
+            {
+                case NPTypeCode.Byte:    { byte    x = *(byte*)&v;    byte    r = isProd ? (byte)   IPowU(x, count) : unchecked((byte)   (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.SByte:   { sbyte   x = *(sbyte*)&v;   sbyte   r = isProd ? (sbyte)  IPowS(x, count) : unchecked((sbyte)  (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.Int16:   { short   x = *(short*)&v;   short   r = isProd ? (short)  IPowS(x, count) : unchecked((short)  (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.UInt16:  { ushort  x = *(ushort*)&v;  ushort  r = isProd ? (ushort) IPowU(x, count) : unchecked((ushort) (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.Int32:   { int     x = *(int*)&v;     int     r = isProd ? (int)    IPowS(x, count) : unchecked((int)    (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.UInt32:  { uint    x = *(uint*)&v;    uint    r = isProd ? (uint)   IPowU(x, count) : unchecked((uint)   (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.Int64:   { long    x = *(long*)&v;    long    r = isProd ? IPowS(x, count)          : unchecked(x * count);                    return *(TResult*)&r; }
+                case NPTypeCode.UInt64:  { ulong   x = *(ulong*)&v;   ulong   r = isProd ? IPowU(x, count)          : unchecked(x * (ulong)count);             return *(TResult*)&r; }
+                case NPTypeCode.Single:  { float   x = *(float*)&v;   float   r = isProd ? (float)Math.Pow(x, count) : (float)(x * (double)count);            return *(TResult*)&r; }
+                case NPTypeCode.Double:  { double  x = *(double*)&v;  double  r = isProd ? Math.Pow(x, count)        : x * count;                              return *(TResult*)&r; }
+                case NPTypeCode.Decimal: { decimal x = *(decimal*)&v; decimal r = isProd ? DPow(x, count)           : x * count;                              return *(TResult*)&r; }
+                // Char/Boolean/Half/Complex only reach CombineWithCount via min/max (returned above) → identity.
+                default: return v;
+            }
+        }
+
+        /// <summary>Signed integer pow with two's-complement wraparound (square-and-multiply, unchecked).</summary>
+        private static long IPowS(long b, long e)
+        {
+            long r = 1, bb = b; ulong ee = (ulong)e;
+            unchecked { while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; } }
+            return r;
+        }
+
+        /// <summary>Unsigned integer pow with modular wraparound (square-and-multiply, unchecked).</summary>
+        private static ulong IPowU(ulong b, long e)
+        {
+            ulong r = 1, bb = b, ee = (ulong)e;
+            unchecked { while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; } }
+            return r;
+        }
+
+        /// <summary>Decimal pow (square-and-multiply); overflow throws OverflowException — decimal has no infinity, matching np.prod-on-decimal overflow behavior.</summary>
+        private static decimal DPow(decimal b, long e)
+        {
+            decimal r = 1m, bb = b; ulong ee = (ulong)e;
+            while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; }
+            return r;
         }
 
         /// <summary>
