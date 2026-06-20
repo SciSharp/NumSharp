@@ -24,9 +24,11 @@ namespace NumSharp.UnitTest.Creation
     ///     np.broadcast accepts 0..64 operands like NumPy (see the N-operand tests), exposes the
     ///     live <c>index</c> cursor, is iterable (yields one per-operand value tuple per step), and
     ///     supports <c>reset()</c> — all matching NumPy (see the live-cursor tests).
-    ///     Sole remaining documented divergence (see the [Misaligned] tests):
+    ///     Documented divergences (see the [Misaligned] tests):
     ///       - <c>iters</c> are re-enumerable and independent of the cursor, whereas NumPy's
     ///         flatiters are one-shot and share the broadcast's live cursor.
+    ///       - no operand cap: NumSharp accepts any number of operands (matching its unlimited
+    ///         NpyIter), whereas NumPy caps at NPY_MAXARGS=64.
     /// </summary>
     [TestClass]
     public class NpyBroadcastItersTests
@@ -450,19 +452,28 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     More than 64 operands raises ValueError ("Need at least 0 and at most 64 array objects.").
+        ///     DIVERGENCE: NumPy caps np.broadcast at NPY_MAXARGS=64 (65+ -> ValueError). NumSharp's
+        ///     NpyIter allocates per-operand state dynamically and imposes no cap, so np.broadcast
+        ///     accepts any number of operands.
         /// </summary>
         [TestMethod]
-        public void Broadcast_TooManyOperands_Throws()
+        [Misaligned]
+        public void Broadcast_ManyOperands_NoCap_MatchesNpyIter()
         {
+            // 65 operands — one past NumPy's NPY_MAXARGS=64 — is accepted, not rejected.
             var sixtyFive = Enumerable.Range(0, 65).Select(_ => np.ones(new Shape(1))).ToArray();
+            var b65 = np.broadcast(sixtyFive);
+            b65.numiter.Should().Be(65);
+            b65.iters.Length.Should().Be(65);
+            b65.shape.dimensions.Should().Equal(new long[] { 1 });
 
-            new Action(() => np.broadcast(sixtyFive))
-                .Should().Throw<ValueError>("NumPy caps np.broadcast at 64 operands");
-
-            // exactly 64 is allowed
-            var sixtyFour = Enumerable.Range(0, 64).Select(_ => np.ones(new Shape(1))).ToArray();
-            np.broadcast(sixtyFour).numiter.Should().Be(64);
+            // Well beyond NumPy's cap — every operand still broadcasts correctly.
+            var many = Enumerable.Range(0, 200).Select(i => np.array(new long[] { i })).ToArray();
+            var bm = np.broadcast(many);
+            bm.numiter.Should().Be(200);
+            bm.size.Should().Be(1);
+            bm.iters[0].Cast<long>().Single().Should().Be(0L);
+            bm.iters[199].Cast<long>().Single().Should().Be(199L);
         }
 
         /// <summary>

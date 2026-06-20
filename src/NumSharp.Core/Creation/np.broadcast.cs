@@ -12,8 +12,8 @@ namespace NumSharp
         ///     Produce an object that mimics broadcasting.
         /// </summary>
         /// <param name="arrays">
-        ///     The arrays to broadcast against one another. NumPy accepts 0..64 operands; the same
-        ///     range is honored here (65+ raises <see cref="ValueError"/>).
+        ///     The arrays to broadcast against one another. NumPy caps this at 64 operands
+        ///     (NPY_MAXARGS); NumSharp imposes no cap, matching its unlimited-operand <c>NpyIter</c>.
         /// </param>
         /// <returns>Broadcast the input parameters against one another, and return an object that encapsulates the result. Amongst others, it has shape and nd properties, and may be used as an iterator.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast.html</remarks>
@@ -59,18 +59,19 @@ namespace NumSharp
             ///     Broadcast N operands together (NumPy's <c>np.broadcast(*args)</c>). The result
             ///     <see cref="shape"/> is the broadcast of every operand's shape (resolved eagerly;
             ///     iterators are built lazily on first <see cref="iters"/> access). Incompatible
-            ///     shapes raise <see cref="IncorrectShapeException"/>; more than 64 operands raise
-            ///     <see cref="ValueError"/> — both matching NumPy 2.x.
+            ///     shapes raise <see cref="IncorrectShapeException"/> (NumPy parity). Unlike NumPy's
+            ///     fixed NPY_MAXARGS=64 cap, any number of operands is accepted — matching NumSharp's
+            ///     unlimited-operand <c>NpyIter</c>.
             /// </summary>
             internal Broadcast(params NDArray[] ops)
             {
                 _ops = ops ?? Array.Empty<NDArray>();
 
-                // NumPy 2.x caps the multi-iterator at 64 operands ("Need at least 0 and at most
-                // 64 array objects."). 0 operands is legal and yields a 0-d (scalar) broadcast.
-                if (_ops.Length > 64)
-                    throw new ValueError("Need at least 0 and at most 64 array objects.");
-
+                // NUMSHARP DIVERGENCE: NumPy caps the multi-iterator at NPY_MAXARGS=64, but
+                // NumSharp's NpyIter allocates all per-operand state dynamically and imposes no
+                // operand cap (see NpyIter.State.cs — "UNLIMITED ... matches NumSharp's core
+                // philosophy"). np.broadcast follows that engine, so any number of operands is
+                // accepted. 0 operands is legal and yields a 0-d (scalar) broadcast.
                 shape = _ops.Length == 0
                     ? Shape.Scalar
                     : Shape.ResolveReturnShape(_ops.Select(o => o.Shape).ToArray());
