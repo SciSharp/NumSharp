@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AwesomeAssertions;
@@ -20,10 +21,12 @@ namespace NumSharp.UnitTest.Creation
     ///     i.e. each iters[i] yields its operand stretched to the broadcast result shape, walked
     ///     in C-order of the RESULT (not the operand's own memory order).
     ///
-    ///     np.broadcast accepts 0..64 operands like NumPy (see the N-operand tests).
-    ///     Divergences from NumPy that are deliberately documented (see the [Misaligned] tests):
-    ///       - <c>iters</c> are re-enumerable (NumPy's flatiter is one-shot / exhausts).
-    ///       - <c>index</c> throws (NumPy returns the live flat index).
+    ///     np.broadcast accepts 0..64 operands like NumPy (see the N-operand tests), exposes the
+    ///     live <c>index</c> cursor, is iterable (yields one per-operand value tuple per step), and
+    ///     supports <c>reset()</c> — all matching NumPy (see the live-cursor tests).
+    ///     Sole remaining documented divergence (see the [Misaligned] tests):
+    ///       - <c>iters</c> are re-enumerable and independent of the cursor, whereas NumPy's
+    ///         flatiters are one-shot and share the broadcast's live cursor.
     /// </summary>
     [TestClass]
     public class NpyBroadcastItersTests
@@ -498,17 +501,171 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     DIVERGENCE: NumPy exposes broadcast.index (the live flat position). NumSharp does not
-        ///     model a live cursor, so the property throws by design.
+        ///     DIVERGENCE: reading <c>iters</c> does not move the broadcast's live cursor, and the
+        ///     flatiters always start at 0 — whereas NumPy's flatiters share the cursor (so after two
+        ///     next() calls NumPy's iters[0] would start at index 2 → [3,1,2,3]).
         /// </summary>
         [TestMethod]
         [Misaligned]
-        public void Index_Throws_NumSharpDoesNotModelLiveCursor()
+        public void Iters_AreIndependentOfCursor_UnlikeNumPy()
         {
-            var bc = np.broadcast(np.arange(3), np.arange(3));
+            var bc = np.broadcast(np.array(new long[] { 1, 2, 3 }), np.array(new long[,] { { 10 }, { 20 } }));
+            bc.MoveNext();
+            bc.MoveNext();
+            bc.index.Should().Be(2);
 
-            new Action(() => { var _ = bc.index; })
-                .Should().Throw<NotSupportedException>("NumSharp does not expose the live flat index NumPy's broadcast.index returns");
+            bc.iters[0].Cast<long>().ToArray().Should().Equal(new long[] { 1, 2, 3, 1, 2, 3 },
+                "NumSharp iters are independent of the cursor; NumPy's would start at index 2 -> [3,1,2,3]");
+            bc.index.Should().Be(2, "reading iters must not move the broadcast cursor");
+        }
+
+        // ================================================================
+        // Live cursor: index / iteration / reset (NumPy parity)
+        // ================================================================
+
+        /// <summary>broadcast.index starts at 0 (was previously a property that threw).</summary>
+        [TestMethod]
+        public void Index_StartsAtZero()
+        {
+            np.broadcast(np.arange(3), np.arange(3)).index.Should().Be(0);
+        }
+
+        /// <summary>
+        ///     Iterating the broadcast yields one per-operand value tuple per step (C-order) and
+        ///     advances index to size — np.broadcast([1,2,3],[[10],[20]]) -> (1,10),(2,10),(3,10),
+        ///     (1,20),(2,20),(3,20).
+        /// </summary>
+        [TestMethod]
+        public void Iteration_YieldsTuples_AndAdvancesIndexToSize()
+        {
+            var bc = np.broadcast(np.array(new long[] { 1, 2, 3 }), np.array(new long[,] { { 10 }, { 20 } }));
+
+            var col0 = new List<long>();
+            var col1 = new List<long>();
+            foreach (var v in bc)
+            {
+                v.Length.Should().Be(2, "one value per operand (numiter)");
+                col0.Add((long)v[0]);
+                col1.Add((long)v[1]);
+            }
+
+            col0.Should().Equal(1L, 2, 3, 1, 2, 3);
+            col1.Should().Equal(10L, 10, 10, 20, 20, 20);
+            bc.index.Should().Be(6, "index == size once exhausted");
+        }
+
+        /// <summary>MoveNext advances index by one and exposes the step's values via Current.</summary>
+        [TestMethod]
+        public void MoveNext_AdvancesIndex_AndExposesCurrent()
+        {
+            var bc = np.broadcast(np.array(new long[] { 1, 2, 3 }), np.array(new long[,] { { 10 }, { 20 } }));
+
+            bc.index.Should().Be(0);
+            bc.MoveNext().Should().BeTrue();
+            bc.index.Should().Be(1);
+            bc.Current.Length.Should().Be(2);
+            ((long)bc.Current[0]).Should().Be(1);
+            ((long)bc.Current[1]).Should().Be(10);
+
+            bc.MoveNext().Should().BeTrue();
+            bc.index.Should().Be(2);
+            ((long)bc.Current[0]).Should().Be(2);
+            ((long)bc.Current[1]).Should().Be(10);
+        }
+
+        /// <summary>reset() rewinds the cursor to 0 and allows the broadcast to be iterated again.</summary>
+        [TestMethod]
+        public void Reset_RewindsCursor_AllowsReiteration()
+        {
+            var bc = np.broadcast(np.array(new long[] { 1, 2, 3 }), np.array(new long[,] { { 10 }, { 20 } }));
+
+            foreach (var _ in bc) { }
+            bc.index.Should().Be(6);
+            bc.MoveNext().Should().BeFalse("cursor is exhausted");
+
+            bc.reset();
+            bc.index.Should().Be(0);
+            bc.MoveNext().Should().BeTrue();
+            ((long)bc.Current[0]).Should().Be(1);
+            bc.index.Should().Be(1);
+        }
+
+        /// <summary>Single-operand iteration yields 1-tuples: np.broadcast([1,2,3]) -> (1,),(2,),(3,).</summary>
+        [TestMethod]
+        public void Iteration_SingleOperand_MatchNumPy()
+        {
+            var bc = np.broadcast(np.array(new long[] { 1, 2, 3 }));
+
+            var col0 = new List<long>();
+            foreach (var v in bc)
+            {
+                v.Length.Should().Be(1);
+                col0.Add((long)v[0]);
+            }
+            col0.Should().Equal(1L, 2, 3);
+            bc.index.Should().Be(3);
+        }
+
+        /// <summary>Three-operand iteration yields 3-tuples (NumPy parity).</summary>
+        [TestMethod]
+        public void Iteration_ThreeOperands_MatchNumPy()
+        {
+            var bc = np.broadcast(
+                np.array(new long[] { 1, 2, 3 }),
+                np.array(new long[,] { { 10 }, { 20 } }),
+                NDArray.Scalar(100L));
+
+            var c0 = new List<long>();
+            var c1 = new List<long>();
+            var c2 = new List<long>();
+            foreach (var v in bc)
+            {
+                v.Length.Should().Be(3);
+                c0.Add((long)v[0]);
+                c1.Add((long)v[1]);
+                c2.Add((long)v[2]);
+            }
+            c0.Should().Equal(1L, 2, 3, 1, 2, 3);
+            c1.Should().Equal(10L, 10, 10, 20, 20, 20);
+            c2.Should().Equal(100L, 100, 100, 100, 100, 100);
+            bc.index.Should().Be(6);
+        }
+
+        /// <summary>
+        ///     Zero operands iterate exactly once, yielding an empty tuple (NumPy: list(np.broadcast())
+        ///     == [()] with index 1).
+        /// </summary>
+        [TestMethod]
+        public void Iteration_ZeroOperands_OneEmptyTuple_MatchNumPy()
+        {
+            var bc = np.broadcast();
+
+            var items = new List<object[]>();
+            foreach (var v in bc)
+                items.Add(v);
+
+            items.Should().HaveCount(1, "NumPy: list(np.broadcast()) == [()]");
+            items[0].Should().BeEmpty();
+            bc.index.Should().Be(1);
+        }
+
+        /// <summary>The k-th iteration tuple's i-th value equals iters[i][k] (cursor and iters agree on values).</summary>
+        [TestMethod]
+        public void Iteration_TuplesAlignWithIters()
+        {
+            var bc = np.broadcast(np.arange(3), np.array(new long[,] { { 10 }, { 20 } }));
+
+            var i0 = bc.iters[0].Cast<long>().ToArray();
+            var i1 = bc.iters[1].Cast<long>().ToArray();
+
+            int k = 0;
+            foreach (var v in bc)
+            {
+                ((long)v[0]).Should().Be(i0[k]);
+                ((long)v[1]).Should().Be(i1[k]);
+                k++;
+            }
+            k.Should().Be(6);
         }
     }
 }

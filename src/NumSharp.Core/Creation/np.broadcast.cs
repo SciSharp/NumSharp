@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using NumSharp.Backends.Iteration;
 
@@ -29,10 +31,19 @@ namespace NumSharp
             return new Broadcast(nd1, nd2);
         }
 
-        public class Broadcast
+        /// <summary>
+        ///     NumPy's <c>numpy.broadcast</c> — the broadcast result of N operands, usable as an
+        ///     iterator. Like NumPy, the object is its OWN iterator (<c>iter(b) is b</c>): it keeps a
+        ///     single live cursor exposed as <see cref="index"/>, iterating it yields one tuple of
+        ///     per-operand values per step (advancing the cursor), and <see cref="reset"/> rewinds it.
+        /// </summary>
+        public class Broadcast : IEnumerable<object[]>, IEnumerator<object[]>
         {
             private readonly NDArray[] _ops;
             private NpyFlatIterator[] _iters;
+            private NDArray[] _views;     // operands broadcast to the result shape (lazy)
+            private int _index;           // live cursor — NumPy's broadcast.index
+            private object[] _current;    // values at the previous cursor position
 
             /// <summary>
             ///     Parameterless constructor retained for source/binary compatibility
@@ -67,8 +78,15 @@ namespace NumSharp
 
             public Shape shape { get; internal set; }
 
-            //It shouldn't be used unless it is a very advanced code...
-            public int index => throw new NotSupportedException("NumSharp does not implement iterators exactly like numpy does.");
+            /// <summary>
+            ///     The live flat position of the iterator (NumPy's <c>broadcast.index</c>): the number
+            ///     of elements already consumed — 0 before iterating, incrementing by one per step, and
+            ///     equal to <see cref="size"/> once exhausted. Use <see cref="reset"/> to rewind.
+            /// </summary>
+            public int index => _index;
+
+            /// <summary>Operands broadcast to the result <see cref="shape"/>, built once on demand.</summary>
+            private NDArray[] Views => _views ??= _ops?.Select(o => broadcast_to(o, shape)).ToArray();
 
             /// <summary>
             ///     Per-operand flat iterators (NumPy's <c>broadcast.iters</c>): one entry per input,
@@ -77,13 +95,14 @@ namespace NumSharp
             ///     on first access — np.broadcast() only resolves the shape eagerly — and backed by
             ///     <see cref="np.broadcast_to(NDArray, Shape)"/> + <see cref="NpyFlatIterator"/>, the
             ///     NpyIter-aligned replacement for the removed NDIterator. There are <see cref="numiter"/>
-            ///     entries (0 when constructed without operands).
+            ///     entries (0 when constructed without operands). Unlike NumPy's flatiters these are
+            ///     independent and re-enumerable; they do not share the <see cref="index"/> cursor.
             /// </summary>
             public NpyFlatIterator[] iters
             {
                 get => _iters ??= _ops is null
                     ? null
-                    : _ops.Select(o => new NpyFlatIterator(broadcast_to(o, shape))).ToArray();
+                    : Views.Select(v => new NpyFlatIterator(v)).ToArray();
                 internal set => _iters = value;
             }
 
@@ -101,6 +120,56 @@ namespace NumSharp
             ///     <see cref="np.broadcast(NDArray[])"/> (0 for the parameterless constructor).
             /// </summary>
             public int numiter => _ops?.Length ?? 0;
+
+            // ---- NumPy-style single-cursor iteration (iter(b) is b) ----
+
+            /// <summary>
+            ///     Returns the broadcast itself as its iterator — matching NumPy's <c>iter(b) is b</c>,
+            ///     so iteration shares the single <see cref="index"/> cursor (call <see cref="reset"/>
+            ///     to iterate again).
+            /// </summary>
+            public IEnumerator<object[]> GetEnumerator() => this;
+
+            IEnumerator IEnumerable.GetEnumerator() => this;
+
+            /// <summary>The tuple of per-operand values produced by the most recent step (one per <see cref="numiter"/>).</summary>
+            public object[] Current => _current;
+
+            object IEnumerator.Current => _current;
+
+            /// <summary>
+            ///     Advances the cursor one element and reads each operand's value at that flat
+            ///     (C-order) position into <see cref="Current"/>. Returns false once <see cref="index"/>
+            ///     reaches <see cref="size"/> (or when constructed without operands).
+            /// </summary>
+            public bool MoveNext()
+            {
+                if (_ops is null || _index >= size)
+                    return false;
+
+                var views = Views;
+                var vals = new object[views.Length];
+                for (int i = 0; i < views.Length; i++)
+                    vals[i] = views[i].GetAtIndex(_index);
+
+                _current = vals;
+                _index++;
+                return true;
+            }
+
+            /// <summary>
+            ///     NumPy's <c>broadcast.reset()</c>: rewind the live <see cref="index"/> cursor to 0
+            ///     so the object can be iterated again.
+            /// </summary>
+            public void reset()
+            {
+                _index = 0;
+                _current = null;
+            }
+
+            void IEnumerator.Reset() => reset();
+
+            public void Dispose() { }
         }
     }
 }
