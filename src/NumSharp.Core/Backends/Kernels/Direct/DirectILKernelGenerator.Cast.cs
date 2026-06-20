@@ -171,6 +171,11 @@ namespace NumSharp.Backends.Kernels
         public static StridedCastKernel TryGetStridedCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            // Same-type 1B/2B strided copy (the sub-word strided/negcol cliff): SIMD deinterleave
+            // (ss==2) / reverse (ss==-1) / per-row memcpy (ss==1). Gated to src==dst & size {1,2};
+            // cross-type and 4/8/16-byte same-type fall through to the existing fast paths.
+            var subwordCopy = TryGetSubwordCopyStridedKernel(srcType, dstType);
+            if (subwordCopy != null) return subwordCopy;
             // NumPy-faithful cvtt strided fast path for double->int32 (unit / reversed / gathered inner).
             var d2iStrided = TryGetDoubleToInt32StridedKernel(srcType, dstType);
             if (d2iStrided != null) return d2iStrided;
