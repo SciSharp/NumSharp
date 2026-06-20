@@ -39,13 +39,13 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
       - [Caching and auto-keys](#caching-and-auto-keys)
       - [Memory model and lifetime](#memory-model-and-lifetime)
       - [Validation and errors](#validation-and-errors)
-      - [Gotchas](#gotchas)
+      - [Behavioral notes](#behavioral-notes)
       - [Debugging compiled kernels](#debugging-compiled-kernels)
       - [When to use Tier 3C](#when-to-use-tier-3c)
 - [Path Detection](#path-detection)
 - [Worked Examples](#worked-examples)
 - [Performance](#performance)
-  - [JIT Warmup Caveat](#jit-warmup-caveat)
+  - [JIT warmup and measurement](#jit-warmup-and-measurement)
   - [Implementation Notes](#implementation-notes)
   - [When Does Each Layer Pay Off?](#when-does-each-layer-pay-off)
   - [Allocations](#allocations)
@@ -439,7 +439,7 @@ Once the buffer is filled, `DataPtrs[op]` moves into the buffer and every inner-
 
 ### GROWINNER
 
-When `GROWINNER` is set the iterator tries to inline as many outer axes as will fit in the buffer into the inner loop. On a 5×6 contiguous array with buffer size 8192, the entire 30-element array fits in one pass; the reported inner loop size becomes 30 instead of 6. More work per kernel call, less loop overhead.
+`GROWINNER` requests that the inner loop grow to consume as much of the buffer as possible per kernel call — more work per invocation, less loop overhead. In NumSharp the inner-loop length is set by axis coalescing together with the buffer-window size: a contiguous array coalesces to a single axis (a 5×6 contiguous array becomes one length-30 axis), so the inner loop already spans the whole contiguous run, and the buffer window is sized identically with or without the flag. The flag is carried for NumPy API parity.
 
 ### BUF_REUSABLE
 
@@ -576,7 +576,7 @@ Benchmarked on 1M-element arrays, post-warmup, via the showcase script in this d
 | Call | `GELU` via captured lambda (f64) | 8.08 ms | `Math.Tanh` dominates |
 | Tier 3C | stable sigmoid via `Where` (f64) | 13.6 ms | 3 × `Math.Exp` per element |
 
-Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT caveat: when run from a dynamic host (ephemeral script, `dotnet_run`, first-call cold start) they can look 30-50× slower than production code. Post-tier-1 promotion (~100 hot-loop iterations) brings them within 2-3 ms for hypot on 1M f32. See [JIT Warmup Caveat](#jit-warmup-caveat).
+Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT characteristic: when run from a dynamic host (ephemeral script, `dotnet_run`, first-call cold start) they can measure 30-50× slower than production code. Post-tier-1 promotion (~100 hot-loop iterations) brings them within 2-3 ms for hypot on 1M f32. See [JIT warmup and measurement](#jit-warmup-and-measurement).
 
 ### Cache state — two lifetimes to know about
 
@@ -597,7 +597,7 @@ ILKernelGenerator.InnerLoopCachedCount = 4     ← one per unique cache key acro
 DelegateSlots.RegisteredCount          = 131   ← one per Call(lambda) construction
 ```
 
-The `131` is the documented gotcha from the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NpyExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. Users expecting steady-state slot growth should register delegates once at startup (`static readonly Func<…>`), see the [registration-once pattern](#memory-model-and-lifetime).
+The `131` reflects the behavior described in the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NpyExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. To keep slot growth flat, register delegates once at startup (`static readonly Func<…>`); see the [registration-once pattern](#memory-model-and-lifetime).
 
 ### Layer 1 — Canonical Inner-Loop API
 
@@ -972,7 +972,7 @@ iter.ExecuteExpression(expr,
 | Factory | Operator | SIMD | NumPy equivalent | Notes |
 |---------|----------|:----:|------------------|-------|
 | `BitwiseNot(x)` | `~x` | ✓ | `np.invert` / `np.bitwise_not` | Integer types only. |
-| `LogicalNot(x)` | `!x` | — | `np.logical_not` | Returns 1 if `x == 0` else 0. Routes through `EmitComparisonOperation(Equal, outType)` — correct for all dtypes including Int64, Single, Double, Decimal (see [Gotchas](#gotchas)). |
+| `LogicalNot(x)` | `!x` | — | `np.logical_not` | Returns 1 if `x == 0` else 0. Routes through `EmitComparisonOperation(Equal, outType)` — correct for all dtypes including Int64, Single, Double, Decimal (see [Behavioral notes](#behavioral-notes)). |
 | `IsNaN(x)` | — | — | `np.isnan` | Returns 0/1 at output dtype. For integer types: always 0. |
 | `IsFinite(x)` | — | — | `np.isfinite` | Returns 0/1 at output dtype. For integer types: always 1. |
 | `IsInf(x)` | — | — | `np.isinf` | Returns 0/1 at output dtype. For integer types: always 0. |
@@ -1175,7 +1175,7 @@ A node's `SupportsSimd` determines whether Tier 3C emits the vector body:
 - **Yes:** `Input`, `Const`, the four arithmetic binary ops (`+ - * /`), the three bitwise binary ops (`& | ^`), and the unary ops `Negate`, `Abs`, `Sqrt`, `Floor`, `Ceil`, `Square`, `Reciprocal`, `Deg2Rad`, `Rad2Deg`, `BitwiseNot`.
 - **No:** `Mod`, `Power`, `FloorDivide`, `ATan2`, `Min`/`Max`/`Clamp`/`Where`, all comparisons, `Round`, `Truncate` (no net8 SIMD method), all trig (except `Deg2Rad`/`Rad2Deg`), all log/exp, `Sign`, `Cbrt`, `LogicalNot`, predicates (`IsNaN`/`IsFinite`/`IsInf`), `Call` (user methods are always scalar — there is no vectorization path for arbitrary managed calls).
 
-**Predicate / LogicalNot result handling.** Predicates (`IsNaN`/`IsFinite`/`IsInf`) and `LogicalNot` emit an I4 0/1 on the stack, not a value of the output dtype. `UnaryNode` detects these ops and inserts a trailing `EmitConvertTo(Int32, outType)` so the factory's final `Stind` matches. `LogicalNot` in particular routes through `EmitComparisonOperation(Equal, outType)` with an output-dtype zero literal, because the default `ILKernelGenerator` emit path uses `Ldc_I4_0 + Ceq` which is only correct when the value fits in I4 — broken for Int64, Single, Double, Decimal. NpyExpr takes the safer route.
+**Predicate / LogicalNot result handling.** Predicates (`IsNaN`/`IsFinite`/`IsInf`) and `LogicalNot` emit an I4 0/1 on the stack, not a value of the output dtype. `UnaryNode` detects these ops and inserts a trailing `EmitConvertTo(Int32, outType)` so the factory's final `Stind` matches. `LogicalNot` in particular routes through `EmitComparisonOperation(Equal, outType)` with an output-dtype zero literal: the `Ldc_I4_0 + Ceq` sequence is correct only for I4-width values (bool/byte/int16/int32), so the typed-zero comparison is what makes the result correct for Int64, Single, Double, and Decimal too.
 
 A tree's `SupportsSimd` is true only if **every** node in it does. One unsupported node demotes the whole tree to scalar-only — which is usually still autovectorized by the JIT after tier-1 promotion, just without the 4× unroll.
 
@@ -1218,7 +1218,7 @@ Two trees with identical structure and types get the same auto-derived key and s
 
 ##### Memory model and lifetime
 
-Three things live longer than you might expect when you use Tier 3C. Knowing what they are, where they hide, and how long they stick around is enough to avoid every subtle memory-creep footgun in practice.
+Three things outlive a single Tier 3C call. Knowing what they are and how long they live explains the steady-state memory profile of a Tier 3C-heavy program.
 
 **1. Compiled kernels (`_innerLoopCache`).**
 
@@ -1227,7 +1227,7 @@ Every unique `(structural signature, inputTypes, outputType)` triple produces a 
 Typical memory profile:
 - Each compiled kernel is ~2-5 KB of native code + its metadata in the runtime's dynamic-method table.
 - Typical application: a few dozen unique expressions → ~100-200 KB of steady-state cache.
-- Pathological: a hot loop constructing new-per-call trees → linear growth. Reuse expression objects or pass explicit cache keys.
+- Worst case: a hot loop constructing new-per-call trees → linear growth. Reuse expression objects or pass explicit cache keys.
 
 To inspect or reset during tests:
 ```csharp
@@ -1255,7 +1255,7 @@ DelegateSlots.RegisteredCount;  // strong-ref count across both dicts
 DelegateSlots.Clear();          // wipe for testing (invalidates kernels that reference it!)
 ```
 
-> Calling `DelegateSlots.Clear()` while a kernel that references a slot is compiled is a footgun — the next call will throw `KeyNotFoundException` from inside the generated IL. Only use in test setup/teardown where you also clear the inner-loop cache.
+> Calling `DelegateSlots.Clear()` while a kernel that references a slot is still compiled makes the next call throw `KeyNotFoundException` from inside the generated IL. Use it only in test setup/teardown, paired with clearing the inner-loop cache.
 
 **3. NDArrays referenced by the iterator.**
 
@@ -1302,9 +1302,9 @@ Runtime errors depend on the op and dtype:
 - `Power(neg, fractional)` → `NaN` via `Math.Pow`, no exception.
 - Overflow during `Conv_*` from a float that's outside the target integer range → silently wraps or saturates per the CLI's conv opcode semantics (matches `unchecked {}` casts in C#). Use `Conv_Ovf_*` if you need checked behavior — not exposed through the DSL.
 
-##### Gotchas
+##### Behavioral notes
 
-A non-exhaustive list of pitfalls worth internalizing:
+Non-obvious but permanent behaviors of the DSL:
 
 - **NaN propagation in `Min`/`Max` matches `np.minimum`/`np.maximum`, not `np.fmin`/`np.fmax`.** If you need NaN-skipping min/max, compose with `IsNaN` and `Where`:
   ```csharp
@@ -1326,7 +1326,7 @@ A non-exhaustive list of pitfalls worth internalizing:
 
 - **Input dtype mismatch is silent.** If your `inputTypes[]` says `Int32` but the actual NDArray operand is `Int16`, the kernel reads 4 bytes starting at the int16 pointer — garbage. The iterator's buffer/cast machinery only kicks in with `BUFFERED | NPY_*_CASTING`. For ad-hoc Tier 3C use, make sure `inputTypes[i]` matches the actual NDArray dtype, or run the iterator with casting flags.
 
-- **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is almost never what you intended. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
+- **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is rarely the intended comparison. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
 
 - **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier 3B.
 
@@ -1807,11 +1807,11 @@ Layer 1 and Layer 2 give you control and fusion. For any standard elementwise uf
 
 **When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NpyExpr.Input(0) * NpyExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
 
-### JIT Warmup Caveat
+### JIT warmup and measurement
 
-**Critical gotcha for benchmarking.** .NET uses tiered compilation: methods first compile to unoptimized tier-0 code, then get promoted to tier-1 after ~100+ calls. Until tier-1 kicks in, **autovectorization doesn't happen**. A scalar kernel that eventually runs at 2.5 ms/iter will look like 70+ ms/iter if you only warm up 10 times.
+.NET uses tiered compilation: methods first compile to unoptimized tier-0 code, then get promoted to tier-1 after ~100+ calls. Until tier-1, **autovectorization doesn't happen** — a scalar kernel that runs at 2.5 ms/iter in steady state measures at 70+ ms/iter when warmed up only 10 times.
 
-Symptoms of under-warmed benchmarks:
+Under-warmed measurement shows up as:
 - Layer 2 scalar shows 50-80 ms instead of 2-5 ms
 - `ExecuteGeneric` looks slower than `ForEach` (it isn't, post-warmup)
 - Reusing a single iterator looks 50× faster than constructing fresh ones (the reuse path warmed up faster because it kept hitting the same call site)
