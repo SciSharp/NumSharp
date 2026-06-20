@@ -64,7 +64,8 @@ def run_cs(repo, cs_path, timeout=1200):
     name = os.path.basename(cs_path)
     try:
         p = subprocess.run(["dotnet", "run", "-c", "Release", "-"], input=src,
-                           capture_output=True, text=True, cwd=repo, env=env, timeout=timeout)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           cwd=repo, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         log(f"    [cs] {name}: TIMED OUT ({timeout}s) — section dropped")
         return ""
@@ -78,7 +79,7 @@ def run_py(repo, py_path, timeout=900):
     name = os.path.basename(py_path)
     try:
         p = subprocess.run([sys.executable, py_path], capture_output=True, text=True,
-                           cwd=repo, timeout=timeout)
+                           encoding="utf-8", errors="replace", cwd=repo, timeout=timeout)
     except subprocess.TimeoutExpired:
         log(f"    [py] {name}: TIMED OUT ({timeout}s) — section dropped")
         return ""
