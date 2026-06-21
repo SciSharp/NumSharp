@@ -272,13 +272,14 @@ namespace NumSharp.UnitTest.Fuzz
 
             // (4) Unary result-dtype: the transcendental ufuncs (sqrt/cbrt/exp/log/sin/cos/tan) now
             //     follow NumPy's width-based float promotion (Phase 1 F3a) and are verified bit-exact,
-            //     so they are NOT excused here. The dtype-preserving ufuncs (square/floor/ceil/trunc/
-            //     reciprocal) still widen integer input to float64 instead of preserving it — pending
-            //     Phase 1 F3b (needs integer identity / x*x / int-reciprocal kernels). Scoped to that
-            //     set so a transcendental promotion regression fails the gate.
+            //     so they are NOT excused here. reciprocal now preserves the integer dtype too (bool
+            //     -> int8), matching NumPy bit-exact (see (8) below), so it is no longer excused. The
+            //     remaining dtype-preserving ufuncs (square/floor/ceil/trunc) still widen integer
+            //     input to float64 instead of preserving it — pending Phase 1 F3b. Scoped to that set
+            //     so a transcendental promotion regression fails the gate.
             if (kind == DivergenceKind.Dtype && c.Operands.Length == 1
-                && (c.Op == "square" || c.Op == "floor" || c.Op == "ceil" || c.Op == "trunc" || c.Op == "reciprocal"))
-                return "unary preserve-dtype pending: square/floor/ceil/trunc/reciprocal widen int->float64 [F3b]";
+                && (c.Op == "square" || c.Op == "floor" || c.Op == "ceil" || c.Op == "trunc"))
+                return "unary preserve-dtype pending: square/floor/ceil/trunc widen int->float64 [F3b]";
 
             // (W3-A/B) The hyperbolic / inverse-trig / angle-conversion ufuncs have no Half kernel
             // (throw "Unary operation X not supported for Half" whenever the input promotes to
@@ -351,17 +352,11 @@ namespace NumSharp.UnitTest.Fuzz
             // unsupported for Complex"); it now selects complex operands bit-exact. Classifier
             // branch removed so the where matrix verifies it.
 
-            // (8) np.reciprocal of an integer still returns the float64 reciprocal (0 for |x|>1)
-            //     instead of NumPy's integer reciprocal with the ÷0 sentinel, and on a non-contiguous
-            //     integer operand it still throws (the int->float reciprocal path needs a flat
-            //     Address) — both pending F3b (preserve-int-dtype + a strided integer-reciprocal
-            //     kernel). reciprocal on non-contiguous FLOAT operands is resolved. Scoped to integer
-            //     input (value diff or the non-contig throw).
-            if (c.Op == "reciprocal" && c.Operands.Length == 1
-                && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw)
-                && (c.Operands[0].Dtype.StartsWith("int") || c.Operands[0].Dtype.StartsWith("uint")
-                    || c.Operands[0].Dtype == "bool"))
-                return "reciprocal(int): float64 reciprocal / non-contig Address vs NumPy integer ÷0 sentinel [F3b]";
+            // (8) np.reciprocal of an integer/bool now matches NumPy bit-exact and is no longer
+            //     excused: it preserves the integer dtype (bool -> int8), C-truncating 1/x gives 0
+            //     for |x| > 1, and the per-type 1/0 sentinel is reproduced exactly (0 for
+            //     int8/int16/uint8/uint16/uint32; the sign-bit 0x80..0 for int32/int64/uint64).
+            //     Strided / sliced / broadcast integer operands are read in place (no longer throw).
 
             return null;
         }

@@ -187,18 +187,62 @@ namespace NumSharp.UnitTest.NewDtypes
         [TestMethod]
         public void B36_SByte_Reciprocal_PreservesIntegerDtype()
         {
-            // NumPy 2.4.2 (probed): np.reciprocal(np.array([1,-2,100,0,10,-50], i1))
-            // -> [1, 0, 0, -128, 0, 0] with a RuntimeWarning — signed 1/0 yields
-            // the dtype's MinValue, NOT 0 (the previous pin was disproven by probe).
+            // NumPy 2.4.2 (re-probed bit-exact, deterministic): np.reciprocal(
+            // np.array([1,-2,100,0,10,-50], i1)) -> [1, 0, 0, 0, 0, 0]. The 1/0 result
+            // for the NARROW signed types (int8/int16) is 0, NOT the dtype MinValue —
+            // only int32/int64/uint64 get the sign-bit ÷0 sentinel (see B36_Int32 /
+            // B36_UInt64). The earlier MinValue pin here was a mis-probe.
             var a = np.array(new sbyte[] { 1, -2, 100, 0, 10, -50 });
             var r = np.reciprocal(a);
             r.typecode.Should().Be(NPTypeCode.SByte);
             r.GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
             r.GetAtIndex<sbyte>(1).Should().Be((sbyte)0);
             r.GetAtIndex<sbyte>(2).Should().Be((sbyte)0);
-            r.GetAtIndex<sbyte>(3).Should().Be(sbyte.MinValue); // 1/0 -> MinValue (NumPy 2.4.2)
+            r.GetAtIndex<sbyte>(3).Should().Be((sbyte)0); // 1/0 -> 0 for int8 (NumPy 2.4.2)
             r.GetAtIndex<sbyte>(4).Should().Be((sbyte)0);
             r.GetAtIndex<sbyte>(5).Should().Be((sbyte)0);
+        }
+
+        [TestMethod]
+        public void B36_Int16_Reciprocal_ZeroDivIsZero()
+        {
+            // NumPy 2.4.2 (probed): int16 1/0 -> 0 (narrow type, no sentinel).
+            var a = np.array(new short[] { 1, -1, 5, 0 });
+            var r = np.reciprocal(a);
+            r.typecode.Should().Be(NPTypeCode.Int16);
+            r.GetAtIndex<short>(0).Should().Be((short)1);
+            r.GetAtIndex<short>(1).Should().Be((short)-1);
+            r.GetAtIndex<short>(2).Should().Be((short)0);
+            r.GetAtIndex<short>(3).Should().Be((short)0); // 1/0 -> 0 for int16
+        }
+
+        [TestMethod]
+        public void B36_UInt64_Reciprocal_ZeroDivIsSentinel()
+        {
+            // NumPy 2.4.2 (probed): uint64 1/0 -> 0x8000000000000000 (= 2^63), the
+            // sign-bit ÷0 sentinel that the 64-bit / int32 loops produce; uint32 by
+            // contrast yields 0. Probed deterministic across array sizes / lanes.
+            var a = np.array(new ulong[] { 1, 5, 0, 0 });
+            var r = np.reciprocal(a);
+            r.typecode.Should().Be(NPTypeCode.UInt64);
+            r.GetAtIndex<ulong>(0).Should().Be(1UL);
+            r.GetAtIndex<ulong>(1).Should().Be(0UL);
+            r.GetAtIndex<ulong>(2).Should().Be(0x8000000000000000UL);
+            r.GetAtIndex<ulong>(3).Should().Be(0x8000000000000000UL);
+        }
+
+        [TestMethod]
+        public void B36_Bool_Reciprocal_PromotesToInt8()
+        {
+            // NumPy 2.4.2 (probed): np.reciprocal([True,False]) -> int8 [1, 0]
+            // (bool promotes to the int8 loop; False -> 1/0 -> 0 for int8).
+            var a = np.array(new bool[] { true, false, true, false });
+            var r = np.reciprocal(a);
+            r.typecode.Should().Be(NPTypeCode.SByte);
+            r.GetAtIndex<sbyte>(0).Should().Be((sbyte)1);
+            r.GetAtIndex<sbyte>(1).Should().Be((sbyte)0);
+            r.GetAtIndex<sbyte>(2).Should().Be((sbyte)1);
+            r.GetAtIndex<sbyte>(3).Should().Be((sbyte)0);
         }
 
         [TestMethod]

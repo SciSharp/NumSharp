@@ -358,6 +358,19 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // float32/float64: NaN-propagating, signed-zero-tie-to-second (matches the SIMD body
+            // and NumPy). Math.Max would resolve the +0/-0 tie to +0 and diverge in the scalar tail.
+            if (dtype == NPTypeCode.Single)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(FloatMaxNaN) : nameof(FloatMinNaN)), null);
+                return;
+            }
+            if (dtype == NPTypeCode.Double)
+            {
+                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(DoubleMaxNaN) : nameof(DoubleMinNaN)), null);
+                return;
+            }
+
             // Math.Max(T, T) / Math.Min(T, T) for all sized numerics + decimal.
             // ScalarMethodCache.Get throws on missing — fall back to the manual select below
             // for the one type that's not covered (Char has no Math.Max overload).
@@ -426,6 +439,22 @@ namespace NumSharp.Backends.Kernels
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
             return a <= b ? a : b;
         }
+
+        // float32/float64 max/min matching the NaN-propagating SIMD path (EmitVectorMinOrMax)
+        // and NumPy maximum/minimum/clip. NaN in the first operand propagates; otherwise the
+        // STRICT comparison returns the SECOND operand on a tie — so the signed-zero tie resolves
+        // like hardware MAXPS/MINPD (f32/f64 maximum(+0,-0) = -0), the OPPOSITE of float16 (which
+        // ties to the first operand, hence the separate Half helpers above) and of Math.Max (+0).
+        // Used by both the IL kernel's scalar tail (EmitScalarClamp) and the engine's ClipStrided,
+        // so the contiguous and strided paths agree bit-for-bit on signed-zero / NaN.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatMaxNaN(float a, float b) => float.IsNaN(a) ? a : (a > b ? a : b);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatMinNaN(float a, float b) => float.IsNaN(a) ? a : (a < b ? a : b);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleMaxNaN(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleMinNaN(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
 
         // Complex: lex ordering on (real, imag). NaN propagation: if either
         // operand contains a NaN component, that operand wins (first-encountered

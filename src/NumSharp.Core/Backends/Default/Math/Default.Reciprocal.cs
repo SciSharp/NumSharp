@@ -25,14 +25,20 @@ namespace NumSharp.Backends
                 ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "reciprocal");
 
             var loopType = typeCode ?? nd.GetTypeCode;
+            // NumPy reciprocal(bool) takes the int8 loop (True -> 1/1 = 1, False -> 1/0 = 0),
+            // not a float loop: probed np.reciprocal([True,False]) -> int8 [1, 0].
+            if (loopType == NPTypeCode.Boolean)
+                loopType = NPTypeCode.SByte;
+
             if (loopType.IsInteger())
             {
-                // Integer loop: C-truncating 1/x with the probed 1/0 ->
-                // MinValue semantic. The hand loop is the compute path; a
-                // provided out/where gets a masked identity copy through the
-                // shared Into machinery (plan §4.3.3 temp+copy route).
-                var tmp = ReciprocalInteger(typeCode.HasValue && typeCode.Value != nd.GetTypeCode
-                    ? Cast(nd, typeCode.Value, copy: true)
+                // Integer loop: C-truncating 1/x with the probed per-type 1/0 sentinel.
+                // The hand loop is the compute path; a provided out/where gets a masked
+                // identity copy through the shared Into machinery (plan §4.3.3 temp+copy route).
+                // The input is cast to the loop dtype first (e.g. bool -> int8, or an
+                // explicit dtype=) so ReciprocalInteger always sees a supported integer type.
+                var tmp = ReciprocalInteger(loopType != nd.GetTypeCode
+                    ? Cast(nd, loopType, copy: true)
                     : nd);
                 if (@out is null && where is null)
                     return tmp;
@@ -44,12 +50,15 @@ namespace NumSharp.Backends
 
         private static unsafe NDArray ReciprocalInteger(NDArray nd)
         {
-            // NumPy: 1/x with C truncating integer division. 1/0 produces the
-            // signed MinValue with a RuntimeWarning in NumPy 2.4.2 (probed:
-            // reciprocal(i4 [1,2,-3,0]) -> [1, 0, 0, -2147483648]); unsigned
-            // zero stays 0. The input is read through its strides (FlatStrideOffset),
-            // so sliced / strided / transposed / broadcast (stride=0) views are consumed
-            // in place — no materializing copy — while the result is freshly C-contiguous.
+            // NumPy: 1/x with C truncating integer division (so |x| >= 2 -> 0, 1 -> 1,
+            // -1 -> -1). The 1/0 result is per-type and was probed bit-exact against
+            // NumPy 2.4.2 (RuntimeWarning, deterministic across array sizes / lane
+            // positions): the sign-bit sentinel 0x80..0 ONLY for int32 / int64 / uint64
+            // (int32 -> int.MinValue, int64 -> long.MinValue, uint64 -> 2^63), and 0 for
+            // every narrower type — int8, int16, uint8, uint16, AND uint32.
+            // The input is read through its strides (FlatStrideOffset), so sliced /
+            // strided / transposed / broadcast (stride=0) views are consumed in place —
+            // no materializing copy — while the result is freshly C-contiguous.
             var tc = nd.GetTypeCode;
             var result = new NDArray(tc, new Shape((long[])nd.shape.Clone()), false);
             long n = nd.size;
@@ -64,7 +73,7 @@ namespace NumSharp.Backends
                 {
                     var src = (sbyte*)basePtr;
                     var dst = (sbyte*)result.Address;
-                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? sbyte.MinValue : (sbyte)(1 / x); }
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (sbyte)0 : (sbyte)(1 / x); }
                     break;
                 }
                 case NPTypeCode.Byte:
@@ -78,7 +87,7 @@ namespace NumSharp.Backends
                 {
                     var src = (short*)basePtr;
                     var dst = (short*)result.Address;
-                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? short.MinValue : (short)(1 / x); }
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (short)0 : (short)(1 / x); }
                     break;
                 }
                 case NPTypeCode.UInt16:
@@ -113,7 +122,7 @@ namespace NumSharp.Backends
                 {
                     var src = (ulong*)basePtr;
                     var dst = (ulong*)result.Address;
-                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? 0UL : 1UL / x; }
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? 0x8000000000000000UL : 1UL / x; }
                     break;
                 }
                 default:

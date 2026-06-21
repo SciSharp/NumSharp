@@ -213,23 +213,14 @@ namespace NumSharp.Backends
                 case NPTypeCode.UInt32:  ClipStridedT<uint>(sBase, (uint*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Int64:   ClipStridedT<long>(sBase, (long*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.UInt64:  ClipStridedT<ulong>(sBase, (ulong*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
-                case NPTypeCode.Single:  ClipStridedT<float>(sBase, (float*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &ClipMaxF, &ClipMinF); break;
-                case NPTypeCode.Double:  ClipStridedT<double>(sBase, (double*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &ClipMaxD, &ClipMinD); break;
+                case NPTypeCode.Single:  ClipStridedT<float>(sBase, (float*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.FloatMaxNaN, &DirectILKernelGenerator.FloatMinNaN); break;
+                case NPTypeCode.Double:  ClipStridedT<double>(sBase, (double*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.DoubleMaxNaN, &DirectILKernelGenerator.DoubleMinNaN); break;
                 case NPTypeCode.Decimal: ClipStridedT<decimal>(sBase, (decimal*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
                 case NPTypeCode.Half:    ClipStridedT<Half>(sBase, (Half*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.HalfMaxNaN, &DirectILKernelGenerator.HalfMinNaN); break;
                 case NPTypeCode.Complex: ClipStridedT<System.Numerics.Complex>(sBase, (System.Numerics.Complex*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.ComplexMaxNaN, &DirectILKernelGenerator.ComplexMinNaN); break;
                 default: throw new NotSupportedException($"clip not supported for {outType}");
             }
         }
-
-        // Float/double max/min matching the IL kernel's NaN-propagating SIMD path (and NumPy
-        // maximum/minimum/clip): NaN in the first operand propagates; otherwise the STRICT
-        // comparison returns the second operand on a tie — so the signed-zero tie resolves like
-        // hardware MAXPS/MINPD (maximum(+0,-0) = -0), unlike Math.Max which would return +0.
-        private static float ClipMaxF(float a, float b) => float.IsNaN(a) ? a : (a > b ? a : b);
-        private static float ClipMinF(float a, float b) => float.IsNaN(a) ? a : (a < b ? a : b);
-        private static double ClipMaxD(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
-        private static double ClipMinD(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
 
         // One strided clip loop, shared across dtypes via Max/Min function pointers (no per-element
         // boxing or virtual dispatch). dst is C-contiguous; src and array bounds are read at
