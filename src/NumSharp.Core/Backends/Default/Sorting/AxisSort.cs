@@ -150,6 +150,23 @@ namespace NumSharp.Backends.Sorting
         private static void DriveAllButAxis(NDArray[] ops, NpyIterPerOpFlags[] flags, int axis, NpyInnerLoopFunc kern, void* aux)
         {
             int ndim = ops[0].ndim;
+
+            // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NpyIter
+            // mis-drives that degenerate shape as `size` single-element iterations, and because each
+            // line kernel re-sorts the whole line (it walks by LineCtx.n, ignoring the per-call count)
+            // the total work is N x O(N) = O(N^2). Promote every operand to a (1, N) memory-sharing
+            // view (expand_dims aliases storage, so an in-place sort still mutates the original, and a
+            // leading size-1 axis leaves the data-axis stride -> LineCtx in/out strides unchanged): now
+            // exactly one axis (size 1) is kept, so the iterator makes exactly one line kernel call.
+            if (ndim == 1)
+            {
+                var promoted = new NDArray[ops.Length];
+                for (int i = 0; i < ops.Length; i++) promoted[i] = np.expand_dims(ops[i], 0);
+                ops = promoted;
+                axis = 1;
+                ndim = 2;
+            }
+
             var kept = new int[ndim - 1];
             for (int d = 0, w = 0; d < ndim; d++) if (d != axis) kept[w++] = d;
             var opAxes = new int[ops.Length][];
