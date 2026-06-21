@@ -95,35 +95,7 @@ namespace NumSharp.Backends
         }
 
         protected unsafe NDArray cumprod_elementwise(NDArray arr, NPTypeCode? typeCode)
-        {
-            if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
-                return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
-
-            if (!arr.Shape.IsContiguous)
-                return cumprod_elementwise(arr.copy(), typeCode);
-
-            var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
-
-            // Fast path: use IL-generated kernel for contiguous arrays
-            if (arr.Shape.IsContiguous && DirectILKernelGenerator.Enabled)
-            {
-                var ret = new NDArray(retType, Shape.Vector(arr.size));
-                var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumProd, IsContiguous: true);
-                var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
-                if (kernel != null)
-                {
-                    fixed (long* strides = arr.strides)
-                    fixed (long* shape = arr.shape)
-                    {
-                        kernel((void*)arr.Address, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
-                    }
-                    return ret;
-                }
-            }
-
-            // Fallback: contiguous prefix-product loop
-            return cumprod_elementwise_fallback(arr, retType);
-        }
+            => ScanElementwiseFlat(arr, typeCode, ReductionOp.CumProd);
 
         /// <summary>
         /// Fallback element-wise cumprod for contiguous input.

@@ -156,7 +156,7 @@ namespace NumSharp.Backends.Kernels
             string helperName = key.Op switch
             {
                 ReductionOp.CumSum => nameof(CumSumHelperSameType),
-                // ReductionOp.CumProd => nameof(CumProdHelperSameType), // Future
+                ReductionOp.CumProd => nameof(CumProdHelperSameType),
                 _ => throw new NotSupportedException($"Scan operation {key.Op} not supported")
             };
 
@@ -189,6 +189,28 @@ namespace NumSharp.Backends.Kernels
             {
                 sum += src[i];
                 dst[i] = sum;
+            }
+        }
+
+        /// <summary>
+        /// Cumulative product helper for same-type contiguous arrays. Scan is inherently
+        /// sequential; we use direct pointer access for optimal memory throughput. Mirrors
+        /// <see cref="CumSumHelperSameType{T}"/> with a multiplicative identity / combine.
+        /// </summary>
+        internal static unsafe void CumProdHelperSameType<T>(void* input, void* output, long totalSize)
+            where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
+        {
+            if (totalSize == 0)
+                return;
+
+            T* src = (T*)input;
+            T* dst = (T*)output;
+
+            T product = T.MultiplicativeIdentity;
+            for (long i = 0; i < totalSize; i++)
+            {
+                product *= src[i];
+                dst[i] = product;
             }
         }
 
@@ -415,9 +437,9 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.CumSum:
                     il.Emit(OpCodes.Add);
                     break;
-                // case ReductionOp.CumProd:
-                //     il.Emit(OpCodes.Mul);
-                //     break;
+                case ReductionOp.CumProd:
+                    il.Emit(OpCodes.Mul);
+                    break;
                 default:
                     throw new NotSupportedException($"Scan operation {op} not supported");
             }

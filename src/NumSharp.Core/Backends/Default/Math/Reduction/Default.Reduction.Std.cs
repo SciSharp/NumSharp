@@ -243,78 +243,34 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback element-wise std using iterators.
+        /// Fallback element-wise std. Shares the strided, zero-copy two-pass moment helpers with
+        /// var (<see cref="VarMomentsReal{TIn}"/> / <see cref="VarMomentsDecimal"/> /
+        /// <see cref="VarMomentsComplex"/>) and takes the square root — strided / transposed /
+        /// sliced / reversed views are iterated in place via their strides, not copied.
         /// </summary>
         private unsafe object std_elementwise_fallback(NDArray arr, NPTypeCode retType, int? ddof)
         {
             int _ddof = ddof ?? 0;
+            var tc = arr.GetTypeCode;
+            byte* basePtr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+            bool contig = arr.Shape.IsContiguous;
+            var dims = arr.shape;
+            var strides = arr.strides;
+            int ndim = arr.ndim;
+            long n = arr.size;
 
-            if (!arr.Shape.IsContiguous)
-                arr = arr.copy();
-
-            if (arr.GetTypeCode == NPTypeCode.Decimal)
+            if (tc == NPTypeCode.Decimal)
             {
-                var input = arr.typecode == NPTypeCode.Decimal ? arr.reshape(Shape.Vector(arr.size)) : Cast(arr, NPTypeCode.Decimal, copy: true);
-                var ptr = (decimal*)input.Address;
-                decimal mean = 0;
-                for (long i = 0; i < input.size; i++)
-                    mean += ptr[i];
-                mean /= input.size;
-
-                decimal sum = 0;
-                for (long i = 0; i < input.size; i++)
-                {
-                    var a = ptr[i] - mean;
-                    sum += a * a;
-                }
-
-                var std = Utilities.DecimalMath.Sqrt(sum / ((decimal)input.size - _ddof));
+                decimal std = Utilities.DecimalMath.Sqrt(VarMomentsDecimal((decimal*)basePtr, dims, strides, ndim, contig, n, _ddof));
                 return Converts.ChangeType(std, retType);
             }
 
-// Handle Complex separately - std uses |x - mean|^2 and returns float64
-            if (arr.GetTypeCode == NPTypeCode.Complex)
-            {
-                var complexInput = arr.reshape(Shape.Vector(arr.size));
-                var ptr = (System.Numerics.Complex*)complexInput.Address;
+            // Complex std uses |x - mean|^2 and returns float64.
+            if (tc == NPTypeCode.Complex)
+                return Math.Sqrt(VarMomentsComplex((System.Numerics.Complex*)basePtr, dims, strides, ndim, contig, n, _ddof));
 
-                // Compute mean
-                var xmean = System.Numerics.Complex.Zero;
-                for (long i = 0; i < complexInput.size; i++)
-                    xmean += ptr[i];
-                xmean /= complexInput.size;
-
-                // Compute sum of squared magnitudes of differences
-                double sum = 0;
-                for (long i = 0; i < complexInput.size; i++)
-                {
-                    var diff = ptr[i] - xmean;
-                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary;
-                }
-
-                var std = Math.Sqrt(sum / (complexInput.size - _ddof));
-                return std;
-            }
-
-            var doubleInput = arr.typecode == NPTypeCode.Double ? arr.reshape(Shape.Vector(arr.size)) : Cast(arr, NPTypeCode.Double, copy: true);
-            unsafe
-            {
-                var ptr = (double*)doubleInput.Address;
-                double mean = 0;
-                for (long i = 0; i < doubleInput.size; i++)
-                    mean += ptr[i];
-                mean /= doubleInput.size;
-
-                double sum = 0;
-                for (long i = 0; i < doubleInput.size; i++)
-                {
-                    var a = ptr[i] - mean;
-                    sum += a * a;
-                }
-
-                var std = Math.Sqrt(sum / (doubleInput.size - _ddof));
-                return Converts.ChangeType(std, retType);
-            }
+            double variance = VarMomentsRealDispatch(tc, basePtr, dims, strides, ndim, contig, n, _ddof);
+            return Converts.ChangeType(Math.Sqrt(variance), retType);
         }
 
         /// <summary>

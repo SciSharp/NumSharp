@@ -415,13 +415,13 @@ namespace NumSharp.Backends.Kernels
         // AggressiveOptimization (full tier-1 codegen from the first call when they're
         // invoked standalone via the kernel's Call, skipping the tier-0 hot-path penalty).
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static Half HalfMaxNaN(Half a, Half b)
+        internal static Half HalfMaxNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
             return a >= b ? a : b;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static Half HalfMinNaN(Half a, Half b)
+        internal static Half HalfMinNaN(Half a, Half b)
         {
             if (Half.IsNaN(a) || Half.IsNaN(b)) return Half.NaN;
             return a <= b ? a : b;
@@ -433,7 +433,7 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ComplexIsNaN(Complex z) => double.IsNaN(z.Real) || double.IsNaN(z.Imaginary);
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static Complex ComplexMaxNaN(Complex a, Complex b)
+        internal static Complex ComplexMaxNaN(Complex a, Complex b)
         {
             if (ComplexIsNaN(a)) return a;
             if (ComplexIsNaN(b)) return b;
@@ -442,7 +442,7 @@ namespace NumSharp.Backends.Kernels
             return a.Imaginary > b.Imaginary ? a : b;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static Complex ComplexMinNaN(Complex a, Complex b)
+        internal static Complex ComplexMinNaN(Complex a, Complex b)
         {
             if (ComplexIsNaN(a)) return a;
             if (ComplexIsNaN(b)) return b;

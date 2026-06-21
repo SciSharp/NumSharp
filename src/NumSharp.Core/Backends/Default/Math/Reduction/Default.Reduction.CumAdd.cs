@@ -123,34 +123,62 @@ namespace NumSharp.Backends
         }
 
         protected unsafe NDArray cumsum_elementwise(NDArray arr, NPTypeCode? typeCode)
+            => ScanElementwiseFlat(arr, typeCode, ReductionOp.CumSum);
+
+        /// <summary>
+        /// Flat (axis=None) cumulative scan shared by cumsum and cumprod.
+        /// </summary>
+        /// <remarks>
+        /// The IL scan kernel walks the input in C-order via coordinate decode
+        /// (<c>EmitScanStridedLoop</c>), so it consumes strided / transposed / sliced /
+        /// reversed views directly — there is no need to materialize a contiguous copy first
+        /// (the rejected anti-pattern). The combine emits <c>il Add/Mul</c>, which is invalid
+        /// for Half/Complex struct arithmetic; those have a valid IL path only when
+        /// same-type-contiguous (a C# helper). So for a non-contiguous Half/Complex (or when IL
+        /// is disabled, or decimal-cumprod which the kernel does not emit) we materialize a
+        /// single C-order copy — the very ravel NumPy itself performs — and run the scalar scan.
+        /// </remarks>
+        private unsafe NDArray ScanElementwiseFlat(NDArray arr, NPTypeCode? typeCode, ReductionOp op)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
 
-            if (!arr.Shape.IsContiguous)
-                return cumsum_elementwise(arr.copy(), typeCode);
-
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
-            // Fast path: use IL-generated kernel for contiguous arrays
-            if (arr.Shape.IsContiguous && DirectILKernelGenerator.Enabled)
+            if (DirectILKernelGenerator.Enabled)
             {
-                var ret = new NDArray(retType, Shape.Vector(arr.size));
-                var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumSum, IsContiguous: true);
-                var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
-                if (kernel != null)
+                // Half/Complex accumulators cannot be combined with il Add/Mul except via the
+                // same-type-contiguous C# helper, so only let them reach the kernel contiguous.
+                bool combineEmittable = retType != NPTypeCode.Half && retType != NPTypeCode.Complex;
+                if (arr.Shape.IsContiguous || combineEmittable)
                 {
-                    fixed (long* strides = arr.strides)
-                    fixed (long* shape = arr.shape)
+                    var key = new CumulativeKernelKey(arr.GetTypeCode, retType, op, IsContiguous: arr.Shape.IsContiguous);
+                    var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
+                    if (kernel != null)
                     {
-                        kernel((void*)arr.Address, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
+                        var ret = new NDArray(retType, Shape.Vector(arr.size));
+                        // Strided / reversed / 2-D-sliced views keep their base in Shape.offset
+                        // (simple contiguous slices bake it into Address, leaving offset==0); the
+                        // kernel reads from a raw base, so fold the offset in here — same base
+                        // math as DefaultEngine.ReductionOp.cs.
+                        byte* baseAddr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+                        fixed (long* strides = arr.strides)
+                        fixed (long* shape = arr.shape)
+                        {
+                            kernel((void*)baseAddr, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
+                        }
+                        return ret;
                     }
-                    return ret;
                 }
             }
 
-            // Fallback: contiguous prefix-sum loop
-            return cumsum_elementwise_fallback(arr, retType);
+            // Fallback: IL disabled, or non-contiguous Half/Complex/decimal-cumprod — materialize
+            // a C-order copy (NumPy's ravel) then run the contiguous scalar scan.
+            if (!arr.Shape.IsContiguous)
+                arr = arr.copy();
+            return op == ReductionOp.CumSum
+                ? cumsum_elementwise_fallback(arr, retType)
+                : cumprod_elementwise_fallback(arr, retType);
         }
 
         /// <summary>

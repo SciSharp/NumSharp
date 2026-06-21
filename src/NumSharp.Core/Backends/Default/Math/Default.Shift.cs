@@ -67,22 +67,101 @@ namespace NumSharp.Backends
             var result = new NDArray(lhs.typecode, new Shape(resultDimensions), fillZeros: false);
             var len = result.size;
 
-            // Materialize non-contiguous arrays to allow raw pointer access.
-            // This handles broadcast arrays where stride=0 would cause incorrect reads.
-            var contiguousLhs = broadcastedLhs.Shape.IsContiguous ? broadcastedLhs : broadcastedLhs.copy();
-
-            // Cast RHS to Int32 for shift amounts (C# shift operators require int for shift amount).
-            // Also materialize if non-contiguous to allow raw pointer access.
+            // Shift amounts must be Int32 (C# shift operators require an int amount). astype
+            // performs the genuine dtype conversion when needed; an already-Int32 operand keeps
+            // its (possibly strided / broadcast) view and is read through its strides below.
             var rhsInt32 = broadcastedRhs.GetTypeCode == NPTypeCode.Int32
                 ? broadcastedRhs
                 : broadcastedRhs.astype(NPTypeCode.Int32);
-            var contiguousRhs = rhsInt32.Shape.IsContiguous ? rhsInt32 : rhsInt32.copy();
 
-            var shiftPtr = (int*)contiguousRhs.Address;
-
-            NpFunc.Invoke(lhs.GetTypeCode, ShiftArrayDispatch<int>, contiguousLhs, (nint)shiftPtr, result, len, isLeftShift);
+            bool lhsFlat = broadcastedLhs.Shape.IsContiguous && broadcastedLhs.Shape.offset == 0;
+            bool rhsFlat = rhsInt32.Shape.IsContiguous && rhsInt32.Shape.offset == 0;
+            if (lhsFlat && rhsFlat)
+            {
+                // Fast path: both operands plainly contiguous — IL scalar-loop kernel.
+                var shiftPtr = (int*)rhsInt32.Address;
+                NpFunc.Invoke(lhs.GetTypeCode, ShiftArrayDispatch<int>, broadcastedLhs, (nint)shiftPtr, result, len, isLeftShift);
+            }
+            else
+            {
+                // Strided / sliced / broadcast (stride=0) operands: walk both inputs in C-order
+                // through their own strides — no materializing copy (the rejected anti-pattern).
+                ExecuteShiftArrayStrided(broadcastedLhs, rhsInt32, result, len, isLeftShift);
+            }
 
             return result;
+        }
+
+        /// <summary>
+        /// Element-wise shift over operands of arbitrary layout. Both the values and the per-element
+        /// shift amounts are read through their own strides (<see cref="FlatStrideOffset"/>), so
+        /// strided / transposed / sliced / broadcast (stride=0) views are consumed in place; the
+        /// result is freshly C-contiguous. Matches the contiguous IL kernel element-for-element.
+        /// </summary>
+        private static unsafe void ExecuteShiftArrayStrided(NDArray input, NDArray shifts, NDArray output, long count, bool isLeftShift)
+        {
+            var dims = input.shape;
+            int ndim = input.ndim;
+            var inStr = input.strides;
+            var shStr = shifts.strides;
+            byte* inBase = (byte*)input.Address + input.Shape.offset * input.dtypesize;
+            int* shPtr = (int*)((byte*)shifts.Address + shifts.Shape.offset * shifts.dtypesize);
+            bool inC = input.Shape.IsContiguous && input.Shape.offset == 0;
+            bool shC = shifts.Shape.IsContiguous && shifts.Shape.offset == 0;
+
+            switch (input.GetTypeCode)
+            {
+                case NPTypeCode.Byte:
+                {
+                    var s = (byte*)inBase; var o = (byte*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = (byte)(isLeftShift ? (v << sh) : (v >> sh)); }
+                    break;
+                }
+                case NPTypeCode.SByte:
+                {
+                    var s = (sbyte*)inBase; var o = (sbyte*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = (sbyte)(isLeftShift ? (v << sh) : (v >> sh)); }
+                    break;
+                }
+                case NPTypeCode.Int16:
+                {
+                    var s = (short*)inBase; var o = (short*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = (short)(isLeftShift ? (v << sh) : (v >> sh)); }
+                    break;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    var s = (ushort*)inBase; var o = (ushort*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = (ushort)(isLeftShift ? (v << sh) : (v >> sh)); }
+                    break;
+                }
+                case NPTypeCode.Int32:
+                {
+                    var s = (int*)inBase; var o = (int*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = isLeftShift ? (v << sh) : (v >> sh); }
+                    break;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    var s = (uint*)inBase; var o = (uint*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = isLeftShift ? (v << sh) : (v >> sh); }
+                    break;
+                }
+                case NPTypeCode.Int64:
+                {
+                    var s = (long*)inBase; var o = (long*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = isLeftShift ? (v << sh) : (v >> sh); }
+                    break;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    var s = (ulong*)inBase; var o = (ulong*)output.Address;
+                    for (long i = 0; i < count; i++) { var v = s[inC ? i : FlatStrideOffset(i, dims, inStr, ndim)]; int sh = shPtr[shC ? i : FlatStrideOffset(i, dims, shStr, ndim)]; o[i] = isLeftShift ? (v << sh) : (v >> sh); }
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Shift not supported for type {input.GetTypeCode}");
+            }
         }
 
         /// <summary>

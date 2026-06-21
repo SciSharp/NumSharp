@@ -42,83 +42,82 @@ namespace NumSharp.Backends
             return ExecuteUnaryOp(nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode), @out, where);
         }
 
-        private static NDArray ReciprocalInteger(NDArray nd)
+        private static unsafe NDArray ReciprocalInteger(NDArray nd)
         {
             // NumPy: 1/x with C truncating integer division. 1/0 produces the
             // signed MinValue with a RuntimeWarning in NumPy 2.4.2 (probed:
             // reciprocal(i4 [1,2,-3,0]) -> [1, 0, 0, -2147483648]); unsigned
-            // zero stays 0. The linear walk below requires contiguous memory --
-            // sliced/strided/broadcast views are materialized first (the
-            // previous direct _Unsafe.Address read THREW for views).
-            if (nd.Shape.IsSliced || nd.Shape.IsBroadcasted || !nd.Shape.IsContiguous)
-                nd = nd.copy();
-
+            // zero stays 0. The input is read through its strides (FlatStrideOffset),
+            // so sliced / strided / transposed / broadcast (stride=0) views are consumed
+            // in place — no materializing copy — while the result is freshly C-contiguous.
             var tc = nd.GetTypeCode;
             var result = new NDArray(tc, new Shape((long[])nd.shape.Clone()), false);
             long n = nd.size;
-            unsafe
+            bool contig = nd.Shape.IsContiguous;
+            var dims = nd.shape;
+            var strides = nd.strides;
+            int ndim = nd.ndim;
+            byte* basePtr = (byte*)nd.Address + nd.Shape.offset * nd.dtypesize;
+            switch (tc)
             {
-                switch (tc)
+                case NPTypeCode.SByte:
                 {
-                    case NPTypeCode.SByte:
-                    {
-                        var src = (sbyte*)nd.Unsafe.Address;
-                        var dst = (sbyte*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? sbyte.MinValue : (sbyte)(1 / src[i]);
-                        break;
-                    }
-                    case NPTypeCode.Byte:
-                    {
-                        var src = (byte*)nd.Unsafe.Address;
-                        var dst = (byte*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? (byte)0 : (byte)(1 / src[i]);
-                        break;
-                    }
-                    case NPTypeCode.Int16:
-                    {
-                        var src = (short*)nd.Unsafe.Address;
-                        var dst = (short*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? short.MinValue : (short)(1 / src[i]);
-                        break;
-                    }
-                    case NPTypeCode.UInt16:
-                    {
-                        var src = (ushort*)nd.Unsafe.Address;
-                        var dst = (ushort*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? (ushort)0 : (ushort)(1 / src[i]);
-                        break;
-                    }
-                    case NPTypeCode.Int32:
-                    {
-                        var src = (int*)nd.Unsafe.Address;
-                        var dst = (int*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? int.MinValue : 1 / src[i];
-                        break;
-                    }
-                    case NPTypeCode.UInt32:
-                    {
-                        var src = (uint*)nd.Unsafe.Address;
-                        var dst = (uint*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? 0u : 1u / src[i];
-                        break;
-                    }
-                    case NPTypeCode.Int64:
-                    {
-                        var src = (long*)nd.Unsafe.Address;
-                        var dst = (long*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? long.MinValue : 1L / src[i];
-                        break;
-                    }
-                    case NPTypeCode.UInt64:
-                    {
-                        var src = (ulong*)nd.Unsafe.Address;
-                        var dst = (ulong*)result.Unsafe.Address;
-                        for (long i = 0; i < n; i++) dst[i] = src[i] == 0 ? 0UL : 1UL / src[i];
-                        break;
-                    }
-                    default:
-                        throw new NotSupportedException($"Integer reciprocal not supported for {tc}");
+                    var src = (sbyte*)basePtr;
+                    var dst = (sbyte*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? sbyte.MinValue : (sbyte)(1 / x); }
+                    break;
                 }
+                case NPTypeCode.Byte:
+                {
+                    var src = (byte*)basePtr;
+                    var dst = (byte*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (byte)0 : (byte)(1 / x); }
+                    break;
+                }
+                case NPTypeCode.Int16:
+                {
+                    var src = (short*)basePtr;
+                    var dst = (short*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? short.MinValue : (short)(1 / x); }
+                    break;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    var src = (ushort*)basePtr;
+                    var dst = (ushort*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (ushort)0 : (ushort)(1 / x); }
+                    break;
+                }
+                case NPTypeCode.Int32:
+                {
+                    var src = (int*)basePtr;
+                    var dst = (int*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? int.MinValue : 1 / x; }
+                    break;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    var src = (uint*)basePtr;
+                    var dst = (uint*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? 0u : 1u / x; }
+                    break;
+                }
+                case NPTypeCode.Int64:
+                {
+                    var src = (long*)basePtr;
+                    var dst = (long*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? long.MinValue : 1L / x; }
+                    break;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    var src = (ulong*)basePtr;
+                    var dst = (ulong*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? 0UL : 1UL / x; }
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Integer reciprocal not supported for {tc}");
             }
             return result;
         }

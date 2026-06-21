@@ -1,4 +1,6 @@
 using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
@@ -244,78 +246,118 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback element-wise var using iterators.
+        /// Fallback element-wise var. The input is iterated in place through its strides
+        /// (<see cref="FlatStrideOffset"/>) — strided / transposed / sliced / reversed views are
+        /// visited via coordinate decode rather than materialized to a contiguous copy. var is an
+        /// order-independent two-pass reduction, so any visiting order is valid; this mirrors
+        /// NumPy, which reduces strided arrays in place instead of copying.
         /// </summary>
         private unsafe object var_elementwise_fallback(NDArray arr, NPTypeCode retType, int? ddof)
         {
             int _ddof = ddof ?? 0;
+            var tc = arr.GetTypeCode;
+            byte* basePtr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+            bool contig = arr.Shape.IsContiguous;
+            var dims = arr.shape;
+            var strides = arr.strides;
+            int ndim = arr.ndim;
+            long n = arr.size;
 
-            if (!arr.Shape.IsContiguous)
-                arr = arr.copy();
+            if (tc == NPTypeCode.Decimal)
+                return Converts.ChangeType(VarMomentsDecimal((decimal*)basePtr, dims, strides, ndim, contig, n, _ddof), retType);
 
-            if (arr.GetTypeCode == NPTypeCode.Decimal)
+            // Complex var uses |x - mean|^2 and returns float64.
+            if (tc == NPTypeCode.Complex)
+                return VarMomentsComplex((Complex*)basePtr, dims, strides, ndim, contig, n, _ddof);
+
+            double variance = VarMomentsRealDispatch(tc, basePtr, dims, strides, ndim, contig, n, _ddof);
+            return Converts.ChangeType(variance, retType);
+        }
+
+        /// <summary>
+        /// C-order visitation offset (in elements) for the <paramref name="linear"/>-th element of
+        /// a strided view. Decodes coordinates last-axis-fastest and folds them through the strides.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static long FlatStrideOffset(long linear, long[] dims, long[] strides, int ndim)
+        {
+            long off = 0;
+            for (int d = ndim - 1; d >= 0; d--)
             {
-                var input = arr.typecode == NPTypeCode.Decimal ? arr.reshape(Shape.Vector(arr.size)) : Cast(arr, NPTypeCode.Decimal, copy: true);
-                var ptr = (decimal*)input.Address;
-                decimal mean = 0;
-                for (long i = 0; i < input.size; i++)
-                    mean += ptr[i];
-                mean /= input.size;
-
-                decimal sum = 0;
-                for (long i = 0; i < input.size; i++)
-                {
-                    var a = ptr[i] - mean;
-                    sum += a * a;
-                }
-
-                var variance = sum / ((decimal)input.size - _ddof);
-                return Converts.ChangeType(variance, retType);
+                long dim = dims[d];
+                off += (linear % dim) * strides[d];
+                linear /= dim;
             }
+            return off;
+        }
 
-// Handle Complex separately - var uses |x - mean|^2 and returns float64
-            if (arr.GetTypeCode == NPTypeCode.Complex)
+        /// <summary>Two-pass variance over a strided real-typed buffer, accumulating in double.</summary>
+        private static unsafe double VarMomentsReal<TIn>(TIn* p, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
+            where TIn : unmanaged, INumberBase<TIn>
+        {
+            double sum = 0;
+            for (long i = 0; i < n; i++)
+                sum += double.CreateChecked(p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]);
+            double mean = sum / n;
+            double sq = 0;
+            for (long i = 0; i < n; i++)
             {
-                var complexInput = arr.reshape(Shape.Vector(arr.size));
-                var ptr = (System.Numerics.Complex*)complexInput.Address;
-
-                // Compute mean
-                var xmean = System.Numerics.Complex.Zero;
-                for (long i = 0; i < complexInput.size; i++)
-                    xmean += ptr[i];
-                xmean /= complexInput.size;
-
-                // Compute sum of squared magnitudes of differences
-                double sum = 0;
-                for (long i = 0; i < complexInput.size; i++)
-                {
-                    var diff = ptr[i] - xmean;
-                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary;
-                }
-
-                var variance = sum / (complexInput.size - _ddof);
-                return variance;
+                double v = double.CreateChecked(p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]) - mean;
+                sq += v * v;
             }
+            return sq / (n - ddof);
+        }
 
-            var doubleInput = arr.typecode == NPTypeCode.Double ? arr.reshape(Shape.Vector(arr.size)) : Cast(arr, NPTypeCode.Double, copy: true);
-            unsafe
+        /// <summary>Dispatch the real-typed strided two-pass on the input dtype (bool→byte, char→ushort).</summary>
+        private static unsafe double VarMomentsRealDispatch(NPTypeCode tc, byte* basePtr, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
+            => tc switch
             {
-                var ptr = (double*)doubleInput.Address;
-                double mean = 0;
-                for (long i = 0; i < doubleInput.size; i++)
-                    mean += ptr[i];
-                mean /= doubleInput.size;
+                NPTypeCode.Boolean => VarMomentsReal((byte*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Byte    => VarMomentsReal((byte*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.SByte   => VarMomentsReal((sbyte*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Int16   => VarMomentsReal((short*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.UInt16  => VarMomentsReal((ushort*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Char    => VarMomentsReal((ushort*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Int32   => VarMomentsReal((int*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.UInt32  => VarMomentsReal((uint*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Int64   => VarMomentsReal((long*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.UInt64  => VarMomentsReal((ulong*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Half    => VarMomentsReal((Half*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Single  => VarMomentsReal((float*)basePtr, dims, strides, ndim, contig, n, ddof),
+                NPTypeCode.Double  => VarMomentsReal((double*)basePtr, dims, strides, ndim, contig, n, ddof),
+                _ => throw new NotSupportedException($"var/std not supported for {tc}")
+            };
 
-                double sum = 0;
-                for (long i = 0; i < doubleInput.size; i++)
-                {
-                    var a = ptr[i] - mean;
-                    sum += a * a;
-                }
-
-                var variance = sum / (doubleInput.size - _ddof);
-                return Converts.ChangeType(variance, retType);
+        /// <summary>Two-pass variance over a strided decimal buffer, accumulating in decimal.</summary>
+        private static unsafe decimal VarMomentsDecimal(decimal* p, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
+        {
+            decimal mean = 0;
+            for (long i = 0; i < n; i++)
+                mean += p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)];
+            mean /= n;
+            decimal sum = 0;
+            for (long i = 0; i < n; i++)
+            {
+                decimal a = p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)] - mean;
+                sum += a * a;
             }
+            return sum / ((decimal)n - ddof);
+        }
+
+        /// <summary>Two-pass variance over a strided complex buffer; returns float64 of |x-mean|^2.</summary>
+        private static unsafe double VarMomentsComplex(Complex* p, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
+        {
+            var xmean = Complex.Zero;
+            for (long i = 0; i < n; i++)
+                xmean += p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)];
+            xmean /= n;
+            double sum = 0;
+            for (long i = 0; i < n; i++)
+            {
+                var diff = p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)] - xmean;
+                sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary;
+            }
+            return sum / (n - ddof);
         }
 
         /// <summary>

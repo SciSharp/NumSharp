@@ -16,11 +16,17 @@ namespace NumSharp.Backends
         // (dtype, mode, kind). No SIMD width is hardcoded — the kernel adapts
         // to V128 / V256 / V512 via GetVectorContainerType().
         //
-        // For strided / broadcast inputs that the contiguous IL kernel cannot
-        // address directly, we materialize a contiguous copy first (`Cast(...,
-        // copy: true)`) and then run the kernel in-place on that copy. This
-        // is one extra memory pass for those inputs but keeps the kernel
-        // surface area small.
+        // Two execution paths, no materializing copy for non-contiguous input:
+        //   * Contiguous fast path — every operand C-contiguous offset-0 → the IL
+        //     kernel (SIMD where the dtype supports it) in one src→dst pass.
+        //   * Strided path (ClipStrided) — strided / transposed / sliced / F-order /
+        //     broadcast (stride=0) operands are read through their own strides in
+        //     C-order via FlatStrideOffset, writing a fresh C-contiguous result. Its
+        //     per-element clamp mirrors the IL kernel's NaN-propagating semantics
+        //     exactly (incl. the signed-zero tie), so both paths agree bit-for-bit.
+        //   A dtype change still goes through Cast (a genuine conversion), and a
+        //   non-C-contiguous @out is relayed with copyto (writing a strided output
+        //   is inherent, not a kernel-dodge copy).
         // =============================================================================
 
         public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
@@ -106,82 +112,156 @@ namespace NumSharp.Backends
                 hiCast = PrepareBound(max, lhs.Shape, outType);
             }
 
-            // ---- Pick src / dst pointers and materialize what's needed
-            NDArray src, dst;
-            bool srcDstSame;
-            bool srcContiguous = lhs.Shape.IsContiguous && lhs.Shape.Offset == 0;
-            // Array bounds feed the flat clip kernel, which walks src/dst/lo/hi
-            // linearly and pairs them by C-order (row-major) index. Every operand
-            // must therefore be C-contiguous offset-0; an F-contig / strided buffer
-            // would be read in its raw buffer order and each element mis-paired
-            // with the wrong bound (the W7-A "F-contig/strided wrong pairing" bug).
-            // Scalar bounds are order-insensitive (one value broadcast to every
-            // lane), so this normalization is needed only for array bounds.
+            // ---- Pick src and route to the contiguous IL kernel or the strided loop
             bool arrayBounds = kind == DirectILKernelGenerator.ClipBoundsKind.Array;
-            // When @out is non-C-contiguous and bounds are arrays we cannot clip
-            // in @out's own buffer (wrong element order vs the C-order bounds).
-            // Clip a C-order temp and copy the logical result back into @out.
-            NDArray copyBackOut = null;
 
-            if (@out is not null)
+            // src at outType. Cast performs only a genuine dtype change; the source LAYOUT is
+            // preserved (no contiguity copy). Strided / F-order / sliced views are read through
+            // their strides by the strided path below — the previous code materialized a C-order
+            // copy here (and a second copy('C') for array bounds), the rejected anti-pattern.
+            NDArray srcArr = lhs.GetTypeCode == outType ? lhs : Cast(lhs, outType, copy: true);
+
+            bool srcFlat = srcArr.Shape.IsContiguous && srcArr.Shape.Offset == 0;
+            // The flat IL kernel walks src/dst/lo/hi linearly and pairs them by C-order index,
+            // so array bounds must also be C-contiguous offset-0; scalar bounds are one value
+            // broadcast to every lane and are always fine.
+            bool boundsFlat = !arrayBounds
+                || ((loCast is null || (loCast.Shape.IsContiguous && loCast.Shape.Offset == 0))
+                    && (hiCast is null || (hiCast.Shape.IsContiguous && hiCast.Shape.Offset == 0)));
+
+            // Fresh C-contiguous shape for any allocated result — must NOT inherit lhs's strides
+            // (np.empty(lhs.Shape) would clone a strided/F-order layout, which the linear dst
+            // writes below would then mis-address).
+            Shape cShape = new Shape((long[])lhs.shape.Clone());
+
+            if (srcFlat && boundsFlat)
             {
-                if (arrayBounds && (!@out.Shape.IsContiguous || @out.Shape.Offset != 0))
+                // Fast path: every operand plainly C-contiguous — IL kernel (SIMD where the
+                // dtype supports it) in a single src→dst pass (or straight into a C-order @out).
+                if (@out is not null && (!@out.Shape.IsContiguous || @out.Shape.Offset != 0))
                 {
-                    // @out is F-contig / strided: clip a C-order copy of lhs, then
-                    // map it back into @out's layout via copyto (which honors strides).
-                    dst = AsCContiguousCopy(lhs, outType);
-                    src = dst;
-                    srcDstSame = true;
-                    copyBackOut = @out;
+                    var tmp = np.empty(cShape, outType);
+                    RunClipKernel(srcArr, tmp, loCast, hiCast, outType, mode, kind);
+                    np.copyto(@out, tmp);    // relay C-order result into the strided @out
+                    return @out;
                 }
-                else
-                {
-                    // User-supplied @out — copy lhs (possibly cast) into it, run in-place.
-                    np.copyto(@out, Cast(lhs, outType, copy: false));
-                    dst = @out;
-                    src = @out;          // run in place — fused copy already done via copyto above
-                    srcDstSame = true;
-                }
-            }
-            else if (allScalarBounds && srcContiguous && lhs.GetTypeCode == outType)
-            {
-                // Fused single-pass: read from lhs, write to a fresh dst — kernel
-                // does Min(Max(src, lo), hi) and stores to dst in one memory pass.
-                dst = np.empty(lhs.Shape, outType);
-                src = lhs;
-                srcDstSame = false;
-            }
-            else
-            {
-                // General path: materialize a contiguous outType-typed copy and clip in place.
-                dst = Cast(lhs, outType, copy: true);
-                // Cast keeps the source layout (order='K'); the flat array-bounds
-                // kernel needs C-order, so re-materialize a C-contiguous copy when
-                // lhs (hence dst) is F-contig / strided / offset.
-                if (arrayBounds && (!dst.Shape.IsContiguous || dst.Shape.Offset != 0))
-                    dst = dst.copy('C');
-                src = dst;
-                srcDstSame = true;
+                var dstFast = @out ?? np.empty(cShape, outType);
+                RunClipKernel(srcArr, dstFast, loCast, hiCast, outType, mode, kind);
+                return dstFast;
             }
 
-            // ---- Invoke the IL-generated kernel
+            // ---- Strided / F-order src or array bounds: read every operand through its own
+            //      strides in C-order, writing a fresh C-contiguous result — no copy. copyto
+            //      relays into a non-C-contiguous @out (writing a strided output is inherent).
+            NDArray outBuf = (@out is not null && @out.Shape.IsContiguous && @out.Shape.Offset == 0)
+                ? @out
+                : np.empty(cShape, outType);
+            ClipStrided(srcArr, outBuf, loCast, hiCast, outType, mode, kind);
+            if (@out is not null && !ReferenceEquals(outBuf, @out))
+            {
+                np.copyto(@out, outBuf);
+                return @out;
+            }
+            return outBuf;
+        }
+
+        // Extract pointers and invoke the flat IL clip kernel. src/dst (and array bounds) must
+        // be C-contiguous offset-0; scalar bounds are single values.
+        private static unsafe void RunClipKernel(NDArray src, NDArray dst, NDArray loCast, NDArray hiCast,
+            NPTypeCode outType, DirectILKernelGenerator.ClipMode mode, DirectILKernelGenerator.ClipBoundsKind kind)
+        {
             void* srcPtr = (void*)src.Address;
             void* dstPtr = (void*)dst.Address;
             void* loPtr  = loCast is null ? null : (void*)loCast.Address;
             void* hiPtr  = hiCast is null ? null : (void*)hiCast.Address;
-
             DirectILKernelGenerator.Clip(outType, mode, kind, srcPtr, dstPtr, dst.size, loPtr, hiPtr);
+        }
 
-            _ = srcDstSame;
-            if (copyBackOut is not null)
+        // Strided clip: read src and (array) bounds through their own strides in C-order, writing
+        // a C-contiguous dst. Per-element semantics mirror the IL kernel's scalar tail exactly —
+        // Math.Max/Min for sized numerics + decimal, NaN-aware helpers for Half / Complex, numeric
+        // ordering for Char (read as UInt16) — so results are identical to the contiguous path.
+        private static unsafe void ClipStrided(NDArray src, NDArray dst, NDArray loCast, NDArray hiCast,
+            NPTypeCode outType, DirectILKernelGenerator.ClipMode mode, DirectILKernelGenerator.ClipBoundsKind kind)
+        {
+            long n = dst.size;
+            var dims = dst.shape;
+            int ndim = dst.ndim;
+            bool needLo = mode != DirectILKernelGenerator.ClipMode.MaxOnly;
+            bool needHi = mode != DirectILKernelGenerator.ClipMode.MinOnly;
+            bool arr = kind == DirectILKernelGenerator.ClipBoundsKind.Array;
+
+            byte* sBase = (byte*)src.Address + src.Shape.offset * src.dtypesize;
+            bool srcC = src.Shape.IsContiguous && src.Shape.offset == 0;
+            var srcStr = src.strides;
+
+            byte* loBase = loCast is null ? null : (byte*)loCast.Address + loCast.Shape.offset * loCast.dtypesize;
+            byte* hiBase = hiCast is null ? null : (byte*)hiCast.Address + hiCast.Shape.offset * hiCast.dtypesize;
+            long[] loStr = loCast?.strides;
+            long[] hiStr = hiCast?.strides;
+            bool loC = !arr || loCast is null || (loCast.Shape.IsContiguous && loCast.Shape.offset == 0);
+            bool hiC = !arr || hiCast is null || (hiCast.Shape.IsContiguous && hiCast.Shape.offset == 0);
+
+            switch (outType)
             {
-                // Array-bounds path computed into a C-order temp because @out's own
-                // layout (F-contig / strided) can't drive the flat kernel; relay the
-                // logical result into @out (copyto maps C-order → @out's strides).
-                np.copyto(copyBackOut, dst);
-                return copyBackOut;
+                case NPTypeCode.Byte:    ClipStridedT<byte>(sBase, (byte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.SByte:   ClipStridedT<sbyte>(sBase, (sbyte*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Int16:   ClipStridedT<short>(sBase, (short*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.UInt16:  ClipStridedT<ushort>(sBase, (ushort*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Char:    ClipStridedT<ushort>(sBase, (ushort*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Int32:   ClipStridedT<int>(sBase, (int*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.UInt32:  ClipStridedT<uint>(sBase, (uint*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Int64:   ClipStridedT<long>(sBase, (long*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.UInt64:  ClipStridedT<ulong>(sBase, (ulong*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Single:  ClipStridedT<float>(sBase, (float*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &ClipMaxF, &ClipMinF); break;
+                case NPTypeCode.Double:  ClipStridedT<double>(sBase, (double*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &ClipMaxD, &ClipMinD); break;
+                case NPTypeCode.Decimal: ClipStridedT<decimal>(sBase, (decimal*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &Math.Max, &Math.Min); break;
+                case NPTypeCode.Half:    ClipStridedT<Half>(sBase, (Half*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.HalfMaxNaN, &DirectILKernelGenerator.HalfMinNaN); break;
+                case NPTypeCode.Complex: ClipStridedT<System.Numerics.Complex>(sBase, (System.Numerics.Complex*)dst.Address, loBase, hiBase, dims, srcStr, loStr, hiStr, ndim, srcC, arr, loC, hiC, n, needLo, needHi, &DirectILKernelGenerator.ComplexMaxNaN, &DirectILKernelGenerator.ComplexMinNaN); break;
+                default: throw new NotSupportedException($"clip not supported for {outType}");
             }
-            return dst;
+        }
+
+        // Float/double max/min matching the IL kernel's NaN-propagating SIMD path (and NumPy
+        // maximum/minimum/clip): NaN in the first operand propagates; otherwise the STRICT
+        // comparison returns the second operand on a tie — so the signed-zero tie resolves like
+        // hardware MAXPS/MINPD (maximum(+0,-0) = -0), unlike Math.Max which would return +0.
+        private static float ClipMaxF(float a, float b) => float.IsNaN(a) ? a : (a > b ? a : b);
+        private static float ClipMinF(float a, float b) => float.IsNaN(a) ? a : (a < b ? a : b);
+        private static double ClipMaxD(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
+        private static double ClipMinD(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
+
+        // One strided clip loop, shared across dtypes via Max/Min function pointers (no per-element
+        // boxing or virtual dispatch). dst is C-contiguous; src and array bounds are read at
+        // FlatStrideOffset(i) so any stride layout — incl. broadcast stride=0 — is honoured.
+        private static unsafe void ClipStridedT<T>(
+            byte* sBase, T* dst, byte* loBase, byte* hiBase,
+            long[] dims, long[] srcStr, long[] loStr, long[] hiStr, int ndim,
+            bool srcC, bool arr, bool loC, bool hiC,
+            long n, bool needLo, bool needHi,
+            delegate*<T, T, T> max, delegate*<T, T, T> min) where T : unmanaged
+        {
+            var s = (T*)sBase;
+            var loA = (T*)loBase;
+            var hiA = (T*)hiBase;
+            T loScalar = (needLo && !arr && loBase != null) ? *loA : default;
+            T hiScalar = (needHi && !arr && hiBase != null) ? *hiA : default;
+
+            for (long i = 0; i < n; i++)
+            {
+                T v = s[srcC ? i : FlatStrideOffset(i, dims, srcStr, ndim)];
+                if (needLo && loBase != null)
+                {
+                    T lo = arr ? loA[loC ? i : FlatStrideOffset(i, dims, loStr, ndim)] : loScalar;
+                    v = max(v, lo);
+                }
+                if (needHi && hiBase != null)
+                {
+                    T hi = arr ? hiA[hiC ? i : FlatStrideOffset(i, dims, hiStr, ndim)] : hiScalar;
+                    v = min(v, hi);
+                }
+                dst[i] = v;
+            }
         }
 
         // ---- Policy helpers ---------------------------------------------------
@@ -223,27 +303,11 @@ namespace NumSharp.Backends
             {
                 return bound;
             }
-            var prepared = np.broadcast_to(bound, targetShape).astype(outType);
-            // The flat clip kernel reads lo/hi linearly in C-order. astype keeps
-            // the source layout (order='K'), so an F-contig / strided / broadcast
-            // bound stays non-C-contiguous and would be mis-paired element-wise
-            // against the C-order src. Force a C-order copy when it isn't already
-            // C-contiguous offset-0.
-            if (!prepared.Shape.IsContiguous || prepared.Shape.Offset != 0)
-                prepared = prepared.copy('C');
-            return prepared;
-        }
-
-        // Materialize lhs as a fresh C-contiguous, offset-0 array of outType whose
-        // element values are in logical (row-major) order. Used when the flat clip
-        // kernel needs a C-order working buffer but the natural source/@out is
-        // F-contig / strided and therefore can't drive the kernel directly.
-        private NDArray AsCContiguousCopy(NDArray lhs, NPTypeCode outType)
-        {
-            var cast = Cast(lhs, outType, copy: true);
-            if (!cast.Shape.IsContiguous || cast.Shape.Offset != 0)
-                cast = cast.copy('C');
-            return cast;
+            // Broadcast to the target shape and convert dtype. The result may stay
+            // non-C-contiguous (broadcast stride=0 / F-order / strided) — that's fine:
+            // ClipStrided reads the bound through its own strides at FlatStrideOffset(i),
+            // pairing it correctly with the C-order result without a normalizing copy.
+            return np.broadcast_to(bound, targetShape).astype(outType);
         }
 
         // Returns true when `bound` is a 0-d scalar NDArray whose value is NaN.
