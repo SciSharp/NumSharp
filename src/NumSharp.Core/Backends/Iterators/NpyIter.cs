@@ -910,8 +910,19 @@ namespace NumSharp.Backends.Iteration
 
             // With op_axes, iteration ndim is set by opAxesNDim. Each operand's virtual
             // shape per-iter-axis = opShape[op_axis] if op_axis >= 0, else 1.
-            if (opAxes != null && opAxesNDim > 0)
+            if (opAxes != null && opAxesNDim >= 0)
             {
+                // opAxesNDim == 0: every iterated axis was dropped (the IterAllButAxis shape on a
+                // 1-D operand, or any drop-all-axes request). NumPy's NpyIter_RemoveAxis leaves a
+                // 0-dimensional iterator with GetIterSize() == 1 — ONE iteration whose data pointer
+                // is the operand base (the dropped axis is the caller's responsibility, walked via
+                // its saved stride). Return an empty iteration shape so IterSize == 1. The previous
+                // `opAxesNDim > 0` gate fell through to natural broadcasting and returned the
+                // operand's own shape [N], so the kernel was driven N times — O(N^2) for the sort
+                // driver, whose line kernel re-sorts the whole line on every call.
+                if (opAxesNDim == 0)
+                    return Array.Empty<long>();
+
                 var virtualShapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
                 for (int opIdx = 0; opIdx < nop; opIdx++)
                 {
