@@ -136,6 +136,36 @@ namespace NumSharp.Backends
                 return ExecuteScalarScalar(lhs, rhs, op, resultType);
             }
 
+            // NEP50 weak-scalar fast-path enablement. A Python-scalar literal arrives wrapped at
+            // its OWN dtype (`a * 2` -> int32 0-d; `a * 2.0` -> float64 0-d), so `f32[] * 2`
+            // reaches here as f32×int32. resultType already reflects NumPy's weak promotion (here
+            // f32), but the same-dtype gate inside TryTrivialContiguousBinaryOp / the SIMD-viability
+            // gate inside TryExecuteBinaryOpViaNpyIter key off the RAW operand dtypes and bail
+            // (f32 != int32), routing to the heavy per-element-convert mixed path — measured ~2.25×
+            // slower than the SimdScalarRight scalar-broadcast loop it should take (100K f32:
+            // 0.080 ms vs 0.035 ms). When the ARRAY operand already IS resultType and only the
+            // 0-d/size-1 scalar differs, materialize that scalar at resultType (one element —
+            // exactly what NumPy does, casting the scalar to the loop dtype), so both operands share
+            // resultType and the same-dtype SIMD paths below light up. When the array ALSO differs
+            // (e.g. int32[] * 2.5 -> float64) we leave it: the array genuinely needs a cast, which is
+            // the mixed path's job. (scalar×scalar already returned above; value is identical either
+            // way — the mixed path converts the same scalar to resultType per element.)
+            if (lhsType != rhsType)
+            {
+                bool lhsScalarLike = lhs.Shape.IsScalar || lhs.Shape.size == 1;
+                bool rhsScalarLike = rhs.Shape.IsScalar || rhs.Shape.size == 1;
+                if (rhsScalarLike && !lhsScalarLike && lhsType == resultType)
+                {
+                    rhs = Cast(rhs, resultType, copy: true);
+                    rhsType = resultType;
+                }
+                else if (lhsScalarLike && !rhsScalarLike && rhsType == resultType)
+                {
+                    lhs = Cast(lhs, resultType, copy: true);
+                    lhsType = resultType;
+                }
+            }
+
             // -------- O(1) trivial-loop bypass -----------------------------
             // NumSharp analogue of NumPy's check_for_trivial_loop +
             // try_trivial_single_output_loop (ufunc_object.c), which handle a
