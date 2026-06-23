@@ -188,25 +188,6 @@ namespace NumSharp.Backends.Kernels
             throw new NotSupportedException($"Argwhere: unsupported element type {t.Name}");
         }
 
-        /// <summary>
-        /// IL opcode that loads a value of type <paramref name="t"/> from a native
-        /// pointer that's already on the eval stack. Used in the scalar tail.
-        /// </summary>
-        [Obsolete("Unused. Argwhere IL emission resolves load opcodes inline, never calls this dispatcher.", error: true)]
-        private static OpCode ArgwhereScalarLoadOpcode(Type t)
-        {
-            if (t == typeof(bool) || t == typeof(byte)) return OpCodes.Ldind_U1;
-            if (t == typeof(sbyte)) return OpCodes.Ldind_I1;
-            if (t == typeof(short)) return OpCodes.Ldind_I2;
-            if (t == typeof(ushort) || t == typeof(char)) return OpCodes.Ldind_U2;
-            if (t == typeof(int)) return OpCodes.Ldind_I4;
-            if (t == typeof(uint)) return OpCodes.Ldind_U4;
-            if (t == typeof(long) || t == typeof(ulong)) return OpCodes.Ldind_I8;
-            if (t == typeof(float)) return OpCodes.Ldind_R4;
-            if (t == typeof(double)) return OpCodes.Ldind_R8;
-            // For Half/Decimal/Complex the scalar load goes via Ldobj, handled separately.
-            throw new NotSupportedException($"No primitive Ldind for {t.Name}");
-        }
 
         #endregion
 

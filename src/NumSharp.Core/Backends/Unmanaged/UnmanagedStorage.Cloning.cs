@@ -423,8 +423,8 @@ namespace NumSharp.Backends
             // Scalar-broadcast (all strides 0): every element is the SAME single source value, so
             // materialize with a fast typed fill (1-byte -> InitBlock/memset, wider -> SIMD fill via
             // UnmanagedMemoryBlock<T>.Fill) instead of the general per-element NpyIter.Copy walk.
-            // Proven 6-8x for the same-type broadcast clone (CAST_BEAT_NUMPY_PLAN.md §0.4: bcast
-            // u8->u8 4M 0.83->5.69x). Bit-identical (same value in every slot).
+            // Proven 6-8x for the same-type broadcast clone (bcast u8->u8 4M: 0.83->5.69x).
+            // Bit-identical (same value in every slot).
             if (_shape.IsScalarBroadcast)
                 return ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, GetValue(0));
 

@@ -1791,8 +1791,6 @@ namespace NumSharp.Backends.Kernels
         // file (EmitStridedCastBody, EmitBroadcastConvertThenMemcpy, etc.) read unchanged.
         // Cast.Masked.cs reuses the same aliases via the partial-class scope.
         private static Type VType(int simdBits, Type elem) => VectorMethodCache.V(simdBits, elem);
-        [Obsolete("Unused alias. Call VectorMethodCache.Container directly.", error: true)]
-        private static Type ContainerType(int simdBits) => VectorMethodCache.Container(simdBits);
 
         private static MethodInfo GetVectorLoadMethod(int simdBits, Type elementType)
             => VectorMethodCache.Load(simdBits, elementType);

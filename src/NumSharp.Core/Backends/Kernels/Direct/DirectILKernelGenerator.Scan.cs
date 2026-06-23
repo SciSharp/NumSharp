@@ -481,19 +481,6 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static int AxisScanCachedCount => _axisScanCache.Count;
 
-        /// <summary>
-        /// Get or generate a cumulative axis (scan along axis) kernel.
-        /// Returns a delegate that computes running accumulation along a specific axis.
-        /// </summary>
-        [Obsolete("Unused. Callers use TryGetCumulativeAxisKernel (the non-throwing twin) instead.", error: true)]
-        public static CumulativeAxisKernel GetCumulativeAxisKernel(CumulativeAxisKernelKey key)
-        {
-            if (!Enabled)
-                throw new InvalidOperationException("IL generation is disabled");
-
-            var kernel = _axisScanCache.GetOrAdd(key, GenerateCumulativeAxisKernel);
-            return (CumulativeAxisKernel)kernel;
-        }
 
         /// <summary>
         /// Try to get or generate a cumulative axis kernel.
@@ -623,52 +610,6 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        /// <summary>
-        /// Axis cumulative product helper. Computes cumprod along a specific axis.
-        /// Uses optimized iteration pattern based on axis position.
-        /// </summary>
-        [Obsolete("Unused. Superseded by IL-emitted axis cumprod kernels via TryGetCumulativeAxisKernel.", error: true)]
-        internal static unsafe void AxisCumProdHelper<TIn, TOut>(
-            void* input, void* output, long* inputStrides, long* shape,
-            int axis, int ndim, long totalSize)
-            where TIn : unmanaged
-            where TOut : unmanaged
-        {
-            if (totalSize == 0)
-                return;
-
-            TIn* src = (TIn*)input;
-            TOut* dst = (TOut*)output;
-
-            long axisSize = shape[axis];
-            long axisStride = inputStrides[axis];
-
-            // Calculate outer size (product of dimensions before axis)
-            // and inner size (product of dimensions after axis)
-            long outerSize = 1;
-            long innerSize = 1;
-            for (int d = 0; d < axis; d++)
-                outerSize *= shape[d];
-            for (int d = axis + 1; d < ndim; d++)
-                innerSize *= shape[d];
-
-            // Calculate output strides (output is always contiguous)
-            long outputAxisStride = innerSize;
-            long outputOuterStride = axisSize * innerSize;
-
-            // Dispatch to specialized helper based on types
-            if (typeof(TIn) == typeof(TOut))
-            {
-                // When TIn == TOut, we can cast safely and use same-type optimized path
-                AxisCumProdSameType<TIn>((TIn*)src, (TIn*)(void*)dst, inputStrides, shape, axis, ndim,
-                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
-            }
-            else
-            {
-                AxisCumProdWithConversion<TIn, TOut>(src, dst, inputStrides, shape, axis, ndim,
-                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
-            }
-        }
 
         /// <summary>
         /// Same-type axis cumprod implementation.
@@ -2218,36 +2159,6 @@ namespace NumSharp.Backends.Kernels
 
         #region Public SIMD Helpers for Direct Calls
 
-        /// <summary>
-        /// SIMD-optimized cumulative sum for contiguous arrays with type conversion.
-        /// Called directly by DefaultEngine for the fast path.
-        /// </summary>
-        /// <typeparam name="TIn">Input element type</typeparam>
-        /// <typeparam name="TOut">Output element type</typeparam>
-        /// <param name="input">Pointer to input data</param>
-        /// <param name="output">Pointer to output data</param>
-        /// <param name="totalSize">Number of elements</param>
-        [Obsolete("Unused. Superseded by IL-emitted flat cumsum kernels via TryGetCumulativeKernel.", error: true)]
-        public static unsafe void CumSumHelper<TIn, TOut>(void* input, void* output, long totalSize)
-            where TIn : unmanaged
-            where TOut : unmanaged
-        {
-            if (totalSize == 0)
-                return;
-
-            // Dispatch based on types for optimal performance
-            // Most common paths first
-            if (typeof(TIn) == typeof(TOut))
-            {
-                // Same type - use generic math
-                CumSumSameTypeDispatch<TIn>(input, output, totalSize);
-            }
-            else
-            {
-                // Type conversion required - use scalar loop with conversion
-                CumSumWithConversion<TIn, TOut>(input, output, totalSize);
-            }
-        }
 
         /// <summary>
         /// Dispatch same-type cumsum to appropriate implementation.

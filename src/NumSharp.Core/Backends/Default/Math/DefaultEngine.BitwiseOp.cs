@@ -9,8 +9,7 @@ namespace NumSharp.Backends
     ///
     /// NumPy loop resolution (probed 2.4.2): the bitwise ufuncs have loops for
     /// bool and the integer dtypes ONLY — float/complex/decimal inputs raise
-    /// the no-loop TypeError. Validation order pinned by probes
-    /// (OUT_WHERE_NPYITER_FAMILIES_PLAN.md §2.7):
+    /// the no-loop TypeError. Validation order pinned by probes:
     ///   ① where must be bool → ② loop resolution (no-loop TypeError) →
     ///   ③ out same_kind cast → ④ broadcast/shape.
     /// ①② run here; ③④ run inside the shared ufunc Into-path (which

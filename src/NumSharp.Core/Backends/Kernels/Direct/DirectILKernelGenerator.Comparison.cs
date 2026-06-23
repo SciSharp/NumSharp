@@ -117,25 +117,6 @@ namespace NumSharp.Backends.Kernels
             return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
         }
 
-        /// <summary>
-        /// Try to get or generate a comparison kernel. Returns null if generation fails.
-        /// </summary>
-        [Obsolete("Unused. Callers use GetComparisonKernel directly. Marked obsolete pending removal.", error: true)]
-        public static ComparisonKernel? TryGetComparisonKernel(ComparisonKernelKey key)
-        {
-            if (!Enabled)
-                return null;
-
-            try
-            {
-                return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetComparisonKernel({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
 
         /// <summary>
         /// Check if SIMD can be used for this comparison operation.

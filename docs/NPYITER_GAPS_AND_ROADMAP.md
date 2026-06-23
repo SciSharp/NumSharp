@@ -47,7 +47,7 @@ Notes:
 - P8/P7 are fast because transposes of C-contig are F-contig → KEEPORDER coalesces them to one contiguous run. The *genuinely* strided shapes are S1/S2/S3 — exactly where the Tier-3B shell falls to `EmitScalarStridedLoop` (S2 ≈ 12 cycles/element).
 - P13/P16: the previously-reported "f32 axis-tier gap 4.6×" is **refuted under Release** — another Debug-tainted number (handover §4.12). f32 axis reductions are *faster* than NumPy.
 - **Correctness probe (overlap, write-ahead direction):** `add(a[:-1], a[:-1], out=a[1:])` → NumSharp `[1,2,4,6,8,16,32,64]` (cascade through clobbered reads at the vector boundary), NumPy `[1,2,4,6,8,10,12,14]`. **Silent corruption.**
-- POC reference (same iterator, hand-written per-chunk hw-gather kernels, `benchmark/poc/POC_RESULTS.md`): every aspect at-or-faster than NumPy, fusion 2.8–5.4× faster.
+- POC reference (same iterator, hand-written per-chunk hw-gather kernels): every aspect at-or-faster than NumPy, fusion 2.8–5.4× faster.
 
 ---
 

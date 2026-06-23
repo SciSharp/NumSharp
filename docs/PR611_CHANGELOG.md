@@ -214,7 +214,7 @@ New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation
 
 - `ILKernelGenerator` split into **`DirectILKernelGenerator`** (legacy whole-array kernels, 51 partials under `Kernels/Direct/`) and **`ILKernelGenerator`** (NpyIter-driven per-chunk kernels — the target model matching NumPy's `PyUFuncGenericFunction`); migration path documented per kernel family.
 - All `Vector128/256/512` and `Math`/`MathF` reflection centralized in `VectorMethodCache` / `ScalarMethodCache`; IL-emitted typed-field copier replaces the `UnmanagedStorage.Alias` switch.
-- 24 dead kernel methods poisoned with `[Obsolete(error: true)]` pending deletion; dead axis-reduction SIMD paths removed.
+- 24 dead kernel methods removed outright (were `[Obsolete(error: true)]` tombstones, referenced by nothing); dead axis-reduction SIMD paths removed.
 
 ## 15. Documentation
 

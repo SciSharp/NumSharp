@@ -112,34 +112,6 @@ namespace NumSharp.Backends.Kernels
 
         #region Public API
 
-        /// <summary>
-        /// Get or generate an IL-based kernel for contiguous (SimdFull) operations.
-        /// Returns null if IL generation is not supported for this type/operation.
-        /// </summary>
-        [Obsolete("Unused. Superseded by GetMixedTypeKernel(ExecutionPath.SimdFull) for same-type contig kernels.", error: true)]
-        public static ContiguousKernel<T>? GetContiguousKernel<T>(BinaryOp op) where T : unmanaged
-        {
-            if (!Enabled)
-                return null;
-
-            var key = (op, typeof(T));
-
-            // Check cache first
-            if (_contiguousKernelCache.TryGetValue(key, out var cached))
-                return (ContiguousKernel<T>)cached;
-
-            // Generate new kernel
-            var kernel = TryGenerateContiguousKernel<T>(op);
-            if (kernel == null)
-                return null;
-
-            // Try to add to cache; if another thread added first, use theirs
-            if (_contiguousKernelCache.TryAdd(key, kernel))
-                return kernel;
-
-            // Another thread beat us - return the cached version
-            return (ContiguousKernel<T>)_contiguousKernelCache[key];
-        }
 
         #endregion
 

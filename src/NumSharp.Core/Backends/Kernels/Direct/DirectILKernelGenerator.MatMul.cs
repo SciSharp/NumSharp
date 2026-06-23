@@ -58,34 +58,6 @@ namespace NumSharp.Backends.Kernels
 
         #region Public API
 
-        /// <summary>
-        /// Get or generate an IL-based high-performance MatMul kernel.
-        /// Returns null if the type is not supported for SIMD optimization.
-        /// </summary>
-        [Obsolete("Unused. Matmul callers invoke SimdMatMul.* directly instead.", error: true)]
-        public static unsafe MatMul2DKernel<T>? GetMatMulKernel<T>() where T : unmanaged
-        {
-            if (!Enabled)
-                return null;
-
-            // Only support float and double for SIMD matmul
-            if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
-                return null;
-
-            var key = typeof(T);
-
-            if (_matmulKernelCache.TryGetValue(key, out var cached))
-                return (MatMul2DKernel<T>)cached;
-
-            var kernel = GenerateMatMulKernelIL<T>();
-            if (kernel == null)
-                return null;
-
-            if (_matmulKernelCache.TryAdd(key, kernel))
-                return kernel;
-
-            return (MatMul2DKernel<T>)_matmulKernelCache[key];
-        }
 
         #endregion
 

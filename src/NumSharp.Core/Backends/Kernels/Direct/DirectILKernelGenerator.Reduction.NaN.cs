@@ -40,43 +40,6 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static int NanElementReductionCachedCount => _nanElementReductionCache.Count;
 
-        /// <summary>
-        /// Try to get an IL-generated NaN element reduction kernel.
-        /// Only supports float and double types (NaN is only defined for floating-point).
-        /// </summary>
-        [Obsolete("Unused. np.nan* paths route through Masking.NaN / Reduction.NaN-specific helpers, not this Try wrapper.", error: true)]
-        public static TypedElementReductionKernel<TResult>? TryGetNanElementReductionKernel<TResult>(ElementReductionKernelKey key)
-            where TResult : unmanaged
-        {
-            if (!Enabled)
-                return null;
-
-            // Only NaN operations
-            if (key.Op != ReductionOp.NanSum && key.Op != ReductionOp.NanProd &&
-                key.Op != ReductionOp.NanMin && key.Op != ReductionOp.NanMax &&
-                key.Op != ReductionOp.NanMean && key.Op != ReductionOp.NanVar &&
-                key.Op != ReductionOp.NanStd)
-            {
-                return null;
-            }
-
-            // NaN is only defined for float and double
-            if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
-            {
-                return null;
-            }
-
-            try
-            {
-                var kernel = _nanElementReductionCache.GetOrAdd(key, GenerateNanElementReductionKernel<TResult>);
-                return (TypedElementReductionKernel<TResult>)kernel;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetNanElementReductionKernel<{typeof(TResult).Name}>({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
 
         /// <summary>
         /// Generate an IL-based NaN element reduction kernel.

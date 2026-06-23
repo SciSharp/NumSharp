@@ -138,25 +138,6 @@ namespace NumSharp.Backends.Kernels
             return _unaryCache.GetOrAdd(key, GenerateUnaryKernel);
         }
 
-        /// <summary>
-        /// Try to get or generate a unary kernel. Returns null if generation fails.
-        /// </summary>
-        [Obsolete("Unused. Callers use GetUnaryKernel directly. Marked obsolete pending removal.", error: true)]
-        public static UnaryKernel? TryGetUnaryKernel(UnaryKernelKey key)
-        {
-            if (!Enabled)
-                return null;
-
-            try
-            {
-                return _unaryCache.GetOrAdd(key, GenerateUnaryKernel);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetUnaryKernel({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
 
         /// <summary>
         /// Generate a unary kernel for the specified key.

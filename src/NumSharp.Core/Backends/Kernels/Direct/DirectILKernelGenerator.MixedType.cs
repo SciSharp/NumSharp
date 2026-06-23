@@ -113,25 +113,6 @@ namespace NumSharp.Backends.Kernels
             return _mixedTypeCache.GetOrAdd(key, GenerateMixedTypeKernel);
         }
 
-        /// <summary>
-        /// Try to get or generate a mixed-type kernel. Returns null if generation fails.
-        /// </summary>
-        [Obsolete("Unused. Callers use GetMixedTypeKernel directly. Marked obsolete pending removal.", error: true)]
-        public static MixedTypeKernel? TryGetMixedTypeKernel(MixedTypeKernelKey key)
-        {
-            if (!Enabled)
-                return null;
-
-            try
-            {
-                return _mixedTypeCache.GetOrAdd(key, GenerateMixedTypeKernel);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetMixedTypeKernel({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
 
         /// <summary>
         /// Generate a mixed-type kernel for the specified key.

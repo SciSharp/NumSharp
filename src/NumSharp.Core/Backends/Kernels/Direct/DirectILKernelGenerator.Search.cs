@@ -79,20 +79,6 @@ namespace NumSharp.Backends.Kernels
             return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter, contiguousA), GenerateSearchKernel);
         }
 
-        /// <summary>
-        /// Try to get or generate a kernel. Returns null on failure (caller falls back).
-        /// </summary>
-        [Obsolete("Unused. Callers use GetSearchSortedKernel directly. Marked obsolete pending removal.", error: true)]
-        public static SearchSortedKernel TryGetSearchSortedKernel(NPTypeCode type, bool leftSide, bool hasSorter, bool contiguousA)
-        {
-            if (!Enabled) return null;
-            try { return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter, contiguousA), GenerateSearchKernel); }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetSearchSortedKernel({type}, {leftSide}, {hasSorter}, {contiguousA}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
 
         private static SearchSortedKernel GenerateSearchKernel(SearchKernelKey key)
         {
