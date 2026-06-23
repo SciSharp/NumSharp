@@ -187,38 +187,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute shift operation with scalar operand (uniform shift).
-        /// SIMD optimized path for contiguous arrays.
-        /// </summary>
-        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
-        {
-            // Converts.ToInt32 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
-            int shiftAmount = Converts.ToInt32(rhs);
-
-            // For contiguous arrays, allocate result and use SIMD kernel
-            // For sliced arrays, clone first then apply shift in-place
-            NDArray result;
-            NDArray input;
-
-            if (lhs.Shape.IsContiguous)
-            {
-                result = new NDArray(lhs.typecode, new Shape(lhs.shape), fillZeros: false);
-                input = lhs;
-            }
-            else
-            {
-                result = lhs.Clone();  // Clone also handles non-contiguous arrays
-                input = result;        // Shift in-place on the cloned result
-            }
-
-            var len = result.size;
-
-            NpFunc.Invoke(lhs.GetTypeCode, ShiftScalarDispatch<int>, input, result, shiftAmount, len, isLeftShift);
-
-            return result;
-        }
-
-        /// <summary>
         /// Execute scalar shift using IL kernel (SIMD optimized).
         /// </summary>
         private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, long count, bool isLeftShift) where T : unmanaged

@@ -203,40 +203,5 @@ namespace NumSharp
             }
         }
 
-        /// <summary>
-        /// B9: Dedicated unique path for Complex, since System.Numerics.Complex does not implement
-        /// IComparable&lt;Complex&gt; (prevents reuse of the generic unique&lt;T&gt;).
-        /// Dedup uses EqualityComparer&lt;Complex&gt;.Default (component-wise value equality, NaN==NaN)
-        /// then sorts using NumPy lex semantics with NaN at end.
-        /// </summary>
-        protected unsafe NDArray uniqueComplex()
-        {
-            var hashset = new Hashset<Complex>();
-            if (Shape.IsContiguous)
-            {
-                var src = (Complex*)this.Address;
-                long len = this.size;
-                for (long i = 0; i < len; i++)
-                    hashset.Add(src[i]);
-            }
-            else
-            {
-                long len = this.size;
-                var flat = this.flat;
-                var src = (Complex*)flat.Address;
-                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
-                for (long i = 0; i < len; i++)
-                    hashset.Add(src[getOffset(i)]);
-            }
-
-            var count = hashset.LongCount;
-            var memoryBlock = new UnmanagedMemoryBlock<Complex>(count);
-            var arraySlice = new ArraySlice<Complex>(memoryBlock);
-            Hashset<Complex>.CopyTo(hashset, arraySlice);
-
-            Utilities.LongIntroSort.Sort(memoryBlock.Address, count, NaNAwareComplexComparer.Instance.Compare);
-
-            return new NDArray(arraySlice, Shape.Vector(count));
-        }
     }
 }

@@ -179,7 +179,6 @@ namespace NumSharp.Backends.Kernels
         private static unsafe long BulkInt64ToBoolV(void* s, void* d, long n) => BulkInt64ToBool((long*)s, (byte*)d, n);
         private static unsafe long BulkInt16ToBoolV(void* s, void* d, long n) => BulkInt16ToBool((short*)s, (byte*)d, n);
         private static unsafe long BulkByteToBoolV(void* s, void* d, long n) => BulkByteToBool((byte*)s, (byte*)d, n);
-        private static unsafe long BulkHalfToBoolV(void* s, void* d, long n) => BulkHalfToBool((ushort*)s, (byte*)d, n);
 
         private static unsafe void ConvSingleToBool(void* s, void* d) => *(bool*)d = Converts.ToBoolean(*(float*)s);
         private static unsafe void ConvDoubleToBool(void* s, void* d) => *(bool*)d = Converts.ToBoolean(*(double*)s);
@@ -187,7 +186,6 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ConvInt64ToBool(void* s, void* d) => *(bool*)d = *(long*)s != 0;
         private static unsafe void ConvInt16ToBool(void* s, void* d) => *(bool*)d = *(short*)s != 0;
         private static unsafe void ConvByteToBool(void* s, void* d) => *(bool*)d = *(byte*)s != 0;
-        private static unsafe void ConvHalfToBool(void* s, void* d) => *(bool*)d = Converts.ToBoolean(*(Half*)s);
 
         // =====================================================================
         // FUSED gather strided->bool — WHOLE ARRAY, idx hoisted (same model as the

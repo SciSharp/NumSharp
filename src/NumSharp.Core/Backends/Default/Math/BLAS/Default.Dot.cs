@@ -82,21 +82,5 @@ namespace NumSharp.Backends
 
             throw new NotSupportedException();
         }
-
-        private static long[] ExpandStartDim(Shape shape)
-        {
-            var ret = new long[shape.NDim + 1];
-            ret[0] = 1;
-            Array.Copy(shape.dimensions, 0, ret, 1, shape.NDim);
-            return ret;
-        }
-
-        private static Shape ExpandEndDim(Shape shape)
-        {
-            var ret = new long[shape.NDim + 1];
-            ret[ret.Length - 1] = 1;
-            Array.Copy(shape.dimensions, 0, ret, 0, shape.NDim);
-            return new Shape(ret);
-        }
     }
 }

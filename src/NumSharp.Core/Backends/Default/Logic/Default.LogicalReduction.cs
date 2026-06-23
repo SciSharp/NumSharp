@@ -251,19 +251,6 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private static Shape CreateLogicalResultShape(Shape inputShape, int axis, bool keepdims)
-        {
-            if (keepdims)
-            {
-                var dims = (long[])inputShape.dimensions.Clone();
-                dims[axis] = 1;
-                return new Shape(dims);
-            }
-
-            var reducedDims = Shape.GetAxis(inputShape, axis);
-            return reducedDims.Length == 0 ? Shape.Scalar : new Shape(reducedDims);
-        }
-
         private static NDArray<bool> CreateLogicalResult(Shape resultShape, bool fillTrue)
         {
             var result = fillTrue

@@ -1341,15 +1341,5 @@ namespace NumSharp
             return true;
         }
 
-        private static bool TryUniformConstant(object[,] valuePairs, int ndim, out object value)
-        {
-            value = valuePairs[0, 0];
-            for (int i = 0; i < ndim; i++)
-            {
-                if (!Equals(valuePairs[i, 0], value) || !Equals(valuePairs[i, 1], value))
-                    return false;
-            }
-            return true;
-        }
     }
 }
