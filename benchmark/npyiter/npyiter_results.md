@@ -1,5 +1,5 @@
 ```
-NumSharp NpyIter — canonical benchmark · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
+NumSharp NpyIter — canonical benchmark · 2026-06-23 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
 198 measured pairs (35 NA) · best-of-rounds, Release · matched kernels/ids
 %NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)
 
@@ -7,55 +7,55 @@ AV POLICY — a NumSharp section that crashes all retries (known intermittent
 AccessViolation, an unmanaged-storage lifetime bug) is reported NA / IGNORED
 and excluded from every geomean below.  THIS RUN: NA across selection.
 
-HEADLINE — operation matrix: 1.17× geomean · 85%🕐 of NumPy's time · 77 win / 53 lose over 130 cells
+HEADLINE — operation matrix: 1.18× geomean · 85%🕐 of NumPy's time · 72 win / 58 lose over 130 cells
 
 OPERATIONS — BY SIZE TIER  (geomean over all families)
         slower ◄───────── 1.0 (parity) ─────────► faster
-scalar     ███████████▍ .......   1.14×    87%🕐  ( 11 win / 15 lose)
-1K         ███████████▍ .......   1.14×    88%🕐  ( 14 win / 12 lose)
-100K       ███████████▏ .......   1.12×    89%🕐  ( 17 win /  9 lose)
-1M         █████████████▍ .....   1.34×    75%🕐  ( 18 win /  8 lose)
-10M        ███████████▎ .......   1.13×    88%🕐  ( 17 win /  9 lose)
-ALL        ███████████▋ .......   1.17×    85%🕐  ( 77 win / 53 lose)
+scalar     ██████████▉ ........   1.10×    91%🕐  ( 12 win / 14 lose)
+1K         ███████████▊ .......   1.19×    84%🕐  ( 15 win / 11 lose)
+100K       ██████████▊ ........   1.08×    93%🕐  ( 12 win / 14 lose)
+1M         █████████████ ......   1.31×    77%🕐  ( 17 win /  9 lose)
+10M        ████████████▎ ......   1.23×    81%🕐  ( 16 win / 10 lose)
+ALL        ███████████▊ .......   1.18×    85%🕐  ( 72 win / 58 lose)
 
 OPERATIONS — BY CATEGORY  (geomean over its families, all sizes)
         slower ◄───────── 1.0 (parity) ─────────► faster
-elementwise███████████▏ .......   1.12×    89%🕐  ( 22 win / 18 lose)
-reductions █████████████████▉     1.80×    56%🕐  ( 34 win /  6 lose)
+elementwise███████████▊ .......   1.18×    85%🕐  ( 28 win / 12 lose)
+reductions █████████████████▍     1.75×    57%🕐  ( 28 win / 12 lose)
 selection  (no data)
-copy/cast  ██████▌ ............   0.65×   153%🕐  (  9 win / 16 lose)  ◄ SLOWER
-index-math ██████▉ ............   0.70×   144%🕐  (  5 win /  5 lose)  ◄ SLOWER
-dtypes     ███████████████▉ ...   1.59×    63%🕐  (  7 win /  8 lose)
+copy/cast  ███████▎ ...........   0.73×   137%🕐  (  8 win / 17 lose)  ◄ SLOWER
+index-math ███████▌ ...........   0.75×   133%🕐  (  3 win /  7 lose)  ◄ SLOWER
+dtypes     ████████████▏ ......   1.22×    82%🕐  (  5 win / 10 lose)
 
 CATEGORY × TIER geomean
 category       scalar       1K     100K       1M      10M
-elementwise     0.97×    1.31×    1.23×    1.02×    1.12×
-reductions      4.21×    2.72×    1.20×    1.32×    1.04×
+elementwise     1.05×    1.54×    1.18×    1.09×    1.11×
+reductions      2.67×    1.99×    1.51×    1.44×    1.42×
 selection           -        -        -        -        -
-copy/cast       0.47×    0.36×    0.46×    1.34×    1.15×
-index-math      0.23×    0.58×    1.20×    1.14×    0.89×
-dtypes          0.71×    0.82×    3.15×    3.22×    1.71×
+copy/cast       0.61×    0.59×    0.40×    1.39×    1.06×
+index-math      0.32×    0.51×    0.97×    1.22×    1.22×
+dtypes          0.71×    0.85×    1.97×    1.54×    1.47×
 
 PER-FAMILY × TIER  (NumPy ÷ NumSharp; >1.0 = NumSharp faster)
 family        scalar       1K     100K       1M      10M    geomean
 -- elementwise
-  add          0.99×    0.51×    1.05×    0.68×    1.12×     0.83×
-  sqrt         0.82×    0.54×    1.04×    1.30×    1.11×     0.92×
-  copy         0.86×    1.61×    1.37×    1.43×    2.40×     1.45×
-  strided      0.91×    0.76×    1.04×    0.91×    0.97×     0.91×
-  bcast        0.92×    2.26×    1.07×    0.95×    0.92×     1.14×
-  reversed     0.86×    1.65×    0.83×    1.04×    0.83×     1.00×
-  castbuf      1.42×    3.06×    1.84×    1.79×    1.13×     1.74×
-  mixbuf       1.09×    2.19×    2.01×    0.59×    0.97×     1.22×
+  add          1.01×    1.48×    1.03×    0.88×    1.01×     1.06×
+  sqrt         0.85×    1.15×    1.00×    1.01×    1.02×     1.00×
+  copy         0.88×    2.59×    1.78×    1.33×    1.72×     1.56×
+  strided      0.89×    1.12×    1.00×    1.02×    0.99×     1.00×
+  bcast        0.89×    1.13×    1.02×    0.98×    1.03×     1.01×
+  reversed     0.85×    1.28×    0.90×    0.99×    1.00×     0.99×
+  castbuf      1.98×    2.29×    1.65×    1.35×    1.16×     1.64×
+  mixbuf       1.49×    1.94×    1.40×    1.24×    1.09×     1.40×
 -- reductions
-  sum          1.79×    2.34×    2.30×    2.13×    1.62×     2.02×
-  sum ax0      1.71×    2.56×    1.14×    1.07×    1.18×     1.45×
-  sum ax1      3.82×    2.42×    1.35×    3.58×    1.50×     2.32×
-  sum dt=      3.11×    2.76×    1.18×    1.09×    1.07×     1.64×
-  amin         2.57×    1.62×    0.43×    0.24×    0.74×     0.79×
-  cumsum       1.89×    1.72×    2.11×    2.51×    1.15×     1.82×
-  any(F)      24.56×    6.15×    0.18×    0.08×    0.09×     0.71×
-  any(hit)    22.84×    4.35×    6.22×   22.07×    6.03×     9.62×
+  sum          1.84×    1.78×    2.79×    2.21×    1.76×     2.04×
+  sum ax0      1.90×    0.86×    0.96×    1.00×    0.94×     1.08×
+  sum ax1      1.85×    0.86×    1.51×    1.83×    1.57×     1.47×
+  sum dt=      1.97×    1.47×    0.49×    0.47×    0.55×     0.82×
+  amin         1.70×    1.61×    0.71×    0.70×    0.82×     1.02×
+  cumsum       1.47×    1.09×    1.06×    1.80×    1.68×     1.39×
+  any(F)       8.89×    8.41×    2.12×    0.98×    1.00×     2.74×
+  any(hit)     9.01×    8.50×    8.50×    7.87×    8.22×     8.41×
 -- selection
   where           NA       NA       NA       NA       NA
   a[mask]         NA       NA       NA       NA       NA
@@ -65,53 +65,53 @@ family        scalar       1K     100K       1M      10M    geomean
   a[idx]          NA       NA       NA       NA       NA
   a[idx]=         NA       NA       NA       NA       NA
 -- copy/cast
-  flatten      0.40×    0.16×    0.26×    2.20×    1.11×     0.52×
-  astype       0.29×    0.25×    0.71×    1.80×    1.57×     0.68×
-  ravel.T      0.41×    0.28×    0.62×    1.71×    1.08×     0.67×
-  in-place     1.02×    0.65×    0.47×    1.07×    1.23×     0.84×
-  less->b      0.49×    0.83×    0.38×    0.59×    0.85×     0.60×
+  flatten      0.43×    0.44×    0.17×    2.17×    0.90×     0.57×
+  astype       0.30×    0.53×    0.59×    1.97×    1.90×     0.81×
+  ravel.T      0.45×    0.73×    0.48×    2.11×    1.01×     0.80×
+  in-place     1.77×    0.81×    0.81×    1.06×    1.02×     1.05×
+  less->b      0.81×    0.52×    0.26×    0.54×    0.76×     0.54×
 -- index-math
-  unravel      0.30×    0.49×    1.36×    1.04×    0.76×     0.69×
-  ravel_mi     0.17×    0.70×    1.07×    1.26×    1.05×     0.70×
+  unravel      0.33×    0.50×    0.95×    1.01×    0.97×     0.68×
+  ravel_mi     0.32×    0.52×    0.99×    1.49×    1.53×     0.82×
 -- dtypes
-  complex      0.73×    0.60×    1.39×    2.67×    2.52×     1.33×
-  float16      0.73×    0.63×    0.97×    0.99×    0.61×     0.77×
-  int8         0.67×    1.47×   23.21×   12.59×    3.26×     3.93×
+  complex      0.74×    0.63×    1.01×    0.76×    0.89×     0.80×
+  float16      0.72×    0.65×    0.62×    0.62×    0.62×     0.65×
+  int8         0.67×    1.47×   12.09×    7.70×    5.78×     3.51×
 
 CONSTRUCTION — iterator build+dispose vs np.nditer (size-invariant, 1K)
         slower ◄───────── 1.0 (parity) ─────────► faster
-1op          █████████▋ .........   0.96×   104%🕐  (  0 win /  1 lose)  ◄ SLOWER
-3op_exl      ███████████████████▶   2.44×    41%🕐  (  1 win /  0 lose)
-ufunc        ███████████████████▶   2.91×    34%🕐  (  1 win /  0 lose)
-bufcast      ███████████████████▶   7.24×    14%🕐  (  1 win /  0 lose)
-multiindex   ███████████████████▶   3.96×    25%🕐  (  1 win /  0 lose)
-8op          ███████████████████▶   3.78×    26%🕐  (  1 win /  0 lose)
-4d           ███████████████████▶   2.64×    38%🕐  (  1 win /  0 lose)
-8d           ███████████████████▶   2.31×    43%🕐  (  1 win /  0 lose)
-strided2d    ███████████████████▶   3.00×    33%🕐  (  1 win /  0 lose)
-geomean      ███████████████████▶   2.88×    35%🕐  (  8 win /  1 lose)
+1op          ██████████████████▋    1.86×    54%🕐  (  1 win /  0 lose)
+3op_exl      ███████████████████▶   4.43×    23%🕐  (  1 win /  0 lose)
+ufunc        ███████████████████▶   4.98×    20%🕐  (  1 win /  0 lose)
+bufcast      ███████████████████▶   3.49×    29%🕐  (  1 win /  0 lose)
+multiindex   ███████████████████▶   2.56×    39%🕐  (  1 win /  0 lose)
+8op          ███████████████████▶   5.26×    19%🕐  (  1 win /  0 lose)
+4d           ███████████████████▶   2.94×    34%🕐  (  1 win /  0 lose)
+8d           ███████████████████▶   2.65×    38%🕐  (  1 win /  0 lose)
+strided2d    ███████████████████▶   3.35×    30%🕐  (  1 win /  0 lose)
+geomean      ███████████████████▶   3.33×    30%🕐  (  9 win /  0 lose)
 
 CHUNK-WIDTH dispatch — strided rows, 2M total, inner width w (NumPy = np.positive)
         slower ◄───────── 1.0 (parity) ─────────► faster
-w=4          ███████▎ ...........   0.73×   136%🕐  (  0 win /  1 lose)  ◄ SLOWER
-w=16         ██████████▉ ........   1.09×    92%🕐  (  1 win /  0 lose)
+w=4          ███████ ............   0.71×   141%🕐  (  0 win /  1 lose)  ◄ SLOWER
+w=16         ██████████▏ ........   1.02×    98%🕐  (  1 win /  0 lose)  ◄ PARITY
 w=64         ███████████▍ .......   1.15×    87%🕐  (  1 win /  0 lose)
-w=256        █████████████▎ .....   1.33×    75%🕐  (  1 win /  0 lose)
-w=1024       █████████████▉ .....   1.40×    71%🕐  (  1 win /  0 lose)
+w=256        █████████████▍ .....   1.34×    75%🕐  (  1 win /  0 lose)
+w=1024       ███████████████ ....   1.51×    66%🕐  (  1 win /  0 lose)
 
 PATHOLOGY canaries — known taxes/losses to track (NumPy ÷ NumSharp)
-  bcast_reduce      0.02×   (51.8× slower, SLOWER)
-  allocate          0.57×   (1.8× slower, SLOWER)
-  overlap_copy      0.73×   (1.4× slower, SLOWER)
-  forder_out        0.46×   (2.2× slower, SLOWER)
-  zerodim           0.92×   (1.1× slower, SLOWER)
+  bcast_reduce    538.56×   (538.6× faster, faster)
+  allocate          1.10×   (1.1× faster, faster)
+  overlap_copy      1.78×   (1.8× faster, faster)
+  forder_out        1.28×   (1.3× faster, faster)
+  zerodim           1.26×   (1.3× faster, faster)
 
 DIVIDENDS — NumSharp-only machinery (NumPy baseline = closest it can do)
                 scalar       1K     100K       1M      10M   note
-fuse7           13.10×    6.90×    2.30×    4.02×    1.76×   vs chained 6× add
-reuse            6.75×    6.32×    1.25×    0.87×    1.01×   vs rebuild each call
-par8                 -    1.67×    8.04×    3.55×    6.28×   vs single-thread
+fuse7           12.65×    3.80×    1.39×    1.62×    2.01×   vs chained 6× add
+reuse            5.63×    5.30×    0.97×    1.04×    1.06×   vs rebuild each call
+par8                 -    0.66×    2.70×    3.09×    4.25×   vs single-thread
 
-biggest NumSharp wins: anyff@1 24.56× · i8@100K 23.21× · anyeh@1 22.84× · anyeh@1M 22.07× · i8@1M 12.59×
-most behind:           anyff@1M 0.08× · anyff@10M 0.09× · flatten@1K 0.16× · ravelmi@1 0.17× · anyff@100K 0.18×
+biggest NumSharp wins: i8@100K 12.09× · anyeh@1 9.01× · anyff@1 8.89× · anyeh@100K 8.50× · anyeh@1K 8.50×
+most behind:           flatten@100K 0.17× · lessbool@100K 0.26× · astype@1 0.30× · ravelmi@1 0.32× · unravel@1 0.33×
 ```

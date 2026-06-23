@@ -8,33 +8,33 @@ NumSharp — fused np.evaluate vs unfused np.* chains (4M elements, best-of-9; (
 correctness cross-checks ok
 
 4M float64, best of 9:
-  a*b+c       fused    4.38 ms   unfused    7.08 ms   (1.62x)
-  (a-b)/(a+b) fused    3.36 ms   unfused   14.21 ms   (4.23x)
-  sum(a*b)    fused    2.68 ms   unfused    4.86 ms   (1.82x)
-  sum(af*bf)  fused    1.77 ms   unfused    2.38 ms   (1.35x)  [f32]
-  a*b+c out=  fused    4.22 ms
-  i4*2+f8     fused    3.33 ms   unfused    5.02 ms   (1.51x)
+  a*b+c       fused    4.48 ms   unfused    6.97 ms   (1.56x)
+  (a-b)/(a+b) fused    3.26 ms   unfused   13.54 ms   (4.16x)
+  sum(a*b)    fused    2.44 ms   unfused    3.90 ms   (1.60x)
+  sum(af*bf)  fused    1.30 ms   unfused    1.68 ms   (1.29x)  [f32]
+  a*b+c out=  fused    3.77 ms   [1-pass fused-into-out]
+  i4*2+f8     fused    2.93 ms   unfused    4.18 ms   (1.43x)
 
   a*b+c across operand layouts (2-D 2000x2000, all 3 operands same layout):
-    [C      ] fused    4.37 ms   unfused    7.11 ms   (1.63x)
-    [F      ] fused    4.33 ms   unfused    7.81 ms   (1.80x)
-    [T      ] fused    4.28 ms   unfused    7.41 ms   (1.73x)
-    [strided] fused    4.00 ms   unfused    5.67 ms   (1.42x)
-    [bcast  ] fused    1.99 ms   unfused    5.04 ms   (2.54x)
+    [C      ] fused    3.68 ms   unfused    6.43 ms   (1.75x)
+    [F      ] fused    3.60 ms   unfused    6.67 ms   (1.85x)
+    [T      ] fused    3.67 ms   unfused    6.37 ms   (1.74x)
+    [strided] fused    3.49 ms   unfused    4.75 ms   (1.36x)
+    [bcast  ] fused    1.11 ms   unfused    3.99 ms   (3.60x)
 
 NumPy — absolutes on the same box (context for the unfused column):
 
 numpy 2.4.2, 4M float64, best of 9:
-  a*b+c         15.10 ms
-  (a-b)/(a+b)   21.07 ms
-  sum(a*b)       9.39 ms
-  sum(af*bf)     4.52 ms  [f32]
-  a*b+c out=     5.90 ms  [two-pass with out=]
-  i4*2+f8       10.72 ms
+  a*b+c         12.93 ms
+  (a-b)/(a+b)   19.64 ms
+  sum(a*b)       8.45 ms
+  sum(af*bf)     4.19 ms  [f32]
+  a*b+c out=     4.96 ms  [two-pass with out=]
+  i4*2+f8        9.99 ms
   a*b+c across operand layouts (2-D 2000x2000, unfused):
-    [C      ]   14.02 ms
-    [F      ]   13.72 ms
-    [T      ]   13.79 ms
-    [strided]    8.64 ms
-    [bcast  ]   12.93 ms
+    [C      ]   12.87 ms
+    [F      ]   12.76 ms
+    [T      ]   12.84 ms
+    [strided]    7.87 ms
+    [bcast  ]   12.36 ms
 ```
