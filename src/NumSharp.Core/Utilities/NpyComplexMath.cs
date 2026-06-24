@@ -527,14 +527,21 @@ namespace NumSharp.Utilities
             return scale == 1 ? new Complex(result.Real * 2.0, result.Imaginary) : result;
         }
 
-        /// <summary>Overflow-safe finite <c>hypot</c> (BCL lacks <c>Math.Hypot</c> on net8.0).</summary>
+        /// <summary>Overflow-safe <c>hypot</c> matching NumPy's <c>npy_hypot</c> (BCL lacks
+        /// <c>Math.Hypot</c> on net8.0). Returns <c>+inf</c> when EITHER part is infinite — even if the
+        /// other is NaN (C99: <c>hypot(±inf, NaN) = +inf</c>) — then <c>NaN</c> when either part is NaN,
+        /// before the overflow-safe <c>x·sqrt(1+(y/x)²)</c> core. The two non-finite guards mirror the
+        /// <c>NPY_BLOCK_HYPOT</c> path verbatim so <c>clog</c>/<c>csqrt</c>/<c>nc_log1p</c> agree with
+        /// NumPy on infinite operands (e.g. <c>log1p(nan + inf i).real = +inf</c>).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double Hypot(double x, double y)
         {
+            if (double.IsInfinity(x) || double.IsInfinity(y)) return double.PositiveInfinity;
+            if (double.IsNaN(x) || double.IsNaN(y)) return double.NaN;
             x = Math.Abs(x);
             y = Math.Abs(y);
             if (x < y) { double tmp = x; x = y; y = tmp; }
-            if (x == 0.0) return y;   // both 0 -> 0; (0, NaN) with no swap -> NaN (C99 hypot)
+            if (x == 0.0) return 0.0;   // both 0 -> 0
             double r = y / x;
             return x * Math.Sqrt(1.0 + r * r);
         }
@@ -696,17 +703,21 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Complex <c>log(1+z)</c> matching NumPy. Equivalent to <c>Complex.Log(1+z)</c> but builds
-        /// <c>1+z</c> as <c>(1+re, im)</c> so a negative-zero imaginary part survives (the naive
-        /// <c>Complex.One + z</c> computes <c>0 + (-0) = +0</c>, dropping the sign on the cut).
+        /// Complex <c>log(1+z)</c> matching NumPy's <c>nc_log1p</c> (funcs.inc.src). Computed as
+        /// <c>real = log(hypot(re+1, im))</c>, <c>imag = atan2(im, re+1)</c> — the *naive* magnitude
+        /// log, NOT <see cref="Log"/>'s near-|z|=1 refinement (NumPy's <c>np.log1p(1e-10j).real == 0</c>,
+        /// not the <c>5e-21</c> a refined <c>clog(1+z)</c> would give). Routing through the C99
+        /// <see cref="Hypot"/> (instead of the BCL <see cref="Complex.Log"/>, whose <c>Complex.Abs</c>
+        /// turns <c>hypot(±inf, NaN)</c> into NaN) reproduces NumPy's non-finite results — most
+        /// importantly <c>log1p(nan ± inf i) = (+inf, nan)</c>. Building <c>re+1</c> separately also
+        /// keeps a negative-zero imaginary part that the naive <c>1 + z</c> would flip on the cut.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static Complex Log1p(Complex z)
         {
-            // NumPy's complex log1p is the *naive* clog(1+z) — it does NOT apply clog's near-|z|=1
-            // log1p refinement (np.log1p(1e-10j).real == 0, not 5e-21), so use Complex.Log here, NOT
-            // NpyComplexMath.Log. Building (1+re, im) preserves a -0 imaginary the naive 1+z would flip.
-            return Complex.Log(new Complex(1.0 + z.Real, z.Imaginary));
+            double re1 = z.Real + 1.0;
+            double l = Hypot(re1, z.Imaginary);
+            return new Complex(Math.Log(l), Math.Atan2(z.Imaginary, re1));
         }
 
         /// <summary>
