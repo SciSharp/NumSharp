@@ -165,7 +165,7 @@ The kwargs present on every NumPy ufunc now span the elementwise core — binary
 - **37,445 bit-exact corpus cases** across 24 JSONL tiers generated from real NumPy 2.4.2 outputs: casts (full 15×15 matrix), binary arith (NEP50), div/mod/power, comparisons, unary (incl. float16 inputs + all narrow ints), reductions, NaN-aware reductions, cumulative, statistics, logic/extrema, bitwise+shift, where/place, manipulation, matmul, modf multi-output, sorting/searching, parameter sweeps, SIMD-tail boundaries (900 cases around vector-width edges), operand aliasing, and error-parity (exception-for-exception).
 - **Seeded random fuzzer** with an element-wise shrinker for minimal repros; **metamorphic invariant tier** (11 algebraic properties).
 - **CI integration:** FuzzMatrix gate wired into the build workflow + a new nightly **fuzz-soak** workflow (`.github/workflows/fuzz-soak.yml`).
-- Findings inventoried in `docs/FUZZ_FINDINGS.md`; every fixed class re-armed as a permanent regression gate. The error-parity tier alone surfaced 1 critical crash; the op tiers surfaced 17+ distinct bug classes that are now fixed (see §10).
+- Every fixed class is re-armed as a permanent regression gate. The error-parity tier alone surfaced 1 critical crash; the op tiers surfaced 17+ distinct bug classes that are now fixed (see §10).
 
 ## 10. Correctness — NumPy-parity bug fixes
 
@@ -220,7 +220,6 @@ New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation
 
 - **NpyIter/NDIter book**: `docs/website-src/docs/NDIter.md` (7-technique quick reference, decision tree, memory model, gotchas) + `ndarray.md`.
 - **DocFX website — Benchmarks vs NumPy**: `benchmarks.md` (head-to-head evidence companion to the IL-generation page), `benchmark-iterator.md`, `benchmark-matrix.md`, driven by the auto-committed report artifacts.
-- **Engineering ledgers**: `PERF_LEDGER.md` (every optimization with before/after), `NPYITER_GAPS_AND_ROADMAP.md` (gap analysis vs NumPy 2.4.2 + prioritized roadmap), `MIGRATE_NPYITER.md`, IL-kernel playbook, fuzz findings/coverage.
 - **Branch quality audit** findings are pinned as `test/NumSharp.UnitTest/AuditV2/AuditV2_*.cs` — every Tier-1 finding fixed or reproduced as an `[OpenBugs]` test.
 
 ## 16. Tests & CI
@@ -228,7 +227,7 @@ New `examples/NeuralNetwork.NumSharp`: a 2-layer MLP with a naive implementation
 - **+2,600 test methods**; suite now **9,990 passed / 0 failed** on net8.0 + net10.0. Zero regressions maintained commit-by-commit.
 - New suites: `np.evaluate` (per-node wraparound, dtype matrices, weak scalars + overflow, fused-vs-unfused, `out=` identity/cast/aliasing, fused reductions), `out=`/`where=`/`dtype=` parity suites (broadcast/cast/error-text pins), WRITEMASKED/VIRTUAL parity; NpyIter battletests (566 scenarios), order-support sections 41–51, ARC lifecycle, clone regression, np.pad/average/median/percentile/ptp/diff battle tests, IL-kernel battle tests, behavioral audit harness.
 - CI: fuzz gate in `build-and-release.yml`, nightly `fuzz-soak.yml`, **new post-release `benchmark.yml`** (auto-commits NumPy-comparison report cards to master).
-- **Known gaps stay visible**: the still-unimplemented NumPy functions are `flip`/`fliplr`/`flipud`/`rot90`, `diag`, `gradient`, and `round` (`np.sort` is now done); small-N (~1K) per-call dispatch overhead is the headline performance focus (`docs/NPYITER_GAPS_AND_ROADMAP.md`); a few iterator edge cases remain pinned as `[OpenBugs]`/skipped repros. Every open issue found by the audits/fuzzers/benches is checked in as a failing-by-design test rather than ignored.
+- **Known gaps stay visible**: the still-unimplemented NumPy functions are `flip`/`fliplr`/`flipud`/`rot90`, `diag`, `gradient`, and `round` (`np.sort` is now done); small-N (~1K) per-call dispatch overhead is the headline performance focus; a few iterator edge cases remain pinned as `[OpenBugs]`/skipped repros. Every open issue found by the audits/fuzzers/benches is checked in as a failing-by-design test rather than ignored.
 
 ---
 

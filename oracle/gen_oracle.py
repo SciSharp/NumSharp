@@ -1179,7 +1179,7 @@ def gen_errors():
         ("sum", [_cbase((3,), i32)], {"axis": 5, "keepdims": False}),                               # axis out of range
         # NOTE: ("invert", [float]) is DELIBERATELY EXCLUDED — it does not raise a catchable
         # exception, it executes an ILLEGAL CPU INSTRUCTION (ExecutionEngineException) and crashes
-        # the whole test host. Tracked as W14-A in docs/FUZZ_COVERAGE_BUGS.md (a 🔴 crash bug) and
+        # the whole test host (a 🔴 crash bug) and
         # cannot be gated here until the kernel is fixed to reject float input cleanly.
         ("stack", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                          # mismatched shapes
     ]

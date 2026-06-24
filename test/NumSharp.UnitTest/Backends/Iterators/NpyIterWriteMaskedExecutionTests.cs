@@ -7,10 +7,9 @@ using NumSharp.Backends.Iteration;
 namespace NumSharp.UnitTest.Backends.Iterators;
 
 /// <summary>
-/// Wave 1.3 (roadmap): WRITEMASKED/ARRAYMASK EXECUTION + VIRTUAL operands.
+/// WRITEMASKED/ARRAYMASK EXECUTION + VIRTUAL operands.
 ///
-/// Every expectation here is pinned to NumPy 2.4.2 output (probed via
-/// python_run; see docs/NPYITER_GAPS_AND_ROADMAP.md Wave 1.3 row).
+/// Every expectation here is pinned to NumPy 2.4.2 output (probed via python_run).
 ///
 /// The load-bearing semantic, verified against NumPy: masking is enforced in
 /// exactly ONE place — the buffered copy-back (npyiter_copy_from_buffers,

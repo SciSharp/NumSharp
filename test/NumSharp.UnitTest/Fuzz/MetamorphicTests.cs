@@ -6,13 +6,13 @@ using NumSharp;
 namespace NumSharp.UnitTest.Fuzz
 {
     /// <summary>
-    ///     W15 — metamorphic / oracle-free invariants. These assert mathematical relationships that
+    ///     Metamorphic / oracle-free invariants. These assert mathematical relationships that
     ///     must hold REGARDLESS of NumPy (no oracle), so they catch internal-consistency bugs the
     ///     differential corpus can't: round-trips, involutions, identities, order invariance.
     ///
     ///     Each invariant runs across several dtypes/shapes/layouts. A failure is collected (not
     ///     fatal) and surfaced at the end so the whole property is visible at once. Any genuine
-    ///     violation is a NumSharp bug documented in docs/FUZZ_COVERAGE_BUGS.md.
+    ///     violation is a NumSharp bug.
     /// </summary>
     [TestClass]
     public class MetamorphicTests
