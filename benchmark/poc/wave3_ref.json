@@ -1,1 +1,0 @@
-{"sum": 10.0, "mean": 1.25, "prod": 3.75, "sum_T": 276.0, "mean_T": 11.5, "sum_slice": 135.0, "sum_inf": "inf", "max": 4.5, "min": -2.0, "argmax": 2, "argmin": 4, "max_T": 11.0, "min_T": 0.0, "argmax_T": 8, "argmin_T": 5, "argmax_slice": 3, "argmin_slice": 4, "max_nan": "nan", "min_nan": "nan", "argmax_nan": 2, "argmin_nan": 2, "argmax_nanT": 1, "max_nanT": "nan"}

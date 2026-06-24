@@ -158,7 +158,7 @@ namespace NumSharp.Backends.Kernels
         //   • PINNED (reduced axis is the contiguous inner loop): NumPy folds the
         //     stripe with pairwise_sum. We do the same — PairwiseFold below is ported
         //     1:1 and is BIT-FOR-BIT identical to np.add.reduce for float/double
-        //     (validated, benchmark/poc/pairwise_parity.{cs,py}).
+        //     (validated).
         //   • SLAB (a kept axis is the contiguous inner loop; reduced axis is outer):
         //     NumPy accumulates rows sequentially (out[c] += in[c]); so do we (the
         //     Vector256 streaming add), which already bit-matches NumPy on that

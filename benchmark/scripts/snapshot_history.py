@@ -247,7 +247,7 @@ def make_snapshot(results_dir=None, snap_name=None, head=None, stage=True,
     # "Dirty" for provenance = does the BUILT library-under-test differ from HEAD? i.e.
     # uncommitted changes (tracked-modified OR brand-new) to build-affecting sources —
     # src/ code + the *.csproj/props/targets build graph. It must NOT fire on untracked
-    # scratch (benchmark/poc/*.cs probes), gitignored output, or the report files a run
+    # scratch (ad-hoc *.cs probe scripts), gitignored output, or the report files a run
     # always regenerates — otherwise EVERY run (and every CI snapshot) reads DIRTY and
     # "clean (HEAD exactly)" becomes unreachable. Evaluated against the working tree at
     # snapshot time, which in the normal end-of-run flow IS the benchmarked commit.

@@ -31,7 +31,6 @@ namespace NumSharp.Backends.Kernels
         //   Measured standalone (1000x1000 i8 src, warm dst, best-of-7) vs scalar + NumPy:
         //     strided i8->i16  0.157 -> 0.024 ms (NumPy ~0.115)
         //     negcol  i8->i16  0.367 -> 0.055 ms (NumPy ~0.24)
-        //   (benchmark/poc/subword_widen_poc.cs).
         // =====================================================================
 
         /// <summary>

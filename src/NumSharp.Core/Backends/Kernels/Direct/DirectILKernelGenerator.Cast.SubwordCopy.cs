@@ -44,7 +44,6 @@ namespace NumSharp.Backends.Kernels
         //     stride-2 1B  0.187 -> 0.020 ms (NumPy 0.093)
         //     stride-2 2B  0.206 -> 0.040 ms (NumPy 0.107)
         //     reverse  1B  0.370 -> 0.031 ms (NumPy 0.221)
-        //   (benchmark/poc/subword_strided_poc.cs, subword_structure_poc.cs).
         // =====================================================================
 
         // Hoisted shuffle constants (loaded once before the odometer, not per row).

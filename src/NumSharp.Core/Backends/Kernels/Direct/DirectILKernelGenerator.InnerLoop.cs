@@ -191,7 +191,7 @@ namespace NumSharp.Backends.Kernels
             // user's vectorBody runs unchanged, and the output is stored
             // contiguously (or scattered per-lane when the output is strided
             // too). This is NumPy's npyv_loadn technique, POC-proven 1.3-1.9x
-            // FASTER than NumPy on strided shapes (benchmark/poc/).
+            // FASTER than NumPy on strided shapes.
             GatherSupport gatherSupport = default;
             bool gatherPossible = simdPossible && TryGetGatherSupport(operandTypes[0], out gatherSupport);
 

@@ -9,8 +9,7 @@ namespace NumSharp.UnitTest
 {
     /// <summary>
     ///     Bugs surfaced by the broadcast-reduction adversarial fuzz
-    ///     (<c>benchmark/poc/bcast_consistency.cs</c> + <c>bcast_ax_ref.py</c>/<c>bcast_ax_check.cs</c>,
-    ///     run 2026-06-20). Each asserts the CORRECT behavior (NumPy 2.4.2 as oracle, cross-checked
+    ///     (run 2026-06-20). Each asserts the CORRECT behavior (NumPy 2.4.2 as oracle, cross-checked
     ///     against NumSharp's own materialized-copy of the same view) and FAILS while the bug exists.
     ///
     ///     IMPORTANT SCOPE NOTE: these are all PRE-EXISTING bugs in code paths DISJOINT from the

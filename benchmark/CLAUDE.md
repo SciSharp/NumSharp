@@ -23,7 +23,7 @@ normal — emitted IL is always JIT-optimized — while hand-written C# kernels 
 NumSharp.Core C# glue inflate ~2×. If strided/custom-kernel numbers look ~2×
 worse than contiguous/IL-kernel numbers suggest, check
 `Assembly.GetCustomAttribute<DebuggableAttribute>().IsJITOptimizerDisabled`
-for both assemblies (see the startup guard in `poc/npyiter_parity_poc.cs`).
+for both assemblies.
 
 The BenchmarkDotNet projects below are unaffected (they already mandate `-c Release`).
 
@@ -499,7 +499,7 @@ class BenchmarkResult:
 
 > ⚠️ **Convention note.** The **canonical Performance Convention** (project `.claude/CLAUDE.md`)
 > is **NPY/NS**: `ratio = NumPy_ms / NumSharp_ms`, **`>1` = NumSharp faster** (higher is better) —
-> used by the `npyiter` sheet and `benchmark/poc/*_merge.py`. The legacy `run-benchmarks.ps1`
+> used by the `npyiter` sheet. The legacy `run-benchmarks.ps1`
 > table BELOW is the **inverse** (NS/NPY, lower is better). Prefer the canonical NPY/NS direction
 > for any new reporting.
 

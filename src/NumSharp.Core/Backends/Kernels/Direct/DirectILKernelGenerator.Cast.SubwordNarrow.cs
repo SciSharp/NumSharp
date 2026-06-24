@@ -31,7 +31,6 @@ namespace NumSharp.Backends.Kernels
         //     strided i16->i8  0.156 -> 0.104 ms (NumPy 0.107; memory-bound, ~parity)
         //     negcol  i16->i8  0.369 -> 0.125 ms (NumPy ~0.24; ~1.9x)
         //     strided i16->bool 0.214 -> 0.105 ms (NumPy 0.143; ~1.4x)
-        //   (benchmark/poc/subword_narrow_poc.cs).
         // =====================================================================
 
         private static readonly Vector256<short> _lowByteMask = Vector256.Create((short)0x00FF);
