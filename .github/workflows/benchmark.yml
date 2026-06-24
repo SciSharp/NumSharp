@@ -11,8 +11,10 @@
 # is a SEPARATE workflow from the release pipeline on purpose: a slow/failed
 # benchmark must never gate a release.
 #
-# It commits the refreshed report + cards straight to master with '[skip ci]'
-# (so the push cannot re-trigger anything). GITHUB_TOKEN + contents:write — no PAT.
+# It commits the refreshed report + cards + the benchmark/history/<date>_<sha>/
+# snapshot (and the `latest` symlink — see benchmark/scripts/snapshot_history.py)
+# straight to master with '[skip ci]' (so the push cannot re-trigger anything).
+# GITHUB_TOKEN + contents:write — no PAT.
 #
 # NOTE on numbers: GitHub runners are shared, variable hardware. ABSOLUTE ms are
 # not comparable run-to-run; every ratio is NumPy / NumSharp on the SAME runner,
@@ -102,13 +104,19 @@ jobs:
                   benchmark/cast/cast_results.md \
                   benchmark/cast/cast_results.tsv \
                   benchmark/fusion/fusion_results.md \
+                  benchmark/history/ \
                   docs/website-src/docs/benchmark-matrix.md \
                   docs/website-src/docs/benchmark-iterator.md
+          # benchmark/history/ holds the committable snapshot run_benchmark.py wrote
+          # (via benchmark/scripts/snapshot_history.py): the report + every subsystem
+          # sheet + cards + the json/csv/numpy-results that are gitignored at the
+          # benchmark root, under history/<date>_<sha>/, plus the `latest` symlink —
+          # the durable provenance and the stable path the docs reference.
           if git diff --cached --quiet; then
             echo "No benchmark changes to commit."
             exit 0
           fi
-          git commit -m "bench: refresh benchmark report + NpyIter cards [skip ci]"
+          git commit -m "bench: refresh report + NpyIter cards + history snapshot [skip ci]"
           git push origin HEAD:master
           # The commit carries [skip ci] so it cannot re-trigger this workflow or the
           # release pipeline (push-to-master). The refreshed report PAGES + cards live

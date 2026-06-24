@@ -51,6 +51,7 @@ from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+HISTORY_DIR = HERE / "history"
 CSHARP_DIR = HERE / "NumSharp.Benchmark.GraphEngine"
 CSHARP_PROJ = CSHARP_DIR / "NumSharp.Benchmark.GraphEngine.csproj"
 PY_BENCH = HERE / "NumSharp.Benchmark.Python" / "numpy_benchmark.py"
@@ -162,6 +163,8 @@ def main():
                     help="Skip the Fusion gate (benchmark/fusion)")
     ap.add_argument("--skip-operand", action="store_true",
                     help="Skip the Operand-layout subsystem (benchmark/operand)")
+    ap.add_argument("--no-history", action="store_true",
+                    help="Skip writing the committable benchmark/history/<date>_<sha>/ snapshot + latest symlink")
     args = ap.parse_args()
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -263,8 +266,22 @@ def main():
         if src.exists():
             shutil.copy(src, HERE / name)
 
+    # 6. History snapshot + latest symlink — the committable provenance/publish step
+    #    (benchmark/scripts/snapshot_history.py): copies the report + all five subsystem
+    #    sheets + cards into benchmark/history/<date>_<sha>/, writes a MANIFEST, and
+    #    repoints benchmark/history/latest at it (a git-tracked symlink). results/<ts>/
+    #    stays the gitignored raw scratch; benchmark/history/ is what we commit + reference.
+    #    --no-stage: writing the snapshot must NOT mutate the git index. Staging is the
+    #    human's "review" step (run -> review -> commit), and CI stages benchmark/history/
+    #    explicitly. A local perf check shouldn't silently `git add` ~16 files.
+    if not args.no_history:
+        print("\n=== history snapshot + latest (benchmark/history) ===", flush=True)
+        run([sys.executable, str(HERE / "scripts" / "snapshot_history.py"),
+             "--results-dir", str(results_dir), "--no-stage"], check=False)
+
     print(f"\nDone in {time.time() - t0:.0f}s. Report: {HERE / 'benchmark-report.md'}")
     print(f"Archive: {results_dir}")
+    print(f"Snapshot: {HISTORY_DIR / 'latest'} -> newest benchmark/history/<date>_<sha>/")
 
 
 if __name__ == "__main__":

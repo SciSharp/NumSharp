@@ -81,9 +81,17 @@ benchmark/
 │
 ├── run_benchmark.py                       # THE entry point (orchestrates everything below)
 │
+├── history/                               # TRACKED snapshots — *what we commit and reference*
+│   ├── latest -> <date>_<sha>             # symlink (git mode 120000) → the newest snapshot
+│   └── <date>_<sha>/                      # MANIFEST.md + benchmark-report.{md,json,csv}
+│                                          #   + numpy-results.json + every subsystem
+│                                          #   *_results.{md,tsv} + cards/  (full provenance)
+├── results/                               # GITIGNORED raw per-run scratch (results/<timestamp>/)
+│
 ├── scripts/                               # Helper scripts
 │   ├── merge-results.py                   # Merges NumPy and NumSharp op-matrix results
-│   └── bench_common.py                    # Shared driver for the matrix subsystems (build/run/parse)
+│   ├── bench_common.py                    # Shared driver for the matrix subsystems (build/run/parse)
+│   └── snapshot_history.py                # Builds history/<date>_<sha>/ + latest (the publish step)
 │
 ├── npyiter/                               # Subsystem: iterator machinery (aspect × tier)
 ├── layout/                                # Subsystem: reduction/copy/elementwise × memory layout × dtype
@@ -513,7 +521,9 @@ Legacy `run-benchmarks.ps1` icons (NS/NPY — NumSharp_ms / NumPy_ms, **lower is
 `run_benchmark.py` is the single reusable entry point for the official NumSharp-vs-NumPy
 comparison. It builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON,
 so it is resumable), sweeps NumPy across the three cache-tier sizes (1K / 100K / 10M), merges,
-and archives everything to `results/<timestamp>/`.
+archives the raw run to `results/<timestamp>/` (gitignored), and finally writes the committable
+`history/<date>_<sha>/` snapshot + repoints `history/latest` (see **History snapshots & the
+publish ritual** below; `--no-history` opts out).
 
 ```bash
 python run_benchmark.py                      # full official run, all comparison suites
@@ -573,6 +583,36 @@ checkout) + a NumPy `*_bench.py` twin emitting identical keys, merged and render
 `*_sheet.py` to a committed `*_results.md`. The shared build/run/parse plumbing lives in
 `benchmark/scripts/bench_common.py`. The convention is **NPY/NS** throughout
 (ratio = NumPy_ms / NumSharp_ms, **>1.0 = NumSharp faster**).
+
+### History snapshots & the publish ritual
+
+A full run ends by writing a **committable snapshot** — this is *what we commit and
+reference*, distinct from the gitignored raw scratch:
+
+| Path | Tracked? | Contents |
+|------|----------|----------|
+| `benchmark/results/<timestamp>/` | ❌ gitignored | raw per-run scratch: per-suite NumPy JSONs, BenchmarkDotNet per-class reports, the merged json/csv. Ephemeral. |
+| `benchmark/history/<date>_<sha>/` | ✅ tracked | the snapshot: `MANIFEST.md` + `benchmark-report.{md,json,csv}` + `numpy-results.json` + every subsystem `*_results.{md,tsv}` + `cards/`. The json/csv/numpy-results are **gitignored at the benchmark root**, so the snapshot is their only committed home. |
+| `benchmark/history/latest` | ✅ tracked symlink | relative symlink (git mode 120000) → the newest snapshot. The stable path for docs/CI: `benchmark/history/latest/benchmark-report.md`. |
+
+`benchmark/scripts/snapshot_history.py` assembles the snapshot, repoints `latest`, and
+auto-generates `MANIFEST.md` (provenance, env, methodology, headline geomeans, NpyIter/Cast
+headlines). `run_benchmark.py` invokes it at the end of every run (skip with `--no-history`):
+
+```bash
+python run_benchmark.py                                   # run + write history/<date>_<sha>/ + latest
+python benchmark/scripts/snapshot_history.py              # (re)build from newest results/ at HEAD
+python benchmark/scripts/snapshot_history.py --commit     # also git-commit the snapshot + latest
+python benchmark/scripts/snapshot_history.py \
+    --results-dir benchmark/results/<ts> --snap-name <date>_<sha> --head <sha>   # after-the-fact
+```
+
+The folder is `<date>_<HEAD-short-sha at snapshot time>` (the benchmarked commit; the MANIFEST
+records the dirty/WIP state when the tree isn't clean). Raw BenchmarkDotNet per-class JSON
+(~tens of MB) is **not** persisted — regenerable. **Publish ritual:** run → review → commit
+`benchmark/history/` together with the rendered root reports. The post-release
+`.github/workflows/benchmark.yml` does exactly this (`git add benchmark/history/`) and redeploys
+the docs.
 
 ### Quick Start (PowerShell, Windows)
 
