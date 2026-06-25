@@ -135,7 +135,7 @@ def main():
     count = int(sys.argv[2])
     outfile = sys.argv[3] if len(sys.argv) > 3 else f"random_seed{seed}.jsonl"
     here = os.path.dirname(os.path.abspath(__file__))
-    corpus_dir = os.path.normpath(os.path.join(here, "..", "test", "NumSharp.UnitTest", "Fuzz", "corpus"))
+    corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
     cases = gen_random(seed, count)
     G.write_jsonl(os.path.join(corpus_dir, outfile), cases)
 

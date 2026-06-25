@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Fuzz
 {
     /// <summary>
     ///     Maps a corpus op-name to the NumSharp call that produces the operand result.
-    ///     The matching NumPy call lives in oracle/gen_oracle.py; this is the C# side of that pair.
+    ///     The matching NumPy call lives in test/oracle/gen_oracle.py; this is the C# side of that pair.
     ///     New op tiers (binary arith, comparison, unary, reductions, where/place) extend this switch.
     /// </summary>
     public static class OpRegistry

@@ -1,6 +1,6 @@
 name: Fuzz Soak
 
-# Nightly differential-fuzz soak: sweeps seeds through oracle/fuzz_random.py (NumPy 2.4.2 oracle),
+# Nightly differential-fuzz soak: sweeps seeds through test/oracle/fuzz_random.py (NumPy 2.4.2 oracle),
 # generating hundreds of thousands of fresh random cases per seed and replaying them through the
 # C# harness. The FuzzMatrix gate on every push/PR replays the small COMMITTED corpora (no Python);
 # this job is the "millions of cases" tail that needs Python and runs on a schedule only.
@@ -55,7 +55,7 @@ jobs:
         STATUS=0
         for seed in $SEEDS; do
           echo "::group::seed=$seed count=$COUNT"
-          python oracle/fuzz_random.py "$seed" "$COUNT" random_smoke.jsonl
+          python test/oracle/fuzz_random.py "$seed" "$COUNT" random_smoke.jsonl
           # Incremental build copies the regenerated corpus to the test output, then replay it.
           dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
             --configuration Release -p:NoWarn=CS1591 >/dev/null

@@ -6,11 +6,11 @@ cast saturate-vs-wrap bug, latent in `where`/`copyto`/`concatenate`) must be imp
 
 ## How it works
 
-NumPy is the oracle. Python (`oracle/`) generates a **committed, bytes-exact corpus**; the C# harness
+NumPy is the oracle. Python (`test/oracle/`) generates a **committed, bytes-exact corpus**; the C# harness
 **replays the operand bytes** and bit-compares — *no Python at test time, none in CI*.
 
 ```
-oracle/                              corpus generators (NumPy 2.4.2)
+test/oracle/                         corpus generators (NumPy 2.4.2)
   layout_catalog.py                  the layout builders (single-array, pairwise, where-triple)
   gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place)
   fuzz_random.py                     seeded random fuzzer (NumSharp-producible layouts)
@@ -30,16 +30,16 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
 ## Regenerating the corpus
 
 ```bash
-python oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts
-python oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
-python oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (Misaligned)
-python oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
-python oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
-python oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
-python oracle/gen_oracle.py where            # np.where(cond,x,y)
-python oracle/gen_oracle.py place            # np.place(arr,mask,vals)
-python oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
-python oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
+python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts
+python test/oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
+python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (Misaligned)
+python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
+python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
+python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
+python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
+python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
+python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
+python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 ```
 
 Then `dotnet build` (copies the corpus to output) and run:
