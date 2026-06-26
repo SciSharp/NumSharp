@@ -1442,48 +1442,60 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case7_Broadcasted()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[[1], :]
-            //
-            //(1, 4)
-            //[[0 1 2 3]]
+            // Single advanced index + slice on a BROADCASTED source (axis-0 stride 0).
+            // a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
+            // a[[1], :] -> (1, 4) [[0 1 2 3]]  (row 1 == row 0, the broadcast is materialized)
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case7()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8)) # np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[np.arange(1) + 1, :]
-            //
-            //(1, 1, 8)
-            //[[[0 1 2 3 4 5 6 7]]]
+            // Single advanced index + slice on a 3-D BROADCASTED source (axis-0 stride 0).
+            // a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8))
+            // a[np.arange(1) + 1, :] -> (1, 1, 8) [[[0 1 2 3 4 5 6 7]]]
             var a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8));
             var b = a[np.arange(1) + 1, Slice.All];
-            print(b);
-            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0,1,2,3,4,5,6,7);
+            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
         }
 
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case8_Broadcasted()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[[1], :]
-            //
-            //(1, 4)
-            //[[0 1 2 3]]
+            // Single advanced index + slice on a 3-D BROADCASTED source (axis-0 stride 0).
+            // The slice keeps its own output axis (NOT broadcast together with the advanced
+            // index), so the trailing (2, 4) block is preserved:
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[1], :] -> (1, 2, 4) [0 1 2 3 4 5 6 7]   (a[1] == a[0], broadcast materialized)
             var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
-            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 2, 4).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case9_Broadcasted_AdvIntSlice()
+        {
+            // Advanced index + scalar int + slice on a broadcasted source: the int reduces
+            // axis 1, the slice keeps axis 2.
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[1], 1, :] -> (1, 4) [4 5 6 7]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
+            a[np.array(new long[] { 1 }), 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case10_Broadcasted_TwoAdvanced()
+        {
+            // Two advanced indices (axes 0 and 1) on a broadcasted source — they broadcast
+            // TOGETHER (no slice), so the result is the (2,) pair plus the trailing axis 2.
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[0, 1], [1, 0]] -> (2, 4) [4 5 6 7 0 1 2 3]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
+            a[np.array(new long[] { 0, 1 }), np.array(new long[] { 1, 0 })]
+                .Should().BeShaped(2, 4).And.BeOfValues(4, 5, 6, 7, 0, 1, 2, 3);
         }
     }
 }
