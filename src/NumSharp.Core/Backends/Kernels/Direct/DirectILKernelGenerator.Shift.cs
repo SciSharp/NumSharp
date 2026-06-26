@@ -180,10 +180,12 @@ namespace NumSharp.Backends.Kernels
             // Right shift signed: 0 for positive, -1 for negative (handled per-element in non-overflow path)
             // For scalar shift, we can check once and fill entire output with appropriate value
 
-            // if (shiftAmount < bitWidth) goto NormalShift
+            // if ((uint)shiftAmount < bitWidth) goto NormalShift.
+            // Unsigned compare so a negative count maps to a huge value -> overflow fill,
+            // matching NumPy (left_shift(x, -1) == 0, right_shift(x, -1) == sign fill).
             il.Emit(OpCodes.Ldarg_2);                      // shiftAmount
             il.Emit(OpCodes.Ldc_I4, bitWidth);
-            il.Emit(OpCodes.Blt, lblNormalShift);
+            il.Emit(OpCodes.Blt_Un, lblNormalShift);
 
             // Overflow case: shift >= bitWidth
             if (isLeftShift || IsUnsignedType<T>())
@@ -417,12 +419,36 @@ namespace NumSharp.Backends.Kernels
         private static bool IsShiftSupported<T>() where T : unmanaged
         {
             return typeof(T) == typeof(byte) ||
+                   typeof(T) == typeof(sbyte) ||
                    typeof(T) == typeof(short) ||
                    typeof(T) == typeof(ushort) ||
                    typeof(T) == typeof(int) ||
                    typeof(T) == typeof(uint) ||
                    typeof(T) == typeof(long) ||
                    typeof(T) == typeof(ulong);
+        }
+
+        /// <summary>
+        /// NPTypeCode form of <see cref="IsShiftSupported{T}"/> — the integer dtypes that have
+        /// a Vector{N}.Shift* overload (so the SIMD scalar-shift kernel can be generated). Char
+        /// is excluded (no Vector{N}&lt;char&gt;); it rides the scalar NpyIter path instead.
+        /// </summary>
+        internal static bool IsShiftSimdSupported(NPTypeCode t)
+        {
+            switch (t)
+            {
+                case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Int32:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                case NPTypeCode.UInt64:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -596,9 +622,10 @@ namespace NumSharp.Backends.Kernels
                 // Duplicate shift amount for comparison and potential use
                 il.Emit(OpCodes.Dup);
 
-                // if (shiftAmount < bitWidth) goto NoOverflow
+                // if ((uint)shiftAmount < bitWidth) goto NoOverflow.
+                // Unsigned compare so a negative per-element count overflows like NumPy.
                 il.Emit(OpCodes.Ldc_I4, bitWidth);
-                il.Emit(OpCodes.Blt, lblNoOverflow);
+                il.Emit(OpCodes.Blt_Un, lblNoOverflow);
 
                 // Overflow case: shift >= bitWidth
                 il.Emit(OpCodes.Pop);  // remove duplicate shift amount
@@ -758,6 +785,10 @@ namespace NumSharp.Backends.Kernels
             {
                 il.Emit(OpCodes.Conv_U1);
             }
+            else if (typeof(T) == typeof(sbyte))
+            {
+                il.Emit(OpCodes.Conv_I1);
+            }
             else if (typeof(T) == typeof(short))
             {
                 il.Emit(OpCodes.Conv_I2);
@@ -767,6 +798,107 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Conv_U2);
             }
             // int, uint, long, ulong don't need truncation
+        }
+
+        /// <summary>
+        /// Emit a NumPy-correct bit shift that consumes <c>[value(t), count(t)]</c> from the
+        /// evaluation stack and leaves <c>[shifted(t)]</c>. This is the entry point used by
+        /// <see cref="EmitScalarOperation"/> so <see cref="BinaryOp.LeftShift"/> /
+        /// <see cref="BinaryOp.RightShift"/> behave as first-class binary ops in every generic
+        /// scalar loop — the MixedType General/Chunk kernels, the NpyIter Tier-3B scalar body,
+        /// and the scalar×scalar delegate — without a per-dtype switch.
+        ///
+        /// The generic binary loops convert BOTH operands to <paramref name="t"/> (the promoted
+        /// loop dtype) before calling here, so the count arrives at the result width and is
+        /// truncated to <c>int</c> only for the IL <c>shl</c>/<c>shr</c> opcode.
+        ///
+        /// Overflow rule (probed against NumPy 2.4.2): a count that is negative OR &gt;= the
+        /// result type's bit width yields 0 for left shift and unsigned right shift, and a sign
+        /// fill (-1 when the value is negative, else 0) for signed right shift. The single
+        /// unsigned comparison <c>(ulong)count &gt;= bitWidth</c> captures BOTH the negative and
+        /// the too-large case in one branch.
+        /// </summary>
+        internal static void EmitShiftFromStack(ILGenerator il, NPTypeCode t, bool isLeft)
+        {
+            var clr = GetClrType(t);
+            int bitWidth = GetTypeSize(t) * 8;
+            bool unsigned = IsUnsigned(t);
+
+            var locValue = il.DeclareLocal(clr);
+            var locCount = il.DeclareLocal(clr);
+            var lblNormal = il.DefineLabel();
+            var lblNeg = il.DefineLabel();
+            var lblDone = il.DefineLabel();
+
+            il.Emit(OpCodes.Stloc, locCount);   // pop count
+            il.Emit(OpCodes.Stloc, locValue);   // pop value
+
+            // if ((ulong)count < bitWidth) goto normal — negative widens to a huge value
+            il.Emit(OpCodes.Ldloc, locCount);
+            il.Emit(unsigned ? OpCodes.Conv_U8 : OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, (long)bitWidth);
+            il.Emit(OpCodes.Blt_Un, lblNormal);
+
+            // ---- overflow fill ----
+            if (isLeft || unsigned)
+            {
+                EmitShiftIntConst(il, t, 0);
+                il.Emit(OpCodes.Br, lblDone);
+            }
+            else
+            {
+                // signed right shift: value < 0 ? -1 : 0
+                il.Emit(OpCodes.Ldloc, locValue);
+                EmitShiftIntConst(il, t, 0);
+                il.Emit(OpCodes.Blt, lblNeg);
+                EmitShiftIntConst(il, t, 0);
+                il.Emit(OpCodes.Br, lblDone);
+                il.MarkLabel(lblNeg);
+                EmitShiftIntConst(il, t, -1);
+                il.Emit(OpCodes.Br, lblDone);
+            }
+
+            // ---- normal shift ----
+            il.MarkLabel(lblNormal);
+            il.Emit(OpCodes.Ldloc, locValue);
+            il.Emit(OpCodes.Ldloc, locCount);
+            il.Emit(OpCodes.Conv_I4);          // shift count is int for shl/shr (already < bitWidth)
+            if (isLeft)
+                il.Emit(OpCodes.Shl);
+            else
+                il.Emit(unsigned ? OpCodes.Shr_Un : OpCodes.Shr);
+            EmitShiftTruncate(il, t);
+
+            il.MarkLabel(lblDone);
+        }
+
+        /// <summary>
+        /// Push the integer constant <paramref name="val"/> (only 0 or -1 are used) typed as
+        /// <paramref name="t"/> — widened to int64 for the 64-bit dtypes so the stack type at the
+        /// merge label matches the shifted value.
+        /// </summary>
+        private static void EmitShiftIntConst(ILGenerator il, NPTypeCode t, int val)
+        {
+            il.Emit(val == -1 ? OpCodes.Ldc_I4_M1 : OpCodes.Ldc_I4_0);
+            if (t == NPTypeCode.Int64 || t == NPTypeCode.UInt64)
+                il.Emit(OpCodes.Conv_I8);
+        }
+
+        /// <summary>
+        /// Truncate a shift result on the stack back to the sub-word dtype width
+        /// (the IL <c>shl</c>/<c>shr</c> produced an int32/int64), matching NumPy's wrapping.
+        /// </summary>
+        private static void EmitShiftTruncate(ILGenerator il, NPTypeCode t)
+        {
+            switch (t)
+            {
+                case NPTypeCode.SByte: il.Emit(OpCodes.Conv_I1); break;
+                case NPTypeCode.Byte:  il.Emit(OpCodes.Conv_U1); break;
+                case NPTypeCode.Int16: il.Emit(OpCodes.Conv_I2); break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:  il.Emit(OpCodes.Conv_U2); break;
+                // Int32/UInt32/Int64/UInt64 need no truncation
+            }
         }
 
         #endregion

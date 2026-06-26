@@ -198,4 +198,122 @@ public class ShiftOpTests
     }
 
     #endregion
+
+    #region Type Promotion (NEP50) Tests
+
+    [TestMethod]
+    public void LeftShift_Int8_Int32_PromotesToInt32_Array()
+    {
+        // NumPy: np.left_shift(np.array([1,2,4],np.int8), np.array([1,2,3],np.int32)) -> int32 [2,8,32]
+        // (regression: NumSharp previously used lhs.typecode and returned int8)
+        var a = np.array(new sbyte[] { 1, 2, 4 });
+        var b = np.array(new int[] { 1, 2, 3 });
+        np.left_shift(a, b).Should().BeOfValues(2, 8, 32).And.BeOfType(NPTypeCode.Int32);
+    }
+
+    [TestMethod]
+    public void LeftShift_Int8_Int32_PromotesToInt32_Scalar()
+    {
+        // The promoted width matters: shifting an int8 by 20 at int32 width yields 1048576,
+        // whereas the old int8-width path overflowed to 0.
+        var a = np.array(new sbyte[] { 1, 2, 4 });
+        var b = np.array(new int[] { 20 });
+        np.left_shift(a, b).Should().BeOfValues(1048576, 2097152, 4194304).And.BeOfType(NPTypeCode.Int32);
+    }
+
+    [TestMethod]
+    public void LeftShift_Int32_Int64_PromotesToInt64()
+    {
+        // NumPy: int32 << int64 -> int64
+        var a = np.array(new int[] { 1, 2, 4 });
+        var b = np.array(new long[] { 2 });
+        np.left_shift(a, b).Should().BeOfValues(4L, 8L, 16L).And.BeOfType(NPTypeCode.Int64);
+    }
+
+    [TestMethod]
+    public void LeftShift_UInt8_UInt16_PromotesToUInt16()
+    {
+        var a = np.array(new byte[] { 1, 2, 4 });
+        var b = np.array(new ushort[] { 1, 2, 3 });
+        np.left_shift(a, b).Should().BeOfValues(2, 8, 32).And.BeOfType(NPTypeCode.UInt16);
+    }
+
+    [TestMethod]
+    public void LeftShift_Bool_Bool_PromotesToInt8()
+    {
+        // NumPy has no bool shift loop; bool promotes to int8: True<<True == 1<<1 == 2.
+        var a = np.array(new bool[] { true, false });
+        var b = np.array(new bool[] { true, true });
+        np.left_shift(a, b).Should().BeOfValues(2, 0).And.BeOfType(NPTypeCode.SByte);
+    }
+
+    [TestMethod]
+    public void LeftShift_SByte_ScalarSimd_PreservesDtype()
+    {
+        // int8 has a vector shift loop; the SIMD scalar fast path must keep int8 and wrap.
+        var a = np.array(new sbyte[] { 5, 10, 15, 64 });
+        np.left_shift(a, 1).Should().BeOfValues(10, 20, 30, -128).And.BeOfType(NPTypeCode.SByte);
+    }
+
+    #endregion
+
+    #region Overflow & Negative Count Tests (NumPy shift semantics)
+
+    [TestMethod]
+    public void LeftShift_CountGEWidth_IsZero()
+    {
+        // count >= bit width: left shift is always 0 (probed NumPy 2.4.2).
+        np.left_shift(np.array(new sbyte[] { 1, 127, -1 }), 8)
+            .Should().BeOfValues(0, 0, 0).And.BeOfType(NPTypeCode.SByte);
+        np.left_shift(np.array(new int[] { 1 }), 40).Should().BeOfValues(0);
+        np.left_shift(np.array(new long[] { 1 }), 100).Should().BeOfValues(0L);
+    }
+
+    [TestMethod]
+    public void RightShift_CountGEWidth_SignedIsSignFill()
+    {
+        // signed right shift overflow: -1 for negative values, 0 otherwise.
+        np.right_shift(np.array(new sbyte[] { 1, 127, -1 }), 8)
+            .Should().BeOfValues(0, 0, -1).And.BeOfType(NPTypeCode.SByte);
+        np.right_shift(np.array(new int[] { -8, 8 }), 40).Should().BeOfValues(-1, 0);
+    }
+
+    [TestMethod]
+    public void RightShift_CountGEWidth_UnsignedIsZero()
+    {
+        np.right_shift(np.array(new byte[] { 255, 128 }), 8).Should().BeOfValues(0, 0).And.BeOfType(NPTypeCode.Byte);
+    }
+
+    [TestMethod]
+    public void Shift_NegativeCount_BehavesLikeOverflow()
+    {
+        // count < 0 behaves like count >= width (probed NumPy 2.4.2).
+        np.left_shift(np.array(new int[] { 5 }), -1).Should().BeOfValues(0);
+        np.right_shift(np.array(new int[] { 5, -5 }), -1).Should().BeOfValues(0, -1);
+    }
+
+    #endregion
+
+    #region Layout Tests (strided / broadcast)
+
+    [TestMethod]
+    public void LeftShift_StridedView_MatchesNumPy()
+    {
+        // np.left_shift(np.arange(8,dtype=int32)[::2], 1) -> [0,4,8,12]
+        var a = np.arange(8).astype(NPTypeCode.Int32)["::2"];
+        np.left_shift(a, 1).Should().BeOfValues(0, 4, 8, 12).And.BeOfType(NPTypeCode.Int32);
+    }
+
+    [TestMethod]
+    public void LeftShift_ColumnBroadcast_MatchesNumPy()
+    {
+        // (3,4) << (3,1): each row shifted by its own count.
+        var a = np.arange(12).astype(NPTypeCode.Int32).reshape(3, 4);
+        var col = np.array(new int[] { 0, 1, 2 }).reshape(3, 1);
+        var r = np.left_shift(a, col);
+        r.Should().BeShaped(3, 4);
+        r.Should().BeOfValues(0, 1, 2, 3, 8, 10, 12, 14, 32, 36, 40, 44);
+    }
+
+    #endregion
 }

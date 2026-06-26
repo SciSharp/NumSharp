@@ -515,6 +515,26 @@ namespace NumSharp.UnitTest.Utilities
                     }
                     break;
                 }
+			    case NPTypeCode.SByte:
+                {
+                    var iter = Subject.AsElements<sbyte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        _chain
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToSByte(values[i]);
+                        var nextval = next();
+
+                        _chain
+                            .ForCondition(expected == nextval)
+                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: SByte).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    }
+                    break;
+                }
 			    case NPTypeCode.Byte:
                 {
                     var iter = Subject.AsElements<byte>();

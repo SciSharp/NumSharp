@@ -106,6 +106,13 @@ namespace NumSharp.Backends
                 resultType = dtype.Value;
             }
 
+            // NumPy shift ufuncs have NO bool loop (left_shift/right_shift loops are bb->b ..
+            // QQ->Q only). A bool input therefore promotes to the smallest integer loop, int8,
+            // e.g. left_shift(bool, bool) -> int8 (probed 2.4.2). Bump BEFORE the bool->logical
+            // remap below so shift never takes the bitwise-OR/AND path.
+            if ((op == BinaryOp.LeftShift || op == BinaryOp.RightShift) && resultType == NPTypeCode.Boolean)
+                resultType = NPTypeCode.SByte;
+
             // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`
             // is logical OR and `*` is logical AND (so True + True == True, raw byte 1, not 2).
             // The remap keys off the FINAL loop dtype (i.e. AFTER the dtype= override):

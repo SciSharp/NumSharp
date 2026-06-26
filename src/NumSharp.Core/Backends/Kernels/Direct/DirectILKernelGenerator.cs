@@ -1223,6 +1223,18 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for LeftShift / RightShift - NumPy bit-shift semantics.
+            // Stack on entry is [value(resultType), count(resultType)] (the generic binary
+            // loops converted BOTH operands to resultType). EmitShiftFromStack consumes the
+            // count as the shift amount (truncated to int for the IL shl/shr opcode) and
+            // applies NumPy's overflow rule (count < 0 || count >= bitWidth) at the
+            // resultType width — see DirectILKernelGenerator.Shift.cs.
+            if (op == BinaryOp.LeftShift || op == BinaryOp.RightShift)
+            {
+                EmitShiftFromStack(il, resultType, op == BinaryOp.LeftShift);
+                return;
+            }
+
             // Special handling for boolean
             if (resultType == NPTypeCode.Boolean)
             {
