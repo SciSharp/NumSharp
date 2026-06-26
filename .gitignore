@@ -369,3 +369,6 @@ benchmark/benchmark-report.json
 benchmark/benchmark-report.csv
 benchmark/.claude_*.log
 /.claude/scripts
+
+# Windows/MSYS crash dumps
+*.stackdump

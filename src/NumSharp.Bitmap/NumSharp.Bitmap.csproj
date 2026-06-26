@@ -40,7 +40,6 @@
 
   <ItemGroup>
     <None Remove="NumSharp.Bitmap.csproj.DotSettings" />
-    <None Remove="NumSharp.Image.csproj.DotSettings" />
     <None Remove="Open.snk" />
   </ItemGroup>
 
