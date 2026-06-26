@@ -1416,9 +1416,13 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Get_Case4_Broadcasted()
         {
+            // np: a[0:1:-1, :] -> a reversed row-slice (start 0, stop 1, step -1) is empty -> (0, 4).
+            // (Previously asserted via a no-arg BeShaped(), which resolves to the all-optional
+            //  overload and checks nothing — strengthened to pin NumPy's empty-shape result.)
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             var g = a["0:1:-1, :"];
-            g.Should().BeShaped();
+            g.Should().BeShaped(0, 4);
+            g.size.Should().Be(0);
         }
 
 
