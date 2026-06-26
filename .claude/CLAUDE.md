@@ -495,6 +495,7 @@ Tests use typed category attributes defined in `TestCategory.cs`. Adding new bug
 | `LongIndexing` | `[LongIndexing]` | Arrays with size > int.MaxValue (>2B elements) | Runs (excluded only if also HighMemory) |
 | `HighMemory` | `[HighMemory]` | Requires 8GB+ RAM | **EXCLUDED** via filter |
 | `LargeMemoryTest` | `[LargeMemoryTest]` | Memory-heavy non-bugs (combines OpenBugs+HighMemory) | **EXCLUDED** via filter |
+| `FuzzMatrix` | `[TestCategory("FuzzMatrix")]` | NumPy differential gate — replays the committed oracle corpus bit-exact (see Differential-Fuzz Pipeline). | Runs (the gate) |
 
 ### How CI Excludes Categories
 
@@ -547,9 +548,33 @@ dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCatego
 
 **OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce).
 
+## Differential-Fuzz Pipeline (NumPy oracle)
+
+Proves every NpyIter-backed op is **bit-identical** to NumPy 2.4.2 across the input space. NumPy is the oracle: Python generates a **committed, bytes-exact corpus**; the C# harness replays the operand bytes and bit-compares — **no Python at test time or in CI**.
+
+```
+test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
+  layout_catalog.py                   memory-layout builders (the "44 variations")
+  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/…)
+  fuzz_random.py                      seeded random fuzzer (imports the other two)
+test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
+  FuzzCorpus.cs                       rebuilds EXACT NDArray views from (dtype,shape,strides,offset,bytes)
+  OpRegistry.cs                       op-name → NumSharp call (pairs 1:1 with gen_oracle.py)
+  BitDiff.cs / Shrinker.cs            bit-exact compare (NaN tokenized) / shrink a failure to 1 element
+  MisalignedRegistry.cs               the documented, excused divergences (intended diffs + known bugs)
+  FuzzCorpusTests.cs                  one [FuzzMatrix] test per corpus file
+  corpus/*.jsonl                      committed corpus, copied to test output via the csproj glob
+```
+
+- **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing errors`) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl`, then `dotnet build` (copies the corpus to test output).
+- **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
+
 ## CI Pipeline
 
-`.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org.
+`.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org. The `FuzzMatrix` gate runs here (replays the committed corpora; no Python).
+
+`.github/workflows/fuzz-soak.yml` — nightly soak: sweeps seeds through `test/oracle/fuzz_random.py` (~1M fresh cases/night), replays them, and uploads any failing corpus; copy a shrunk repro into `Fuzz/corpus/regressions/` to pin it on every CI thereafter.
 
 ## Scripting with `dotnet run` (.NET 10 file-based apps)
 
