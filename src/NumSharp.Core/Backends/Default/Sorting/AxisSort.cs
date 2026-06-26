@@ -91,6 +91,22 @@ namespace NumSharp.Backends.Sorting
 
         // ============================ in-place line sort ============================
 
+        /// <summary>
+        /// Radix key width (bytes) the line kernel needs for <paramref name="tc"/>, or 0 for the
+        /// scalar BCL path (Half/Complex/Decimal sort their own buffer). 8 for the 8-byte numeric
+        /// dtypes (Int64/UInt64/Double), else 4 (1/2/4-byte ints, Single via its float32 key).
+        /// Drives which scratch buffers <see cref="SortInPlace"/>/<see cref="ArgSortInto"/> allocate:
+        /// the old code allocated BOTH the u32 and u64 double-buffers (plus the histogram) for every
+        /// dtype, so a 10M-element int32 sort allocated 160 MB of u64 buffers it never touched — and
+        /// the CLR zero-fills new arrays, ≈16 ms of pure memset wasted per large sort.
+        /// </summary>
+        private static int KeyWidth(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Int64 or NPTypeCode.UInt64 or NPTypeCode.Double => 8,
+            NPTypeCode.Half or NPTypeCode.Complex or NPTypeCode.Decimal => 0,
+            _ => 4,
+        };
+
         private static void SortInPlace(NDArray target, int axis)
         {
             int N = (int)target.shape[axis];
@@ -100,11 +116,15 @@ namespace NumSharp.Backends.Sorting
             int elsize = tc.SizeOf();
             long axisStride = (long)target.Shape.strides[axis] * elsize; // byte stride along the sort axis
 
-            // scratch (sized to the line length, reused across all lines)
+            // scratch (sized to the line length, reused across all lines) — only the width the
+            // chosen kernel touches; unused buffers stay Array.Empty (fix to a null pointer).
+            int w = KeyWidth(tc);
             var ctx = new LineCtx { n = N, inStride = axisStride, outStride = axisStride };
-            var k32 = new uint[N]; var t32 = new uint[N];
-            var k64 = new ulong[N]; var t64 = new ulong[N];
-            var cnt = new int[256];
+            var k32 = w == 4 ? new uint[N] : Array.Empty<uint>();
+            var t32 = w == 4 ? new uint[N] : Array.Empty<uint>();
+            var k64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
+            var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
+            var cnt = w == 0 ? Array.Empty<int>() : new int[256];
 
             fixed (uint* pk = k32, pt = t32)
             fixed (ulong* pk6 = k64, pt6 = t64)
@@ -129,10 +149,16 @@ namespace NumSharp.Backends.Sorting
             };
             if (N == 0) return;
 
-            var k32 = new uint[N]; var t32 = new uint[N];
-            var k64 = new ulong[N]; var t64 = new ulong[N];
-            var idx = new long[N]; var it = new long[N];
-            var cnt = new int[256];
+            // Only the key width the kernel touches; the index column (idx/it) is radix-only, so the
+            // scalar BCL argsort path (Half/Complex/Decimal, w==0) allocates none of it.
+            int w = KeyWidth(tc);
+            var k32 = w == 4 ? new uint[N] : Array.Empty<uint>();
+            var t32 = w == 4 ? new uint[N] : Array.Empty<uint>();
+            var k64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
+            var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
+            var idx = w == 0 ? Array.Empty<long>() : new long[N];
+            var it = w == 0 ? Array.Empty<long>() : new long[N];
+            var cnt = w == 0 ? Array.Empty<int>() : new int[256];
 
             fixed (uint* pk = k32, pt = t32)
             fixed (ulong* pk6 = k64, pt6 = t64)

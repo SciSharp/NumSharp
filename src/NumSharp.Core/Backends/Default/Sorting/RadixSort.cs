@@ -25,6 +25,72 @@ namespace NumSharp.Backends.Sorting
     internal static unsafe class RadixSort
     {
         /// <summary>
+        /// Below these line lengths, a binary-insertion sort beats LSD radix: radix pays a fixed
+        /// 256-bucket histogram + prefix per byte-pass (≈ <c>nbytes·(512 + 2n)</c> ops + a cold
+        /// 1 KB histogram sweep), which dwarfs the O(n²/4) of insertion for small n. NumPy makes the
+        /// same call (quicksort falls to insertion below 16); radix's far larger constant pushes our
+        /// crossover much higher, and it differs by key width — the 8-byte core runs twice the passes
+        /// (8 vs 4), so insertion stays ahead to a longer line. Measured crossovers on an i9 (200k
+        /// lines, random keys): 4-byte ≈ n80, 8-byte ≈ n120. Picking those exactly keeps each core
+        /// out of its bad regime. This is THE fix for the short-line pathology (e.g. sort along the
+        /// length-10 axis of a (1e6,10) array, where every one of a million lines paid the histogram
+        /// tax: 624 ms → 72 ms).
+        /// </summary>
+        private const int InsertionThreshold32 = 80;
+        private const int InsertionThreshold64 = 120;
+
+        /// <summary>Stable in-place binary-insertion sort of <paramref name="n"/> u32 keys ascending.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void InsertionU32(uint* a, int n)
+        {
+            for (int i = 1; i < n; i++)
+            {
+                uint v = a[i];
+                int j = i - 1;
+                // strict '>' shift keeps equal keys in source order (stability is load-bearing for argsort ties)
+                while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
+                a[j + 1] = v;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void InsertionU64(ulong* a, int n)
+        {
+            for (int i = 1; i < n; i++)
+            {
+                ulong v = a[i];
+                int j = i - 1;
+                while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
+                a[j + 1] = v;
+            }
+        }
+
+        /// <summary>Stable insertion argsort: co-moves <paramref name="idx"/> while ordering by <paramref name="a"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ArgInsertionU32(uint* a, long* idx, int n)
+        {
+            for (int i = 1; i < n; i++)
+            {
+                uint v = a[i]; long ix = idx[i];
+                int j = i - 1;
+                while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; idx[j + 1] = idx[j]; j--; }
+                a[j + 1] = v; idx[j + 1] = ix;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ArgInsertionU64(ulong* a, long* idx, int n)
+        {
+            for (int i = 1; i < n; i++)
+            {
+                ulong v = a[i]; long ix = idx[i];
+                int j = i - 1;
+                while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; idx[j + 1] = idx[j]; j--; }
+                a[j + 1] = v; idx[j + 1] = ix;
+            }
+        }
+
+        /// <summary>
         /// Sorts <paramref name="n"/> unsigned keys ascending. <paramref name="nbytes"/> is the
         /// number of low bytes that carry information (1, 2, or 4). Double-buffered between
         /// <paramref name="keys"/> and <paramref name="tmp"/>; returns the pointer to the buffer
@@ -34,6 +100,7 @@ namespace NumSharp.Backends.Sorting
         internal static uint* SortU32(uint* keys, uint* tmp, int n, int nbytes, int* count)
         {
             if (n <= 1) return keys; // 0 or 1 element: already sorted (and guards null fixed-ptr on n==0)
+            if (n <= InsertionThreshold32) { InsertionU32(keys, n); return keys; }
             uint* src = keys, dst = tmp;
             for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
             {
@@ -59,6 +126,7 @@ namespace NumSharp.Backends.Sorting
                                          int n, int nbytes, int* count)
         {
             if (n <= 1) return idx;
+            if (n <= InsertionThreshold32) { ArgInsertionU32(keys, idx, n); return idx; }
             uint* ks = keys, kd = keyTmp;
             long* xs = idx, xd = idxTmp;
             for (int shift = 0, pass = 0; pass < nbytes; pass++, shift += 8)
@@ -82,6 +150,7 @@ namespace NumSharp.Backends.Sorting
         internal static ulong* SortU64(ulong* keys, ulong* tmp, int n, int* count)
         {
             if (n <= 1) return keys;
+            if (n <= InsertionThreshold64) { InsertionU64(keys, n); return keys; }
             ulong* src = keys, dst = tmp;
             for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
             {
@@ -102,6 +171,7 @@ namespace NumSharp.Backends.Sorting
                                          int n, int* count)
         {
             if (n <= 1) return idx;
+            if (n <= InsertionThreshold64) { ArgInsertionU64(keys, idx, n); return idx; }
             ulong* ks = keys, kd = keyTmp;
             long* xs = idx, xd = idxTmp;
             for (int shift = 0, pass = 0; pass < 8; pass++, shift += 8)
