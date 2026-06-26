@@ -102,12 +102,13 @@ namespace NumSharp.Backends.Kernels
             if (key.InType == NPTypeCode.Decimal && key.AccType == NPTypeCode.Decimal)
                 return CreateTypedReduceKernel<decimal, decimal>(key.Op);
 
-            // Phase 6 — numeric same-type Sum (and Mean, via the Sum kernel + MeanDivideByCount).
-            // Double AND float32 now route here: the PINNED path uses PairwiseFold, which is
-            // bit-for-bit identical to NumPy's pairwise_sum, so float32 is exact (its earlier
-            // exclusion was a flat-accumulator divergence the pairwise leaf removes). Integer
-            // widening sums and Min/Max/Prod stay on the Direct path (CreateSimdReduceKernel
-            // returns null for those → caller falls back).
+            // Phase 6 — numeric same-type Sum/Mean (PairwiseFold, bit-for-bit NumPy
+            // pairwise_sum) AND Min/Max (SimdMinMaxSameType, NaN-propagating). Double AND
+            // float32 route here so f64/f32 reductions ride the stride-ordered NpyIter reduce
+            // path — SIMD on EVERY layout (transpose/F/strided/negcol/broadcast), fixing the
+            // C-contiguity-gated Direct axis kernel's collapse on those layouts. Integer
+            // widening sums and Prod stay on the Direct path (CreateSimdReduceKernel returns
+            // null for those → caller falls back).
             if (key.InType == key.AccType && (key.InType == NPTypeCode.Double || key.InType == NPTypeCode.Single))
             {
                 // Sum: prefer the IL-EMITTED SIMD pairwise kernel — bit-for-bit identical to
@@ -119,6 +120,12 @@ namespace NumSharp.Backends.Kernels
                     var emitted = TryEmitPairwiseSumKernel(key.InType);
                     if (emitted != null) return emitted;
                 }
+                // Min/Max: width-native SIMD with explicit per-lane NaN propagation
+                // (Vector256.Min/Max alone do not propagate NaN). Same-type, no widening.
+                else if (key.Op == ReductionOp.Min)
+                    return key.InType == NPTypeCode.Double ? (NpyInnerLoopFunc)SimdMinKernel<double> : SimdMinKernel<float>;
+                else if (key.Op == ReductionOp.Max)
+                    return key.InType == NPTypeCode.Double ? (NpyInnerLoopFunc)SimdMaxKernel<double> : SimdMaxKernel<float>;
                 if (key.InType == NPTypeCode.Double) return CreateSimdReduceKernel<double>(key.Op);
                 return CreateSimdReduceKernel<float>(key.Op);
             }
@@ -645,6 +652,144 @@ namespace NumSharp.Backends.Kernels
             if (TAccum.IsNaN(v)) return v;
             bool takeV = pickGreater ? (v > acc) : (v < acc);
             return takeV ? v : acc;
+        }
+
+        // =====================================================================
+        // SIMD same-type Min/Max (Phase 6 — double/float). Dual-mode, NaN-propagating
+        // (NumPy parity). Mirrors PairwiseSumSameType so f64/f32 Min/Max ride the
+        // stride-ordered NpyIter reduce path at SIMD speed on EVERY layout
+        // (transpose / F / strided / negcol / broadcast) instead of falling to the
+        // C-contiguity-gated Direct axis kernel (which collapses to a cache-hostile
+        // coordinate walk on negative-stride / broadcast inputs — measured 6–17×
+        // slower than NumPy). The scalar tail / strided fallback reuse MinMaxFold so
+        // they are bit-identical to the Half/Decimal/Complex TypedMinMax path.
+        //
+        // NaN handling: Vector256.Min/Max do NOT propagate NaN (x86 MINPD/MAXPD return
+        // the SECOND operand when either input is NaN), so each step blends with
+        // ConditionalSelect to keep the actual NaN OPERAND (accumulator first, then
+        // input) — reproducing np.minimum/np.maximum's "NaN wins" AND preserving the
+        // input NaN's bit pattern/sign exactly like the scalar MinMaxFold (NumPy
+        // propagates the input NaN, not .NET's negative double.NaN). The non-NaN result
+        // is order-independent (min/max associative+commutative), so the lane-parallel
+        // fold matches the sequential scalar fold for all finite/inf inputs.
+        // =====================================================================
+
+        private static unsafe void SimdMinKernel<T>(void** dataptrs, long* strides, long count, void* auxdata)
+            where T : unmanaged, IFloatingPointIeee754<T>
+            => SimdMinMaxSameType<T>(dataptrs, strides, count, pickGreater: false);
+
+        private static unsafe void SimdMaxKernel<T>(void** dataptrs, long* strides, long count, void* auxdata)
+            where T : unmanaged, IFloatingPointIeee754<T>
+            => SimdMinMaxSameType<T>(dataptrs, strides, count, pickGreater: true);
+
+        // Per-lane NaN-propagating min/max: keep acc's NaN if acc is NaN, else input's
+        // NaN if input is NaN, else the plain Vector256 min/max. Mirrors MinMaxFold lane-wise
+        // (and therefore preserves the input NaN bits NumPy propagates).
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static Vector256<T> NaNFoldVec<T>(Vector256<T> acc, Vector256<T> v, bool pickGreater)
+            where T : unmanaged, IFloatingPointIeee754<T>
+        {
+            var m = pickGreater ? Vector256.Max(acc, v) : Vector256.Min(acc, v);
+            var accNaN = ~Vector256.Equals(acc, acc);   // acc != acc ⇒ NaN lane
+            var vNaN = ~Vector256.Equals(v, v);
+            return Vector256.ConditionalSelect(accNaN, acc, Vector256.ConditionalSelect(vNaN, v, m));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void SimdMinMaxSameType<T>(void** dataptrs, long* strides, long count, bool pickGreater)
+            where T : unmanaged, IFloatingPointIeee754<T>
+        {
+            byte* inp = (byte*)dataptrs[0]; long inS = strides[0];
+            byte* outp = (byte*)dataptrs[1]; long outS = strides[1];
+            int sz = sizeof(T);
+            int W = Vector256<T>.Count;
+
+            if (outS == 0)
+            {
+                // PINNED: fold the contiguous stripe into the single slot. The slot is
+                // seeded ±inf (SeedReduceIdentity) and accumulates across buffered chunks.
+                T cur = *(T*)outp;
+                if (T.IsNaN(cur)) return;            // NaN already won — stays NaN
+                T* id = (T*)inp;
+
+                if (inS == sz && Vector256.IsHardwareAccelerated && count >= W)
+                {
+                    // Hot loop: 4×-unrolled PLAIN min/max (1 op/lane, like the sum SLAB) plus a
+                    // cheap per-lane finite mask. Vector256.Min/Max don't propagate NaN, but a
+                    // NaN in a min/max stripe is rare; the finite mask flags it and a cold scalar
+                    // scan then recomputes the exact result (the first NaN's bits — NumPy/scalar
+                    // parity). This keeps the common (no-NaN) path at sum-class throughput; the
+                    // earlier NaN-correct-every-step fold (NaNFoldVec) was ~5 ops/lane → 2–3×
+                    // slower than the Direct whole-array kernel on contiguous reduced axes.
+                    var a0 = Vector256.Create(cur); var a1 = a0; var a2 = a0; var a3 = a0;
+                    var fin = Vector256<T>.AllBitsSet;
+                    long i = 0, lim = count - count % (W * 4);
+                    for (; i < lim; i += W * 4)
+                    {
+                        var v0 = Vector256.Load(id + i);
+                        var v1 = Vector256.Load(id + i + W);
+                        var v2 = Vector256.Load(id + i + 2 * W);
+                        var v3 = Vector256.Load(id + i + 3 * W);
+                        if (pickGreater)
+                        { a0 = Vector256.Max(a0, v0); a1 = Vector256.Max(a1, v1); a2 = Vector256.Max(a2, v2); a3 = Vector256.Max(a3, v3); }
+                        else
+                        { a0 = Vector256.Min(a0, v0); a1 = Vector256.Min(a1, v1); a2 = Vector256.Min(a2, v2); a3 = Vector256.Min(a3, v3); }
+                        fin &= Vector256.Equals(v0, v0) & Vector256.Equals(v1, v1) & Vector256.Equals(v2, v2) & Vector256.Equals(v3, v3);
+                    }
+                    var va = pickGreater
+                        ? Vector256.Max(Vector256.Max(a0, a1), Vector256.Max(a2, a3))
+                        : Vector256.Min(Vector256.Min(a0, a1), Vector256.Min(a2, a3));
+                    for (; i + W <= count; i += W)
+                    {
+                        var v = Vector256.Load(id + i);
+                        va = pickGreater ? Vector256.Max(va, v) : Vector256.Min(va, v);
+                        fin &= Vector256.Equals(v, v);
+                    }
+                    // fin lane = all-ones ⇒ that lane was finite throughout; MSB-extract → bit set.
+                    bool anyNaN = Vector256.ExtractMostSignificantBits(fin) != (uint)((1 << W) - 1);
+                    T acc = va.GetElement(0);
+                    for (int l = 1; l < W; l++) acc = MinMaxFold(acc, va.GetElement(l), pickGreater);
+                    for (; i < count; i++)
+                    {
+                        T x = id[i];
+                        if (T.IsNaN(x)) anyNaN = true;
+                        acc = MinMaxFold(acc, x, pickGreater);
+                    }
+                    // Cold path: a NaN was present ⇒ the reduction is NaN. Propagate the FIRST
+                    // input NaN's exact bits, matching the sequential scalar fold and np.minimum.
+                    if (anyNaN)
+                        for (long k = 0; k < count; k++) { T x = id[k]; if (T.IsNaN(x)) { acc = x; break; } }
+                    *(T*)outp = acc;
+                }
+                else
+                {
+                    T acc = cur;
+                    for (long k = 0; k < count; k++)
+                        acc = MinMaxFold(acc, *(T*)(inp + k * inS), pickGreater);
+                    *(T*)outp = acc;
+                }
+            }
+            else
+            {
+                // SLAB: out[c] = minmax(out[c], in[c]); the slab is revisited across outer
+                // iterations (seeded ±inf), so fold in place.
+                if (inS == sz && outS == sz && Vector256.IsHardwareAccelerated)
+                {
+                    T* id = (T*)inp; T* od = (T*)outp;
+                    long i = 0, lim = count - count % W;
+                    for (; i < lim; i += W)
+                        Vector256.Store(NaNFoldVec(Vector256.Load(od + i), Vector256.Load(id + i), pickGreater), od + i);
+                    for (; i < count; i++) od[i] = MinMaxFold(od[i], id[i], pickGreater);
+                }
+                else
+                {
+                    for (long k = 0; k < count; k++)
+                    {
+                        T* o = (T*)(outp + k * outS);
+                        *o = MinMaxFold(*o, *(T*)(inp + k * inS), pickGreater);
+                    }
+                }
+            }
         }
     }
 }

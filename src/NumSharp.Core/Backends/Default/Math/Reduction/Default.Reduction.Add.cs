@@ -73,7 +73,19 @@ namespace NumSharp.Backends
             // (dtype, op) combinations that the legacy DirectILKernelGenerator path covers
             // only with a slow scalar kernel — Complex sum/prod/min/max. Returns null when
             // no per-chunk kernel exists yet, so we fall through to the Direct path below.
-            if (UseNpyIterReduce(inputType, outputType, op))
+            bool useNpyIter = UseNpyIterReduce(inputType, outputType, op);
+            // f64/f32 Min/Max only WIN on the stride-ordered NpyIter reduce path where the
+            // Direct whole-array kernel collapses to a cache-hostile coordinate walk — i.e.
+            // broadcast (stride 0) or negative strides. For C/F-contiguous and positive-strided
+            // inputs the Direct kernel's per-array (not per-stripe) traversal is faster, so keep
+            // it there. (Sum/Mean always prefer NpyIter — their pairwise/streaming kernels beat
+            // Direct on every layout. Complex/Decimal Min/Max are NOT gated: their NpyIter path
+            // is a strict win over the legacy scalar Direct kernel on all layouts.)
+            if (useNpyIter && (op == ReductionOp.Min || op == ReductionOp.Max)
+                && (inputType == NPTypeCode.Double || inputType == NPTypeCode.Single)
+                && !MinMaxLayoutFavorsNpyIter(shape))
+                useNpyIter = false;
+            if (useNpyIter)
             {
                 var npyIterResult = ExecuteAxisReductionNpyIter(arr, axis, keepdims, outputType, @out, op);
                 if (npyIterResult is not null) return npyIterResult;
@@ -150,17 +162,36 @@ namespace NumSharp.Backends
                        op == ReductionOp.Mean;
 
             // Phase 6 — numeric migration onto the per-chunk target architecture.
-            // Double AND float32 SUM and MEAN (mean = Sum kernel + MeanDivideByCount).
-            // The PINNED path uses PairwiseFold (ported 1:1 from NumPy's pairwise_sum),
-            // so results are BIT-FOR-BIT identical to NumPy for both dtypes — which is
-            // what makes float32 safe to route (its earlier exclusion was a flat-
-            // accumulator divergence the pairwise leaf removes). SLAB stays the
-            // streaming Vector256 add (already bit-matches NumPy on that orientation).
-            // Integer Sum (NEP50 widening), Prod, and Min/Max stay on the Direct path
-            // (GetReduceInnerLoop returns null for those → caller falls back).
+            // Double AND float32 SUM, MEAN (mean = Sum kernel + MeanDivideByCount), and
+            // MIN/MAX. SUM's PINNED path uses PairwiseFold (ported 1:1 from NumPy's
+            // pairwise_sum) so it is BIT-FOR-BIT identical to NumPy for both dtypes — which
+            // is what makes float32 safe to route (its earlier exclusion was a flat-
+            // accumulator divergence the pairwise leaf removes); SLAB stays the streaming
+            // Vector256 add. MIN/MAX route to SimdMinMaxSameType (NaN-propagating, dual-mode)
+            // so f64/f32 min/max are SIMD on every layout instead of collapsing on the
+            // C-contiguity-gated Direct kernel for negcol/broadcast/strided inputs.
+            // Integer Sum (NEP50 widening), integer Min/Max, and Prod stay on the Direct
+            // path (GetReduceInnerLoop returns null for those → caller falls back).
             if ((inputType == NPTypeCode.Double || inputType == NPTypeCode.Single) && outputType == inputType)
-                return op == ReductionOp.Sum || op == ReductionOp.Mean;
+                return op == ReductionOp.Sum || op == ReductionOp.Mean ||
+                       op == ReductionOp.Min || op == ReductionOp.Max;
 
+            return false;
+        }
+
+        /// <summary>
+        ///     Layout gate for the f64/f32 Min/Max NpyIter routing (see ExecuteAxisReduction).
+        ///     Returns true only where the Direct whole-array axis kernel collapses to a
+        ///     cache-hostile coordinate walk — broadcast (stride 0, repeated reads) or any
+        ///     negative stride (backward traversal). Contiguous and positive-strided inputs
+        ///     stay on the faster Direct kernel.
+        /// </summary>
+        private static bool MinMaxLayoutFavorsNpyIter(Shape shape)
+        {
+            if (shape.IsBroadcasted) return true;
+            var strides = shape.strides;
+            for (int i = 0; i < strides.Length; i++)
+                if (strides[i] < 0) return true;
             return false;
         }
 
