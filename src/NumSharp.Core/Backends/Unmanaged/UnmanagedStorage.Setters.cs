@@ -415,7 +415,7 @@ namespace NumSharp.Backends
             //by now this ndarray is not broadcasted nor sliced
 
             //this must be a void* so it'll go through a typed switch.
-            (value.TypeCode == _typecode ? value : value.CastTo(_typecode))
+            (value.TypeCode == _typecode ? value : CastSliceViaIterator(value, _typecode))
                 .CopyTo(lhs.InternalArray);
         }
 
@@ -519,7 +519,7 @@ namespace NumSharp.Backends
             //by now this ndarray is not broadcasted nor sliced
 
             //this must be a void* so it'll go through a typed switch.
-            (value.TypeCode == _typecode ? value : value.CastTo(_typecode))
+            (value.TypeCode == _typecode ? value : CastSliceViaIterator(value, _typecode))
                 .CopyTo(lhs.InternalArray);
         }
 

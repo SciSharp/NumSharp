@@ -1201,6 +1201,87 @@ def gen_errors():
     return cases
 
 
+# W15 — copyto: (1) same-dtype OVERLAPPING copies (dst & src are different views of the SAME
+# buffer) which NumPy makes safe via COPY_IF_OVERLAP, and (2) cross-dtype copyto INTO a strided
+# destination view + scalar-broadcast source (the cast-into-non-contiguous-dst path astype never
+# exercises, plus the scalar-broadcast cross-dtype fast fill).
+COPYTO_OVERLAP_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+COPYTO_CROSS = [
+    ("float64", "int32"), ("float32", "uint8"), ("float64", "int16"), ("int32", "float64"),
+    ("int64", "int16"), ("float64", "float16"), ("int32", "uint8"), ("float64", "int64"),
+    ("uint8", "float32"), ("int16", "int64"), ("float64", "uint32"), ("complex128", "float64"),
+]
+
+
+def _viewspec(base, view):
+    """(shape, element-strides, element-offset) of a view into base — buffer stripped (it lives once)."""
+    d = describe(base, view)
+    return {"shape": d["shape"], "strides": d["strides"], "offset": d["offset"]}
+
+
+def _copyto_cast_case(id_, dbase, dview, sbase, sview, exp, casting):
+    return {
+        "id": id_, "op": "copyto", "params": {"casting": casting},
+        "operands": [describe(dbase, dview), describe(sbase, sview)],
+        "expected": {"dtype": exp.dtype.name, "shape": [int(d) for d in exp.shape],
+                     "buffer": np.ascontiguousarray(exp).tobytes().hex()},
+        "layout": "copyto_cast", "valueclass": "cast",
+    }
+
+
+def gen_copyto(overlap_dtypes, cross_pairs):
+    cases = []
+    n = 0
+
+    # (1) Same-dtype OVERLAPPING copyto — ONE buffer, two views. The harness rebuilds the base
+    # buffer once (operand 0) and re-derives dst/src views from params, so they genuinely alias.
+    specs_1d = [
+        ("shift_fwd", 8, lambda a: (a[1:], a[:-1])),     # same-direction run -> memmove-safe
+        ("shift_bwd", 8, lambda a: (a[:-1], a[1:])),
+        ("reverse",   8, lambda a: (a[:], a[::-1])),     # opposite-direction -> needs temp
+        ("step_wbr",  8, lambda a: (a[2:8:2], a[0:6:2])),# strided write-before-read overlap
+    ]
+    specs_2d = [
+        ("rev2d",     (4, 4), lambda a: (a[:], a[::-1, ::-1])),
+        ("transpose", (4, 4), lambda a: (a[:], a.T)),    # square -> in-place transpose overlap
+    ]
+    for s in overlap_dtypes:
+        dt = np.dtype(s)
+        for (tag, shp, fn) in [(t, (ln,), f) for (t, ln, f) in specs_1d] + list(specs_2d):
+            base = _cbase(shp, dt)
+            work = base.copy()
+            dv, sv = fn(work)
+            np.copyto(dv, sv)
+            exp = np.ascontiguousarray(dv)
+            bdv, bsv = fn(base)  # identical slicing on the pristine base -> same strides/offset
+            cases.append({
+                "id": f"copyto_overlap/{tag}/{s}/{n}", "op": "copyto_overlap",
+                "params": {"dst": _viewspec(base, bdv), "src": _viewspec(base, bsv)},
+                "operands": [describe(base, base)],
+                "expected": {"dtype": exp.dtype.name, "shape": [int(d) for d in exp.shape],
+                             "buffer": exp.tobytes().hex()},
+                "layout": f"overlap_{tag}", "valueclass": "overlap"})
+            n += 1
+
+    # (2) Cross-dtype copyto (casting='unsafe') into contiguous / strided dst, + scalar-broadcast src.
+    for (ss, ds) in cross_pairs:
+        sdt, ddt = np.dtype(ss), np.dtype(ds)
+        # 2a contiguous src -> contiguous dst
+        src = _cbase((8,), sdt); dst = _cbase((8,), ddt)
+        w = dst.copy(); np.copyto(w, src, casting="unsafe")
+        cases.append(_copyto_cast_case(f"copyto/cast_contig/{ss}->{ds}/{n}", dst, dst, src, src, w, "unsafe")); n += 1
+        # 2b contiguous src -> STRIDED dst (every other element of a 16-buffer)
+        dbase = _cbase((16,), ddt); dview = dbase[::2]; src2 = _cbase((8,), sdt)
+        wb = dbase.copy(); wv = wb[::2]; np.copyto(wv, src2, casting="unsafe")
+        cases.append(_copyto_cast_case(f"copyto/cast_strided_dst/{ss}->{ds}/{n}", dbase, dview, src2, src2, wv, "unsafe")); n += 1
+        # 2c SCALAR-BROADCAST src -> whole-buffer dst (the cross-dtype fast-fill path)
+        sval = _fill(1, sdt); sview = np.broadcast_to(sval, (8,)); dst3 = _cbase((8,), ddt)
+        w3 = dst3.copy(); np.copyto(w3, sview, casting="unsafe")
+        cases.append(_copyto_cast_case(f"copyto/cast_bcast_src/{ss}->{ds}/{n}", dst3, dst3, sval, sview, w3, "unsafe")); n += 1
+
+    return cases
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1294,6 +1375,9 @@ def main():
     elif mode == "aliasing":
         cases = gen_aliasing(ALIAS_DTYPES)
         write_jsonl(os.path.join(corpus_dir, "aliasing.jsonl"), cases)
+    elif mode == "copyto":
+        cases = gen_copyto(COPYTO_OVERLAP_DTYPES, COPYTO_CROSS)
+        write_jsonl(os.path.join(corpus_dir, "copyto.jsonl"), cases)
     elif mode == "errors":
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)

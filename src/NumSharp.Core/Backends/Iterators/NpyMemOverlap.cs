@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends.Iteration
 {
@@ -214,6 +215,51 @@ namespace NumSharp.Backends.Iteration
                 if (dims[i] == 0)
                 {
                     // Zero-size array occupies no bytes.
+                    start = 0;
+                    end = 0;
+                    return;
+                }
+                long maxAxisOffset = (long)strides[i] * itemsize * (dims[i] - 1);
+                if (maxAxisOffset > 0)
+                    upper += maxAxisOffset;
+                else
+                    lower += maxAxisOffset;
+            }
+            upper += itemsize; // half-open
+            start = baseAddr + (ulong)lower;
+            end = baseAddr + (ulong)upper;
+        }
+
+        /// <summary>
+        /// Bounds-only overlap test for two storages — the cheap NPY_MAY_SHARE_BOUNDS
+        /// check <c>PyArray_AssignArray</c> uses (<c>arrays_overlap</c>). Conservative:
+        /// returns true whenever the two byte extents intersect, without solving exact
+        /// stride collisions. Operates directly on <see cref="UnmanagedStorage"/> so it
+        /// allocates nothing and has NO reference-counting side effects (wrapping a
+        /// storage in a throwaway <see cref="NDArray"/> would retain its buffer).
+        /// </summary>
+        internal static bool StoragesMayShareMemory(UnmanagedStorage a, UnmanagedStorage b)
+        {
+            StorageExtent(a, out ulong s1, out ulong e1);
+            StorageExtent(b, out ulong s2, out ulong e2);
+            // Non-empty and intersecting (matches the extent test in SolveMayShareMemory).
+            return s1 < e2 && s2 < e1 && s1 < e1 && s2 < e2;
+        }
+
+        private static void StorageExtent(UnmanagedStorage st, out ulong start, out ulong end)
+        {
+            var shape = st.Shape;
+            int itemsize = st.TypeCode.SizeOf();
+            ulong baseAddr = (ulong)st.Address + (ulong)((long)shape.offset * itemsize);
+
+            long lower = 0, upper = 0;
+            int nd = (int)shape.NDim;
+            var dims = shape.dimensions;
+            var strides = shape.strides;
+            for (int i = 0; i < nd; i++)
+            {
+                if (dims[i] == 0)
+                {
                     start = 0;
                     end = 0;
                     return;

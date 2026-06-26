@@ -145,6 +145,24 @@ namespace NumSharp.UnitTest.Fuzz
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
 
+                // W15 copyto: cross-dtype / strided-dst / scalar-broadcast-src. dst (ops[0]) is mutated
+                // in place and IS the result; casting rule comes from params (default same_kind).
+                case "copyto":
+                    np.copyto(ops[0], ops[1], p.TryGetValue("casting", out var cast) ? cast.GetString() : "same_kind");
+                    return ops[0];
+
+                // W15 copyto OVERLAP: dst and src are two views of ONE buffer (operand 0). Rebuild both
+                // from params so they genuinely alias, exercising NumPy's COPY_IF_OVERLAP path.
+                case "copyto_overlap":
+                {
+                    var storage = ops[0].Storage;
+                    long bufSize = ops[0].size;
+                    var dst = new NDArray(storage, ShapeFrom(p["dst"], bufSize));
+                    var src = new NDArray(storage, ShapeFrom(p["src"], bufSize));
+                    np.copyto(dst, src);
+                    return dst;
+                }
+
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
@@ -191,6 +209,20 @@ namespace NumSharp.UnitTest.Fuzz
                 list.Add(e.GetInt32());
             return list.ToArray();
         }
+
+        private static long[] ParseLongArray(JsonElement arr)
+        {
+            var list = new List<long>();
+            foreach (var e in arr.EnumerateArray())
+                list.Add(e.GetInt64());
+            return list.ToArray();
+        }
+
+        // Rebuild an aliasing view (shape, element-strides, element-offset) over a shared buffer —
+        // the overlap-case counterpart to FuzzCorpus.Reconstruct (which owns its buffer).
+        private static Shape ShapeFrom(JsonElement v, long bufferSize)
+            => new Shape(ParseLongArray(v.GetProperty("shape")), ParseLongArray(v.GetProperty("strides")),
+                         v.GetProperty("offset").GetInt64(), bufferSize);
 
         private static int? ParseAxis(IReadOnlyDictionary<string, JsonElement> p)
             => p.TryGetValue("axis", out var ax) && ax.ValueKind != JsonValueKind.Null ? ax.GetInt32() : (int?)null;

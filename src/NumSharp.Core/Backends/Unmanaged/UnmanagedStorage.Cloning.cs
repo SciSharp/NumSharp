@@ -294,9 +294,9 @@ namespace NumSharp.Backends
             if (_dtype == typeof(T))
                 return Clone();
 
-            // CloneData materializes logical element order for strided/F-contiguous views
-            // before the dtype conversion. Casting the raw backing buffer would reorder data.
-            return new UnmanagedStorage((ArraySlice<T>)CloneData().CastTo<T>(), _shape.Clone(true, true, true)) { Engine = Engine };
+            // SIMD copy-with-cast via NpyIter (materializes logical element order for strided /
+            // F-contiguous views and converts in a single pass). Was: CloneData().CastTo<T>().
+            return CastViaIterator(InfoOf<T>.NPTypeCode);
         }
 
         /// <summary>
@@ -313,9 +313,9 @@ namespace NumSharp.Backends
             if (_typecode == typeCode)
                 return Clone();
 
-            // CloneData materializes logical element order for strided/F-contiguous views
-            // before the dtype conversion. Casting the raw backing buffer would reorder data.
-            return new UnmanagedStorage((IArraySlice)CloneData().CastTo(typeCode), _shape.Clone(true, true, true)) { Engine = Engine };
+            // SIMD copy-with-cast via NpyIter (materializes logical element order for strided /
+            // F-contiguous views and converts in a single pass). Was: CloneData().CastTo(typeCode).
+            return CastViaIterator(typeCode);
         }
 
         /// <summary>
@@ -343,9 +343,9 @@ namespace NumSharp.Backends
             if (_shape.IsEmpty)
                 return new UnmanagedStorage(typeof(T)) { Engine = Engine };
 
-            // CloneData materializes logical element order for strided/F-contiguous views
-            // before the dtype conversion. Casting the raw backing buffer would reorder data.
-            return new UnmanagedStorage((ArraySlice<T>)CloneData().CastTo<T>(), _shape.Clone(true, true, true)) { Engine = Engine };
+            // SIMD copy-with-cast via NpyIter (materializes logical element order for strided /
+            // F-contiguous views and converts in a single pass). Was: CloneData().CastTo<T>().
+            return CastViaIterator(InfoOf<T>.NPTypeCode);
         }
 
         /// <summary>
@@ -362,9 +362,9 @@ namespace NumSharp.Backends
             if (_shape.IsEmpty)
                 return new UnmanagedStorage(typeCode) { Engine = Engine };
 
-            // CloneData materializes logical element order for strided/F-contiguous views
-            // before the dtype conversion. Casting the raw backing buffer would reorder data.
-            return new UnmanagedStorage((IArraySlice)CloneData().CastTo(typeCode), _shape.Clone(true, true, true)) { Engine = Engine };
+            // SIMD copy-with-cast via NpyIter (materializes logical element order for strided /
+            // F-contiguous views and converts in a single pass). Was: CloneData().CastTo(typeCode).
+            return CastViaIterator(typeCode);
         }
 
         /// <summary>
@@ -376,6 +376,38 @@ namespace NumSharp.Backends
         public UnmanagedStorage CastIfNecessary(Type dtype)
         {
             return CastIfNecessary(dtype.GetTypeCode());
+        }
+
+        /// <summary>
+        ///     SIMD cast of this storage's logical data to <paramref name="typeCode"/> through the
+        ///     unified <see cref="NpyIter.Copy(UnmanagedStorage, UnmanagedStorage)"/> core, into a
+        ///     fresh C-contiguous storage of the same logical dimensions. Replaces the legacy
+        ///     per-element <c>CloneData().CastTo</c> scalar loop (same NumPy-faithful values, now
+        ///     vectorized and materialized + cast in a single pass). Preserves <see cref="Engine"/>.
+        /// </summary>
+        private UnmanagedStorage CastViaIterator(NPTypeCode typeCode)
+        {
+            Shape outShape = _shape.NDim == 0
+                ? Shape.NewScalar()
+                : new Shape((long[])_shape.dimensions.Clone(), 'C');
+
+            var dst = new UnmanagedStorage(ArraySlice.Allocate(typeCode, outShape.size, false), outShape) { Engine = Engine };
+            NpyIter.Copy(dst, this);
+            return dst;
+        }
+
+        /// <summary>
+        ///     SIMD cast of a contiguous 1-D <paramref name="value"/> slice to <paramref name="typeCode"/>
+        ///     through <see cref="NpyIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>. Replaces the legacy
+        ///     scalar <c>IMemoryBlock.CastTo</c> loop at the slice level (indexed-assignment cast, typed
+        ///     extraction). Returns a fresh owning slice of <paramref name="typeCode"/>.
+        /// </summary>
+        private static IArraySlice CastSliceViaIterator(IArraySlice value, NPTypeCode typeCode)
+        {
+            var src = new UnmanagedStorage(value, Shape.Vector(value.Count));
+            var dst = new UnmanagedStorage(ArraySlice.Allocate(typeCode, value.Count, false), Shape.Vector(value.Count));
+            NpyIter.Copy(dst, src);
+            return dst.InternalArray;
         }
 
         #endregion
@@ -443,11 +475,12 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage and casted (if necessary) as <see cref="ArraySlice{T}"/></returns>
         public ArraySlice<T> CloneData<T>() where T : unmanaged
         {
-            var cloned = CloneData();
-            if (cloned.TypeCode != InfoOf<T>.NPTypeCode)
-                return (ArraySlice<T>)cloned.CastTo<T>();
+            if (_typecode == InfoOf<T>.NPTypeCode)
+                return (ArraySlice<T>)CloneData();
 
-            return (ArraySlice<T>)cloned;
+            // SIMD materialize-and-cast in a single NpyIter pass. Was: CloneData() (materialize)
+            // followed by the scalar CastTo<T> loop — two passes over the data.
+            return (ArraySlice<T>)CastViaIterator(InfoOf<T>.NPTypeCode).InternalArray;
         }
 
         /// <summary>

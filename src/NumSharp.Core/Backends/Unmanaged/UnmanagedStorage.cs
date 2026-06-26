@@ -1031,7 +1031,8 @@ namespace NumSharp.Backends
         protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
         {
             if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
-            return (ArraySlice<TOut>)sourceArray.CastTo<TOut>();
+            // SIMD copy-with-cast via NpyIter. Was: scalar sourceArray.CastTo<TOut>() loop.
+            return (ArraySlice<TOut>)CastSliceViaIterator(sourceArray, InfoOf<TOut>.NPTypeCode);
         }
 
         #region Allocation

@@ -131,6 +131,13 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Errors() => RunCorpus("errors.jsonl");
 
+        // W15 copyto: same-dtype OVERLAPPING copies (shift/reverse/strided write-before-read/2-D
+        // transpose — NumPy's COPY_IF_OVERLAP) + cross-dtype copyto into contiguous/strided dst and
+        // scalar-broadcast src (the cast-into-non-contiguous-dst path astype never exercises).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Copyto() => RunCorpus("copyto.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]

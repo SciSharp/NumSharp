@@ -3996,6 +3996,27 @@ namespace NumSharp.Backends.Iteration
 
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
+            // Scalar-broadcast fast path: src has ALL strides 0, so every logical element is the
+            // SAME single value. When dst is a gap-free, whole-buffer C- OR F-contiguous target, fill
+            // it with one typed fill (1-byte InitBlock/memset, wider unrolled/SIMD) instead of the
+            // per-element strided walk the general path takes here (IsContiguousCopy is false for a
+            // broadcast src, so the cpblk tier below is skipped). Mirrors the IsScalarBroadcast tier
+            // in UnmanagedStorage.CloneData and is bit-identical: the same GetValue(0) value lands in
+            // every slot (read once, before the write, so a src/dst alias is safe). 6-8x for 1-byte,
+            // ~2x wider. The fill is order-independent — every slot gets the same value — so an F-
+            // contiguous whole buffer (offset 0, size == Count, no gaps) is equally fillable as C.
+            // GetValue(0) is offset-aware (GetOffset honours the broadcast strides) and boxes as the
+            // storage dtype, which IArraySlice.Fill unboxes via the same-type cast.
+            if (src.Shape.IsScalarBroadcast
+                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                && dst.Shape.offset == 0
+                && dst.Shape.size > 0
+                && dst.Shape.size == dst.InternalArray.Count)
+            {
+                dst.InternalArray.Fill(src.GetValue(0));
+                return true;
+            }
+
             var state = CreateCopyState(src, dst);
             try
             {
@@ -4097,11 +4118,67 @@ namespace NumSharp.Backends.Iteration
             Copy(dst.Storage, src.Storage);
         }
 
+        /// <summary>
+        ///     The unified allocate-and-fill core for copying, retyping, and casting. Allocates a
+        ///     fresh array of <paramref name="dstType"/> whose physical layout follows
+        ///     <paramref name="order"/> (NumPy C/F/A/K resolved via <see cref="OrderResolver"/>),
+        ///     then fills it from <paramref name="src"/> through the in-place <see cref="Copy(NDArray, NDArray)"/>
+        ///     primitive. Every elementwise concern — broadcast, arbitrary strides, transpose, and
+        ///     cross-dtype conversion — is absorbed by the NpyIter copy core, so a single call covers
+        ///     <c>ndarray.copy()</c>, <c>astype()</c>, and <c>Clone()</c> alike.
+        /// </summary>
+        /// <param name="dstType">dtype of the result (equal to <paramref name="src"/>'s dtype for a plain copy/retype).</param>
+        /// <param name="src">source array of any layout (contiguous, sliced, strided, broadcast, transposed, scalar, empty).</param>
+        /// <param name="order">
+        ///     'C' (row-major), 'F' (column-major), 'A' ('F' iff src is F-contiguous and not C), or
+        ///     'K' (default; KEEPORDER — mirror src contiguity, matching NumPy astype order='K').
+        /// </param>
+        /// <param name="engine">tensor engine assigned to the result; defaults to <paramref name="src"/>'s engine.</param>
+        /// <returns>A freshly allocated, owning array of <paramref name="dstType"/> holding src's values.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="src"/> is null.</exception>
+        public static NDArray CopyAs(NPTypeCode dstType, NDArray src, char order = 'K', TensorEngine engine = null)
+        {
+            if (src is null) throw new ArgumentNullException(nameof(src));
+
+            engine = engine ?? src.TensorEngine;
+            Shape srcShape = src.Shape;
+
+            // 0-D scalar has no axes to order; everything else allocates with the resolved layout
+            // (KEEPORDER lets an F-contiguous / transposed source cast as a single flat pass).
+            Shape outShape;
+            if (srcShape.NDim == 0)
+                outShape = Shape.NewScalar();
+            else
+            {
+                char physical = OrderResolver.Resolve(order, srcShape);
+                outShape = new Shape((long[])srcShape.dimensions.Clone(), physical);
+            }
+
+            var dst = new NDArray(dstType, outShape, false) { TensorEngine = engine };
+            Copy(dst, src);
+            return dst;
+        }
+
         /// <inheritdoc cref="Copy(NDArray, NDArray)"/>
         public static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));
             if (src is null) throw new ArgumentNullException(nameof(src));
+
+            // OVERLAP GUARD — NumPy PyArray_AssignArray (array_assign_array.c:371-399).
+            // A forward element/row copy reads source lanes after destination writes have
+            // already clobbered them when src and dst alias the same buffer. A same-direction
+            // 1-D run coalesces to a memmove-safe block copy and is fine; but 1-D opposite-
+            // direction strides (e.g. a[:] = a[::-1]) and ANY multi-dimensional copy must
+            // first materialize src into a temporary. Detection reuses the shared solver
+            // (NpyMemOverlap = NumPy solve_may_share_memory) directly on the storages — NOT via
+            // throwaway NDArray wrappers, which under ARC would retain the buffers. A cross-dtype
+            // copy targets a distinct buffer, so the bounds test short-circuits to No for free.
+            if (NeedsAssignmentTemp(dst.Shape, src.Shape)
+                && NpyMemOverlap.StoragesMayShareMemory(src, dst))
+            {
+                src = src.Clone();
+            }
 
             // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
             if (TryCopySameType(dst, src))
@@ -4110,6 +4187,24 @@ namespace NumSharp.Backends.Iteration
             // Cross-dtype: per-element cast via NpyIterCasting.ConvertValue,
             // driven by the same coalesced broadcast state used by TryCopySameType.
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
+            // so convert it ONCE with the same NumPy-faithful NpyIterCasting.ConvertValue the scalar
+            // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
+            // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
+            // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
+            // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
+            if (src.Shape.IsScalarBroadcast
+                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                && dst.Shape.offset == 0
+                && dst.Shape.size > 0
+                && dst.Shape.size == dst.InternalArray.Count)
+            {
+                byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
+                NpyIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
+                dst.InternalArray.Fill(dst.GetValue(0));
+                return;
+            }
 
             var state = CreateCopyState(src, dst);
             try
@@ -4167,6 +4262,38 @@ namespace NumSharp.Backends.Iteration
             {
                 state.FreeDimArrays();
             }
+        }
+
+        /// <summary>
+        /// NumPy's array_assign_array.c:371-381 gate: which (dst, src) layouts can corrupt
+        /// themselves under a forward copy when the operands overlap. A 1-D copy is memmove-safe
+        /// ONLY as a same-direction UNIT-stride run — it coalesces to a single Buffer.MemoryCopy,
+        /// which tolerates overlap. A non-unit stride walks element-by-element (no memmove) and an
+        /// opposite-direction stride reverses the read order; either way a write-before-read overlap
+        /// clobbers the source mid-copy. So everything except a unit-stride forward run — non-unit
+        /// strides, opposite directions, or any <c>dst.ndim &gt; 1</c> — must copy through a temporary
+        /// when src and dst share memory. Allocation-free; the actual overlap test runs only when
+        /// this returns true (and a distinct-buffer / non-overlapping pair short-circuits to No there).
+        /// </summary>
+        private static bool NeedsAssignmentTemp(Shape dst, Shape src)
+        {
+            int dn = (int)dst.NDim;
+            if (dn > 1)
+                return true;
+
+            int sn = (int)src.NDim;
+            if (dn == 1 && sn >= 1)
+            {
+                long ds = dst.strides[0];
+                long ss = src.strides[sn - 1];
+                // Memmove-safe only when BOTH innermost strides are unit (same forward block).
+                // Non-unit (element-by-element, no memmove) or opposite-direction needs a temp:
+                // e.g. copyto(a[2:8:2], a[0:6:2]) writes a[2] then reads it for the next element.
+                if (!(ds == 1 && ss == 1))
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool ReduceBoolGeneral<T, TKernel>(ref NpyIterState state)

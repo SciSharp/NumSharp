@@ -140,8 +140,6 @@ namespace NumSharp.Backends.Kernels
             // {int,float,half,char} -> bool via SIMD `!= 0` compare (Phase-0's worst dst column).
             var toBool = TryGetToBoolKernel(srcType, dstType);
             if (toBool != null) return toBool;
-            if (DivergesFromNumpyCast(srcType, dstType)) return null;
-
             var key = new CastKernelKey(srcType, dstType);
             if (_castCache.TryGetValue(key, out var existing)) return existing;
             if (_castUnsupported.ContainsKey(key)) return null;
@@ -223,8 +221,6 @@ namespace NumSharp.Backends.Kernels
             // {int,float,half,char}->bool strided (!= 0 compare): reuses StridedNarrowDriver (dstSize=1).
             var toBoolStrided = TryGetToBoolStridedKernel(srcType, dstType);
             if (toBoolStrided != null) return toBoolStrided;
-            if (DivergesFromNumpyCast(srcType, dstType)) return null;
-
             var key = new CastKernelKey(srcType, dstType);
             if (_stridedCastCache.TryGetValue(key, out var existing)) return existing;
             if (_stridedCastUnsupported.ContainsKey(key)) return null;
@@ -265,24 +261,6 @@ namespace NumSharp.Backends.Kernels
             SmallIntToSingle,
             SingleToDouble,
             DoubleToSingle,
-        }
-
-        /// <summary>
-        /// True for (src,dst) pairs whose emitted SIMD kernel body still diverges from NumPy on
-        /// out-of-range / NaN inputs, so the caller declines it and falls back to the Converts-backed
-        /// scalar path (<see cref="Iteration.NpyIterCasting.ConvertValue"/>), bit-exact with NumPy.
-        ///
-        /// Now narrowed to ONE family: signed-narrow -> UInt64 (SByte/Int16/Int32), whose vectorized
-        /// widen sign-extends only to 32 bits. (float->int is now NumPy-faithful everywhere: the
-        /// scalar path via EmitConvertTo -> Converts.*, the float->int32 contig path via the cvtt
-        /// helpers in TryGetCastKernel, and the remaining float->int pairs via the ScalarOnly
-        /// strategy which has no SIMD body.)
-        /// </summary>
-        internal static bool DivergesFromNumpyCast(NPTypeCode src, NPTypeCode dst)
-        {
-            // (Probing whether the signed->UInt64 widen rejection is stale — generic widen
-            // sign-extends via the source-typed Vector.WidenLower/Upper, identical bits to ->Int64.)
-            return false;
         }
 
         /// <summary>

@@ -17,22 +17,14 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.copy.html</remarks>
         public NDArray copy(char order = 'C')
         {
-            char physical = OrderResolver.Resolve(order, this.Shape);
-
-            // Preserve current behavior for scalars / empty arrays — Clone() handles them.
-            if (this.Shape.IsEmpty || this.Shape.IsScalar || this.Shape.size <= 1)
+            // The uninitialized-shape sentinel has no dimensions to order or fill — Clone() handles it.
+            if (this.Shape.IsEmpty)
                 return Clone();
 
-            if (physical == 'C' && this.Shape.IsContiguous)
-                return Clone();
-
-            // Allocate destination with the requested physical strides and copy values logically.
-            // Clone dimensions to avoid aliasing — Shape(long[], char) does not clone,
-            // and Shape exposes an indexer setter that could otherwise mutate both shapes.
-            var destShape = new Shape((long[])this.Shape.dimensions.Clone(), physical);
-            var dest = new NDArray(this.typecode, destShape, false) { TensorEngine = TensorEngine };
-            NpyIter.Copy(dest, this);
-            return dest;
+            // Unified allocate-and-fill copy core: resolves order (C/F/A/K), allocates, and fills via
+            // the NpyIter copy primitive. Absorbs every layout — scalar, (1,), strided, broadcast,
+            // transposed — so copy() and astype() share one path.
+            return NpyIter.CopyAs(this.typecode, this, order, TensorEngine);
         }
     }
 }
