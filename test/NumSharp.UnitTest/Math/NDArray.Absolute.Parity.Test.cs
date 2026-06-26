@@ -354,5 +354,264 @@ namespace NumSharp.UnitTest.MathSuite
             Assert.AreEqual(0, s.ndim);
             Assert.AreEqual(3.5, s.GetDouble(), 0);
         }
+
+        // =====================================================================
+        // Extended dtype coverage — every signed-int width, uint64, Half,
+        // Decimal, Char (all values re-probed against NumPy 2.4.2)
+        // =====================================================================
+        [TestMethod]
+        public void AllSignedInt_Negatives_ValueCorrectness()
+        {
+            var r16 = np.abs(np.array(new short[] { -5, -1, 0, 7, short.MinValue }));
+            Assert.AreEqual(NPTypeCode.Int16, r16.typecode);
+            Assert.AreEqual((short)5, r16.GetInt16(0));
+            Assert.AreEqual((short)1, r16.GetInt16(1));
+            Assert.AreEqual((short)7, r16.GetInt16(3));
+            Assert.AreEqual(short.MinValue, r16.GetInt16(4));   // MIN overflow
+
+            var r32 = np.abs(np.array(new int[] { -5, 0, 7, int.MinValue }));
+            Assert.AreEqual(5, r32.GetInt32(0));
+            Assert.AreEqual(int.MinValue, r32.GetInt32(3));
+
+            var r64 = np.abs(np.array(new long[] { -5, 0, 7, long.MinValue }));
+            Assert.AreEqual(5L, r64.GetInt64(0));
+            Assert.AreEqual(long.MinValue, r64.GetInt64(3));
+        }
+
+        [TestMethod]
+        public void UInt64_Max_Identity()
+        {
+            var r = np.abs(np.array(new ulong[] { ulong.MaxValue, 0, 42 }));
+            Assert.AreEqual(NPTypeCode.UInt64, r.typecode);
+            Assert.AreEqual(ulong.MaxValue, r.GetUInt64(0));
+            Assert.AreEqual(0UL, r.GetUInt64(1));
+            Assert.AreEqual(42UL, r.GetUInt64(2));
+        }
+
+        [TestMethod]
+        public void Half_SpecialValues()
+        {
+            var h = np.array(new Half[]
+            {
+                (Half)(-1.5), (Half)(-0.0), Half.NaN, Half.PositiveInfinity, Half.NegativeInfinity, (Half)65504
+            });
+            var r = np.abs(h);
+            Assert.AreEqual(NPTypeCode.Half, r.typecode);
+            Assert.AreEqual(1.5, (double)r.GetHalf(0), 1e-3);
+            Assert.IsFalse(Half.IsNegative(r.GetHalf(1)));       // -0.0 -> +0.0
+            Assert.AreEqual(0.0, (double)r.GetHalf(1), 0);
+            Assert.IsTrue(Half.IsNaN(r.GetHalf(2)));
+            Assert.IsTrue(Half.IsPositiveInfinity(r.GetHalf(3)));
+            Assert.IsTrue(Half.IsPositiveInfinity(r.GetHalf(4)));   // -inf -> +inf
+            Assert.AreEqual(65504.0, (double)r.GetHalf(5), 0);     // max normal preserved
+        }
+
+        [TestMethod]
+        public void Half_Subnormal_PreservedMagnitude()
+        {
+            // abs of a negative subnormal/min-normal flips only the sign bit
+            var r = np.abs(np.array(new Half[] { (Half)(-5.96e-08), (Half)(-6.1035e-05) }));
+            Assert.AreEqual((Half)5.96e-08, r.GetHalf(0));
+            Assert.AreEqual((Half)6.1035e-05, r.GetHalf(1));
+            Assert.IsFalse(Half.IsNegative(r.GetHalf(0)));
+        }
+
+        [TestMethod]
+        public void Decimal_Abs()
+        {
+            var r = np.abs(np.array(new decimal[] { -1.5m, 2.5m, 0m, -123456.789m }));
+            Assert.AreEqual(NPTypeCode.Decimal, r.typecode);
+            Assert.AreEqual(1.5m, r.GetDecimal(0));
+            Assert.AreEqual(2.5m, r.GetDecimal(1));
+            Assert.AreEqual(0m, r.GetDecimal(2));
+            Assert.AreEqual(123456.789m, r.GetDecimal(3));
+        }
+
+        [TestMethod]
+        public void Char_Abs_Identity()
+        {
+            // Char is an unsigned 2-byte type → abs is identity (dtype preserved)
+            var r = np.abs(np.array(new char[] { (char)65, (char)0, (char)65535 }));
+            Assert.AreEqual(NPTypeCode.Char, r.typecode);
+            Assert.AreEqual((char)65, r.GetChar(0));
+            Assert.AreEqual((char)0, r.GetChar(1));
+            Assert.AreEqual((char)65535, r.GetChar(2));
+        }
+
+        // =====================================================================
+        // Extended dtype= : int→float16, float widening, signed narrowing
+        // (cast-then-abs), uint64→int64 (cast to MIN then abs overflow)
+        // =====================================================================
+        [TestMethod]
+        public void Dtype_IntToFloat16_And_FloatWidening()
+        {
+            var r = np.abs(np.array(new sbyte[] { -5 }), dtype: NPTypeCode.Half);
+            Assert.AreEqual(NPTypeCode.Half, r.typecode);
+            Assert.AreEqual(5.0, (double)r.GetHalf(0), 1e-3);
+
+            var w = np.abs(np.array(new Half[] { (Half)(-2.5) }), dtype: NPTypeCode.Single);
+            Assert.AreEqual(NPTypeCode.Single, w.typecode);
+            Assert.AreEqual(2.5f, w.GetSingle(0));
+        }
+
+        [TestMethod]
+        public void Dtype_SignedNarrowing_CastThenAbs()
+        {
+            // int16 -200 → int8(56) → abs 56 ; int16 200 → int8(-56) → abs 56
+            Assert.AreEqual((sbyte)56, np.abs(np.array(new short[] { -200 }), dtype: NPTypeCode.SByte).GetSByte(0));
+            Assert.AreEqual((sbyte)56, np.abs(np.array(new short[] { 200 }), dtype: NPTypeCode.SByte).GetSByte(0));
+            // int32 -300 → int8(-44) → abs 44
+            Assert.AreEqual((sbyte)44, np.abs(np.array(new int[] { -300 }), dtype: NPTypeCode.SByte).GetSByte(0));
+        }
+
+        [TestMethod]
+        public void Dtype_UInt64ToInt64_CastThenAbs_OverflowsToMin()
+        {
+            // 2^63 casts to int64 MIN (same_kind uint64->int64), then abs(MIN) overflows to MIN
+            var r = np.abs(np.array(new ulong[] { 9223372036854775808UL }), dtype: NPTypeCode.Int64);
+            Assert.AreEqual(NPTypeCode.Int64, r.typecode);
+            Assert.AreEqual(long.MinValue, r.GetInt64(0));
+        }
+
+        // =====================================================================
+        // Complex magnitude — large components must NOT overflow (npy_cabs/hypot
+        // scaling), and a complex out= takes the magnitude as its real part
+        // =====================================================================
+        [TestMethod]
+        public void Complex_LargeMagnitude_NoOverflow()
+        {
+            var r = np.abs(np.array(new Complex[] { new Complex(1e308, 1e308), new Complex(3e200, 4e200) }));
+            Assert.IsFalse(double.IsInfinity(r.GetDouble(0)), "hypot must not overflow to inf");
+            Assert.AreEqual(1.4142135623730951e308, r.GetDouble(0), 1e296);
+            Assert.AreEqual(5e200, r.GetDouble(1), 5e188);
+        }
+
+        [TestMethod]
+        public void Complex_MagnitudeIntoComplexOut()
+        {
+            // np.abs(3+4j, out=complex128) → 5+0j (float64 magnitude cast safely into complex out)
+            var oc = np.zeros(new Shape(1), NPTypeCode.Complex);
+            var r = np.abs(np.array(new Complex[] { new Complex(3, 4) }), oc);
+            Assert.IsTrue(ReferenceEquals(r, oc));
+            Assert.AreEqual(5.0, oc.GetComplex(0).Real, 1e-12);
+            Assert.AreEqual(0.0, oc.GetComplex(0).Imaginary, 0);
+        }
+
+        // =====================================================================
+        // out= write-back casting + in-place aliasing
+        // =====================================================================
+        [TestMethod]
+        public void Out_WriteBackCasting_And_InPlace()
+        {
+            // int32 abs written into a float64 out (int->float is a safe write-back cast)
+            var of = np.zeros(new Shape(3), np.float64);
+            np.abs(np.array(new int[] { -1, -2, -3 }), of);
+            Assert.AreEqual(1.0, of.GetDouble(0), 0);
+            Assert.AreEqual(3.0, of.GetDouble(2), 0);
+
+            // float64 abs into an int32 out is NOT a same_kind write-back → rejected
+            var oi = np.zeros(new Shape(1), np.int32);
+            Assert.ThrowsException<ArgumentException>(() => np.abs(np.array(new double[] { -1.5 }), oi));
+
+            // in-place: out aliases the input
+            var a = np.array(new long[] { -1, -2, -3, -4 });
+            var r = np.abs(a, a);
+            Assert.IsTrue(ReferenceEquals(r, a));
+            Assert.AreEqual(1L, a.GetInt64(0));
+            Assert.AreEqual(4L, a.GetInt64(3));
+        }
+
+        // =====================================================================
+        // where= broadcasting (a row mask stretched over a 2-D output)
+        // =====================================================================
+        [TestMethod]
+        public void Where_Broadcasting_2D()
+        {
+            var o = np.full(new Shape(2, 3), 99, NPTypeCode.Int32);
+            np.abs(np.array(new int[,] { { -1, -2, -3 }, { -4, -5, -6 } }), o,
+                   where: np.array(new bool[] { true, false, true }));
+            // column 1 is masked-off in every row → keeps 99
+            Assert.AreEqual(1, o.GetInt32(0, 0));
+            Assert.AreEqual(99, o.GetInt32(0, 1));
+            Assert.AreEqual(3, o.GetInt32(0, 2));
+            Assert.AreEqual(4, o.GetInt32(1, 0));
+            Assert.AreEqual(99, o.GetInt32(1, 1));
+            Assert.AreEqual(6, o.GetInt32(1, 2));
+        }
+
+        [TestMethod]
+        public void Where_NoOut_ComputesMaskTrueSlots()
+        {
+            // Without out=, only mask-true slots are guaranteed (NumPy leaves the
+            // rest uninitialized; NumSharp zeros them — not asserted here).
+            var r = np.abs(np.array(new int[] { -1, -2, -3, -4 }),
+                           where: np.array(new bool[] { true, false, true, false }));
+            Assert.AreEqual(1, r.GetInt32(0));
+            Assert.AreEqual(3, r.GetInt32(2));
+        }
+
+        // =====================================================================
+        // Layout coverage — transposed (F-contig), broadcast view, negative
+        // stride 2-D, 0-d integer-index view, higher-rank (5-D)
+        // =====================================================================
+        [TestMethod]
+        public void Layout_Transposed_PreservesFContig()
+        {
+            var t = np.array(new int[,] { { -1, -2, -3 }, { -4, -5, -6 } }).T;   // (3,2) F-contig view
+            var r = np.abs(t);
+            Assert.IsTrue(r.Shape.IsFContiguous);
+            Assert.AreEqual(1, r.GetInt32(0, 0));
+            Assert.AreEqual(4, r.GetInt32(0, 1));
+            Assert.AreEqual(6, r.GetInt32(2, 1));
+        }
+
+        [TestMethod]
+        public void Layout_BroadcastView_Materializes()
+        {
+            var b = np.broadcast_to(np.array(new int[] { -1, -2, -3 }), new Shape(4, 3));
+            var r = np.abs(b);
+            Assert.IsTrue(r.Shape.IsContiguous);
+            CollectionAssert.AreEqual(new long[] { 4, 3 }, r.shape);
+            Assert.AreEqual(1, r.GetInt32(0, 0));
+            Assert.AreEqual(3, r.GetInt32(3, 2));
+        }
+
+        [TestMethod]
+        public void Layout_NegativeStride_2D()
+        {
+            var v = np.array(new int[,] { { -1, -2, -3 }, { -4, -5, -6 } })["::-1,::-1"];
+            var r = np.abs(v);
+            Assert.IsTrue(r.Shape.IsContiguous);
+            Assert.AreEqual(6, r.GetInt32(0, 0));   // reversed both axes
+            Assert.AreEqual(4, r.GetInt32(0, 2));
+            Assert.AreEqual(1, r.GetInt32(1, 2));
+        }
+
+        [TestMethod]
+        public void Layout_0dView_And_HigherRank5D()
+        {
+            // 0-d view from integer indexing shares storage; abs returns a 0-d scalar
+            var v0 = np.abs(np.array(new int[] { -7, -8, -9 })[1]);
+            Assert.AreEqual(0, v0.ndim);
+            Assert.AreEqual(8, v0.GetInt32());
+
+            // 5-D with singleton dims — shape preserved, values correct
+            var a5 = np.arange(-30, 30).reshape(2, 1, 3, 1, 10);
+            var r5 = np.abs(a5);
+            CollectionAssert.AreEqual(new long[] { 2, 1, 3, 1, 10 }, r5.shape);
+            Assert.AreEqual(29L, r5.GetInt64(1, 0, 2, 0, 9));
+        }
+
+        [TestMethod]
+        public void NDValues_3D_Correctness()
+        {
+            var a = np.arange(-12, 12).reshape(2, 3, 4);
+            var r = np.abs(a);
+            Assert.AreEqual(NPTypeCode.Int64, r.typecode);
+            CollectionAssert.AreEqual(new long[] { 2, 3, 4 }, r.shape);
+            Assert.AreEqual(12L, r.GetInt64(0, 0, 0));
+            Assert.AreEqual(11L, r.GetInt64(1, 2, 3));
+            Assert.AreEqual(0L, r.GetInt64(1, 0, 0));
+        }
     }
 }
