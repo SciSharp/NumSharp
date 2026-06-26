@@ -429,9 +429,9 @@ namespace NumSharp.UnitTest.Selection
         public void Slice_Step3()
         {
             var x = np.arange(5);
-            Assert.AreEqual("[0, 1, 2, 3, 4]", x.ToString());
+            Assert.AreEqual("[0 1 2 3 4]", x.ToString());
             var y = x["::2"];
-            Assert.AreEqual("[0, 2, 4]", y.ToString());
+            Assert.AreEqual("[0 2 4]", y.ToString());
         }
 
         [TestMethod]
@@ -984,7 +984,9 @@ namespace NumSharp.UnitTest.Selection
             var ret = b[1, 2];
             var str = ret.ToString(true);
             Console.WriteLine(str);
-            str.Should().Be(np.array(4, 5, 6, 7).reshape(2, 2).ToString(true));
+            // ret is int64 (from np.arange); construct the expected with a matching dtype so the
+            // repr's "dtype=" suffix (now NumPy-faithful) lines up.
+            str.Should().Be(np.array(new long[] { 4, 5, 6, 7 }).reshape(2, 2).ToString(true));
         }
 
         [TestMethod]

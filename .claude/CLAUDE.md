@@ -314,6 +314,11 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 ### File I/O
 `fromfile`, `load`, `save`, `tofile`
 
+### Printing / Formatting
+`array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`
+
+`NDArray.ToString()` is a **byte-exact port of NumPy 2.4.2's array printing** (`numpy/_core/arrayprint.py` + `dragon4.c`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`, the `str()` form), `ToString(true)` → `np.array_repr` (`array([0, 1, 2], dtype=…)`, the `repr()` form). Covers decimal-point float alignment, the maxprec/unique/fixed floatmodes, exp-format cutoffs (per-dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold` (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`-vs-`repr` asymmetry (`5.0` vs `5.`), and repr dtype/shape suffixes. Float digit generation leans on .NET's shortest-round-trip `ToString("R")` (== Dragon4 unique) but routes **all rounding** through `ToString("F"|"E"+precision)` (rounds the true binary value, IEEE half-to-even) — never the shortest string (the latter diverges ~50 % on adversarial ties). NumSharp's `Char` dtype keeps its legacy string rendering (no NumPy equivalent). Validated against NumPy 2.4.2 across ~18 000 fuzz cases.
+
 ### Other
 `around`, `asscalar`, `copyto`, `round_`, `size`
 
@@ -340,6 +345,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 | TensorEngine | `Backends/TensorEngine.cs` |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
+| Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NpyIter.cs` |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NpyExpr.cs` (nodes + emission), `NpyExpr.Typing.cs` (per-node NumPy result_type pass), `NpyExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
