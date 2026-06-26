@@ -105,13 +105,11 @@ namespace NumSharp.Benchmark.Unmanaged
             for (int i = 0; i < iterations; i++)
             {
                 var doubletype = a.GetType();
-#if _REGEN
-                %foreach supported_numericals_lowercase%
-                if (doubletype == typeof(#1)) {
-                    var ret = ScalarAdd<#1>(0,0);
-                } else 
-                %
-#else
+                // %foreach supported_numericals_lowercase%
+                // if (doubletype == typeof(#1)) {
+                    // var ret = ScalarAdd<#1>(0,0);
+                // } else 
+                // %
                 if (doubletype == typeof(byte))
                 {
                     var ret = ScalarAdd<byte>(0, 0);
@@ -153,7 +151,6 @@ namespace NumSharp.Benchmark.Unmanaged
                     var ret = ScalarAdd<decimal>(0, 0);
                 }
                 else
-#endif
                 if (doubletype == typeof(double))
                 {
                     var ret = ScalarAdd<double>(a, b);
@@ -170,14 +167,12 @@ namespace NumSharp.Benchmark.Unmanaged
                 var doubletype = Type.GetTypeCode(a.GetType());
                 switch (doubletype)
                 {
-#if _REGEN
-                %foreach supported_numericals%
-	                case TypeCode.#1: {
-                        ret = ScalarAdd<#1>(0, 0);
-                        break;
-                    }
-                %
-#else
+                // %foreach supported_numericals%
+	                // case TypeCode.#1: {
+                        // ret = ScalarAdd<#1>(0, 0);
+                        // break;
+                    // }
+                // %
 
                     case TypeCode.Byte:
                     {
@@ -244,7 +239,6 @@ namespace NumSharp.Benchmark.Unmanaged
                         ret = ScalarAdd<Double>(a, b);
                         break;
                     }
-#endif
 
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -261,13 +255,11 @@ namespace NumSharp.Benchmark.Unmanaged
                 var doubletype = Type.GetTypeCode(a.GetType());
                 switch (doubletype)
                 {
-#if _REGEN
-                %foreach supported_numericals%
-	                case TypeCode.#1: {
-                       return ScalarAdd<#1>(0, 0);
-                        }
-                %
-#else
+                // %foreach supported_numericals%
+	                // case TypeCode.#1: {
+                       // return ScalarAdd<#1>(0, 0);
+                        // }
+                // %
 
                     case TypeCode.Byte:
                     {
@@ -334,7 +326,6 @@ namespace NumSharp.Benchmark.Unmanaged
                         ret = ScalarAddSwitch<Double>(a, b);
                         break;
                     }
-#endif
 
                     default:
                         throw new ArgumentOutOfRangeException();

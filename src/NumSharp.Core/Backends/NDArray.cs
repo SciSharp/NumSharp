@@ -1246,18 +1246,16 @@ namespace NumSharp
         [MethodImpl(Inline)]
         public void SetAtIndex<T>(T value, long index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
-#if _REGEN
-	%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Sets a #2 at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(Inline)]
-        public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
+	// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Sets a #2 at specific coordinates.
+        // /// </summary>
+        // /// <param name="value">The values to assign</param>
+        // /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        // [MethodImpl(Inline)]
+        // public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
 
-    %
-#else
+    // %
         /// <summary>
         ///     Sets a bool at specific coordinates.
         /// </summary>
@@ -1386,7 +1384,6 @@ namespace NumSharp
 
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, int[] indices) => Storage.SetComplex(value, indices);
-#endif
 
         #region Typed Setters (long[] overloads for int64 indexing)
 

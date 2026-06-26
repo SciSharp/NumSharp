@@ -33,21 +33,19 @@ namespace NumSharp
                 {
                     // NPTypeCode.Boolean is rejected up-front (see guard above);
                     // NumPy has no boolean negative loop.
-#if _REGEN
-                    %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++)
-                            out_addr[i] = (#2)(-out_addr[i]);
-                        return @out;
-	                }
-	                %
-                    %foreach supported_numericals_unsigned,supported_numericals_unsigned_lowercase,supported_numericals_unsigned_defaultvals
-	                case NPTypeCode.#1:
-	                default:
-		                throw new NotSupportedException();
-#else
+                    // %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
+	                // case NPTypeCode.#1:
+	                // {
+                        // var out_addr = (#2*)@out.Address;
+                        // for (int i = 0; i < len; i++)
+                            // out_addr[i] = (#2)(-out_addr[i]);
+                        // return @out;
+	                // }
+	                // %
+                    // %foreach supported_numericals_unsigned,supported_numericals_unsigned_lowercase,supported_numericals_unsigned_defaultvals
+	                // case NPTypeCode.#1:
+	                // default:
+		                // throw new NotSupportedException();
 	                case NPTypeCode.SByte:
 	                {
                         var out_addr = (sbyte*)@out.Address;
@@ -118,7 +116,6 @@ namespace NumSharp
 	                case NPTypeCode.Char:
 	                default:
 		                throw new NotSupportedException();
-#endif
                 }
             }
         }

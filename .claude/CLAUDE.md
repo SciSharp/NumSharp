@@ -81,12 +81,12 @@ np                Static API class (like `import numpy as np`)
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest; optimized for performance |
 | Order-aware layout | Row-major (C-order) remains the default. `Shape` also tracks F-contiguity, and APIs with an `order` parameter resolve NumPy `C`/`F`/`A`/`K` modes through `OrderResolver`. |
-| Regen templating | Type-specific code generation (legacy, mostly replaced by ILKernel) |
+| Regen templating (removed) | Legacy type-specific code generation — fully superseded by ILKernelGenerator/DirectILKernelGenerator; the old `#if _REGEN` blocks were stripped and survive only as commented reference |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). Supersedes Regen templates. |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). Superseded the now-removed Regen templates. |
 
 ## ILKernelGenerator + DirectILKernelGenerator
 
@@ -654,8 +654,8 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 **Q: Why unmanaged memory instead of Span<T>/Memory<T>?**
 A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed memory allocation optimized for performance.
 
-**Q: Why Regen templating instead of T4 or source generators?**
-A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator/DirectILKernelGenerator which use runtime IL emission.
+**Q: What happened to the Regen templating engine?**
+A: It was the original type-specific code generator and has been fully superseded by ILKernelGenerator/DirectILKernelGenerator (runtime IL emission). The old `#if _REGEN` template blocks were removed; where the template source is still useful as reference it survives only as `//`-commented lines next to the generated code.
 
 **Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
 A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (63 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NpyIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.

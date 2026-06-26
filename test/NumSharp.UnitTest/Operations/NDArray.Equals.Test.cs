@@ -83,30 +83,28 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(results.SequenceEqual(np3));
         }
 
-#if _REGEN
-        %a = except(supported_dtypes, "NDArray")
-        %b = [true,"1","1","1","1","1u","1L","1UL","1","1d","1f","1m"]
-        %foreach forevery(a,a,true), forevery(b,b,true)%
-        [TestMethod]
-        public void Compare_#1_To_#2()
-        {
-            var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.#1.AsType()).reshape(new Shape(3, 2));
-            var right = np.array(new int[] {1, 0, 0, 1, 1, 0}, dtype: NPTypeCode.#2.AsType()).reshape(new Shape(3, 2));
-            NDArray<bool> ret = left == right;
+        // %a = except(supported_dtypes, "NDArray")
+        // %b = [true,"1","1","1","1","1u","1L","1UL","1","1d","1f","1m"]
+        // %foreach forevery(a,a,true), forevery(b,b,true)%
+        // [TestMethod]
+        // public void Compare_#1_To_#2()
+        // {
+            // var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.#1.AsType()).reshape(new Shape(3, 2));
+            // var right = np.array(new int[] {1, 0, 0, 1, 1, 0}, dtype: NPTypeCode.#2.AsType()).reshape(new Shape(3, 2));
+            // NDArray<bool> ret = left == right;
 
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                //Convert.ToInt32(val).Should().Be(1);
-                Console.WriteLine(val);
-            }
+            // for (int i = 0; i < ret.size; i++)
+            // {
+                // var val = ret.GetAtIndex(i);
+                // //Convert.ToInt32(val).Should().Be(1);
+                // Console.WriteLine(val);
+            // }
 
-            var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Data<bool>().Should().Equal(a.Data<bool>());
-        }
+            // var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
+            // ret.Data<bool>().Should().Equal(a.Data<bool>());
+        // }
         
-        %
-#else
+        // %
 
         [TestMethod]
         public void Compare_Boolean_To_Byte()
@@ -2135,6 +2133,5 @@ namespace NumSharp.UnitTest.Operations
                 throw new NotSupportedException();
         }
         
-#endif
     }
 }

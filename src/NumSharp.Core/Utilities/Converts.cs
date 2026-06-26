@@ -624,23 +624,21 @@ namespace NumSharp.Utilities
             // of Int32, but the object can't actually be cast to an Int32.
             //            if (v.GetNPTypeCode() == NPTypeCode) return value;
 
-#if _REGEN
-            switch (typeCode)
-            {
-	            %foreach supported_dtypes, supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                    switch (InfoOf<T>.NPTypeCode)
-                    {
-                	    %foreach supported_dtypes, supported_dtypes_lowercase%
-	                    case NPTypeCode.#101: return Converts.To#1(Unsafe.As<T, #102>(ref value));
-	                    %
-                        default: throw new NotSupportedException();
-                    }
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
+            // switch (typeCode)
+            // {
+	            // %foreach supported_dtypes, supported_dtypes_lowercase%
+	            // case NPTypeCode.#1:
+                    // switch (InfoOf<T>.NPTypeCode)
+                    // {
+                	    // %foreach supported_dtypes, supported_dtypes_lowercase%
+	                    // case NPTypeCode.#101: return Converts.To#1(Unsafe.As<T, #102>(ref value));
+	                    // %
+                        // default: throw new NotSupportedException();
+                    // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+            // }
 
             switch (typeCode)
             {
@@ -883,7 +881,6 @@ namespace NumSharp.Utilities
                 default:
                     return ChangeType((object)value, typeCode);
             }
-#endif
         }
 
 
@@ -908,25 +905,23 @@ namespace NumSharp.Utilities
             // of Int32, but the object can't actually be cast to an Int32.
             //            if (v.GetNPTypeCode() == NPTypeCode) return value;
 
-#if _REGEN
-            switch (InfoOf<TOut>.NPTypeCode)
-            {
-	            %foreach supported_dtypes, supported_dtypes_lowercase%
-	            case NPTypeCode.#1: {
-                    |#2 res;
-                    switch (InfoOf<TIn>.NPTypeCode)
-                    {
-                	    %foreach supported_dtypes, supported_dtypes_lowercase%
-	                    case NPTypeCode.#101: res = Converts.To#1(Unsafe.As<TIn, #102>(ref value)); return Unsafe.As<#2, TOut>(ref res);
-	                    %
-                        default: throw new NotSupportedException();
-                    }
-                }
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
+            // switch (InfoOf<TOut>.NPTypeCode)
+            // {
+	            // %foreach supported_dtypes, supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: {
+                    // |#2 res;
+                    // switch (InfoOf<TIn>.NPTypeCode)
+                    // {
+                	    // %foreach supported_dtypes, supported_dtypes_lowercase%
+	                    // case NPTypeCode.#101: res = Converts.To#1(Unsafe.As<TIn, #102>(ref value)); return Unsafe.As<#2, TOut>(ref res);
+	                    // %
+                        // default: throw new NotSupportedException();
+                    // }
+                // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+            // }
 
             switch (InfoOf<TOut>.NPTypeCode)
             {
@@ -1161,7 +1156,6 @@ namespace NumSharp.Utilities
 	            default:
 		            return ChangeType<TOut>((object)value);
             }
-#endif
         }
 
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
@@ -1199,39 +1193,37 @@ namespace NumSharp.Utilities
         /// <typeparam name="TOut">The type we expect to convert to.</typeparam>
         public static Func<TIn, TOut> FindConverter<TIn, TOut>()
         {
-#if _REGEN
-#region Compute
-            //#n is input, #10n is output
-		    switch (InfoOf<TIn>.NPTypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-			    {
-				    switch (InfoOf<TOut>.NPTypeCode)
-		            {
-			            %foreach supported_dtypes,supported_dtypes_lowercase%
-			            case NPTypeCode.#101:
-			            {
-				            Func<#2, #102> ret = Converts.55To#101;
-                            return (Func<TIn, TOut>) (object) ret;
-			            }
-			            %
-			            default:
-                        {
-                            var tout = typeof(TOut);
-                            return @in => (TOut)Convert.ChangeType(@in, tout);
-                        }
-		            }
-			    }
-			    %
-			    default:
-                {
-                    var tout = typeof(TOut);
-                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                }
-		    }
-#endregion
-#else
+// #region Compute
+            // //#n is input, #10n is output
+		    // switch (InfoOf<TIn>.NPTypeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+			    // {
+				    // switch (InfoOf<TOut>.NPTypeCode)
+		            // {
+			            // %foreach supported_dtypes,supported_dtypes_lowercase%
+			            // case NPTypeCode.#101:
+			            // {
+				            // Func<#2, #102> ret = Converts.55To#101;
+                            // return (Func<TIn, TOut>) (object) ret;
+			            // }
+			            // %
+			            // default:
+                        // {
+                            // var tout = typeof(TOut);
+                            // return @in => (TOut)Convert.ChangeType(@in, tout);
+                        // }
+		            // }
+			    // }
+			    // %
+			    // default:
+                // {
+                    // var tout = typeof(TOut);
+                    // return @in => (TOut)Convert.ChangeType(@in, tout);
+                // }
+		    // }
+// #endregion
 
 #region Compute
 
@@ -2489,27 +2481,24 @@ namespace NumSharp.Utilities
 
 #endregion
 
-#endif
         }
 
 #region ToScalar
 
-#if _REGEN
-#region Compute
+// #region Compute
 
-		%foreach supported_dtypes,supported_dtypes_lowercase%
-		[MethodImpl(Inline)]
-        public static #2 To#1(NDArray nd)
-        {
-            if (nd.size != 1)
-                throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
+		// %foreach supported_dtypes,supported_dtypes_lowercase%
+		// [MethodImpl(Inline)]
+        // public static #2 To#1(NDArray nd)
+        // {
+            // if (nd.size != 1)
+                // throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
 
-            return nd.typecode == NPTypeCode.#1 ? nd.GetAtIndex<#2>(0) : Converts.To#1(nd.GetAtIndex(0));
-        }
-		%
+            // return nd.typecode == NPTypeCode.#1 ? nd.GetAtIndex<#2>(0) : Converts.To#1(nd.GetAtIndex(0));
+        // }
+		// %
 			    
-#endregion
-#else
+// #endregion
 
 #region Compute
 
@@ -2623,7 +2612,6 @@ namespace NumSharp.Utilities
 
 #endregion
 
-#endif
 
 #endregion
     }

@@ -462,37 +462,35 @@ namespace NumSharp.UnitTest.Utilities
 
             Subject.size.Should().Be(values.Length, "the method BeOfValues also confirms the sizes are matching with given values.");
 
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsElements<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    for (int i = 0; i < values.Length; i++)
-                    {
-                        _chain
-                            .ForCondition(hasnext())
-                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // for (int i = 0; i < values.Length; i++)
+                    // {
+                        // _chain
+                            // .ForCondition(hasnext())
+                            // .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
 
-                        var expected = Convert.To#1(values[i]);
-                        var nextval = next();
+                        // var expected = Convert.To#1(values[i]);
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(expected == nextval)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(expected == nextval)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
@@ -742,7 +740,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);
@@ -750,33 +747,31 @@ namespace NumSharp.UnitTest.Utilities
 
         public AndConstraint<NDArrayAssertions> AllValuesBe(object val)
         {
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsElements<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    var expected = Convert.To#1(val);
-                    for (int i = 0; hasnext(); i++)
-                    {
-                        var nextval = next();
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // var expected = Convert.To#1(val);
+                    // for (int i = 0; hasnext(); i++)
+                    // {
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(expected == nextval)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(expected == nextval)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
@@ -977,7 +972,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);
@@ -990,37 +984,35 @@ namespace NumSharp.UnitTest.Utilities
 
             Subject.size.Should().Be(values.Length, "the method BeOfValuesApproximately also confirms the sizes are matching with given values.");
 
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsElements<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    for (int i = 0; i < values.Length; i++)
-                    {
-                        _chain
-                            .ForCondition(hasnext())
-                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // for (int i = 0; i < values.Length; i++)
+                    // {
+                        // _chain
+                            // .ForCondition(hasnext())
+                            // .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
 
-                        var expected = Convert.To#1(values[i]);
-                        var nextval = next();
+                        // var expected = Convert.To#1(values[i]);
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
@@ -1269,7 +1261,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);

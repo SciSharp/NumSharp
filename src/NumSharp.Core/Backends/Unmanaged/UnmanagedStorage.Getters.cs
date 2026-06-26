@@ -20,13 +20,11 @@ namespace NumSharp.Backends
         {
             switch (TypeCode)
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(indices));
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return *((#2*)Address + _shape.GetOffset(indices));
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Boolean: return *((bool*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.SByte: return *((sbyte*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Byte: return *((byte*)Address + _shape.GetOffset(indices));
@@ -44,7 +42,6 @@ namespace NumSharp.Backends
                 case NPTypeCode.Complex: return *((System.Numerics.Complex*)Address + _shape.GetOffset(indices));
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -79,16 +76,14 @@ namespace NumSharp.Backends
 
         public unsafe object GetAtIndex(long index)
         {
-#if _REGEN
-            switch (TypeCode)
-            {
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
+            // switch (TypeCode)
+            // {
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return *((#2*)Address + _shape.TransformOffset(index));
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+            // }
             switch (TypeCode)
             {
                 case NPTypeCode.Boolean: return *((bool*)Address + _shape.TransformOffset(index));
@@ -109,7 +104,6 @@ namespace NumSharp.Backends
                 default:
                     throw new NotSupportedException();
             }
-#endif
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -428,22 +422,20 @@ namespace NumSharp.Backends
         /// <returns>reference to internal storage as System.Array</returns>
         [MethodImpl(Inline)]
         public IArraySlice GetData() => InternalArray;
-#if _REGEN
-        #region Direct Getters
+        // #region Direct Getters
      
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Retrieves value of type <see cref="#2"/> from internal storage.
-        /// </summary>
-        /// <param name="indices">The shape's indices to get.</param>
-        /// <returns></returns>
-        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
-        public #2 Get#1(int[] indices)
-            => _array#1[_shape.GetOffset(indices)];
+        // %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Retrieves value of type <see cref="#2"/> from internal storage.
+        // /// </summary>
+        // /// <param name="indices">The shape's indices to get.</param>
+        // /// <returns></returns>
+        // /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
+        // public #2 Get#1(int[] indices)
+            // => _array#1[_shape.GetOffset(indices)];
 
-        %
-        #endregion
-#else
+        // %
+        // #endregion
 
         #region Direct Getters
      
@@ -722,7 +714,6 @@ namespace NumSharp.Backends
             => _arrayComplex[_shape.GetOffset(indices)];
 
         #endregion
-#endif
 
         #endregion
     }

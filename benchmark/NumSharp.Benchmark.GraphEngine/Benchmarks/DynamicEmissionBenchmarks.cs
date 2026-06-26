@@ -13,7 +13,7 @@ namespace NumSharp.Benchmark.GraphEngine;
 /// Benchmarks for GitHub Issue #544: Replace ~636K lines of generated math code with DynamicMethod IL emission.
 ///
 /// This benchmark compares:
-/// - NumSharp current (generated code via Regen templates)
+/// - NumSharp legacy (generated code via the removed Regen templates)
 /// - DynamicMethod scalar (IL-emitted pointer loops)
 /// - DynamicMethod SIMD (IL-emitted Vector256 loops)
 ///

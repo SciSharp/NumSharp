@@ -19,14 +19,12 @@ namespace NumSharp.Backends.Unmanaged
         {
             switch (to)
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-	                return Cast<#2>(source);
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1:
+	                // return Cast<#2>(source);
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Boolean:
                     return CastTo<bool>(source);
                 case NPTypeCode.Byte:
@@ -59,7 +57,6 @@ namespace NumSharp.Backends.Unmanaged
                     return CastTo<System.Numerics.Complex>(source);
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -74,13 +71,11 @@ namespace NumSharp.Backends.Unmanaged
         {
             switch (source.TypeCode)
             {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1: return Cast<#2, TOut>(source);
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                // case NPTypeCode.#1: return Cast<#2, TOut>(source);
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
                 // Cast source to typed IMemoryBlock<T> to use the generic converter path
                 case NPTypeCode.Boolean: return ((IMemoryBlock<bool>)source).CastTo<bool, TOut>();
                 case NPTypeCode.Byte: return ((IMemoryBlock<byte>)source).CastTo<byte, TOut>();
@@ -99,7 +94,6 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Complex: return ((IMemoryBlock<System.Numerics.Complex>)source).CastTo<System.Numerics.Complex, TOut>();
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -144,34 +138,32 @@ namespace NumSharp.Backends.Unmanaged
 
                 switch (InfoOf<TIn>.NPTypeCode)
                 {
-#if _REGEN
-                    #region Compute
-                    //#n is in, #10n is out
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1:
-                    {
-                        var src = (#2*)source.Address;
-                        switch (InfoOf<TOut>.NPTypeCode)
-                        {
-	                        %foreach supported_dtypes,supported_dtypes_lowercase%
-	                        case NPTypeCode.#101:
-                            {
-                                var dst = (#102*)ret.Address;
-                                for (long i = 0; i < len; i++) *(dst + i) = Converts.To#101(*(src + i));
-                                break;
-                            }
-	                        %
-	                        default:
-		                        throw new NotSupportedException();
-                        }
+                    // #region Compute
+                    // //#n is in, #10n is out
+	                // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                // case NPTypeCode.#1:
+                    // {
+                        // var src = (#2*)source.Address;
+                        // switch (InfoOf<TOut>.NPTypeCode)
+                        // {
+	                        // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                        // case NPTypeCode.#101:
+                            // {
+                                // var dst = (#102*)ret.Address;
+                                // for (long i = 0; i < len; i++) *(dst + i) = Converts.To#101(*(src + i));
+                                // break;
+                            // }
+	                        // %
+	                        // default:
+		                        // throw new NotSupportedException();
+                        // }
 
-                        break;
-                    }
-	                %
-	                default:
-		                throw new NotSupportedException();
-                    #endregion
-#else
+                        // break;
+                    // }
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
+                    // #endregion
                     #region Compute
                     //#n is in, #10n is out
 	                case NPTypeCode.Boolean:
@@ -1173,7 +1165,6 @@ namespace NumSharp.Backends.Unmanaged
 	                default:
 		                throw new NotSupportedException();
                     #endregion
-#endif
                 }
 
                 if (source is IArraySlice)
@@ -1202,34 +1193,32 @@ namespace NumSharp.Backends.Unmanaged
             switch (source.TypeCode)
             {
 
-#if _REGEN
-                #region Compute
-                //#n is in, #10n is out
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                {
-                    var src = (#2*)source.Address;
-                    switch (ret.TypeCode)
-                    {
-	                    %foreach supported_dtypes,supported_dtypes_lowercase%
-	                    case NPTypeCode.#101:
-                        {
-                            var dst = (#102*)ret.Address + offset;
-                            for (long i = 0; i < len; i++) *(dst + i) = Converts.To#101(*(src + i));
-                            break;
-                        }
-	                    %
-	                    default:
-		                    throw new NotSupportedException();
-                    }
+                // #region Compute
+                // //#n is in, #10n is out
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1:
+                // {
+                    // var src = (#2*)source.Address;
+                    // switch (ret.TypeCode)
+                    // {
+	                    // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                    // case NPTypeCode.#101:
+                        // {
+                            // var dst = (#102*)ret.Address + offset;
+                            // for (long i = 0; i < len; i++) *(dst + i) = Converts.To#101(*(src + i));
+                            // break;
+                        // }
+	                    // %
+	                    // default:
+		                    // throw new NotSupportedException();
+                    // }
 
-                    break;
-                }
-	            %
-	            default:
-		            throw new NotSupportedException();
-                #endregion
-#else
+                    // break;
+                // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+                // #endregion
                 #region Compute
                 //#n is in, #10n is out
 	            case NPTypeCode.Boolean:
@@ -2231,7 +2220,6 @@ namespace NumSharp.Backends.Unmanaged
 	            default:
 		            throw new NotSupportedException();
                 #endregion
-#endif
             }
         }
     }

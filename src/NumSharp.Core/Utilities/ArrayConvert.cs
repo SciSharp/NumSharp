@@ -152,11 +152,9 @@ namespace NumSharp.Utilities
 
             switch (returnType.GetTypeCode())
             {
-#if _REGEN
-                %foreach supported_dtypes %
-                case NPTypeCode.#1: return To#1(sourceArray);
-                %
-#else
+                // %foreach supported_dtypes %
+                // case NPTypeCode.#1: return To#1(sourceArray);
+                // %
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
                 case NPTypeCode.SByte: return ToSByte(sourceArray);
@@ -172,7 +170,6 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Decimal: return ToDecimal(sourceArray);
                 case NPTypeCode.Half: return ToHalf(sourceArray);
                 case NPTypeCode.Complex: return ToComplex(sourceArray);
-#endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to {returnType?.Name}.");
             }
@@ -189,11 +186,9 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
-                %foreach supported_dtypes %
-                case NPTypeCode.#1: return To#1(sourceArray);
-                %
-#else
+                // %foreach supported_dtypes %
+                // case NPTypeCode.#1: return To#1(sourceArray);
+                // %
 
                 case NPTypeCode.Boolean: return ToBoolean(sourceArray);
                 case NPTypeCode.Byte: return ToByte(sourceArray);
@@ -210,7 +205,6 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Decimal: return ToDecimal(sourceArray);
                 case NPTypeCode.Half: return ToHalf(sourceArray);
                 case NPTypeCode.Complex: return ToComplex(sourceArray);
-#endif
                 default:
                     throw new NotSupportedException($"Unable to convert {sourceArray.GetType().GetElementType()?.Name} to NPTypeCode.{typeCode}.");
             }
@@ -232,52 +226,50 @@ namespace NumSharp.Utilities
 
         #region From NonGeneric
 
-#if _REGEN
-        %foreach all_dtypes%
+        // %foreach all_dtypes%
 
-        public static #1[] To#1(Array sourceArray)
-        {
-            if (sourceArray == null)
-            {
-                throw new ArgumentNullException(nameof(sourceArray));
-            }
+        // public static #1[] To#1(Array sourceArray)
+        // {
+            // if (sourceArray == null)
+            // {
+                // throw new ArgumentNullException(nameof(sourceArray));
+            // }
 
-            var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
-            switch (fromTypeCode)
-            {
-                case NPTypeCode.Boolean:
-                    return To#1((Boolean[]) sourceArray);
-                case NPTypeCode.Byte:
-                    return To#1((Byte[]) sourceArray);
-                case NPTypeCode.Int16:
-                    return To#1((Int16[]) sourceArray);
-                case NPTypeCode.UInt16:
-                    return To#1((UInt16[]) sourceArray);
-                case NPTypeCode.Int32:
-                    return To#1((Int32[]) sourceArray);
-                case NPTypeCode.UInt32:
-                    return To#1((UInt32[]) sourceArray);
-                case NPTypeCode.Int64:
-                    return To#1((Int64[]) sourceArray);
-                case NPTypeCode.UInt64:
-                    return To#1((UInt64[]) sourceArray);
-                case NPTypeCode.Char:
-                    return To#1((Char[]) sourceArray);
-                case NPTypeCode.Double:
-                    return To#1((Double[]) sourceArray);
-                case NPTypeCode.Single:
-                    return To#1((Single[]) sourceArray);
-                case NPTypeCode.Decimal:
-                    return To#1((Decimal[]) sourceArray);
-                case NPTypeCode.String:
-                    return To#1((String[]) sourceArray);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-        %
+            // var fromTypeCode = sourceArray.GetType().GetElementType().GetTypeCode();
+            // switch (fromTypeCode)
+            // {
+                // case NPTypeCode.Boolean:
+                    // return To#1((Boolean[]) sourceArray);
+                // case NPTypeCode.Byte:
+                    // return To#1((Byte[]) sourceArray);
+                // case NPTypeCode.Int16:
+                    // return To#1((Int16[]) sourceArray);
+                // case NPTypeCode.UInt16:
+                    // return To#1((UInt16[]) sourceArray);
+                // case NPTypeCode.Int32:
+                    // return To#1((Int32[]) sourceArray);
+                // case NPTypeCode.UInt32:
+                    // return To#1((UInt32[]) sourceArray);
+                // case NPTypeCode.Int64:
+                    // return To#1((Int64[]) sourceArray);
+                // case NPTypeCode.UInt64:
+                    // return To#1((UInt64[]) sourceArray);
+                // case NPTypeCode.Char:
+                    // return To#1((Char[]) sourceArray);
+                // case NPTypeCode.Double:
+                    // return To#1((Double[]) sourceArray);
+                // case NPTypeCode.Single:
+                    // return To#1((Single[]) sourceArray);
+                // case NPTypeCode.Decimal:
+                    // return To#1((Decimal[]) sourceArray);
+                // case NPTypeCode.String:
+                    // return To#1((String[]) sourceArray);
+                // default:
+                    // throw new ArgumentOutOfRangeException();
+            // }
+        // }
+        // %
 
-#else
         public static Boolean[] ToBoolean(Array sourceArray)
         {
             if (sourceArray == null)
@@ -1025,7 +1017,6 @@ namespace NumSharp.Utilities
                     throw new ArgumentOutOfRangeException();
             }
         }
-#endif
 
         #endregion
 
@@ -1033,29 +1024,27 @@ namespace NumSharp.Utilities
 
         #region To Same Type
 
-#if _REGEN
-        %foreach all_dtypes%
+        // %foreach all_dtypes%
         
-        /// <summary>
-        ///     Converts <see cref="#1"/> array to a <see cref="#1"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type #1</returns>
-        /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(Inline)]
-        public static #1[] To#1(#1[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
+        // /// <summary>
+        // ///     Converts <see cref="#1"/> array to a <see cref="#1"/> array.
+        // /// </summary>
+        // /// <param name="sourceArray">The array to convert</param>
+        // /// <returns>Converted array of type #1</returns>
+        // /// <remarks>Based on benchmark ArrayCopying</remarks>
+        // [MethodImpl(Inline)]
+        // public static #1[] To#1(#1[] sourceArray)
+        // {
+            // if (sourceArray == null)
+                // throw new ArgumentNullException(nameof(sourceArray));
             
-            var length = sourceArray.Length;
-            var output = new #1[length];
-            sourceArray.AsSpan().CopyTo(output);
+            // var length = sourceArray.Length;
+            // var output = new #1[length];
+            // sourceArray.AsSpan().CopyTo(output);
 
-            return output;
-        }
-        %
-#else
+            // return output;
+        // }
+        // %
 
 
         /// <summary>
@@ -1323,33 +1312,30 @@ namespace NumSharp.Utilities
 
             return output;
         }
-#endif
 
         #endregion
 
-#if _REGEN
-        #region Compute
-        %foreach forevery(supported_primitives, supported_primitives, true)%
+        // #region Compute
+        // %foreach forevery(supported_primitives, supported_primitives, true)%
         
-        /// <summary>
-        ///     Converts <see cref="#1"/> array to a <see cref="#2"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type #2</returns>
-        [MethodImpl(Inline)]
-        public static #2[] To#2(#1[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
+        // /// <summary>
+        // ///     Converts <see cref="#1"/> array to a <see cref="#2"/> array.
+        // /// </summary>
+        // /// <param name="sourceArray">The array to convert</param>
+        // /// <returns>Converted array of type #2</returns>
+        // [MethodImpl(Inline)]
+        // public static #2[] To#2(#1[] sourceArray)
+        // {
+            // if (sourceArray == null)
+                // throw new ArgumentNullException(nameof(sourceArray));
             
-            var length = sourceArray.Length;
-            var output = new #2[length];
-            for (int i = 0; i < length; i++) output[i] = Converts.To#2(sourceArray[i]);
-            return output;
-        }
-        %
-        #endregion
-#else
+            // var length = sourceArray.Length;
+            // var output = new #2[length];
+            // for (int i = 0; i < length; i++) output[i] = Converts.To#2(sourceArray[i]);
+            // return output;
+        // }
+        // %
+        // #endregion
 
 
         #region Compute
@@ -4006,35 +3992,32 @@ namespace NumSharp.Utilities
             return output;
         }
         #endregion
-#endif
 
         #endregion
 
         #region Complex
 
-#if _REGEN
-        %foreach supported_primitives%
+        // %foreach supported_primitives%
         
-        /// <summary>
-        ///     Converts <see cref="#1"/> array to a <see cref="Complex"/> array.
-        /// </summary>
-        /// <param name="sourceArray">The array to convert</param>
-        /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(Inline)]
-        public static Complex[] ToComplex(#1[] sourceArray)
-        {
-            if (sourceArray == null)
-                throw new ArgumentNullException(nameof(sourceArray));
+        // /// <summary>
+        // ///     Converts <see cref="#1"/> array to a <see cref="Complex"/> array.
+        // /// </summary>
+        // /// <param name="sourceArray">The array to convert</param>
+        // /// <returns>Converted array of type Complex</returns>
+        // [MethodImpl(Inline)]
+        // public static Complex[] ToComplex(#1[] sourceArray)
+        // {
+            // if (sourceArray == null)
+                // throw new ArgumentNullException(nameof(sourceArray));
             
-            var length = sourceArray.Length;
-            var output = new Complex[length];
+            // var length = sourceArray.Length;
+            // var output = new Complex[length];
 
-            for (int i = 0; i < length; i++)
-                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
-            return output;
-        }
-        %
-#else
+            // for (int i = 0; i < length; i++)
+                // output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
+            // return output;
+        // }
+        // %
 
 
         
@@ -5120,7 +5103,6 @@ namespace NumSharp.Utilities
             return output;
         }
 
-#endif
 
         #endregion
     }

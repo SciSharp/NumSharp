@@ -14,18 +14,16 @@ namespace NumSharp.Backends
 
             switch (dtype.GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
-	            case NPTypeCode.#1:
-	            {
-                    slice = new ArraySlice<#2>(buffer == null ? new UnmanagedMemoryBlock<#2>(shape.size, #3) : UnmanagedMemoryBlock<#2>.FromArray((#2[])buffer));
-                    break;
-	            }
+	            // %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
+	            // case NPTypeCode.#1:
+	            // {
+                    // slice = new ArraySlice<#2>(buffer == null ? new UnmanagedMemoryBlock<#2>(shape.size, #3) : UnmanagedMemoryBlock<#2>.FromArray((#2[])buffer));
+                    // break;
+	            // }
 
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 	            case NPTypeCode.Boolean:
 	            {
                     slice = new ArraySlice<bool>(buffer == null ? new UnmanagedMemoryBlock<bool>(shape.size, false) : UnmanagedMemoryBlock<bool>.FromArray((bool[])buffer));
@@ -118,7 +116,6 @@ namespace NumSharp.Backends
 
 	            default:
 		            throw new NotSupportedException();
-#endif
             }
 
             return new NDArray(slice, shape: shape, order: order);
@@ -132,18 +129,16 @@ namespace NumSharp.Backends
             if (buffer == null)
                 switch (dtype.GetTypeCode())
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
-	                case NPTypeCode.#1:
-	                {
-                        buffer = new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(shape.size, #3));
-                        break;
-	                }
+	                // %foreach supported_dtypes,supported_dtypes_lowercase,supported_dtypes_defaultvals%
+	                // case NPTypeCode.#1:
+	                // {
+                        // buffer = new ArraySlice<#2>(new UnmanagedMemoryBlock<#2>(shape.size, #3));
+                        // break;
+	                // }
 
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
 	                case NPTypeCode.Boolean:
 	                {
                         buffer = new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>(shape.size, false));
@@ -236,7 +231,6 @@ namespace NumSharp.Backends
 
 	                default:
 		                throw new NotSupportedException();
-#endif
                 }
 
             return new NDArray(buffer, shape: shape, order: order);

@@ -11,22 +11,20 @@ namespace NumSharp.Utilities.Maths
     internal class Operator
     {
         //all other gen
-#if _REGEN //We manually fixed types that naturally do not match with casting.
-        %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
-        %import NumSharp.np as np
-        %ops = ["+", "-", "%", "*", "/"]
-        %names = ["Add", "Subtract", "Mod", "Multiply", "Divide"]
+        //We manually fixed types that naturally do not match with casting.
+        // %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
+        // %import NumSharp.np as np
+        // %ops = ["+", "-", "%", "*", "/"]
+        // %names = ["Add", "Subtract", "Mod", "Multiply", "Divide"]
         
-        %foreach ops,names%
-        %foreach supported_numericals,supported_numericals_lowercase%
-        %foreach supported_numericals,supported_numericals_lowercase%
-        [MethodImpl(Inline)] public static #(np.find_common_type(#101.ToString(), #201.ToString())) #2(#101 lhs, #201 rhs) => lhs #1 rhs;
-        %
-        %
-        %
-#else
+        // %foreach ops,names%
+        // %foreach supported_numericals,supported_numericals_lowercase%
+        // %foreach supported_numericals,supported_numericals_lowercase%
+        // [MethodImpl(Inline)] public static #(np.find_common_type(#101.ToString(), #201.ToString())) #2(#101 lhs, #201 rhs) => lhs #1 rhs;
+        // %
+        // %
+        // %
 
-#endif
 
         //boolean gen
         [MethodImpl(Inline)] public static bool Add(bool lhs, bool rhs) => (lhs || rhs);
@@ -43,33 +41,32 @@ namespace NumSharp.Utilities.Maths
         [MethodImpl(Inline)] public static int DivideBoolean(bool lhs, bool rhs) => (lhs && rhs) ? 1 : 0;
 
 
-#if _REGEN //We manually fixed types that naturally do not match with casting.
-        %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
-        %import NumSharp.np as np
+        //We manually fixed types that naturally do not match with casting.
+        // %import "C:\Users\Eli-PC\Desktop\SciSharp\NumSharp\src\NumSharp.Core\bin\Debug\netstandard2.0\NumSharp.Core.dll"
+        // %import NumSharp.np as np
 
-        %ops = ["+", "-", "%", "*", "/"]
-        %names = ["Add", "Subtract", "Mod", "Multiply", "Divide"]
-        //Add, Subtract, Mod, Multiply and Divide Booleanic Operators
-        //bool is lhs
-        %foreach ops,names%
-        %foreach ["Boolean"],["bool"]%
-        %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
-        |#rettype = np.find_common_type("#101", "#201")
-        [MethodImpl(Inline)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) ((lhs ? #204 : #203) #1 rhs);
-        %
-        %
-        %      
+        // %ops = ["+", "-", "%", "*", "/"]
+        // %names = ["Add", "Subtract", "Mod", "Multiply", "Divide"]
+        // //Add, Subtract, Mod, Multiply and Divide Booleanic Operators
+        // //bool is lhs
+        // %foreach ops,names%
+        // %foreach ["Boolean"],["bool"]%
+        // %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
+        // |#rettype = np.find_common_type("#101", "#201")
+        // [MethodImpl(Inline)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) ((lhs ? #204 : #203) #1 rhs);
+        // %
+        // %
+        // %      
 
-        //bool is rhs
-        %foreach ops,names%
-        %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
-        %foreach ["Boolean"],["bool"]%
-        |#rettype = np.find_common_type("#101", "#201")
-        [MethodImpl(Inline)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) (lhs #1 (rhs ? #104 : #103));
-        %
-        %
-        %      
-#else
+        // //bool is rhs
+        // %foreach ops,names%
+        // %foreach supported_numericals,supported_numericals_lowercase,supported_numericals_defaultvals,supported_numericals_onevales%
+        // %foreach ["Boolean"],["bool"]%
+        // |#rettype = np.find_common_type("#101", "#201")
+        // [MethodImpl(Inline)] public static #(rettype) #2(#101 lhs, #201 rhs) => (#(rettype)) (lhs #1 (rhs ? #104 : #103));
+        // %
+        // %
+        // %      
 
         //Add, Subtract, Mod, Multiply and Divide Booleanic Operators
         [MethodImpl(Inline)] public static byte Add(bool lhs, byte rhs) => (byte) ((lhs ? 1 : 0) + rhs);
@@ -184,7 +181,6 @@ namespace NumSharp.Utilities.Maths
         [MethodImpl(Inline)] public static double Divide(double lhs, bool rhs) => lhs / (rhs ? 1d : 0d);
         [MethodImpl(Inline)] public static float Divide(float lhs, bool rhs) => lhs / (rhs ? 1f : 0f);
         [MethodImpl(Inline)] public static decimal Divide(decimal lhs, bool rhs) => lhs / (rhs ? 1m : 0m);
-#endif
 
         [MethodImpl(Inline)]
         public static byte Add(byte lhs, byte rhs) => (byte)(lhs + rhs);

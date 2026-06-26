@@ -35,13 +35,11 @@ namespace NumSharp
                 var bytes = File.ReadAllBytes(file);
                 switch (dtype.GetTypeCode())
                 {
-#if _REGEN
-	                %foreach supported_dtypes, supported_dtypes_lowercase%
-	                case NPTypeCode.#1: return new NDArray(new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromBuffer(bytes, false)));
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %foreach supported_dtypes, supported_dtypes_lowercase%
+	                // case NPTypeCode.#1: return new NDArray(new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromBuffer(bytes, false)));
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
 	                case NPTypeCode.Boolean: return new NDArray(new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(bytes, false)));
 	                case NPTypeCode.Byte: return new NDArray(new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(bytes, false)));
 	                case NPTypeCode.SByte: return new NDArray(new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromBuffer(bytes, false)));
@@ -59,7 +57,6 @@ namespace NumSharp
 	                case NPTypeCode.Complex: return new NDArray(new ArraySlice<System.Numerics.Complex>(UnmanagedMemoryBlock<System.Numerics.Complex>.FromBuffer(bytes, false)));
 	                default:
 		                throw new NotSupportedException();
-#endif
                 }
             }
         }

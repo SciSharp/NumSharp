@@ -277,18 +277,16 @@ namespace NumSharp
 
         protected static void SetIndices(NDArray src, NDArray[] indices, NDArray values)
         {
-#if _REGEN
-            #region Compute
-		    switch (src.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: SetIndices<#2>(src.MakeGeneric<#2>(), indices, values); break;
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+            // #region Compute
+		    // switch (src.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1: SetIndices<#2>(src.MakeGeneric<#2>(), indices, values); break;
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 
@@ -345,7 +343,6 @@ namespace NumSharp
 
             #endregion
 
-#endif
         }
 
         protected static unsafe void SetIndices<T>(NDArray<T> source, NDArray[] indices, NDArray values) where T : unmanaged

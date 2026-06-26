@@ -350,28 +350,23 @@ namespace NumSharp.UnitTest.Logic
             dict.Add((np.complex128, np.complex128), np.complex128);
 
 
-#if _REGEN
-            %a = ["bool","uint8","int16","uint16","int32","uint32","int64","uint64","float32","float64","complex64"]
-            %foreach forevery(a,a,false)%
-                print("{(np."+str(np.#1.__name__) + ", " + "np." + str(np.#2.__name__) + "),  " + "np." + str(np.find_common_type([np.#1], [np.#2]))+"},")
-            %
-#else
+            // %a = ["bool","uint8","int16","uint16","int32","uint32","int64","uint64","float32","float64","complex64"]
+            // %foreach forevery(a,a,false)%
+                // print("{(np."+str(np.#1.__name__) + ", " + "np." + str(np.#2.__name__) + "),  " + "np." + str(np.find_common_type([np.#1], [np.#2]))+"},")
+            // %
 
-#endif
         }
 
         [TestMethod]
         [Ignore("Ignored")]
         public void gen_all_possible_combinations()
         {
-#if _REGEN
-            %a = supported_dtypes
-            %b = supported_dtypes_lowercase
+            // %a = supported_dtypes
+            // %b = supported_dtypes_lowercase
 
-            %foreach forevery(b,b,false), forevery(a,a, false)%
-            Console.WriteLine($"#3 <> #4  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.#3, NPTypeCode.#4}, Array.Empty<NPTypeCode>()));
-            %
-#else
+            // %foreach forevery(b,b,false), forevery(a,a, false)%
+            // Console.WriteLine($"#3 <> #4  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.#3, NPTypeCode.#4}, Array.Empty<NPTypeCode>()));
+            // %
 
             Console.WriteLine($"Boolean <> Boolean  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.Boolean, NPTypeCode.Boolean}, Array.Empty<NPTypeCode>()));
             Console.WriteLine($"Boolean <> Byte  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.Boolean, NPTypeCode.Byte}, Array.Empty<NPTypeCode>()));
@@ -517,7 +512,6 @@ namespace NumSharp.UnitTest.Logic
             Console.WriteLine($"Decimal <> Double  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.Decimal, NPTypeCode.Double}, Array.Empty<NPTypeCode>()));
             Console.WriteLine($"Decimal <> Single  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.Decimal, NPTypeCode.Single}, Array.Empty<NPTypeCode>()));
             Console.WriteLine($"Decimal <> Decimal  ==  " + np._FindCommonType(new NPTypeCode[] {NPTypeCode.Decimal, NPTypeCode.Decimal}, Array.Empty<NPTypeCode>()));
-#endif
         }
     }
 }

@@ -54,16 +54,14 @@ namespace NumSharp.Backends
             ThrowIfNotWriteable();
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                    *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
-                    return;
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                    // *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
+                    // return;
+                // %
+                // default:
+                    // throw new NotSupportedException();
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
@@ -113,7 +111,6 @@ namespace NumSharp.Backends
                     return;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -163,16 +160,14 @@ namespace NumSharp.Backends
             ThrowIfNotWriteable();
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                    *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
-                    return;
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                    // *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
+                    // return;
+                // %
+                // default:
+                    // throw new NotSupportedException();
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
@@ -222,7 +217,6 @@ namespace NumSharp.Backends
                     return;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -531,23 +525,21 @@ namespace NumSharp.Backends
 
         #region Typed Setters
 
-#if _REGEN
-	%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Sets a #2 at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(Inline)]
-        public void Set#1(#2 value, int[] indices)         
-        {
-            unsafe {
-                *((#2*)Address + _shape.GetOffset(indices)) = value;
-            }
-        }
+	// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Sets a #2 at specific coordinates.
+        // /// </summary>
+        // /// <param name="value">The values to assign</param>
+        // /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        // [MethodImpl(Inline)]
+        // public void Set#1(#2 value, int[] indices)         
+        // {
+            // unsafe {
+                // *((#2*)Address + _shape.GetOffset(indices)) = value;
+            // }
+        // }
 
-    %
-#else
+    // %
         /// <summary>
         ///     Sets a bool at specific coordinates.
         /// </summary>
@@ -787,7 +779,6 @@ namespace NumSharp.Backends
                 *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
             }
         }
-#endif
 
         #region Typed Setters (long[] overloads)
 

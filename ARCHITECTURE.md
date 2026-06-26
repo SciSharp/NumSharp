@@ -480,49 +480,20 @@ MoveNext = () => *((T*)Address + shape.GetOffset(index++));
 
 ## Code Generation
 
-### Regen Templating
+### Runtime IL Kernels
 
-NumSharp uses Regen (a custom templating engine) to generate type-specific code. This results in approximately **200,000 lines of generated code**.
+NumSharp emits type-specific kernels at runtime via `System.Reflection.Emit.DynamicMethod`, detecting SIMD width (V128 / V256 / V512) at startup. Two generators split by kernel-driving contract — `DirectILKernelGenerator` (whole-array kernels) and `ILKernelGenerator` (NpyIter-driven per-chunk kernels). Each kernel is emitted once per signature and cached.
 
-The pattern appears in many files:
+### Legacy: Regen Templating (removed)
 
-```csharp
-#if _REGEN
-    #region Compute
-    switch (typeCode)
-    {
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        case NPTypeCode.#1: return DoOperation<#2>(arr);
-        %
-        default:
-            throw new NotSupportedException();
-    }
-    #endregion
-#else
-    // Generated code follows...
-    switch (typeCode)
-    {
-        case NPTypeCode.Boolean: return DoOperation<bool>(arr);
-        case NPTypeCode.Byte: return DoOperation<byte>(arr);
-        case NPTypeCode.Int16: return DoOperation<short>(arr);
-        // ... all 12 types
-    }
-#endif
-```
+The original backend used **Regen** (a custom C#-like templating engine) to pre-generate type-specific code into `#if _REGEN ... #else <generated> #endif` blocks. That engine has been fully superseded by the runtime IL kernels above. The `#if _REGEN` blocks were removed; where the template source is still useful as reference it survives only as `//`-commented lines next to the code it once produced (`_REGEN` is never defined, so nothing compiles from it).
 
-### Why Code Generation?
+### Why Runtime IL?
 
-- **Performance**: Avoids boxing and virtual dispatch
-- **Type safety**: Compile-time checks for each type
-- **NumPy compatibility**: Exact type handling behavior
-
-### Trade-offs
-
-- **Heavy codebase**: 200K lines of generated code
-- **Maintenance burden**: Changes require regeneration
-- **Compile time**: Longer builds
-
-> **Note**: Migration to T4 templates or C# source generators is possible but not currently prioritized.
+- **Performance**: SIMD vectorization with no boxing or virtual dispatch
+- **Type safety**: one emitted kernel per dtype, cached and reused
+- **NumPy compatibility**: Exact per-type handling behavior
+- **Smaller source tree**: no large generated-code checkout to maintain or regenerate
 
 ---
 
@@ -650,8 +621,7 @@ Integer indexing, string slice notation, Slice objects, boolean masking, fancy i
 ### Potential Future Directions
 
 1. **Alternative Backends**: GPU (CUDA), SIMD intrinsics, MKL/BLAS
-2. **Source Generator Migration**: Replace Regen with C# source generators
-3. **Span<T>/Memory<T> Integration**: Where beneficial without breaking changes
+2. **Span<T>/Memory<T> Integration**: Where beneficial without breaking changes
 
 ### Breaking Changes
 
@@ -683,7 +653,7 @@ When contributing to NumSharp:
 
 1. **Match NumPy exactly** - Run Python code, observe behavior, replicate
 2. **Write tests first** - Based on actual NumPy output
-3. **Handle all types** - Use Regen patterns or switch statements for all 12 dtypes
+3. **Handle all types** - Use type-switch statements for all dtypes
 4. **Consider edge cases** - NaN, empty arrays, scalar vs array, broadcasting
 5. **Document behavior** - Reference NumPy docs in comments
 

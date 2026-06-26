@@ -146,22 +146,20 @@ namespace NumSharp
                     return ref CompilerUnsafe.AsRef<T>(_this.Address);
                 }
 
-#if _REGEN
-                #region Compute
-		        %foreach supported_dtypes,supported_dtypes_lowercase%
-                /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
-		        public unsafe ref #2 #1
-                {
-                    get
-                    {
-                        if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
-                        return ref CompilerUnsafe.AsRef<#2>(_this.Address);
-                    }
-                } 
+                // #region Compute
+		        // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
+		        // public unsafe ref #2 #1
+                // {
+                    // get
+                    // {
+                        // if (_this.Shape.IsSliced || _this.Shape.IsBroadcasted) throw new InvalidOperationException("Can't pin reference when NDArray is sliced or broadcasted.");
+                        // return ref CompilerUnsafe.AsRef<#2>(_this.Address);
+                    // }
+                // } 
 
-		        %
-                #endregion
-#else
+		        // %
+                // #endregion
 
                 #region Compute
                 /// <exception cref="InvalidOperationException">When this NDArray is a slice.</exception>
@@ -285,7 +283,6 @@ namespace NumSharp
                 } 
 
                 #endregion
-#endif
             }
 
             #endregion

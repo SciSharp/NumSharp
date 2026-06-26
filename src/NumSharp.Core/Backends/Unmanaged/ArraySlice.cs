@@ -20,13 +20,11 @@ namespace NumSharp.Backends.Unmanaged
         {
             switch (val.GetType().GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(_buffer)) {[0] = ((IConvertible)val).To#1(CultureInfo.InvariantCulture)};
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(_buffer)) {[0] = ((IConvertible)val).To#1(CultureInfo.InvariantCulture)};
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 
                 // Use Converts.ToXxx for NumPy-compatible unchecked wrapping on integer overflow
                 case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = Converts.ToBoolean(val)};
@@ -46,7 +44,6 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = Converts.ToComplex(val)};
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -60,13 +57,11 @@ namespace NumSharp.Backends.Unmanaged
         {
             switch (typeCode)
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(_buffer)) {[0] = ((IConvertible)val).To#1(CultureInfo.InvariantCulture)};
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return new ArraySlice<#1>(UnmanagedMemoryBlock<#1>.FromPool(_buffer)) {[0] = ((IConvertible)val).To#1(CultureInfo.InvariantCulture)};
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 
                 // Use Converts.ToXxx for NumPy-compatible unchecked wrapping on integer overflow
                 case NPTypeCode.Boolean: return new ArraySlice<Boolean>(UnmanagedMemoryBlock<Boolean>.FromPool(_buffer)) {[0] = Converts.ToBoolean(val)};
@@ -86,7 +81,6 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromPool(_buffer)) {[0] = Converts.ToComplex(val)};
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -220,13 +214,11 @@ namespace NumSharp.Backends.Unmanaged
 
             switch (elementType.GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(copy ? (#2[])arr.Clone() : (#2[])arr));
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(copy ? (#2[])arr.Clone() : (#2[])arr));
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Boolean: return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(copy ? (bool[])arr.Clone() : (bool[])arr));
                 case NPTypeCode.SByte: return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromArray(copy ? (sbyte[])arr.Clone() : (sbyte[])arr));
                 case NPTypeCode.Byte: return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(copy ? (byte[])arr.Clone() : (byte[])arr));
@@ -244,7 +236,6 @@ namespace NumSharp.Backends.Unmanaged
                 case NPTypeCode.Complex: return new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromArray(copy ? (Complex[])arr.Clone() : (Complex[])arr));
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -260,13 +251,11 @@ namespace NumSharp.Backends.Unmanaged
 
                 switch (type.GetGenericArguments()[0].GetTypeCode())
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1: return new ArraySlice<#2>(copy ? ((UnmanagedMemoryBlock<#2>)block).Clone() : (UnmanagedMemoryBlock<#2>)block);
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                // case NPTypeCode.#1: return new ArraySlice<#2>(copy ? ((UnmanagedMemoryBlock<#2>)block).Clone() : (UnmanagedMemoryBlock<#2>)block);
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
 
                     case NPTypeCode.Boolean: return new ArraySlice<bool>(copy ? ((UnmanagedMemoryBlock<bool>)block).Clone() : (UnmanagedMemoryBlock<bool>)block);
                     case NPTypeCode.SByte: return new ArraySlice<sbyte>(copy ? ((UnmanagedMemoryBlock<sbyte>)block).Clone() : (UnmanagedMemoryBlock<sbyte>)block);
@@ -285,17 +274,14 @@ namespace NumSharp.Backends.Unmanaged
                     case NPTypeCode.Complex: return new ArraySlice<Complex>(copy ? ((UnmanagedMemoryBlock<Complex>)block).Clone() : (UnmanagedMemoryBlock<Complex>)block);
                     default:
                         throw new NotSupportedException();
-#endif
                 }
 
             throw new NotSupportedException($"IMemoryBlock of type {block.GetType().Name} is not supported for ArraySlice.FromMemoryBlock(...)");
         }
 
-#if _REGEN
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        public static ArraySlice<#2> FromArray(#2[] #2s, bool copy = false) => new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(#2s, copy));
-        %
-#else
+        // %foreach supported_dtypes,supported_dtypes_lowercase%
+        // public static ArraySlice<#2> FromArray(#2[] #2s, bool copy = false) => new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(#2s, copy));
+        // %
         public static ArraySlice<bool> FromArray(bool[] bools, bool copy = false) => new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromArray(bools, copy));
         public static ArraySlice<sbyte> FromArray(sbyte[] sbytes, bool copy = false) => new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromArray(sbytes, copy));
         public static ArraySlice<byte> FromArray(byte[] bytes, bool copy = false) => new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromArray(bytes, copy));
@@ -311,7 +297,6 @@ namespace NumSharp.Backends.Unmanaged
         public static ArraySlice<float> FromArray(float[] floats, bool copy = false) => new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromArray(floats, copy));
         public static ArraySlice<decimal> FromArray(decimal[] decimals, bool copy = false) => new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(decimals, copy));
         public static ArraySlice<Complex> FromArray(Complex[] complexes, bool copy = false) => new ArraySlice<Complex>(UnmanagedMemoryBlock<Complex>.FromArray(complexes, copy));
-#endif
 
         /// <summary>
         /// Backwards-compatible overload accepting int count.

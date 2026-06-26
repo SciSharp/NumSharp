@@ -18,27 +18,25 @@ namespace NumSharp.Utilities
         
         #region Cached Converters
 
-#if _REGEN
-        #region Compute
-		%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="#1"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="#1"/></param>
-        /// <returns>A <see cref="#1"/></returns>
-        [MethodImpl(Inline)] public static #2 To#1(T obj) => _to#1(obj);
-		private static readonly Func<T, #2> _to#1 = Converts.FindConverter<T, #2>();
+        // #region Compute
+		// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Converts <typeparamref name="T"/> to <see cref="#1"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        // /// </summary>
+        // /// <param name="obj">The object to convert to <see cref="#1"/></param>
+        // /// <returns>A <see cref="#1"/></returns>
+        // [MethodImpl(Inline)] public static #2 To#1(T obj) => _to#1(obj);
+		// private static readonly Func<T, #2> _to#1 = Converts.FindConverter<T, #2>();
 
-		%
-        /// <summary>
-        ///     Converts <typeparamref name="T"/> to <see cref="String"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <see cref="String"/></param>
-        /// <returns>A <see cref="String"/></returns>
-        [MethodImpl(Inline)] public static String ToString(T obj) => _toString(obj);
-		private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
-        #endregion
-#else
+		// %
+        // /// <summary>
+        // ///     Converts <typeparamref name="T"/> to <see cref="String"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        // /// </summary>
+        // /// <param name="obj">The object to convert to <see cref="String"/></param>
+        // /// <returns>A <see cref="String"/></returns>
+        // [MethodImpl(Inline)] public static String ToString(T obj) => _toString(obj);
+		// private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
+        // #endregion
 
         #region Compute
 
@@ -194,29 +192,26 @@ namespace NumSharp.Utilities
 
         #endregion
 
-#endif
 
-#if _REGEN
-		#region Compute
-		%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Converts <see cref="#1"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="#1"/></param>
-        /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(Inline)] public static T From(#2 obj) => _from#1(obj);
-		private static readonly Func<#2, T> _from#1 = Converts.FindConverter<#2, T>();
+		// #region Compute
+		// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Converts <see cref="#1"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        // /// </summary>
+        // /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="#1"/></param>
+        // /// <returns>A <typeparamref name="T"/></returns>
+        // [MethodImpl(Inline)] public static T From(#2 obj) => _from#1(obj);
+		// private static readonly Func<#2, T> _from#1 = Converts.FindConverter<#2, T>();
 
-		%
-        /// <summary>
-        ///     Converts <see cref="String"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
-        /// </summary>
-        /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="String"/></param>
-        /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(Inline)] public static T From(string obj) => _fromString(obj);
-        private static readonly Func<string, T> _fromString = Converts.FindConverter<string, T>();
-		#endregion
-#else
+		// %
+        // /// <summary>
+        // ///     Converts <see cref="String"/> to <typeparamref name="T"/> using staticly cached <see cref="Converts.FindConverter{TIn,TOut}"/>.
+        // /// </summary>
+        // /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="String"/></param>
+        // /// <returns>A <typeparamref name="T"/></returns>
+        // [MethodImpl(Inline)] public static T From(string obj) => _fromString(obj);
+        // private static readonly Func<string, T> _fromString = Converts.FindConverter<string, T>();
+		// #endregion
 
 		#region Compute
         /// <summary>
@@ -339,7 +334,6 @@ namespace NumSharp.Utilities
         [MethodImpl(Inline)] public static T From(string obj) => _fromString(obj);
         private static readonly Func<string, T> _fromString = Converts.FindConverter<string, T>();
 		#endregion
-#endif
 
         #endregion
     }

@@ -260,18 +260,16 @@ namespace NumSharp
 
         protected static NDArray FetchIndices(NDArray src, NDArray[] indices, NDArray @out, bool extraDim)
         {
-#if _REGEN
-            #region Compute
-		    switch (src.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return FetchIndices<#2>(src.MakeGeneric<#2>(), indices, @out, extraDim);
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+            // #region Compute
+		    // switch (src.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1: return FetchIndices<#2>(src.MakeGeneric<#2>(), indices, @out, extraDim);
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
 #region Compute
 
@@ -298,7 +296,6 @@ namespace NumSharp
 
 #endregion
 
-#endif
         }
 
         protected static unsafe NDArray<T> FetchIndices<T>(NDArray<T> source, NDArray[] indices, NDArray @out, bool extraDim) where T : unmanaged

@@ -36,13 +36,11 @@ namespace NumSharp
                 var nd = new NDArray(underlying);
                 switch (nd.GetTypeCode)
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1: return NDArray.FromJaggedArray<#2>(array);
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                // case NPTypeCode.#1: return NDArray.FromJaggedArray<#2>(array);
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
                     case NPTypeCode.Boolean: return NDArray.FromJaggedArray<bool>(array);
 	                case NPTypeCode.Byte: return NDArray.FromJaggedArray<byte>(array);
 	                case NPTypeCode.SByte: return NDArray.FromJaggedArray<sbyte>(array);
@@ -60,7 +58,6 @@ namespace NumSharp
 	                case NPTypeCode.Complex: return NDArray.FromJaggedArray<System.Numerics.Complex>(array);
 	                default:
 		                throw new NotSupportedException();
-#endif
                 }
             }
             else
@@ -69,13 +66,11 @@ namespace NumSharp
                 var nd = new NDArray(underlying);
                 switch (nd.GetTypeCode)
                 {
-#if _REGEN
-	                %foreach supported_dtypes,supported_dtypes_lowercase%
-	                case NPTypeCode.#1: return NDArray.FromMultiDimArray<#2>(array);
-	                %
-	                default:
-		                throw new NotSupportedException();
-#else
+	                // %foreach supported_dtypes,supported_dtypes_lowercase%
+	                // case NPTypeCode.#1: return NDArray.FromMultiDimArray<#2>(array);
+	                // %
+	                // default:
+		                // throw new NotSupportedException();
                     case NPTypeCode.Boolean: return NDArray.FromMultiDimArray<bool>(array);
 	                case NPTypeCode.Byte: return NDArray.FromMultiDimArray<byte>(array);
 	                case NPTypeCode.SByte: return NDArray.FromMultiDimArray<sbyte>(array);
@@ -93,7 +88,6 @@ namespace NumSharp
 	                case NPTypeCode.Complex: return NDArray.FromMultiDimArray<System.Numerics.Complex>(array);
 	                default:
 		                throw new NotSupportedException();
-#endif
                 }
             }
 
@@ -104,13 +98,11 @@ namespace NumSharp
         {
             switch (nd.GetTypeCode)
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: return nd.ToMuliDimArray<#2>();
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 	            case NPTypeCode.Boolean: return nd.ToMuliDimArray<bool>();
 	            case NPTypeCode.Byte: return nd.ToMuliDimArray<byte>();
 	            case NPTypeCode.SByte: return nd.ToMuliDimArray<sbyte>();
@@ -128,7 +120,6 @@ namespace NumSharp
 	            case NPTypeCode.Complex: return nd.ToMuliDimArray<System.Numerics.Complex>();
 	            default:
 		            throw new NotSupportedException();
-#endif
             }
         }
 
