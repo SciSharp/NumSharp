@@ -1831,8 +1831,41 @@ namespace NumSharp.Backends.Kernels
                 il.EmitCall(OpCodes.Call, x86, null);
                 return;
             }
+            // Generic fallback (e.g. ARM64). For float/double, Vector{N}.Max/Min lower to ARM
+            // FMAX/FMINNM, whose signed-zero tie-break is IEEE maxNum/minNum (order-independent,
+            // +0 > -0) — diverging from x86 MAXPS/MINPS (and NumPy maximum/minimum), which return
+            // the SECOND operand on a ±0 tie. Emit an explicit strict compare + select so every
+            // platform agrees: max = a > b ? a : b, min = a < b ? a : b (tie -> b). NaN lanes
+            // also select b here; the EmitVectorMinOrMax wrapper restores NaN-from-a afterwards,
+            // so NaN still propagates per NumPy. Integer min/max keep the bare hardware op.
+            if (clrType == typeof(float) || clrType == typeof(double))
+            {
+                EmitFloatTieMinOrMax(il, methodName == "Max", clrType);
+                return;
+            }
             il.EmitCall(OpCodes.Call,
                 VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2), null);
+        }
+
+        // Cross-platform float/double min/max with MAXPS/MINPS tie semantics (second operand on
+        // a ±0 / equal tie). Stack in: [a, b]; stack out: [result].
+        private static void EmitFloatTieMinOrMax(ILGenerator il, bool isMax, Type clrType)
+        {
+            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            var locA = il.DeclareLocal(vecType);
+            var locB = il.DeclareLocal(vecType);
+            il.Emit(OpCodes.Stloc, locB);                       // [a]
+            il.Emit(OpCodes.Stloc, locA);                       // []
+            // mask = a (>|<) b  — strict; ties and NaN compares are false, so they select b.
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+            il.EmitCall(OpCodes.Call,
+                isMax ? VectorMethodCache.GreaterThan(VectorBits, clrType)
+                      : VectorMethodCache.LessThan(VectorBits, clrType), null);   // [mask]
+            // result = ConditionalSelect(mask, a, b)
+            il.Emit(OpCodes.Ldloc, locA);                       // [mask, a]
+            il.Emit(OpCodes.Ldloc, locB);                       // [mask, a, b]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [result]
         }
 
         /// <summary>

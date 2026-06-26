@@ -41,6 +41,9 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.BitwiseNot:
                     il.EmitCall(OpCodes.Call, VectorMethodCache.OnesComplement(VectorBits, clrType), null);
                     return;
+                case UnaryOp.Negate when clrType == typeof(double) || clrType == typeof(float):
+                    EmitVectorSignFlip(il, clrType);
+                    return;
             }
 
             string methodName = op switch
@@ -80,6 +83,25 @@ namespace NumSharp.Backends.Kernels
             }
 
             il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit float/double negation as a sign-bit XOR (<c>x ^ -0.0</c>) broadcast across the
+        /// vector. NumPy/IEEE negate flips the sign bit, so <c>-(+0.0) = -0.0</c>. The generic
+        /// <c>Vector{N}.op_UnaryNegation</c> lowers to <c>Zero - x</c>, which yields <c>+0.0</c>
+        /// for <c>-(+0.0)</c> on ARM64 (0.0 - 0.0 = +0.0 under round-to-nearest) even though the
+        /// x86 JIT folds the same operator to a sign xor. The explicit XOR is bit-exact and
+        /// architecture-independent for ±0, normals, ±inf and NaN (payload preserved).
+        /// </summary>
+        private static void EmitVectorSignFlip(ILGenerator il, Type clrType)
+        {
+            // Stack in: [x]. -0.0 has only the sign bit set, so XOR flips the sign of every lane.
+            if (clrType == typeof(float)) il.Emit(OpCodes.Ldc_R4, -0.0f);
+            else il.Emit(OpCodes.Ldc_R8, -0.0);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.CreateBroadcast(VectorBits, clrType), null); // [x, signMask]
+            var xor = VectorMethodCache.BinaryX86(VectorBits, "Xor", clrType)
+                      ?? VectorMethodCache.Generic(VectorBits, "Xor", clrType, paramCount: 2);
+            il.EmitCall(OpCodes.Call, xor, null); // [result]
         }
 
         /// <summary>

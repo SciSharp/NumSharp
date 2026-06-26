@@ -604,6 +604,66 @@ namespace NumSharp.Backends.Kernels
                 return (TAccum)(object)(Half)hResult;
             }
 
+            // Integer accumulators: EXACT integer arithmetic. NumPy wraps integer sum/prod modulo
+            // 2^width (e.g. prod of 70 twos = 0, prod of 63 twos = -2^63); a double intermediate
+            // would lose precision / saturate for |x| > 2^53 — (long)(double)2^70 = Int64.MaxValue.
+            // On x86 these (input,accum) pairs usually take the AVX2 widening kernel; this scalar
+            // path is the non-AVX2 (e.g. ARM64) / uncovered-shape fallback. Min/Max also stay exact
+            // here (large int64 magnitudes aren't representable in double). Add/mul wraparound is
+            // bit-identical for signed and unsigned, so the read sign/zero-extends per input type.
+            if (typeof(TAccum) == typeof(long))
+            {
+                long a = (long)(object)accum, v = unchecked((long)ConvertToInt64Bits(val));
+                long r = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => unchecked(a + v),
+                    ReductionOp.Prod => unchecked(a * v),
+                    ReductionOp.Min => v < a ? v : a,
+                    ReductionOp.Max => v > a ? v : a,
+                    _ => a
+                };
+                return (TAccum)(object)r;
+            }
+            if (typeof(TAccum) == typeof(ulong))
+            {
+                ulong a = (ulong)(object)accum, v = ConvertToInt64Bits(val);
+                ulong r = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => unchecked(a + v),
+                    ReductionOp.Prod => unchecked(a * v),
+                    ReductionOp.Min => v < a ? v : a,
+                    ReductionOp.Max => v > a ? v : a,
+                    _ => a
+                };
+                return (TAccum)(object)r;
+            }
+            if (typeof(TAccum) == typeof(int))
+            {
+                int a = (int)(object)accum, v = unchecked((int)ConvertToInt64Bits(val));
+                int r = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => unchecked(a + v),
+                    ReductionOp.Prod => unchecked(a * v),
+                    ReductionOp.Min => v < a ? v : a,
+                    ReductionOp.Max => v > a ? v : a,
+                    _ => a
+                };
+                return (TAccum)(object)r;
+            }
+            if (typeof(TAccum) == typeof(uint))
+            {
+                uint a = (uint)(object)accum, v = unchecked((uint)ConvertToInt64Bits(val));
+                uint r = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => unchecked(a + v),
+                    ReductionOp.Prod => unchecked(a * v),
+                    ReductionOp.Min => v < a ? v : a,
+                    ReductionOp.Max => v > a ? v : a,
+                    _ => a
+                };
+                return (TAccum)(object)r;
+            }
+
             // Convert input to double for arithmetic, then to accumulator type
             double dAccum = ConvertToDouble(accum);
             double dVal = ConvertToDouble(val);
@@ -618,6 +678,27 @@ namespace NumSharp.Backends.Kernels
             };
 
             return ConvertFromDouble<TAccum>(result);
+        }
+
+        /// <summary>
+        /// Read an integer/bool/char value and return its 64-bit two's-complement representation:
+        /// signed types sign-extend, unsigned types zero-extend. Used by the exact integer
+        /// accumulator branches of <see cref="CombineScalarsPromoted{TInput,TAccum}"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static ulong ConvertToInt64Bits<T>(T value) where T : unmanaged
+        {
+            if (typeof(T) == typeof(byte)) return (byte)(object)value;
+            if (typeof(T) == typeof(sbyte)) return unchecked((ulong)(long)(sbyte)(object)value);
+            if (typeof(T) == typeof(short)) return unchecked((ulong)(long)(short)(object)value);
+            if (typeof(T) == typeof(ushort)) return (ushort)(object)value;
+            if (typeof(T) == typeof(int)) return unchecked((ulong)(long)(int)(object)value);
+            if (typeof(T) == typeof(uint)) return (uint)(object)value;
+            if (typeof(T) == typeof(long)) return unchecked((ulong)(long)(object)value);
+            if (typeof(T) == typeof(ulong)) return (ulong)(object)value;
+            if (typeof(T) == typeof(char)) return (char)(object)value;
+            if (typeof(T) == typeof(bool)) return (bool)(object)value ? 1UL : 0UL;
+            return 0UL;
         }
 
         /// <summary>
