@@ -81,6 +81,17 @@ namespace NumSharp
             if (advCount != 1 || !sawRealSlice)
                 return false;
 
+            // A 0-D integer array as the SOLE advanced index behaves like a scalar int
+            // (broadcast shape () -> reduces its axis, no grid dimension). Mirror the getter:
+            // fold it to a scalar int and re-dispatch as pure basic-indexing assignment.
+            if (advObj is NDArray adv0d && adv0d.typecode != NPTypeCode.Boolean && adv0d.ndim == 0)
+            {
+                var rewritten = (object[])items.Clone();
+                rewritten[advItemIdx] = (int)adv0d;          // 0-D scalar -> int (basic reduction)
+                this[rewritten] = values;
+                return true;
+            }
+
             NDArray advIdx;
             switch (advObj)
             {

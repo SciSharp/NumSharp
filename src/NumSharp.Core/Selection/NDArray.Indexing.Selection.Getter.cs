@@ -473,6 +473,19 @@ namespace NumSharp
             if (advCount != 1 || !(sawRealSlice || sawNewAxis))
                 return false;
 
+            // A 0-D integer array as the SOLE advanced index behaves EXACTLY like a scalar
+            // int: its broadcast shape is () so it reduces its axis and contributes no output
+            // dimension. NumPy: a[np.array(0), :] -> (2,), NOT (1, 2). Fold it to a scalar int
+            // and re-dispatch as pure basic indexing (the np.take path below would instead
+            // reshape it to (1,) and leave a spurious size-1 axis).
+            if (advObj is NDArray adv0d && adv0d.typecode != NPTypeCode.Boolean && adv0d.ndim == 0)
+            {
+                var rewritten = (object[])items.Clone();
+                rewritten[advItemIdx] = (int)adv0d;          // 0-D scalar -> int (basic reduction)
+                result = this[rewritten];
+                return true;
+            }
+
             // Resolve the single advanced operand to a 1-D integer index array.
             NDArray advIdx;
             switch (advObj)
@@ -831,10 +844,11 @@ namespace NumSharp
                 //handle non-flat index
                 if (idxs.ndim != 1)
                 {
+                    // A 0-D index contributes NO output axis: its shape () is prepended to the
+                    // subshape, so a[np.array(0)] matches a[0] -> (subshape), NOT a length-1
+                    // leading axis. Keep the natural (possibly empty) implied shape instead of
+                    // forcing (1,), which left a spurious size-1 axis (NumPy parity).
                     indicesImpliedShape = idxs.shape;
-                    if (indicesImpliedShape.Length == 0)
-                        indicesImpliedShape = new long[] {1};
-
                     idxs = idxs.flat;
                 }
 
@@ -875,10 +889,10 @@ namespace NumSharp
                     var nd = indices[i];
                     if (nd.ndim != 1)
                     {
+                        // 0-D operand (e.g. broadcast of all-scalar advanced indices) -> empty
+                        // implied shape, no spurious leading size-1 axis: a[np.array(0), np.array(1)]
+                        // -> scalar, matching NumPy.
                         indicesImpliedShape = nd.shape;
-                        if (indicesImpliedShape.Length == 0)
-                            indicesImpliedShape = new long[] {1};
-
                         indices[i] = nd = np.atleast_1d(nd).flat;
                     }
                 }

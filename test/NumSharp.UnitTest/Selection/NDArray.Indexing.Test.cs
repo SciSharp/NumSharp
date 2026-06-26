@@ -1285,10 +1285,40 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs] // newaxis indexing returns wrong shape
         public void IndexNDArray_NewAxis_Case2()
         {
+            // A 0-D advanced index (np.array(0)) mixed with newaxes used to leave a spurious
+            // leading size-1 axis ((1,1,1,1,2)); it behaves like the scalar-int Case1 -> (1,1,1,2).
             np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_ScalarArrayIndex_ReducesAxis_LikeInt()
+        {
+            // A 0-D integer array index behaves EXACTLY like a scalar int: its shape () is
+            // prepended to the subshape, so it REDUCES its axis. (A 1-D length-1 index keeps a
+            // size-1 axis instead.) Matches NumPy: a[np.array(0)] == a[0].
+            var a = np.arange(4).reshape(2, 2);
+            a[np.array(0)].Should().BeShaped(2).And.BeOfValues(0, 1);                 // not (1, 2)
+            a[np.array(1)].Should().BeShaped(2).And.BeOfValues(2, 3);
+            a[np.array(-1)].Should().BeShaped(2).And.BeOfValues(2, 3);                // negative wraps
+            a[np.array(0), Slice.All].Should().BeShaped(2).And.BeOfValues(0, 1);      // 0-D + slice
+            a[np.array(0), Slice.NewAxis].Should().BeShaped(1, 2).And.BeOfValues(0, 1);
+
+            np.arange(5)[np.array(2)].Should().BeScalar(2);                           // 1-D src -> 0-D scalar
+            np.arange(5)[np.array(-1)].Should().BeScalar(4);
+            a[np.array(0), np.array(1)].Should().BeScalar(1);                         // two 0-D advanced -> scalar
+
+            a[np.array(new int[] { 0 })].Should().BeShaped(1, 2).And.BeOfValues(0, 1); // 1-D len-1 KEEPS the axis
+        }
+
+        [TestMethod]
+        public void IndexNDArray_ScalarArrayIndex_Set_LikeInt()
+        {
+            // Setter mirror: assigning through a 0-D advanced index targets the reduced axis.
+            var a = np.arange(4).reshape(2, 2);
+            a[np.array(0), Slice.All] = NDArray.Scalar<int>(-1);
+            a.Should().BeShaped(2, 2).And.BeOfValues(-1, -1, 2, 3);
         }
 
         [TestMethod]
