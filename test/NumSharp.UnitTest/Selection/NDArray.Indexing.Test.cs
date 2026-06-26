@@ -1112,17 +1112,12 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Masking_2D_over_3D()
         {
+            // A 2-D boolean mask over the FIRST TWO axes of a 3-D array (partial mask:
+            // mask.ndim < arr.ndim). Each True at (i,j) selects the trailing (5,) row
+            // x[i,j], so the result is (count, 5).
             //>>> x = np.arange(30).reshape(2,3,5)
-            //>>> x
-            //array([[[ 0,  1,  2,  3,  4],
-            //        [ 5,  6,  7,  8,  9],
-            //        [10, 11, 12, 13, 14]],
-            //       [[15, 16, 17, 18, 19],
-            //        [20, 21, 22, 23, 24],
-            //        [25, 26, 27, 28, 29]]])
             //>>> b = np.array([[True, True, False], [False, True, True]])
             //>>> x[b]
             //array([[ 0,  1,  2,  3,  4],
@@ -1131,7 +1126,7 @@ namespace NumSharp.UnitTest.Selection
             //       [25, 26, 27, 28, 29]])
             var x = np.arange(30).reshape(2, 3, 5);
             var b = np.array(new[,] { { true, true, false }, { false, true, true } }).MakeGeneric<bool>();
-            y[b[":, 5"]].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
+            x[b].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
         }
 
         [TestMethod]
