@@ -51,40 +51,97 @@ namespace NumSharp.Backends
                 return arr.copy();
             }
 
-            // For broadcast arrays, we iterate over the input (which has stride=0 for broadcast dims)
-            // but write to a contiguous output array. Key insight:
-            // - Input: may have stride=0 (broadcast) - read same value multiple times
-            // - Output: must be contiguous - write unique values to distinct memory locations
-            NDArray inputArr = arr;
+            var retTypeCode = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
-            // Create output with CONTIGUOUS strides even if input is broadcast.
-            // Use dimensions only, not the input shape's strides.
-            var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
-            var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
-            var ret = new NDArray(retTypeCode, outputShape, false);
-
-            // Fast path: use IL-generated axis kernel when available
-            // This avoids the overhead of iterator-based slicing and provides direct pointer access.
-            // Note: We only use the IL kernel for contiguous arrays without offset, as it doesn't
-            // handle negative strides or offset-based views correctly.
-            if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
+            // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
+            // output through the iterator with KEEPORDER, so its memory layout follows the
+            // source (C-contig source -> C output, F-contig -> F). NumSharp models two physical
+            // layouts, so 'K' resolves to C or F via OrderResolver. This is what fixes the
+            // long-standing C-only output (the old post-hoc copy('F') in np.cumsum) and removes
+            // the per-dtype AxisCumSum* tree in favor of one NpyIter-driven generic kernel.
+            char order = OrderResolver.Resolve('K', shape);
+            try
             {
-                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
-                var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
-                var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
-                if (kernel != null)
+                return AccumulateAxis(arr, axis, retTypeCode, order);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Defensive fallback to the legacy whole-array axis path. Only reachable if the
+                // NpyIter accumulate construction fails for an exotic view; the legacy path
+                // allocates a C-contiguous output, so relay it to F when the source asked for it.
+                System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
+                var ret = new NDArray(retTypeCode, new Shape(shape.dimensions), false);
+                if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                 {
-                    fixed (long* inputStrides = arr.strides)
-                    fixed (long* shapePtr = arr.shape)
+                    bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                    var key = new CumulativeAxisKernelKey(arr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
+                    var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
+                    if (kernel != null)
                     {
-                        kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                        fixed (long* inputStrides = arr.strides)
+                        fixed (long* shapePtr = arr.shape)
+                            kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                        return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
                     }
-                    return ret;
                 }
+                var fb = ExecuteAxisCumSumFallback(arr, ret, axis);
+                return order == 'F' && fb.Shape.NDim > 1 ? fb.copy('F') : fb;
+            }
+        }
+
+        /// <summary>
+        /// NumPy-aligned axis cumulative sum — the np.add.accumulate structure
+        /// (numpy/_core/src/umath/ufunc_object.c : PyUFunc_Accumulate). Builds a 2-operand
+        /// [input, output] iterator (KEEPORDER, MULTI_INDEX), removes the scan axis
+        /// (<see cref="NpyIterRef.RemoveAxis"/>) so the iterator walks every OTHER axis, then
+        /// drives a single generic running-sum kernel along the removed axis per outer position.
+        /// Handles every layout (contiguous / strided / transposed / broadcast / reversed) through
+        /// the iterator and honors the chosen <paramref name="order"/> output layout exactly (the
+        /// kernel reads the output's own scan-axis stride), replacing the legacy per-dtype tree.
+        /// </summary>
+        private unsafe NDArray AccumulateAxis(NDArray input, int axis, NPTypeCode retType, char order)
+        {
+            var shape = input.Shape;
+            int ndim = input.ndim;
+
+            long[] dims = new long[ndim];
+            for (int i = 0; i < ndim; i++) dims[i] = shape.dimensions[i];
+            var ret = new NDArray(retType, new Shape(dims, order), false);
+
+            // Scan-axis geometry (bytes). Negative for reversed views — the iterator base points
+            // at scan-axis index 0 and the kernel walks forward in logical order regardless.
+            var aux = new ILKernelGenerator.ScanAxisAux
+            {
+                InByteStride = input.strides[axis] * input.dtypesize,
+                OutByteStride = ret.strides[axis] * ret.dtypesize,
+                AxisLen = shape[axis],
+            };
+
+            var kernel = ILKernelGenerator.GetCumSumInnerLoop(input.GetTypeCode, retType);
+
+            // Construct in C-order (a FORCED order → identity axis permutation, no negative-stride
+            // flip): NumSharp's RemoveAxis is index-based (unlike NumPy's perm-mapped one), so the
+            // iterator's internal axes MUST match logical axes for RemoveAxis(axis) to drop the
+            // scan axis. A KEEPORDER construction would permute axes for F-dominant strides and
+            // remove the wrong one. RemoveMultiIndex below re-applies KEEPORDER to the REMAINING
+            // axes for cache-friendly traversal; iteration order over kept axes can't affect the
+            // result (each scan line is independent), and the scan axis is walked explicitly.
+            var opFlags = new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE };
+            using (var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { input, ret },
+                NpyIterGlobalFlags.MULTI_INDEX,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                opFlags))
+            {
+                iter.RemoveAxis(axis);        // iterator now walks every axis except the scan axis
+                iter.RemoveMultiIndex();      // reorder remaining axes by stride (KEEPORDER) + coalesce
+                iter.EnableExternalLoop();    // deliver the innermost remaining axis as a stripe
+                iter.ForEach(kernel, &aux);
             }
 
-            // Fallback: iterator-based axis cumsum (handles broadcast, non-contiguous, edge cases)
-            return ExecuteAxisCumSumFallback(inputArr, ret, axis);
+            return ret;
         }
 
         /// <summary>
