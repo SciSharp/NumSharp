@@ -62,6 +62,14 @@ namespace NumSharp
                 }
             }
 
+            // Mixed basic (slice) + single advanced (array / boolean mask) indexing.
+            // NumPy keeps slices as their own output axes and selects the advanced
+            // index along its axis (an outer product), instead of broadcasting slices
+            // and advanced indices together. Handle that here before the broadcast
+            // path below, which only models all-advanced tuples.
+            if (TryFetchSliceWithSingleAdvanced(indicesObjects, out var mixedResult))
+                return mixedResult;
+
             int ints = 0;
             int bools = 0;
             bool foundSlices = false;
@@ -190,9 +198,16 @@ namespace NumSharp
                     case NDArray nd:
                         if (nd.typecode == NPTypeCode.Boolean)
                         {
-                            // Boolean mask indexing: convert to NDArray<bool> and use the specialized indexer
-                            // This handles cases like arr[np.array([true, false, true])]
-                            return @this[nd.MakeGeneric<bool>()];
+                            // Combined indexing: a boolean mask mixed with other indices is
+                            // NOT a standalone mask — NumPy replaces it with its nonzero()
+                            // integer index arrays (one per mask dimension), which then
+                            // participate in advanced indexing (mapping.c prepare_index).
+                            // e.g. arr[mask1d, 2] == arr[np.nonzero(mask1d)[0], 2].
+                            // (A standalone boolean mask never reaches here — it is handled
+                            // by the indicesLen == 1 fast-path above.)
+                            foreach (var component in np.nonzero(nd.MakeGeneric<bool>()))
+                                indices.Add(component);
+                            continue;
                         }
 
                         indices.Add(nd);
@@ -256,6 +271,157 @@ namespace NumSharp
             }
 
             return ret;
+        }
+
+        /// <summary>
+        /// Expands a single <c>...</c> (ellipsis) in a normalized index tuple to the
+        /// right number of full slices, counting EVERY axis-consuming item (slices,
+        /// integers and advanced indices) — unlike <see cref="ExpandEllipsis"/>, which
+        /// tallies only Slices and so over-fills when arrays/ints are present. Newaxis
+        /// and the ellipsis itself consume no source axis. Each advanced index here is
+        /// assumed to consume one axis (the caller falls back for multi-axis masks).
+        /// </summary>
+        private static object[] ExpandEllipsisForMixed(object[] items, int ndim)
+        {
+            int consumed = 0;
+            bool hasEllipsis = false;
+            foreach (var it in items)
+            {
+                if (it is Slice s && s.IsEllipsis) { hasEllipsis = true; continue; }
+                if (it is Slice s2 && s2.IsNewAxis) continue;
+                consumed++;
+            }
+
+            if (!hasEllipsis)
+                return items;
+
+            var outList = new List<object>(items.Length + Math.Max(0, ndim - consumed));
+            foreach (var it in items)
+            {
+                if (it is Slice s && s.IsEllipsis)
+                {
+                    for (int j = 0; j < ndim - consumed; j++)
+                        outList.Add(Slice.All);
+                    continue;
+                }
+                outList.Add(it);
+            }
+            return outList.ToArray();
+        }
+
+        /// <summary>
+        /// Mixed basic + advanced indexing for the common case of ONE advanced index
+        /// (a 1-D integer array, or a 1-D boolean mask via its <see cref="np.nonzero"/>
+        /// indices) combined with basic slices/integers — e.g. <c>arr[:, mask]</c>,
+        /// <c>arr[mask, 1:3]</c>, <c>arr[1, :, idxArray]</c>. NumPy keeps the slices as
+        /// their own output axes and selects the advanced index along its axis (an outer
+        /// product), rather than broadcasting slices and advanced indices together.
+        /// Implemented as: apply the basic indexing with the advanced axis left full,
+        /// then <see cref="np.take"/> the advanced index along its post-basic axis.
+        /// Slices, scalar-int reductions, newaxis and ellipsis all compose. Returns
+        /// <c>false</c> (caller falls back to the all-advanced broadcast path) when not
+        /// applicable: no slice/newaxis present, not exactly one advanced index, or a
+        /// multi-dimensional advanced index / k-D boolean mask (multiple advanced axes).
+        /// </summary>
+        private bool TryFetchSliceWithSingleAdvanced(object[] indicesObjects, out NDArray result)
+        {
+            result = null;
+
+            // Normalize string slice notations to Slice so newaxis/ellipsis classify
+            // uniformly, then expand ellipsis counting EVERY axis-consuming item (the
+            // shared ExpandEllipsis miscounts because it only tallies Slices, not the
+            // advanced/int indices a mixed tuple also consumes axes with).
+            var normalized = new object[indicesObjects.Length];
+            for (int i = 0; i < indicesObjects.Length; i++)
+            {
+                if (indicesObjects[i] is string str)
+                {
+                    Slice parsed;
+                    try { parsed = new Slice(str); }       // single-axis slice notation
+                    catch { return false; }                // multi-axis / unparseable: let the caller handle/raise
+                    normalized[i] = parsed;
+                }
+                else
+                {
+                    normalized[i] = indicesObjects[i];
+                }
+            }
+            object[] items = ExpandEllipsisForMixed(normalized, this.ndim);
+
+            int advItemIdx = -1, advCount = 0;
+            bool sawRealSlice = false, sawNewAxis = false;
+            object advObj = null;
+            for (int i = 0; i < items.Length; i++)
+            {
+                switch (items[i])
+                {
+                    case Slice sl:
+                        if (sl.IsEllipsis) return false;                // leftover ellipsis (defensive): let caller handle
+                        if (sl.IsNewAxis) sawNewAxis = true;            // newaxis: a basic output axis (handled below)
+                        else sawRealSlice = true;
+                        break;
+                    case int _:
+                    case long _:
+                        break;                                          // scalar (basic, reduces an axis)
+                    case NDArray _:
+                    case int[] _:
+                    case long[] _:
+                        advCount++; advItemIdx = i; advObj = items[i]; break;
+                    default:
+                        return false;                                   // unknown item: let the caller handle/raise
+                }
+            }
+            // Trigger only when a single advanced index is mixed with basic axis-shaping
+            // (a real slice or a newaxis). Pure advanced tuples (mask+int, mask+mask,…)
+            // are left to the broadcast path, which already models them.
+            if (advCount != 1 || !(sawRealSlice || sawNewAxis))
+                return false;
+
+            // Resolve the single advanced operand to a 1-D integer index array.
+            NDArray advIdx;
+            switch (advObj)
+            {
+                case NDArray nd when nd.typecode == NPTypeCode.Boolean:
+                    var nz = np.nonzero(nd.MakeGeneric<bool>());
+                    if (nz.Length != 1) return false;                   // k-D mask -> multiple advanced axes; fall back
+                    advIdx = nz[0];
+                    break;
+                case NDArray nd:
+                    if (nd.ndim > 1) return false;                      // multi-dim advanced index; fall back
+                    advIdx = nd.ndim == 0 ? nd.reshape(1) : nd;
+                    break;
+                case int[] ia:  advIdx = np.array(ia, copy: false); break;
+                case long[] la: advIdx = np.array(la, copy: false); break;
+                default: return false;
+            }
+
+            // Build the basic index (advanced axis -> full ':', newaxes kept) and locate
+            // the advanced axis in the resulting view. Integer indices BEFORE it drop an
+            // axis (shift left); newaxes BEFORE it add an axis (shift right).
+            var basic = new object[items.Length];
+            int curAxis = 0, advSrcAxis = -1, intsBeforeAdv = 0, newAxesBeforeAdv = 0;
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (i == advItemIdx)
+                {
+                    advSrcAxis = curAxis; basic[i] = Slice.All; curAxis++;
+                    continue;
+                }
+
+                switch (items[i])
+                {
+                    case int iv:  basic[i] = iv; if (advSrcAxis < 0) intsBeforeAdv++; curAxis++; break;
+                    case long lv: basic[i] = lv; if (advSrcAxis < 0) intsBeforeAdv++; curAxis++; break;
+                    case Slice sl when sl.IsNewAxis:
+                        basic[i] = Slice.NewAxis; if (advSrcAxis < 0) newAxesBeforeAdv++; break; // consumes no source axis
+                    default:
+                        basic[i] = items[i]; curAxis++; break;          // real slice passthrough
+                }
+            }
+
+            var view = this[basic];                                     // basic indexing (slices, int reductions, newaxes)
+            result = np.take(view, advIdx, axis: advSrcAxis - intsBeforeAdv + newAxesBeforeAdv);
+            return true;
         }
 
         protected static NDArray FetchIndices(NDArray src, NDArray[] indices, NDArray @out, bool extraDim)

@@ -27,6 +27,130 @@ namespace NumSharp
             SetIndices(this, indices, values);
         }
 
+        /// <summary>
+        /// Assignment counterpart to <see cref="TryFetchSliceWithSingleAdvanced"/>:
+        /// a single advanced index (1-D integer array, or a 1-D boolean mask via its
+        /// nonzero indices) mixed with basic slices / scalar-int reductions — e.g.
+        /// <c>arr[:, mask] = v</c>, <c>arr[mask, 1:3] = v</c>. Builds a per-source-axis
+        /// integer index grid (slices and the advanced index form an outer product;
+        /// scalar ints broadcast) and scatters through the all-advanced assignment path.
+        /// Returns <c>false</c> (caller falls back) when not applicable: no slice
+        /// present, not exactly one advanced index, a multi-dim advanced index / k-D
+        /// mask, or a newaxis mixed in (not modelled for assignment).
+        /// </summary>
+        private bool TrySetSliceWithSingleAdvanced(object[] indicesObjects, NDArray values)
+        {
+            var normalized = new object[indicesObjects.Length];
+            for (int i = 0; i < indicesObjects.Length; i++)
+            {
+                if (indicesObjects[i] is string str)
+                {
+                    Slice parsed;
+                    try { parsed = new Slice(str); }
+                    catch { return false; }
+                    normalized[i] = parsed;
+                }
+                else
+                {
+                    normalized[i] = indicesObjects[i];
+                }
+            }
+            object[] items = ExpandEllipsisForMixed(normalized, this.ndim);
+
+            int advItemIdx = -1, advCount = 0;
+            bool sawRealSlice = false;
+            object advObj = null;
+            for (int i = 0; i < items.Length; i++)
+            {
+                switch (items[i])
+                {
+                    case Slice sl:
+                        if (sl.IsEllipsis || sl.IsNewAxis) return false; // newaxis assignment not modelled here
+                        sawRealSlice = true; break;
+                    case int _:
+                    case long _:
+                        break;
+                    case NDArray _:
+                    case int[] _:
+                    case long[] _:
+                        advCount++; advItemIdx = i; advObj = items[i]; break;
+                    default:
+                        return false;
+                }
+            }
+            if (advCount != 1 || !sawRealSlice)
+                return false;
+
+            NDArray advIdx;
+            switch (advObj)
+            {
+                case NDArray nd when nd.typecode == NPTypeCode.Boolean:
+                    var nz = np.nonzero(nd.MakeGeneric<bool>());
+                    if (nz.Length != 1) return false;
+                    advIdx = nz[0];
+                    break;
+                case NDArray nd:
+                    if (nd.ndim > 1) return false;
+                    advIdx = nd.ndim == 0 ? nd.reshape(1) : nd;
+                    break;
+                case int[] ia:  advIdx = np.array(ia, copy: false); break;
+                case long[] la: advIdx = np.array(la, copy: false); break;
+                default: return false;
+            }
+
+            // One integer index array per source axis. Slices and the advanced index are
+            // "grid" axes (outer product); scalar ints stay length-1 and broadcast.
+            int ndim = this.ndim;
+            var axisIndex = new NDArray[ndim];
+            var isGridAxis = new bool[ndim];
+            int curAxis = 0;
+            for (int i = 0; i < items.Length && curAxis < ndim; i++)
+            {
+                if (i == advItemIdx)
+                {
+                    axisIndex[curAxis] = advIdx.astype(NPTypeCode.Int64); isGridAxis[curAxis] = true; curAxis++;
+                    continue;
+                }
+                switch (items[i])
+                {
+                    case int iv:  axisIndex[curAxis] = np.array(new long[] { iv }, copy: false); isGridAxis[curAxis] = false; curAxis++; break;
+                    case long lv: axisIndex[curAxis] = np.array(new long[] { lv }, copy: false); isGridAxis[curAxis] = false; curAxis++; break;
+                    default:      axisIndex[curAxis] = GetIndicesFromSlice(this.Shape.dimensions, (Slice)items[i], curAxis); isGridAxis[curAxis] = true; curAxis++; break;
+                }
+            }
+            // Trailing axes the tuple didn't reach are full ':'.
+            for (; curAxis < ndim; curAxis++)
+            {
+                axisIndex[curAxis] = GetIndicesFromSlice(this.Shape.dimensions, Slice.All, curAxis);
+                isGridAxis[curAxis] = true;
+            }
+
+            // Reshape each grid axis to occupy its own dimension in the outer-product grid.
+            int gridDims = 0;
+            for (int a = 0; a < ndim; a++) if (isGridAxis[a]) gridDims++;
+            int pos = 0;
+            for (int a = 0; a < ndim; a++)
+            {
+                if (!isGridAxis[a]) continue;                          // scalar int: leave length-1
+                long len = axisIndex[a].size;
+                var sh = new long[gridDims];
+                for (int k = 0; k < gridDims; k++) sh[k] = (k == pos) ? len : 1L;
+                axisIndex[a] = axisIndex[a].reshape(sh);
+                pos++;
+            }
+
+            var mesh = np.broadcast_arrays(axisIndex);
+
+            // The value broadcasts to the advanced-index result (grid) shape, per NumPy.
+            NDArray v = values;
+            var gridShape = mesh[0].Shape;
+            if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
+                v = np.broadcast_to(values, gridShape);
+
+            SetIndices(this, mesh, v);
+            return true;
+        }
+
         protected void SetIndices(object[] indicesObjects, NDArray values)
         {
             var indicesLen = indicesObjects.Length;
@@ -73,6 +197,12 @@ namespace NumSharp
                     //no default
                 }
             }
+
+            // Mixed basic (slice) + single advanced (array / boolean mask) assignment,
+            // mirroring the getter: slices stay basic output axes, the advanced index
+            // scatters along its axis. Handled before the broadcast path below.
+            if (TrySetSliceWithSingleAdvanced(indicesObjects, values))
+                return;
 
             int ints = 0;
             int bools = 0;
@@ -206,8 +336,15 @@ namespace NumSharp
                     case NDArray nd:
                         if (nd.typecode == NPTypeCode.Boolean)
                         {
-                            //TODO: mask only specific axis??? find a unit test to check it against.
-                            throw new Exception("if (nd.typecode == NPTypeCode.Boolean)");
+                            // Combined indexing: a boolean mask mixed with other indices
+                            // expands to its nonzero() integer index arrays (one per mask
+                            // dimension) for advanced-index assignment (mapping.c
+                            // prepare_index), e.g. arr[mask1d, 2] = v.
+                            // (Slice + mask is intercepted earlier by the mixed handler;
+                            //  a standalone mask is handled by the indicesLen == 1 path.)
+                            foreach (var component in np.nonzero(nd.MakeGeneric<bool>()))
+                                indices.Add(component);
+                            continue;
                         }
 
                         indices.Add(nd);

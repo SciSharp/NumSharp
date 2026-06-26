@@ -483,32 +483,7 @@ namespace NumSharp.UnitTest.Selection
             }
         }
 
-        // =================================================================
-        //  Documented LIMITATIONS — combined boolean + other indexing.
-        //  NumPy supports these; NumSharp's mask indexer does not. Marked
-        //  [OpenBugs] so they surface when combined advanced indexing lands.
-        // =================================================================
-
-        [TestMethod]
-        [OpenBugs]
-        public void Get_CombinedMaskAndInteger_Unsupported()
-        {
-            // np: a(3,4)[ [T,F,T], 2 ] -> column 2 of rows 0,2 -> [2,10] shape (2,)
-            // NumSharp currently ignores the integer index and returns (2,4).
-            var a = Iota2(3, 4);
-            var r = a[M(true, false, true), 2];
-            r.Should().BeShaped(2).And.BeOfValues(2, 10);
-        }
-
-        [TestMethod]
-        [OpenBugs]
-        public void Get_SliceThenMask_NonLeadingAxis_Unsupported()
-        {
-            // np: a(3,4)[:, [T,F,T,F]] -> columns 0,2 -> (3,2) [0,2,4,6,8,10]
-            // NumSharp applies the mask to axis 0 (length 3 != 4) and throws.
-            var a = Iota2(3, 4);
-            var r = a[":", M(true, false, true, false)];
-            r.Should().BeShaped(3, 2).And.BeOfValues(0, 2, 4, 6, 8, 10);
-        }
+        // Combined boolean + advanced indexing (mask mixed with int/slice/array) is
+        // covered comprehensively in CombinedIndexing_MatrixTests.
     }
 }
