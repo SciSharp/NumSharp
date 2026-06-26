@@ -124,7 +124,9 @@ namespace NumSharp.Backends.Sorting
             var t32 = w == 4 ? new uint[N] : Array.Empty<uint>();
             var k64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
             var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
-            var cnt = w == 0 ? Array.Empty<int>() : new int[256];
+            // single-pass radix builds ALL byte-histograms at once: nbytes·256 ints (8·256 for the
+            // 8-byte path, 4·256 covers the ≤4-byte paths). Scalar BCL path (w==0) needs none.
+            var cnt = w == 0 ? Array.Empty<int>() : new int[(w == 8 ? 8 : 4) * 256];
 
             fixed (uint* pk = k32, pt = t32)
             fixed (ulong* pk6 = k64, pt6 = t64)
@@ -158,7 +160,9 @@ namespace NumSharp.Backends.Sorting
             var t64 = w == 8 ? new ulong[N] : Array.Empty<ulong>();
             var idx = w == 0 ? Array.Empty<long>() : new long[N];
             var it = w == 0 ? Array.Empty<long>() : new long[N];
-            var cnt = w == 0 ? Array.Empty<int>() : new int[256];
+            // single-pass radix builds ALL byte-histograms at once: nbytes·256 ints (8·256 for the
+            // 8-byte path, 4·256 covers the ≤4-byte paths). Scalar BCL path (w==0) needs none.
+            var cnt = w == 0 ? Array.Empty<int>() : new int[(w == 8 ? 8 : 4) * 256];
 
             fixed (uint* pk = k32, pt = t32)
             fixed (ulong* pk6 = k64, pt6 = t64)
