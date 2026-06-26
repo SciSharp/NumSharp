@@ -206,4 +206,65 @@ public class np_ArrayPrint_ParityTests
     }
 
     #endregion
+
+    #region edge cases: subnormals, extremes, signed zero, empties, 0-d specials, complex specials
+
+    private static NDArray Scalar0d(NDArray a) => a.reshape(new int[0]);
+
+    [TestMethod] public void Edge_Subnormal_Str() => Str(np.array(new double[] { 5e-324 }), "[5.e-324]");
+    [TestMethod] public void Edge_Subnormal_Repr() => Repr(np.array(new double[] { 5e-324 }), "array([5.e-324])");
+    [TestMethod] public void Edge_ThreeDigitExp() => Str(np.array(new double[] { 1e-100, 1e100 }), "[1.e-100 1.e+100]");
+    [TestMethod] public void Edge_Float16_Subnormal() => Str(np.array(new Half[] { (Half)6e-8 }), "[6.e-08]");
+
+    [TestMethod] public void Edge_AllNan() => Str(np.array(new double[] { double.NaN, double.NaN }), "[nan nan]");
+    [TestMethod] public void Edge_AllInf() => Str(np.array(new double[] { double.PositiveInfinity, double.PositiveInfinity }), "[inf inf]");
+    [TestMethod] public void Edge_AllNegInf() => Str(np.array(new double[] { double.NegativeInfinity, double.NegativeInfinity }), "[-inf -inf]");
+    [TestMethod] public void Edge_NanInExpField() => Str(np.array(new double[] { double.NaN, 1e-16, 1e16 }), "[   nan 1.e-16 1.e+16]");
+
+    [TestMethod] public void Edge_NegativeZero() => Str(np.array(new double[] { -0.0, 0.0 }), "[-0.  0.]");
+
+    [TestMethod]
+    public void Edge_UInt64_Big() => Repr(np.array(new ulong[] { ulong.MaxValue, 0, 9223372036854775808UL }),
+        "array([18446744073709551615,                    0,  9223372036854775808],\n      dtype=uint64)");
+
+    [TestMethod] public void Edge_0d_Float32_Str() => Str(Scalar0d(np.array(new float[] { 3.14f })), "3.14");
+    [TestMethod] public void Edge_0d_Float32_Repr() => Repr(Scalar0d(np.array(new float[] { 3.14f })), "array(3.14, dtype=float32)");
+    [TestMethod] public void Edge_0d_Float16_Str() => Str(Scalar0d(np.array(new Half[] { (Half)3.14 })), "3.14");
+    [TestMethod] public void Edge_0d_Float32Big_Str() => Str(Scalar0d(np.array(new float[] { 1e20f })), "1e+20");
+    [TestMethod] public void Edge_0d_Int64Min_Str() => Str(Scalar0d(np.array(new long[] { long.MinValue })), "-9223372036854775808");
+    [TestMethod] public void Edge_0d_UInt64Max_Repr() => Repr(Scalar0d(np.array(new ulong[] { ulong.MaxValue })), "array(18446744073709551615, dtype=uint64)");
+    [TestMethod] public void Edge_0d_NegativeZero_Str() => Str(np.array(-0.0), "-0.0");
+    [TestMethod] public void Edge_0d_Tiny_Str() => Str(np.array(1e-20), "1e-20");
+    [TestMethod] public void Edge_0d_Complex_NanInf_Str() => Str(Scalar0d(np.array(new Complex[] { new(double.NaN, double.PositiveInfinity) })), "(nan+infj)");
+    [TestMethod] public void Edge_0d_Complex_NanInf_Repr() => Repr(Scalar0d(np.array(new Complex[] { new(double.NaN, double.PositiveInfinity) })), "array(nan+infj)");
+
+    [TestMethod] public void Edge_Empty_0x3_Repr() => Repr(np.zeros(new Shape(0, 3)), "array([], shape=(0, 3), dtype=float64)");
+    [TestMethod] public void Edge_Empty_3x0_Repr() => Repr(np.zeros(new Shape(3, 0)), "array([], shape=(3, 0), dtype=float64)");
+    [TestMethod] public void Edge_Empty_2x0x4_Repr() => Repr(np.array(new int[0]).reshape(2, 0, 4), "array([], shape=(2, 0, 4), dtype=int32)");
+    [TestMethod] public void Edge_Empty_0x0_Repr() => Repr(np.zeros(new Shape(0, 0)), "array([], shape=(0, 0), dtype=float64)");
+    [TestMethod] public void Edge_Empty_Complex_Repr() => Repr(np.array(new Complex[0]), "array([], dtype=complex128)");
+    [TestMethod] public void Edge_Empty_Bool_Repr() => Repr(np.array(new bool[0]), "array([], dtype=bool)");
+
+    [TestMethod] public void Edge_Complex_NanInf() => Str(np.array(new Complex[] { new(double.NaN, 1), new(1, double.NegativeInfinity) }), "[nan +1.j  1.-infj]");
+    [TestMethod] public void Edge_Complex_SignedZero() => Str(np.array(new Complex[] { new(0, 0), new(-0.0, -0.0) }), "[ 0.+0.j -0.-0.j]");
+    [TestMethod] public void Edge_Complex_Exp() => Str(np.array(new Complex[] { new(1e-16, 1e16) }), "[1.e-16+1.e+16j]");
+
+    // summarization: hidden middle values must NOT widen columns (format computed over edge items only)
+    [TestMethod]
+    public void Edge_Summary_HiddenValuesIgnored() =>
+        np.array2string(np.array(new long[] { 1, 1, 999999, 999999, 999999, 2, 2 }), threshold: 5, edgeitems: 2)
+        .Should().Be("[1 1 ... 2 2]");
+
+    [TestMethod]
+    public void Edge_FloatmodeEqual_2D() =>
+        np.array2string(np.array(new double[] { 1.0, 22.5, 333.25, 0.5, 1.125, 9.0 }).reshape(2, 3), floatmode: "maxprec_equal", precision: 3)
+        .Should().Be("[[  1.000  22.500 333.250]\n [  0.500   1.125   9.000]]");
+
+    [TestMethod] public void Edge_Precision0() => np.array2string(np.array(new double[] { 1234.5, 6789.1 }), precision: 0).Should().Be("[1234. 6789.]");
+
+    [TestMethod]
+    public void Edge_TinyLineWidth() =>
+        np.array2string(np.arange(15), max_line_width: 8).Should().Be("[ 0  1\n  2  3\n  4  5\n  6  7\n  8  9\n 10 11\n 12 13\n 14]");
+
+    #endregion
 }
