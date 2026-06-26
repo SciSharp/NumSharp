@@ -25,9 +25,27 @@ namespace NumSharp
             return FetchIndices(this, indices, @out, true);
         }
 
+        /// <summary>
+        /// Normalizes raw boolean <see cref="System.Array"/> indices (<c>bool[]</c>,
+        /// <c>bool[,]</c>, …) to <see cref="NDArray"/> of dtype Boolean so they are
+        /// recognized as boolean masks. Without this a raw bool array matches none of the
+        /// index cases and falls through to the "valid indices" IndexError. NumPy treats a
+        /// boolean array index as a mask (equivalent to <c>np.asarray(bool_list)</c>).
+        /// Shared by the getter and setter dispatch.
+        /// </summary>
+        private static void NormalizeRawBoolArrayIndices(object[] indices)
+        {
+            for (int i = 0; i < indices.Length; i++)
+            {
+                if (indices[i] is Array arr && arr.GetType().GetElementType() == typeof(bool))
+                    indices[i] = np.array(arr).MakeGeneric<bool>();
+            }
+        }
+
         private NDArray FetchIndices(object[] indicesObjects)
         {
             var indicesLen = indicesObjects.Length;
+            NormalizeRawBoolArrayIndices(indicesObjects);   // raw bool[]/bool[,] -> boolean mask
             if (indicesLen == 1)
             {
                 switch (indicesObjects[0])

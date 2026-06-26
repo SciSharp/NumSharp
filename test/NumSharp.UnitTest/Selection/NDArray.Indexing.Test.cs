@@ -63,9 +63,10 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void MaskSetter()
         {
+            // A raw bool[] / bool[,] (not NDArray<bool>) is recognized as a boolean mask, as
+            // NumPy treats any boolean array index. Previously these raised IndexError.
             NDArray nd = new double[] { 1, 2, 3 };
             nd[new bool[] { true, false, true }] = 99;
             nd.Should().BeOfValues(99, 2, 99);
@@ -73,6 +74,25 @@ namespace NumSharp.UnitTest.Selection
             nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             nd[new bool[,] { { true, false, true }, { false, true, false } }] = -2;
             nd.Should().BeOfValues(-2, 2, -2, 4, -2, 6);
+        }
+
+        [TestMethod]
+        public void MaskGetter_RawBoolArray()
+        {
+            // Getter + combined-indexing parity for raw boolean arrays (pinned to NumPy 2.4.2).
+            NDArray a1 = new double[] { 1, 2, 3 };
+            a1[new bool[] { true, false, true }].Should().BeShaped(2).And.BeOfValues(1, 3);
+
+            var a2 = np.arange(12).reshape(3, 4);
+            a2[new bool[,] { { true, false, true, false }, { false, true, false, true }, { true, true, false, false } }]
+                .Should().BeShaped(6).And.BeOfValues(0, 2, 5, 7, 8, 9);
+
+            // combined: raw bool[] mask + scalar int / + slice
+            a2[new bool[] { true, false, true }, 2].Should().BeShaped(2).And.BeOfValues(2, 10);
+
+            var a3 = np.arange(12).reshape(3, 4);
+            a3[new bool[] { true, false, true }, "1:3"] = (NDArray)(-1L);
+            a3.Should().BeOfValues(0, -1, -1, 3, 4, 5, 6, 7, 8, -1, -1, 11);
         }
 
         [TestMethod]
