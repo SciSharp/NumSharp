@@ -256,12 +256,32 @@ namespace NumSharp.Backends.Kernels
             if (key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil ||
                 key.Op == UnaryOp.Round || key.Op == UnaryOp.Truncate)
             {
-                return VectorMethodCache.ContainerUnaryOrNull(
-                    VectorBits, VectorRoundingMethodName(key.Op), GetClrType(key.InputType)) != null;
+                return RoundingVectorSimdAvailable(key.Op, key.InputType);
             }
 
             return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
                    key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
+        }
+
+        /// <summary>
+        /// Whether the active SIMD width can lower a rounding-family op (<c>Floor</c>/<c>Ceil</c>/
+        /// <c>Round</c>/<c>Truncate</c>) for element type <paramref name="t"/>. These bind per-type,
+        /// non-generic <c>Vector{N}</c> BCL methods that exist ONLY for float/double (Floor/Ceiling
+        /// .NET 7+, Round/Truncate .NET 9+) — integer "rounding" is an identity the scalar path
+        /// owns, and a runtime can expose a width's method (e.g. Vector256.Round) before another's
+        /// (Vector512.Round). Returns false when there is no SIMD hardware (<c>VectorBits == 0</c>),
+        /// the type is not float/double, or the running runtime lacks the method at this width. This
+        /// is the SINGLE capability gate shared by the direct kernel (<see cref="CanUseUnarySimd"/>)
+        /// and the fused NpyExpr path, so neither can route to <see cref="EmitUnaryVectorOperation"/>
+        /// for a (width, type) the BCL cannot satisfy — closing the "Could not find &lt;op&gt; for
+        /// Vector{N}&lt;T&gt;" kernel-compile crash for both AVX-512 floats and integer rounding.
+        /// </summary>
+        internal static bool RoundingVectorSimdAvailable(UnaryOp op, NPTypeCode t)
+        {
+            if (VectorBits == 0) return false;
+            if (t != NPTypeCode.Single && t != NPTypeCode.Double) return false;
+            return VectorMethodCache.ContainerUnaryOrNull(
+                VectorBits, VectorRoundingMethodName(op), GetClrType(t)) != null;
         }
 
         /// <summary>

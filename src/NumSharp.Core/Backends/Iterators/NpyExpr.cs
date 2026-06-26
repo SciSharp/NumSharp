@@ -61,9 +61,23 @@ namespace NumSharp.Backends.Iteration
         public abstract void EmitVector(ILGenerator il, NpyExprCompileContext ctx);
 
         /// <summary>
-        /// True if this node and its entire sub-tree have a SIMD emit path.
+        /// True if this node and its entire sub-tree have a SIMD emit path. Structural and
+        /// type-independent — prefer <see cref="SupportsSimdAt"/> for the compile decision, since
+        /// some ops only vectorize at certain element types/runtimes.
         /// </summary>
         public abstract bool SupportsSimd { get; }
+
+        /// <summary>
+        /// Whether this node and its sub-tree have a SIMD emit path WHEN every operand and the
+        /// output share element type <paramref name="t"/> (the compiler only vectorizes a tree when
+        /// all its types are equal — see <see cref="Compile"/>). Defaults to the structural
+        /// <see cref="SupportsSimd"/>; nodes whose SIMD-ability is type- or runtime-dependent
+        /// override this. The key case: rounding ops (Floor/Ceil/Round/Truncate) bind a per-type
+        /// <c>Vector{N}</c> BCL method that exists only for float/double on a capable runtime, so
+        /// vectorizing them at an integer type (or on a runtime without the method) would hit the
+        /// emitter's "Could not find ..." throw — this gate routes those to scalar instead.
+        /// </summary>
+        public virtual bool SupportsSimdAt(NPTypeCode t) => SupportsSimd;
 
         /// <summary>
         /// Stable structural signature. Used to derive a cache key when the
@@ -84,7 +98,11 @@ namespace NumSharp.Backends.Iteration
             string key = cacheKey ?? DeriveCacheKey(inputTypes, outputType);
             int nIn = inputTypes.Length;
 
-            bool wantSimd = SupportsSimd && AllEqual(inputTypes, outputType);
+            // Type-aware: a tree only vectorizes when every operand and the output share a type
+            // (AllEqual), so SupportsSimdAt is evaluated at that single shared type. This catches
+            // ops that vectorize only at certain element types/runtimes (e.g. rounding ops, which
+            // have no Vector{N} method for integers or on pre-.NET-9 runtimes).
+            bool wantSimd = AllEqual(inputTypes, outputType) && SupportsSimdAt(outputType);
 
             Action<ILGenerator> scalarBody = il =>
             {
@@ -528,6 +546,9 @@ namespace NumSharp.Backends.Iteration
         public override bool SupportsSimd
             => _left.SupportsSimd && _right.SupportsSimd && IsSimdOp(_op);
 
+        public override bool SupportsSimdAt(NPTypeCode t)
+            => _left.SupportsSimdAt(t) && _right.SupportsSimdAt(t) && IsSimdOp(_op);
+
         // Must match DirectILKernelGenerator.EmitVectorOperation's supported set.
         // Mod, Power, FloorDivide, ATan2 are scalar-only.
         private static bool IsSimdOp(BinaryOp op)
@@ -597,14 +618,26 @@ namespace NumSharp.Backends.Iteration
         public override bool SupportsSimd
             => _child.SupportsSimd && IsSimdUnary(_op);
 
-        // Must match DirectILKernelGenerator.EmitUnaryVectorOperation's supported set.
-        // (See DirectILKernelGenerator.Unary.Vector.cs). Ops not listed here stay scalar-only.
-        // Round and Truncate are intentionally excluded: Vector256.Round/Truncate only
-        // exist in .NET 9+ but NumSharp's library targets net8 as well, and the emit
-        // path fails there with "Could not find Round/Truncate for Vector256`1".
+        public override bool SupportsSimdAt(NPTypeCode t)
+            => _child.SupportsSimdAt(t) && IsSimdUnaryAt(_op, t);
+
+        // Type/runtime-aware refinement of IsSimdUnary. The rounding family binds a per-type
+        // Vector{N} BCL method that exists only for float/double on a capable runtime (Floor/Ceil
+        // .NET 7+, Round/Truncate .NET 9+), so its SIMD-ability depends on the element type AND the
+        // running runtime — defer to the shared capability gate. This is what lets the fused path
+        // vectorize Round/Truncate on .NET 9+ while (a) staying scalar on net8.0 and (b) NOT
+        // crashing on integer rounding, where the typing keeps the dtype and there is no
+        // Vector{N}.Floor(int) (the gate returns false -> scalar identity emit).
+        private static bool IsSimdUnaryAt(UnaryOp op, NPTypeCode t)
+            => IsRoundingOp(op)
+                ? DirectILKernelGenerator.RoundingVectorSimdAvailable(op, t)
+                : IsSimdUnary(op);
+
+        // Structural SIMD set used by the type-independent SupportsSimd. The rounding family
+        // (Floor/Ceil/Round/Truncate) is gated per type+runtime by IsSimdUnaryAt instead, so it is
+        // omitted here — SupportsSimdAt is the gate the compiler actually consults.
         private static bool IsSimdUnary(UnaryOp op)
             => op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.Sqrt ||
-               op == UnaryOp.Floor || op == UnaryOp.Ceil ||
                op == UnaryOp.Square || op == UnaryOp.Reciprocal ||
                op == UnaryOp.Deg2Rad || op == UnaryOp.Rad2Deg || op == UnaryOp.BitwiseNot;
 

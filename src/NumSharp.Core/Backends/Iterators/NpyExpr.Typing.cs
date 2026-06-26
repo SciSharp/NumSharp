@@ -340,7 +340,12 @@ namespace NumSharp.Backends.Iteration
                 }
             }
 
-            bool wantSimd = homogeneous && SupportsSimd;
+            // homogeneous => every operand and every node type equals `resolved`, so the tree (if
+            // it vectorizes at all) does so at that single type. SupportsSimdAt(resolved) refines
+            // the structural SupportsSimd with type/runtime capability — e.g. it keeps integer
+            // rounding and pre-.NET-9 Round/Truncate on the scalar path instead of emitting a
+            // Vector{N} method the BCL has no overload for.
+            bool wantSimd = homogeneous && SupportsSimdAt(resolved);
 
             Action<ILGenerator> scalarBody = il =>
             {
