@@ -266,5 +266,22 @@ public class np_ArrayPrint_ParityTests
     public void Edge_TinyLineWidth() =>
         np.array2string(np.arange(15), max_line_width: 8).Should().Be("[ 0  1\n  2  3\n  4  5\n  6  7\n  8  9\n 10 11\n 12 13\n 14]");
 
+    // integer sign modes / bool summarization / threshold disabling summary
+    [TestMethod] public void Edge_IntegerSignPlus() => np.array2string(np.array(new long[] { 1, -2, 3, 100 }), sign: '+').Should().Be("[  +1   -2   +3 +100]");
+    [TestMethod] public void Edge_IntegerSignSpace() => np.array2string(np.array(new long[] { 1, -2, 3, 100 }), sign: ' ').Should().Be("[  1  -2   3 100]");
+    [TestMethod] public void Edge_ThresholdDisablesSummary() => np.array2string(np.arange(20), threshold: 1000000).Should().Be("[ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19]");
+
+    [TestMethod]
+    public void Edge_Bool_Summarization()
+    {
+        var bools = new bool[20];
+        for (int i = 0; i < 20; i++) bools[i] = i % 2 == 0;
+        np.array2string(np.array(bools), threshold: 5).Should().Be("[ True False  True ... False  True False]");
+    }
+
+    // NumSharp extensions (no NumPy dtype equivalent): must format sensibly without crashing.
+    [TestMethod] public void Edge_Decimal_NumSharpExtension() => np.array(new decimal[] { 1.5m, 2.25m, 3.125m }).ToString(false).Should().Be("[1.5   2.25  3.125]");
+    [TestMethod] public void Edge_Char_LegacyStringRendering() => np.array('h', 'e', 'l', 'l', 'o').ToString(false).Should().Be("hello");
+
     #endregion
 }
