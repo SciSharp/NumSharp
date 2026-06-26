@@ -435,8 +435,10 @@ namespace NumSharp.UnitTest.Selection
             // np: b[[T,F], :, [T,F,T,F]] -> two advanced indices separated by a slice.
             // NumPy broadcasts the two advanced indices (-> length-2) and, because they are
             // NON-contiguous, moves the advanced axis to the FRONT: result (2,3) [0,4,8,2,6,10].
-            // NumSharp does not yet implement the advanced-axes-to-front rule for separated
-            // advanced indices and raises instead.
+            // NumSharp does not yet implement the advanced-axes placement rule for >=2
+            // advanced indices mixed with slices (both contiguous and separated forms).
+            // Handover with the NumPy rule, references, and an implementation plan:
+            //   docs/plans/advanced-index-axis-placement.md
             var r = B3[M(true, false), ":", M(true, false, true, false)];
             r.Should().BeShaped(2, 3).And.BeOfValues(0, 4, 8, 2, 6, 10);
         }
