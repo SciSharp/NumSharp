@@ -341,7 +341,7 @@ public class AuditV2_NDArrayCreation
             "NumPy: arange(..., dtype=bool) is only supported for length <= 2; raises TypeError");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.50")]
+    [TestMethod]
     public void T1_50_Arange_BoolDtype_LengthAtMost2_Allowed()
     {
         // The audit explicitly notes len=2 should still work. Sanity guard

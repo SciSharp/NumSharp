@@ -28,7 +28,6 @@ public class MatmulBattleTests : TestClass
     }
 
     [TestMethod]
-    [OpenBugs]  // NumSharp requires 2D inputs, doesn't support 1D @ 1D
     public void Matmul_1D_1D_DotProduct()
     {
         // NumPy: [1,2,3] @ [4,5,6] = 32 (scalar)
@@ -40,7 +39,6 @@ public class MatmulBattleTests : TestClass
     }
 
     [TestMethod]
-    [OpenBugs]  // NumSharp returns shape (2,1) instead of (2,)
     public void Matmul_2D_1D()
     {
         // NumPy: [[1,2],[3,4]] @ [5,6] = [17, 39], shape=(2,)
@@ -53,7 +51,6 @@ public class MatmulBattleTests : TestClass
     }
 
     [TestMethod]
-    [OpenBugs]  // NumSharp throws dimension mismatch for 1D @ 2D
     public void Matmul_1D_2D()
     {
         // NumPy: [1,2] @ [[3,4],[5,6]] = [13, 16], shape=(2,)
@@ -66,7 +63,6 @@ public class MatmulBattleTests : TestClass
     }
 
     [TestMethod]
-    [OpenBugs]  // NumSharp crashes on >2D broadcasting
     public void Matmul_Broadcasting_3D_2D()
     {
         // NumPy: (3,2,2) @ (2,2) = (3,2,2) via broadcasting

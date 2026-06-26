@@ -44,7 +44,7 @@ public class AuditV2_Iterators
     ///
     /// Path: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:Iternext()
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.1")]
+    [TestMethod]
     public void T1_1_Iternext_ExternalLoop_Should_Not_Advance_One_Element_At_A_Time()
     {
         var a = np.arange(12).reshape(3, 4).transpose();  // shape (4,3), non-contig
@@ -314,7 +314,7 @@ public class AuditV2_Iterators
     /// a Const-only expression for Half currently throws NotSupportedException
     /// in ConstNode.EmitLoadTyped.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NpyExpr_Const_Half_Must_Compile()
     {
         var expr = NpyExpr.Const(1.5);
@@ -327,7 +327,7 @@ public class AuditV2_Iterators
     /// <summary>
     /// T1.34 — NpyExpr.Const must support SByte as output dtype.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NpyExpr_Const_SByte_Must_Compile()
     {
         var expr = NpyExpr.Const(1);
@@ -340,7 +340,7 @@ public class AuditV2_Iterators
     /// <summary>
     /// T1.34 — NpyExpr.Const must support Complex as output dtype.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NpyExpr_Const_Complex_Must_Compile()
     {
         var expr = NpyExpr.Const(1);
@@ -354,7 +354,7 @@ public class AuditV2_Iterators
     /// T1.34 — NpyExpr.Where must support Half. Currently throws
     /// NotSupportedException in WhereNode.EmitPushZero for Half / SByte / Complex.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
+    [TestMethod]
     public void T1_34_NpyExpr_Where_Half_Must_Compile()
     {
         var cond = NpyExpr.Input(0);
@@ -402,7 +402,7 @@ public class AuditV2_Iterators
     /// doesn't include SByte → ValidateCasts throws InvalidCastException
     /// (or the underlying ReadAsDouble throws NotSupportedException, see T1.12).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.38")]
+    [TestMethod]
     public void T1_38_IsSafeCast_SByte_To_Int32_Must_Be_Allowed()
     {
         var a = np.array(new sbyte[] { -1, 2 });
@@ -427,7 +427,7 @@ public class AuditV2_Iterators
     /// NumPy: np.can_cast(np.float16, np.float32, 'safe') == True.
     /// NumSharp: IsFloatingPoint doesn't include Half → InvalidCastException.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.38")]
+    [TestMethod]
     public void T1_38_IsSafeCast_Half_To_Single_Must_Be_Allowed()
     {
         var a = np.array(new Half[] { (Half)1, (Half)2, (Half)3 });
@@ -464,7 +464,7 @@ public class AuditV2_Iterators
     ///   == [9007199254740993] (exact preservation).
     /// NumSharp: yields 9007199254740992 (off by 1, precision lost via double).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.39")]
+    [TestMethod]
     public unsafe void T1_39_Int64_To_UInt64_Cast_Must_Preserve_Precision_Above_2_53()
     {
         long big = (1L << 53) + 1;  // 9007199254740993

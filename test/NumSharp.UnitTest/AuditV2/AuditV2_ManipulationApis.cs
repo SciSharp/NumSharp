@@ -504,7 +504,7 @@ public class AuditV2_ManipulationApis
     /// <summary>
     /// Section 1.7 — np.unique missing return_index / return_inverse / return_counts / axis / equal_nan.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-unique-kwargs")]
+    [TestMethod]
     public void Unique_MissingKeywordArguments()
     {
         var methods = typeof(np).GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);

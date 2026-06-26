@@ -42,7 +42,7 @@ public class AuditV2_ILKernelSimd
     // as `Cgt OR Ceq` so NaN drops out as `false OR false = false`.
     // ======================================================================
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_NaN_LessEqual_ShouldReturnFalse_Float()
     {
         var nan = np.array(new float[] { float.NaN });
@@ -52,7 +52,7 @@ public class AuditV2_ILKernelSimd
             "NumPy: float32 NaN <= 1.0 is False (all NaN ordered comparisons return False per IEEE 754)");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_NaN_GreaterEqual_ShouldReturnFalse_Float()
     {
         var nan = np.array(new float[] { float.NaN });
@@ -62,7 +62,7 @@ public class AuditV2_ILKernelSimd
             "NumPy: float32 NaN >= 1.0 is False (all NaN ordered comparisons return False per IEEE 754)");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_NaN_LessEqual_ShouldReturnFalse_Double()
     {
         var nan = np.array(new double[] { double.NaN });
@@ -72,7 +72,7 @@ public class AuditV2_ILKernelSimd
             "NumPy: float64 NaN <= 1.0 is False per IEEE 754");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_NaN_GreaterEqual_ShouldReturnFalse_Double()
     {
         var nan = np.array(new double[] { double.NaN });
@@ -82,7 +82,7 @@ public class AuditV2_ILKernelSimd
             "NumPy: float64 NaN >= 1.0 is False per IEEE 754");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_LessEqual_NaN_Reverse_ShouldReturnFalse()
     {
         // Reverse direction: 1 <= NaN — symmetric bug.
@@ -93,7 +93,7 @@ public class AuditV2_ILKernelSimd
             "NumPy: 1.0 <= NaN is False (NaN on either side returns False for ordered compares)");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.6")]
+    [TestMethod]
     public void T1_6_GreaterEqual_NaN_Reverse_ShouldReturnFalse()
     {
         var one = np.array(new float[] { 1.0f });
@@ -207,7 +207,7 @@ public class AuditV2_ILKernelSimd
         result.GetDouble(0).Should().Be(5.0, "fmin(NaN, 5) must return 5 per NumPy");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.11")]
+    [TestMethod]
     public void T1_11_Fmax_BothNaN_ReturnsNaN()
     {
         // When both sides are NaN, NumPy returns NaN (no other operand to fall back to).

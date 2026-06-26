@@ -739,7 +739,6 @@ public class LongIndexingSmokeTest
     }
 
     [TestMethod]
-    [OpenBugs] // isinf not implemented - returns null (Default.IsInf.cs)
     public void NDArray_Isinf_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });

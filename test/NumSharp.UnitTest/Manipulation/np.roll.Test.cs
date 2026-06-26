@@ -454,7 +454,6 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Roll_Empty2D_Axis1()
         {
             // Bug: np.roll on empty 2D array (shape 0x3) with axis=1 throws

@@ -179,7 +179,6 @@ public class EdgeCaseTests
     #region Negative Edge Cases
 
     [TestMethod]
-    [OpenBugs]  // NumSharp throws NotSupportedException for unsigned types
     public void Negative_UInt8_Wraps()
     {
         // NumPy: np.negative(np.uint8(1)) = 255 (wraps)

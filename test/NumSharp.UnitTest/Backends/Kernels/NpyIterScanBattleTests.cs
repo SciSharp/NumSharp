@@ -106,7 +106,6 @@ public class NpyIterScanBattleTests
     }
 
     [TestMethod]
-    [TestCategory("OpenBugs")]
     public void Cumsum_ReversedColumns_Axis1_MatchesNumPy()
     {
         // NumPy 2.4.2:

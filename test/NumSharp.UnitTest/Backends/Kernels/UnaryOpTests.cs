@@ -297,7 +297,6 @@ public class UnaryOpTests
     }
 
     [TestMethod]
-    [OpenBugs] // NumSharp throws NotSupportedException for unsigned negative
     public void Negative_Byte_Overflow()
     {
         // NumPy: negative([1, 2, 3, 4, 5]) for uint8 = [255, 254, 253, 252, 251]

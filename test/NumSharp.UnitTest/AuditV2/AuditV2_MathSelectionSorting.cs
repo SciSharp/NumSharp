@@ -137,7 +137,7 @@ public class AuditV2_MathSelectionSorting
     /// T1.27a — np.searchsorted(...) is missing the side parameter (NumPy default side='left').
     /// Compile-time/API check: there is no overload accepting side or sorter.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.27a")]
+    [TestMethod]
     public void T1_27a_Searchsorted_Missing_SideParameter()
     {
         // NumPy: np.searchsorted([1,2,2,3], 2, side='left')  = 1
@@ -167,7 +167,7 @@ public class AuditV2_MathSelectionSorting
     ///           ValueError: object too deep for desired array
     /// NumSharp: returns an int (flat binsearch over 20 elements, ignores shape).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.27b")]
+    [TestMethod]
     public void T1_27b_Searchsorted_Multidim_Silently_Accepted()
     {
         var marr = np.arange(20).reshape(4, 5);
@@ -288,7 +288,7 @@ public class AuditV2_MathSelectionSorting
     /// NumPy:   np.negative(np.uint8([1,5,0])) = [255, 251, 0]
     /// NumSharp operator: works   np.negative(byte): throws
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.28a")]
+    [TestMethod]
     public void T1_28a_NpNegative_RejectsByteArray_OperatorWorks()
     {
         var arr = np.array(new byte[] { 1, 5, 0 });
@@ -309,7 +309,7 @@ public class AuditV2_MathSelectionSorting
     /// NumPy 2.x: "The numpy boolean negative, the `-` operator, is not supported,
     /// use the `~` operator or the logical_not function instead."
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.28b")]
+    [TestMethod]
     public void T1_28b_NpNegative_AcceptsBool_NumPyRejects()
     {
         var barr = np.array(new bool[] { true, false, true });

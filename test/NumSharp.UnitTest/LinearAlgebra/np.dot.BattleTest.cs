@@ -107,7 +107,6 @@ public class DotBattleTests : TestClass
     }
 
     [TestMethod]
-    [OpenBugs]  // NumSharp returns (2,4) instead of (2,3)
     public void Dot_ND_1D()
     {
         // NumPy: shape(2,3,4) dot shape(4,) = shape(2,3)

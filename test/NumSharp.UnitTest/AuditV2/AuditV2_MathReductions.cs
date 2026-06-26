@@ -95,7 +95,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.4 — np.reciprocal on sliced int32 must not crash.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.4")]
+    [TestMethod]
     public void T1_4_Reciprocal_SlicedInt32_ShouldNotCrash()
     {
         var a = np.arange(1, 21).astype(NPTypeCode.Int32);  // [1..20]
@@ -131,7 +131,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.5 — np.dot(3D, 1D) should produce shape (lhs[0], lhs[1]) by summing the last axis.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.5")]
+    [TestMethod]
     public void T1_5_Dot_3D_1D_ShouldSumLastAxis()
     {
         // NumPy ground truth:
@@ -243,7 +243,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.22a — np.ceil(bool) should preserve dtype.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.22")]
+    [TestMethod]
     public void T1_22a_Ceil_Bool_PreservesDtype()
     {
         var r = np.ceil(np.array(new bool[] { true, false }));
@@ -256,7 +256,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.22b — np.floor(bool) should preserve dtype.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.22")]
+    [TestMethod]
     public void T1_22b_Floor_Bool_PreservesDtype()
     {
         var r = np.floor(np.array(new bool[] { true, false }));
@@ -267,7 +267,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.22c — np.trunc(bool) should preserve dtype.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.22")]
+    [TestMethod]
     public void T1_22c_Trunc_Bool_PreservesDtype()
     {
         var r = np.trunc(np.array(new bool[] { true, false }));
@@ -288,7 +288,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.28c — np.negative(uint16) must wrap (NumPy: [65535, 65534, 65533]).
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.28")]
+    [TestMethod]
     public void T1_28c_Negative_UInt16_ShouldWrap()
     {
         var arr = np.array(new ushort[] { 1, 2, 3 });
@@ -301,7 +301,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.28d — np.negative(uint32) must wrap.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.28")]
+    [TestMethod]
     public void T1_28d_Negative_UInt32_ShouldWrap()
     {
         var arr = np.array(new uint[] { 1, 2, 3 });
@@ -313,7 +313,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.28e — np.negative(uint64) must wrap.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.28")]
+    [TestMethod]
     public void T1_28e_Negative_UInt64_ShouldWrap()
     {
         var arr = np.array(new ulong[] { 1, 2, 3 });
@@ -339,7 +339,7 @@ public class AuditV2_MathReductions
     /// <summary>
     /// T1.35 — np.matmul(1D, 2D) should multiply by prepending a 1-axis, then squeezing.
     /// </summary>
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.35")]
+    [TestMethod]
     public void T1_35_Matmul_1D_2D_ShouldSucceed()
     {
         // NumPy: np.matmul([1,2,3], [[1,2],[3,4],[5,6]]) = [22, 28]

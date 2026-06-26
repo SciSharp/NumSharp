@@ -2590,9 +2590,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumPy: around is element-wise, preserves F-contig layout.
-                   // NumSharp: np.around doesn't route through the element-wise
-                   // dispatcher's F-preservation helper — result is C-contig.
         public void Around_FContig2D_PreservesFContig()
         {
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
@@ -2624,8 +2621,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // Same gap as Around_FContig2D_PreservesFContig — round_ is an alias
-                   // of around and shares the same dispatcher that bypasses F-preservation.
         public void Round_FContig2D_PreservesFContig()
         {
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
@@ -2635,8 +2630,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // Same root cause as Around_FContig2D_PreservesFContig, confirmed on
-                   // a 3-D shape where the F-strides pattern is non-trivial.
         public void Around_FContig3D_PreservesFContig()
         {
             // NumPy: around on 3-D F-contig stays F-contig.
