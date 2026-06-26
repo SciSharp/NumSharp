@@ -259,6 +259,8 @@ namespace NumSharp
         // Boolean masking
         public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
 
+        public abstract void BooleanMaskSet(NDArray arr, NDArray mask, NDArray value);
+
         #endregion
     }
 }

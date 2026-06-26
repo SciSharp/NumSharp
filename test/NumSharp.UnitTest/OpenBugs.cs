@@ -2057,12 +2057,12 @@ namespace NumSharp.UnitTest
         // ================================================================
 
         /// <summary>
-        ///     BUG 21: Boolean mask indexing on 2D arrays returns wrong shape.
-        ///
-        ///     NumPy:    arr[mask] where mask has 3 True values → shape (3,)
-        ///     NumSharp: returns shape (3, ...) — treats True as row selector
+        ///     BUG 21 (FIXED): Boolean mask indexing on 2D arrays returns the
+        ///     correct 1-D shape. A full-shape mask now flows through the unified
+        ///     NpyIter gather (DefaultEngine.BooleanMask), so arr[mask] with 3
+        ///     True values yields shape (3,). Kept as a regression guard.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod]
         public void Bug_BooleanMask_2D_WrongShape()
         {
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
