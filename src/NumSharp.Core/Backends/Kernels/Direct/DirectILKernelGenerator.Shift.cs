@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 // =============================================================================
 // DirectILKernelGenerator.Shift.cs - Shift operations (LeftShift, RightShift)
@@ -899,6 +900,96 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Char:  il.Emit(OpCodes.Conv_U2); break;
                 // Int32/UInt32/Int64/UInt64 need no truncation
             }
+        }
+
+        #endregion
+
+        #region SIMD variable-shift vector body (NpyIter Tier-3B)
+
+        /// <summary>
+        /// Whether <paramref name="t"/> has a per-lane SIMD variable shift on this machine for
+        /// the given direction — i.e. whether <see cref="EmitShiftVectorBody"/> can supply a
+        /// vectorBody to the NpyIter Tier-3B factory (which then drives the contiguous,
+        /// scalar-broadcast, and AVX2-gather strided SIMD paths automatically).
+        ///
+        /// The AVX2/AVX512 variable-shift instructions (VPSLLVD/VPSRLVD/VPSRAVD and the 64-bit
+        /// VPSLLVQ/VPSRLVQ, plus VPSRAVQ on AVX512) implement NumPy's overflow semantics
+        /// natively: the count is taken UNSIGNED, so count &gt;= width yields 0 (logical) or a
+        /// sign fill (arithmetic), and a negative count widens to a huge unsigned → overflow.
+        /// No separate overflow branch is needed (verified against NumPy 2.4.2).
+        ///
+        /// Coverage: int32/uint32 in every direction; int64/uint64 left and unsigned/logical
+        /// right on AVX2; int64 ARITHMETIC right only on AVX512 (no VPSRAVQ in AVX2). 8/16-bit
+        /// dtypes have no variable SIMD shift (they keep the scalar inner loop, as does NumPy).
+        /// </summary>
+        internal static bool ShiftVariableSupported(NPTypeCode t, bool isLeft)
+        {
+            int b = VectorBits;
+            if (b == 512) { if (!Avx512F.IsSupported) return false; }
+            else if (b == 256 || b == 128) { if (!Avx2.IsSupported) return false; }
+            else return false;
+
+            return t switch
+            {
+                NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
+                NPTypeCode.UInt64 => true,             // left + logical right (VPSLLVQ / VPSRLVQ)
+                NPTypeCode.Int64 => isLeft || b == 512, // arithmetic right needs VPSRAVQ (AVX512)
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Cache of the (variable-shift method, optional count-reinterpret method) per
+        /// (SIMD width, dtype, direction). The shift instruction lives on Avx2 (128/256) or
+        /// Avx512F (512); the count vector must be the unsigned form of the value dtype, so for
+        /// signed value types the count is reinterpreted with <c>Vector{W}.As</c> first.
+        /// </summary>
+        private static readonly ConcurrentDictionary<(int, NPTypeCode, bool), (MethodInfo Shift, MethodInfo? AsCount)> _shiftVecMethods = new();
+
+        private static (MethodInfo Shift, MethodInfo? AsCount) GetShiftVectorMethods(int bits, NPTypeCode t, bool isLeft)
+            => _shiftVecMethods.GetOrAdd((bits, t, isLeft), static key =>
+            {
+                var (b, tt, left) = key;
+                Type valClr = GetClrType(tt);
+                Type cntClr = tt is NPTypeCode.Int32 or NPTypeCode.UInt32 ? typeof(uint) : typeof(ulong);
+                Type vVal = VectorMethodCache.V(b, valClr);
+                Type vCnt = VectorMethodCache.V(b, cntClr);
+                string name = left
+                    ? "ShiftLeftLogicalVariable"
+                    : (IsUnsigned(tt) ? "ShiftRightLogicalVariable" : "ShiftRightArithmeticVariable");
+                Type cls = b == 512 ? typeof(Avx512F) : typeof(Avx2);
+                var shift = cls.GetMethod(name, new[] { vVal, vCnt })
+                    ?? throw new InvalidOperationException($"{cls.Name}.{name}({vVal.Name}, {vCnt.Name}) not found");
+
+                // Reinterpret the count vector V<value> -> V<unsigned> only when the value dtype
+                // is signed (then the loaded count vec dtype differs from the intrinsic's count
+                // param). Free at runtime (a bit-reinterpret).
+                MethodInfo? asCount = null;
+                if (valClr != cntClr)
+                {
+                    Type vecStatic = b switch
+                    {
+                        128 => typeof(Vector128),
+                        512 => typeof(Vector512),
+                        _ => typeof(Vector256)
+                    };
+                    asCount = vecStatic.GetMethod("As")!.MakeGenericMethod(valClr, cntClr);
+                }
+                return (shift, asCount);
+            });
+
+        /// <summary>
+        /// Emit the per-vector shift used as the NpyIter Tier-3B <c>vectorBody</c>. On entry the
+        /// stack holds <c>[valueVec&lt;T&gt;, countVec&lt;T&gt;]</c>; on exit it holds one
+        /// <c>shiftedVec&lt;T&gt;</c>. Only called for dtypes/directions where
+        /// <see cref="ShiftVariableSupported"/> is true.
+        /// </summary>
+        internal static void EmitShiftVectorBody(ILGenerator il, NPTypeCode t, bool isLeft)
+        {
+            var (shift, asCount) = GetShiftVectorMethods(VectorBits, t, isLeft);
+            if (asCount != null)
+                il.EmitCall(OpCodes.Call, asCount, null);   // count V<T> -> V<unsigned>
+            il.EmitCall(OpCodes.Call, shift, null);          // [value, count] -> [result]
         }
 
         #endregion

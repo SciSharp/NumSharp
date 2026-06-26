@@ -1,4 +1,6 @@
 using System;
+using System.Reflection.Emit;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -63,12 +65,92 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
+            // Fast path: contiguous `array << scalar` — the dedicated uniform-count SIMD kernel
+            // (covers every width incl. 8/16-bit via Vector{N}.ShiftLeft).
             var fast = TrySimdScalarShift(lhs, rhs, isLeftShift);
             if (fast is not null)
                 return fast;
 
+            // Everything else (array << array, strided, broadcast, transposed, mixed dtype) goes
+            // through the NpyIter Tier-3B kernel: a per-vector variable shift drives the factory's
+            // 4×-unrolled contiguous, scalar-broadcast, and AVX2-gather strided SIMD paths, with a
+            // scalar inner loop where no per-lane SIMD shift exists (8/16-bit, int64 arith-right
+            // without AVX512).
+            var viaIter = ExecuteShiftViaNpyIter(lhs, rhs, isLeftShift);
+            if (viaIter is not null)
+                return viaIter;
+
+            // Backstop for scalar×scalar and shapes beyond int range: the unified binary pipeline
+            // (with the EmitShiftFromStack scalar kernel) handles them correctly.
             var op = isLeftShift ? BinaryOp.LeftShift : BinaryOp.RightShift;
             return ExecuteBinaryOp(lhs, rhs, op);
+        }
+
+        /// <summary>
+        /// Drive the shift through the NpyIter Tier-3B inner-loop factory. Operands are cast to
+        /// the promoted loop dtype so the iterator sees one dtype (same-dtype views are kept
+        /// strided so the factory's hardware-gather path can SIMD them without materializing).
+        /// The vector body (<see cref="DirectILKernelGenerator.EmitShiftVectorBody"/>) is supplied
+        /// when the dtype/direction has a per-lane variable shift; otherwise the factory uses the
+        /// overflow-correct scalar body. Returns null for scalar×scalar and over-int-range shapes
+        /// so the caller can fall back to the unified pipeline.
+        /// </summary>
+        private unsafe NDArray? ExecuteShiftViaNpyIter(NDArray lhs, NDArray rhs, bool isLeftShift)
+        {
+            // scalar × scalar → let ExecuteBinaryOp's dedicated scalar path handle it.
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.size <= 1;
+            if (lhsScalar && rhsScalar)
+                return null;
+
+            var resultType = ShiftResultType(lhs, rhs);
+
+            // Cast inputs to the loop dtype (NumPy casts to the loop signature). Same-dtype
+            // operands keep their view (possibly strided) — the gather SIMD path reads them in
+            // place; a differing dtype materializes to a contiguous copy at the loop dtype.
+            var value = lhs.GetTypeCode == resultType ? lhs : lhs.astype(resultType);
+            var count = rhs.GetTypeCode == resultType ? rhs : rhs.astype(resultType);
+
+            var (valueShape, countShape) = Broadcast(value.Shape, count.Shape);
+            var cleanShape = valueShape.Clean();
+            if (cleanShape.size < 0)
+                return null;
+            for (int i = 0; i < cleanShape.NDim; i++)
+                if (cleanShape.dimensions[i] > int.MaxValue)
+                    return null;
+
+            // Mirror the unified path's NumPy-aligned F-order preservation.
+            bool allStrictFContig = AreAllOperandsStrictFContig(value, count, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+
+            var result = new NDArray(resultType, resultShape, false);
+            if (result.size == 0)
+                return result;
+
+            var order = allStrictFContig ? NPY_ORDER.NPY_FORTRANORDER : NPY_ORDER.NPY_CORDER;
+
+            var capType = resultType;
+            bool capLeft = isLeftShift;
+            Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitShiftFromStack(il, capType, capLeft);
+            Action<ILGenerator>? vectorBody = DirectILKernelGenerator.ShiftVariableSupported(resultType, isLeftShift)
+                ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, capType, capLeft)
+                : null;
+            string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{resultType}";
+
+            using (var iter = NpyIterRef.MultiNew(
+                3, new[] { value, count, result },
+                NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
+                order, NPY_CASTING.NPY_SAFE_CASTING, s_binaryIterFlags))
+            {
+                iter.ExecuteElementWiseBinary(resultType, resultType, resultType, scalarBody, vectorBody, cacheKey);
+            }
+
+            if (!allStrictFContig && ShouldProduceFContigOutput(value, count, result.Shape))
+                return result.copy('F');
+
+            return result;
         }
 
         /// <summary>
