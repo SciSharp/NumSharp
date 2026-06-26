@@ -96,6 +96,27 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        public void MaskIndex_BoolArrayLikeForms()
+        {
+            // Any boolean array-like is a mask: rectangular bool[,,] of any rank, and any
+            // IEnumerable<bool> (List<bool>, …). Integer arrays keep coordinate semantics.
+            var b = np.arange(24).reshape(2, 3, 4);
+            var m = new bool[2, 3, 4];
+            m[0, 0, 0] = true; m[1, 2, 3] = true;                 // bool[,,] -> trailing rows selected
+            b[m].Should().BeShaped(2).And.BeOfValues(0, 23);
+
+            NDArray v = new double[] { 1, 2, 3 };
+            v[new System.Collections.Generic.List<bool> { true, false, true }].Should().BeShaped(2).And.BeOfValues(1, 3);
+
+            NDArray w = new double[] { 1, 2, 3 };
+            w[new System.Collections.Generic.List<bool> { true, false, true }] = 7;
+            w.Should().BeOfValues(7, 2, 7);
+
+            // a raw int[] index is NOT a mask: NumSharp coordinate access (element at (0,2)).
+            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }].Should().BeScalar(2);
+        }
+
+        [TestMethod]
         [OpenBugs]
         public void Compare()
         {

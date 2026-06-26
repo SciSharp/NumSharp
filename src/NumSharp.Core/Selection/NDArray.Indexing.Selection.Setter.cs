@@ -165,7 +165,7 @@ namespace NumSharp
         protected void SetIndices(object[] indicesObjects, NDArray values)
         {
             var indicesLen = indicesObjects.Length;
-            NormalizeRawBoolArrayIndices(indicesObjects);   // raw bool[]/bool[,] -> boolean mask
+            NormalizeBooleanMaskIndices(indicesObjects);    // any boolean array-like -> boolean mask
             if (indicesLen == 1)
             {
                 switch (indicesObjects[0])

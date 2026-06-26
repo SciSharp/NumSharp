@@ -26,26 +26,41 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Normalizes raw boolean <see cref="System.Array"/> indices (<c>bool[]</c>,
-        /// <c>bool[,]</c>, …) to <see cref="NDArray"/> of dtype Boolean so they are
-        /// recognized as boolean masks. Without this a raw bool array matches none of the
-        /// index cases and falls through to the "valid indices" IndexError. NumPy treats a
-        /// boolean array index as a mask (equivalent to <c>np.asarray(bool_list)</c>).
-        /// Shared by the getter and setter dispatch.
+        /// Normalizes any raw boolean array-like index to an <see cref="NDArray"/> of dtype
+        /// Boolean so it is recognized as a boolean mask — NumPy treats any boolean
+        /// <c>array_like</c> index as a mask. Covers, via interfaces rather than per-type
+        /// cases: a rectangular boolean <see cref="System.Array"/> of any rank
+        /// (<c>bool[]</c>, <c>bool[,]</c>, <c>bool[,,]</c>, …) and any
+        /// <see cref="IEnumerable{T}"/> of bool (<c>bool[]</c>, <see cref="List{T}"/>, …).
+        /// Integer arrays keep their existing (coordinate) semantics and are left untouched.
+        /// (A <em>jagged</em> <c>bool[][]</c> cannot be a single 2-D mask here: C# spreads it
+        /// through the <c>params object[]</c> indexer into separate per-row <c>bool[]</c>
+        /// arguments via array covariance before this runs — use a rectangular <c>bool[,]</c>
+        /// for a 2-D mask.) Shared by the getter and setter dispatch; only the general
+        /// <c>object[]</c> indexing path reaches it (the typed indexers bypass it).
         /// </summary>
-        private static void NormalizeRawBoolArrayIndices(object[] indices)
+        private static void NormalizeBooleanMaskIndices(object[] indices)
         {
             for (int i = 0; i < indices.Length; i++)
             {
-                if (indices[i] is Array arr && arr.GetType().GetElementType() == typeof(bool))
-                    indices[i] = np.array(arr).MakeGeneric<bool>();
+                switch (indices[i])
+                {
+                    case NDArray _:                                          // already an NDArray (mask handled by typecode)
+                        continue;
+                    case Array arr when arr.GetType().GetElementType() == typeof(bool):
+                        indices[i] = np.array(arr).MakeGeneric<bool>();      // bool[], bool[,], bool[,,] (rectangular, any rank)
+                        continue;
+                    case System.Collections.Generic.IEnumerable<bool> seq:
+                        indices[i] = np.array(System.Linq.Enumerable.ToArray(seq)).MakeGeneric<bool>();  // List<bool>, any IEnumerable<bool>
+                        continue;
+                }
             }
         }
 
         private NDArray FetchIndices(object[] indicesObjects)
         {
             var indicesLen = indicesObjects.Length;
-            NormalizeRawBoolArrayIndices(indicesObjects);   // raw bool[]/bool[,] -> boolean mask
+            NormalizeBooleanMaskIndices(indicesObjects);    // any boolean array-like -> boolean mask
             if (indicesLen == 1)
             {
                 switch (indicesObjects[0])
