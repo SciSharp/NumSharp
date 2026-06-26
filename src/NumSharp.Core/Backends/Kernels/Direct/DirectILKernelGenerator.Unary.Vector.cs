@@ -69,11 +69,12 @@ namespace NumSharp.Backends.Kernels
             }
             else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round || op == UnaryOp.Truncate)
             {
-                // Floor/Ceiling/Round/Truncate are NOT generic — overloaded per-type.
-                var vT = VectorMethodCache.V(VectorBits, clrType);
-                method = VectorMethodCache.Container(VectorBits).GetMethod(methodName,
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { vT }, null)
+                // Floor/Ceiling/Round/Truncate are NOT generic — overloaded per-type, and only
+                // exist for some (runtime, width) combinations (Floor/Ceiling .NET 7+, Round/
+                // Truncate .NET 9+). CanUseUnarySimd has already probed this exact cache entry and
+                // only routes here when it is non-null, so the throw is a defensive assert — it can
+                // fire only if the emitter is reached without going through the eligibility gate.
+                method = VectorMethodCache.ContainerUnaryOrNull(VectorBits, methodName, clrType)
                     ?? throw new InvalidOperationException($"Could not find {methodName} for Vector{VectorBits}<{clrType.Name}>");
             }
             else

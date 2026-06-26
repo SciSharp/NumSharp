@@ -125,6 +125,22 @@ namespace NumSharp.Backends.Kernels
             _ => throw new NotSupportedException($"SIMD width {simdBits} not supported")
         };
 
+        /// <summary>
+        /// The per-type, non-generic <c>Vector{N}.{Floor|Ceiling|Round|Truncate}(V{N}&lt;T&gt;)</c>
+        /// method bound to <paramref name="elem"/>, or <see langword="null"/> when the running BCL
+        /// at this <paramref name="simdBits"/> width exposes no such method. Floor/Ceiling shipped
+        /// in .NET 7, Round/Truncate in .NET 9, and a runtime can expose a method at one width but
+        /// not another — so callers MUST treat <see langword="null"/> as "fall back to scalar",
+        /// never assume presence. The lookup (hit OR null) is cached, so reflection runs at most
+        /// once per (width, name, elem). This is the single source of truth both the SIMD
+        /// eligibility gate and the emitter consult, so they never disagree about availability.
+        /// </summary>
+        public static MethodInfo ContainerUnaryOrNull(int simdBits, string name, Type elem)
+            => _methods.GetOrAdd(new Key(simdBits, name, elem, /*containerUnary*/ 7000), static k =>
+                Container(k.SimdBits).GetMethod(k.Name,
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null, types: new[] { V(k.SimdBits, k.Elem) }, modifiers: null));
+
         // =================================================================
         // Generic container methods (Load / Store / ConditionalSelect / …)
         // =================================================================

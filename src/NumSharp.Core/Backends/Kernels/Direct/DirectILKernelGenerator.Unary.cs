@@ -242,20 +242,42 @@ namespace NumSharp.Backends.Kernels
             if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
                 return false;
 
-#if NET8_0
-            // Vector128/256/512.Round and .Truncate are .NET 9+ BCL APIs --
-            // on net8.0 the vector emit threw "Could not find Round for
-            // Vector256<Double>" at kernel-compile time (the long-known
-            // net8.0 failure set). Scalar fallback instead.
-            if (key.Op == UnaryOp.Round || key.Op == UnaryOp.Truncate)
-                return false;
-#endif
+            // Floor/Ceiling (.NET 7+) and Round/Truncate (.NET 9+) bind to per-type, non-generic
+            // Vector{128,256,512} BCL methods whose presence depends on BOTH the running runtime
+            // AND the active vector width: net8.0 has no Vector*.Round/Truncate at any width, and a
+            // runtime can ship Vector256.Round before Vector512.Round (the exact case that crashed
+            // AVX-512 CI runners — "Could not find Round for Vector512" — while non-AVX-512 hosts,
+            // running the Vector256 path, passed). Probe the EXACT method the emitter will bind
+            // (same VectorMethodCache entry) for the active VectorBits and fall back to scalar when
+            // it is absent, instead of letting EmitUnaryVectorOperation hit its "Could not find ..."
+            // throw at kernel-compile time. This supersedes the old `#if NET8_0` guard, which was a
+            // compile-time switch (it could not see the actual runtime/width at all) and therefore
+            // could not protect the net10.0 target when a given runtime lacked Vector512.Round.
+            if (key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil ||
+                key.Op == UnaryOp.Round || key.Op == UnaryOp.Truncate)
+            {
+                return VectorMethodCache.ContainerUnaryOrNull(
+                    VectorBits, VectorRoundingMethodName(key.Op), GetClrType(key.InputType)) != null;
+            }
 
-            return key.Op == UnaryOp.Sqrt ||
-                   key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil || key.Op == UnaryOp.Round ||
-                   key.Op == UnaryOp.Truncate || key.Op == UnaryOp.Reciprocal ||
+            return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
                    key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
         }
+
+        /// <summary>
+        /// BCL method name for the rounding-family unary ops on the <c>Vector{N}</c> container
+        /// (<c>Floor</c>/<c>Ceiling</c>/<c>Round</c>/<c>Truncate</c>). Kept identical to the
+        /// <c>methodName</c> switch in <see cref="EmitUnaryVectorOperation"/> so the eligibility
+        /// gate probes exactly the method the emitter will bind.
+        /// </summary>
+        private static string VectorRoundingMethodName(UnaryOp op) => op switch
+        {
+            UnaryOp.Floor => "Floor",
+            UnaryOp.Ceil => "Ceiling",   // Vector container spells it "Ceiling", not "Ceil"
+            UnaryOp.Round => "Round",
+            UnaryOp.Truncate => "Truncate",
+            _ => throw new ArgumentOutOfRangeException(nameof(op), op, "not a rounding-family op")
+        };
 
         /// <summary>
         /// Emit SIMD loop for contiguous unary operations with 4x unrolling.
