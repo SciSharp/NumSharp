@@ -25,6 +25,10 @@ namespace NumSharp.UnitTest.Selection
         private static NDArray<bool> M2(bool[,] b) => np.array(b).MakeGeneric<bool>();        // 2-D mask
         private static NDArray A() => np.arange(12).reshape(3, 4);
         private static NDArray B() => np.arange(24).reshape(2, 3, 4);
+        private static NDArray B4() => np.arange(120).reshape(2, 3, 4, 5);
+        private static NDArray IA() => np.array(new long[] { 0, 1 });                          // 1-D index array
+        private static NDArray IB() => np.array(new long[] { 0, 2 });                          // 1-D index array
+        private static NDArray IA2D() => np.array(new long[] { 0, 1, 1, 0 }).reshape(2, 2);    // 2-D index array
 
         // ── case records ───────────────────────────────────────────────────────────
         public sealed record GCase(string Name, Func<NDArray> Op, int[] Shape, long[] Vals);
@@ -141,6 +145,29 @@ namespace NumSharp.UnitTest.Selection
             new("c29_mask_newaxis",  () => A()[M(true,false,true), Slice.NewAxis], new[]{2,1,4}, new long[]{0,1,2,3,8,9,10,11}),
             new("c30_newaxis_mask",  () => A()[Slice.NewAxis, M(true,false,true)], new[]{1,2,4}, new long[]{0,1,2,3,8,9,10,11}),
             new("c31_slice_intarr",  () => A()[":", np.array(new long[]{0,2})], new[]{3,2}, new long[]{0,2,4,6,8,10}),
+
+            // ── TWO-OR-MORE advanced indices mixed with a slice/newaxis (axis placement) ──
+            // Consecutive advanced -> block stays IN PLACE; a slice/newaxis between them
+            // -> block moves to the FRONT (NumPy mapping.c mit->consec / _get_transpose).
+            new("c32_arr_arr_slice",  () => B()[IA(), IB(), ":"], new[]{2,4}, new long[]{0,1,2,3,20,21,22,23}),       // contiguous -> front
+            new("c33_slice_arr_arr",  () => B()[":", IA(), IB()], new[]{2,2}, new long[]{0,6,12,18}),                 // contiguous -> after slice
+            new("c34_arr_slice_arr",  () => B()[IA(), ":", IB()], new[]{2,3}, new long[]{0,4,8,14,18,22}),            // separated -> front
+            new("c35_mask_slice_mask",() => B()[M(true,false), ":", M(true,false,true,false)], new[]{2,3}, new long[]{0,4,8,2,6,10}),   // separated masks -> front
+            new("c36_mask_mask_slice",() => B()[M(true,false), M(true,false,true), ":"], new[]{2,4}, new long[]{0,1,2,3,8,9,10,11}),    // contiguous masks -> front
+            new("c37_2darr_slice_arr",() => B()[IA2D(), ":", IB()], new[]{2,2,3}, new long[]{0,4,8,14,18,22,12,16,20,2,6,10}),          // 2-D broadcast, separated
+            new("c38_slice_2darr_arr",() => B()[":", IA2D(), IB()], new[]{2,2,2}, new long[]{0,6,4,2,12,18,16,14}),                    // 2-D broadcast, in place
+            new("c39_2darr_arr_slice",() => B()[IA2D(), IB(), ":"], new[]{2,2,4}, new long[]{0,1,2,3,20,21,22,23,12,13,14,15,8,9,10,11}),
+            new("c40_arr_int_arr",    () => B()[IA(), 0, IB()], new[]{2}, new long[]{0,14}),                          // int between -> still consecutive
+            new("c41_arr_slice1_arr", () => B()[IA(), "0:1", IB()], new[]{2,1}, new long[]{0,14}),                    // len-1 slice still separates
+            new("c42_int_arr_arr",    () => B()[0, IA(), IB()], new[]{2}, new long[]{0,6}),
+            new("c43_arr_arr_int",    () => B()[IA(), IB(), 0], new[]{2}, new long[]{0,20}),
+            new("c44_arr_newaxis_arr",() => B()[IA(), Slice.NewAxis, IB()], new[]{2,1,4}, new long[]{0,1,2,3,20,21,22,23}),  // newaxis separates -> front
+            new("c45_sl_arr_na_arr",  () => B()[":", IA(), Slice.NewAxis, IB()], new[]{2,2,1}, new long[]{0,12,6,18}),
+            new("c46_arr_slice_negarr",() => B()[IA(), ":", np.array(new long[]{-1,-3})], new[]{2,3}, new long[]{3,7,11,13,17,21}),  // negative wrap
+            new("c47_4d_int_sl_arr_arr",() => B4()[0, ":", IA(), IB()], new[]{2,3}, new long[]{0,20,40,7,27,47}),     // int+slice separate -> front
+            new("c48_4d_sl_arr_arr_sl",() => B4()[":", IA(), IB(), ":"], new[]{2,2,5}, new long[]{0,1,2,3,4,30,31,32,33,34,60,61,62,63,64,90,91,92,93,94}),  // contiguous -> in place (middle)
+            new("c49_4d_arr_sl_sl_arr",() => B4()[IA(), ":", ":", IB()], new[]{2,3,4}, new long[]{0,5,10,15,20,25,30,35,40,45,50,55,62,67,72,77,82,87,92,97,102,107,112,117}),  // separated -> front
+            new("c50_4d_sl_arr_sl_arr",() => B4()[":", IA(), ":", IB()], new[]{2,2,4}, new long[]{0,5,10,15,60,65,70,75,22,27,32,37,82,87,92,97}),  // separated -> front
         };
 
         // ═══════════════════════ COMBINED (mask + advanced) — SET ══════════════════
@@ -159,12 +186,21 @@ namespace NumSharp.UnitTest.Selection
             new("cs11_mask_intvec",  () => { var a=A(); a[M(true,false,true),"1:3"]=np.array(new long[]{10,20}); return a; }, new long[]{0,10,20,3,4,5,6,7,8,10,20,11}),
             new("cs12_slice_mask_sl",() => { var a=B(); a[":",M(true,false,true),":"]=(NDArray)(-7L); return a; }, new long[]{-7,-7,-7,-7,4,5,6,7,-7,-7,-7,-7,-7,-7,-7,-7,16,17,18,19,-7,-7,-7,-7}),
             new("cs13_2dmask_slice", () => { var a=B(); a[M2(new[,]{{true,false,true},{false,true,false}}),"1:3"]=(NDArray)(-1L); return a; }, new long[]{0,-1,-1,3,4,5,6,7,8,-1,-1,11,12,13,14,15,16,-1,-1,19,20,21,22,23}),
+
+            // ── TWO-OR-MORE advanced indices mixed with a slice (scatter mirror) ──
+            new("cs14_arr_arr_slice", () => { var a=B(); a[IA(),IB(),":"]=(NDArray)(-1L); return a; }, new long[]{-1,-1,-1,-1,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,-1,-1,-1,-1}),
+            new("cs15_slice_arr_arr", () => { var a=B(); a[":",IA(),IB()]=(NDArray)(-1L); return a; }, new long[]{-1,1,2,3,4,5,-1,7,8,9,10,11,-1,13,14,15,16,17,-1,19,20,21,22,23}),
+            new("cs16_arr_slice_arr", () => { var a=B(); a[IA(),":",IB()]=(NDArray)(-1L); return a; }, new long[]{-1,1,2,3,-1,5,6,7,-1,9,10,11,12,13,-1,15,16,17,-1,19,20,21,-1,23}),
+            new("cs17_mask_slice_mask",() => { var a=B(); a[M(true,false),":",M(true,false,true,false)]=(NDArray)(-1L); return a; }, new long[]{-1,1,-1,3,-1,5,-1,7,-1,9,-1,11,12,13,14,15,16,17,18,19,20,21,22,23}),
+            new("cs18_arr_slice_arr_grid",() => { var a=B(); a[IA(),":",IB()]=np.array(new long[,]{{100,200,300},{400,500,600}}); return a; }, new long[]{100,1,2,3,200,5,6,7,300,9,10,11,12,13,400,15,16,17,500,19,20,21,600,23}),
+            new("cs19_slice_arr_arr_colbc",() => { var a=B(); a[":",IA(),IB()]=np.array(new long[,]{{10},{20}}); return a; }, new long[]{10,1,2,3,4,5,10,7,8,9,10,11,20,13,14,15,16,17,20,19,20,21,22,23}),
         };
 
         private static readonly ECase[] CombSetErr =
         {
             new("cse01_slice_mask_vecmismatch", () => { var a=A(); a[":",M(true,false,true,false)]=np.array(new long[]{100,200,300}); return a; }),
             new("cse02_mask_slice_badval",      () => { var a=A(); a[M(true,false,true),"1:3"]=np.array(new long[]{1,2,3,4,5}); return a; }),
+            new("cse03_multiadv_gridmismatch",  () => { var a=B(); a[IA(),":",IB()]=np.array(new long[]{1,2,3,4,5}); return a; }),  // (5,) !-> grid (2,3)
         };
 
         // ── DynamicData sources (index + name for readable reporting) ───────────────

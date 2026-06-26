@@ -213,6 +213,20 @@ namespace NumSharp
             if (TrySetSliceWithSingleAdvanced(indicesObjects, values))
                 return;
 
+            // TWO OR MORE advanced indices mixed with an explicit slice / newaxis —
+            // the assignment counterpart of the getter's multi-advanced gather. Builds
+            // the same per-source-axis integer index grid (NumPy axis placement) and
+            // scatters the value (broadcast to the grid shape) in one pass.
+            if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
+            {
+                NDArray v = values;
+                var gridShape = multiGrid[0].Shape;
+                if (!System.Linq.Enumerable.SequenceEqual(v.Shape.dimensions, gridShape.dimensions))
+                    v = np.broadcast_to(values, gridShape);
+                SetIndices(this, multiGrid, v);
+                return;
+            }
+
             int ints = 0;
             int bools = 0;
             for (var i = 0; i < indicesObjects.Length; i++)

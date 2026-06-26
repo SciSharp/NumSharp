@@ -1,8 +1,23 @@
-# Handover: multiple advanced indices mixed with slices (axis placement)
+# Multiple advanced indices mixed with slices (axis placement)
 
-**Status:** open gap. One representative `[OpenBugs]` test is pinned:
-`test/NumSharp.UnitTest/Selection/CombinedIndexing.MatrixTests.cs` →
-`Get_TwoMasks_SeparatedBySlice_AdvancedAxesToFront_Unsupported`.
+**Status: RESOLVED.** Implemented by `TryBuildMultiAdvancedGrid` in
+`src/NumSharp.Core/Selection/NDArray.Indexing.Selection.Getter.cs` (shared by the
+getter and the setter `NDArray.Indexing.Selection.Setter.cs`). The recommended
+"build the index grid in final order" approach (§4) was taken — no transpose needed.
+
+Every case in the truth table below is now bit-exact with NumPy 2.4.2 (GET and SET,
+including ints-as-advanced, newaxis separators, negative wrap, 2-D-broadcast advanced
+indices and 4-D placements). Verified by differential probing and pinned as tests:
+`test/NumSharp.UnitTest/Selection/IndexingProbeMatrix.Tests.cs` (`c32`–`c50`,
+`cs14`–`cs19`, `cse03`) and `CombinedIndexing.MatrixTests.cs`
+(`Get_TwoMasks_SeparatedBySlice_AdvancedAxesToFront`,
+`Get_TwoArrays_ContiguousThenSlice_BlockInPlace`,
+`Get_SliceThenTwoArrays_BlockAfterSlice`,
+`Set_TwoArrays_SeparatedBySlice_GridValueBroadcast`). The full CI suite and the
+`FuzzMatrix` differential gate stay green.
+
+The document below is retained as the design record (the NumPy rule, references and the
+implementation it describes).
 
 **Owner of the surrounding work:** the combined boolean+advanced indexing fix
 (commits `17c467d9`, `718c5a04`, `5c537104` on branch `nditer`).

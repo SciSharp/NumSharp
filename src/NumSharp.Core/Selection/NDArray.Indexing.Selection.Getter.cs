@@ -77,6 +77,16 @@ namespace NumSharp
             if (TryFetchSliceWithSingleAdvanced(indicesObjects, out var mixedResult))
                 return mixedResult;
 
+            // TWO OR MORE advanced indices (arrays / masks) mixed with an explicit
+            // slice / newaxis — the general advanced-index case the broadcast path
+            // below cannot model (it would broadcast the slices together with the
+            // advanced block instead of treating them as outer-product output axes).
+            // Builds one integer index array per source axis with NumPy's axis
+            // placement (block in place when consecutive, to the front when a
+            // slice/newaxis separates the advanced indices) for a single gather.
+            if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
+                return FetchIndices(this, multiGrid, null, true);
+
             int ints = 0;
             int bools = 0;
             bool foundSlices = false;
@@ -507,6 +517,240 @@ namespace NumSharp
 
             var view = this[basic];                                     // basic indexing (slices, int reductions, newaxes)
             result = np.take(view, advIdx, axis: advSrcAxis - intsBeforeAdv + newAxesBeforeAdv);
+            return true;
+        }
+
+        /// <summary>Kind of one normalized index-tuple item, per source axis (newaxis consumes none).</summary>
+        private enum MixKind : byte { Adv, Int, Slice, NewAxis }
+
+        /// <summary>
+        /// Shared builder for TWO-OR-MORE advanced indices (integer arrays, or boolean
+        /// masks via their <see cref="np.nonzero"/> components) mixed with basic
+        /// slices / scalar ints / newaxis — e.g. <c>b[ia,:,ib]</c>, <c>b[:,ia,ib]</c>,
+        /// <c>b[ia,ib,:]</c>, <c>b[mask,:,mask2]</c>. Reproduces NumPy's advanced-index
+        /// algorithm (<c>mapping.c</c> <c>PyArray_MapIterNew</c> / <c>_get_transpose</c>):
+        /// <list type="bullet">
+        /// <item>every advanced index broadcasts TOGETHER into one block of axes;</item>
+        /// <item>each slice / newaxis keeps its own output axis (outer product with the block);</item>
+        /// <item>a scalar int is a 0-d advanced index (part of the block, no output axis);</item>
+        /// <item>the block stays IN PLACE when the advanced indices are consecutive, or moves
+        /// to the FRONT when a slice / newaxis separates them.</item>
+        /// </list>
+        /// Emits one integer index array per source axis, each broadcast to the final
+        /// output shape, so a single <c>FetchIndices</c> / <c>SetIndices</c> performs the
+        /// gather / scatter. Shared by the getter and setter. Returns <c>false</c>
+        /// (caller falls back) when there is no explicit slice/newaxis, fewer than two
+        /// advanced axes, the tuple over-indexes the rank, or an item is unrecognized.
+        /// </summary>
+        private bool TryBuildMultiAdvancedGrid(object[] indicesObjects, out NDArray[] grid)
+        {
+            grid = null;
+            int ndim = this.ndim;
+            var srcShape = this.Shape;
+
+            // Normalize string slice notations so newaxis/ellipsis classify uniformly.
+            var normalized = new object[indicesObjects.Length];
+            for (int i = 0; i < indicesObjects.Length; i++)
+            {
+                if (indicesObjects[i] is string str)
+                {
+                    Slice parsed;
+                    try { parsed = new Slice(str); }
+                    catch { return false; }
+                    normalized[i] = parsed;
+                }
+                else
+                {
+                    normalized[i] = indicesObjects[i];
+                }
+            }
+
+            // Expand a single ellipsis, counting EACH item's true axis consumption
+            // (a k-D boolean mask consumes k axes; slice/int/array one; newaxis zero).
+            int consumed = 0;
+            bool hasEllipsis = false;
+            foreach (var it in normalized)
+            {
+                switch (it)
+                {
+                    case Slice s when s.IsEllipsis: hasEllipsis = true; break;
+                    case Slice s when s.IsNewAxis: break;
+                    case NDArray nd when nd.typecode == NPTypeCode.Boolean: consumed += nd.ndim; break;
+                    default: consumed++; break;
+                }
+            }
+            object[] expanded;
+            if (hasEllipsis)
+            {
+                var lst = new List<object>(normalized.Length + Math.Max(0, ndim - consumed));
+                foreach (var it in normalized)
+                {
+                    if (it is Slice s && s.IsEllipsis)
+                    {
+                        for (int j = 0; j < ndim - consumed; j++) lst.Add(Slice.All);
+                    }
+                    else lst.Add(it);
+                }
+                expanded = lst.ToArray();
+            }
+            else expanded = normalized;
+
+            // Classify into a FLAT per-axis item list; masks expand to their nonzero
+            // components (adjacent -> naturally consecutive among themselves).
+            var items = new List<(MixKind kind, NDArray adv, long iv, Slice slc)>(expanded.Length + ndim);
+            bool hasExplicitBasic = false;
+            int srcAxes = 0;
+            foreach (var it in expanded)
+            {
+                switch (it)
+                {
+                    case Slice s when s.IsEllipsis:
+                        return false;                                  // leftover ellipsis (defensive)
+                    case Slice s when s.IsNewAxis:
+                        items.Add((MixKind.NewAxis, null, 0, null)); hasExplicitBasic = true; break;
+                    case Slice s:
+                        items.Add((MixKind.Slice, null, 0, s)); hasExplicitBasic = true; srcAxes++; break;
+                    case int iv:
+                        items.Add((MixKind.Int, null, iv, null)); srcAxes++; break;
+                    case long lv:
+                        items.Add((MixKind.Int, null, lv, null)); srcAxes++; break;
+                    case NDArray nd when nd.typecode == NPTypeCode.Boolean:
+                        foreach (var comp in np.nonzero(nd.MakeGeneric<bool>()))
+                        { items.Add((MixKind.Adv, comp, 0, null)); srcAxes++; }
+                        break;
+                    case NDArray nd:
+                        items.Add((MixKind.Adv, nd, 0, null)); srcAxes++; break;
+                    case int[] ia:
+                        items.Add((MixKind.Adv, np.array(ia, copy: false), 0, null)); srcAxes++; break;
+                    case long[] la:
+                        items.Add((MixKind.Adv, np.array(la, copy: false), 0, null)); srcAxes++; break;
+                    case Half h:
+                        items.Add((MixKind.Int, null, Converts.ToInt64(h), null)); srcAxes++; break;
+                    case Complex c:
+                        items.Add((MixKind.Int, null, Converts.ToInt64(c), null)); srcAxes++; break;
+                    case IConvertible co:
+                        items.Add((MixKind.Int, null, co.ToInt64(CultureInfo.InvariantCulture), null)); srcAxes++; break;
+                    default:
+                        return false;                                  // unknown item -> caller raises
+                }
+            }
+
+            if (srcAxes > ndim) return false;                          // over-indexed -> caller raises
+            if (!hasExplicitBasic) return false;                       // pure advanced -> existing broadcast path
+
+            int advAxisCount = 0;
+            foreach (var t in items) if (t.kind == MixKind.Adv) advAxisCount++;
+            if (advAxisCount < 2) return false;                        // single-advanced fast paths already covered it
+
+            // Trailing axes the tuple did not reach are full ':'.
+            for (int a = srcAxes; a < ndim; a++)
+                items.Add((MixKind.Slice, null, 0, Slice.All));
+
+            // Source axis consumed by each item (-1 for newaxis).
+            var axisOfItem = new int[items.Count];
+            for (int i = 0, axc = 0; i < items.Count; i++)
+                axisOfItem[i] = items[i].kind == MixKind.NewAxis ? -1 : axc++;
+
+            // Consecutiveness: a slice/newaxis between the first and last advanced item
+            // (ints count as advanced 0-d) moves the block to the front.
+            int firstAdv = -1, lastAdv = -1;
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].kind == MixKind.Adv || items[i].kind == MixKind.Int)
+                { if (firstAdv < 0) firstAdv = i; lastAdv = i; }
+            bool consecutive = true;
+            for (int i = firstAdv; i <= lastAdv; i++)
+                if (items[i].kind == MixKind.Slice || items[i].kind == MixKind.NewAxis)
+                { consecutive = false; break; }
+
+            // Broadcast all advanced indices together -> bshape (the block).
+            var advArrays = new List<NDArray>(advAxisCount);
+            foreach (var t in items) if (t.kind == MixKind.Adv) advArrays.Add(t.adv.astype(NPTypeCode.Int64));
+            NDArray[] advB = np.broadcast_arrays(advArrays.ToArray());
+            long[] bshape = advB[0].Shape.dimensions;
+            int m = bshape.Length;
+
+            // Pre-resolve slice index arrays once (also gives their output lengths).
+            var sliceIndex = new NDArray[items.Count];
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].kind == MixKind.Slice)
+                    sliceIndex[i] = GetIndicesFromSlice(srcShape, items[i].slc, axisOfItem[i]);
+
+            // Compute the FINAL (consec-aware) output layout: the block dims, plus one
+            // dim per slice and per newaxis, in the right order. slicePos[i] records the
+            // output-dim index a slice item occupies.
+            var outShape = new List<long>(items.Count + m);
+            int blockStart = -1;
+            var slicePos = new int[items.Count];
+            for (int i = 0; i < slicePos.Length; i++) slicePos[i] = -1;
+
+            if (!consecutive)
+            {
+                blockStart = 0;
+                for (int d = 0; d < m; d++) outShape.Add(bshape[d]);
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (items[i].kind == MixKind.Slice) { slicePos[i] = outShape.Count; outShape.Add(sliceIndex[i].size); }
+                    else if (items[i].kind == MixKind.NewAxis) { outShape.Add(1); }
+                }
+            }
+            else
+            {
+                bool blockEmitted = false;
+                for (int i = 0; i < items.Count; i++)
+                {
+                    switch (items[i].kind)
+                    {
+                        case MixKind.Slice: slicePos[i] = outShape.Count; outShape.Add(sliceIndex[i].size); break;
+                        case MixKind.NewAxis: outShape.Add(1); break;
+                        case MixKind.Adv:
+                        case MixKind.Int:
+                            if (!blockEmitted) { blockStart = outShape.Count; for (int d = 0; d < m; d++) outShape.Add(bshape[d]); blockEmitted = true; }
+                            break;
+                    }
+                }
+            }
+
+            int outRank = outShape.Count;
+
+            // One integer index array per source axis, reshaped to occupy its output
+            // role and broadcast (advanced -> the block dims; slice -> its own dim;
+            // int -> all-ones constant). broadcast_arrays then stretches them to outShape.
+            var axisIndex = new NDArray[ndim];
+            int advCursor = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                int a = axisOfItem[i];
+                switch (items[i].kind)
+                {
+                    case MixKind.Adv:
+                    {
+                        var shp = new long[outRank];
+                        for (int d = 0; d < outRank; d++) shp[d] = 1;
+                        for (int d = 0; d < m; d++) shp[blockStart + d] = bshape[d];
+                        axisIndex[a] = advB[advCursor++].reshape(shp);
+                        break;
+                    }
+                    case MixKind.Int:
+                    {
+                        var shp = new long[outRank];
+                        for (int d = 0; d < outRank; d++) shp[d] = 1;
+                        axisIndex[a] = np.array(new long[] { items[i].iv }, copy: false).reshape(shp);
+                        break;
+                    }
+                    case MixKind.Slice:
+                    {
+                        var shp = new long[outRank];
+                        for (int d = 0; d < outRank; d++) shp[d] = 1;
+                        shp[slicePos[i]] = sliceIndex[i].size;
+                        axisIndex[a] = sliceIndex[i].reshape(shp);
+                        break;
+                    }
+                    // NewAxis consumes no source axis (its size-1 output dim is implicit
+                    // in every axisIndex' all-ones layout).
+                }
+            }
+
+            grid = np.broadcast_arrays(axisIndex);
             return true;
         }
 

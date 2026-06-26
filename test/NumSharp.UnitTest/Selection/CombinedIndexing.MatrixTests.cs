@@ -426,21 +426,54 @@ namespace NumSharp.UnitTest.Selection
             act.Should().Throw<IncorrectShapeException>();
         }
 
-        // ------------------- documented gap (NumPy parity not yet implemented) -------------------
+        // ------------- two-or-more advanced indices mixed with slices (axis placement) -------------
+        // NumPy broadcasts all advanced indices TOGETHER into one block of axes; each slice/newaxis
+        // keeps its own output axis (outer product). The block stays IN PLACE when the advanced
+        // indices are consecutive, or moves to the FRONT when a slice/newaxis separates them
+        // (mapping.c PyArray_MapIterNew mit->consec / _get_transpose). Implemented by
+        // TryBuildMultiAdvancedGrid; full matrix in IndexingProbeMatrix.Tests.cs (c32..c50, cs14..cs19).
+        // Implementation notes: docs/plans/advanced-index-axis-placement.md.
 
         [TestMethod]
-        [OpenBugs]
-        public void Get_TwoMasks_SeparatedBySlice_AdvancedAxesToFront_Unsupported()
+        public void Get_TwoMasks_SeparatedBySlice_AdvancedAxesToFront()
         {
-            // np: b[[T,F], :, [T,F,T,F]] -> two advanced indices separated by a slice.
-            // NumPy broadcasts the two advanced indices (-> length-2) and, because they are
-            // NON-contiguous, moves the advanced axis to the FRONT: result (2,3) [0,4,8,2,6,10].
-            // NumSharp does not yet implement the advanced-axes placement rule for >=2
-            // advanced indices mixed with slices (both contiguous and separated forms).
-            // Handover with the NumPy rule, references, and an implementation plan:
-            //   docs/plans/advanced-index-axis-placement.md
+            // np: b[[T,F], :, [T,F,T,F]] -> two advanced indices separated by a slice. The two
+            // advanced indices broadcast (-> length-2) and, being NON-consecutive, move to the
+            // FRONT: result (2,3) [0,4,8,2,6,10].
             var r = B3[M(true, false), ":", M(true, false, true, false)];
             r.Should().BeShaped(2, 3).And.BeOfValues(0, 4, 8, 2, 6, 10);
+        }
+
+        [TestMethod]
+        public void Get_TwoArrays_ContiguousThenSlice_BlockInPlace()
+        {
+            // np: b[ia, ib, :] -> arrays consecutive at the front, slice trailing -> (2,4).
+            var ia = np.array(new long[] { 0, 1 });
+            var ib = np.array(new long[] { 0, 2 });
+            var r = B3[ia, ib, ":"];
+            r.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 20, 21, 22, 23);
+        }
+
+        [TestMethod]
+        public void Get_SliceThenTwoArrays_BlockAfterSlice()
+        {
+            // np: b[:, ia, ib] -> slice keeps its axis, consecutive arrays follow -> (2,2).
+            var ia = np.array(new long[] { 0, 1 });
+            var ib = np.array(new long[] { 0, 2 });
+            var r = B3[":", ia, ib];
+            r.Should().BeShaped(2, 2).And.BeOfValues(0, 6, 12, 18);
+        }
+
+        [TestMethod]
+        public void Set_TwoArrays_SeparatedBySlice_GridValueBroadcast()
+        {
+            // np: b[ia, :, ib] = (2,3) grid -> scatters one value per (broadcast-pair, slice) cell.
+            var b = B3;
+            var ia = np.array(new long[] { 0, 1 });
+            var ib = np.array(new long[] { 0, 2 });
+            b[ia, ":", ib] = np.array(new long[,] { { 100, 200, 300 }, { 400, 500, 600 } });
+            b.Should().BeOfValues(100, 1, 2, 3, 200, 5, 6, 7, 300, 9, 10, 11,
+                                  12, 13, 400, 15, 16, 17, 500, 19, 20, 21, 600, 23);
         }
     }
 }
