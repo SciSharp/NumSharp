@@ -19,11 +19,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Backends\Unmanaged\Iterators\**" />
     <Compile Remove="data\**" />
-    <EmbeddedResource Remove="Backends\Unmanaged\Iterators\**" />
     <EmbeddedResource Remove="data\**" />
-    <None Remove="Backends\Unmanaged\Iterators\**" />
     <None Remove="data\**" />
     <None Remove="NumSharp.Bitmap\resources\odd-width.png" />
     <EmbeddedResource Include="NumSharp.Bitmap\resources\odd-width.png" />

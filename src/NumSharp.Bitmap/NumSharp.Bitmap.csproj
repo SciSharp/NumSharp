@@ -39,24 +39,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="NewFolder\**" />
-    <EmbeddedResource Remove="NewFolder\**" />
-    <None Remove="NewFolder\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Operations\NdArray.ElementsWise.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Remove="NumSharp.Bitmap.csproj.DotSettings" />
     <None Remove="NumSharp.Image.csproj.DotSettings" />
     <None Remove="Open.snk" />
