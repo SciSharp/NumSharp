@@ -99,12 +99,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for comparison kernels.
         /// Key: ComparisonKernelKey (LhsType, RhsType, Op, Path)
         /// </summary>
-        private static readonly ConcurrentDictionary<ComparisonKernelKey, ComparisonKernel> _comparisonCache = new();
-
-        /// <summary>
-        /// Number of comparison kernels in cache.
-        /// </summary>
-        public static int ComparisonCachedCount => _comparisonCache.Count;
+        internal static readonly ConcurrentDictionary<ComparisonKernelKey, ComparisonKernel> _comparisonCache = new();
 
         /// <summary>
         /// Get or generate a comparison kernel for the specified key.
@@ -116,7 +111,6 @@ namespace NumSharp.Backends.Kernels
 
             return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
         }
-
 
         /// <summary>
         /// Check if SIMD can be used for this comparison operation.
@@ -1263,12 +1257,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cache for comparison scalar kernels.
         /// </summary>
-        private static readonly ConcurrentDictionary<ComparisonScalarKernelKey, Delegate> _comparisonScalarCache = new();
-
-        /// <summary>
-        /// Number of comparison scalar kernels in cache.
-        /// </summary>
-        public static int ComparisonScalarCachedCount => _comparisonScalarCache.Count;
+        internal static readonly ConcurrentDictionary<ComparisonScalarKernelKey, Delegate> _comparisonScalarCache = new();
 
         /// <summary>
         /// Get or generate a comparison scalar delegate.

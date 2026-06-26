@@ -60,7 +60,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine();
 
             // ---- 2. Fusion probe: correctness + abbreviated perf ----
-            int cacheBefore = DirectILKernelGenerator.InnerLoopCachedCount;
+            int cacheBefore = GeneratedDelegates.InnerLoopCount;
             RunFusionProbe(trainX, trainY);
 
             // ---- 3. Build model and train ----
@@ -85,7 +85,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             Console.WriteLine();
 
             // ---- 4. Instrumentation ----
-            int cacheAfter = DirectILKernelGenerator.InnerLoopCachedCount;
+            int cacheAfter = GeneratedDelegates.InnerLoopCount;
             Console.WriteLine("Kernel / delegate instrumentation:");
             Console.WriteLine($"  IL kernel cache entries : {cacheBefore} -> {cacheAfter} (delta {cacheAfter - cacheBefore})");
             Console.WriteLine($"  NpyExpr delegate slots  : {DelegateSlots.RegisteredCount}");

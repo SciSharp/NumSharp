@@ -103,7 +103,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             var arr = new NDArray(NPTypeCode.Single, new Shape(count, px), fillZeros: false);
             unsafe
             {
-                float* dst = (float*)arr.Address;
+                float* dst = (float*)arr.Unsafe.Address;
                 for (int i = 0; i < count; i++)
                 {
                     int srcBase = 16 + i * px;
@@ -133,7 +133,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             var arr = new NDArray(NPTypeCode.Byte, new Shape(count), fillZeros: false);
             unsafe
             {
-                byte* dst = (byte*)arr.Address;
+                byte* dst = (byte*)arr.Unsafe.Address;
                 for (int i = 0; i < count; i++)
                     dst[i] = raw[8 + i];
             }
@@ -177,8 +177,8 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             var labels = new NDArray(NPTypeCode.Byte,   new Shape(count),            fillZeros: false);
             unsafe
             {
-                float* pxl = (float*)images.Address;
-                byte*  lbl = (byte*)labels.Address;
+                float* pxl = (float*)images.Unsafe.Address;
+                byte*  lbl = (byte*)labels.Unsafe.Address;
                 for (int i = 0; i < count; i++)
                 {
                     int c = rng.Next(classes);

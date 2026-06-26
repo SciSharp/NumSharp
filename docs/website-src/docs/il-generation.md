@@ -655,11 +655,14 @@ public static ContiguousKernel<T>? GetContiguousKernel<T>(BinaryOp op)
 
 ### Cache Statistics
 
+All kernel-cache sizes are exposed read-only on the centralized `GeneratedDelegates`
+class (the individual caches are `internal`):
+
 ```csharp
-public static int CachedCount => _contiguousKernelCache.Count;
-public static int UnaryCachedCount => _unaryCache.Count;
-public static int ElementReductionCachedCount => _elementReductionCache.Count;
-// ... etc
+public static int BinaryCount => _contiguousKernelCache.Count;
+public static int UnaryCount => _unaryCache.Count;
+public static int ElementReductionCount => _elementReductionCache.Count;
+// ... etc — see GeneratedDelegates
 ```
 
 ---

@@ -120,12 +120,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for unary kernels.
         /// Key: UnaryKernelKey (InputType, OutputType, Op, IsContiguous)
         /// </summary>
-        private static readonly ConcurrentDictionary<UnaryKernelKey, UnaryKernel> _unaryCache = new();
-
-        /// <summary>
-        /// Number of unary kernels in cache.
-        /// </summary>
-        public static int UnaryCachedCount => _unaryCache.Count;
+        internal static readonly ConcurrentDictionary<UnaryKernelKey, UnaryKernel> _unaryCache = new();
 
         /// <summary>
         /// Get or generate a unary kernel for the specified key.
@@ -137,7 +132,6 @@ namespace NumSharp.Backends.Kernels
 
             return _unaryCache.GetOrAdd(key, GenerateUnaryKernel);
         }
-
 
         /// <summary>
         /// Generate a unary kernel for the specified key.

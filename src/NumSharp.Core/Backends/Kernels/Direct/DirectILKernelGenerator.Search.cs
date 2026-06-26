@@ -40,7 +40,7 @@ namespace NumSharp.Backends.Kernels
             void* sorterPtr,
             long* retPtr);
 
-        private readonly struct SearchKernelKey : IEquatable<SearchKernelKey>
+        internal readonly struct SearchKernelKey : IEquatable<SearchKernelKey>
         {
             public readonly NPTypeCode Type;
             public readonly bool LeftSide;
@@ -56,12 +56,7 @@ namespace NumSharp.Backends.Kernels
             public override string ToString() => $"{Type}_{(LeftSide ? "Left" : "Right")}_{(HasSorter ? "Sort" : "NoSort")}_{(ContiguousA ? "Contig" : "Strided")}";
         }
 
-        private static readonly ConcurrentDictionary<SearchKernelKey, SearchSortedKernel> _searchCache = new();
-
-        /// <summary>
-        /// Number of cached searchsorted kernels.
-        /// </summary>
-        public static int SearchCachedCount => _searchCache.Count;
+        internal static readonly ConcurrentDictionary<SearchKernelKey, SearchSortedKernel> _searchCache = new();
 
         /// <summary>
         /// Get or generate a searchsorted kernel.
@@ -78,7 +73,6 @@ namespace NumSharp.Backends.Kernels
                 throw new InvalidOperationException("IL generation is disabled");
             return _searchCache.GetOrAdd(new SearchKernelKey(type, leftSide, hasSorter, contiguousA), GenerateSearchKernel);
         }
-
 
         private static SearchSortedKernel GenerateSearchKernel(SearchKernelKey key)
         {

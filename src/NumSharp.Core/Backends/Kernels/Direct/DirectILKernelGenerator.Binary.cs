@@ -103,15 +103,9 @@ namespace NumSharp.Backends.Kernels
         /// Cache of IL-generated contiguous kernels.
         /// Key: (Operation, Type)
         /// </summary>
-        private static readonly ConcurrentDictionary<(BinaryOp, Type), Delegate> _contiguousKernelCache = new();
-
-        /// <summary>
-        /// Number of IL-generated kernels in cache.
-        /// </summary>
-        public static int CachedCount => _contiguousKernelCache.Count;
+        internal static readonly ConcurrentDictionary<(BinaryOp, Type), Delegate> _contiguousKernelCache = new();
 
         #region Public API
-
 
         #endregion
 

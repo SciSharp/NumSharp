@@ -409,13 +409,13 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "call_reuse_v1");
-            int after1 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after1 = GeneratedDelegates.InnerLoopCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "call_reuse_v1");
-            int after2 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after2 = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(after1, after2, "Same cache key → same kernel");
         }
@@ -431,12 +431,12 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Sqrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterSqrt = DirectILKernelGenerator.InnerLoopCachedCount;
+            int afterSqrt = GeneratedDelegates.InnerLoopCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Call(Math.Cbrt, NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterCbrt = DirectILKernelGenerator.InnerLoopCachedCount;
+            int afterCbrt = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(afterSqrt + 1, afterCbrt,
                 "Different MethodInfos must produce distinct cache entries");

@@ -583,20 +583,20 @@ Layer 1 and Layer 2 element-wise kernels have a tier-0 JIT characteristic: when 
 
 ### Cache state — two lifetimes to know about
 
-The full integration layer shares two process-lifetime caches. Inspect them via the internal hooks (need `[InternalsVisibleTo]` or the `AssemblyName=NumSharp.DotNetRunScript` script directive):
+The full integration layer shares two process-lifetime caches. The kernel-cache counts are public read-only observability on `GeneratedDelegates`; resetting a cache is an internal test-only hook (needs `[InternalsVisibleTo]` or the `AssemblyName=NumSharp.DotNetRunScript` script directive):
 
 ```csharp
-int kernels = ILKernelGenerator.InnerLoopCachedCount;   // compiled DynamicMethods
-int slots   = DelegateSlots.RegisteredCount;            // registered delegates + targets
+int kernels = GeneratedDelegates.InnerLoopCount;        // compiled DynamicMethods (public)
+int slots   = DelegateSlots.RegisteredCount;            // registered delegates + targets (public)
 
-ILKernelGenerator.ClearInnerLoopCache();                // test-only
+DirectILKernelGenerator.ClearInnerLoopCache();          // internal, test-only
 DelegateSlots.Clear();                                   // test-only — pair with above!
 ```
 
 After running the full showcase (Layer 3 + Tiers A-C + Call across 130 warmup+timed iterations), typical counts are:
 
 ```
-ILKernelGenerator.InnerLoopCachedCount = 4     ← one per unique cache key across all tiers
+GeneratedDelegates.InnerLoopCount      = 4     ← one per unique cache key across all tiers
 DelegateSlots.RegisteredCount          = 131   ← one per Call(lambda) construction
 ```
 
@@ -1234,8 +1234,8 @@ Typical memory profile:
 
 To inspect or reset during tests:
 ```csharp
-ILKernelGenerator.InnerLoopCachedCount;   // count of compiled kernels
-ILKernelGenerator.ClearInnerLoopCache();  // wipe for fresh-start testing
+GeneratedDelegates.InnerLoopCount;        // count of compiled kernels (public)
+DirectILKernelGenerator.ClearInnerLoopCache();  // internal — wipe for fresh-start testing
 ```
 
 Both are `internal`, so scripts need the `AssemblyName=NumSharp.DotNetRunScript` override.
@@ -1345,7 +1345,7 @@ Non-obvious but permanent behaviors of the DSL:
 
 Tier 3C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
 
-- **Inspect the kernel cache.** `ILKernelGenerator.InnerLoopCachedCount` (internal; use `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) gives you a count. `ILKernelGenerator.ClearInnerLoopCache()` (internal) lets you force recompilation in a test.
+- **Inspect the kernel cache.** `GeneratedDelegates.InnerLoopCount` (public) gives you a count. `DirectILKernelGenerator.ClearInnerLoopCache()` (internal; needs `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) lets you force recompilation in a test.
 - **Inspect the delegate slot registry** (only relevant when `Call` is in play). `DelegateSlots.RegisteredCount` (internal) returns the sum of registered delegates + registered instance targets. Growing unboundedly means a per-call lambda or target allocation somewhere — find it by comparing counts before and after your suspected hot path. `DelegateSlots.Clear()` wipes the registry; always pair with `ClearInnerLoopCache()` because cleared-but-cached kernels will throw `KeyNotFoundException` on their next invocation.
 - **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?". For `Call` nodes in particular, the signature includes `MetadataToken` and `ModuleVersionId` — if those differ across two calls of what you thought was the same method, the compiler loaded the method from different assemblies or modules.
 - **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
@@ -1382,7 +1382,7 @@ Is the loop shape non-rectangular (gather/scatter, cross-element deps)?
   yes → Tier 3A. Emit the whole inner-loop IL yourself.
 ```
 
-**Caching is shared across all tiers.** All three write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `InnerLoopCachedCount` (internal) exposes the size for tests.
+**Caching is shared across all tiers.** All three write into the same `_innerLoopCache` inside `ILKernelGenerator.InnerLoop.cs`. The first `ExecuteRawIL("k")` call JIT-compiles; every subsequent call with the same key returns the cached delegate immediately. `GeneratedDelegates.InnerLoopCount` (public) exposes the size for tests.
 
 ---
 

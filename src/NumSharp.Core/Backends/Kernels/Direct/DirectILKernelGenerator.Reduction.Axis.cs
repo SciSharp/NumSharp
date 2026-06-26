@@ -32,12 +32,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cache for axis reduction kernels (delegates that call SIMD helpers).
         /// </summary>
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _axisReductionCache = new();
-
-        /// <summary>
-        /// Number of axis reduction kernels in cache.
-        /// </summary>
-        public static int AxisReductionCachedCount => _axisReductionCache.Count;
+        internal static readonly System.Collections.Concurrent.ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _axisReductionCache = new();
 
         /// <summary>
         /// Try to get an axis reduction kernel.

@@ -29,9 +29,7 @@ namespace NumSharp.Backends.Kernels
     {
         #region Boolean Axis Reduction (All / Any)
 
-        private static readonly ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _boolAxisReductionCache = new();
-
-        public static int BooleanAxisReductionCachedCount => _boolAxisReductionCache.Count;
+        internal static readonly ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _boolAxisReductionCache = new();
 
         /// <summary>
         ///     Try to get a boolean axis reduction kernel (All / Any).

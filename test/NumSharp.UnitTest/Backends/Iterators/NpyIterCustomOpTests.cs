@@ -292,9 +292,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter.ExecuteElementWiseBinary(NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
                     scalar, vec, "test_reuse_add_f32");
             }
-            int afterFirst = (int)typeof(DirectILKernelGenerator)
-                .GetProperty("InnerLoopCachedCount", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
-                .GetValue(null)!;
+            int afterFirst = GeneratedDelegates.InnerLoopCount;
 
             using (var iter2 = NpyIterRef.MultiNew(3, new[] { a2, b2, c2 },
                 NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
@@ -303,9 +301,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter2.ExecuteElementWiseBinary(NPTypeCode.Single, NPTypeCode.Single, NPTypeCode.Single,
                     scalar, vec, "test_reuse_add_f32");  // same key
             }
-            int afterSecond = (int)typeof(DirectILKernelGenerator)
-                .GetProperty("InnerLoopCachedCount", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
-                .GetValue(null)!;
+            int afterSecond = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(afterFirst, afterSecond, "Second call should not have grown the cache.");
         }

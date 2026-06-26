@@ -57,12 +57,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for cumulative (scan) kernels.
         /// Key: CumulativeKernelKey (InputType, OutputType, Op, IsContiguous)
         /// </summary>
-        private static readonly ConcurrentDictionary<CumulativeKernelKey, Delegate> _scanCache = new();
-
-        /// <summary>
-        /// Number of scan kernels in cache.
-        /// </summary>
-        public static int ScanCachedCount => _scanCache.Count;
+        internal static readonly ConcurrentDictionary<CumulativeKernelKey, Delegate> _scanCache = new();
 
         /// <summary>
         /// Get or generate a cumulative (scan) kernel.
@@ -474,13 +469,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for cumulative axis (scan along axis) kernels.
         /// Key: CumulativeAxisKernelKey (InputType, OutputType, Op, InnerAxisContiguous)
         /// </summary>
-        private static readonly ConcurrentDictionary<CumulativeAxisKernelKey, Delegate> _axisScanCache = new();
-
-        /// <summary>
-        /// Number of axis scan kernels in cache.
-        /// </summary>
-        public static int AxisScanCachedCount => _axisScanCache.Count;
-
+        internal static readonly ConcurrentDictionary<CumulativeAxisKernelKey, Delegate> _axisScanCache = new();
 
         /// <summary>
         /// Try to get or generate a cumulative axis kernel.
@@ -609,7 +598,6 @@ namespace NumSharp.Backends.Kernels
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
             }
         }
-
 
         /// <summary>
         /// Same-type axis cumprod implementation.
@@ -2158,7 +2146,6 @@ namespace NumSharp.Backends.Kernels
         #endregion
 
         #region Public SIMD Helpers for Direct Calls
-
 
         /// <summary>
         /// Dispatch same-type cumsum to appropriate implementation.

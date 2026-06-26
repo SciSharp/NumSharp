@@ -58,12 +58,7 @@ namespace NumSharp.Backends.Kernels
     {
         #region Inner-Loop Kernel Cache
 
-        private static readonly ConcurrentDictionary<string, NpyInnerLoopFunc> _innerLoopCache = new();
-
-        /// <summary>
-        /// Number of cached inner-loop kernels (Tier 3A and Tier 3B combined).
-        /// </summary>
-        internal static int InnerLoopCachedCount => _innerLoopCache.Count;
+        internal static readonly ConcurrentDictionary<string, NpyInnerLoopFunc> _innerLoopCache = new();
 
         /// <summary>
         /// Drop all cached inner-loop kernels. Exposed for tests.

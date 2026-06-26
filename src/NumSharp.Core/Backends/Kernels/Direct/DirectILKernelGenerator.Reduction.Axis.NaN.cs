@@ -30,12 +30,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cache for NaN axis reduction kernels.
         /// </summary>
-        private static readonly ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _nanAxisReductionCache = new();
-
-        /// <summary>
-        /// Number of NaN axis reduction kernels in cache.
-        /// </summary>
-        public static int NanAxisReductionCachedCount => _nanAxisReductionCache.Count;
+        internal static readonly ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _nanAxisReductionCache = new();
 
         /// <summary>
         /// Try to get a NaN-aware axis reduction kernel.

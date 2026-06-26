@@ -36,10 +36,7 @@ namespace NumSharp.Backends.Kernels
         public unsafe delegate void InnerCastLoop(
             void* src, long srcStrideBytes, void* dst, long dstStrideBytes, long count);
 
-        private static readonly ConcurrentDictionary<CastKernelKey, InnerCastLoop> _innerCastCache = new();
-
-        /// <summary>Number of cached scalar inner-cast kernels (diagnostics).</summary>
-        public static int InnerCastCachedCount => _innerCastCache.Count;
+        internal static readonly ConcurrentDictionary<CastKernelKey, InnerCastLoop> _innerCastCache = new();
 
         /// <summary>
         /// Get or emit the scalar inner-loop cast kernel for the pair. Non-null for every

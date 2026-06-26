@@ -4,5 +4,4 @@
 [assembly: InternalsVisibleTo("NumSharp.Benchmark")]
 [assembly: InternalsVisibleTo("TensorFlowNET.UnitTest")]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]
-[assembly: InternalsVisibleTo("NeuralNetwork.NumSharp")]
 #endif

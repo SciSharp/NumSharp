@@ -33,13 +33,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cache for NaN element reduction kernels.
         /// </summary>
-        private static readonly ConcurrentDictionary<ElementReductionKernelKey, Delegate> _nanElementReductionCache = new();
-
-        /// <summary>
-        /// Number of NaN element reduction kernels in cache.
-        /// </summary>
-        public static int NanElementReductionCachedCount => _nanElementReductionCache.Count;
-
+        internal static readonly ConcurrentDictionary<ElementReductionKernelKey, Delegate> _nanElementReductionCache = new();
 
         /// <summary>
         /// Generate an IL-based NaN element reduction kernel.

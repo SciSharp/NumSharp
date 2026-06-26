@@ -95,12 +95,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for mixed-type kernels.
         /// Key: MixedTypeKernelKey (LhsType, RhsType, ResultType, Op, Path)
         /// </summary>
-        private static readonly ConcurrentDictionary<MixedTypeKernelKey, MixedTypeKernel> _mixedTypeCache = new();
-
-        /// <summary>
-        /// Number of mixed-type kernels in cache.
-        /// </summary>
-        public static int MixedTypeCachedCount => _mixedTypeCache.Count;
+        internal static readonly ConcurrentDictionary<MixedTypeKernelKey, MixedTypeKernel> _mixedTypeCache = new();
 
         /// <summary>
         /// Get or generate a mixed-type kernel for the specified key.
@@ -112,7 +107,6 @@ namespace NumSharp.Backends.Kernels
 
             return _mixedTypeCache.GetOrAdd(key, GenerateMixedTypeKernel);
         }
-
 
         /// <summary>
         /// Generate a mixed-type kernel for the specified key.

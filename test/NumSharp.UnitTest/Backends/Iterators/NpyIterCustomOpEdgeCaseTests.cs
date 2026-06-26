@@ -904,17 +904,11 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =====================================================================
-        // Reflection helpers for internal cache count
+        // Helpers for inner-loop kernel cache (public count, internal reset)
         // =====================================================================
 
-        private static PropertyInfo _cacheCountProp = typeof(DirectILKernelGenerator)
-            .GetProperty("InnerLoopCachedCount", BindingFlags.Static | BindingFlags.NonPublic)!;
+        private static int GetInnerLoopCacheCount() => GeneratedDelegates.InnerLoopCount;
 
-        private static MethodInfo _clearCacheMethod = typeof(DirectILKernelGenerator)
-            .GetMethod("ClearInnerLoopCache", BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        private static int GetInnerLoopCacheCount() => (int)_cacheCountProp.GetValue(null)!;
-
-        private static void InvokeClearCache() => _clearCacheMethod.Invoke(null, null);
+        private static void InvokeClearCache() => DirectILKernelGenerator.ClearInnerLoopCache();
     }
 }

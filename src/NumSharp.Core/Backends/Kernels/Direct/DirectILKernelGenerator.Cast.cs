@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Kernels
         // Caches
         // -----------------------------------------------------------------
 
-        private readonly struct CastKernelKey : IEquatable<CastKernelKey>
+        internal readonly struct CastKernelKey : IEquatable<CastKernelKey>
         {
             public readonly NPTypeCode Src;
             public readonly NPTypeCode Dst;
@@ -81,17 +81,11 @@ namespace NumSharp.Backends.Kernels
             public override string ToString() => $"{Src}To{Dst}";
         }
 
-        private static readonly ConcurrentDictionary<CastKernelKey, CastKernel> _castCache = new();
+        internal static readonly ConcurrentDictionary<CastKernelKey, CastKernel> _castCache = new();
         private static readonly ConcurrentDictionary<CastKernelKey, byte> _castUnsupported = new();
 
-        private static readonly ConcurrentDictionary<CastKernelKey, StridedCastKernel> _stridedCastCache = new();
+        internal static readonly ConcurrentDictionary<CastKernelKey, StridedCastKernel> _stridedCastCache = new();
         private static readonly ConcurrentDictionary<CastKernelKey, byte> _stridedCastUnsupported = new();
-
-        /// <summary>Number of cached contig cast kernels (diagnostics).</summary>
-        public static int CastCachedCount => _castCache.Count;
-
-        /// <summary>Number of cached strided cast kernels (diagnostics).</summary>
-        public static int StridedCastCachedCount => _stridedCastCache.Count;
 
         // -----------------------------------------------------------------
         // Public API

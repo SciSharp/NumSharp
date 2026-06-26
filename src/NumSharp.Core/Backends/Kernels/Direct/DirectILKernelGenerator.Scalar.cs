@@ -28,24 +28,14 @@ namespace NumSharp.Backends.Kernels
         /// Key: UnaryScalarKernelKey (InputType, OutputType, Op)
         /// Value: Delegate (Func&lt;TInput, TOutput&gt;)
         /// </summary>
-        private static readonly ConcurrentDictionary<UnaryScalarKernelKey, Delegate> _unaryScalarCache = new();
+        internal static readonly ConcurrentDictionary<UnaryScalarKernelKey, Delegate> _unaryScalarCache = new();
 
         /// <summary>
         /// Cache for binary scalar kernels.
         /// Key: BinaryScalarKernelKey (LhsType, RhsType, ResultType, Op)
         /// Value: Delegate (Func&lt;TLhs, TRhs, TResult&gt;)
         /// </summary>
-        private static readonly ConcurrentDictionary<BinaryScalarKernelKey, Delegate> _binaryScalarCache = new();
-
-        /// <summary>
-        /// Number of unary scalar kernels in cache.
-        /// </summary>
-        public static int UnaryScalarCachedCount => _unaryScalarCache.Count;
-
-        /// <summary>
-        /// Number of binary scalar kernels in cache.
-        /// </summary>
-        public static int BinaryScalarCachedCount => _binaryScalarCache.Count;
+        internal static readonly ConcurrentDictionary<BinaryScalarKernelKey, Delegate> _binaryScalarCache = new();
 
         /// <summary>
         /// Get or generate an IL-based unary scalar delegate.

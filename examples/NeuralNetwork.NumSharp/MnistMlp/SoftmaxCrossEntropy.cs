@@ -97,7 +97,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             NPTypeCode lt = labels.typecode;
             unsafe
             {
-                float* dst = (float*)one_hot.Address;
+                float* dst = (float*)one_hot.Unsafe.Address;
                 for (int i = 0; i < n; i++)
                 {
                     int label = lt switch

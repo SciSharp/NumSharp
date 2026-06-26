@@ -33,12 +33,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache for element-wise reduction kernels.
         /// Key: ElementReductionKernelKey
         /// </summary>
-        private static readonly ConcurrentDictionary<ElementReductionKernelKey, Delegate> _elementReductionCache = new();
-
-        /// <summary>
-        /// Number of element reduction kernels in cache.
-        /// </summary>
-        public static int ElementReductionCachedCount => _elementReductionCache.Count;
+        internal static readonly ConcurrentDictionary<ElementReductionKernelKey, Delegate> _elementReductionCache = new();
 
         /// <summary>
         /// Get or generate a typed element-wise reduction kernel.

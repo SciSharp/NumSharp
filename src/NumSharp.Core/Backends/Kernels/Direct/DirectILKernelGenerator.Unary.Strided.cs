@@ -63,12 +63,7 @@ namespace NumSharp.Backends.Kernels
         /// <see cref="UnaryKernelKey"/> the caller uses for the contiguous SIMD kernel
         /// (its <c>IsContiguous</c> field is irrelevant here — the source is always strided).
         /// </summary>
-        private static readonly ConcurrentDictionary<UnaryKernelKey, StridedUnaryKernel> _stridedUnaryCache = new();
-
-        /// <summary>
-        /// Number of fused strided-SIMD unary kernels in cache.
-        /// </summary>
-        public static int StridedUnaryCachedCount => _stridedUnaryCache.Count;
+        internal static readonly ConcurrentDictionary<UnaryKernelKey, StridedUnaryKernel> _stridedUnaryCache = new();
 
         /// <summary>
         /// Get or generate a fused strided-SIMD unary kernel for the given key.

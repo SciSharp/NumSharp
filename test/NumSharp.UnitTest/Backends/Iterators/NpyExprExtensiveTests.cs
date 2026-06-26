@@ -1035,7 +1035,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         public void Cache_DistinctExpressionsProduceDistinctKernels()
         {
             DirectILKernelGenerator.ClearInnerLoopCache();
-            int before = DirectILKernelGenerator.InnerLoopCachedCount;
+            int before = GeneratedDelegates.InnerLoopCount;
 
             var a = np.arange(10).astype(np.float64);
             var r1 = np.empty_like(a);
@@ -1044,12 +1044,12 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using (var it = Iter(a, r1))
                 it.ExecuteExpression(NpyExpr.Exp(NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterExp = DirectILKernelGenerator.InnerLoopCachedCount;
+            int afterExp = GeneratedDelegates.InnerLoopCount;
 
             using (var it = Iter(a, r2))
                 it.ExecuteExpression(NpyExpr.Log(NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int afterLog = DirectILKernelGenerator.InnerLoopCachedCount;
+            int afterLog = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(before + 1, afterExp, "Exp should add 1 entry");
             Assert.AreEqual(afterExp + 1, afterLog, "Log should add 1 entry (distinct)");
@@ -1066,13 +1066,13 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 it.ExecuteExpression(NpyExpr.Sin(NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "cache_sin_reuse");
-            int after1 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after1 = GeneratedDelegates.InnerLoopCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Sin(NpyExpr.Input(0)),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double,
                     cacheKey: "cache_sin_reuse");
-            int after2 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after2 = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(after1, after2, "Same cache key should reuse kernel");
         }
@@ -1346,7 +1346,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 var expr = NpyExpr.Sqrt(NpyExpr.Input(0));
                 it.ExecuteExpression(expr, new[] { NPTypeCode.Double }, NPTypeCode.Double);
             }
-            int after1 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after1 = GeneratedDelegates.InnerLoopCount;
 
             // Build a *different instance* of the same expression — must reuse.
             using (var it = Iter(a, r))
@@ -1354,7 +1354,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 var expr = NpyExpr.Sqrt(NpyExpr.Input(0));
                 it.ExecuteExpression(expr, new[] { NPTypeCode.Double }, NPTypeCode.Double);
             }
-            int after2 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after2 = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(after1, after2,
                 "Structurally identical exprs should produce same auto-derived cache key");
@@ -1371,12 +1371,12 @@ namespace NumSharp.UnitTest.Backends.Iterators
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Input(0) + NpyExpr.Const(1.0),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int after1 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after1 = GeneratedDelegates.InnerLoopCount;
 
             using (var it = Iter(a, r))
                 it.ExecuteExpression(NpyExpr.Input(0) + NpyExpr.Const(2.0),
                     new[] { NPTypeCode.Double }, NPTypeCode.Double);
-            int after2 = DirectILKernelGenerator.InnerLoopCachedCount;
+            int after2 = GeneratedDelegates.InnerLoopCount;
 
             Assert.AreEqual(after1 + 1, after2,
                 "Different constant values must produce distinct cache entries");
