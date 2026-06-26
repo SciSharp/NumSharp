@@ -198,6 +198,15 @@ namespace NumSharp
                 }
             }
 
+            // A leading boolean mask (any ndim) followed only by basic indices —
+            // e.g. arr[mask2d, 1:3] = v. Slice the trailing axes to a writable view
+            // (shares memory), then assign through the now-leading partial mask.
+            if (TryBuildLeadingMaskBasicIndex(indicesObjects, out var leadMask, out var leadBasic))
+            {
+                this[leadBasic][leadMask] = values;
+                return;
+            }
+
             // Mixed basic (slice) + single advanced (array / boolean mask) assignment,
             // mirroring the getter: slices stay basic output axes, the advanced index
             // scatters along its axis. Handled before the broadcast path below.

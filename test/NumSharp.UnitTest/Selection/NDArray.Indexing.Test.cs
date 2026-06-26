@@ -1146,7 +1146,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Combining_IndexArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1160,7 +1159,6 @@ namespace NumSharp.UnitTest.Selection
 
 
         [TestMethod]
-        [OpenBugs]
         public void Combining_MaskArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)

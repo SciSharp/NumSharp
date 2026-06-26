@@ -62,6 +62,13 @@ namespace NumSharp
                 }
             }
 
+            // A LEADING boolean mask (any ndim) followed only by basic indices —
+            // e.g. arr[mask2d, 1:3], arr[mask, 2] — reduces to: slice the trailing
+            // axes, then apply the (now-leading) partial boolean mask. Reuses the
+            // unified BooleanMask, so it also covers multi-dimensional masks.
+            if (TryFetchLeadingMaskWithBasic(indicesObjects, out var leadResult))
+                return leadResult;
+
             // Mixed basic (slice) + single advanced (array / boolean mask) indexing.
             // NumPy keeps slices as their own output axes and selects the advanced
             // index along its axis (an outer product), instead of broadcasting slices
@@ -307,6 +314,85 @@ namespace NumSharp
                 outList.Add(it);
             }
             return outList.ToArray();
+        }
+
+        /// <summary>
+        /// Detects a LEADING boolean mask followed only by basic indices and builds the
+        /// equivalent basic index that slices the trailing axes while leaving the mask
+        /// axes full. Shared by the getter and setter. Returns false (caller falls back)
+        /// when items[0] is not a boolean mask, any trailing item is advanced / newaxis /
+        /// ellipsis, or the index count would exceed the array rank.
+        /// </summary>
+        private bool TryBuildLeadingMaskBasicIndex(object[] indicesObjects, out NDArray<bool> mask, out object[] basicIndex)
+        {
+            mask = null;
+            basicIndex = null;
+
+            var normalized = new object[indicesObjects.Length];
+            for (int i = 0; i < indicesObjects.Length; i++)
+            {
+                if (indicesObjects[i] is string str)
+                {
+                    Slice parsed;
+                    try { parsed = new Slice(str); }
+                    catch { return false; }
+                    normalized[i] = parsed;
+                }
+                else
+                {
+                    normalized[i] = indicesObjects[i];
+                }
+            }
+            object[] items = ExpandEllipsisForMixed(normalized, this.ndim);
+
+            if (items.Length < 2 || !(items[0] is NDArray nd0 && nd0.typecode == NPTypeCode.Boolean))
+                return false;
+
+            int k = nd0.ndim;
+            if (k < 1 || k > this.ndim)
+                return false;
+
+            // Everything after the leading mask must be basic (slice / scalar int).
+            for (int i = 1; i < items.Length; i++)
+            {
+                switch (items[i])
+                {
+                    case Slice sl:
+                        if (sl.IsNewAxis || sl.IsEllipsis) return false;
+                        break;
+                    case int _:
+                    case long _:
+                        break;
+                    default:
+                        return false;                                   // advanced index after the mask
+                }
+            }
+
+            int total = k + (items.Length - 1);
+            if (total > this.ndim)
+                return false;                                           // too many indices for the rank
+
+            basicIndex = new object[total];
+            for (int i = 0; i < k; i++) basicIndex[i] = Slice.All;       // mask axes stay full
+            for (int i = 1; i < items.Length; i++) basicIndex[k + i - 1] = items[i];
+            mask = nd0.MakeGeneric<bool>();
+            return true;
+        }
+
+        /// <summary>
+        /// A boolean mask at the LEADING position of a multi-index tuple, followed only
+        /// by basic indices (e.g. <c>arr[mask2d, 1:3]</c>, <c>arr[mask, 2]</c>). Slices
+        /// the trailing axes (mask axes left full), then applies the now-leading partial
+        /// boolean mask through the unified <see cref="TensorEngine.BooleanMask"/> — so
+        /// multi-dimensional masks combined with basic indexing work too.
+        /// </summary>
+        private bool TryFetchLeadingMaskWithBasic(object[] indicesObjects, out NDArray result)
+        {
+            result = null;
+            if (!TryBuildLeadingMaskBasicIndex(indicesObjects, out var mask, out var basic))
+                return false;
+            result = this[basic][mask];
+            return true;
         }
 
         /// <summary>
