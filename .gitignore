@@ -372,3 +372,7 @@ benchmark/.claude_*.log
 
 # Windows/MSYS crash dumps
 *.stackdump
+
+# DocFX build OUTPUT — regenerated in CI from docs/website-src/ and deployed via the Pages artifact.
+# (docs/website-src/ is the tracked source; this is just its stale generated output.)
+docs/website/

@@ -409,72 +409,27 @@ public static (Shape, Shape) Broadcast(Shape left, Shape right)
 }
 ```
 
-### MultiIterator
+### Multi-operand iteration
 
-For element-wise operations with broadcasting:
-
-```csharp
-public static class MultiIterator
-{
-    // Creates paired iterators with broadcasting
-    public static (NDIterator, NDIterator) GetIterators(
-        UnmanagedStorage lhs,
-        UnmanagedStorage rhs,
-        bool broadcast);
-
-    // Assignment with broadcasting
-    public static void Assign(NDArray lhs, NDArray rhs);
-}
-```
+Element-wise operations with broadcasting are driven by the NumPy-aligned multi-operand iterator `NpyIter` (see [Iterator System](#iterator-system)): it aligns operand shapes, applies stride-0 broadcasting, and synchronizes traversal across all operands in a single pass. (The earlier `MultiIterator` helper was removed.)
 
 ---
 
 ## Iterator System
 
-### NDIterator<T>
+### NpyIter
 
-The iterator system handles traversal of arrays with different memory layouts:
-
-```csharp
-public class NDIterator<T> where T : unmanaged
-{
-    public Func<T> MoveNext;                    // Get next value
-    public MoveNextReferencedDelegate<T> MoveNextReference;  // Get reference
-    public Func<bool> HasNext;                  // Check if more elements
-    public Action Reset;                        // Reset to beginning
-
-    public bool AutoReset;  // For broadcasting (smaller array loops)
-    public IteratorType Type;  // Scalar, Vector, Matrix, Tensor
-}
-```
-
-### Iterator Types
-
-```csharp
-public enum IteratorType
-{
-    Scalar,  // Single element
-    Vector,  // 1D array
-    Matrix,  // 2D array
-    Tensor   // 3D+ array
-}
-```
+Array traversal goes through `NpyIter` (`Backends/Iterators/NpyIter.cs`), a NumPy-aligned multi-operand iterator modeled on NumPy's `NpyIter`. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Single-operand flat traversal uses `NpyFlatIterator`. (The legacy `NDIterator<T>` / `MultiIterator` stack was removed and replaced wholesale by this.)
 
 ### Optimization Paths
 
-The iterator chooses different code paths based on:
+`NpyIter` picks a traversal strategy from each operand's layout (classified once via `ArrayFlags`):
 
-1. **Contiguous arrays**: Direct pointer increment
-2. **Sliced arrays**: Coordinate-to-offset calculation
-3. **Auto-reset mode**: For broadcasting smaller arrays
+1. **Contiguous**: direct pointer increment (the SIMD fast path in the emitted kernels)
+2. **Strided / sliced**: coordinate-to-offset via `Shape.GetOffset`, honoring `Shape.offset`
+3. **Broadcast (stride 0)**: the dimension is re-read without advancing — read-only
 
-```csharp
-// Contiguous: fast path
-MoveNext = () => *((T*)Address + index++);
-
-// Sliced: uses shape.GetOffset
-MoveNext = () => *((T*)Address + shape.GetOffset(index++));
-```
+The per-chunk inner loop is an IL-emitted kernel (see [Code Generation](#code-generation)): `NpyIter` advances the operand pointers and hands each chunk to the kernel (`NpyIterRef` drives the `ILKernelGenerator` loops).
 
 ---
 
@@ -638,7 +593,7 @@ The library accepts breaking changes - it was deprecated for an extended period 
 | Shape | `View/Shape.cs` |
 | Slicing | `View/Slice.cs` |
 | TensorEngine | `Backends/TensorEngine.cs`, `Backends/Default/DefaultEngine.*.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `MultiIterator.cs` |
+| Iterators | `Backends/Iterators/NpyIter.cs`, `NpyFlatIterator.cs` |
 | np API | `APIs/np.cs`, individual `np.*.cs` files |
 | Operators | `Operations/Elementwise/NDArray.Primitive.cs` |
 | Type Info | `Utilities/InfoOf.cs`, `Backends/NPTypeCode.cs` |
