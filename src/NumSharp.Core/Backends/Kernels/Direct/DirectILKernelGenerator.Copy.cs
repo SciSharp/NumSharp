@@ -7,7 +7,7 @@ namespace NumSharp.Backends.Kernels
 {
     public static partial class DirectILKernelGenerator
     {
-        private static readonly ConcurrentDictionary<CopyKernelKey, CopyKernel> _copyKernelCache = new();
+        internal static readonly ConcurrentDictionary<CopyKernelKey, CopyKernel> _copyKernelCache = new();
 
         public static CopyKernel GetCopyKernel(CopyKernelKey key)
         {

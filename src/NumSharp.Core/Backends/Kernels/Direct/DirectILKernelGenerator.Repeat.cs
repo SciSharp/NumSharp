@@ -67,8 +67,8 @@ namespace NumSharp.Backends.Kernels
             long n,
             long* counts);
 
-        private static readonly ConcurrentDictionary<int, RepeatBroadcastKernel> _repeatBroadcastCache = new();
-        private static readonly ConcurrentDictionary<int, RepeatPerJKernel> _repeatPerJCache = new();
+        internal static readonly ConcurrentDictionary<int, RepeatBroadcastKernel> _repeatBroadcastCache = new();
+        internal static readonly ConcurrentDictionary<int, RepeatPerJKernel> _repeatPerJCache = new();
 
         /// <summary>
         /// Returns the cached IL-emitted broadcast-repeat kernel for the given slab size.

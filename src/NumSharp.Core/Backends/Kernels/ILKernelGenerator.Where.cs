@@ -57,7 +57,7 @@ namespace NumSharp.Backends.Kernels
         // outType -> compiled per-chunk where kernel. Keyed by output dtype only:
         // cond is always Boolean and x/y/result always share the output dtype by
         // the time np.where reaches the iterator (operands are pre-cast).
-        private static readonly ConcurrentDictionary<NPTypeCode, NpyInnerLoopFunc> _whereInnerCache = new();
+        internal static readonly ConcurrentDictionary<NPTypeCode, NpyInnerLoopFunc> _whereInnerCache = new();
 
         /// <summary>
         /// Get (or generate and cache) the per-chunk np.where inner-loop kernel for

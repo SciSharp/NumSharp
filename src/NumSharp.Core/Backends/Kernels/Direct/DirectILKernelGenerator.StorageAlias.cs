@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Kernels
     {
         // Per-typecode delegate cache. ConcurrentDictionary so the first call
         // for each dtype emits IL once; subsequent calls hit a cached lookup.
-        private static readonly ConcurrentDictionary<NPTypeCode, StorageTypedFieldCopier> _storageAliasFieldCopiers = new();
+        internal static readonly ConcurrentDictionary<NPTypeCode, StorageTypedFieldCopier> _storageAliasFieldCopiers = new();
 
         // No-op fallback for typecodes that have no backing typed field (Empty,
         // String). UnmanagedStorage.Alias still copies InternalArray + Address

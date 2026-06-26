@@ -60,7 +60,7 @@ namespace NumSharp.Backends.Kernels
         /// accumulator dtype). Construction (reflection for the generic widen body)
         /// happens once per pair; subsequent lookups are a dictionary hit.
         /// </summary>
-        private static readonly ConcurrentDictionary<(NPTypeCode In, NPTypeCode Acc), NpyInnerLoopFunc> _cumSumCache = new();
+        internal static readonly ConcurrentDictionary<(NPTypeCode In, NPTypeCode Acc), NpyInnerLoopFunc> _cumSumCache = new();
 
         /// <summary>
         /// Returns the NpyIter-driven cumulative-sum inner loop for

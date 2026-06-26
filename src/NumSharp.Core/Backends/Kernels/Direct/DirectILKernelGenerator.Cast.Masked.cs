@@ -65,7 +65,7 @@ namespace NumSharp.Backends.Kernels
             long* shape, int ndim);
 
         internal static readonly ConcurrentDictionary<CastKernelKey, MaskedCastKernel> _maskedCastCache = new();
-        private static readonly ConcurrentDictionary<CastKernelKey, byte> _maskedCastUnsupported = new();
+        internal static readonly ConcurrentDictionary<CastKernelKey, byte> _maskedCastUnsupported = new();
 
         /// <summary>
         /// Get or generate a masked-cast kernel for the given (src, dst) pair.

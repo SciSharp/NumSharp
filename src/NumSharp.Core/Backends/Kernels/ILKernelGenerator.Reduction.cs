@@ -54,7 +54,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public readonly record struct ReduceKernelKey(ReductionOp Op, NPTypeCode InType, NPTypeCode AccType);
 
-        private static readonly ConcurrentDictionary<ReduceKernelKey, NpyInnerLoopFunc> _reduceCache = new();
+        internal static readonly ConcurrentDictionary<ReduceKernelKey, NpyInnerLoopFunc> _reduceCache = new();
 
         /// <summary>
         /// Returns the cached per-chunk reduction kernel for the given

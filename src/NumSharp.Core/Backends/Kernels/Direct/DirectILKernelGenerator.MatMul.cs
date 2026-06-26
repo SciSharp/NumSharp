@@ -54,7 +54,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cache of IL-generated MatMul kernels by type.
         /// </summary>
-        private static readonly ConcurrentDictionary<Type, Delegate> _matmulKernelCache = new();
+        internal static readonly ConcurrentDictionary<Type, Delegate> _matmulKernelCache = new();
 
         #region Public API
 

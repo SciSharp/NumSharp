@@ -45,7 +45,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache of IL-generated where kernels.
         /// Key: Type
         /// </summary>
-        private static readonly ConcurrentDictionary<Type, Delegate> _whereKernelCache = new();
+        internal static readonly ConcurrentDictionary<Type, Delegate> _whereKernelCache = new();
 
         #region Public API
 

@@ -60,10 +60,8 @@ namespace NumSharp.Backends.Kernels
 
         internal static readonly ConcurrentDictionary<string, NpyInnerLoopFunc> _innerLoopCache = new();
 
-        /// <summary>
-        /// Drop all cached inner-loop kernels. Exposed for tests.
-        /// </summary>
-        internal static void ClearInnerLoopCache() => _innerLoopCache.Clear();
+        // Cache size + reset are centralized on GeneratedDelegates
+        // (GeneratedDelegates.InnerLoopCount / GeneratedDelegates.ClearInnerLoop).
 
         #endregion
 

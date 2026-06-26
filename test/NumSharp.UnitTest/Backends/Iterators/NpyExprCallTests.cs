@@ -400,7 +400,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Call_SameStaticMethodReusesKernel()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);
@@ -423,7 +423,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Call_DifferentMethodsProduceDistinctKernels()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);

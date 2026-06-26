@@ -54,7 +54,7 @@ namespace NumSharp.Backends.Kernels
             void* dstBase, long dstOuterStride,
             int ignoreNaN, int* rowKScratch);
 
-        private readonly struct QuantileKey : IEquatable<QuantileKey>
+        internal readonly struct QuantileKey : IEquatable<QuantileKey>
         {
             public readonly NPTypeCode SrcType;
             public readonly NPTypeCode OutType;
@@ -69,7 +69,7 @@ namespace NumSharp.Backends.Kernels
             public override int GetHashCode() => ((int)SrcType << 17) | ((int)OutType << 9) | ((int)Method << 1) | (IgnoreNaN ? 1 : 0);
         }
 
-        private static readonly ConcurrentDictionary<QuantileKey, QuantileKernel> _quantileKernelCache = new();
+        internal static readonly ConcurrentDictionary<QuantileKey, QuantileKernel> _quantileKernelCache = new();
 
         /// <summary>
         ///     Run the cached quantile kernel for the given dtype triple. First call for a

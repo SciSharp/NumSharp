@@ -909,6 +909,6 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
         private static int GetInnerLoopCacheCount() => GeneratedDelegates.InnerLoopCount;
 
-        private static void InvokeClearCache() => DirectILKernelGenerator.ClearInnerLoopCache();
+        private static void InvokeClearCache() => GeneratedDelegates.ClearInnerLoop();
     }
 }

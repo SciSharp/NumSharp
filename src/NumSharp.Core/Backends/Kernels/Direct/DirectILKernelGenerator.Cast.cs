@@ -82,10 +82,10 @@ namespace NumSharp.Backends.Kernels
         }
 
         internal static readonly ConcurrentDictionary<CastKernelKey, CastKernel> _castCache = new();
-        private static readonly ConcurrentDictionary<CastKernelKey, byte> _castUnsupported = new();
+        internal static readonly ConcurrentDictionary<CastKernelKey, byte> _castUnsupported = new();
 
         internal static readonly ConcurrentDictionary<CastKernelKey, StridedCastKernel> _stridedCastCache = new();
-        private static readonly ConcurrentDictionary<CastKernelKey, byte> _stridedCastUnsupported = new();
+        internal static readonly ConcurrentDictionary<CastKernelKey, byte> _stridedCastUnsupported = new();
 
         // -----------------------------------------------------------------
         // Public API

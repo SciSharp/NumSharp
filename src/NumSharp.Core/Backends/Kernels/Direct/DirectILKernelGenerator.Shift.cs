@@ -66,7 +66,7 @@ namespace NumSharp.Backends.Kernels
 
         #region Shift Kernel Cache
 
-        private static readonly ConcurrentDictionary<(BinaryOp, Type, bool), Delegate> _shiftKernelCache = new();
+        internal static readonly ConcurrentDictionary<(BinaryOp, Type, bool), Delegate> _shiftKernelCache = new();
 
         #endregion
 

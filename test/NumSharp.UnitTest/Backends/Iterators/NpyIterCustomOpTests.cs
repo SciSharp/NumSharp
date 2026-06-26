@@ -273,7 +273,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         {
             // Two distinct iters calling ExecuteElementWise with the same
             // cacheKey should hit the same compiled delegate.
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
 
             var a1 = np.arange(4).astype(np.float32);
             var b1 = np.arange(4).astype(np.float32);

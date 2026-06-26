@@ -42,7 +42,7 @@ namespace NumSharp.Backends.Kernels
     {
         // Recursive pairwise fold DynamicMethods, rooted here so cross-DynamicMethod
         // `call` sites (the kernel below, and the fold's own self-recursion) stay alive.
-        private static readonly ConcurrentDictionary<NPTypeCode, DynamicMethod> _pwFolds = new();
+        internal static readonly ConcurrentDictionary<NPTypeCode, DynamicMethod> _pwFolds = new();
 
         /// <summary>
         /// Try to build an IL-emitted SIMD pairwise Sum per-chunk kernel for

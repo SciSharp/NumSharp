@@ -67,7 +67,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public unsafe delegate void ClipKernel(void* src, void* dst, long size, void* lo, void* hi);
 
-        private static readonly ConcurrentDictionary<int, ClipKernel> _clipKernelCache = new();
+        internal static readonly ConcurrentDictionary<int, ClipKernel> _clipKernelCache = new();
 
         /// <summary>
         /// Run a clip operation. Picks (and on first call, IL-generates) the

@@ -66,7 +66,7 @@ namespace NumSharp.Backends.Kernels
 
     public static partial class DirectILKernelGenerator
     {
-        private static readonly ConcurrentDictionary<Type, TraceKernel> _trace = new();
+        internal static readonly ConcurrentDictionary<Type, TraceKernel> _trace = new();
 
         /// <summary>
         /// IL-emitted singleton per <paramref name="srcType"/>. Returns

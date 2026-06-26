@@ -1034,7 +1034,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Cache_DistinctExpressionsProduceDistinctKernels()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
             int before = GeneratedDelegates.InnerLoopCount;
 
             var a = np.arange(10).astype(np.float64);
@@ -1058,7 +1058,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Cache_SameExpressionReusesKernel()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);
 
@@ -1336,7 +1336,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void AutoKey_EquivalentExpressionsShareKernel()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);
@@ -1363,7 +1363,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void AutoKey_DifferentConstantsProduceDifferentKernels()
         {
-            DirectILKernelGenerator.ClearInnerLoopCache();
+            GeneratedDelegates.ClearInnerLoop();
 
             var a = np.arange(10).astype(np.float64);
             var r = np.empty_like(a);

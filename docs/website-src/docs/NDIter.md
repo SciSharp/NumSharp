@@ -589,7 +589,7 @@ The full integration layer shares two process-lifetime caches. The kernel-cache 
 int kernels = GeneratedDelegates.InnerLoopCount;        // compiled DynamicMethods (public)
 int slots   = DelegateSlots.RegisteredCount;            // registered delegates + targets (public)
 
-DirectILKernelGenerator.ClearInnerLoopCache();          // internal, test-only
+GeneratedDelegates.ClearInnerLoop();          // internal, test-only
 DelegateSlots.Clear();                                   // test-only — pair with above!
 ```
 
@@ -1235,7 +1235,7 @@ Typical memory profile:
 To inspect or reset during tests:
 ```csharp
 GeneratedDelegates.InnerLoopCount;        // count of compiled kernels (public)
-DirectILKernelGenerator.ClearInnerLoopCache();  // internal — wipe for fresh-start testing
+GeneratedDelegates.ClearInnerLoop();  // internal — wipe for fresh-start testing
 ```
 
 Both are `internal`, so scripts need the `AssemblyName=NumSharp.DotNetRunScript` override.
@@ -1345,8 +1345,8 @@ Non-obvious but permanent behaviors of the DSL:
 
 Tier 3C kernels are `DynamicMethod` delegates — you can't step into their IL with a debugger as-is. What you *can* do:
 
-- **Inspect the kernel cache.** `GeneratedDelegates.InnerLoopCount` (public) gives you a count. `DirectILKernelGenerator.ClearInnerLoopCache()` (internal; needs `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) lets you force recompilation in a test.
-- **Inspect the delegate slot registry** (only relevant when `Call` is in play). `DelegateSlots.RegisteredCount` (internal) returns the sum of registered delegates + registered instance targets. Growing unboundedly means a per-call lambda or target allocation somewhere — find it by comparing counts before and after your suspected hot path. `DelegateSlots.Clear()` wipes the registry; always pair with `ClearInnerLoopCache()` because cleared-but-cached kernels will throw `KeyNotFoundException` on their next invocation.
+- **Inspect the kernel cache.** `GeneratedDelegates.InnerLoopCount` (public) gives you a count. `GeneratedDelegates.ClearInnerLoop()` (internal; needs `[InternalsVisibleTo]` or a `dotnet_run` script with `AssemblyName=NumSharp.DotNetRunScript`) lets you force recompilation in a test.
+- **Inspect the delegate slot registry** (only relevant when `Call` is in play). `DelegateSlots.RegisteredCount` (internal) returns the sum of registered delegates + registered instance targets. Growing unboundedly means a per-call lambda or target allocation somewhere — find it by comparing counts before and after your suspected hot path. `DelegateSlots.Clear()` wipes the registry; always pair with `GeneratedDelegates.ClearInnerLoop()` because cleared-but-cached kernels will throw `KeyNotFoundException` on their next invocation.
 - **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?". For `Call` nodes in particular, the signature includes `MetadataToken` and `ModuleVersionId` — if those differ across two calls of what you thought was the same method, the compiler loaded the method from different assemblies or modules.
 - **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
 - **Watch the output dtype.** `ExecuteExpression` expects `outputType` to match the output NDArray's dtype. If they disagree, the kernel reads/writes wrong byte counts. Double-check both.

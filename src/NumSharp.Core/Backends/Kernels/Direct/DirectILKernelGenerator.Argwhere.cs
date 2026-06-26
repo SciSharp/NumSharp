@@ -79,8 +79,8 @@ namespace NumSharp.Backends.Kernels
     {
         #region Caches
 
-        private static readonly ConcurrentDictionary<Type, ArgwhereCountKernel> _argwhereCount = new();
-        private static readonly ConcurrentDictionary<Type, ArgwhereFlatKernel> _argwhereFlat = new();
+        internal static readonly ConcurrentDictionary<Type, ArgwhereCountKernel> _argwhereCount = new();
+        internal static readonly ConcurrentDictionary<Type, ArgwhereFlatKernel> _argwhereFlat = new();
         private static ArgwhereExpandKernel _argwhereExpand;
 
         /// <summary>

@@ -47,9 +47,9 @@ namespace NumSharp.Backends.Kernels
     {
         #region Caches
 
-        private static readonly ConcurrentDictionary<Type, Delegate> _whereScalarXCache = new();
-        private static readonly ConcurrentDictionary<Type, Delegate> _whereScalarYCache = new();
-        private static readonly ConcurrentDictionary<Type, Delegate> _whereScalarXYCache = new();
+        internal static readonly ConcurrentDictionary<Type, Delegate> _whereScalarXCache = new();
+        internal static readonly ConcurrentDictionary<Type, Delegate> _whereScalarYCache = new();
+        internal static readonly ConcurrentDictionary<Type, Delegate> _whereScalarXYCache = new();
 
         #endregion
 

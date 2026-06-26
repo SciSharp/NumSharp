@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Kernels
     {
         public readonly record struct WeightedSumKernelKey(NPTypeCode Dtype);
 
-        private static readonly ConcurrentDictionary<WeightedSumKernelKey, NpyInnerLoopFunc?> _weightedSumCache = new();
+        internal static readonly ConcurrentDictionary<WeightedSumKernelKey, NpyInnerLoopFunc?> _weightedSumCache = new();
 
         /// <summary>
         /// Returns the cached IL-emitted weighted-sum kernel for the given dtype,

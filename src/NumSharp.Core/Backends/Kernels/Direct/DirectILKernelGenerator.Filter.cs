@@ -65,7 +65,7 @@ namespace NumSharp.Backends.Kernels
         /// Cache key for the filter kernel — innerSize bucket. Keys 1/2/4/8/16
         /// use typed Ldind/Stind; 0 is the catch-all bulk-cpblk kernel.
         /// </summary>
-        private static readonly ConcurrentDictionary<int, FilterAxisKernel> _filterAxis = new();
+        internal static readonly ConcurrentDictionary<int, FilterAxisKernel> _filterAxis = new();
 
         /// <summary>
         /// IL-emitted kernel cached by <paramref name="innerSize"/>. Pass the
