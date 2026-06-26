@@ -150,12 +150,13 @@ namespace NumSharp.UnitTest.Fuzz
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
             //     branch is intentionally removed so the comparison matrix verifies it bit-exact.
 
-            // (W5-A) cumsum/cumprod on a SIZE-1 array skip the NEP50 accumulator widening — they
-            // preserve the narrow integer input (int16/int32 -> int64, uint8/uint16 -> uint64 is
-            // what NumPy does) only on the size>1 path; the one-element fast path returns the input
-            // dtype. Scoped to a cumsum/cumprod dtype mismatch.
-            if ((c.Op == "cumsum" || c.Op == "cumprod") && kind == DivergenceKind.Dtype)
-                return "cumsum/cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
+            // (W5-A) cumprod on a SIZE-1 / empty / 0-d array skips the NEP50 accumulator widening —
+            // it preserves the narrow integer input dtype on the one-element fast path instead of
+            // int16/int32 -> int64, uint8/uint16 -> uint64. cumsum was fixed (ReduceCumAdd now
+            // promotes + reshapes every trivial case to match np.add.accumulate); cumprod still
+            // carries the bug in ReduceCumMul. Scoped to a cumprod dtype mismatch.
+            if (c.Op == "cumprod" && kind == DivergenceKind.Dtype)
+                return "cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
 
             // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
             if (ExtremaOps.Contains(c.Op) && kind == DivergenceKind.Value)

@@ -23,35 +23,50 @@ namespace NumSharp.Backends
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
-            if (shape.IsEmpty || shape.size == 0)
-                return arr;
+            var retTypeCode = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
-            if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
-                return typeCode.HasValue ? Cast(arr, typeCode.Value, copy: true) : arr.Clone();
+            // Validate the axis UP FRONT, before any trivial shortcut — NumPy raises AxisError first:
+            // cumsum([5], axis=-3) and cumsum(0d, axis=1) are errors, not no-ops. A 0-d array is
+            // treated as 1-D for cumsum, so the valid range is [-nd, nd) with nd = max(ndim, 1).
+            int axis = 0;
+            if (axis_ != null)
+            {
+                int nd = Math.Max(arr.ndim, 1);
+                axis = axis_.Value;
+                if (axis < 0) axis += nd;
+                if (axis < 0 || axis >= nd)
+                    throw new ArgumentOutOfRangeException(nameof(axis_),
+                        $"axis {axis_.Value} is out of bounds for array of dimension {nd}");
+            }
+
+            // Empty: cumsum returns a FRESH array of the accumulator dtype — NEP50 widening applies
+            // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape
+            // (0,)); with an axis the shape is preserved.
+            if (shape.IsEmpty || shape.size == 0)
+                return new NDArray(retTypeCode,
+                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+
+            // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
+            // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
+            // cumsum([x]) -> [x] int64). Previously these returned the input dtype (NEP50 skip bug).
+            if (shape.IsScalar || (shape.size == 1 && shape.dimensions.Length == 1))
+            {
+                var single = Cast(arr, retTypeCode, copy: true);
+                if (single.ndim != 1)
+                    single.Storage.Reshape(Shape.Vector(1));   // 0-d -> (1,)
+                return single;
+            }
 
             if (axis_ == null)
             {
-                var r = cumsum_elementwise(arr, typeCode);
-                if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
-                    r.Storage.Reshape(Shape.Scalar);
-                return r;
+                // axis=None ravels in C-order to a 1-D result; cumsum never collapses to 0-d.
+                return cumsum_elementwise(arr, typeCode);
             }
-
-            var axis = axis_.Value;
-            while (axis < 0)
-                axis = arr.ndim + axis; //handle negative axis
-
-            if (axis >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
 
             if (shape[axis] == 1)
-            {
-                //if the given div axis is 1 - cumsum is just the value itself
-                //Return a copy to avoid sharing memory with the original (NumPy behavior)
-                return arr.copy();
-            }
-
-            var retTypeCode = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
+                // axis of length 1: values unchanged, but promoted to the accumulator dtype + copied
+                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip).
+                return Cast(arr, retTypeCode, copy: true);
 
             // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
             // output through the iterator with KEEPORDER, so its memory layout follows the
