@@ -488,53 +488,20 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set a <see cref="NDArray"/> at given <see cref="indices"/> (long version).
         /// </summary>
-        public unsafe void SetData(NDArray value, params long[] indices)
+        public void SetData(NDArray value, params long[] indices)
         {
-            ThrowIfNotWriteable();
+            // Delegate to the int[] overload so the SAME semantics apply: a scalar broadcasts
+            // across the WHOLE selected sub-array (a[0] = v fills row 0, not just a[0,0]), a
+            // smaller value broadcasts/tiles, and a value that cannot broadcast raises NumPy's
+            // ValueError. This overload previously wrote only the FIRST element for a scalar and
+            // linear-copied a larger/smaller value WITHOUT validation — reachable via the
+            // object[] single-int setter (b[(object)0] = v) and the long[] coordinate shim.
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
-
-            var valueshape = value.Shape;
-            bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
-
-            //incase lhs or rhs are broadcasted or sliced (noncontagious)
-            if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
-            {
-                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
-                return;
-            }
-
-            //by now value and this are contagious
-
-            //incase it is 1 value assigned to all
-            if (valueIsScalary)
-            {
-                var lhs = GetData(indices);
-                var rhs = value.Storage;
-                switch (_typecode)
-                {
-                    case NPTypeCode.Boolean: *(bool*)lhs.Address = *(bool*)rhs.Address; break;
-                    case NPTypeCode.SByte: *(sbyte*)lhs.Address = *(sbyte*)rhs.Address; break;
-                    case NPTypeCode.Byte: *(byte*)lhs.Address = *(byte*)rhs.Address; break;
-                    case NPTypeCode.Int16: *(short*)lhs.Address = *(short*)rhs.Address; break;
-                    case NPTypeCode.UInt16: *(ushort*)lhs.Address = *(ushort*)rhs.Address; break;
-                    case NPTypeCode.Int32: *(int*)lhs.Address = *(int*)rhs.Address; break;
-                    case NPTypeCode.UInt32: *(uint*)lhs.Address = *(uint*)rhs.Address; break;
-                    case NPTypeCode.Int64: *(long*)lhs.Address = *(long*)rhs.Address; break;
-                    case NPTypeCode.UInt64: *(ulong*)lhs.Address = *(ulong*)rhs.Address; break;
-                    case NPTypeCode.Char: *(char*)lhs.Address = *(char*)rhs.Address; break;
-                    case NPTypeCode.Half: *(Half*)lhs.Address = *(Half*)rhs.Address; break;
-                    case NPTypeCode.Double: *(double*)lhs.Address = *(double*)rhs.Address; break;
-                    case NPTypeCode.Single: *(float*)lhs.Address = *(float*)rhs.Address; break;
-                    case NPTypeCode.Decimal: *(decimal*)lhs.Address = *(decimal*)rhs.Address; break;
-                    case NPTypeCode.Complex: *(System.Numerics.Complex*)lhs.Address = *(System.Numerics.Complex*)rhs.Address; break;
-                    default: throw new NotSupportedException();
-                }
-                return;
-            }
-
-            //copy the value's data to lhs via linear copy
-            value.Storage.InternalArray.CopyTo(GetData(indices).InternalArray);
+            var intIndices = new int[indices.Length];
+            for (int i = 0; i < indices.Length; i++)
+                intIndices[i] = checked((int)indices[i]);
+            SetData(value, intIndices);
         }
 
         /// <summary>

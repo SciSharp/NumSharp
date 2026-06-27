@@ -166,6 +166,33 @@ namespace NumSharp.UnitTest.Selection
             np.arange(12).reshape(3, 4).GetData(new long[] { 1, 3 }).Should().BeScalar(7);
         }
 
+        // Regression: the object[] single-int setter (b[(object)0] = v) and the long[]
+        // coordinate shim (b.SetData(v, 0L)) must behave EXACTLY like b[0] = v — found by the
+        // differential index sweep. SetData(NDArray, long[]) used to write only the FIRST
+        // element for a scalar and linear-copy a larger/smaller value without validation.
+        [TestMethod]
+        public void ObjectArraySingleInt_Setter_BroadcastsAndValidates()
+        {
+            // scalar broadcasts across the WHOLE row (NumPy b[0] = -1)
+            var a = np.arange(12L).reshape(3, 4);
+            a[new object[] { 0 }] = (NDArray)(-1L);
+            a.ravel().ToArray<long>().Should().Equal(new long[] { -1, -1, -1, -1, 4, 5, 6, 7, 8, 9, 10, 11 });
+
+            // matched row value
+            var b = np.arange(12L).reshape(3, 4);
+            b[new object[] { 0 }] = np.array(new long[] { 10, 20, 30, 40 });
+            b.ravel().ToArray<long>().Should().Equal(new long[] { 10, 20, 30, 40, 4, 5, 6, 7, 8, 9, 10, 11 });
+
+            // incompatible value -> ValueError (was a silent partial write)
+            new Action(() => { var c = np.arange(12L).reshape(3, 4); c[new object[] { 0 }] = np.array(new long[] { 1, 2 }); })
+                .Should().Throw<ValueError>();
+
+            // the public long[] coordinate shim mirrors it
+            var d = np.arange(12L).reshape(3, 4);
+            d.SetData((NDArray)(-1L), new long[] { 1 });
+            d.ravel().ToArray<long>().Should().Equal(new long[] { 0, 1, 2, 3, -1, -1, -1, -1, 8, 9, 10, 11 });
+        }
+
         [TestMethod]
         public void Compare()
         {
