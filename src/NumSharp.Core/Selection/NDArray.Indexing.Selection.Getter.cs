@@ -1039,6 +1039,11 @@ namespace NumSharp
             long indicesSize = indices.Max(nd => nd.size);
             var srcShape = source.Shape;
             var ndsCount = indices.Length;
+            // More advanced indices than the array has axes is NEVER valid: the subshape would
+            // be sized `srcShape.NDim - ndsCount` (negative) and the offset/getter loops would
+            // walk strides[i] past the end — an OOB read/write (memory corruption). NumPy raises.
+            if (ndsCount > source.ndim)
+                throw new IndexError($"too many indices for array: array is {source.ndim}-dimensional, but {ndsCount} were indexed");
             bool isSubshaped = ndsCount != source.ndim;
             NDArray idxs;
             long[] indicesImpliedShape = null;
