@@ -876,23 +876,21 @@ namespace NumSharp
             }
 
             if (srcAxes > ndim) return false;                          // over-indexed -> caller raises
+            _ = hasExplicitBasic;                                       // (no longer gates; see below)
 
             bool hasZeroBool = false;
             foreach (var t in items) if (t.kind == MixKind.ZeroBool) { hasZeroBool = true; break; }
-            // Fire when there is a slice/newaxis to outer-product OR a 0-d bool to fold into the block.
-            // Pure all-advanced tuples WITHOUT a 0-d bool stay on the existing broadcast path; but a
-            // 0-d bool needs the block-broadcast layout here (the broadcast path can't model it, and
-            // np.nonzero on a 0-d bool is unsupported), so it routes through the grid regardless.
-            if (!hasExplicitBasic && !hasZeroBool) return false;
 
             int advAxisCount = 0;
             foreach (var t in items) if (t.kind == MixKind.Adv) advAxisCount++;
-            // Need at least ONE advanced axis. A single 1-D advanced index is already served by the
-            // np.take fast path (TryFetchSliceWithSingleAdvanced runs first); but a single MULTI-DIM
-            // fancy array mixed with a slice (e.g. a[arr(2,2), 1::2] -> NumPy keeps the slice axis,
-            // shape (2,2,1)) reaches here because np.take bails on ndim>1. The grid builds the correct
-            // outer-product layout (advanced block in place + the slice's own axis), so fire for >=1.
-            if (advAxisCount < 1) return false;
+            // Fire for ANY tuple carrying an advanced block member — a fancy array (>=1) OR a 0-d bool.
+            // The grid is NumPy's general advanced-index algorithm (block broadcast + consec-aware axis
+            // placement), so route the whole HAS_FANCY space through it: a single 1-D or n-D fancy, a
+            // fancy mixed with slices/newaxis/ints, multi-fancy, and pure-advanced tuples (fancy+int,
+            // fancy+fancy with NO slice) that the old _NDArrayFound broadcast path mis-placed when a
+            // multi-dim fancy was combined with an int (e.g. a[arr(4,1), 3] -> (4,1)). Pure-basic tuples
+            // (only slices/ints/newaxis, no block) fall through to the view path.
+            if (advAxisCount < 1 && !hasZeroBool) return false;
 
             // Trailing axes the tuple did not reach are full ':'.
             for (int a = srcAxes; a < ndim; a++)
