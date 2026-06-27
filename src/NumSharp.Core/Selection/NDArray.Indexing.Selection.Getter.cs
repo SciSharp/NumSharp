@@ -750,8 +750,8 @@ namespace NumSharp
             return true;
         }
 
-        /// <summary>Kind of one normalized index-tuple item, per source axis (newaxis consumes none).</summary>
-        private enum MixKind : byte { Adv, Int, Slice, NewAxis }
+        /// <summary>Kind of one normalized index-tuple item, per source axis (newaxis / 0-d-bool consume none).</summary>
+        private enum MixKind : byte { Adv, Int, Slice, NewAxis, ZeroBool }
 
         /// <summary>
         /// Shared builder for TWO-OR-MORE advanced indices (integer arrays, or boolean
@@ -844,6 +844,12 @@ namespace NumSharp
                         items.Add((MixKind.Int, null, iv, null)); srcAxes++; break;
                     case long lv:
                         items.Add((MixKind.Int, null, lv, null)); srcAxes++; break;
+                    case NDArray nd when nd.typecode == NPTypeCode.Boolean && nd.ndim == 0:
+                        // 0-d bool (HAS_0D_BOOL): a length-1 (True) / length-0 (False) array that joins
+                        // the advanced BLOCK broadcast but consumes NO source axis and adds no output dim
+                        // of its own. e.g. A[arr(2,1), True] -> (2,1,4); A[arr([0,1]), False] cannot
+                        // broadcast (2,) with (0,) -> IndexError (already raised by PrepareIndex).
+                        items.Add((MixKind.ZeroBool, np.array(new long[(bool)nd ? 1 : 0]), 0, null)); break;
                     case NDArray nd when nd.typecode == NPTypeCode.Boolean:
                         foreach (var comp in np.nonzero(nd.MakeGeneric<bool>()))
                         { items.Add((MixKind.Adv, comp, 0, null)); srcAxes++; }
@@ -866,7 +872,14 @@ namespace NumSharp
             }
 
             if (srcAxes > ndim) return false;                          // over-indexed -> caller raises
-            if (!hasExplicitBasic) return false;                       // pure advanced -> existing broadcast path
+
+            bool hasZeroBool = false;
+            foreach (var t in items) if (t.kind == MixKind.ZeroBool) { hasZeroBool = true; break; }
+            // Fire when there is a slice/newaxis to outer-product OR a 0-d bool to fold into the block.
+            // Pure all-advanced tuples WITHOUT a 0-d bool stay on the existing broadcast path; but a
+            // 0-d bool needs the block-broadcast layout here (the broadcast path can't model it, and
+            // np.nonzero on a 0-d bool is unsupported), so it routes through the grid regardless.
+            if (!hasExplicitBasic && !hasZeroBool) return false;
 
             int advAxisCount = 0;
             foreach (var t in items) if (t.kind == MixKind.Adv) advAxisCount++;
@@ -881,25 +894,31 @@ namespace NumSharp
             for (int a = srcAxes; a < ndim; a++)
                 items.Add((MixKind.Slice, null, 0, Slice.All));
 
-            // Source axis consumed by each item (-1 for newaxis).
+            // Source axis consumed by each item (-1 for newaxis and 0-d bool, which consume none).
             var axisOfItem = new int[items.Count];
             for (int i = 0, axc = 0; i < items.Count; i++)
-                axisOfItem[i] = items[i].kind == MixKind.NewAxis ? -1 : axc++;
+                axisOfItem[i] = (items[i].kind == MixKind.NewAxis || items[i].kind == MixKind.ZeroBool) ? -1 : axc++;
 
-            // Consecutiveness: a slice/newaxis between the first and last advanced item
-            // (ints count as advanced 0-d) moves the block to the front.
+            // Consecutiveness: a slice/newaxis between the first and last advanced item (ints and
+            // 0-d bools count as advanced 0-d members of the block) moves the block to the front.
             int firstAdv = -1, lastAdv = -1;
             for (int i = 0; i < items.Count; i++)
-                if (items[i].kind == MixKind.Adv || items[i].kind == MixKind.Int)
+                if (items[i].kind == MixKind.Adv || items[i].kind == MixKind.Int || items[i].kind == MixKind.ZeroBool)
                 { if (firstAdv < 0) firstAdv = i; lastAdv = i; }
             bool consecutive = true;
             for (int i = firstAdv; i <= lastAdv; i++)
                 if (items[i].kind == MixKind.Slice || items[i].kind == MixKind.NewAxis)
                 { consecutive = false; break; }
 
-            // Broadcast all advanced indices together -> bshape (the block).
-            var advArrays = new List<NDArray>(advAxisCount);
-            foreach (var t in items) if (t.kind == MixKind.Adv) advArrays.Add(t.adv.astype(NPTypeCode.Int64));
+            // Broadcast ALL advanced indices together -> bshape (the block): the real fancy arrays AND
+            // the 0-d-bool (1,)/(0,) arrays. advBOf[i] maps each block member back to its broadcast slot
+            // (only real Adv members map to a source axis; 0-d bools only shape the block).
+            var advArrays = new List<NDArray>();
+            var advBOf = new int[items.Count];
+            for (int i = 0; i < items.Count; i++) advBOf[i] = -1;
+            for (int i = 0; i < items.Count; i++)
+                if (items[i].kind == MixKind.Adv || items[i].kind == MixKind.ZeroBool)
+                { advBOf[i] = advArrays.Count; advArrays.Add(items[i].adv.astype(NPTypeCode.Int64)); }
             NDArray[] advB = np.broadcast_arrays(advArrays.ToArray());
             long[] bshape = advB[0].Shape.dimensions;
             int m = bshape.Length;
@@ -939,6 +958,7 @@ namespace NumSharp
                         case MixKind.NewAxis: outShape.Add(1); break;
                         case MixKind.Adv:
                         case MixKind.Int:
+                        case MixKind.ZeroBool:
                             if (!blockEmitted) { blockStart = outShape.Count; for (int d = 0; d < m; d++) outShape.Add(bshape[d]); blockEmitted = true; }
                             break;
                     }
@@ -951,7 +971,6 @@ namespace NumSharp
             // role and broadcast (advanced -> the block dims; slice -> its own dim;
             // int -> all-ones constant). broadcast_arrays then stretches them to outShape.
             var axisIndex = new NDArray[ndim];
-            int advCursor = 0;
             for (int i = 0; i < items.Count; i++)
             {
                 int a = axisOfItem[i];
@@ -962,9 +981,10 @@ namespace NumSharp
                         var shp = new long[outRank];
                         for (int d = 0; d < outRank; d++) shp[d] = 1;
                         for (int d = 0; d < m; d++) shp[blockStart + d] = bshape[d];
-                        axisIndex[a] = advB[advCursor++].reshape(shp);
+                        axisIndex[a] = advB[advBOf[i]].reshape(shp);
                         break;
                     }
+                    // ZeroBool (0-d bool) consumes no source axis; it only shaped the block above.
                     case MixKind.Int:
                     {
                         var shp = new long[outRank];
