@@ -157,7 +157,7 @@ right abstraction wants to exist; it is just trapped inside one handler.
 
 | # | Area | NumSharp today | NumPy 2.4.2 | Disposition |
 |---|---|---|---|---|
-| D1 | **`nd[int[]]` / `nd[long[]]`** | **coordinate access** — `nd[new int[]{0,2}]` → element `(0,2)` | **fancy** — rows `[0,2]` | **Breaking-change decision (§5).** Legacy NumSharp behavior; pervasive. |
+| D1 | **`nd[int[]]` / `nd[long[]]`** | **coordinate access** — `nd[new int[]{0,2}]` → element `(0,2)` | **fancy** — rows `[0,2]` | **DECIDED (§5): → fancy (B).** Small blast radius; coordinate access preserved via `nd.GetData(coords)`. |
 | D2 | Classifier | none; ~8-stage cascade per entry | one `prepare_index` | the refactor itself |
 | D3 | Entry points | `string`/`Slice[]` bypass fancy entirely | every index funnels through `prepare_index` | unify (§4) |
 | D4 | Only normalization | `NormalizeBooleanMaskIndices` | full per-item classification | the refactor |
@@ -233,24 +233,31 @@ entry points.
 
 ---
 
-## 5. The `int[]` decision (the big fork) — **needs a human call**
+## 5. The `int[]` decision — **DECIDED: (B) full NumPy, `int[]` = fancy**
 
-`nd[new int[]{0,2}]` means **coordinate access** in NumSharp (element at `(0,2)`), but **fancy**
-in NumPy (rows `0` and `2`). This is load-bearing legacy behavior (`IndexNDArray_Case…`,
-`Filter1D`, `NDArrayByNDArray`, and any downstream consumer). Options:
+`nd[new int[]{0,2}]` means **coordinate access** today in NumSharp (element at `(0,2)`), but
+**fancy** in NumPy (rows `0` and `2`). **Decision: align to NumPy** — raw `int[]`/`long[]` as an
+index becomes **fancy indexing**, per the project's "breaking changes OK to match NumPy" rule.
 
-- **(A) Keep `int[]`/`long[]` = coordinate (recommended for compat).** Treat *raw* `int[]`/`long[]`
-  as coordinate sugar at the entry, but treat `NDArray<int>` (and any *other* integer sequence)
-  as fancy — exactly today's split. The classifier models this by special-casing raw 1-D
-  `int[]`/`long[]` *before* `PrepareIndex`, or by a flag. Downside: `nd[int[]]` (coordinate) vs
-  `nd[byte[]]`/`nd[np.array(int[])]` (fancy) stay inconsistent. This is the status quo; the refactor
-  just makes it explicit and documented instead of emergent.
-- **(B) Go full NumPy: `int[]` = fancy.** Cleanest parity, but a **breaking change** — every
-  `nd[int[]]` coordinate call changes meaning. Would need a deprecation shim
-  (`nd.At(coords)` / `GetData`) and a sweep of the test suite + downstream (TensorFlow.NET, etc.).
+**Blast radius (measured) is small:**
+- Implementing code: the getter `case int[] coords` / `case long[] coords` →`GetData(coords)`
+  (`…Getter.cs:81-84`) and the setter mirror (`…Setter.cs:192-195`). These reroute to the fancy
+  executor. The *all-scalar-int* path (`ints == indicesLen` → `GetData(coords)`, `…Getter.cs:150`)
+  is the `nd[0,2]` form, which is **coordinate in NumPy too** (`a[0,2]` is `HAS_INTEGER`) — it
+  **stays**. Only the *array* form moves.
+- Call sites: an exhaustive scan found **no** library code and only **one** test
+  (`MaskIndex_BoolArrayLikeForms`, asserting `nd[new int[]{0,2}]` → scalar) relying on the
+  coordinate behavior. `Filter1D` / `NDArrayByNDArray` / `Filter2D` use `np.array(...)` or the
+  implicit `NDArray nd = new int[]{…}` conversion → they are **already fancy** and do not change.
+- **Coordinate access is preserved** — the shim already exists and is public:
+  `NDArray.GetData(int[])` / `GetData(long[])` (`Backends/NDArray.cs:812,819`) and
+  `Storage.GetData(params …)`. Migration note for users: replace `nd[new int[]{i,j}]` (was
+  coordinate) with `nd.GetData(i, j)`.
 
-This decision gates the refactor's "1-to-1" claim. Until it's made, target **(A)** and document
-`int[]`=coordinate as an explicit, intentional NumSharp nuance (like `Char` printing).
+**Migration step (do first, it is contained):** flip the `case int[]/long[]` branches from
+`GetData(coords)` to the fancy path, update the one test, add a `[Misaligned]`-style note +
+differential cases proving `nd[int[]]` now matches NumPy fancy, and document the `GetData`
+coordinate shim in the indexing section of `.claude/CLAUDE.md`.
 
 ---
 
@@ -324,7 +331,8 @@ Each phase keeps the full suite + `FuzzMatrix` green and is independently commit
 
 ## 9. Risks & open decisions
 
-- **R1 (decision):** the §5 `int[]` fork. Until resolved, "1-to-1 parity" has an asterisk.
+- **R1 (decided):** the §5 `int[]` fork is **resolved to (B) fancy** — measured blast radius is
+  one test + two dispatch branches; coordinate access stays available via `nd.GetData`.
 - **R2:** perf — `PrepareIndex` must not regress the hot `nd[i]` / `nd["1:3"]` paths. Mitigate
   by keeping the typed `this[string]`/`this[Slice[]]` fast paths and a trivial-fancy short-circuit
   (NumPy itself special-cases these).
@@ -370,5 +378,5 @@ multi-advanced placement rule, now implemented in `TryBuildMultiAdvancedGrid`).
 - `SetIndicesNDNonLinear` implemented; `T1_15a/15b` un-marked.
 - Every routing branch in §1c has pinned get+set tests; full suite + `FuzzMatrix` green on
   net8.0 and net10.0.
-- The `int[]` nuance (§5) is either aligned to NumPy (B) or documented as an intentional NumSharp
-  divergence (A) — explicitly, in code comments and this doc.
+- The `int[]` nuance (§5) is aligned to NumPy fancy (B); `nd.GetData(coords)` is documented as
+  the coordinate-access replacement in code comments, this doc, and `.claude/CLAUDE.md`.
