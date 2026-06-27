@@ -30,12 +30,44 @@ three dtypes for min/max.
 
 ---
 
+## Outcome (2026-06-27): T1–T4 implemented — and what measurement changed
+
+Implementing T1–T4 was **measurement-driven**, and the measurements substantially refined this
+handover's premise. The `Vector256.Min/Max` fixup is real, but for the *binary/elementwise*
+ops it is **secondary** to a bigger, cross-cutting cost. Summary:
+
+| Target | Verdict after measuring | Action | Commit |
+|--------|------------------------|--------|--------|
+| **T1** axis min/max (contiguous) | Already **0.9–2.8×** at 1K/10K/100K (f64/f32/i64). The fixup is NOT the bottleneck on the axis path (it's register-resident + cache-streaming, not fixup-bound). | **Skipped** — no risky refactor. | — |
+| **T2** clip | The SIMD kernel was fine; the cost was **per-call overhead** (scalar-bound `astype` clone, ~0.9µs×2) + **cold output allocation**. | Lean dispatch (`ScalarBoundReady` skips the astype) + 4×-unrolled `EmitSimdLoop`. f64 1K clip 0.34→0.53×; f64 1K clip(out=) 0.96→1.09×, 100K 0.68→0.74×. | `8952ba1c` |
+| **T3** `SimdMinMaxSameType` (bcast/negstride axis) | The finite mask was already present → the `Vector256.Min/Max` fixup was pure redundant cost. | Raw `Avx.Min/Max` via `RawMin256`/`RawMax256` (the textbook lesson). Bit-exact (FuzzMatrix negstride layouts). | `aebefff9` |
+| **T4** maximum/minimum/fmax/fmin | **Biggest finding.** All four routed through `np.clip(a, a_min/a_max=b)` + `broadcast_arrays`, which (a) made `fmax`/`fmin` propagate NaN (a **correctness bug**, was excused in `MisalignedRegistry`) and (b) carried the clip+broadcast overhead. | Rewrote as **direct binary ufuncs** (`BinaryOp.Maximum/Minimum/FMax/FMin` via `ExecuteBinaryOp`); fixed the NaN bug; removed the excuse so FuzzMatrix verifies it. | `badacc78` |
+
+### The dominant lever is NOT the fixup — it is output-buffer allocation
+
+The decisive measurement: **even `np.add` is ~0.22× NumPy at 10K** in a tight loop. The cost
+of every op that allocates a fresh result is dominated by **cold-page first-write faults** on
+the freshly-`malloc`'d output, which NumPy avoids because its deterministic refcount-free
+recycles a *warm* buffer every iteration (NumSharp's GC-based unmanaged lifetime does not).
+Measured penalty: ~1µs @1K, ~7µs @10K, ~27µs @100K — which **caps small-N binary/clip ops at
+~0.2×** and even **100K at ~0.5×**, regardless of kernel quality. T2/T4 therefore moved the
+*non-alloc* fraction (real on the `out=` path); the no-`out=` path stays alloc-bound. **A small
+NumPy-style warm output-buffer cache is the single highest-impact future perf lever** for the
+whole library (it was scoped out of this task by choice). The min/max fixup lesson below still
+stands and is the right tool wherever a kernel is genuinely compute/fixup-bound (flat reduce,
+T3) rather than alloc/bandwidth-bound.
+
+---
+
 ## 0. What's already done (do not redo)
 
 | Op | File / kernel | Commit |
 |----|---------------|--------|
 | **flat (axis=None) f64/f32 min/max** | `Backends/Default/Math/DefaultEngine.ReductionOp.cs` → `FlatMinMaxF64Avx` / `FlatMinMaxF32Avx`, routed from `ExecuteElementReduction` ahead of the IL kernel, gated on `Avx.IsSupported` | `f73eba6e` |
-| **axis f64/f32 min/max on broadcast / negative-stride** (the earlier G1 routing) | `ILKernelGenerator.Reduction.cs` → `SimdMinMaxSameType` (still uses `Vector256.Min/Max` — see target T3) | `3a34aebf` |
+| **axis f64/f32 min/max on broadcast / negative-stride** (the earlier G1 routing) | `ILKernelGenerator.Reduction.cs` → `SimdMinMaxSameType` | `3a34aebf` |
+| **T3: raw Avx in `SimdMinMaxSameType`** (dropped the redundant fixup; `RawMin256`/`RawMax256`) | `ILKernelGenerator.Reduction.cs` | `aebefff9` |
+| **T2: clip lean dispatch + 4×-unrolled kernel** | `Default.ClipNDArray.cs` (`ScalarBoundReady`), `DirectILKernelGenerator.Clip.cs` (`EmitSimdLoop`/`EmitClipVectorBody`) | `8952ba1c` |
+| **T4: direct binary maximum/minimum/fmax/fmin ufuncs + fmax/fmin NaN fix** | `BinaryOp` enum, `DirectILKernelGenerator.{cs,Clip.cs,MixedType.cs}`, `Default.MinMax.cs`, `np.{maximum,minimum}.cs` | `badacc78` |
 
 The `FlatMinMaxF64Avx` / `FlatMinMaxF32Avx` kernels are the **reference implementation** of
 the pattern — copy their structure.
