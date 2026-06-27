@@ -1,6 +1,6 @@
 # Handover: full combinatorial advanced indexing (NumPy `mapping.c` parity)
 
-**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–C done, D done, E mostly done; random sweep 697 → 64 divergences (91%). See "Execution status" below.
+**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–C done, D done, E mostly done; random sweep 697 → 61 divergences (91%). See "Execution status" below.
 
 This is the successor to [`advanced-index-axis-placement.md`](./advanced-index-axis-placement.md)
 (which resolved the *two-advanced-indices-with-a-slice* case via `TryBuildMultiAdvancedGrid`).
@@ -39,9 +39,9 @@ how-to.
 
 ## 0b. Execution status (2026-06-27)
 
-Executed against this plan. Differential random sweep (seed 20240626, 10000 cases): **697 → 64
+Executed against this plan. Differential random sweep (seed 20240626, 10000 cases): **697 → 61
 divergences (91%)**. Curated + dtype gate stays **0/0**; full CI suite **10980 pass / 0 fail on
-net8.0 AND net10.0**. Commits `d20fb793` … `373978d8` on `nditer`.
+net8.0 AND net10.0**. Commits `d20fb793` … `9c2e16b2` on `nditer`.
 
 **Done:**
 - **Phase A** (`d20fb793`) — oracle committed: `test/oracle/gen_index_oracle.py`, three corpora
@@ -55,33 +55,109 @@ net8.0 AND net10.0**. Commits `d20fb793` … `373978d8` on `nditer`.
 - **Phase C** (`0be160ea`) — `Selection/NDArray.Indexing.PrepareIndex.cs`: faithful `prepare_index`
   port (classify + validate: too-many-indices, bool-array dim, integer/array value bounds,
   advanced-block broadcast-together, single-ellipsis, invalid-type). Wired as the multi-index gate.
-- **Phase D** (`32cb060b`, `bea57936`, `36161bb8`, `65315bfe`) — slice neg-step out-of-range start
-  fix; `largestOffset` neg-stride bound fix; grid handles a single (incl. n-d) advanced index and
-  subsumes the removed `np.take` path; 0-d bool joins the advanced block in the grid (`MixKind.ZeroBool`);
-  ellipsis no longer counts a 0-d bool as axis-consuming.
+- **Phase D** (`32cb060b`, `bea57936`, `36161bb8`, `65315bfe`, `9c2e16b2`) — slice neg-step
+  out-of-range start fix; `largestOffset` neg-stride bound fix; grid handles a single (incl. n-d)
+  advanced index and subsumes the removed `np.take` path; 0-d bool joins the advanced block in the
+  grid (`MixKind.ZeroBool`); ellipsis no longer counts a 0-d bool as axis-consuming; **the grid is
+  now the single advanced path for ALL `HAS_FANCY` tuples** incl. pure-advanced (fancy+int,
+  fancy+fancy with no slice — which the old `_NDArrayFound` broadcast path mis-placed for a
+  multi-dim fancy + int, e.g. `AT[…,arr(4,1),-1]` → `(4,1)`).
 - **Phase E (partial)** (`7c72c006`, `56c9e7c6`, `aed44b31`, `6a3aa93c`) — empty index array (any
   dtype) is an empty integer fancy; empty value into a non-empty whole-array region raises ValueError;
   setter pure-basic slice path was missing a `return` (fell through to fancy — fixed many
   `A[...]=scalar` / `A[:,:]=scalar` / `A[None]=v` cases); non-subshaped fancy assignment validates the
   value broadcasts to the selection.
 
-**Remaining (64 divergences):**
-1. **Setter value-broadcast on EMPTY selections** (~25, the largest bucket) — `a[empty_fancy]=v`,
-   `a[slice,False]=v` short-circuit on the empty index BEFORE validating the value broadcasts to the
-   (0,…) selection shape. NumPy raises ValueError. Fix: compute the selection shape and validate at the
-   `SetIndices<T>` empty short-circuits / the `TryBuild0dBoolWithBasic` False branch.
-2. **0-d-bool placement edges** (~27 cases carry a 0-d bool) — MULTIPLE 0-d bools interspersed with
-   slices/newaxis in `TryBuild0dBoolWithBasic` (e.g. `[slice,True,slice,False]` → NumPy `(0,2,1)`,
-   NumSharp `(2,0,1)`): the merged 0-d-bool axis lands at the wrong output position. (Single 0-d-bool +
-   fancy via the grid is correct.)
-3. **Multi-dim fancy + ellipsis + int** (a few) — `[ell, arr(4,1), int]` → NumPy `(4,1)`, NumSharp `(4,3)`.
-4. **A second, layout-dependent teardown OOB** — the main loop now COMPLETES; the full 10000-case run
-   still segfaults at process teardown. It writes past a **pinned managed array** (page-heap doesn't
-   catch it; survives GC-hunt, isolated repetition, and window repetition — it needs a specific
-   cross-case heap layout). It is the pre-existing "second OOB write" the prior summary noted, expected
-   to be subsumed as the remaining wrong-shape divergences are fixed (handover §8: correct shapes ⇒ no OOB).
-5. **Final cleanup** — delete the now-unreferenced `TryFetchSliceWithSingleAdvanced` (getter) and migrate
-   the setter equivalents; un-mark `Index_Random` `[OpenBugs]` once the sweep reaches 0/0 (Phase E gate).
+### Remaining work (61 divergences) — actionable
+
+Order: **R1 → R2** (the two divergence buckets, ~30 cases) **→ R3** (re-check the teardown OOB; it
+may already be gone) **→ R4** (cleanup + un-mark the gate). Gate EVERY step behind the curated/dtype
+gate (`Index_Curated`/`Index_Dtype`, must stay 0) and the random window it targets. Measurement is
+windowed because the full 10000-case run still crashes at teardown (R3) — `[0,5000)` and
+`[5000,5000)` complete cleanly; sum their `fail=` counts.
+
+**R1 — Setter value-broadcast on EMPTY selections (~25 cases, the largest bucket).**
+- *Symptom:* an assignment whose SELECTION is empty accepts a value NumPy rejects.
+  `set/ASO/.../[slice,b0_false] = arr([4,75])` → NumPy `ValueError`, NumSharp no-ops;
+  `a[empty_fancy] = nonscalar`, `a[empty_bool] = nonscalar` likewise.
+- *Root cause:* `SetIndices<T>` (`Selection/NDArray.Indexing.Selection.Setter.cs`) short-circuits on
+  the empty index — `if (idxs.Shape.IsEmpty) return;` (single, ~L577) and `if (nd.Shape.IsEmpty)
+  return;` (multi, ~L599) — **before** computing `retShape` (~L633) and validating the value. The
+  `TryBuild0dBoolWithBasic` False branch in `SetIndices(object[])` (~L229) also no-ops without
+  validating.
+- *Fix:* NumPy requires the value to broadcast to the indexing-RESULT shape even when that shape has a
+  0. Restructure `SetIndices<T>` so `retShape`/`subShape` are computed BEFORE the empty check, then
+  `np.broadcast_to(value, retShape)` (catch `IncorrectShapeException` → the NumPy `ValueError "could
+  not broadcast input array from shape … into shape …"`, no-space tuple — reuse the `Tup` helper
+  already in this file), THEN if the selection is empty return (no-op). A scalar (`value.size == 1`)
+  always broadcasts — skip. For the 0-d-bool-False path, capture `boolAxis` (currently `out _`) and
+  validate against `this[boolBasic].shape` with `[boolAxis] = 0`.
+- *Care / gate:* the non-empty fancy-set curated cases (`a[[0,1]] = -1` / `= row(4)` / `= [[100],[200]]`)
+  must stay green; gate on curated + the `[7500,10000)` random window. Expected delta ≈ −25.
+
+**R2 — Multi / non-consecutive 0-d-bool placement (~4–10 cases).**
+- *Symptom:* `[slice, True, slice, False]` on `(2,4)` → NumPy `(0,2,1)`, NumSharp `(2,0,1)`;
+  `[int, slice, True]` → NumPy `(1,0)`, NumSharp `(0,1)`. (Single / consecutive 0-d bool is correct.)
+- *Root cause:* `TryBuild0dBoolWithBasic` (`…Getter.cs` ~L537) inserts the merged 0-d-bool axis at the
+  FIRST 0-d-bool's output position and has **no consec rule** — but when the 0-d bools are
+  NON-CONSECUTIVE (a slice/newaxis separates them) NumPy moves the merged advanced block to the FRONT
+  (`_get_transpose`, §4c). The grid already implements consec + `MixKind.ZeroBool` correctly.
+- *Fix:* route these to the grid. (a) Make `TryBuild0dBoolWithBasic` BAIL (return false) when there is
+  >1 0-d bool, or a 0-d bool is non-consecutive with the axis-consumers, so they fall to
+  `TryBuildMultiAdvancedGrid`. (b) The grid already fires for 0-d-bool-only tuples (gate is
+  `advAxisCount < 1 && !hasZeroBool → false`, so `hasZeroBool` proceeds): verify it handles
+  pure-0-d-bool + slice (no fancy) — `advArrays` = the ZeroBool `(1,)`/`(0,)` arrays, broadcast →
+  `bshape`, no per-source-axis index for them, slices keep their axes, consec/front placement via the
+  existing `outShape` logic. **Unit-test the consec permutation directly** (handover §4c) before
+  trusting end-to-end. Simpler alternative consistent with the handover's "delete the Try\* stack":
+  delete `TryBuild0dBoolWithBasic` entirely and let the grid own all 0-d-bool cases.
+- *Care / gate:* the `a[True,:]`→`(1,3,4)`, `a[False,:]`→`(0,3,4)`, `a[True,True]`, `a[True,False]`
+  curated cases must stay green. Expected delta ≈ −4 to −10.
+
+**R3 — A second, layout-dependent teardown OOB (memory safety; re-check after R1/R2).**
+- *Symptom:* the main loop now COMPLETES (prints the result), but the full 10000-case run SEGFAULTS at
+  process teardown (GC finalization walks a heap corrupted earlier in the run). `[0,5000)` and
+  `[5000,5000)` windows complete — only the full accumulation tips it.
+- *Known:* it writes past a **PINNED MANAGED array** (`UnmanagedMemoryBlock.FromArray`, GCHandle-pinned).
+  `NUMSHARP_GUARD_PAGES` guards only pool/native buffers, so it does **not** catch it; it also survives
+  GC-hunt (GC per case), isolated repetition (`loop_each` 5000×), and window repetition — the OOB
+  target depends on a specific cross-case heap layout. This is the pre-existing "second OOB write" the
+  prior summary noted.
+- *Plan:* fix R1/R2 first and re-measure — per handover §8 (correct shapes ⇒ no OOB) it is likely one
+  of the remaining wrong-shape cases and may disappear. If it survives: the only detection page-heap
+  can't cover is a **red-zone on the pinned managed allocation** — temporarily make
+  `UnmanagedMemoryBlock.FromArray` over-allocate the managed `T[]` by a guard span, sentinel it, and
+  verify the sentinel on a per-case hook (revert after). Or run `loop_mini.cs <rounds>` (whole
+  mini-corpus in rounds, PRESERVING cross-case state) over a broad agree+divergent window, then bisect
+  the round/case. The first corruptor (negative-setter) was found exactly this way (`loop_each`).
+
+**R4 — Final cleanup + close the gate.**
+- The getter's `TryFetchSliceWithSingleAdvanced` is already unreferenced (call removed; method dead) —
+  delete it. The `_NDArrayFound` advanced loop in the getter is now reachable only for cases the grid
+  declined; with the grid owning ALL `HAS_FANCY` (commit `9c2e16b2`) confirm it is dead for advanced
+  and delete (keep `Storage.GetView` for pure-basic). Migrate the setter equivalents
+  (`TrySetSliceWithSingleAdvanced`, the setter `_NDArrayFound`) the same way — this completes the
+  handover's "replace the Try\* patchwork with the unified driver".
+- When the random sweep reaches **0/0**: remove `[OpenBugs]` from `Index_Random`
+  (`Fuzz/IndexOracleTests.cs`) so it becomes a CI gate, re-run the full sweep under
+  `NUMSHARP_GUARD_PAGES=1` to confirm no AccessViolation (DOD §10), and flip this doc's Status to DONE.
+
+### Diagnostic tooling (lives in the scratchpad — promote or re-create)
+
+`replay_index_jsonl.cs`, `replay_index_gchunt.cs`, `loop_each.cs`, `loop_mini.cs` (scratchpad:
+`…/2d3a5974-…/scratchpad/`). All read the committed corpus `index_random_20240626.jsonl`:
+- **`replay_index_jsonl.cs <file> [SKIP] [LIMIT]`** — primary measurement; prints categorized counts
+  (agree-OK/ERR, ns-threw-on-valid, ns-accepted-invalid, shape/val diff) and writes flushed
+  `trace.txt`/`diverge.txt` (survive a crash). Each line of `diverge.txt` starts with the case `id`.
+- **`replay_index_gchunt.cs`** — `GC.Collect` per case (trips on GC-heap corruption near the corruptor).
+- **`loop_each.cs <N>`** — loops EACH mini-corpus case N× in isolation (finds layout-INDEPENDENT OOB;
+  how the negative-setter corruptor was pinned).
+- **`loop_mini.cs <rounds>`** — loops the WHOLE mini-corpus in rounds, preserving cross-case state
+  (for layout-DEPENDENT OOB, R3).
+- Build a mini-corpus: `awk '{print $1}' diverge.txt` → IDs; filter the corpus JSONL by `id` (see the
+  python one-liner in the session). Run under `NUMSHARP_GUARD_PAGES=1` for page-heap.
+- **Gotcha:** clear `%LOCALAPPDATA%\Temp\dotnet\runfile` after every `NumSharp.Core` rebuild — the
+  file-based-app cache serves a stale Core (a green run can hide an unbuilt fix).
 
 ---
 
