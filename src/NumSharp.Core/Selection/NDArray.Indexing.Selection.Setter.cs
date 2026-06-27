@@ -684,18 +684,8 @@ namespace NumSharp
             //prepare indices getters
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            //figure out the largest possible abosulte offset
-            long largestOffset;
-            if (srcShape.IsContiguous)
-                largestOffset = source.size - 1;
-            else
-            {
-                var largestIndices = (long[])source.shape.Clone();
-                for (int i = 0; i < largestIndices.Length; i++)
-                    largestIndices[i] = largestIndices[i] - 1;
-
-                largestOffset = srcShape.GetOffset(largestIndices);
-            }
+            //figure out the largest possible abosulte offset (true max reachable, neg-stride safe)
+            long largestOffset = LargestReachableOffset(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)

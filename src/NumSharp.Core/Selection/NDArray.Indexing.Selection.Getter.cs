@@ -191,21 +191,15 @@ namespace NumSharp
             if (TryFetchLeadingMaskWithBasic(indicesObjects, out var leadResult))
                 return leadResult;
 
-            // Mixed basic (slice) + single advanced (array / boolean mask) indexing.
-            // NumPy keeps slices as their own output axes and selects the advanced
-            // index along its axis (an outer product), instead of broadcasting slices
-            // and advanced indices together. Handle that here before the broadcast
-            // path below, which only models all-advanced tuples.
-            if (TryFetchSliceWithSingleAdvanced(indicesObjects, out var mixedResult))
-                return mixedResult;
-
-            // TWO OR MORE advanced indices (arrays / masks) mixed with an explicit
-            // slice / newaxis — the general advanced-index case the broadcast path
-            // below cannot model (it would broadcast the slices together with the
-            // advanced block instead of treating them as outer-product output axes).
-            // Builds one integer index array per source axis with NumPy's axis
-            // placement (block in place when consecutive, to the front when a
-            // slice/newaxis separates the advanced indices) for a single gather.
+            // Mixed basic (slice / newaxis / int) + ANY number of advanced indices (integer arrays,
+            // or boolean masks via their nonzero() components). NumPy keeps each slice/newaxis as its
+            // own output axis and broadcasts the advanced indices TOGETHER into one block, placed in
+            // position when the advanced indices are consecutive or at the front when a slice/newaxis
+            // separates them (mapping.c MapIterNew / _get_transpose). TryBuildMultiAdvancedGrid builds
+            // one integer index array per source axis in that exact layout for a single gather — it is
+            // the unified advanced path, covering a single 1-D/n-D fancy + slice (which the removed
+            // np.take fast path mishandled for newaxis / negative slices / non-contiguous sources) as
+            // well as multi-advanced.
             if (TryBuildMultiAdvancedGrid(indicesObjects, out var multiGrid))
                 return FetchIndices(this, multiGrid, null, true);
 
@@ -872,7 +866,12 @@ namespace NumSharp
 
             int advAxisCount = 0;
             foreach (var t in items) if (t.kind == MixKind.Adv) advAxisCount++;
-            if (advAxisCount < 2) return false;                        // single-advanced fast paths already covered it
+            // Need at least ONE advanced axis. A single 1-D advanced index is already served by the
+            // np.take fast path (TryFetchSliceWithSingleAdvanced runs first); but a single MULTI-DIM
+            // fancy array mixed with a slice (e.g. a[arr(2,2), 1::2] -> NumPy keeps the slice axis,
+            // shape (2,2,1)) reaches here because np.take bails on ndim>1. The grid builds the correct
+            // outer-product layout (advanced block in place + the slice's own axis), so fire for >=1.
+            if (advAxisCount < 1) return false;
 
             // Trailing axes the tuple did not reach are full ':'.
             for (int a = srcAxes; a < ndim; a++)
@@ -1178,17 +1177,7 @@ namespace NumSharp
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
             //figure out the largest possible abosulte offset
-            long largestOffset;
-            if (srcShape.IsContiguous)
-                largestOffset = source.size - 1;
-            else
-            {
-                var largestIndices = (long[])source.shape.Clone();
-                for (int i = 0; i < largestIndices.Length; i++)
-                    largestIndices[i] = largestIndices[i] - 1;
-
-                largestOffset = srcShape.GetOffset(largestIndices);
-            }
+            long largestOffset = LargestReachableOffset(srcShape, source.size);
 
             //compute coordinates
             if (indices.Length > 1)
@@ -1393,6 +1382,31 @@ namespace NumSharp
         /// together with the computed <c>retShape</c>/<c>subShape</c> so a divergence is traced to
         /// the mishandled index combination instead of corrupting the GC heap silently.
         /// </summary>
+        /// <summary>
+        ///     The largest buffer offset REACHABLE by any coordinate of <paramref name="shape"/>:
+        ///     its base offset plus, per axis, only the positive-stride contribution (a negative
+        ///     stride reaches its maximum at index 0, contributing nothing). For a contiguous view
+        ///     this is <c>size-1</c>. Used as the upper bound when validating gather/scatter offsets;
+        ///     the previous <c>GetOffset(size-1 corner)</c> was the MINIMUM corner for a negative-stride
+        ///     view, so valid early-row offsets were falsely rejected as out of bounds.
+        /// </summary>
+        private static long LargestReachableOffset(Shape shape, long size)
+        {
+            if (shape.IsContiguous)
+                return size - 1;
+
+            long largest = shape.offset;
+            var strides = shape.strides;
+            var dims = shape.dimensions;
+            for (int i = 0; i < dims.Length; i++)
+            {
+                long stride = strides[i];
+                if (stride > 0)
+                    largest += (dims[i] - 1) * stride;
+            }
+            return largest;
+        }
+
         private static string IndexingOobMessage(string where, long srcOff, long dstOff, long span, long srcCap, long dstCap, long[] retShape, long[] subShape)
             => $"[indexing OOB guard] {where}: copy src[{srcOff},+{span}) of {srcCap} -> dst[{dstOff},+{span}) of {dstCap} out of bounds " +
                $"(retShape=[{(retShape == null ? "" : string.Join(",", retShape))}] subShape=[{(subShape == null ? "" : string.Join(",", subShape))}]).";
