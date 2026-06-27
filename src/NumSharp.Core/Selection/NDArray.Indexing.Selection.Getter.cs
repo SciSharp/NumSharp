@@ -426,6 +426,10 @@ namespace NumSharp
             {
                 if (it is Slice s && s.IsEllipsis) { hasEllipsis = true; continue; }
                 if (it is Slice s2 && s2.IsNewAxis) continue;
+                // A 0-d boolean (HAS_0D_BOOL) consumes NO source axis — it must not be counted, or the
+                // ellipsis under-fills and the inserted axis lands wrong: [..., True] on (4,3) is
+                // (4,3,1), not (4,1,3).
+                if (it is NDArray nd && nd.typecode == NPTypeCode.Boolean && nd.ndim == 0) continue;
                 consumed++;
             }
 
