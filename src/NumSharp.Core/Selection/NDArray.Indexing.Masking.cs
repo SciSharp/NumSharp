@@ -60,13 +60,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Checks if mask.shape matches arr.shape[:mask.ndim] (partial shape match).
+        /// Checks if mask.shape matches arr.shape[:mask.ndim] (partial shape match). A mask axis
+        /// of length 0 is EXEMPT from the match — a zero-length boolean axis selects nothing and is
+        /// valid against an axis of any size (NumPy: A[np.zeros(0,bool)] -> (0,)+trailing on a
+        /// size-3 axis, A[np.zeros((3,0),bool)] -> (0,)); only a NON-zero mask axis must equal the
+        /// array axis (A[np.zeros((0,2),bool)] still raises on the mismatched size-2 axis).
         /// </summary>
         private bool IsPartialShapeMatch(NDArray mask)
         {
             for (int i = 0; i < mask.ndim; i++)
             {
-                if (mask.shape[i] != this.shape[i])
+                if (mask.shape[i] != this.shape[i] && mask.shape[i] != 0)
                     return false;
             }
             return true;

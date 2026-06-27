@@ -294,6 +294,19 @@ namespace NumSharp
             // These are exactly the IndexErrors NumPy raises; doing them here rejects the malformed
             // combinations before any gather/scatter (memory safety + accepts-invalid parity).
             {
+                // NumPy bounds-checks integer ARRAY values at GATHER time, so when the advanced block
+                // broadcasts to an EMPTY result (some advanced index has size 0) nothing is gathered and
+                // the (possibly out-of-range) fancy values are never validated — e.g.
+                // a[arr([99]), np.array(False)] -> (0,4), a[arr([-3,1,2,3],(4,1)), np.array([],int)]
+                // -> (4,0). A SCALAR int index is still validated eagerly (NumPy checks it regardless of
+                // the empty block), as is a bool array's axis size. The block is empty iff a Fancy / 0-d
+                // bool op is itself size 0; broadcastability is still checked below, so an un-broadcastable
+                // empty combo (e.g. (2,2) with (0,)) raises shape-mismatch rather than silently passing.
+                bool advancedBlockEmpty = false;
+                foreach (var op in ops)
+                    if ((op.Kind == IndexKind.Fancy || op.Kind == IndexKind.ZeroDBool) && op.Array is not null && op.Array.size == 0)
+                    { advancedBlockEmpty = true; break; }
+
                 int axis = 0;
                 foreach (var op in ops)
                 {
@@ -306,7 +319,8 @@ namespace NumSharp
                                     $"{dims[axis]} but size of corresponding boolean axis is {op.Value}");
                             break;
                         case IndexKind.Fancy:                                   // integer array (Value == -1): value bounds
-                            ScanFancyBounds(op.Array, dims[axis], axis);
+                            if (!advancedBlockEmpty)                            // skipped for an empty broadcast result
+                                ScanFancyBounds(op.Array, dims[axis], axis);
                             break;
                         case IndexKind.Integer:                                 // scalar int / 0-d array: value bounds
                             if (op.IntVal < -dims[axis] || op.IntVal >= dims[axis])
