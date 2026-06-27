@@ -340,12 +340,16 @@ public class Indexing_BasicParity_MatrixTests
         Assert.IsTrue(threw, $"[{tc.Name}] expected an exception (NumPy raises IndexError here)");
     }
 
-    // ─────────────────────── BUG: GET cases (known NumSharp divergences) ───
-    // NumPy raises IndexError; NumSharp does NOT throw → marked [OpenBugs].
+    // ─────────────────────── FIXED: per-axis OOB now validated ─────────────
+    // Was [OpenBugs]: coordinate indexing only checked the flat offset against the
+    // buffer, so a per-axis OOB whose flat offset still landed inside the buffer
+    // (e.g. A[0,4] → A[1,0] == 4) slipped through. Fixed in Shape.InferNegativeCoordinates
+    // (every GetData coordinate path) — each index is now validated to [-dim, dim-1] and
+    // raises IndexError "index N is out of bounds for axis A with size S" (NumPy-verbatim).
+    // Kept as a passing regression guard.
     static readonly ECase[] _bugErrCases =
     {
         // NumPy: IndexError: index 4 is out of bounds for axis 1 with size 4
-        // NumSharp: silently returns val=4 (treats as flat-buffer index, bypasses axis check)
         new ECase("E_A_oob_ax1_wrapped",   () => A()[0, 4]),    // axis-1 OOB, flat offset=4 still inside buffer
         new ECase("E_A_oob_ax1_wrapped2",  () => A()[1, 4]),    // flat offset=8, also inside buffer
         new ECase("E_B_oob_ax2_wrapped",   () => B()[0, 0, 4]), // axis-2 OOB, flat offset=4 inside buffer
@@ -356,15 +360,14 @@ public class Indexing_BasicParity_MatrixTests
 
     [DataTestMethod]
     [DynamicData(nameof(BugErrCases))]
-    [OpenBugs] // NumSharp doesn't throw when it should; axis-bounds check is flat-offset-only
     public void AssertError_Bugs(ECase tc)
     {
-        // NumPy: throws IndexError. NumSharp: currently does not throw. This test FAILS = known bug.
+        // NumPy throws IndexError; NumSharp now throws too (per-axis bounds check). Passing.
         bool threw = false;
         try { tc.Op(); }
         catch { threw = true; }
         Assert.IsTrue(threw,
-            $"[{tc.Name}] expected IndexError (NumPy axis-bounds check); NumSharp does not check per-axis OOB when flat offset is within buffer");
+            $"[{tc.Name}] expected IndexError (NumPy axis-bounds check); per-axis OOB must be validated even when the flat offset is within the buffer");
     }
 
     // ─────────────────────── BUG: SET shape mismatch ─────────────────────

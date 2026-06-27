@@ -113,11 +113,16 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static unsafe void InferNegativeCoordinates(long[] dimensions, long* coords, int coordsCount)
         {
+            if (coordsCount > dimensions.Length)
+                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coordsCount} were indexed");
             for (int i = 0; i < coordsCount; i++)
             {
                 var curr = coords[i];
+                var dim = dimensions[i];
+                if (curr < -dim || curr >= dim)
+                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
                 if (curr < 0)
-                    coords[i] = dimensions[i] + curr;
+                    coords[i] = dim + curr;
             }
         }
     }

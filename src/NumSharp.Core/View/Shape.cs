@@ -1464,11 +1464,20 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static long[] InferNegativeCoordinates(long[] dimensions, long[] coords)
         {
+            // NumPy validates EACH integer coordinate against its own axis: a valid index
+            // lies in [-dim, dim-1] (ranges clamp, but an integer index raises). The previous
+            // code only wrapped negatives, leaving per-axis OOB to slip through whenever the
+            // resulting flat offset still landed inside the buffer (e.g. a[0,4] returned a[1,0]).
+            if (coords.Length > dimensions.Length)
+                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
+                var dim = dimensions[i];
+                if (curr < -dim || curr >= dim)
+                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
                 if (curr < 0)
-                    coords[i] = dimensions[i] + curr;
+                    coords[i] = dim + curr;
             }
 
             return coords;
@@ -1480,11 +1489,16 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static int[] InferNegativeCoordinates(long[] dimensions, int[] coords)
         {
+            if (coords.Length > dimensions.Length)
+                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {coords.Length} were indexed");
             for (int i = 0; i < coords.Length; i++)
             {
                 var curr = coords[i];
+                var dim = dimensions[i];
+                if (curr < -dim || curr >= dim)
+                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
                 if (curr < 0)
-                    coords[i] = (int)(dimensions[i] + curr);
+                    coords[i] = (int)(dim + curr);
             }
 
             return coords;
@@ -1497,11 +1511,16 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static unsafe void InferNegativeCoordinates(long[] dimensions, int* coords, int ndims)
         {
+            if (ndims > dimensions.Length)
+                throw new IndexError($"too many indices for array: array is {dimensions.Length}-dimensional, but {ndims} were indexed");
             for (int i = 0; i < ndims; i++)
             {
                 var curr = coords[i];
+                var dim = dimensions[i];
+                if (curr < -dim || curr >= dim)
+                    throw new IndexError($"index {curr} is out of bounds for axis {i} with size {dim}");
                 if (curr < 0)
-                    coords[i] = (int)(dimensions[i] + curr);
+                    coords[i] = (int)(dim + curr);
             }
         }
 
