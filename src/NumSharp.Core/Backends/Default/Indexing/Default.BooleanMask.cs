@@ -96,7 +96,24 @@ namespace NumSharp.Backends
 
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
             if (trueCount == 0)
+            {
+                // The selection is EMPTY ((0,)+trailing). NumPy still requires the value to
+                // broadcast to that indexing-result shape — a non-scalar that cannot broadcast
+                // raises ValueError (e.g. arr[allFalseMask] = [93,1,39] into a (0,4) selection);
+                // it is NOT silently a no-op. A scalar (size 1) always broadcasts.
+                if (value.size != 1)
+                {
+                    var emptySel = BooleanMaskResultShape(0, arr, leadNdim);
+                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                    try { np.broadcast_to(value, emptySel); }
+                    catch (IncorrectShapeException)
+                    {
+                        throw new ValueError($"shape mismatch: value array of shape {Tup(value.Shape.dimensions)} " +
+                                             $"could not be broadcast to indexing result of shape {Tup(emptySel.dimensions)}");
+                    }
+                }
                 return;
+            }
 
             // A scalar (size-1) value splats to every selected slot from a clean
             // 1-element buffer; otherwise broadcast to the selection shape and

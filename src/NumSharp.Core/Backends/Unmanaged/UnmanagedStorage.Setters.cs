@@ -361,8 +361,14 @@ namespace NumSharp.Backends
             //incase its a scalar to scalar assignment
             if (indices.Length == _shape.NDim)
             {
-                if (!(valueIsScalary))
-                    throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to the target indices, these shapes can't be broadcasted together.");
+                // The coordinate consumes EVERY axis, so the target is a single element (shape ()).
+                // NumPy requires a 0-d / scalar value there: a 1+-D array — even size 1, e.g.
+                // a[3] = np.array([78]) or m[0,2] = np.array([94]) — raises "setting an array
+                // element with a sequence.", it is NOT silently unwrapped to its first element.
+                // (The looser `valueIsScalary`, which also accepts a (1,) array, is correct only
+                // for the sub-array broadcast branch above, NOT for a single-element target.)
+                if (!valueshape.IsScalar)
+                    throw new ValueError("setting an array element with a sequence.");
 
                 SetValue(Converts.ChangeType(value.GetAtIndex(0), _typecode), indices);
                 return;

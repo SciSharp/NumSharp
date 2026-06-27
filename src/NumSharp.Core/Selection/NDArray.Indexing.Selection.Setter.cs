@@ -237,12 +237,33 @@ namespace NumSharp
 
             // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices: True
             // assigns through the size-1 newaxis view (which aliases this, value broadcasting
-            // against the (1,...) selection); any-False selects nothing and is a no-op. Mirrors
-            // the getter's HAS_0D_BOOL handling.
-            if (TryBuild0dBoolWithBasic(indicesObjects, out var boolBasic, out _, out var boolVal))
+            // against the (1,...) selection); any-False selects nothing. Mirrors the getter's
+            // HAS_0D_BOOL handling.
+            if (TryBuild0dBoolWithBasic(indicesObjects, out var boolBasic, out var boolAxis, out var boolVal))
             {
                 if (boolVal)
+                {
                     this[boolBasic] = values;
+                    return;
+                }
+                // any-False -> the selection is EMPTY (size 0 along boolAxis), but NumPy still
+                // requires the value to broadcast to that empty indexing-result shape — a
+                // non-broadcastable, non-scalar value raises ValueError; it is NOT silently a
+                // no-op (mapping.c array_assign_subscript). A scalar always broadcasts.
+                if (values.size != 1)
+                {
+                    var selShape = boolBasic.Length == 0
+                        ? (long[])this.shape.Select(x => (long)x).ToArray()
+                        : this[boolBasic].shape.Select(x => (long)x).ToArray();
+                    selShape[boolAxis] = 0;                      // False -> empty axis
+                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                    try { np.broadcast_to(values, (Shape)selShape); }
+                    catch (IncorrectShapeException)
+                    {
+                        throw new ValueError($"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
+                                             $"could not be broadcast to indexing result of shape {Tup(selShape)}");
+                    }
+                }
                 return;
             }
 
