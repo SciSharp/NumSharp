@@ -222,6 +222,17 @@ namespace NumSharp
                 }
             }
 
+            // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices: True
+            // assigns through the size-1 newaxis view (which aliases this, value broadcasting
+            // against the (1,...) selection); any-False selects nothing and is a no-op. Mirrors
+            // the getter's HAS_0D_BOOL handling.
+            if (TryBuild0dBoolWithBasic(indicesObjects, out var boolBasic, out _, out var boolVal))
+            {
+                if (boolVal)
+                    this[boolBasic] = values;
+                return;
+            }
+
             // A leading boolean mask (any ndim) followed only by basic indices —
             // e.g. arr[mask2d, 1:3] = v. Slice the trailing axes to a writable view
             // (shares memory), then assign through the now-leading partial mask.

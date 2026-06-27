@@ -160,6 +160,21 @@ namespace NumSharp
                 }
             }
 
+            // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices adds a
+            // size-1 (True) / size-0 (False) axis at its position and KEEPS every source axis
+            // (HAS_0D_BOOL): A[True, :] -> (1,3,4), A[:, True] -> (3,1,4), A[False, :] -> (0,3,4).
+            if (TryBuild0dBoolWithBasic(indicesObjects, out var boolBasic, out var boolAxis, out var boolVal))
+            {
+                var boolResult = this[boolBasic];               // size-1 axis (NewAxis) at boolAxis
+                if (boolVal)
+                    return boolResult;
+                // any-False -> that axis is empty; slice it to length 0 (keeps all other axes).
+                var emptySlices = new Slice[boolResult.ndim];
+                for (int i = 0; i < emptySlices.Length; i++) emptySlices[i] = Slice.All;
+                emptySlices[boolAxis] = new Slice(0, 0);
+                return boolResult[emptySlices];
+            }
+
             // A LEADING boolean mask (any ndim) followed only by basic indices —
             // e.g. arr[mask2d, 1:3], arr[mask, 2] — reduces to: slice the trailing
             // axes, then apply the (now-leading) partial boolean mask. Reuses the
@@ -500,6 +515,103 @@ namespace NumSharp
             if (!TryBuildLeadingMaskBasicIndex(indicesObjects, out var mask, out var basic))
                 return false;
             result = this[basic][mask];
+            return true;
+        }
+
+        /// <summary>
+        /// A 0-d boolean index (<c>np.array(True)</c> / <c>np.array(False)</c>, NumPy's
+        /// HAS_0D_BOOL) consumes NO source axis and inserts an axis of size 1 (True) or 0
+        /// (False) at its position — <c>A[True, :]</c> → (1,3,4), <c>A[:, True]</c> → (3,1,4),
+        /// <c>A[False, :]</c> → (0,3,4). (NumSharp previously routed it through
+        /// <see cref="np.nonzero"/> as an axis-CONSUMING advanced index, dropping the axis the
+        /// colon should keep — <c>A[True, :]</c> → (1,4) — or crashing for trailing positions.)
+        /// Detects one-or-more 0-d booleans mixed ONLY with basic indices (slice / int /
+        /// newaxis / ellipsis) and emits the equivalent BASIC index with the first 0-d bool
+        /// replaced by a <see cref="Slice.NewAxis"/>; subsequent 0-d bools merge into it (NumPy
+        /// broadcasts the 0-d advanced indices together, so the inserted axis is size 1 only
+        /// when ALL are True, else 0). Outputs that axis' output position (<paramref name="boolAxis"/>)
+        /// and the merged value (<paramref name="boolValue"/>) so the caller returns the size-1
+        /// newaxis view (True) or empties that axis (False). Shared by the getter and setter;
+        /// returns false when there is no 0-d bool or any non-basic (advanced) index is present.
+        /// </summary>
+        private bool TryBuild0dBoolWithBasic(object[] indicesObjects, out object[] basicIndex, out int boolAxis, out bool boolValue)
+        {
+            basicIndex = null;
+            boolAxis = -1;
+            boolValue = true;
+
+            var normalized = new object[indicesObjects.Length];
+            for (int i = 0; i < indicesObjects.Length; i++)
+            {
+                if (indicesObjects[i] is string str)
+                {
+                    Slice parsed;
+                    try { parsed = new Slice(str); }
+                    catch { return false; }
+                    normalized[i] = parsed;
+                }
+                else
+                    normalized[i] = indicesObjects[i];
+            }
+            object[] items = ExpandEllipsisForMixed(normalized, this.ndim);
+
+            int firstBoolPos = -1, boolCount = 0;
+            bool allTrue = true;
+            for (int i = 0; i < items.Length; i++)
+            {
+                switch (items[i])
+                {
+                    case NDArray nd when nd.typecode == NPTypeCode.Boolean && nd.ndim == 0:
+                        if (firstBoolPos < 0) firstBoolPos = i;
+                        boolCount++;
+                        if (!(bool)nd) allTrue = false;
+                        break;
+                    case NDArray _:        // n-d / non-bool array -> advanced; not this case
+                    case int[] _:
+                    case long[] _:
+                        return false;
+                    case Slice _:
+                    case int _:
+                    case long _:
+                        break;
+                    default:
+                        return false;
+                }
+            }
+            if (boolCount == 0)
+                return false;
+
+            boolValue = allTrue;
+
+            // Output axis of the inserted bool axis = output axes contributed by the items
+            // BEFORE the first 0-d bool (a real slice or a newaxis adds one; an int reduces one).
+            int outAxis = 0;
+            for (int i = 0; i < firstBoolPos; i++)
+            {
+                switch (items[i])
+                {
+                    case int _:
+                    case long _:
+                        break;
+                    case Slice _:
+                        outAxis++;
+                        break;
+                }
+            }
+            boolAxis = outAxis;
+
+            var basic = new List<object>(items.Length);
+            bool emitted = false;
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (items[i] is NDArray nd2 && nd2.typecode == NPTypeCode.Boolean && nd2.ndim == 0)
+                {
+                    if (!emitted) { basic.Add(Slice.NewAxis); emitted = true; }
+                    continue;   // subsequent 0-d bools merge into the first
+                }
+                basic.Add(items[i]);
+            }
+            basicIndex = basic.ToArray();
             return true;
         }
 

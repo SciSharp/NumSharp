@@ -124,6 +124,13 @@ public class Indexing_EdgeParity_MatrixTests
 
         // uint8 multi-row fancy set (rows 1,0,1), matched (3,4) value — last write wins per row.
         yield return WrapS(new("A_uint8Idx_multiRow_set", () => { var a = A(); a[Idx<byte>(1, 0, 1)] = np.arange(100L, 112L).reshape(3, 4); return a; }, new long[] { 104, 105, 106, 107, 108, 109, 110, 111, 8, 9, 10, 11 }));
+
+        // 0-d bool combined with basic indices (setter): True assigns through the size-1
+        // newaxis view (aliases A, value broadcasts); any-False selects nothing -> no-op.
+        yield return WrapS(new("A_0dTrue_colon_set",  () => { var a = A(); a[np.array(true), ":"]  = -1L; return a; }, Enumerable.Repeat(-1L, 12).ToArray()));
+        yield return WrapS(new("A_0dFalse_colon_set", () => { var a = A(); a[np.array(false), ":"] = -1L; return a; }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return WrapS(new("A_colon_0dTrue_set",  () => { var a = A(); a[":", np.array(true)]  = -1L; return a; }, Enumerable.Repeat(-1L, 12).ToArray()));
+        yield return WrapS(new("A_int_0dTrue_set",    () => { var a = A(); a[1, np.array(true)]    = -1L; return a; }, new long[] { 0, 1, 2, 3, -1, -1, -1, -1, 8, 9, 10, 11 }));
     }
 
     [DataTestMethod]
@@ -145,23 +152,28 @@ public class Indexing_EdgeParity_MatrixTests
     // ═══════════════════════════════════════════════════════════════════════════
     // BUG cases — genuine NumSharp divergences (clean-build verified). [OpenBugs]
     // ═══════════════════════════════════════════════════════════════════════════
-    private static IEnumerable<object[]> BugGetCases()
+    // ── FIXED: 0-d boolean combined with basic indices (was [OpenBugs]) ──────────
+    // A 0-d boolean (HAS_0D_BOOL) adds a leading size-1 (True) / size-0 (False) axis and
+    // KEEPS every source axis. NumSharp used to route it through nonzero as an axis-CONSUMING
+    // advanced index, dropping the axis the colon should keep (A[True,:] -> (1,4)) or even
+    // crashing for a trailing position (A[:,:,True]). Fixed via TryBuild0dBoolWithBasic
+    // (getter + setter). Values probed from NumPy 2.4.2.
+    private static IEnumerable<object[]> BoolZeroDCases()
     {
-        // A 0-d boolean combined with a slice must ADD a leading size-1/size-0 axis
-        // (HAS_0D_BOOL) and KEEP every source axis. NumSharp instead drops the axis the
-        // colon should preserve, returning one rank too few.
-        //   NumPy A[True, :]  → (1,3,4);  NumSharp → (1,4)
-        //   NumPy A[False, :] → (0,3,4);  NumSharp → (0,4)
-        //   NumPy A[:, True]  → (3,1,4);  NumSharp → (3,1)
-        yield return Wrap(new("BUG_A_0dTrue_colon",  () => A()[np.array(true), ":"],  new[] { 1, 3, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
-        yield return Wrap(new("BUG_A_0dFalse_colon", () => A()[np.array(false), ":"], new[] { 0, 3, 4 }, new long[0]));
-        yield return Wrap(new("BUG_A_colon_0dTrue",  () => A()[":", np.array(true)],  new[] { 3, 1, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return Wrap(new("A_0dTrue_colon",       () => A()[np.array(true), ":"],            new[] { 1, 3, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return Wrap(new("A_0dFalse_colon",      () => A()[np.array(false), ":"],           new[] { 0, 3, 4 }, new long[0]));
+        yield return Wrap(new("A_colon_0dTrue",       () => A()[":", np.array(true)],            new[] { 3, 1, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return Wrap(new("A_colon_0dFalse",      () => A()[":", np.array(false)],           new[] { 3, 0, 4 }, new long[0]));
+        yield return Wrap(new("A_int_0dTrue",         () => A()[1, np.array(true)],              new[] { 1, 4 },    new long[] { 4, 5, 6, 7 }));
+        yield return Wrap(new("A_0dTrue_int",         () => A()[np.array(true), 1],              new[] { 1, 4 },    new long[] { 4, 5, 6, 7 }));
+        yield return Wrap(new("A_colon_colon_0dTrue", () => A()[":", ":", np.array(true)],       new[] { 3, 4, 1 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return Wrap(new("A_0dTrue_0dTrue",      () => A()[np.array(true), np.array(true)], new[] { 1, 3, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
+        yield return Wrap(new("A_0dTrue_0dFalse",     () => A()[np.array(true), np.array(false)],new[] { 0, 3, 4 }, new long[0]));
     }
 
     [DataTestMethod]
-    [OpenBugs]
-    [DynamicData(nameof(BugGetCases), DynamicDataSourceType.Method)]
-    public void AssertGet_Bug(GCase tc) => CheckGet(tc);
+    [DynamicData(nameof(BoolZeroDCases), DynamicDataSourceType.Method)]
+    public void AssertGet_BoolZeroD(GCase tc) => CheckGet(tc);
 
     private static IEnumerable<object[]> BugThrowCases()
     {
