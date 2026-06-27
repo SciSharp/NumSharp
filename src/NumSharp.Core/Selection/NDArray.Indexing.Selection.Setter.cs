@@ -339,6 +339,9 @@ namespace NumSharp
             }
 
             new NDArray(Storage.GetView(slices)).SetData(values, new int[0]);
+            return;   // pure basic (slices/ellipsis/newaxis): assigned via the view; do NOT fall through
+                      // into _NDArrayFound, which would re-interpret the slices as fancy index arrays and
+                      // broadcast them (the getter's equivalent path likewise returns its view).
 
 //handle complex ndarrays indexing
             _NDArrayFound:
