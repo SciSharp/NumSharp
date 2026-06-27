@@ -728,40 +728,38 @@ namespace NumSharp
                 var idxAddr = computedOffsets.Address;
                 var dstAddr = source.Address;
                 var valuesTyped = values.AsOrMakeGeneric<T>();
-                T* valAddr = valuesTyped.Address;
-                var valuesShape = valuesTyped.Shape;
                 long len = computedOffsets.size;
 
-                // Handle broadcasting: if values.size == 1, broadcast scalar
-                long valBuf = valuesTyped.Shape.BufferSize;
+                // Scalar fast path: one value fills every selected slot.
                 if (valuesTyped.size == 1)
                 {
-                    T val = *valAddr;
+                    T val = *valuesTyped.Address;
                     for (long i = 0; i < len; i++)
                         dstAddr[idxAddr[i]] = val;
+                    return;
                 }
-                else if (valuesShape.IsContiguous)
+
+                // The value must BROADCAST to the indexing-result (selection) shape = retShape; a value
+                // of a different, incompatible shape (e.g. a (5,) into a (1,) selection, or a (len,) flat
+                // value into a 2-D retShape of the same size) is a NumPy ValueError, not a partial / flat
+                // write. Materialize to a C-contiguous buffer of exactly retShape so the flat write below
+                // aligns with the C-order offsets.
+                if (!(valuesTyped.Shape.IsContiguous && valuesTyped.Shape.dimensions.SequenceEqual(retShape)))
                 {
-                    for (long i = 0; i < len; i++)
+                    string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                    try
                     {
-                        // Memory-safety guard: a value shorter than the selection (a shape NumPy
-                        // would reject) would read past the value buffer.
-                        if (i >= valBuf)
-                            throw new IndexOutOfRangeException(IndexingOobMessage("SetIndices(value)", i, idxAddr[i], 1, valBuf, source.Shape.BufferSize, retShape, subShape));
-                        dstAddr[idxAddr[i]] = valAddr[i];
+                        valuesTyped = np.broadcast_to(valuesTyped, (Shape)retShape).copy().MakeGeneric<T>();
+                    }
+                    catch (IncorrectShapeException)
+                    {
+                        throw new ValueError($"could not broadcast input array from shape {Tup(values.Shape.dimensions)} into shape {Tup(retShape)}");
                     }
                 }
-                else
-                {
-                    // Non-contiguous values array
-                    for (long i = 0; i < len; i++)
-                    {
-                        long vo = valuesShape.TransformOffset(i);
-                        if (vo < 0 || vo >= valBuf)
-                            throw new IndexOutOfRangeException(IndexingOobMessage("SetIndices(value,nl)", vo, idxAddr[i], 1, valBuf, source.Shape.BufferSize, retShape, subShape));
-                        dstAddr[idxAddr[i]] = valAddr[vo];
-                    }
-                }
+
+                T* valAddr = valuesTyped.Address;   // contiguous, exactly retShape (len elements)
+                for (long i = 0; i < len; i++)
+                    dstAddr[idxAddr[i]] = valAddr[i];
                 return;
             }
             else
