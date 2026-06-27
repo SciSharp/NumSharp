@@ -182,6 +182,13 @@ namespace NumSharp
                     case int i:
                         Storage.SetData(values, i);
                         return;
+                    case ulong ui:
+                        // uint64 scalar index — see the getter: ulong can't bind to the Slice
+                        // indexer, so it lands here. Route through the same Slice.Index view as
+                        // the int/long scalar path so the value broadcasts across the reduced
+                        // sub-array (NumPy: a[np.uint64(1)] = v sets all of row 1).
+                        new NDArray(Storage.GetView(Slice.Index((long)ui))).SetData(values, new int[0]);
+                        return;
                     case bool boolean:
                         if (boolean == false)
                             return; //do nothing

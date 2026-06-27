@@ -72,6 +72,12 @@ namespace NumSharp
                         return FetchIndices(this, new NDArray[] {nd}, null, true);
                     case int i:
                         return new NDArray(Storage.GetData(i));
+                    case ulong ui:
+                        // ulong is the only integer scalar with no implicit conversion to
+                        // int/long, so it can't bind to the Slice indexer (where byte/short/
+                        // int/uint/long land) and arrives here instead. NumPy indexes with a
+                        // uint64 scalar like any other integer: a[np.uint64(1)] == a[1].
+                        return new NDArray(Storage.GetData((int)ui));
                     case bool boolean:
                         if (boolean == false)
                             return new NDArray(dtype); //return empty

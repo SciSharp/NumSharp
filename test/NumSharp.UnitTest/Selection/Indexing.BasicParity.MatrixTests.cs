@@ -397,4 +397,43 @@ public class Indexing_BasicParity_MatrixTests
         Assert.IsTrue(threw,
             $"[{tc.Name}] expected ValueError (setter shape mismatch); NumSharp does not validate broadcast compatibility");
     }
+
+    // ─────────────────────── Scalar-index DTYPE coverage ──────────────────────
+    // NumPy indexes with a scalar of ANY integer dtype (np.uint8 .. np.uint64) like a
+    // plain int: a[np.uint64(1)] == a[1]. In NumSharp the scalar binds to the Slice-based
+    // indexer via Slice's implicit operators; ulong is the only integer type with no
+    // implicit conversion to int/long, so it needs its own Slice operator (regression
+    // guard for that fix). All eight must select row 1 (get) and assign row 1 (set).
+    [TestMethod]
+    public void ScalarIndex_AllIntegerDtypes_IndexLikeInt()
+    {
+        var expectRow1 = new long[] { 4, 5, 6, 7 };
+
+        void Get(string name, NDArray r)
+        {
+            r.shape.Select(d => (int)d).ToArray().Should().Equal(new[] { 4 }, $"{name} shape");
+            Enumerable.Range(0, 4).Select(i => Convert.ToInt64(r.GetValue(i))).ToArray()
+                .Should().Equal(expectRow1, $"{name} values");
+        }
+
+        Get("byte",   A()[(byte)1]);
+        Get("sbyte",  A()[(sbyte)1]);
+        Get("short",  A()[(short)1]);
+        Get("ushort", A()[(ushort)1]);
+        Get("int",    A()[1]);
+        Get("uint",   A()[(uint)1]);
+        Get("long",   A()[1L]);
+        Get("ulong",  A()[(ulong)1]);   // the gap that needed Slice's ulong operator
+
+        void Set(string name, Func<NDArray> op)
+        {
+            var a = op();
+            Enumerable.Range(0, 12).Select(i => Convert.ToInt64(a.GetValue(i / 4, i % 4))).ToArray()
+                .Should().Equal(new long[] { 0, 1, 2, 3, -1, -1, -1, -1, 8, 9, 10, 11 }, $"{name} set");
+        }
+
+        Set("byte",  () => { var a = A(); a[(byte)1]  = (NDArray)(-1L); return a; });
+        Set("uint",  () => { var a = A(); a[(uint)1]  = (NDArray)(-1L); return a; });
+        Set("ulong", () => { var a = A(); a[(ulong)1] = (NDArray)(-1L); return a; });
+    }
 }
