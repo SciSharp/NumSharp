@@ -1,6 +1,6 @@
 # Handover: full combinatorial advanced indexing (NumPy `mapping.c` parity)
 
-**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** OPEN — design + plan, not started.
+**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–C done, D done, E mostly done; random sweep 697 → 64 divergences (91%). See "Execution status" below.
 
 This is the successor to [`advanced-index-axis-placement.md`](./advanced-index-axis-placement.md)
 (which resolved the *two-advanced-indices-with-a-slice* case via `TryBuildMultiAdvancedGrid`).
@@ -34,6 +34,54 @@ how-to.
    Kills the shape/value divergences (85 cases) and the rest.
 5. **Gate:** the curated sweep (2369 cases) stays 0/0 **and** the random sweep reaches 0/0
    (currently ~660–700 fails), full CI green on net8.0 + net10.0, `FuzzMatrix` green.
+
+---
+
+## 0b. Execution status (2026-06-27)
+
+Executed against this plan. Differential random sweep (seed 20240626, 10000 cases): **697 → 64
+divergences (91%)**. Curated + dtype gate stays **0/0**; full CI suite **10980 pass / 0 fail on
+net8.0 AND net10.0**. Commits `d20fb793` … `373978d8` on `nditer`.
+
+**Done:**
+- **Phase A** (`d20fb793`) — oracle committed: `test/oracle/gen_index_oracle.py`, three corpora
+  (`index_curated` 2265, `index_dtype` 104, `index_random_20240626` 10000), `Fuzz/IndexOracleTests.cs`
+  with `[FuzzMatrix]` `Index_Curated`/`Index_Dtype` (CI gates) + `[OpenBugs]` `Index_Random`.
+- **Phase B** (`468f7419`, `373978d8`) — block-copy bounds guards at every gather/scatter copy site;
+  opt-in page-heap (`NUMSHARP_GUARD_PAGES`, `OsVirtualMemory.AllocGuarded`). **The major flaky
+  corruptor is FIXED**: `SetData(int[])` didn't wrap negative coordinates (getter's `GetData` does),
+  so `b[(object)-1] = v` wrote at `buffer[-1]` — an OOB heap write found by amplifying each divergent
+  case in a loop until `V6[-1]=scalar` crashed.
+- **Phase C** (`0be160ea`) — `Selection/NDArray.Indexing.PrepareIndex.cs`: faithful `prepare_index`
+  port (classify + validate: too-many-indices, bool-array dim, integer/array value bounds,
+  advanced-block broadcast-together, single-ellipsis, invalid-type). Wired as the multi-index gate.
+- **Phase D** (`32cb060b`, `bea57936`, `36161bb8`, `65315bfe`) — slice neg-step out-of-range start
+  fix; `largestOffset` neg-stride bound fix; grid handles a single (incl. n-d) advanced index and
+  subsumes the removed `np.take` path; 0-d bool joins the advanced block in the grid (`MixKind.ZeroBool`);
+  ellipsis no longer counts a 0-d bool as axis-consuming.
+- **Phase E (partial)** (`7c72c006`, `56c9e7c6`, `aed44b31`, `6a3aa93c`) — empty index array (any
+  dtype) is an empty integer fancy; empty value into a non-empty whole-array region raises ValueError;
+  setter pure-basic slice path was missing a `return` (fell through to fancy — fixed many
+  `A[...]=scalar` / `A[:,:]=scalar` / `A[None]=v` cases); non-subshaped fancy assignment validates the
+  value broadcasts to the selection.
+
+**Remaining (64 divergences):**
+1. **Setter value-broadcast on EMPTY selections** (~25, the largest bucket) — `a[empty_fancy]=v`,
+   `a[slice,False]=v` short-circuit on the empty index BEFORE validating the value broadcasts to the
+   (0,…) selection shape. NumPy raises ValueError. Fix: compute the selection shape and validate at the
+   `SetIndices<T>` empty short-circuits / the `TryBuild0dBoolWithBasic` False branch.
+2. **0-d-bool placement edges** (~27 cases carry a 0-d bool) — MULTIPLE 0-d bools interspersed with
+   slices/newaxis in `TryBuild0dBoolWithBasic` (e.g. `[slice,True,slice,False]` → NumPy `(0,2,1)`,
+   NumSharp `(2,0,1)`): the merged 0-d-bool axis lands at the wrong output position. (Single 0-d-bool +
+   fancy via the grid is correct.)
+3. **Multi-dim fancy + ellipsis + int** (a few) — `[ell, arr(4,1), int]` → NumPy `(4,1)`, NumSharp `(4,3)`.
+4. **A second, layout-dependent teardown OOB** — the main loop now COMPLETES; the full 10000-case run
+   still segfaults at process teardown. It writes past a **pinned managed array** (page-heap doesn't
+   catch it; survives GC-hunt, isolated repetition, and window repetition — it needs a specific
+   cross-case heap layout). It is the pre-existing "second OOB write" the prior summary noted, expected
+   to be subsumed as the remaining wrong-shape divergences are fixed (handover §8: correct shapes ⇒ no OOB).
+5. **Final cleanup** — delete the now-unreferenced `TryFetchSliceWithSingleAdvanced` (getter) and migrate
+   the setter equivalents; un-mark `Index_Random` `[OpenBugs]` once the sweep reaches 0/0 (Phase E gate).
 
 ---
 
