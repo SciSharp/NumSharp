@@ -167,10 +167,11 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Compare()
         {
-            throw new Exception("This test kills test engine process due to Debug.Assert");
+            // Previously [OpenBugs]: nd[(nd < 3)] = -2 (a scalar into a boolean-mask subspace)
+            // tripped a Debug.Assert / killed the test host. Fixed by the broadcast-value
+            // assignment path; the whole flow now matches NumPy.
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             (nd < 3).Should().BeOfValues(true, true, false, false, false, false);
 
