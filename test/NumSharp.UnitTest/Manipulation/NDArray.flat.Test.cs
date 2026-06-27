@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void flat_scalar_sliced()
         {
             var nd = NDArray.Scalar(1);
-            var sliced = nd[":"];
+            var sliced = nd["..."];   // scalar[:] is invalid in NumPy ("too many indices"); ellipsis gives the 0-d view
             var flat = sliced.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(1);

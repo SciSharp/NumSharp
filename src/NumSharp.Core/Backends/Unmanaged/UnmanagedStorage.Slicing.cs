@@ -31,6 +31,15 @@ namespace NumSharp.Backends
                     newaxis_count++;
             }
 
+            // Too many indices: count the AXIS-CONSUMING slices (everything except newaxis
+            // and ellipsis). NumPy raises IndexError when this exceeds the array's rank — an
+            // ellipsis only ABSORBS axes, so it can never rescue an already-over-full index
+            // (A[:, :, :] / A[..., :, :, :] on a 2-D array both raise). Previously the extra
+            // slices were silently dropped by Shape.Slice (it iterates only over NDim).
+            int consuming = slices.Length - newaxis_count - ellipsis_count;
+            if (consuming > Shape.NDim)
+                throw new IndexError($"too many indices for array: array is {Shape.NDim}-dimensional, but {consuming} were indexed");
+
             // deal with ellipsis
             if (ellipsis_count > 1)
                 throw new ArgumentException("IndexError: an index can only have a single ellipsis ('...')");

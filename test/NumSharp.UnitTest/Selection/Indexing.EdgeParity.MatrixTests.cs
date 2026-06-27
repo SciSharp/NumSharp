@@ -175,17 +175,24 @@ public class Indexing_EdgeParity_MatrixTests
     [DynamicData(nameof(BoolZeroDCases), DynamicDataSourceType.Method)]
     public void AssertGet_BoolZeroD(GCase tc) => CheckGet(tc);
 
-    private static IEnumerable<object[]> BugThrowCases()
+    // ── FIXED: over-indexing with slices now raises (was [OpenBugs]) ─────────────
+    // Over-indexing with more axis-consuming indices than the rank must raise IndexError
+    // "too many indices for array: array is N-dimensional, but M were indexed" (NumPy).
+    // NumSharp silently dropped the extra slices (Shape.Slice iterates only over NDim);
+    // fixed by a count check in UnmanagedStorage.GetView. An ellipsis only absorbs axes,
+    // so it cannot rescue an already-over-full index.
+    private static IEnumerable<object[]> OverIndexThrowCases()
     {
-        // Over-indexing a 2-D array with 3 slices must raise (NumPy: too many indices).
-        // NumSharp silently returns a view.
-        yield return WrapE(new("BUG_A_tooManySlices_shouldThrow", () => _ = A()[":", ":", ":"]));
+        yield return WrapE(new("A_3slices_2d",      () => _ = A()[":", ":", ":"]));
+        yield return WrapE(new("A_2slice_1int_2d",  () => _ = A()[":", ":", "0"]));
+        yield return WrapE(new("V_2slices_1d",      () => _ = V()[":", ":"]));
+        yield return WrapE(new("A_sliceobj_x3",     () => _ = A()[Slice.All, Slice.All, Slice.All]));
+        yield return WrapE(new("A_ellipsis_3slice", () => _ = A()["...", ":", ":", ":"]));
     }
 
     [DataTestMethod]
-    [OpenBugs]
-    [DynamicData(nameof(BugThrowCases), DynamicDataSourceType.Method)]
-    public void AssertThrows_Bug(ECase tc) => CheckThrows(tc);
+    [DynamicData(nameof(OverIndexThrowCases), DynamicDataSourceType.Method)]
+    public void AssertThrows_OverIndex(ECase tc) => CheckThrows(tc);
 
     // ─── Shared assertion bodies ────────────────────────────────────────────────
     private static void CheckGet(GCase tc)
