@@ -105,6 +105,7 @@ namespace NumSharp
             {
                 var idxs = indices[i];
                 var dimensionSize = srcShape[i];
+                var axis = i; // capture a per-iteration copy for the OOB message (for-loop var is shared)
 
                 if (idxs is null)
                 {
@@ -133,9 +134,13 @@ namespace NumSharp
                             indexGetters[i] = idx =>
                             {
                                 var val = idxAddr[idx];
-                                if (val < 0)
-                                    return dimensionSize + val;
-                                return val;
+                                // NumPy validates each fancy index to [-dim, dim-1] per axis.
+                                // Wrapping a too-negative index (e.g. -7 on size 6 -> -1) used to
+                                // leave a NEGATIVE offset that only the upper-bound check guarded,
+                                // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
+                                if (val < -dimensionSize || val >= dimensionSize)
+                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                return val < 0 ? dimensionSize + val : val;
                             };
                         }
                         else
@@ -145,9 +150,9 @@ namespace NumSharp
                             indexGetters[i] = idx =>
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
-                                if (val < 0)
-                                    return dimensionSize + val;
-                                return val;
+                                if (val < -dimensionSize || val >= dimensionSize)
+                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                return val < 0 ? dimensionSize + val : val;
                             };
                         }
                     }
@@ -160,9 +165,13 @@ namespace NumSharp
                             indexGetters[i] = idx =>
                             {
                                 var val = idxAddr[idx];
-                                if (val < 0)
-                                    return dimensionSize + val;
-                                return val;
+                                // NumPy validates each fancy index to [-dim, dim-1] per axis.
+                                // Wrapping a too-negative index (e.g. -7 on size 6 -> -1) used to
+                                // leave a NEGATIVE offset that only the upper-bound check guarded,
+                                // so it read OUT-OF-BOUNDS memory. Validate both bounds here.
+                                if (val < -dimensionSize || val >= dimensionSize)
+                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                return val < 0 ? dimensionSize + val : val;
                             };
                         }
                         else
@@ -172,9 +181,9 @@ namespace NumSharp
                             indexGetters[i] = idx =>
                             {
                                 var val = idxAddr[idxShape.GetOffset_1D(idx)];
-                                if (val < 0)
-                                    return dimensionSize + val;
-                                return val;
+                                if (val < -dimensionSize || val >= dimensionSize)
+                                    throw new IndexError($"index {val} is out of bounds for axis {axis} with size {dimensionSize}");
+                                return val < 0 ? dimensionSize + val : val;
                             };
                         }
                     }

@@ -771,10 +771,14 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case3()
         {
+            // x = arange(10,1,-1) has size 9; index 20 is out of bounds. NumPy raises
+            // IndexError "index 20 is out of bounds for axis 0 with size 9" — NumSharp now
+            // matches (per-axis validation in PrepareIndexGetters), where it previously threw
+            // a generic IndexOutOfRangeException from the flat-offset bound check.
             new Action(() =>
             {
                 var a = x[np.array(new int[] { 3, 3, 20, 8 })];
-            }).Should().Throw<IndexOutOfRangeException>();
+            }).Should().Throw<IndexError>();
         }
 
         [TestMethod]

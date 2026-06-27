@@ -186,12 +186,17 @@ namespace NumSharp.UnitTest.Selection
             new("e05_mismatch",  () => B()[np.array(new long[]{0,1}), np.array(new long[]{0,1,2})]),
         };
 
-        // ── ERROR bugs: negative OOB NOT caught by NumSharp ──────────────────
-        // NumPy raises IndexError; NumSharp silently wraps into valid (wrong) index.
+        // ── FIXED: negative OOB now validated (was [OpenBugs]) ───────────────
+        // Was a memory-safety bug: PrepareIndexGetters wrapped a too-negative fancy
+        // index (e.g. -7 on size 6 -> -1) and left a NEGATIVE offset that only the
+        // upper-bound (> largestOffset) check guarded, so the gather READ OUT-OF-BOUNDS
+        // memory (returned garbage). Fixed in PrepareIndexGetters: each fancy index is
+        // validated to [-dim, dim-1] per axis, raising IndexError "index N is out of
+        // bounds for axis A with size S" (NumPy-verbatim). Kept as a regression guard.
         private static readonly ECase[] FancyGetErrBug =
         {
-            new("e02_V_oob_neg", () => V()[np.array(new long[]{-7})]),   // -7 < -6 → should throw
-            new("e04_A_oob_neg", () => A()[np.array(new long[]{-4})]),   // -4 < -3 → should throw
+            new("e02_V_oob_neg", () => V()[np.array(new long[]{-7})]),   // -7 < -6 → throws
+            new("e04_A_oob_neg", () => A()[np.array(new long[]{-4})]),   // -4 < -3 → throws
         };
 
         // ═══════════════════ FANCY SET ══════════════════════════════════════════
@@ -249,9 +254,13 @@ namespace NumSharp.UnitTest.Selection
         // ── SET ERROR cases ──────────────────────────────────────────────────────
         private static readonly ECase[] FancySetErr =
         {
-            // OOB set
+            // OOB set (positive)
             new("se01_A_oob_set",  () => { var a = A(); a[np.array(new long[]{3})] = (NDArray)(-1L); return a; }),
             new("se02_V_oob_set",  () => { var v = V(); v[np.array(new long[]{6})] = (NDArray)(-1L); return v; }),
+            // OOB set (negative-beyond-axis) — same shared PrepareIndexGetters validation
+            // as the getter; must throw BEFORE writing (was an OOB write before the fix).
+            new("se03_V_oob_neg_set", () => { var v = V(); v[np.array(new long[]{-7})] = (NDArray)(-1L); return v; }),
+            new("se04_A_oob_neg_set", () => { var a = A(); a[np.array(new long[]{-4})] = (NDArray)(-1L); return a; }),
         };
 
         // ═══════════════════ KNOWN BUGS (OpenBugs) ══════════════════════════════
@@ -340,10 +349,9 @@ namespace NumSharp.UnitTest.Selection
         [OpenBugs]
         public void FancyGetBug_BroadcastShape(int i, string name) => AssertGet(FancyGetBug[i]);
 
-        // ── Bug: negative OOB NOT caught ──────────────────────────────────────
-        // NumPy raises IndexError for index < -axisLen; NumSharp silently wraps.
+        // ── FIXED: negative OOB now validated (regression guard) ──────────────
+        // NumPy raises IndexError for index < -axisLen; NumSharp now does too.
         [DataTestMethod, DynamicData(nameof(FancyGetErrBugData))]
-        [OpenBugs]
         public void FancyGetErrBug_NegativeOOBNotValidated(int i, string name)
         {
             Action act = () => { var _ = FancyGetErrBug[i].Op(); };
