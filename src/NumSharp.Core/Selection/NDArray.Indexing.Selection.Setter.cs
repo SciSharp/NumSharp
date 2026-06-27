@@ -171,6 +171,13 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // An empty index array (size 0) of any dtype is an empty integer fancy index,
+                        // not a boolean mask (NumPy mapping.c:425): a[np.array([],bool)] = v is a no-op.
+                        if (nd.size == 0 && nd.ndim >= 1)
+                        {
+                            SetIndices(this, new NDArray[] { nd.typecode == NPTypeCode.Boolean ? nd.astype(NPTypeCode.Int64) : nd }, values);
+                            return;
+                        }
                         // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
                         if (nd.typecode == NPTypeCode.Boolean)
                         {

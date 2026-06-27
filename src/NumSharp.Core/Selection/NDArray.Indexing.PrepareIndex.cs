@@ -155,6 +155,19 @@ namespace NumSharp
                 // From here the item must be an (integer or boolean) array, a 0-d array scalar, or invalid.
                 NDArray arr = AsIndexArray(obj);     // throws the NumPy invalid-index IndexError otherwise
 
+                // An EMPTY index array (size 0) of ANY dtype is force-cast to intp and treated as an
+                // empty integer fancy index, NOT a boolean mask (NumPy mapping.c:425). So
+                // A[np.array([], bool)] -> (0,4), never a length-mismatch error.
+                if (arr.size == 0 && arr.ndim >= 1)
+                {
+                    var emptyFancy = arr.typecode == NPTypeCode.Boolean ? arr.astype(NPTypeCode.Int64) : arr;
+                    if (fancyNdim < arr.ndim) fancyNdim = arr.ndim;
+                    indexType |= IndexType.Fancy;
+                    ops.Add(IndexOp.FancyArr(emptyFancy));
+                    usedNdim += 1;
+                    continue;
+                }
+
                 if (arr.typecode == NPTypeCode.Boolean)
                 {
                     // Single full-array boolean mask (only item, exact shape) -> HAS_BOOL fast case.
