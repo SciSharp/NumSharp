@@ -363,12 +363,16 @@ namespace NumSharp.Backends
             //regular case
             var (subShape, offset) = _shape.GetSubshape(indices);
 
-            // Empty source: nothing to copy. Guards the modulo below against a zero divisor
-            // when value has a zero-size dimension (e.g. np.pad on an array with an empty
-            // axis does `padded[originalSlice] = array` where array.size == 0). Matches
-            // NumPy, which treats assigning an empty array into an empty region as a no-op.
+            // Empty source: a valid no-op ONLY when the target region is ALSO empty (e.g. np.pad on
+            // an array with an empty axis does `padded[originalSlice] = array` where both are size 0).
+            // Assigning an empty array into a NON-empty region cannot broadcast -> NumPy ValueError.
             if (valueshape.size == 0)
-                return;
+            {
+                if (subShape.size == 0)
+                    return;
+                string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
+            }
 
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
