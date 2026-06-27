@@ -436,4 +436,52 @@ public class Indexing_BasicParity_MatrixTests
         Set("uint",  () => { var a = A(); a[(uint)1]  = (NDArray)(-1L); return a; });
         Set("ulong", () => { var a = A(); a[(ulong)1] = (NDArray)(-1L); return a; });
     }
+
+    // ─────────────────── ITuple + IEnumerable index INPUTS ────────────────────
+    // C#/.NET input forms with no direct NumPy type, mapped to their Python meaning:
+    //   • a C# tuple is Python's tuple index — nd[(1,2)] == nd[1,2] (coordinate/mixed);
+    //   • any sequence (List<int>, ArrayList, …) coerces to a fancy index (NumPy
+    //     PyArray_FROM_O). All expected values probed from NumPy 2.4.2.
+    [TestMethod]
+    public void TupleAndSequence_IndexInputs_NumPyParity()
+    {
+        long[] FlatR(NDArray x)
+        {
+            var f = x.ravel();
+            return Enumerable.Range(0, (int)f.size).Select(i => Convert.ToInt64(f.GetValue(i))).ToArray();
+        }
+
+        // ── ITuple = Python tuple index (coordinate / mixed) ──
+        var t12 = A()[(1, 2)];                       // == A[1,2] -> scalar 6
+        t12.ndim.Should().Be(0, "A[(1,2)] is a 0-d scalar (tuple == coordinate)");
+        Convert.ToInt64(t12.GetValue(new long[0])).Should().Be(6);
+
+        var tmix = A()[(1, "0:2")];                  // == A[1, 0:2] -> [4,5]
+        tmix.shape.Select(d => (int)d).ToArray().Should().Equal(new[] { 2 });
+        FlatR(tmix).Should().Equal(new long[] { 4, 5 });
+
+        var t1 = V()[ValueTuple.Create(5)];          // (5,) == V[5] -> scalar 5
+        t1.ndim.Should().Be(0);
+        Convert.ToInt64(t1.GetValue(new long[0])).Should().Be(5);
+
+        Convert.ToInt64(A()[Tuple.Create(2, 3)].GetValue(new long[0])).Should().Be(11); // System.Tuple == A[2,3]
+
+        // ── IEnumerable (generic + non-generic) -> fancy index ──
+        FlatR(V()[new List<int> { 1, 3, 5 }]).Should().Equal(new long[] { 1, 3, 5 });
+        FlatR(V()[new List<long> { 1, 3, 5 }]).Should().Equal(new long[] { 1, 3, 5 });
+        FlatR(V()[new System.Collections.ArrayList { 1, 3, 5 }]).Should().Equal(new long[] { 1, 3, 5 });
+
+        var rows = A()[new List<int> { 0, 2 }];      // list fancy on 2-D base -> rows 0,2
+        rows.shape.Select(d => (int)d).ToArray().Should().Equal(new[] { 2, 4 });
+        FlatR(rows).Should().Equal(new long[] { 0, 1, 2, 3, 8, 9, 10, 11 });
+
+        FlatR(V()[new List<int>()]).Should().Equal(new long[0]); // empty list -> empty fancy
+
+        // ── setter via tuple + sequence ──
+        var s1 = A(); s1[(1, 2)] = (NDArray)(-1L);   // set element (1,2)
+        FlatR(s1).Should().Equal(new long[] { 0, 1, 2, 3, 4, 5, -1, 7, 8, 9, 10, 11 });
+
+        var s2 = V(); s2[new List<int> { 1, 3, 5 }] = np.array(new long[] { 10, 30, 50 }); // fancy set via list
+        FlatR(s2).Should().Equal(new long[] { 0, 10, 2, 30, 4, 50 });
+    }
 }

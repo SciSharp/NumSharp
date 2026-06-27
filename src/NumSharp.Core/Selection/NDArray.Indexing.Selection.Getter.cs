@@ -26,41 +26,95 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Normalizes any raw boolean array-like index to an <see cref="NDArray"/> of dtype
-        /// Boolean so it is recognized as a boolean mask — NumPy treats any boolean
-        /// <c>array_like</c> index as a mask. Covers, via interfaces rather than per-type
-        /// cases: a rectangular boolean <see cref="System.Array"/> of any rank
-        /// (<c>bool[]</c>, <c>bool[,]</c>, <c>bool[,,]</c>, …) and any
-        /// <see cref="IEnumerable{T}"/> of bool (<c>bool[]</c>, <see cref="List{T}"/>, …).
-        /// Integer arrays keep their existing (coordinate) semantics and are left untouched.
-        /// (A <em>jagged</em> <c>bool[][]</c> cannot be a single 2-D mask here: C# spreads it
-        /// through the <c>params object[]</c> indexer into separate per-row <c>bool[]</c>
-        /// arguments via array covariance before this runs — use a rectangular <c>bool[,]</c>
-        /// for a 2-D mask.) Shared by the getter and setter dispatch; only the general
-        /// <c>object[]</c> indexing path reaches it (the typed indexers bypass it).
+        /// Normalizes the raw index objects before dispatch, bridging C#/.NET input forms to
+        /// their Python/NumPy meaning:
+        /// <list type="bullet">
+        /// <item>A single top-level <see cref="System.Runtime.CompilerServices.ITuple"/> (a C#
+        /// value tuple <c>(1, 2)</c> or <see cref="System.Tuple"/>) is SPREAD into its elements
+        /// — <c>nd[(1, 2)]</c> ≡ <c>nd[1, 2]</c>, matching Python where <c>a[(1, 2)] == a[1, 2]</c>
+        /// (so a tuple is coordinate/mixed indexing, and <c>(1, "0:2")</c> mixes an int with a
+        /// slice).</item>
+        /// <item>Any boolean array-like becomes an <see cref="NDArray"/> mask: a rectangular
+        /// boolean <see cref="System.Array"/> of any rank (<c>bool[]</c>, <c>bool[,]</c>, …) or
+        /// any <see cref="IEnumerable{T}"/> of bool (<see cref="List{T}"/>, …).</item>
+        /// <item>Any OTHER non-array sequence (<see cref="System.Collections.IEnumerable"/> —
+        /// <c>List&lt;int&gt;</c>, <c>ArrayList</c>, …) is coerced to a 1-D integer fancy index,
+        /// mirroring NumPy's <c>PyArray_FROM_O</c>, which accepts any sequence.</item>
+        /// </list>
+        /// <see cref="NDArray"/>, raw <c>int[]</c>/<c>long[]</c>, other typed arrays,
+        /// <see cref="Slice"/>, strings and scalars are left untouched (handled directly by the
+        /// dispatch). (A <em>jagged</em> <c>bool[][]</c>/<c>int[][]</c> never arrives as one item:
+        /// C# array covariance spreads it through <c>params object[]</c> into per-row arguments
+        /// before this runs — use a rectangular <c>T[,]</c>.) Returns a possibly new / resized
+        /// array, so callers MUST read the length AFTER calling. Shared by the getter and setter;
+        /// only the general <c>object[]</c> path reaches it (the typed indexers bypass it).
         /// </summary>
-        private static void NormalizeBooleanMaskIndices(object[] indices)
+        private static object[] NormalizeIndexInputs(object[] indices)
         {
+            // Spread a single top-level tuple: nd[(1,2)] == nd[1,2] (Python tuple index).
+            if (indices.Length == 1 && indices[0] is System.Runtime.CompilerServices.ITuple tup)
+            {
+                var spread = new object[tup.Length];
+                for (int t = 0; t < tup.Length; t++)
+                    spread[t] = tup[t];
+                indices = spread;
+            }
+
             for (int i = 0; i < indices.Length; i++)
             {
                 switch (indices[i])
                 {
-                    case NDArray _:                                          // already an NDArray (mask handled by typecode)
+                    case NDArray _:                                          // already an NDArray (mask/fancy by typecode)
+                    case int[] _:                                            // raw int[]/long[] kept as-is (fancy, decision B)
+                    case long[] _:
+                    case Slice _:
+                    case string _:
+                    case null:
                         continue;
                     case Array arr when arr.GetType().GetElementType() == typeof(bool):
-                        indices[i] = np.array(arr).MakeGeneric<bool>();      // bool[], bool[,], bool[,,] (rectangular, any rank)
+                        indices[i] = np.array(arr).MakeGeneric<bool>();      // bool[], bool[,], bool[,,] (rectangular mask)
                         continue;
-                    case System.Collections.Generic.IEnumerable<bool> seq:
-                        indices[i] = np.array(System.Linq.Enumerable.ToArray(seq)).MakeGeneric<bool>();  // List<bool>, any IEnumerable<bool>
+                    case Array _:
+                        continue;                                            // other typed arrays — left to the dispatch
+                    case System.Collections.Generic.IEnumerable<bool> bseq:
+                        indices[i] = np.array(System.Linq.Enumerable.ToArray(bseq)).MakeGeneric<bool>();  // List<bool>, … mask
                         continue;
+                    case System.Collections.IEnumerable seq:                 // List<int>, ArrayList, … -> 1-D fancy index
+                        indices[i] = SequenceToIndexArray(seq);
+                        continue;
+                    // scalars (int/bool/IConvertible/Half/Complex) fall through unchanged.
                 }
             }
+
+            return indices;
+        }
+
+        /// <summary>
+        /// Coerces a non-array <see cref="System.Collections.IEnumerable"/> (a <c>List&lt;int&gt;</c>,
+        /// <c>ArrayList</c>, …) to a 1-D index <see cref="NDArray"/>: an all-boolean sequence
+        /// becomes a boolean mask; any other sequence becomes an Int64 fancy index (each element
+        /// via <see cref="Convert.ToInt64(object, IFormatProvider)"/>), mirroring NumPy coercing
+        /// any sequence to an <c>intp</c> index array. An empty sequence is an empty fancy index.
+        /// </summary>
+        private static NDArray SequenceToIndexArray(System.Collections.IEnumerable seq)
+        {
+            var items = new System.Collections.Generic.List<object>();
+            foreach (var x in seq)
+                items.Add(x);
+
+            if (items.Count > 0 && items.TrueForAll(x => x is bool))
+                return np.array(items.ConvertAll(x => (bool)x).ToArray()).MakeGeneric<bool>();
+
+            var longs = new long[items.Count];
+            for (int i = 0; i < items.Count; i++)
+                longs[i] = Convert.ToInt64(items[i], CultureInfo.InvariantCulture);
+            return np.array(longs, copy: false);
         }
 
         private NDArray FetchIndices(object[] indicesObjects)
         {
+            indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
             var indicesLen = indicesObjects.Length;
-            NormalizeBooleanMaskIndices(indicesObjects);    // any boolean array-like -> boolean mask
             if (indicesLen == 1)
             {
                 switch (indicesObjects[0])

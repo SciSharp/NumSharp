@@ -164,8 +164,8 @@ namespace NumSharp
 
         protected void SetIndices(object[] indicesObjects, NDArray values)
         {
+            indicesObjects = NormalizeIndexInputs(indicesObjects);    // tuple spread + mask/sequence coercion
             var indicesLen = indicesObjects.Length;
-            NormalizeBooleanMaskIndices(indicesObjects);    // any boolean array-like -> boolean mask
             if (indicesLen == 1)
             {
                 switch (indicesObjects[0])
