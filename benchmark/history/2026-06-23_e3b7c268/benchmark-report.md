@@ -2001,12 +2001,12 @@ _Ranked over 1398 credible comparisons (both sides ≥1µs, within 20×); 384 ne
 
 ---
 
-## NpyIter iterator benchmark
+## NDIter iterator benchmark
 
 _Complementary harness: measures the iterator machinery itself (construction, traversal, reductions, selection, dtypes, pathologies, dividends) across cache tiers — not part of the op/dtype/N matrix above. speedup = NumPy / NumSharp; NA = section ignored due to a known intermittent NumSharp AccessViolation._
 
 ```
-NumSharp NpyIter — canonical benchmark · 2026-06-23 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
+NumSharp NDIter — canonical benchmark · 2026-06-23 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
 198 measured pairs (35 NA) · best-of-rounds, Release · matched kernels/ids
 %NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)
 
@@ -2628,7 +2628,7 @@ _1568 comparable cells (1800 NumSharp rows; 129 lagging <1.0)._
 
 ## Fusion — np.evaluate vs unfused chains
 
-`np.evaluate` runs a whole expression tree in one NpyIter pass (no intermediates). Fixed-expression gate plus an operand-layout sweep of the flagship `a*b+c` (C/F/T/strided/bcast — does the fused single-pass win survive non-contiguous operands?), not a dtype/layout matrix — so reported as-is.
+`np.evaluate` runs a whole expression tree in one NDIter pass (no intermediates). Fixed-expression gate plus an operand-layout sweep of the flagship `a*b+c` (C/F/T/strided/bcast — does the fused single-pass win survive non-contiguous operands?), not a dtype/layout matrix — so reported as-is.
 
 ```
 NumSharp — fused np.evaluate vs unfused np.* chains (4M elements, best-of-9; (Nx) = unfused ÷ fused, >1 = fusion faster):

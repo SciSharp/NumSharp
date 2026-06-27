@@ -13,7 +13,7 @@ namespace NumSharp
         ///     Stable (ties resolve in ascending index order). Floating NaN sorts to the end.
         /// </summary>
         /// <remarks>
-        ///     Implementation: NpyIter drives the all-but-axis loop; each 1-D line is argsorted by
+        ///     Implementation: NDIter drives the all-but-axis loop; each 1-D line is argsorted by
         ///     a stable LSD radix kernel (<see cref="AxisSort"/>). The generic parameter is retained
         ///     for source compatibility — the element type is taken from the array's own dtype.
         /// </remarks>

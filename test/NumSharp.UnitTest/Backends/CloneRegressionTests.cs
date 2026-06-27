@@ -349,7 +349,7 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void NpyIterCopy_BufferedIterator_AllocatesIndependentBuffers()
+        public void NDIterCopy_BufferedIterator_AllocatesIndependentBuffers()
         {
             // NOTE: a same-dtype linear-strided operand is no longer buffered
             // (NumPy parity: 'buffered' enables buffering only when REQUIRED —
@@ -359,13 +359,13 @@ namespace NumSharp.UnitTest.Backends
             // buffer storage, not alias it.
             var source = np.arange(16)["::2"].astype(np.int32);
 
-            using var iter = NpyIterRef.AdvancedNew(
+            using var iter = NDIterRef.AdvancedNew(
                 nop: 1,
                 op: new[] { source },
-                flags: NpyIterGlobalFlags.BUFFERED,
+                flags: NDIterGlobalFlags.BUFFERED,
                 order: NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_SAFE_CASTING,
-                opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                opFlags: new[] { NDIterPerOpFlags.READONLY },
                 opDtypes: new[] { NPTypeCode.Double },
                 bufferSize: 4);
 
@@ -380,11 +380,11 @@ namespace NumSharp.UnitTest.Backends
         }
 
         [TestMethod]
-        public void NpyIterCopy_AfterRemoveAxis_PreservesAllocatedStrideWidth()
+        public void NDIterCopy_AfterRemoveAxis_PreservesAllocatedStrideWidth()
         {
             var source = np.arange(24).reshape(2, 3, 4);
 
-            using var iter = NpyIterRef.New(source, NpyIterGlobalFlags.MULTI_INDEX);
+            using var iter = NDIterRef.New(source, NDIterGlobalFlags.MULTI_INDEX);
             Assert.IsTrue(iter.RemoveAxis(1));
 
             using var copy = iter.Copy();

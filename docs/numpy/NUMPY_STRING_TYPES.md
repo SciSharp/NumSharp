@@ -473,12 +473,12 @@ StringDType uses mutex locks for thread-safe allocator access:
 
 ```c
 // Acquiring allocator (locks mutex)
-npy_string_allocator *alloc = NpyString_acquire_allocator(descr);
+npy_string_allocator *alloc = NDString_acquire_allocator(descr);
 
 // ... use allocator ...
 
 // Releasing (unlocks mutex)
-NpyString_release_allocator(alloc);
+NDString_release_allocator(alloc);
 ```
 
 ---
@@ -1556,26 +1556,26 @@ inline bool codepoint_isalpha<ENCODING::UTF8>(npy_ucs4 code) {
 
 ```c
 // Allocator management
-npy_string_allocator *NpyString_new_allocator(malloc, free, realloc);
-void NpyString_free_allocator(npy_string_allocator *allocator);
+npy_string_allocator *NDString_new_allocator(malloc, free, realloc);
+void NDString_free_allocator(npy_string_allocator *allocator);
 
 // Thread-safe allocator access
-npy_string_allocator *NpyString_acquire_allocator(descr);
-void NpyString_release_allocator(allocator);
+npy_string_allocator *NDString_acquire_allocator(descr);
+void NDString_release_allocator(allocator);
 
 // String operations
-int NpyString_pack(allocator, packed_string, buf, size);
-int NpyString_load(allocator, packed_string, unpacked_string);
-int NpyString_free(packed_string, allocator);
+int NDString_pack(allocator, packed_string, buf, size);
+int NDString_load(allocator, packed_string, unpacked_string);
+int NDString_free(packed_string, allocator);
 
 // Queries
-int NpyString_isnull(packed_string);
-size_t NpyString_size(packed_string);
-int NpyString_cmp(s1, s2);
+int NDString_isnull(packed_string);
+size_t NDString_size(packed_string);
+int NDString_cmp(s1, s2);
 
 // Special values
-int NpyString_pack_null(allocator, packed_string);
-int NpyString_pack_empty(packed_string);
+int NDString_pack_null(allocator, packed_string);
+int NDString_pack_empty(packed_string);
 ```
 
 ### Buffer Class (C++)

@@ -52,14 +52,14 @@ namespace NumSharp
             {
                 case NPTypeCode.Single:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMeanFloatKernel, NanMeanAccumulator>(default, default);
                     result = accum.Count > 0 ? (float)(accum.Sum / accum.Count) : float.NaN;
                     break;
                 }
                 case NPTypeCode.Double:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMeanDoubleKernel, NanMeanAccumulator>(default, default);
                     result = accum.Count > 0 ? accum.Sum / accum.Count : double.NaN;
                     break;
@@ -68,7 +68,7 @@ namespace NumSharp
                 {
                     // Half nanmean returns Half (NumPy parity: np.nanmean(float16) -> float16).
                     // Accumulate in double for precision, convert result to Half.
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMeanHalfKernel, NanMeanAccumulator>(default, default);
                     result = accum.Count > 0 ? (Half)(accum.Sum / accum.Count) : Half.NaN;
                     break;
@@ -76,7 +76,7 @@ namespace NumSharp
                 case NPTypeCode.Complex:
                 {
                     // Complex nanmean returns Complex. "NaN" = either real or imag is NaN.
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMeanComplexKernel, NanMeanComplexAccumulator>(default, default);
                     result = accum.Count > 0
                         ? accum.Sum / accum.Count

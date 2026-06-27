@@ -48,11 +48,11 @@ namespace NumSharp.Backends
                 return nd;
 
             // Unified allocate-and-fill copy/cast core (KEEPORDER = NumPy astype order='K'), integrated
-            // with NpyIter via NpyIter.CopyAs: same-dtype takes the SIMD copy (a single flat pass even
+            // with NDIter via NDIter.CopyAs: same-dtype takes the SIMD copy (a single flat pass even
             // for F-contiguous / transposed sources), cross-dtype takes the IL cast kernels, and every
             // layout (contiguous / strided / broadcast / scalar) resolves to its best path. Replaces the
             // former scalar / (1,) / same-type-Clone / F-contig-special / CastCrossType branch maze.
-            var result = NpyIter.CopyAs(dtype, nd, 'K', engine);
+            var result = NDIter.CopyAs(dtype, nd, 'K', engine);
             if (copy)
                 return result;
 

@@ -41,7 +41,7 @@ namespace NumSharp
             NPY_CASTING castingRule = ParseCastingName(casting);
 
             // NumPy raises TypeError when the cast violates the rule.
-            if (!NpyIterCasting.CanCast(src.GetTypeCode, dst.GetTypeCode, castingRule))
+            if (!NDIterCasting.CanCast(src.GetTypeCode, dst.GetTypeCode, castingRule))
             {
                 throw new InvalidCastException(
                     $"Cannot cast array data from dtype('{src.GetTypeCode.AsNumpyDtypeName()}') " +
@@ -51,7 +51,7 @@ namespace NumSharp
 
             if (@where is null)
             {
-                NpyIter.Copy(dst, src);
+                NDIter.Copy(dst, src);
                 return;
             }
 
@@ -68,7 +68,7 @@ namespace NumSharp
                 bool value = ReadScalarBool(@where);
                 if (!value)
                     return;
-                NpyIter.Copy(dst, src);
+                NDIter.Copy(dst, src);
                 return;
             }
 
@@ -147,7 +147,7 @@ namespace NumSharp
             if (ndim == 0)
             {
                 if (*(bool*)maskBase)
-                    NpyIterCasting.ConvertValue(srcBase, dstBase, srcType, dstType);
+                    NDIterCasting.ConvertValue(srcBase, dstBase, srcType, dstType);
                 return;
             }
 
@@ -193,7 +193,7 @@ namespace NumSharp
 
                 if (*(bool*)(maskBase + maskOffset * maskElemSize))
                 {
-                    NpyIterCasting.ConvertValue(
+                    NDIterCasting.ConvertValue(
                         srcBase + srcOffset * srcElemSize,
                         dstBase + dstOffset * dstElemSize,
                         srcType, dstType);

@@ -22,7 +22,7 @@ namespace NumSharp
                 // and mask.shape == arr.shape[:mask.ndim]. For each True (in C-order) the
                 // trailing sub-tensor arr.shape[mask.ndim:] is gathered. Result:
                 // (count_true,) + arr.shape[mask.ndim:]. This single prefix-match case covers
-                // them all through the unified NpyIter gather (DefaultEngine.BooleanMask):
+                // them all through the unified NDIter gather (DefaultEngine.BooleanMask):
                 //   • full element mask (mask.ndim == arr.ndim)         -> 1-D result;
                 //   • axis-0 row mask / partial mask (mask.ndim < ndim) -> (count,)+trailing;
                 //   • 0-D mask (arr[True]/arr[False], mask.ndim == 0)    -> (1,)/(0,)+arr.shape.
@@ -43,7 +43,7 @@ namespace NumSharp
                 NumSharpException.ThrowIfNotWriteable(Shape);
 
                 // Prefix-match (full / axis-0 / partial / 0-D), symmetric with the getter.
-                // The unified NpyIter scatter streams value into the selected slots; value
+                // The unified NDIter scatter streams value into the selected slots; value
                 // broadcasts to the selection shape (count,)+arr.shape[mask.ndim:] by NumPy
                 // rules (raises on an incompatible value). A 1-D length-1 mask is a normal
                 // mask; a 0-D mask (arr[True]=v / arr[False]=v) assigns all / nothing.

@@ -207,8 +207,8 @@ namespace NumSharp
             // 2. TryDirectCastConcat -- all sources contig, dst contig,
             //    mixed dtypes: drive the IL contig cast kernel per source
             //    with computed offsets.
-            // 3. General path via NpyIter.Copy -- broadcasted sources,
-            //    exotic dtype pairs, mixed C/F layouts. NpyIter's K-order
+            // 3. General path via NDIter.Copy -- broadcasted sources,
+            //    exotic dtype pairs, mixed C/F layouts. NDIter's K-order
             //    axis permutation (added to CreateCopyState) ensures the
             //    unit-stride axis ends up innermost so the IL strided
             //    cast kernel's inner-contig branch fires even for F-contig
@@ -217,7 +217,7 @@ namespace NumSharp
             //
             // The fast paths still win ~50-90% on workloads they cover
             // because they skip the dst[axis_range] slice creation and
-            // the per-source NpyIter state construction -- savings that
+            // the per-source NDIter state construction -- savings that
             // amortize over many small calls (count_1024) or compound
             // across many copy operations.
             if (TryDirectMemcpyConcat(dst, workArrays, effectiveAxis, ndim, resultType))
@@ -226,7 +226,7 @@ namespace NumSharp
             if (TryDirectCastConcat(dst, workArrays, effectiveAxis, ndim, resultType))
                 return dst;
 
-            // General path: NpyIter.Copy for anything the fast paths skip.
+            // General path: NDIter.Copy for anything the fast paths skip.
             var dstAccessor = new Slice[ndim];
             for (int i = 0; i < ndim; i++)
                 dstAccessor[i] = Slice.All;
@@ -243,7 +243,7 @@ namespace NumSharp
                 // wrapper sharing storage). Releasing each iteration's wrapper atomically
                 // keeps N-source loops from queueing N dead wrappers per concatenate call.
                 using var dstSlice = dst[dstAccessor];
-                NpyIter.Copy(dstSlice, src);
+                NDIter.Copy(dstSlice, src);
 
                 dstAxisPos += len;
             }
@@ -366,8 +366,8 @@ namespace NumSharp
         ///     Cross-dtype fast path: same shape/layout assumptions as
         ///     <see cref="TryDirectMemcpyConcat"/>, but drives the IL-generated
         ///     contig cast kernel per source instead of <see cref="Buffer.MemoryCopy"/>.
-        ///     Avoids the slice-then-NpyIter detour for the same F-contig
-        ///     reason (slice produces non-contig view, NpyIter falls into
+        ///     Avoids the slice-then-NDIter detour for the same F-contig
+        ///     reason (slice produces non-contig view, NDIter falls into
         ///     strided cast path, ~17x slower for F-contig).
         /// </summary>
         private static unsafe bool TryDirectCastConcat(

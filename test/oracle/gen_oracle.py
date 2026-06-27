@@ -192,8 +192,8 @@ REDUCE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_co
                   "transposed_3d", "strided_2d_cols", "broadcast_1d_to_2d", "scalar_0d",
                   "empty_2d", "one_element_1d",
                   # negative-stride views — exercise the reduce path's backward traversal
-                  # (and, for f64/f32 min/max, the stride-ordered NpyIter routing gated by
-                  # DefaultEngine.MinMaxLayoutFavorsNpyIter; the Direct kernel walks these
+                  # (and, for f64/f32 min/max, the stride-ordered NDIter routing gated by
+                  # DefaultEngine.MinMaxLayoutFavorsNDIter; the Direct kernel walks these
                   # cache-hostile, so they were a measured 6–10× cliff before the routing).
                   "negstride_1d", "negstride_2d_offset"]
 

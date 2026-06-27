@@ -104,7 +104,7 @@ bc.size;      // 6
 bc.numiter;   // 2   (operand count == bc.iters.Length)
 ```
 
-**Per-operand iterators (`.iters`).** Each entry is a `NpyFlatIterator` (NumSharp's analog of NumPy's `flatiter`) that yields its operand stretched to the result shape, in C-order:
+**Per-operand iterators (`.iters`).** Each entry is a `NDFlatIterator` (NumSharp's analog of NumPy's `flatiter`) that yields its operand stretched to the result shape, in C-order:
 
 ```csharp
 bc.iters[0];  // yields 1, 2, 3, 1, 2, 3
@@ -121,7 +121,7 @@ bc.index;     // 6  (== size, exhausted)
 bc.reset();   // bc.index == 0 again
 ```
 
-`np.broadcast` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp imposes no cap, matching its `NpyIter`. With zero operands it is a 0-d broadcast (`size` 1, `numiter` 0). Unlike NumPy's one-shot flatiters, the `.iters` are re-enumerable.
+`np.broadcast` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp imposes no cap, matching its `NDIter`. With zero operands it is a 0-d broadcast (`size` 1, `numiter` 0). Unlike NumPy's one-shot flatiters, the `.iters` are re-enumerable.
 
 ### Implicit Broadcasting
 

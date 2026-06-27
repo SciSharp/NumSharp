@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 
 /// <summary>
 /// Pins the same-dtype non-contiguous copy path (<c>UnmanagedStorage.Clone</c> →
-/// <c>CloneData</c> → <c>NpyIter.Copy</c> → <c>TryCopySameType</c>).
+/// <c>CloneData</c> → <c>NDIter.Copy</c> → <c>TryCopySameType</c>).
 ///
 /// The SIMD <c>StridedCastKernel</c> rejects the five Vector-less dtypes
 /// (Boolean/Char/Half/Decimal/Complex), so their strided/broadcast clones take the

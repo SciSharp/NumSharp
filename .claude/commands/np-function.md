@@ -24,7 +24,7 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
     - What parameters the np function accepts and what modes the function works in.
     - Understand what optimizations are used by NumPy and what optimizations can we use.
 - Understand how would be the best integration to our existing infrastructure.
-    - Do we use ILKernelGenerator or NpyIter to implement the loop.
+    - Do we use ILKernelGenerator or NDIter to implement the loop.
     - Do not implement struct kernel.
 ## 2. Implement np method/s
 - Implement np methods to the fullest, integrating into our existing infrastructure and patterns.
@@ -32,8 +32,8 @@ NumPy is the source of truth and if NumPy does A, we do A but in NumSharp's C# w
 - Our implementation must provide same parameters as the NumPy function and support all dtypes NumSharp currently supports.
 - Do not create a function per dtype/NPTypeCode or if-else/switch-case per dtype/NPTypeCode to call a specialized path.
 - Do not use struct kernel pattern.
-- Do utilize IL generation (ILKernelGenerator) and/or NpyIter to implement the function, including fast paths. 
-- Any loops must be implemented via NpyIter or via ILKernelGenerator.
+- Do utilize IL generation (ILKernelGenerator) and/or NDIter to implement the function, including fast paths. 
+- Any loops must be implemented via NDIter or via ILKernelGenerator.
 
 ## Tools:
 ### Asserting, Validating, Comparing, Experimenting and Probing
@@ -160,7 +160,7 @@ Total: ~44 distinct variations — 25 single-array layouts, 6 pairwise paths, 8 
 - General — Arbitrary strides on either side; coordinate iteration.
 - Mixed dtypes — Orthogonal axis: same layout, different LHS/RHS/result dtypes (NEP50 promotion).
 
-### C. Per-operand variations — NpyIterOpFlags
+### C. Per-operand variations — NDIterOpFlags
 
 - Aliased operands — Same buffer on both sides (a + a, out=a); no non-aliasing assumption.
 - Overlapping views — Two views with partial overlap (a[1:] and a[:-1]); writes can clobber unread reads.
@@ -171,7 +171,7 @@ Total: ~44 distinct variations — 25 single-array layouts, 6 pairwise paths, 8 
 - Buffered / casting operand — CAST / FORCECOPY / HAS_WRITEBACK: type conversion needs a temp.
 - Read-only operand — READ without WRITE; matters for output selection.
 
-### D. Iteration-level variations — NpyIterFlags
+### D. Iteration-level variations — NDIterFlags
 
 - Coalesced dimensions — Consecutive axes with matching strides collapsed; ndim=4 may arrive as ndim=1.
 - IDENTPERM vs NEGPERM — Axis iteration order: identity vs flipped (negative stride on some axis).
@@ -182,10 +182,10 @@ Total: ~44 distinct variations — 25 single-array layouts, 6 pairwise paths, 8 
 - Early exit — short-circuit (All/Any/IsAllZero) is a KERNEL property (`SupportsEarlyExit`/`ShouldExit`), not an iterator flag.
 - PARALLEL_SAFE — iteration range splittable across workers: no REDUCE operand, ≤1 WRITE operand with COPY_IF_OVERLAP-resolved overlap (`IsParallelSafe`).
 
-### E. NpyIter composite execution paths
+### E. NDIter composite execution paths
 
 - Source-broadcast + dest-contig — Common reduction shape.
 - Source-contig + dest-strided — Writing into a sliced output.
-- Buffer-required path — Dtype mismatch or alignment forces NpyIter to insert a temp; kernel sees contig but indirect.
+- Buffer-required path — Dtype mismatch or alignment forces NDIter to insert a temp; kernel sees contig but indirect.
 - Reused reduce loops — REUSE_REDUCE_LOOPS: inner-loop kernel runs against successive output positions without re-derivation.
 

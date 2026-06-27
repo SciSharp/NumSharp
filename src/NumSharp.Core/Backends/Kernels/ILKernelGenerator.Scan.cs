@@ -6,14 +6,14 @@ using System.Runtime.CompilerServices;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
-// ILKernelGenerator.Scan.cs — NpyIter-driven cumulative-sum (accumulate) kernels
+// ILKernelGenerator.Scan.cs — NDIter-driven cumulative-sum (accumulate) kernels
 // =============================================================================
 //
 // MODEL
 // -----
 // np.cumsum is np.add.accumulate. NumPy drives it with an nditer built over
-// [output, input], KEEPORDER + MULTI_INDEX, then NpyIter_RemoveAxis(scanAxis) +
-// NpyIter_RemoveMultiIndex(): the iterator walks every axis EXCEPT the scan axis,
+// [output, input], KEEPORDER + MULTI_INDEX, then NDIter_RemoveAxis(scanAxis) +
+// NDIter_RemoveMultiIndex(): the iterator walks every axis EXCEPT the scan axis,
 // and a strided inner loop runs the running sum along the (removed) scan axis per
 // outer position (numpy/_core/src/umath/ufunc_object.c : PyUFunc_Accumulate).
 //
@@ -60,20 +60,20 @@ namespace NumSharp.Backends.Kernels
         /// accumulator dtype). Construction (reflection for the generic widen body)
         /// happens once per pair; subsequent lookups are a dictionary hit.
         /// </summary>
-        internal static readonly ConcurrentDictionary<(NPTypeCode In, NPTypeCode Acc), NpyInnerLoopFunc> _cumSumCache = new();
+        internal static readonly ConcurrentDictionary<(NPTypeCode In, NPTypeCode Acc), NDInnerLoopFunc> _cumSumCache = new();
 
         /// <summary>
-        /// Returns the NpyIter-driven cumulative-sum inner loop for
+        /// Returns the NDIter-driven cumulative-sum inner loop for
         /// <paramref name="inType"/> → <paramref name="accType"/>. The returned
-        /// delegate matches <see cref="NpyInnerLoopFunc"/>; drive it with an
+        /// delegate matches <see cref="NDInnerLoopFunc"/>; drive it with an
         /// iterator whose scan axis has been removed (see
         /// <c>DefaultEngine.AccumulateAxis</c>), passing a pointer to a
         /// <see cref="ScanAxisAux"/> as the kernel's auxdata.
         /// </summary>
-        public static NpyInnerLoopFunc GetCumSumInnerLoop(NPTypeCode inType, NPTypeCode accType)
+        public static NDInnerLoopFunc GetCumSumInnerLoop(NPTypeCode inType, NPTypeCode accType)
             => _cumSumCache.GetOrAdd((inType, accType), static k => CreateCumSumInnerLoop(k.In, k.Acc));
 
-        private static unsafe NpyInnerLoopFunc CreateCumSumInnerLoop(NPTypeCode inType, NPTypeCode accType)
+        private static unsafe NDInnerLoopFunc CreateCumSumInnerLoop(NPTypeCode inType, NPTypeCode accType)
         {
             // Complex accumulator: dedicated double-pair kernel (Complex is not INumber).
             // cumsum into Complex from a non-Complex source is not supported (matches the
@@ -93,7 +93,7 @@ namespace NumSharp.Backends.Kernels
             var mi = typeof(ILKernelGenerator)
                 .GetMethod(nameof(ScanAddWiden), BindingFlags.NonPublic | BindingFlags.Static)!
                 .MakeGenericMethod(clrIn, clrAcc);
-            return (NpyInnerLoopFunc)mi.CreateDelegate(typeof(NpyInnerLoopFunc));
+            return (NDInnerLoopFunc)mi.CreateDelegate(typeof(NDInnerLoopFunc));
         }
 
         /// <summary>

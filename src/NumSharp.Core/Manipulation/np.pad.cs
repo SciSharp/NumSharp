@@ -24,7 +24,7 @@ namespace NumSharp
         // Performance: every bulk operation routes through existing IL kernels —
         //   * np.empty for allocation (single pointer alloc)
         //   * IArraySlice.Fill for uniform-value PadSimple (InitBlockUnaligned/unrolled scalar)
-        //   * padded[band] = src routes through NpyIter.Copy → StridedCastKernel
+        //   * padded[band] = src routes through NDIter.Copy → StridedCastKernel
         //     (cpblk contig path, per-row memcpy strided path, "convert once +
         //      memcpy" broadcast fast path for 1-thick stripe and scalar fills)
         //   * stat modes use existing axis-reduction IL kernels (np.max/min/mean/median)
@@ -807,7 +807,7 @@ namespace NumSharp
             }
 
             // Copy original values into the center.  padded[originalSlice] = array
-            // routes through NpyIter.Copy → IL StridedCastKernel (per-row memcpy).
+            // routes through NDIter.Copy → IL StridedCastKernel (per-row memcpy).
             padded[originalSlice] = array;
             return (padded, originalSlice);
         }
@@ -1260,15 +1260,15 @@ namespace NumSharp
         /// <summary>
         ///     Assign <paramref name="value"/> (scalar or NDArray) into the slice
         ///     <paramref name="slices"/> of <paramref name="padded"/>. Scalars are
-        ///     wrapped in a 0-D NDArray and broadcast via <see cref="NpyIter.Copy"/>'s
+        ///     wrapped in a 0-D NDArray and broadcast via <see cref="NDIter.Copy"/>'s
         ///     broadcast fast path (convert-once + memcpy per outer row).
         ///
-        ///     Routes through <see cref="NpyIter.Copy"/> directly rather than the
+        ///     Routes through <see cref="NDIter.Copy"/> directly rather than the
         ///     <c>padded[slices] = value</c> indexer — the indexer's contiguous
         ///     fast path skips broadcast stretching when both shapes are contig
         ///     but sizes differ, which truncates broadcast writes (e.g. a
         ///     <c>(1, N)</c> edge view into a <c>(pad_width, N)</c> band only
-        ///     fills the first row). <see cref="NpyIter.Copy"/> always honours
+        ///     fills the first row). <see cref="NDIter.Copy"/> always honours
         ///     broadcasting.
         /// </summary>
         private static void AssignSliceValue(NDArray padded, Slice[] slices, object value)
@@ -1278,11 +1278,11 @@ namespace NumSharp
             {
                 if (value is NDArray nd)
                 {
-                    NpyIter.Copy(view, nd);
+                    NDIter.Copy(view, nd);
                     return;
                 }
                 using var scalarNd = NDArray.Scalar(value, padded.GetTypeCode);
-                NpyIter.Copy(view, scalarNd);
+                NDIter.Copy(view, scalarNd);
             }
             finally { view.Dispose(); }
         }

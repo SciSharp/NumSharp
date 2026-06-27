@@ -66,10 +66,10 @@ items:
 # Iteration
 - name: Iterators
   items:
-  - uid: NumSharp.Backends.Iteration.NpyIterRef
-    name: NpyIterRef
-  - uid: NumSharp.Backends.Iteration.NpyFlatIterator
-    name: NpyFlatIterator
+  - uid: NumSharp.Backends.Iteration.NDIterRef
+    name: NDIterRef
+  - uid: NumSharp.Backends.Iteration.NDFlatIterator
+    name: NDFlatIterator
   - uid: NumSharp.np.Broadcast
     name: Broadcast (np.broadcast)
 

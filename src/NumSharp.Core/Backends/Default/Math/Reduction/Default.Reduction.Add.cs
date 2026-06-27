@@ -69,25 +69,25 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
 
-            // NpyIter-driven per-chunk path (the migration target). Currently serves the
+            // NDIter-driven per-chunk path (the migration target). Currently serves the
             // (dtype, op) combinations that the legacy DirectILKernelGenerator path covers
             // only with a slow scalar kernel — Complex sum/prod/min/max. Returns null when
             // no per-chunk kernel exists yet, so we fall through to the Direct path below.
-            bool useNpyIter = UseNpyIterReduce(inputType, outputType, op);
-            // f64/f32 Min/Max only WIN on the stride-ordered NpyIter reduce path where the
+            bool useNDIter = UseNDIterReduce(inputType, outputType, op);
+            // f64/f32 Min/Max only WIN on the stride-ordered NDIter reduce path where the
             // Direct whole-array kernel collapses to a cache-hostile coordinate walk — i.e.
             // broadcast (stride 0) or negative strides. For C/F-contiguous and positive-strided
             // inputs the Direct kernel's per-array (not per-stripe) traversal is faster, so keep
-            // it there. (Sum/Mean always prefer NpyIter — their pairwise/streaming kernels beat
-            // Direct on every layout. Complex/Decimal Min/Max are NOT gated: their NpyIter path
+            // it there. (Sum/Mean always prefer NDIter — their pairwise/streaming kernels beat
+            // Direct on every layout. Complex/Decimal Min/Max are NOT gated: their NDIter path
             // is a strict win over the legacy scalar Direct kernel on all layouts.)
-            if (useNpyIter && (op == ReductionOp.Min || op == ReductionOp.Max)
+            if (useNDIter && (op == ReductionOp.Min || op == ReductionOp.Max)
                 && (inputType == NPTypeCode.Double || inputType == NPTypeCode.Single)
-                && !MinMaxLayoutFavorsNpyIter(shape))
-                useNpyIter = false;
-            if (useNpyIter)
+                && !MinMaxLayoutFavorsNDIter(shape))
+                useNDIter = false;
+            if (useNDIter)
             {
-                var npyIterResult = ExecuteAxisReductionNpyIter(arr, axis, keepdims, outputType, @out, op);
+                var npyIterResult = ExecuteAxisReductionNDIter(arr, axis, keepdims, outputType, @out, op);
                 if (npyIterResult is not null) return npyIterResult;
             }
 
@@ -125,18 +125,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Gate for the NpyIter-driven per-chunk reduction path. Returns true only for
+        ///     Gate for the NDIter-driven per-chunk reduction path. Returns true only for
         ///     (dtype, op) combinations that have a kernel in
         ///     <see cref="Kernels.ILKernelGenerator.GetReduceInnerLoop"/>; everything else
         ///     stays on the legacy <see cref="Kernels.DirectILKernelGenerator"/> path.
         ///     Acts as the per-dtype rollback switch (Plan §6).
         /// </summary>
-        private static bool UseNpyIterReduce(NPTypeCode inputType, NPTypeCode outputType, ReductionOp op)
+        private static bool UseNDIterReduce(NPTypeCode inputType, NPTypeCode outputType, ReductionOp op)
         {
             // Complex same-type sum/prod/min/max/mean. The legacy complex axis paths were:
             // a scalar axis kernel (sum/prod/min/max — already ~parity under -c Release) and,
             // for the DEFAULT complex mean, the per-output-row-allocating MeanAxisComplex
-            // (15–45× slower than NumPy — the genuine bottleneck). The NpyIter double-pair
+            // (15–45× slower than NumPy — the genuine bottleneck). The NDIter double-pair
             // path puts all five on the migration-target architecture at parity-or-better and
             // collapses mean to a one-pass sum kernel + scalar divide.
             if (inputType == NPTypeCode.Complex && outputType == NPTypeCode.Complex)
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
                 return (op == ReductionOp.Mean || op == ReductionOp.Sum) && outputType == NPTypeCode.Double;
 
             // Decimal: the legacy path is both cache-hostile AND lossy (it accumulates through
-            // a double bridge). The NpyIter kernels are full-precision Decimal on contiguous
+            // a double bridge). The NDIter kernels are full-precision Decimal on contiguous
             // stripes — 7–12× faster everywhere AND more accurate. No NumPy reference type.
             if (inputType == NPTypeCode.Decimal && outputType == NPTypeCode.Decimal)
                 return op == ReductionOp.Sum || op == ReductionOp.Prod ||
@@ -180,13 +180,13 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Layout gate for the f64/f32 Min/Max NpyIter routing (see ExecuteAxisReduction).
+        ///     Layout gate for the f64/f32 Min/Max NDIter routing (see ExecuteAxisReduction).
         ///     Returns true only where the Direct whole-array axis kernel collapses to a
         ///     cache-hostile coordinate walk — broadcast (stride 0, repeated reads) or any
         ///     negative stride (backward traversal). Contiguous and positive-strided inputs
         ///     stay on the faster Direct kernel.
         /// </summary>
-        private static bool MinMaxLayoutFavorsNpyIter(Shape shape)
+        private static bool MinMaxLayoutFavorsNDIter(Shape shape)
         {
             if (shape.IsBroadcasted) return true;
             var strides = shape.strides;
@@ -202,7 +202,7 @@ namespace NumSharp.Backends
         ///     but seeds the reduction identity and lets the iterator drive the inner loop.
         ///     Returns null when no per-chunk kernel exists for the key (caller falls back).
         /// </summary>
-        private unsafe NDArray ExecuteAxisReductionNpyIter(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
+        private unsafe NDArray ExecuteAxisReductionNDIter(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
         {
             // Mean is computed as a one-pass Sum kernel followed by a scalar divide by the
             // reduced-axis length — there is no separate "mean" inner loop.
@@ -233,8 +233,8 @@ namespace NumSharp.Backends
 
             // COPY_IF_OVERLAP only matters when a user-supplied out= may alias the input; a
             // fresh allocation can never overlap, so the hot path skips the overlap probe.
-            var extraFlags = @out is not null ? NpyIterGlobalFlags.COPY_IF_OVERLAP : NpyIterGlobalFlags.None;
-            using (var iter = NpyIterRef.NewReduce(arr, result, axis, extraFlags))
+            var extraFlags = @out is not null ? NDIterGlobalFlags.COPY_IF_OVERLAP : NDIterGlobalFlags.None;
+            using (var iter = NDIterRef.NewReduce(arr, result, axis, extraFlags))
                 iter.ForEach(kernel);
 
             // Mean: divide the accumulated sums by the reduced-axis length (NumPy parity).

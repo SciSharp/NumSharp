@@ -9,8 +9,8 @@
 //
 // COVERAGE GAP THIS FILLS: prior reduction benches only measured contiguous (and
 // complex C/T). Reductions over OFFSET / NEGATIVE-STRIDE / SLICED views were
-// broken (NpyIter op_axes ignored Shape.offset) until the fix, so were never
-// benchmarked. This sweeps every layout x the NpyIter-routed dtypes x ops.
+// broken (NDIter op_axes ignored Shape.offset) until the fix, so were never
+// benchmarked. This sweeps every layout x the NDIter-routed dtypes x ops.
 //
 // Run ONLY with:  dotnet run -c Release - < benchmark/layout/reduce_layout_bench.cs
 // =============================================================================

@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Creation
         // --------------------------- correctness ---------------------------
 
         /// <summary>
-        /// Exercises the general path (NpyIter.Copy). A transposed source is
+        /// Exercises the general path (NDIter.Copy). A transposed source is
         /// non-contiguous, which forces both fast paths (TryDirectMemcpyConcat,
         /// TryDirectCastConcat) to bail and the dstSlice loop to fire.
         /// </summary>
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Creation
 
         /// <summary>
         /// Non-contig sources with cross-dtype: forces the general path AND
-        /// makes dstSlice + NpyIter.Copy do the casting work. Verifies the
+        /// makes dstSlice + NDIter.Copy do the casting work. Verifies the
         /// using on dstSlice doesn't cut the slice off mid-copy.
         /// </summary>
         [TestMethod]

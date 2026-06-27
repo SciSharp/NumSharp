@@ -69,7 +69,7 @@ namespace NumSharp
             // expands them into stride-0 views. The scalar fast path below dispatches
             // specialised IL kernels that hoist the scalar into Vector.Create<T>(value) once
             // outside the loop — avoiding the per-element broadcast view dereference that the
-            // NpyIter expression kernel would otherwise perform.
+            // NDIter expression kernel would otherwise perform.
             bool xIsScalar = x.size == 1;
             bool yIsScalar = y.size == 1;
 
@@ -126,7 +126,7 @@ namespace NumSharp
             // -----------------------------------------------------------------
             // When x or y was a Python literal / 0-d / size-1 array, broadcast_arrays expanded
             // it into a stride-0 view that fails the IsContiguous gate below. Instead of
-            // materializing that view into a full contig copy (NpyIter's behaviour) we read
+            // materializing that view into a full contig copy (NDIter's behaviour) we read
             // the single value, cast it to outType, and dispatch a kernel that broadcasts via
             // V<T>.Create(value) once outside the SIMD loop.
             //
@@ -186,7 +186,7 @@ namespace NumSharp
 
         private static unsafe void WhereImpl(NDArray cond, NDArray x, NDArray y, NDArray result)
         {
-            // Drive cond + x + y + result in lockstep via a 4-operand NpyIter and a
+            // Drive cond + x + y + result in lockstep via a 4-operand NDIter and a
             // dedicated per-chunk multi-operand kernel (ILKernelGenerator.Where).
             // C-order traversal matches NumPy element semantics; WRITEONLY on the
             // output. Operands already share dtypes by here (cond is Boolean, x/y/
@@ -195,20 +195,20 @@ namespace NumSharp
             // The kernel SIMD-selects (Vector.ConditionalSelect over an expanded
             // bool mask) whenever the inner loop is contiguous for all four operands
             // — e.g. a row-mask broadcast over a matrix — and scalar-walks per byte
-            // stride otherwise. Both beat the previous NpyExpr.Where path, which was
+            // stride otherwise. Both beat the previous NDExpr.Where path, which was
             // scalar-only AND cast cond to the output dtype on every element.
             var dtype = result.GetTypeCode;
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 4, new[] { cond, x, y, result },
-                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER,
                 NPY_CASTING.NPY_SAFE_CASTING,
                 new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.WRITEONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.WRITEONLY,
                 });
 
             iter.ForEach(ILKernelGenerator.GetWhereInnerLoop(dtype));
@@ -265,13 +265,13 @@ namespace NumSharp
         // -----------------------------------------------------------------
         // Reads the scalar value from the 1-element NDArray (already promoted to outType)
         // and invokes the appropriate IL kernel. Returns true on success; false if no IL
-        // kernel was available (caller falls back to the NpyIter path).
+        // kernel was available (caller falls back to the NDIter path).
 
         private static unsafe void WhereScalarXDispatch(NDArray cond, NDArray xScalar, NDArray y, NDArray result, NPTypeCode outType)
         {
             // Attempt the IL kernel; if it returns false (no SIMD / unsupported dtype),
             // materialize the scalar to a broadcast view of cond's shape and fall back
-            // to the existing NpyIter expression path.
+            // to the existing NDIter expression path.
             bool ok = NpFunc.Invoke(outType, TryWhereScalarXExecute<int>,
                 (nint)cond.Address, (nint)xScalar.Address, (nint)y.Address, (nint)result.Address, result.size);
             if (ok) return;

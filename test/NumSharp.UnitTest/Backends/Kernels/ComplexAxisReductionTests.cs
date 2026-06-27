@@ -8,8 +8,8 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 
 /// <summary>
 /// Pins complex128 axis reductions (sum/prod/min/max/mean) to NumPy 2.4.2 output.
-/// These run through the NpyIter 2-operand REDUCE path
-/// (DefaultEngine.ExecuteAxisReductionNpyIter + ILKernelGenerator complex kernels).
+/// These run through the NDIter 2-operand REDUCE path
+/// (DefaultEngine.ExecuteAxisReductionNDIter + ILKernelGenerator complex kernels).
 ///
 /// Expected values produced by NumPy 2.4.2, e.g.:
 ///   a = (np.arange(12) + 1j*(12-np.arange(12))).reshape(3,4)

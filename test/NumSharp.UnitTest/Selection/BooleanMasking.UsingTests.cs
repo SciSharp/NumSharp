@@ -7,7 +7,7 @@ using NumSharp.Generic;
 namespace NumSharp.UnitTest.Selection
 {
     /// <summary>
-    /// Correctness + working-set guards for the unified NpyIter boolean-mask
+    /// Correctness + working-set guards for the unified NDIter boolean-mask
     /// axis-0 getter and setter (gather/scatter). Originally written for the
     /// hand-rolled per-iter srcSlice/destSlice loop; the assertions still hold
     /// for the allocation-free iterator path that replaced it.
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.Selection
 
         /// <summary>
         /// Tight loop of axis-0 boolean SELECTs on a 200-row array. The unified
-        /// gather streams through one NpyIter pass (no per-row view wrappers),
+        /// gather streams through one NDIter pass (no per-row view wrappers),
         /// so the working set must stay near-constant across many calls.
         /// </summary>
         [TestMethod]

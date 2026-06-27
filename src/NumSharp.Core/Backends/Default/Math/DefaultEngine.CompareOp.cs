@@ -38,16 +38,16 @@ namespace NumSharp.Backends
             // Same rationale as the binary route (NumPy check_for_trivial_loop):
             // equal-shape contiguous (both C or both F) and array-vs-scalar cases
             // route straight to the DirectIL SimdFull / SimdScalar comparison
-            // kernel, skipping NpyIter construction. Unlike the binary bypass this
+            // kernel, skipping NDIter construction. Unlike the binary bypass this
             // allows mixed dtypes — comparison promotes per element inside the
             // kernel with no cast temp, and the result is always bool. Returns null
-            // for broadcast/mixed-C-F/strided/unsupported → NpyIter route below.
+            // for broadcast/mixed-C-F/strided/unsupported → NDIter route below.
             {
                 var trivial = TryTrivialContiguousComparisonOp(lhs, rhs, op, lhsType, rhsType);
                 if (trivial is not null) return trivial;
             }
 
-            // -------- NpyIter Tier 3B fast path (all comparison ops) -----------
+            // -------- NDIter Tier 3B fast path (all comparison ops) -----------
             // Mirrors the binary-op routing pattern. The iterator coalesces
             // dimensions, normalizes negative strides, and resolves stride=0
             // broadcast operands into per-outer-iter pointer advance — turning
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
             // the direct path. Contig same-dtype is at parity with the direct
             // path because the same SIMD body lives inside the inner kernel.
             {
-                var routed = TryExecuteComparisonOpViaNpyIter(lhs, rhs, op, lhsType, rhsType);
+                var routed = TryExecuteComparisonOpViaNDIter(lhs, rhs, op, lhsType, rhsType);
                 if (routed is not null) return routed;
             }
 
@@ -110,12 +110,12 @@ namespace NumSharp.Backends
         ///     iterable shapes — equal-shape contiguous (both C or both F → one
         ///     linear SimdFull walk) and array-vs-scalar (scalar read once, array
         ///     walked linearly via SimdScalarLeft/Right) — and routes to the
-        ///     existing DirectIL comparison kernel, skipping NpyIter construction.
+        ///     existing DirectIL comparison kernel, skipping NDIter construction.
         ///     Dtypes may differ (the kernel promotes per element; result is always
         ///     bool). The bool result takes the array operand's layout (C, or
         ///     strictly-F) so the linear write matches the linear read, matching the
         ///     post-kernel <see cref="ShouldProduceFContigOutput(NDArray, NDArray, Shape)"/>
-        ///     branch. Returns null (→ NpyIter) for broadcast, mixed C/F, strided,
+        ///     branch. Returns null (→ NDIter) for broadcast, mixed C/F, strided,
         ///     or unsupported emit.
         /// </summary>
         private unsafe NDArray<bool>? TryTrivialContiguousComparisonOp(
@@ -137,7 +137,7 @@ namespace NumSharp.Backends
                 if (arrShape.IsBroadcasted)
                     return null;
                 if (!arrShape.IsContiguous && !arrShape.IsFContiguous)
-                    return null;   // strided/transposed array operand → NpyIter
+                    return null;   // strided/transposed array operand → NDIter
                 path = rhsScalarLike ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
             }
             else
@@ -345,7 +345,7 @@ namespace NumSharp.Backends
         #endregion
 
         /// <summary>
-        ///     Tier 3B NpyIter routing for comparison ops. Output is always bool.
+        ///     Tier 3B NDIter routing for comparison ops. Output is always bool.
         ///
         ///     Returns the result NDArray&lt;bool&gt; on success, or null when the
         ///     iterator can't handle the shapes (e.g. > int.MaxValue dimension) so
@@ -354,7 +354,7 @@ namespace NumSharp.Backends
         ///     ─── Why this beats the direct path on broadcast/strided ───
         ///     The direct ComparisonKernel walks the output via coordinate math
         ///     (one ndim-loop per output element). For (M,N) op (M,1) it does M*N
-        ///     full coord recomputes and gather loads. NpyIter coalesces the
+        ///     full coord recomputes and gather loads. NDIter coalesces the
         ///     M*N output into the canonical iteration order, sets the broadcast
         ///     operand's stride to 0, and dispatches a contig inner kernel of
         ///     length N for each of M outer steps — the inner kernel becomes a
@@ -370,11 +370,11 @@ namespace NumSharp.Backends
         ///     drops to a per-element scalar loop driven by the emitted body.
         ///     This trades some contig perf for huge wins on strided/broadcast.
         /// </summary>
-        private unsafe NDArray<bool>? TryExecuteComparisonOpViaNpyIter(
+        private unsafe NDArray<bool>? TryExecuteComparisonOpViaNDIter(
             NDArray lhs, NDArray rhs, ComparisonOp op,
             NPTypeCode lhsType, NPTypeCode rhsType)
         {
-            // ─── Routing decision: NpyIter wins on broadcast/strided, the
+            // ─── Routing decision: NDIter wins on broadcast/strided, the
             // direct SIMD kernel wins on plain contig same-shape.
             //
             // The direct ComparisonKernel has a vector body that emits
@@ -384,7 +384,7 @@ namespace NumSharp.Backends
             // invariant, so routing contig through here costs us 3× on the
             // simple shape.
             //
-            // Skip NpyIter routing for the "easy" contig cases that the direct
+            // Skip NDIter routing for the "easy" contig cases that the direct
             // kernel handles best. Anything with broadcast (different shapes)
             // or non-contig storage benefits from the iterator's coalesce +
             // stride normalization + per-outer-iter pointer advance.
@@ -396,7 +396,7 @@ namespace NumSharp.Backends
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
             var cleanShape = leftShape.Clean();
 
-            // NpyIter shape arithmetic is int-bounded.
+            // NDIter shape arithmetic is int-bounded.
             if (cleanShape.size < 0) return null;
             for (int i = 0; i < cleanShape.NDim; i++)
                 if (cleanShape.dimensions[i] > int.MaxValue) return null;
@@ -461,16 +461,16 @@ namespace NumSharp.Backends
                 // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE per NumPy's ufunc
                 // iterator flags (ufunc_object.c:1070); cheap extent check here
                 // since the bool result is freshly allocated.
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, result },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
+                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
                     order,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     new[]
                     {
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                        NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-                        NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+                        NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
                     });
 
                 iter.ExecuteElementWiseBinary(lhsType, rhsType, NPTypeCode.Boolean, scalarBody, null, cacheKey);

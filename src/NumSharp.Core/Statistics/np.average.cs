@@ -90,7 +90,7 @@ namespace NumSharp
             NDArray aCast = a.typecode == resultDtype ? a : a.astype(resultDtype);
 
             // 0-D scalar fast path: reduce-all (axis=None or axes covers all dims)
-            // bypasses NpyIter + NDArray allocation entirely. Accumulates into
+            // bypasses NDIter + NDArray allocation entirely. Accumulates into
             // two stack-allocated doubles, scalar-divides, wraps once at exit.
             // Cuts ~13 μs of fixed pipeline overhead per call (np.zeros×2 + iter
             // setup + scalar HasZero NDArray equality + scalar NDArray divide).
@@ -107,7 +107,7 @@ namespace NumSharp
                 return (avgScalar, returned ? sclScalar : null);
             }
 
-            // Fused fast path via DirectILKernelGenerator: NpyIter walks a + w in one
+            // Fused fast path via DirectILKernelGenerator: NDIter walks a + w in one
             // pass producing (num, scl) into pre-zeroed output NDArrays. The
             // cached kernel handles per-dtype specialization (SIMD via Vector256<T>
             // for SIMD-capable types, scalar otherwise). When the dtype has no
@@ -163,15 +163,15 @@ namespace NumSharp
         // Stackallocs 2-double output cells, runs the cached IL kernel once with
         // 4 stackalloc'd ptrs/strides (stride=8 for inputs, stride=0 for outputs),
         // scalar-checks for zero, scalar-divides. NO NDArray allocation, NO
-        // NpyIter setup. Returns the result wrapped as a 0-D NDArray.Scalar.
+        // NDIter setup. Returns the result wrapped as a 0-D NDArray.Scalar.
         //
-        // Bails to the NpyIter path when the dtype kernel is unavailable
+        // Bails to the NDIter path when the dtype kernel is unavailable
         // (Half/Decimal/Complex/Bool/Char) or when inputs aren't C-contig.
         private static unsafe bool TryFusedWeightedSumScalar(
             NDArray a, NDArray w, NPTypeCode resultDtype,
             out NDArray avg, out NDArray scl)
         {
-            NpyInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
+            NDInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
                 new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
             if (kernel is null) { avg = null; scl = null; return false; }
 
@@ -262,7 +262,7 @@ namespace NumSharp
             _ => throw new NotSupportedException($"IsScalarZero for {dt} not in fast path")
         };
 
-        // Fused weighted sum via DirectILKernelGenerator-cached kernel + NpyIter.
+        // Fused weighted sum via DirectILKernelGenerator-cached kernel + NDIter.
         //
         // Setup: 4-operand iter [a, w, num_out, scl_out] with op_axes encoding
         // the reduction axes as -1 for the writable operands. EXTERNAL_LOOP +
@@ -276,7 +276,7 @@ namespace NumSharp
             NDArray a, NDArray w, int[] axes, NPTypeCode resultDtype,
             out NDArray num, out NDArray scl)
         {
-            NpyInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
+            NDInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
                 new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
             if (kernel is null)
             {
@@ -322,18 +322,18 @@ namespace NumSharp
                 numAxes[i] = isReduced ? -1 : outAxisCounter++;
             }
 
-            using var iter = NpyIterRef.AdvancedNew(
+            using var iter = NDIterRef.AdvancedNew(
                 4,
                 new[] { a, wBcast, num, scl },
-                NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_NO_CASTING,
                 new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READWRITE,
-                    NpyIterPerOpFlags.READWRITE,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READWRITE,
+                    NDIterPerOpFlags.READWRITE,
                 },
                 null,
                 ndim,

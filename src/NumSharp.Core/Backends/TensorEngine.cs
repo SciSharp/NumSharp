@@ -149,18 +149,18 @@ namespace NumSharp
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null);
 
         /// <summary>
-        ///     Fused evaluation of an <see cref="NpyExpr"/> tree in one iterator
+        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator
         ///     pass (np.evaluate, roadmap Wave 6.1). Virtual with a
         ///     NotSupported default so alternative engines opt in explicitly.
         /// </summary>
-        public virtual NDArray Evaluate(NpyExpr expr, NDArray @out = null)
+        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         /// <summary>
         ///     Fused evaluation against an explicit operand list
-        ///     (<see cref="NpyExpr.Input"/> leaves reference operands by position).
+        ///     (<see cref="NDExpr.Input"/> leaves reference operands by position).
         /// </summary>
-        public virtual NDArray Evaluate(NpyExpr expr, NDArray[] operands, NDArray @out = null)
+        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
             => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         #endregion

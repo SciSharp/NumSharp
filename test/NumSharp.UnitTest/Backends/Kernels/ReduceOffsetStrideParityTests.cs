@@ -14,11 +14,11 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 ///    so any all-False group reduced to True. Fixed by an explicit bool identity.
 ///
 /// 2. Reductions over a view whose offset lives in <c>Shape.offset</c> — sliced
-///    (a[1:3,1:3]) and negative-stride (a[::-1], a[:,::-1]) views. The NpyIter
+///    (a[1:3,1:3]) and negative-stride (a[::-1], a[:,::-1]) views. The NDIter
 ///    REDUCE path (op_axes branch) did not add Shape.offset to the operand base
 ///    pointer, so it read from the buffer base — wrong cells, and after
 ///    FlipNegativeStrides moved the pointer, out-of-bounds (garbage / NaN). This
-///    silently corrupted sum/mean/prod/min/max for every NpyIter-routed dtype
+///    silently corrupted sum/mean/prod/min/max for every NDIter-routed dtype
 ///    (double/single sum+mean, complex & decimal all ops, half sum+mean) on any
 ///    offset!=0 view. Contiguous / transpose / F-order / positive-strided views
 ///    (offset==0) were unaffected, which is why it hid so long.

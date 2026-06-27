@@ -11,7 +11,7 @@
 #   * run its `*_bench.py` NumPy twin,
 #   * parse the keyed TSV (`key\tms`) both sides emit.
 #
-# Mirrors the proven npyiter_sheet.py mechanics, centralised so every matrix
+# Mirrors the proven nditer_sheet.py mechanics, centralised so every matrix
 # subsystem runs through one code path. run_benchmark.py drives the sheets; the
 # sheets render; this module is the plumbing between.
 # =============================================================================
@@ -25,7 +25,7 @@ import sys
 AUTHOR_CSPROJ = "K:/source/NumSharp/src/NumSharp.Core/NumSharp.Core.csproj"
 
 # An AV under heavy mixed load should fail FAST (non-zero exit) instead of
-# stalling while the runtime writes a crash dump — same policy as npyiter.
+# stalling while the runtime writes a crash dump — same policy as nditer.
 NS_ENV_EXTRA = {"DOTNET_DbgEnableMiniDump": "0", "DOTNET_EnableCrashReport": "0"}
 
 

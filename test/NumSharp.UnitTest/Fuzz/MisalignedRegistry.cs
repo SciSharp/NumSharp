@@ -68,14 +68,14 @@ namespace NumSharp.UnitTest.Fuzz
             // (op, dtype) cell so a regression in a neighbouring cell still fails the gate.
             // ----------------------------------------------------------------------------------
 
-            // (W1-A) floor_divide / mod producing a float16: NpyDivision (F1) ported SByte..UInt64,
+            // (W1-A) floor_divide / mod producing a float16: NDDivision (F1) ported SByte..UInt64,
             // Single, Double — but NOT Half. The Half floored-division falls back to a generic path
             // that yields -0.0 / NaN where NumPy yields the floored quotient or IEEE ±inf. Scoped to
             // a Half operand/result so int & float32/64 floor_divide stay gated bit-exact.
             if ((c.Op == "floor_divide" || c.Op == "mod")
                 && (tc == NPTypeCode.Half || c.Operands.Any(o => o.Dtype == "float16"))
                 && (kind == DivergenceKind.Value || kind == DivergenceKind.Threw))
-                return "floor_divide/mod(float16): NpyDivision has no Half path (wrong value/NaN) [known bug]";
+                return "floor_divide/mod(float16): NDDivision has no Half path (wrong value/NaN) [known bug]";
 
             // (W1-B FIXED) power(float16) on the scalar-broadcast path used to throw
             // InvalidCastException because ReadScalarAsDouble called Convert.ToDouble on a boxed
@@ -125,12 +125,12 @@ namespace NumSharp.UnitTest.Fuzz
                 return "modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]";
 
             // (W1-E) np.where on the scalar-broadcast path with a narrow-int operand throws
-            // "Zero-push unsupported for SByte" — NpyExpr.EmitPushZero gained Complex/Half (F4) but
+            // "Zero-push unsupported for SByte" — NDExpr.EmitPushZero gained Complex/Half (F4) but
             // not the sub-32-bit integers. Scoped to a where that threw with such an operand.
             if (c.Op == "where" && kind == DivergenceKind.Threw
                 && c.Operands.Any(o => o.Dtype == "int8" || o.Dtype == "uint8"
                                        || o.Dtype == "int16" || o.Dtype == "uint16"))
-                return "where(narrow-int) scalar-broadcast: NpyExpr zero-push unsupported for sub-32-bit int [known bug]";
+                return "where(narrow-int) scalar-broadcast: NDExpr zero-push unsupported for sub-32-bit int [known bug]";
 
             // Size-1 result shape was FIXED in Phase 1 F7: Shape.Broadcast no longer collapses a
             // 1-D [1] against a lower-rank operand (e.g. [1] + 0-D scalar -> [1], not []). The NDim
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.Fuzz
             // (W3-A/B) The hyperbolic / inverse-trig / angle-conversion ufuncs have no Half kernel
             // (throw "Unary operation X not supported for Half" whenever the input promotes to
             // float16: bool/int8/uint8/float16). The COMPLEX hyperbolic/inverse-trig kernels are now
-            // implemented (NpyComplexMath) and verified within ULP below — only Half still throws here;
+            // implemented (NDComplexMath) and verified within ULP below — only Half still throws here;
             // deg2rad/rad2deg additionally throw for Complex (NumPy has no complex loop for them either).
             // Scoped to a single-operand THREW on these op names so value/dtype cells stay gated.
             if (kind == DivergenceKind.Threw && c.Operands.Length == 1
@@ -299,7 +299,7 @@ namespace NumSharp.UnitTest.Fuzz
             //     through the engine kernel (two's-complement wrap, e.g. -1u -> 255), matching NumPy.
             //     Classifier branch removed so the unary matrix verifies it bit-exact.
 
-            // (6b) Complex unary math is a full NumPy-algorithm port (NpyComplexMath): npy_clog with the
+            // (6b) Complex unary math is a full NumPy-algorithm port (NDComplexMath): npy_clog with the
             //     near-|z|=1 log1p path, Kahan ctanh, csinh/ccosh, npy_catanh with real_part_reciprocal,
             //     FMA-contracted z*z, Goldberg expm1, the C99 cexp/csqrt non-finite tables, and
             //     branch-cut/signed-zero fixups. Every complex unary op (sqrt/exp/log/log2/log10/log1p/

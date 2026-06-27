@@ -14,7 +14,7 @@ namespace NumSharp.Backends
     /// <c>result_type(x1, x2)</c> and the shift runs at that width; bool inputs (no bool loop)
     /// promote to int8. The op is wired into the shared binary pipeline
     /// (<see cref="DefaultEngine.ExecuteBinaryOp"/>) so promotion, broadcasting, strided/sliced
-    /// views and scalar×scalar all flow through NpyIter + the IL scalar kernel — the per-element
+    /// views and scalar×scalar all flow through NDIter + the IL scalar kernel — the per-element
     /// shift IL lives in <see cref="DirectILKernelGenerator.EmitShiftFromStack"/>. The common
     /// <c>array &lt;&lt; scalar</c> case takes a dedicated 4×-unrolled SIMD kernel
     /// (<see cref="DirectILKernelGenerator.GetShiftScalarKernel{T}"/>).
@@ -61,7 +61,7 @@ namespace NumSharp.Backends
         /// Resolve a shift through the shared binary pipeline. The hot <c>array &lt;&lt; scalar</c>
         /// case is intercepted by the SIMD kernel; everything else (mixed dtype, strided,
         /// broadcast, scalar×scalar) flows through <see cref="ExecuteBinaryOp"/>, which handles
-        /// NEP50 promotion and drives the per-element shift IL via NpyIter.
+        /// NEP50 promotion and drives the per-element shift IL via NDIter.
         /// </summary>
         private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
@@ -72,11 +72,11 @@ namespace NumSharp.Backends
                 return fast;
 
             // Everything else (array << array, strided, broadcast, transposed, mixed dtype) goes
-            // through the NpyIter Tier-3B kernel: a per-vector variable shift drives the factory's
+            // through the NDIter Tier-3B kernel: a per-vector variable shift drives the factory's
             // 4×-unrolled contiguous, scalar-broadcast, and AVX2-gather strided SIMD paths, with a
             // scalar inner loop where no per-lane SIMD shift exists (8/16-bit, int64 arith-right
             // without AVX512).
-            var viaIter = ExecuteShiftViaNpyIter(lhs, rhs, isLeftShift);
+            var viaIter = ExecuteShiftViaNDIter(lhs, rhs, isLeftShift);
             if (viaIter is not null)
                 return viaIter;
 
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Drive the shift through the NpyIter Tier-3B inner-loop factory. Operands are cast to
+        /// Drive the shift through the NDIter Tier-3B inner-loop factory. Operands are cast to
         /// the promoted loop dtype so the iterator sees one dtype (same-dtype views are kept
         /// strided so the factory's hardware-gather path can SIMD them without materializing).
         /// The vector body (<see cref="DirectILKernelGenerator.EmitShiftVectorBody"/>) is supplied
@@ -95,7 +95,7 @@ namespace NumSharp.Backends
         /// overflow-correct scalar body. Returns null for scalar×scalar and over-int-range shapes
         /// so the caller can fall back to the unified pipeline.
         /// </summary>
-        private unsafe NDArray? ExecuteShiftViaNpyIter(NDArray lhs, NDArray rhs, bool isLeftShift)
+        private unsafe NDArray? ExecuteShiftViaNDIter(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
             // scalar × scalar → let ExecuteBinaryOp's dedicated scalar path handle it.
             bool lhsScalar = lhs.Shape.IsScalar || lhs.size <= 1;
@@ -139,9 +139,9 @@ namespace NumSharp.Backends
                 : null;
             string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{resultType}";
 
-            using (var iter = NpyIterRef.MultiNew(
+            using (var iter = NDIterRef.MultiNew(
                 3, new[] { value, count, result },
-                NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
+                NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
                 order, NPY_CASTING.NPY_SAFE_CASTING, s_binaryIterFlags))
             {
                 iter.ExecuteElementWiseBinary(resultType, resultType, resultType, scalarBody, vectorBody, cacheKey);
@@ -184,7 +184,7 @@ namespace NumSharp.Backends
                 return null;
 
             // The kernel walks the value buffer linearly, so the value operand (widened to the
-            // result dtype) must be contiguous. A same-dtype strided view defers to NpyIter.
+            // result dtype) must be contiguous. A same-dtype strided view defers to NDIter.
             NDArray value;
             if (lhs.GetTypeCode != resultType)
                 value = lhs.astype(resultType);          // contiguous C-order copy at the loop dtype

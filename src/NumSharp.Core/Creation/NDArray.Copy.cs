@@ -22,9 +22,9 @@ namespace NumSharp
                 return Clone();
 
             // Unified allocate-and-fill copy core: resolves order (C/F/A/K), allocates, and fills via
-            // the NpyIter copy primitive. Absorbs every layout — scalar, (1,), strided, broadcast,
+            // the NDIter copy primitive. Absorbs every layout — scalar, (1,), strided, broadcast,
             // transposed — so copy() and astype() share one path.
-            return NpyIter.CopyAs(this.typecode, this, order, TensorEngine);
+            return NDIter.CopyAs(this.typecode, this, order, TensorEngine);
         }
     }
 }

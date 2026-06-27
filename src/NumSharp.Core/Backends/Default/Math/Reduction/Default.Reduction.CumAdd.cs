@@ -73,7 +73,7 @@ namespace NumSharp.Backends
             // source (C-contig source -> C output, F-contig -> F). NumSharp models two physical
             // layouts, so 'K' resolves to C or F via OrderResolver. This is what fixes the
             // long-standing C-only output (the old post-hoc copy('F') in np.cumsum) and removes
-            // the per-dtype AxisCumSum* tree in favor of one NpyIter-driven generic kernel.
+            // the per-dtype AxisCumSum* tree in favor of one NDIter-driven generic kernel.
             char order = OrderResolver.Resolve('K', shape);
             try
             {
@@ -82,7 +82,7 @@ namespace NumSharp.Backends
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // Defensive fallback to the legacy whole-array axis path. Only reachable if the
-                // NpyIter accumulate construction fails for an exotic view; the legacy path
+                // NDIter accumulate construction fails for an exotic view; the legacy path
                 // allocates a C-contiguous output, so relay it to F when the source asked for it.
                 System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
                 var ret = new NDArray(retTypeCode, new Shape(shape.dimensions), false);
@@ -108,7 +108,7 @@ namespace NumSharp.Backends
         /// NumPy-aligned axis cumulative sum — the np.add.accumulate structure
         /// (numpy/_core/src/umath/ufunc_object.c : PyUFunc_Accumulate). Builds a 2-operand
         /// [input, output] iterator (KEEPORDER, MULTI_INDEX), removes the scan axis
-        /// (<see cref="NpyIterRef.RemoveAxis"/>) so the iterator walks every OTHER axis, then
+        /// (<see cref="NDIterRef.RemoveAxis"/>) so the iterator walks every OTHER axis, then
         /// drives a single generic running-sum kernel along the removed axis per outer position.
         /// Handles every layout (contiguous / strided / transposed / broadcast / reversed) through
         /// the iterator and honors the chosen <paramref name="order"/> output layout exactly (the
@@ -141,11 +141,11 @@ namespace NumSharp.Backends
             // remove the wrong one. RemoveMultiIndex below re-applies KEEPORDER to the REMAINING
             // axes for cache-friendly traversal; iteration order over kept axes can't affect the
             // result (each scan line is independent), and the scan axis is walked explicitly.
-            var opFlags = new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE };
-            using (var iter = NpyIterRef.AdvancedNew(
+            var opFlags = new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE };
+            using (var iter = NDIterRef.AdvancedNew(
                 2,
                 new[] { input, ret },
-                NpyIterGlobalFlags.MULTI_INDEX,
+                NDIterGlobalFlags.MULTI_INDEX,
                 NPY_ORDER.NPY_CORDER,
                 NPY_CASTING.NPY_NO_CASTING,
                 opFlags))
@@ -175,7 +175,7 @@ namespace NumSharp.Backends
         }
 
         private static void CumSumAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
-            => NpyAxisIter.ExecuteSameType<T, CumSumAxisKernel<T>>(input, output, axis);
+            => NDAxisIter.ExecuteSameType<T, CumSumAxisKernel<T>>(input, output, axis);
 
         private static unsafe void CumSumInPlace<T>(nint addr, long size) where T : unmanaged, IAdditionOperators<T, T, T>
         {

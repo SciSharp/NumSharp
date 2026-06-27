@@ -432,7 +432,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// NPTypeCode form of <see cref="IsShiftSupported{T}"/> — the integer dtypes that have
         /// a Vector{N}.Shift* overload (so the SIMD scalar-shift kernel can be generated). Char
-        /// is excluded (no Vector{N}&lt;char&gt;); it rides the scalar NpyIter path instead.
+        /// is excluded (no Vector{N}&lt;char&gt;); it rides the scalar NDIter path instead.
         /// </summary>
         internal static bool IsShiftSimdSupported(NPTypeCode t)
         {
@@ -806,7 +806,7 @@ namespace NumSharp.Backends.Kernels
         /// evaluation stack and leaves <c>[shifted(t)]</c>. This is the entry point used by
         /// <see cref="EmitScalarOperation"/> so <see cref="BinaryOp.LeftShift"/> /
         /// <see cref="BinaryOp.RightShift"/> behave as first-class binary ops in every generic
-        /// scalar loop — the MixedType General/Chunk kernels, the NpyIter Tier-3B scalar body,
+        /// scalar loop — the MixedType General/Chunk kernels, the NDIter Tier-3B scalar body,
         /// and the scalar×scalar delegate — without a per-dtype switch.
         ///
         /// The generic binary loops convert BOTH operands to <paramref name="t"/> (the promoted
@@ -904,12 +904,12 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region SIMD variable-shift vector body (NpyIter Tier-3B)
+        #region SIMD variable-shift vector body (NDIter Tier-3B)
 
         /// <summary>
         /// Whether <paramref name="t"/> has a per-lane SIMD variable shift on this machine for
         /// the given direction — i.e. whether <see cref="EmitShiftVectorBody"/> can supply a
-        /// vectorBody to the NpyIter Tier-3B factory (which then drives the contiguous,
+        /// vectorBody to the NDIter Tier-3B factory (which then drives the contiguous,
         /// scalar-broadcast, and AVX2-gather strided SIMD paths automatically).
         ///
         /// The AVX2/AVX512 variable-shift instructions (VPSLLVD/VPSRLVD/VPSRAVD and the 64-bit
@@ -979,7 +979,7 @@ namespace NumSharp.Backends.Kernels
             });
 
         /// <summary>
-        /// Emit the per-vector shift used as the NpyIter Tier-3B <c>vectorBody</c>. On entry the
+        /// Emit the per-vector shift used as the NDIter Tier-3B <c>vectorBody</c>. On entry the
         /// stack holds <c>[valueVec&lt;T&gt;, countVec&lt;T&gt;]</c>; on exit it holds one
         /// <c>shiftedVec&lt;T&gt;</c>. Only called for dtypes/directions where
         /// <see cref="ShiftVariableSupported"/> is true.

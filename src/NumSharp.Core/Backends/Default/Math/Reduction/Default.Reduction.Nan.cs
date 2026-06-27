@@ -265,23 +265,23 @@ namespace NumSharp.Backends
             {
                 case ReductionOp.NanSum:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return iter.ExecuteReducing<NanSumFloatKernel, float>(default, 0f);
                 }
                 case ReductionOp.NanProd:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return iter.ExecuteReducing<NanProdFloatKernel, float>(default, 1f);
                 }
                 case ReductionOp.NanMin:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMinFloatKernel, NanMinMaxFloatAccumulator>(default, default);
                     return accum.Found ? accum.Value : float.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMaxFloatKernel, NanMinMaxFloatAccumulator>(default, default);
                     return accum.Found ? accum.Value : float.NaN;
                 }
@@ -296,23 +296,23 @@ namespace NumSharp.Backends
             {
                 case ReductionOp.NanSum:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return iter.ExecuteReducing<NanSumDoubleKernel, double>(default, 0.0);
                 }
                 case ReductionOp.NanProd:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return iter.ExecuteReducing<NanProdDoubleKernel, double>(default, 1.0);
                 }
                 case ReductionOp.NanMin:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMinDoubleKernel, NanMinMaxDoubleAccumulator>(default, default);
                     return accum.Found ? accum.Value : double.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMaxDoubleKernel, NanMinMaxDoubleAccumulator>(default, default);
                     return accum.Found ? accum.Value : double.NaN;
                 }
@@ -331,23 +331,23 @@ namespace NumSharp.Backends
             {
                 case ReductionOp.NanSum:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return (Half)iter.ExecuteReducing<NanSumHalfKernel, double>(default, 0.0);
                 }
                 case ReductionOp.NanProd:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     return (Half)iter.ExecuteReducing<NanProdHalfKernel, double>(default, 1.0);
                 }
                 case ReductionOp.NanMin:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMinHalfKernel, NanMinMaxDoubleAccumulator>(default, default);
                     return accum.Found ? (Half)accum.Value : Half.NaN;
                 }
                 case ReductionOp.NanMax:
                 {
-                    using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter.ExecuteReducing<NanMaxHalfKernel, NanMinMaxDoubleAccumulator>(default, default);
                     return accum.Found ? (Half)accum.Value : Half.NaN;
                 }
@@ -648,7 +648,7 @@ namespace NumSharp.Backends
             {
                 // Struct-generic NaN-skip Complex sum (~2.6× the old per-element AsIterator).
                 System.Numerics.Complex sum;
-                using (var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP))
+                using (var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP))
                     sum = iter.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
                 var r = NDArray.Scalar(sum);
                 if (keepdims)
@@ -674,7 +674,7 @@ namespace NumSharp.Backends
             {
                 var slice = arr[slices];
                 System.Numerics.Complex sum;
-                using (var it = NpyIterRef.New(slice, NpyIterGlobalFlags.EXTERNAL_LOOP))
+                using (var it = NDIterRef.New(slice, NDIterGlobalFlags.EXTERNAL_LOOP))
                     sum = it.ExecuteReducing<NanSumComplexKernel, System.Numerics.Complex>(default, System.Numerics.Complex.Zero);
                 // iterIndex is the FULL output coordinate (length == ret.ndim). Writing to
                 // iterIndex[0] alone only addressed the first axis, so for a >=3-D input the

@@ -8,7 +8,7 @@ namespace NumSharp.Backends.Sorting
 {
     /// <summary>
     /// Along-axis sort / argsort, structured exactly like NumPy's <c>_new_sortlike</c> /
-    /// <c>_new_argsortlike</c> (item_selection.c): an NpyIter <b>IterAllButAxis</b> drive (the
+    /// <c>_new_argsortlike</c> (item_selection.c): an NDIter <b>IterAllButAxis</b> drive (the
     /// sort axis is dropped from the iterator via <c>op_axes</c> so it can't coalesce) hands one
     /// 1-D line per call to a high-performance inner sort kernel.
     ///
@@ -133,8 +133,8 @@ namespace NumSharp.Backends.Sorting
             fixed (int* pc = cnt)
             {
                 ctx.k32 = pk; ctx.t32 = pt; ctx.k64 = pk6; ctx.t64 = pt6; ctx.count = pc;
-                NpyInnerLoopFunc kern = GetSortKernel(tc);
-                DriveAllButAxis(new[] { target }, new[] { NpyIterPerOpFlags.READWRITE }, axis, kern, &ctx);
+                NDInnerLoopFunc kern = GetSortKernel(tc);
+                DriveAllButAxis(new[] { target }, new[] { NDIterPerOpFlags.READWRITE }, axis, kern, &ctx);
             }
         }
 
@@ -170,18 +170,18 @@ namespace NumSharp.Backends.Sorting
             fixed (int* pc = cnt)
             {
                 ctx.k32 = pk; ctx.t32 = pt; ctx.k64 = pk6; ctx.t64 = pt6; ctx.idx = pi; ctx.it = pit; ctx.count = pc;
-                NpyInnerLoopFunc kern = GetArgSortKernel(tc);
-                DriveAllButAxis(new[] { src, dst }, new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY }, axis, kern, &ctx);
+                NDInnerLoopFunc kern = GetArgSortKernel(tc);
+                DriveAllButAxis(new[] { src, dst }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, axis, kern, &ctx);
             }
         }
 
         /// <summary>NumPy IterAllButAxis: iterate every axis EXCEPT <paramref name="axis"/> (dropped via
         /// op_axes so it can't coalesce); the kernel receives each operand's line start per call.</summary>
-        private static void DriveAllButAxis(NDArray[] ops, NpyIterPerOpFlags[] flags, int axis, NpyInnerLoopFunc kern, void* aux)
+        private static void DriveAllButAxis(NDArray[] ops, NDIterPerOpFlags[] flags, int axis, NDInnerLoopFunc kern, void* aux)
         {
             int ndim = ops[0].ndim;
 
-            // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NpyIter
+            // 1-D input drops its only axis -> a 0-dimensional all-but-axis iterator. Our NDIter
             // mis-drives that degenerate shape as `size` single-element iterations, and because each
             // line kernel re-sorts the whole line (it walks by LineCtx.n, ignoring the per-call count)
             // the total work is N x O(N) = O(N^2). Promote every operand to a (1, N) memory-sharing
@@ -202,13 +202,13 @@ namespace NumSharp.Backends.Sorting
             var opAxes = new int[ops.Length][];
             for (int i = 0; i < ops.Length; i++) opAxes[i] = kept;
 
-            var iter = NpyIterRef.AdvancedNew(ops.Length, ops, NpyIterGlobalFlags.None,
+            var iter = NDIterRef.AdvancedNew(ops.Length, ops, NDIterGlobalFlags.None,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_NO_CASTING, flags, null, ndim - 1, opAxes);
             try { iter.ForEach(kern, aux); }
             finally { iter.Dispose(); }
         }
 
-        // line-sort context carried via NpyIter auxdata (no per-call captures/allocations)
+        // line-sort context carried via NDIter auxdata (no per-call captures/allocations)
         private struct LineCtx
         {
             public uint* k32; public uint* t32; public ulong* k64; public ulong* t64;
@@ -345,7 +345,7 @@ namespace NumSharp.Backends.Sorting
 
         // ============================ dtype dispatch (one type-switch each) ============================
 
-        private static NpyInnerLoopFunc GetSortKernel(NPTypeCode tc) => tc switch
+        private static NDInnerLoopFunc GetSortKernel(NPTypeCode tc) => tc switch
         {
             NPTypeCode.Boolean => static (p, s, c, a) => SortLine32<byte, KBool>((byte*)p[0], (LineCtx*)a),
             NPTypeCode.Byte => static (p, s, c, a) => SortLine32<byte, KU8>((byte*)p[0], (LineCtx*)a),
@@ -365,7 +365,7 @@ namespace NumSharp.Backends.Sorting
             _ => throw new NotSupportedException($"sort not supported for dtype {tc}"),
         };
 
-        private static NpyInnerLoopFunc GetArgSortKernel(NPTypeCode tc) => tc switch
+        private static NDInnerLoopFunc GetArgSortKernel(NPTypeCode tc) => tc switch
         {
             NPTypeCode.Boolean => static (p, s, c, a) => ArgLine32<byte, KBool>((byte*)p[0], (byte*)p[1], (LineCtx*)a),
             NPTypeCode.Byte => static (p, s, c, a) => ArgLine32<byte, KU8>((byte*)p[0], (byte*)p[1], (LineCtx*)a),

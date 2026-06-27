@@ -88,11 +88,11 @@ namespace NumSharp
             long k = alpha.size;
 
             // Copy alpha (any layout, any numeric dtype) into a flat double buffer
-            // via NpyIter.Copy — handles strided/broadcast alpha + any->double cast.
+            // via NDIter.Copy — handles strided/broadcast alpha + any->double cast.
             var alphaBlock = new UnmanagedMemoryBlock<double>(k);
             var alphaSlice = new ArraySlice<double>(alphaBlock);
             var alphaStorage = new UnmanagedStorage(alphaSlice, new Shape(k));
-            NpyIter.Copy(alphaStorage, alpha.Storage);
+            NDIter.Copy(alphaStorage, alpha.Storage);
 
             // Validate
             for (long i = 0; i < k; i++)

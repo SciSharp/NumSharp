@@ -63,8 +63,8 @@ namespace NumSharp.Backends
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);
             var inputTc = arr.GetTypeCode;
 
-            // B2: Complex mean axis is handled by the NpyIter REDUCE path (ExecuteAxisReduction
-            // → ExecuteAxisReductionNpyIter), which runs a one-pass complex Sum kernel then
+            // B2: Complex mean axis is handled by the NDIter REDUCE path (ExecuteAxisReduction
+            // → ExecuteAxisReductionNDIter), which runs a one-pass complex Sum kernel then
             // divides by the axis length — both components preserved (NumPy parity). This
             // replaced the per-output-row-allocating MeanAxisComplex (15–45× slower).
 

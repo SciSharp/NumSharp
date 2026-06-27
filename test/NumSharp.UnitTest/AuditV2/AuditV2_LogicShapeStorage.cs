@@ -246,7 +246,7 @@ namespace NumSharp.UnitTest.AuditV2
         /// T2 perf — `np.all` on a contiguous all-true int32 1M array is much
         /// slower than NumPy. The audit's ~13× ratio depends on hardware; we
         /// assert only that the gap exceeds 2× (which is well above the
-        /// SIMD/short-circuit headroom available in `NpyAllKernel&lt;T&gt;`).
+        /// SIMD/short-circuit headroom available in `NDAllKernel&lt;T&gt;`).
         /// </summary>
         [TestMethod, OpenBugs(IssueUrl = "audit-v2-T2-all-perf")]
         public void T2_All_Contiguous_Is_Much_Slower_Than_NumPy()

@@ -30,7 +30,7 @@ using NumSharp.Backends.Iteration;
 // emitted SIMD pairwise 0.123 ms (2.18x), beating NumPy 2.4.2 (0.207 ms) by 1.69x,
 // and beating the old non-bit-exact flat accumulator (0.139 ms) too.
 //
-// MODEL — same NpyInnerLoopFunc per-chunk contract as the rest of
+// MODEL — same NDInnerLoopFunc per-chunk contract as the rest of
 // ILKernelGenerator.Reduction.cs (PINNED outStride==0 vs SLAB outStride!=0). The
 // emitted kernel folds a PINNED stripe with the recursive pairwise DynamicMethod and
 // streams a SLAB stripe with a width-native vector add.
@@ -51,7 +51,7 @@ namespace NumSharp.Backends.Kernels
         /// Currently emitted for the IEEE binary floats (Single/Double); the same
         /// emitter generalizes to any (clrType, elemSize) whose lane count divides 8.
         /// </summary>
-        internal static unsafe NpyInnerLoopFunc TryEmitPairwiseSumKernel(NPTypeCode tc)
+        internal static unsafe NDInnerLoopFunc TryEmitPairwiseSumKernel(NPTypeCode tc)
         {
             if (!DirectILKernelGenerator.Enabled) return null;
             if (DirectILKernelGenerator.VectorBits < 128) return null; // no SIMD host → keep generic fold
@@ -282,13 +282,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit the NpyInnerLoopFunc kernel. PINNED (outStride==0): fold the whole stripe
+        /// Emit the NDInnerLoopFunc kernel. PINNED (outStride==0): fold the whole stripe
         /// with <paramref name="fold"/> and accumulate into the seeded slot
         /// (<c>*out += fold(in, count, inS/sz)</c>). SLAB (outStride!=0): stream
         /// <c>out[c] += in[c]</c> (width-native vector add + scalar tail for the
         /// contiguous case, scalar strided otherwise).
         /// </summary>
-        private static NpyInnerLoopFunc EmitPairwiseSumKernel(NPTypeCode tc, Type clrType, int elemSize, DynamicMethod fold)
+        private static NDInnerLoopFunc EmitPairwiseSumKernel(NPTypeCode tc, Type clrType, int elemSize, DynamicMethod fold)
         {
             Type pVV = typeof(void).MakePointerType().MakePointerType(); // void**
             Type pL = typeof(long).MakePointerType();                    // long*
@@ -396,7 +396,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, ksL); il.MarkLabel(ksE);
             il.Emit(OpCodes.Ret);
 
-            return dm.CreateDelegate<NpyInnerLoopFunc>();
+            return dm.CreateDelegate<NDInnerLoopFunc>();
         }
 
         // =====================================================================
@@ -501,10 +501,10 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit the complex128 NpyInnerLoopFunc. PINNED: <c>*out += foldC(in, count, inS)</c>
+        /// Emit the complex128 NDInnerLoopFunc. PINNED: <c>*out += foldC(in, count, inS)</c>
         /// as one Vector128 add. SLAB: <c>out[k] += in[k]</c> per complex (Vector128).
         /// </summary>
-        private static NpyInnerLoopFunc EmitComplexPairwiseSumKernel(DynamicMethod fold)
+        private static NDInnerLoopFunc EmitComplexPairwiseSumKernel(DynamicMethod fold)
         {
             Type pVV = typeof(void).MakePointerType().MakePointerType();
             Type pL = typeof(long).MakePointerType();
@@ -603,7 +603,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, sL); il.MarkLabel(sE);
             il.Emit(OpCodes.Ret);
 
-            return dm.CreateDelegate<NpyInnerLoopFunc>();
+            return dm.CreateDelegate<NDInnerLoopFunc>();
         }
     }
 }

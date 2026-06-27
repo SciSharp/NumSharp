@@ -18,7 +18,7 @@ namespace NumSharp.Backends
         //  trailing sub-tensor arr.shape[mask.ndim:] is gathered. Result shape:
         //  (count_true,) + arr.shape[mask.ndim:].
         //
-        //  All three NumPy cases collapse onto ONE NpyIter-driven kernel:
+        //  All three NumPy cases collapse onto ONE NDIter-driven kernel:
         //    • Full element mask (mask.ndim == arr.ndim)  → block size B = 1.
         //    • Axis-0 / partial   (mask.ndim <  arr.ndim) → B = prod(trailing);
         //      the mask is broadcast across the trailing dims (stride 0) so the
@@ -63,7 +63,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                // General NpyIter gather (layout-aware: honors strides/offset/broadcast).
+                // General NDIter gather (layout-aware: honors strides/offset/broadcast).
                 NDArray gatherMask = blockSize == 1 ? mask : BroadcastMaskAcrossBlock(mask, arr);
                 BooleanMaskGather(arr, gatherMask, result);
             }
@@ -76,7 +76,7 @@ namespace NumSharp.Backends
         // =====================================================================
         //  Boolean mask SET — NumPy boolean assignment (mapping.c
         //  array_assign_boolean_subscript). Streams the value into arr through an
-        //  NpyIter scatter: walk (arr[READWRITE], mask[READONLY]) in C-order and,
+        //  NDIter scatter: walk (arr[READWRITE], mask[READONLY]) in C-order and,
         //  for each True, consume the next block from the value buffer. No
         //  per-row NDArray allocation, no nonzero index materialization.
         // =====================================================================
@@ -132,7 +132,7 @@ namespace NumSharp.Backends
         //  Shared helpers
         // ---------------------------------------------------------------------
 
-        /// <summary>Count True values in a mask, layout-aware (SIMD when contiguous, else NpyIter).</summary>
+        /// <summary>Count True values in a mask, layout-aware (SIMD when contiguous, else NDIter).</summary>
         private static unsafe long CountMaskTrue(NDArray<bool> mask)
         {
             if (DirectILKernelGenerator.Enabled && DirectILKernelGenerator.VectorBits > 0 && mask.Shape.IsContiguous)
@@ -143,7 +143,7 @@ namespace NumSharp.Backends
                 return DirectILKernelGenerator.CountTrueSimdHelper(basePtr, mask.size);
             }
 
-            using var maskIter = NpyIterRef.New(mask, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            using var maskIter = NDIterRef.New(mask, NDIterGlobalFlags.EXTERNAL_LOOP);
             return maskIter.ExecuteReducing<CountNonZeroKernel<bool>, long>(default, 0L);
         }
 
@@ -198,18 +198,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// NpyIter gather: copy arr elements where the (possibly trailing-broadcast)
+        /// NDIter gather: copy arr elements where the (possibly trailing-broadcast)
         /// mask is True into the flat <paramref name="result"/>. NPY_CORDER forces
         /// logical C-order traversal (NumPy boolean-indexing semantics).
         /// </summary>
         private unsafe void BooleanMaskGather(NDArray arr, NDArray mask, NDArray result)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 2, new[] { arr, mask },
-                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER,
                 NPY_CASTING.NPY_NO_CASTING,
-                new[] { NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.NO_BROADCAST, NpyIterPerOpFlags.READONLY });
+                new[] { NDIterPerOpFlags.READONLY | NDIterPerOpFlags.NO_BROADCAST, NDIterPerOpFlags.READONLY });
 
             var accum = new BooleanMaskGatherAccumulator
             {
@@ -221,18 +221,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// NpyIter scatter: write the value buffer into arr where the (possibly
+        /// NDIter scatter: write the value buffer into arr where the (possibly
         /// trailing-broadcast) mask is True, in C-order. arr is READWRITE so any
         /// buffered masked-off slots survive copy-out.
         /// </summary>
         private unsafe void BooleanMaskScatter(NDArray arr, NDArray mask, NDArray value, bool splat)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 2, new[] { arr, mask },
-                NpyIterGlobalFlags.EXTERNAL_LOOP,
+                NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER,
                 NPY_CASTING.NPY_NO_CASTING,
-                new[] { NpyIterPerOpFlags.READWRITE | NpyIterPerOpFlags.NO_BROADCAST, NpyIterPerOpFlags.READONLY });
+                new[] { NDIterPerOpFlags.READWRITE | NDIterPerOpFlags.NO_BROADCAST, NDIterPerOpFlags.READONLY });
 
             var accum = new BooleanMaskScatterAccumulator
             {
@@ -268,7 +268,7 @@ namespace NumSharp.Backends
         /// Buffer.MemoryCopy per-element overhead for the small fixed sizes that
         /// cover all 15 NumSharp dtypes (1, 2, 4, 8, 16 bytes).
         /// </summary>
-        private readonly struct BooleanMaskGatherKernel : INpyReducingInnerLoop<BooleanMaskGatherAccumulator>
+        private readonly struct BooleanMaskGatherKernel : INDReducingInnerLoop<BooleanMaskGatherAccumulator>
         {
             public unsafe bool Execute(void** dataptrs, long* strides, long count, ref BooleanMaskGatherAccumulator accum)
             {
@@ -390,7 +390,7 @@ namespace NumSharp.Backends
         /// mask copies a whole block at once; the element-wise path is specialized
         /// on element size.
         /// </summary>
-        private readonly struct BooleanMaskScatterKernel : INpyReducingInnerLoop<BooleanMaskScatterAccumulator>
+        private readonly struct BooleanMaskScatterKernel : INDReducingInnerLoop<BooleanMaskScatterAccumulator>
         {
             public unsafe bool Execute(void** dataptrs, long* strides, long count, ref BooleanMaskScatterAccumulator accum)
             {

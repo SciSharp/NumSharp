@@ -363,7 +363,7 @@ namespace NumSharp.Backends
                     }
                     return;
                 }
-                NpyIter.Copy(targetView, value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                NDIter.Copy(targetView, value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -374,7 +374,7 @@ namespace NumSharp.Backends
             if (valueIsScalary && indices.Length != _shape.NDim)
             {
                 GetData(indices).InternalArray.Fill(Converts.ChangeType(value.GetAtIndex(0), _typecode));
-                //NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                //NDIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -462,7 +462,7 @@ namespace NumSharp.Backends
             // A valid broadcast that needs stretching (value smaller than the region, or a
             // different but compatible rank) -> copy through the iterator, which honours the
             // stride-0 broadcast dimensions instead of a flat partial memcpy.
-            NpyIter.Copy(GetData(indices), broadcasted.Storage);
+            NDIter.Copy(GetData(indices), broadcasted.Storage);
         }
 
         /// <summary>
@@ -488,7 +488,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NDIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
@@ -559,7 +559,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                NpyIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NDIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 

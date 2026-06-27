@@ -47,7 +47,7 @@ namespace NumSharp
         /// <summary>
         ///     When the dtype already matches, returns an independent typed view (alias) sharing this
         ///     array's data; otherwise converts the storage to <typeparamref name="T"/> via the
-        ///     NpyIter-backed <see cref="UnmanagedStorage.Cast{T}"/> (a fresh, owned copy). Never throws
+        ///     NDIter-backed <see cref="UnmanagedStorage.Cast{T}"/> (a fresh, owned copy). Never throws
         ///     on dtype mismatch.
         /// </summary>
         /// <remarks>

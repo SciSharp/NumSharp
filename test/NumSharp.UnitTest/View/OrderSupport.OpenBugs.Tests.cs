@@ -1973,7 +1973,7 @@ namespace NumSharp.UnitTest.View
         // ============================================================================
 
         [TestMethod]
-        [TestCategory("Fixed")] // np.sort implemented (NpyIter IterAllButAxis + radix line kernel).
+        [TestCategory("Fixed")] // np.sort implemented (NDIter IterAllButAxis + radix line kernel).
         public void Sort_ApiGap()
         {
             // NumPy: np.sort(np.array([3,1,2])) == [1,2,3] (returns a sorted COPY; axis=-1 default).

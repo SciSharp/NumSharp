@@ -4,11 +4,11 @@ Status date: 2026-06-26 · Branch: `nditer` · Scope: `np.sort` / `np.argsort` /
 (`Backends/Default/Sorting/`)
 
 This handover specifies **two** follow-up tracks for the along-axis sort, both requested
-explicitly ("NpyIter, IL, unrolling, simd/cpu acceleration, no loop per type/size, lowlevel
+explicitly ("NDIter, IL, unrolling, simd/cpu acceleration, no loop per type/size, lowlevel
 highperf"):
 
 - **#1 — IL-generated per-dtype radix kernel.** Re-house the sort in the
-  `DirectILKernelGenerator` pattern (emitted per-dtype kernels, cache-keyed, NpyIter-driven,
+  `DirectILKernelGenerator` pattern (emitted per-dtype kernels, cache-keyed, NDIter-driven,
   SIMD transform, unrolled histogram, branchless scatter). Removes the 15-way dtype switch and
   the per-size generic methods. **Perf is parity** — this buys the *architecture*, not speed
   (the scatter is the memory floor; proven below). Runs on all hardware.
@@ -46,8 +46,8 @@ NumPy 2.4.2). Any change here MUST keep both green.
 ```
 np.sort / np.argsort / ndarray.sort
   └─ AxisSort  (Backends/Default/Sorting/AxisSort.cs)
-        • NpyIter "all-but-axis" drive: one contiguous 1-D line per kernel call
-          (DriveAllButAxis → NpyIterRef.AdvancedNew(op_axes drops the sort axis) → ForEach)
+        • NDIter "all-but-axis" drive: one contiguous 1-D line per kernel call
+          (DriveAllButAxis → NDIterRef.AdvancedNew(op_axes drops the sort axis) → ForEach)
         • 1-D / axis=None promoted to (1,N) via expand_dims so exactly one line-call happens
         • per line: monotonic transform (value→key) → RadixSort core → un-transform
         • dtype dispatch: GetSortKernel(tc) / GetArgSortKernel(tc)  ← the 15-way switch #1 removes
@@ -171,7 +171,7 @@ dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj -c Release --framewo
 **Goal:** replace the hand-written 15-way dtype switch (`GetSortKernel`/`GetArgSortKernel`) and the
 generic `SortLineXX<T,K>` line kernels with `DirectILKernelGenerator`-emitted per-dtype kernels,
 matching the house pattern. Removes "loop per type/size" from the dispatch; transform becomes
-SIMD; histogram unrolled; scatter stays branchless. **NpyIter still drives the all-but-axis loop.**
+SIMD; histogram unrolled; scatter stays branchless. **NDIter still drives the all-but-axis loop.**
 
 **Honest expectation:** **parity perf.** The house IL kernels self-describe as "~10–15% over C#"
 for *compute-bound elementwise* ops; a random-scatter sort gets ~0% from IL (proven §3). The win
@@ -183,9 +183,9 @@ expects a number.
 New partial: `Backends/Kernels/Direct/DirectILKernelGenerator.Sort.cs`.
 
 - **Cache key:** `struct SortKernelKey { NPTypeCode Dtype; bool IsArgsort; }` →
-  `ConcurrentDictionary<SortKernelKey, NpyInnerLoopFunc>` (same `GetOrAdd` pattern as the other
+  `ConcurrentDictionary<SortKernelKey, NDInnerLoopFunc>` (same `GetOrAdd` pattern as the other
   partials; see `_mixedTypeCache` etc.). Register `ClearSort()` in `ClearAll()` (MixedType.cs).
-- **Emitted delegate shape:** reuse `NpyInnerLoopFunc(void** dataptrs, long* strides, long count,
+- **Emitted delegate shape:** reuse `NDInnerLoopFunc(void** dataptrs, long* strides, long count,
   void* auxdata)` so `AxisSort.DriveAllButAxis` is unchanged — `auxdata` stays the `LineCtx*`.
   The emitted body reads `LineCtx` fields (n, inStride, outStride, k32/t32/k64/t64/idx/it/count)
   via emitted field-offset loads (or pass a flattened arg struct).

@@ -411,25 +411,25 @@ public static (Shape, Shape) Broadcast(Shape left, Shape right)
 
 ### Multi-operand iteration
 
-Element-wise operations with broadcasting are driven by the NumPy-aligned multi-operand iterator `NpyIter` (see [Iterator System](#iterator-system)): it aligns operand shapes, applies stride-0 broadcasting, and synchronizes traversal across all operands in a single pass. (The earlier `MultiIterator` helper was removed.)
+Element-wise operations with broadcasting are driven by the NumPy-aligned multi-operand iterator `NDIter` (see [Iterator System](#iterator-system)): it aligns operand shapes, applies stride-0 broadcasting, and synchronizes traversal across all operands in a single pass. (The earlier `MultiIterator` helper was removed.)
 
 ---
 
 ## Iterator System
 
-### NpyIter
+### NDIter
 
-Array traversal goes through `NpyIter` (`Backends/Iterators/NpyIter.cs`), a NumPy-aligned multi-operand iterator modeled on NumPy's `NpyIter`. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Single-operand flat traversal uses `NpyFlatIterator`. (The legacy `NDIterator<T>` / `MultiIterator` stack was removed and replaced wholesale by this.)
+Array traversal goes through `NDIter` (`Backends/Iterators/NDIter.cs`), a NumPy-aligned multi-operand iterator modeled on NumPy's `NDIter`. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Single-operand flat traversal uses `NDFlatIterator`. (The legacy `NDIterator<T>` / `MultiIterator` stack was removed and replaced wholesale by this.)
 
 ### Optimization Paths
 
-`NpyIter` picks a traversal strategy from each operand's layout (classified once via `ArrayFlags`):
+`NDIter` picks a traversal strategy from each operand's layout (classified once via `ArrayFlags`):
 
 1. **Contiguous**: direct pointer increment (the SIMD fast path in the emitted kernels)
 2. **Strided / sliced**: coordinate-to-offset via `Shape.GetOffset`, honoring `Shape.offset`
 3. **Broadcast (stride 0)**: the dimension is re-read without advancing — read-only
 
-The per-chunk inner loop is an IL-emitted kernel (see [Code Generation](#code-generation)): `NpyIter` advances the operand pointers and hands each chunk to the kernel (`NpyIterRef` drives the `ILKernelGenerator` loops).
+The per-chunk inner loop is an IL-emitted kernel (see [Code Generation](#code-generation)): `NDIter` advances the operand pointers and hands each chunk to the kernel (`NDIterRef` drives the `ILKernelGenerator` loops).
 
 ---
 
@@ -437,7 +437,7 @@ The per-chunk inner loop is an IL-emitted kernel (see [Code Generation](#code-ge
 
 ### Runtime IL Kernels
 
-NumSharp emits type-specific kernels at runtime via `System.Reflection.Emit.DynamicMethod`, detecting SIMD width (V128 / V256 / V512) at startup. Two generators split by kernel-driving contract — `DirectILKernelGenerator` (whole-array kernels) and `ILKernelGenerator` (NpyIter-driven per-chunk kernels). Each kernel is emitted once per signature and cached.
+NumSharp emits type-specific kernels at runtime via `System.Reflection.Emit.DynamicMethod`, detecting SIMD width (V128 / V256 / V512) at startup. Two generators split by kernel-driving contract — `DirectILKernelGenerator` (whole-array kernels) and `ILKernelGenerator` (NDIter-driven per-chunk kernels). Each kernel is emitted once per signature and cached.
 
 ### Legacy: Regen Templating (removed)
 
@@ -593,7 +593,7 @@ The library accepts breaking changes - it was deprecated for an extended period 
 | Shape | `View/Shape.cs` |
 | Slicing | `View/Slice.cs` |
 | TensorEngine | `Backends/TensorEngine.cs`, `Backends/Default/DefaultEngine.*.cs` |
-| Iterators | `Backends/Iterators/NpyIter.cs`, `NpyFlatIterator.cs` |
+| Iterators | `Backends/Iterators/NDIter.cs`, `NDFlatIterator.cs` |
 | np API | `APIs/np.cs`, individual `np.*.cs` files |
 | Operators | `Operations/Elementwise/NDArray.Primitive.cs` |
 | Type Info | `Utilities/InfoOf.cs`, `Backends/NPTypeCode.cs` |

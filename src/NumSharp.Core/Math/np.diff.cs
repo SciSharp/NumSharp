@@ -125,14 +125,14 @@ namespace NumSharp
                 var hi = SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
                 var lo = SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
                 // Bool diffs via not_equal (the `!=` IL kernel). Numeric diffs go
-                // through the lean NpyIter subtract (DiffSubtractViaNpyIter), which
+                // through the lean NDIter subtract (DiffSubtractViaNDIter), which
                 // writes into an uninitialised output and skips the type-promotion /
                 // broadcast / F-analysis the `-` operator would re-derive — operands
                 // here are always equal-shape, equal-dtype, non-broadcast. Falls back
                 // to the `-` operator for any dtype the kernel emitter rejects.
                 NDArray next = useNotEqual
                     ? (hi != lo)
-                    : (DiffSubtractViaNpyIter(hi, lo) ?? (hi - lo));
+                    : (DiffSubtractViaNDIter(hi, lo) ?? (hi - lo));
                 hi.Dispose();
                 lo.Dispose();
                 if (currentOwned) current.Dispose();
@@ -177,17 +177,17 @@ namespace NumSharp
 
         // [hi(READONLY), lo(READONLY), out(WRITEONLY)] operand flags, hoisted so
         // the per-iteration subtract doesn't re-allocate the flags array.
-        private static readonly NpyIterPerOpFlags[] _diffRRW =
+        private static readonly NDIterPerOpFlags[] _diffRRW =
         {
-            NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.WRITEONLY,
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.WRITEONLY,
         };
 
         /// <summary>
-        ///     Lean NpyIter subtract used by the diff loop: computes
+        ///     Lean NDIter subtract used by the diff loop: computes
         ///     <c>hi - lo</c> into a freshly-allocated, <b>uninitialised</b>
-        ///     C-contiguous output via the NpyIter Tier-3B inner-loop kernel
+        ///     C-contiguous output via the NDIter Tier-3B inner-loop kernel
         ///     (4×-unrolled SIMD + scalar-strided shell). <paramref name="hi"/>
         ///     and <paramref name="lo"/> are always equal-shape, equal-dtype and
         ///     non-broadcast, so this skips the type-promotion, broadcast
@@ -196,7 +196,7 @@ namespace NumSharp
         ///     emitter rejects the dtype, signalling the caller to fall back to
         ///     the <c>-</c> operator.
         /// </summary>
-        private static unsafe NDArray DiffSubtractViaNpyIter(NDArray hi, NDArray lo)
+        private static unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
         {
             NPTypeCode dt = hi.GetTypeCode;
 
@@ -206,7 +206,7 @@ namespace NumSharp
             for (int i = 0; i < nd; i++) dims[i] = hi.shape[i];
             var outp = new NDArray(hi.dtype, new Shape(dims), false);
 
-            // Empty result: the NpyIter element-wise path must not run over zero
+            // Empty result: the NDIter element-wise path must not run over zero
             // elements (it walks broadcast dims as if non-empty). Nothing to do.
             if (outp.size == 0) return outp;
 
@@ -220,9 +220,9 @@ namespace NumSharp
 
             try
             {
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { hi, lo, outp },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP,
+                    NDIterGlobalFlags.EXTERNAL_LOOP,
                     NPY_ORDER.NPY_CORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     _diffRRW);

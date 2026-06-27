@@ -18,12 +18,12 @@ namespace NeuralNetwork.NumSharp.MnistMlp
     ///      synthetic tensors (~10% accuracy at best; swap in real data to
     ///      train for real).
     ///   2. Fusion probe — a small correctness + perf comparison of the fused
-    ///      NpyIter bias+ReLU kernel against the naive np.add + np.maximum
+    ///      NDIter bias+ReLU kernel against the naive np.add + np.maximum
     ///      composition. Confirms the fast path is live before we train.
     ///   3. Training — 2-layer MLP (784 -> 128 ReLU -> 10) with Adam +
     ///      SoftmaxCrossEntropy loss. Per-epoch loss / accuracy, plus final
     ///      test-set accuracy.
-    ///   4. Instrumentation — IL kernel-cache delta and NpyExpr delegate-slot
+    ///   4. Instrumentation — IL kernel-cache delta and NDExpr delegate-slot
     ///      count, showing the fused kernels are compiled exactly once and
     ///      reused across every forward/backward pass.
     /// </summary>
@@ -38,7 +38,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
 
         public static int Main(string[] args)
         {
-            Console.WriteLine("=== MNIST 2-Layer MLP (NpyIter-fused forward & backward) ===");
+            Console.WriteLine("=== MNIST 2-Layer MLP (NDIter-fused forward & backward) ===");
             Console.WriteLine($"  Architecture : {InputDim} -> {HiddenDim} ReLU -> {OutputDim} logits  (float32)");
             Console.WriteLine($"  Batch size   : {BatchSize}");
             Console.WriteLine($"  Epochs       : {Epochs}");
@@ -88,7 +88,7 @@ namespace NeuralNetwork.NumSharp.MnistMlp
             int cacheAfter = GeneratedDelegates.InnerLoopCount;
             Console.WriteLine("Kernel / delegate instrumentation:");
             Console.WriteLine($"  IL kernel cache entries : {cacheBefore} -> {cacheAfter} (delta {cacheAfter - cacheBefore})");
-            Console.WriteLine($"  NpyExpr delegate slots  : {DelegateSlots.RegisteredCount}");
+            Console.WriteLine($"  NDExpr delegate slots  : {DelegateSlots.RegisteredCount}");
             Console.WriteLine("  (Cache delta is a small constant: one kernel per unique expression + dtype");
             Console.WriteLine("   combination. Compiled once, hit on every subsequent forward/backward pass.)");
 
@@ -168,20 +168,20 @@ namespace NeuralNetwork.NumSharp.MnistMlp
 
         private static void FusePostMatmulBiasRelu(NDArray preact, NDArray bias, NDArray output)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 nop: 3,
                 op: new[] { preact, bias, output },
-                flags:   NpyIterGlobalFlags.EXTERNAL_LOOP,
+                flags:   NDIterGlobalFlags.EXTERNAL_LOOP,
                 order:   NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_NO_CASTING,
                 opFlags: new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.WRITEONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.WRITEONLY,
                 });
 
-            var expr = NpyExpr.Max(NpyExpr.Input(0) + NpyExpr.Input(1), NpyExpr.Const(0f));
+            var expr = NDExpr.Max(NDExpr.Input(0) + NDExpr.Input(1), NDExpr.Const(0f));
             iter.ExecuteExpression(expr,
                 new[] { NPTypeCode.Single, NPTypeCode.Single }, NPTypeCode.Single,
                 cacheKey: "program_probe_bias_relu_f32");

@@ -2,7 +2,7 @@
 
 > **Status:** implemented. The plan in v1-v4 (build a new `NDIterator` class with
 > three tiers of kernels) was superseded by porting NumPy's `nditer` directly —
-> now `NpyIterRef`. The three "tiers" morphed into seven layered integration
+> now `NDIterRef`. The three "tiers" morphed into seven layered integration
 > points, all sharing one IL-emitted-kernel cache. This document captures the
 > final shape and how we got here.
 >
@@ -23,11 +23,11 @@
 
 | v4 plan | v5 reality | Why |
 |---------|-----------|-----|
-| Build new `NDIterator` class from scratch | Port NumPy's `nditer` as `NpyIterRef` | Every ufunc, reduction, and broadcast in NumPy already goes through it; reinventing the scheduler would re-discover the same design choices (coalescing, buffered reduction, op_axes). Porting preserves 1-to-1 behavioral parity. |
+| Build new `NDIterator` class from scratch | Port NumPy's `nditer` as `NDIterRef` | Every ufunc, reduction, and broadcast in NumPy already goes through it; reinventing the scheduler would re-discover the same design choices (coalescing, buffered reduction, op_axes). Porting preserves 1-to-1 behavioral parity. |
 | 3 tiers (interface / IL / Func) | 7 entry points (Layer 1/2/3 + Tier 3A/3B/3C + Call) | Three layers conflated "how does the kernel dispatch?" with "what kernel shape am I authoring?". Splitting gives us baked ufuncs *and* custom-op escape hatches without mode-switching. |
-| `IUnaryKernel<TIn,TOut>` static abstracts | `NpyInnerLoopFunc` delegate + struct-generic `INpyInnerLoop` | Static-abstract generics don't inline reliably across assemblies on net8; struct-generic dispatch is cleaner and the `NpyInnerLoopFunc` delegate matches NumPy's C-API loop signature 1-to-1. |
+| `IUnaryKernel<TIn,TOut>` static abstracts | `NDInnerLoopFunc` delegate + struct-generic `INDInnerLoop` | Static-abstract generics don't inline reliably across assemblies on net8; struct-generic dispatch is cleaner and the `NDInnerLoopFunc` delegate matches NumPy's C-API loop signature 1-to-1. |
 | `IKernelEmitter` interface for IL injection | `Action<ILGenerator>` per-element + factory-wrapped shell | A full `IKernelEmitter` interface was overkill for the common "I just want SIMD with a custom op" case. The factory handles the unroll shell; users write only the per-element body. Raw-IL power-users use `ExecuteRawIL(Action<ILGenerator>)`. |
-| `Func<T,TOut>` delegates as Tier 3 | `ForEach(NpyInnerLoopFunc)` + `NpyExpr.Call(Delegate)` | The `Func<>` path morphed into two: Layer 1 `ForEach` for whole-loop delegates, and `NpyExpr.Call` for per-element managed methods embedded inside a DSL tree. |
+| `Func<T,TOut>` delegates as Tier 3 | `ForEach(NDInnerLoopFunc)` + `NDExpr.Call(Delegate)` | The `Func<>` path morphed into two: Layer 1 `ForEach` for whole-loop delegates, and `NDExpr.Call` for per-element managed methods embedded inside a DSL tree. |
 
 ## The seven techniques
 
@@ -38,10 +38,10 @@
   Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
               │  "one call, NumPy-style — one line per op"                   │
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C     │  ExecuteExpression(NpyExpr)                                  │  compose
+  Tier 3C     │  ExecuteExpression(NDExpr)                                  │  compose
               │  "build a tree with operators; no IL in caller"              │  with DSL
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C     │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
+  Tier 3C     │  NDExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
     + Call    │  "invoke arbitrary managed method per element"               │  BCL / user op
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
   Tier 3B     │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
@@ -53,18 +53,18 @@
   Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
               │  "zero-alloc; JIT specializes per struct; early-exit reduce" │  generic
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Layer 1     │  ForEach(NpyInnerLoopFunc kernel, void* aux)                 │  delegate,
+  Layer 1     │  ForEach(NDInnerLoopFunc kernel, void* aux)                 │  delegate,
               │  "closest to NumPy's C API; closures welcome"                │  anything goes
               │                                                              │
               ▼                                                              ▼
-           NpyIter state (Shape, Strides, DataPtrs, Buffers, ...)
+           NDIter state (Shape, Strides, DataPtrs, Buffers, ...)
                                   │
                                   ▼
               ILKernelGenerator (DynamicMethod + V128/V256/V512)
 ```
 
 All seven share:
-- one `ConcurrentDictionary<string, NpyInnerLoopFunc>` inner-loop cache
+- one `ConcurrentDictionary<string, NDInnerLoopFunc>` inner-loop cache
 - one `ForEach` driver at the bottom (`do { kernel(dataptrs, strides, count, aux); } while (iternext);`)
 - the same SIMD machinery in `ILKernelGenerator` (V128 / V256 / V512 selection at startup)
 
@@ -73,12 +73,12 @@ All seven share:
 ## Layer 3 — Baked ufuncs (the 90% case)
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(3, new[] { a, b, c },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+using var iter = NDIterRef.MultiNew(3, new[] { a, b, c },
+    NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
     NPY_CASTING.NPY_NO_CASTING,
-    new[] { NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.WRITEONLY });
+    new[] { NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.WRITEONLY });
 iter.ExecuteBinary(BinaryOp.Add);
 ```
 
@@ -88,22 +88,22 @@ Benchmark: 1M float32 `a + b` = **0.58 ms/run** (4×-unrolled V256, post-warmup)
 
 ---
 
-## Tier 3C — Expression DSL (`NpyExpr`)
+## Tier 3C — Expression DSL (`NDExpr`)
 
 45+ node types compose with operators:
 
 ```csharp
-var x = NpyExpr.Input(0);
-var pos = NpyExpr.Const(1.0) / (NpyExpr.Const(1.0) + NpyExpr.Exp(-x));
-var neg = NpyExpr.Exp(x) / (NpyExpr.Const(1.0) + NpyExpr.Exp(x));
-var stable = NpyExpr.Where(
-    NpyExpr.GreaterEqual(x, NpyExpr.Const(0.0)), pos, neg);
+var x = NDExpr.Input(0);
+var pos = NDExpr.Const(1.0) / (NDExpr.Const(1.0) + NDExpr.Exp(-x));
+var neg = NDExpr.Exp(x) / (NDExpr.Const(1.0) + NDExpr.Exp(x));
+var stable = NDExpr.Where(
+    NDExpr.GreaterEqual(x, NDExpr.Const(0.0)), pos, neg);
 
 iter.ExecuteExpression(stable,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
 
-Covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates, comparisons, Min/Max/Clamp/Where. Auto-derives a cache key from the tree's structural signature (e.g. `NpyExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single`).
+Covers arithmetic, bitwise, rounding, transcendentals (exp/log/trig/hyperbolic/inverse-trig), predicates, comparisons, Min/Max/Clamp/Where. Auto-derives a cache key from the tree's structural signature (e.g. `NDExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single`).
 
 Benchmark: stable sigmoid on 1M f64 = **13.6 ms/run** (3 × `Math.Exp` per element dominates).
 
@@ -111,24 +111,24 @@ Benchmark: stable sigmoid on 1M f64 = **13.6 ms/run** (3 × `Math.Exp` per eleme
 
 ```csharp
 // Typed Func overloads — method groups bind without cast
-NpyExpr.Call(Math.Sqrt,   NpyExpr.Input(0));
-NpyExpr.Call(Math.Pow,    NpyExpr.Input(0), NpyExpr.Input(1));
+NDExpr.Call(Math.Sqrt,   NDExpr.Input(0));
+NDExpr.Call(Math.Pow,    NDExpr.Input(0), NDExpr.Input(1));
 
 // Cast to disambiguate overloaded methods
-NpyExpr.Call((Func<double, double>)Math.Abs, NpyExpr.Input(0));
+NDExpr.Call((Func<double, double>)Math.Abs, NDExpr.Input(0));
 
 // Pre-constructed delegate with captures
 static readonly Func<double, double> GELU = x =>
     0.5 * x * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) *
                                (x + 0.044715 * x * x * x)));
-NpyExpr.Call(GELU, NpyExpr.Input(0));
+NDExpr.Call(GELU, NDExpr.Input(0));
 
 // MethodInfo — static
 var mi = typeof(Math).GetMethod("BitIncrement", new[] { typeof(double) });
-NpyExpr.Call(mi, NpyExpr.Input(0));
+NDExpr.Call(mi, NDExpr.Input(0));
 
 // MethodInfo + instance target
-NpyExpr.Call(instanceMethod, targetObject, NpyExpr.Input(0));
+NDExpr.Call(instanceMethod, targetObject, NDExpr.Input(0));
 ```
 
 Three dispatch paths, selected automatically at node construction:
@@ -208,7 +208,7 @@ Benchmark: `abs(a - b)` on 1M i32 = **1.27 ms/run** (scalar loop, JIT autovector
 The JIT specializes `ExecuteGeneric<TKernel>` per struct type at codegen time. No delegate indirection, no boxing. **Only path with early-exit reductions.**
 
 ```csharp
-readonly unsafe struct HypotKernel : INpyInnerLoop
+readonly unsafe struct HypotKernel : INDInnerLoop
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Execute(void** p, long* s, long n)
@@ -223,7 +223,7 @@ readonly unsafe struct HypotKernel : INpyInnerLoop
     }
 }
 
-readonly unsafe struct AnyNonZero : INpyReducingInnerLoop<bool>
+readonly unsafe struct AnyNonZero : INDReducingInnerLoop<bool>
 {
     public bool Execute(void** p, long* s, long n, ref bool acc)
     {
@@ -308,17 +308,17 @@ Tier-0 JIT caveat applies to Layer 1/2 element-wise kernels in ephemeral hosts (
 
 ---
 
-## NpyIter state (unified, post-port)
+## NDIter state (unified, post-port)
 
 Replaces the v4 `IteratorState` struct. Heap-allocated via `NativeMemory.AllocZeroed` (not stack-allocated with `fixed int[16]`) because NumSharp drops NumPy's `NPY_MAXDIMS=64` ceiling — state is sized to the actual `(ndim, nop)`.
 
 ```csharp
-public unsafe struct NpyIterState
+public unsafe struct NDIterState
 {
     // Scalars
     public int NDim, NOp;
     public long IterSize, IterIndex;
-    public NpyIterFlags ItFlags;
+    public NDIterFlags ItFlags;
 
     // Dim arrays (size = NDim)
     public long* Shape;
@@ -340,11 +340,11 @@ public unsafe struct NpyIterState
 }
 ```
 
-See `src/NumSharp.Core/Backends/Iterators/NpyIter.State.cs` for the full definition and `NDIter.md` for the field-by-field walkthrough.
+See `src/NumSharp.Core/Backends/Iterators/NDIter.State.cs` for the full definition and `NDIter.md` for the field-by-field walkthrough.
 
 ---
 
-## Migration: old patterns → NpyIter
+## Migration: old patterns → NDIter
 
 ### Pattern 1: element-wise loop via `NDIterator`
 
@@ -360,7 +360,7 @@ while (iter.HasNext())
 
 **New (Layer 2 struct-generic):**
 ```csharp
-readonly unsafe struct SumOfSquares : INpyReducingInnerLoop<double>
+readonly unsafe struct SumOfSquares : INDReducingInnerLoop<double>
 {
     public bool Execute(void** p, long* s, long n, ref double acc)
     {
@@ -374,16 +374,16 @@ readonly unsafe struct SumOfSquares : INpyReducingInnerLoop<double>
     }
 }
 
-using var iter = NpyIterRef.MultiNew(1, new[] { source },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
-    NPY_CASTING.NPY_NO_CASTING, new[] { NpyIterPerOpFlags.READONLY });
+using var iter = NDIterRef.MultiNew(1, new[] { source },
+    NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_NO_CASTING, new[] { NDIterPerOpFlags.READONLY });
 double sum = iter.ExecuteReducing<SumOfSquares, double>(default, 0.0);
 ```
 
 **New (Tier 3C DSL):**
 ```csharp
 // If you also want the *array* of x² (not just the reduction):
-var expr = NpyExpr.Square(NpyExpr.Input(0));
+var expr = NDExpr.Square(NDExpr.Input(0));
 iter.ExecuteExpression(expr, new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
 
@@ -402,14 +402,14 @@ do
 
 **New (axis-reducing iterator with op_axes):**
 ```csharp
-// Use the axis-reduction construction path; NpyIter handles the double-loop
+// Use the axis-reduction construction path; NDIter handles the double-loop
 // buffered reduction internally via REDUCE_OK + ExecuteReduction.
-using var iter = NpyIterRef.AdvancedNew(2, new[] { input, output },
-    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.REDUCE_OK
-        | NpyIterGlobalFlags.BUFFERED,
+using var iter = NDIterRef.AdvancedNew(2, new[] { input, output },
+    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.REDUCE_OK
+        | NDIterGlobalFlags.BUFFERED,
     NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
-    new[] { NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.ALLOCATE },
+    new[] { NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.ALLOCATE },
     opAxes: new[][] { null, outputAxes });
 iter.ExecuteReduction<double>(ReductionOp.Sum);
 ```
@@ -425,10 +425,10 @@ while (lIter.HasNext())
 
 **New (Layer 3 Copy):**
 ```csharp
-using var iter = NpyIterRef.MultiNew(2, new[] { rhs, lhs },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+using var iter = NDIterRef.MultiNew(2, new[] { rhs, lhs },
+    NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
     NPY_CASTING.NPY_SAFE_CASTING,
-    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY });
+    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY });
 iter.ExecuteCopy();
 ```
 
@@ -447,9 +447,9 @@ do
 
 **New (Layer 1):**
 ```csharp
-using var iter = NpyIterRef.MultiNew(1, new[] { arr },
-    NpyIterGlobalFlags.None, NPY_ORDER.NPY_KEEPORDER,
-    NPY_CASTING.NPY_NO_CASTING, new[] { NpyIterPerOpFlags.READONLY });
+using var iter = NDIterRef.MultiNew(1, new[] { arr },
+    NDIterGlobalFlags.None, NPY_ORDER.NPY_KEEPORDER,
+    NPY_CASTING.NPY_NO_CASTING, new[] { NDIterPerOpFlags.READONLY });
 iter.ForEach((ptrs, strides, count, aux) => {
     byte* p = (byte*)ptrs[0]; long s = strides[0];
     for (long i = 0; i < count; i++)
@@ -465,18 +465,18 @@ iter.ForEach((ptrs, strides, count, aux) => {
 
 ```
 src/NumSharp.Core/Backends/Iterators/
-├── NpyIter.cs                    construction wrappers, MultiNew/AdvancedNew
-├── NpyIter.State.cs              NpyIterState struct, Advance/Reset/GotoIterIndex
-├── NpyIter.Execution.cs          Layer 1/2/3 — ForEach, ExecuteGeneric, Execute*
-├── NpyIter.Execution.Custom.cs   Tier 3A/3B/3C — ExecuteRawIL, ExecuteElementWise, ExecuteExpression
-├── NpyExpr.cs                    Tier 3C DSL — 45+ nodes + Call factory + DelegateSlots
-├── NpyIterFlags.cs               flag enums (Global / PerOp / internal)
-├── NpyIterCoalescing.cs          CoalesceAxes, ReorderAxesForCoalescing, FlipNegativeStrides
-├── NpyIterCasting.cs             safe/same-kind/unsafe cast rules
-├── NpyIterBufferManager.cs       aligned buffer alloc, copy-in/copy-out
-├── NpyIterKernels.cs             INpyInnerLoop, INpyReducingInnerLoop interfaces
-├── NpyAxisIter.cs, NpyAxisIter.State.cs   axis-reduction iterator
-└── NpyLogicalReductionKernels.cs generic boolean/numeric axis reduction structs
+├── NDIter.cs                    construction wrappers, MultiNew/AdvancedNew
+├── NDIter.State.cs              NDIterState struct, Advance/Reset/GotoIterIndex
+├── NDIter.Execution.cs          Layer 1/2/3 — ForEach, ExecuteGeneric, Execute*
+├── NDIter.Execution.Custom.cs   Tier 3A/3B/3C — ExecuteRawIL, ExecuteElementWise, ExecuteExpression
+├── NDExpr.cs                    Tier 3C DSL — 45+ nodes + Call factory + DelegateSlots
+├── NDIterFlags.cs               flag enums (Global / PerOp / internal)
+├── NDIterCoalescing.cs          CoalesceAxes, ReorderAxesForCoalescing, FlipNegativeStrides
+├── NDIterCasting.cs             safe/same-kind/unsafe cast rules
+├── NDIterBufferManager.cs       aligned buffer alloc, copy-in/copy-out
+├── NDIterKernels.cs             INDInnerLoop, INDReducingInnerLoop interfaces
+├── NDAxisIter.cs, NDAxisIter.State.cs   axis-reduction iterator
+└── NDLogicalReductionKernels.cs generic boolean/numeric axis reduction structs
 
 src/NumSharp.Core/Backends/Kernels/
 └── ILKernelGenerator.InnerLoop.cs  CompileRawInnerLoop, CompileInnerLoop, factory shell
@@ -507,17 +507,17 @@ src/NumSharp.Core/Utilities/Incrementors/
 
 1. **Multi-output operations** (e.g., `modf` returning two arrays) — use `ILKernelGenerator.Modf` directly, not via the seven-tier bridge
 2. **Type promotion** — caller's responsibility via `np._FindCommonType` / NPTypeCode utilities
-3. **Memory allocation** — caller provides output NDArray (or uses `NpyIterPerOpFlags.ALLOCATE`)
+3. **Memory allocation** — caller provides output NDArray (or uses `NDIterPerOpFlags.ALLOCATE`)
 
-Broadcasting is **not** a scope limitation anymore — NpyIter handles it inherently via stride=0 dimensions.
+Broadcasting is **not** a scope limitation anymore — NDIter handles it inherently via stride=0 dimensions.
 
 ---
 
 ## Known bugs (post-port)
 
-The bridge works around two bugs in the ported `NpyIter` that should be fixed in-place eventually:
+The bridge works around two bugs in the ported `NDIter` that should be fixed in-place eventually:
 
-- **Bug A:** `NpyIterRef.Iternext()` unconditionally calls `state.Advance()`, ignoring `EXLOOP`. Bridge sidesteps by calling `GetIterNext()` directly.
+- **Bug A:** `NDIterRef.Iternext()` unconditionally calls `state.Advance()`, ignoring `EXLOOP`. Bridge sidesteps by calling `GetIterNext()` directly.
 - **Bug B:** Buffered + Cast path computes wrong byte deltas because `state.Strides[op]` holds element strides but `ElementSizes[op]` is buffer-dtype size. Bridge routes buffered paths through `RunBuffered*` methods using `BufStrides` instead.
 
 Eight additional bugs surfaced during development (C through H, covering Where, Decimal size, predicate I4 leak, LogicalNot type mismatch, Vector256.Round availability, MinMax NaN propagation) were **fixed**. See `NDIter.md § Known Bugs and Workarounds` for full writeups.
@@ -529,8 +529,8 @@ Eight additional bugs surfaced during development (C through H, covering Where, 
 - **Production reference docs:** `docs/website-src/docs/NDIter.md` — complete user-facing documentation (~1900 lines)
 - **NumPy port source:** NumPy's `numpy/_core/src/multiarray/nditer_*.c`
 - **Test coverage:** 264 tests across
-  `NpyIterCustomOpTests.cs` (14 basic),
-  `NpyIterCustomOpEdgeCaseTests.cs` (76 edge cases),
-  `NpyExprExtensiveTests.cs` (136 DSL ops),
-  `NpyExprCallTests.cs` (38 Call variants) —
+  `NDIterCustomOpTests.cs` (14 basic),
+  `NDIterCustomOpEdgeCaseTests.cs` (76 edge cases),
+  `NDExprExtensiveTests.cs` (136 DSL ops),
+  `NDExprCallTests.cs` (38 Call variants) —
   all passing on net8.0 and net10.0.

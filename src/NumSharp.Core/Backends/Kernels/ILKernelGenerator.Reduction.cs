@@ -7,13 +7,13 @@ using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
-// ILKernelGenerator.Reduction.cs — per-chunk axis-reduction kernels (NpyIter-driven)
+// ILKernelGenerator.Reduction.cs — per-chunk axis-reduction kernels (NDIter-driven)
 // =============================================================================
 //
 // MODEL
 // -----
 // These kernels implement the inner loop of a 2-operand REDUCE iterator built by
-// NpyIterRef.NewReduce ([input, output], REDUCE_OK | EXTERNAL_LOOP). The iterator
+// NDIterRef.NewReduce ([input, output], REDUCE_OK | EXTERNAL_LOOP). The iterator
 // owns the outer walk and advances the operand pointers between calls; each kernel
 // invocation folds ONE contiguous inner stripe into the output:
 //
@@ -54,19 +54,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public readonly record struct ReduceKernelKey(ReductionOp Op, NPTypeCode InType, NPTypeCode AccType);
 
-        internal static readonly ConcurrentDictionary<ReduceKernelKey, NpyInnerLoopFunc> _reduceCache = new();
+        internal static readonly ConcurrentDictionary<ReduceKernelKey, NDInnerLoopFunc> _reduceCache = new();
 
         /// <summary>
         /// Returns the cached per-chunk reduction kernel for the given
-        /// (op, input, accumulator) triple, or null when no NpyIter-driven kernel
+        /// (op, input, accumulator) triple, or null when no NDIter-driven kernel
         /// exists yet (caller falls back to the DirectILKernelGenerator path).
-        /// The returned delegate matches <see cref="NpyInnerLoopFunc"/>; hand it to
-        /// an iterator built by <see cref="NpyIterRef.NewReduce(NDArray, NDArray, int, NpyIterGlobalFlags)"/>.
+        /// The returned delegate matches <see cref="NDInnerLoopFunc"/>; hand it to
+        /// an iterator built by <see cref="NDIterRef.NewReduce(NDArray, NDArray, int, NDIterGlobalFlags)"/>.
         /// </summary>
-        public static NpyInnerLoopFunc GetReduceInnerLoop(ReduceKernelKey key) =>
+        public static NDInnerLoopFunc GetReduceInnerLoop(ReduceKernelKey key) =>
             _reduceCache.GetOrAdd(key, CreateReduceInnerLoop);
 
-        private static unsafe NpyInnerLoopFunc CreateReduceInnerLoop(ReduceKernelKey key)
+        private static unsafe NDInnerLoopFunc CreateReduceInnerLoop(ReduceKernelKey key)
         {
             // Complex: dedicated double-pair kernels (SIMD sum, lex min/max).
             if (key.InType == NPTypeCode.Complex && key.AccType == NPTypeCode.Complex)
@@ -92,7 +92,7 @@ namespace NumSharp.Backends.Kernels
             // Half mean / Decimal: generic INumber scalar kernels fed CONTIGUOUS stripes by the
             // per-chunk iterator (no cache-hostile column gather like the legacy coordinate walk).
             //   - Half MEAN accumulates in Double (input Half → Double); ReduceMean casts back to
-            //     Half. (Half sum/prod/min/max stay on the Direct path — see UseNpyIterReduce:
+            //     Half. (Half sum/prod/min/max stay on the Direct path — see UseNDIterReduce:
             //     their Half-accumulator serial chain can't beat it on the pinned axis.)
             //   - Decimal accumulates in full-precision Decimal (no NumPy reference type).
             //     CreateTypedReduceKernel can build a same-type Half kernel too; it just isn't
@@ -104,7 +104,7 @@ namespace NumSharp.Backends.Kernels
 
             // Phase 6 — numeric same-type Sum/Mean (PairwiseFold, bit-for-bit NumPy
             // pairwise_sum) AND Min/Max (SimdMinMaxSameType, NaN-propagating). Double AND
-            // float32 route here so f64/f32 reductions ride the stride-ordered NpyIter reduce
+            // float32 route here so f64/f32 reductions ride the stride-ordered NDIter reduce
             // path — SIMD on EVERY layout (transpose/F/strided/negcol/broadcast), fixing the
             // C-contiguity-gated Direct axis kernel's collapse on those layouts. Integer
             // widening sums and Prod stay on the Direct path (CreateSimdReduceKernel returns
@@ -123,9 +123,9 @@ namespace NumSharp.Backends.Kernels
                 // Min/Max: width-native SIMD with explicit per-lane NaN propagation
                 // (Vector256.Min/Max alone do not propagate NaN). Same-type, no widening.
                 else if (key.Op == ReductionOp.Min)
-                    return key.InType == NPTypeCode.Double ? (NpyInnerLoopFunc)SimdMinKernel<double> : SimdMinKernel<float>;
+                    return key.InType == NPTypeCode.Double ? (NDInnerLoopFunc)SimdMinKernel<double> : SimdMinKernel<float>;
                 else if (key.Op == ReductionOp.Max)
-                    return key.InType == NPTypeCode.Double ? (NpyInnerLoopFunc)SimdMaxKernel<double> : SimdMaxKernel<float>;
+                    return key.InType == NPTypeCode.Double ? (NDInnerLoopFunc)SimdMaxKernel<double> : SimdMaxKernel<float>;
                 if (key.InType == NPTypeCode.Double) return CreateSimdReduceKernel<double>(key.Op);
                 return CreateSimdReduceKernel<float>(key.Op);
             }
@@ -140,7 +140,7 @@ namespace NumSharp.Backends.Kernels
         /// a reinterpret/convert and the arithmetic to native ops. Min/Max propagate NaN
         /// (NumPy parity) via <c>TAccum.IsNaN</c>; Decimal has no NaN so those checks fold away.
         /// </summary>
-        private static unsafe NpyInnerLoopFunc CreateTypedReduceKernel<TIn, TAccum>(ReductionOp op)
+        private static unsafe NDInnerLoopFunc CreateTypedReduceKernel<TIn, TAccum>(ReductionOp op)
             where TIn : unmanaged, INumberBase<TIn>
             where TAccum : unmanaged, INumber<TAccum>
         {
@@ -174,7 +174,7 @@ namespace NumSharp.Backends.Kernels
         //
         // The pairwise PINNED path is what makes float32 sum/mean SAFE to route
         // (its earlier exclusion was due to a flat 8-accumulator divergence of ~24;
-        // pairwise removes that — exact parity). NpyIter supplies the substrate:
+        // pairwise removes that — exact parity). NDIter supplies the substrate:
         // NewReduce orders the contiguous axis innermost (→ PINNED for a contiguous
         // reduced axis), EXTERNAL_LOOP delivers the full stripe as (ptr, count,
         // stride), and the +0 identity seed + slot-accumulate reproduce NumPy's
@@ -232,7 +232,7 @@ namespace NumSharp.Backends.Kernels
         /// reduce kernel. Currently only Sum is emitted (PairwiseSumSameType); Min/Max/Prod
         /// return null so the caller falls back to the Direct path until they are migrated.
         /// </summary>
-        private static unsafe NpyInnerLoopFunc CreateSimdReduceKernel<T>(ReductionOp op)
+        private static unsafe NDInnerLoopFunc CreateSimdReduceKernel<T>(ReductionOp op)
             where T : unmanaged, INumber<T>
         {
             return op switch
@@ -657,7 +657,7 @@ namespace NumSharp.Backends.Kernels
         // =====================================================================
         // SIMD same-type Min/Max (Phase 6 — double/float). Dual-mode, NaN-propagating
         // (NumPy parity). Mirrors PairwiseSumSameType so f64/f32 Min/Max ride the
-        // stride-ordered NpyIter reduce path at SIMD speed on EVERY layout
+        // stride-ordered NDIter reduce path at SIMD speed on EVERY layout
         // (transpose / F / strided / negcol / broadcast) instead of falling to the
         // C-contiguity-gated Direct axis kernel (which collapses to a cache-hostile
         // coordinate walk on negative-stride / broadcast inputs — measured 6–17×

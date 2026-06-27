@@ -86,7 +86,7 @@ np                Static API class (like `import numpy as np`)
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NpyIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). Superseded the now-removed Regen templates. |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NDIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). Superseded the now-removed Regen templates. |
 
 ## ILKernelGenerator + DirectILKernelGenerator
 
@@ -123,21 +123,21 @@ Carries the bulk of NumSharp's elementwise, reduction, scan, cast, and selection
 | Linear algebra | `.MatMul.cs`, `.Trace.cs` |
 | Other | `.Clip.cs`, `.Modf.cs`, `.Repeat.cs`, `.Quantile.cs`, `.WeightedSum.cs`, `.RavelMultiIndex.cs`, `.UnravelIndex.cs`, `.InnerLoop.cs`, `.StorageAlias.cs` |
 
-### `ILKernelGenerator` — NpyIter-driven per-chunk kernels
+### `ILKernelGenerator` — NDIter-driven per-chunk kernels
 
 **Location:** `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator*.cs` (root, not in `Direct/`)
 
-**Contract:** Kernel processes **one inner-loop chunk** per call. The iterator (`NpyIterRef`) drives the loop and advances pointers between calls. Matches NumPy's `PyUFuncGenericFunction` model:
+**Contract:** Kernel processes **one inner-loop chunk** per call. The iterator (`NDIterRef`) drives the loop and advances pointers between calls. Matches NumPy's `PyUFuncGenericFunction` model:
 
 ```csharp
-unsafe delegate void NpyInnerLoopFunc(
+unsafe delegate void NDInnerLoopFunc(
     void** dataptrs,   // [nop] current operand pointers
     long*  strides,    // [nop] per-operand byte stride for inner loop
     long   count,      // number of elements this chunk
     void*  auxdata);   // op-specific extras (e.g. axis index)
 ```
 
-Emits the per-chunk kernels run as an NpyIter inner loop — currently `np.where` and the flat/pairwise reductions (partials `ILKernelGenerator.{Where,Reduction,Reduction.Pairwise}.cs`). Driven via `NpyIterRef.Execute(kernelKey)`.
+Emits the per-chunk kernels run as an NDIter inner loop — currently `np.where` and the flat/pairwise reductions (partials `ILKernelGenerator.{Where,Reduction,Reduction.Pairwise}.cs`). Driven via `NDIterRef.Execute(kernelKey)`.
 
 ### Shared infrastructure
 
@@ -289,17 +289,17 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
 `compress`, `extract`, `indices`, `place`, `put`, `ravel_multi_index`, `take`, `unravel_index`, `where`
 
 ### Fused Expressions (NumSharp extension)
-`evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NpyExpr` tree to ONE NpyIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
+`evaluate` — `np.evaluate(expr[, operands][, out])` compiles an `NDExpr` tree to ONE NDIter pass: every elementwise node runs inside a single inner-loop kernel, so chained expressions allocate no intermediates and read each operand once (NumPy-ecosystem equivalent: `numexpr.evaluate`; measured 3.2–6.1× faster than NumPy 2.4.2 on 4M chains, 1.2–4× over NumSharp's own unfused chains — gate: the `benchmark/fusion` subsystem of `benchmark/run_benchmark.py`).
 
 ```csharp
-NDArray r = np.evaluate((NpyExpr)a * b + 2);                          // fused a*b+2
-NDArray d = np.evaluate((NpyExpr.Arr(a) - b) / (NpyExpr.Arr(a) + b)); // a,b dedup → 3 operand streams
-NDArray s = np.evaluate(NpyExpr.Sum((NpyExpr)a * b), @out: x);        // one-pass sum(a*b), no temp
+NDArray r = np.evaluate((NDExpr)a * b + 2);                          // fused a*b+2
+NDArray d = np.evaluate((NDExpr.Arr(a) - b) / (NDExpr.Arr(a) + b)); // a,b dedup → 3 operand streams
+NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b), @out: x);        // one-pass sum(a*b), no temp
 ```
 
-Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
-- **Dtypes follow NumPy result_type PER NODE** (`NpyExpr.Typing.cs`): NEP50 strong-strong incl. the int/float tier crossing (`i4+f4→f8`); weak python-scalar literals (`i4+2→i4`, `f2+2.5→f2`, `bool+2→i64`, out-of-range → OverflowError); `true_divide` ints→f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool→i8; unary math tiers (`bool/i8→f16`, `i16→f32`, `i32+→f64`); comparisons→bool. `(i4*i4)+f8` wraps the multiply in int32 before promoting — bit-compatible with the unfused NumPy sequence.
-- **Reductions are root-only**: `NpyExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back — documented divergence from NumPy's pairwise, usually more accurate; min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
+Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
+- **Dtypes follow NumPy result_type PER NODE** (`NDExpr.Typing.cs`): NEP50 strong-strong incl. the int/float tier crossing (`i4+f4→f8`); weak python-scalar literals (`i4+2→i4`, `f2+2.5→f2`, `bool+2→i64`, out-of-range → OverflowError); `true_divide` ints→f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool→i8; unary math tiers (`bool/i8→f16`, `i16→f32`, `i32+→f64`); comparisons→bool. `(i4*i4)+f8` wraps the multiply in int32 before promoting — bit-compatible with the unfused NumPy sequence.
+- **Reductions are root-only**: `NDExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back — documented divergence from NumPy's pairwise, usually more accurate; min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
 - Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules above; `ExecuteExpression` (Tier 3C) throws without `EXTERNAL_LOOP` (the ~40× per-element foot-gun) — `np.evaluate` configures the iterator itself.
 
 ### Sorting & Searching
@@ -352,9 +352,9 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NdArray.ToString.cs` |
-| Iterators | `Backends/Iterators/NpyIter.cs` |
-| Expression DSL (np.evaluate) | `Backends/Iterators/NpyExpr.cs` (nodes + emission), `NpyExpr.Typing.cs` (per-node NumPy result_type pass), `NpyExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
-| ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NpyIter-driven) |
+| Iterators | `Backends/Iterators/NDIter.cs` |
+| Expression DSL (np.evaluate) | `Backends/Iterators/NDExpr.cs` (nodes + emission), `NDExpr.Typing.cs` (per-node NumPy result_type pass), `NDExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
+| ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NDIter-driven) |
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | Type info | `Utilities/InfoOf.cs` |
@@ -440,12 +440,12 @@ All NumSharp-vs-NumPy benchmark ratios are reported as **NPY/NS**:
 **Higher is better.** Equivalently `speedup = NumPy_time / NumSharp_time`. A cell of
 `0.5` means NumSharp takes 2× NumPy's time; `2.0` means NumSharp is 2× faster. Use this
 direction **everywhere** — matrices, geomeans, commit messages, and the per-subsystem
-`*_sheet.py` outputs (`npyiter`/`layout`/`cast`/`fusion`) — so one glance answers "are we faster?".
+`*_sheet.py` outputs (`nditer`/`layout`/`cast`/`fusion`) — so one glance answers "are we faster?".
 
 - Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
 - Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
 - best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
-- The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/npyiter/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
+- The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/nditer/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
 - **What we commit & reference is `benchmark/history/`, not the gitignored `benchmark/results/<ts>/` raw scratch.** Every run writes a committable snapshot `benchmark/history/<date>_<sha>/` (MANIFEST + report.{md,json,csv} + numpy-results.json + all subsystem `*_results.{md,tsv}` + cards — the json/csv are gitignored at the benchmark root, so this is their only tracked home) and repoints `benchmark/history/latest` (a git symlink). Built by `benchmark/scripts/snapshot_history.py` (called by `run_benchmark.py`; `--no-history` opts out). Reference the stable `benchmark/history/latest/benchmark-report.md`. The publish ritual (run → review → commit `benchmark/history/`) is what `.github/workflows/benchmark.yml` performs post-release. See `benchmark/CLAUDE.md` → "History snapshots & the publish ritual".
 
 ## Build & Test
@@ -562,7 +562,7 @@ dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCatego
 
 ## Differential-Fuzz Pipeline (NumPy oracle)
 
-Proves every NpyIter-backed op is **bit-identical** to NumPy 2.4.2 across the input space. NumPy is the oracle: Python generates a **committed, bytes-exact corpus**; the C# harness replays the operand bytes and bit-compares — **no Python at test time or in CI**.
+Proves every NDIter-backed op is **bit-identical** to NumPy 2.4.2 across the input space. NumPy is the oracle: Python generates a **committed, bytes-exact corpus**; the C# harness replays the operand bytes and bit-compares — **no Python at test time or in CI**.
 
 ```
 test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
@@ -670,10 +670,10 @@ A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed mem
 A: It was the original type-specific code generator and has been fully superseded by ILKernelGenerator/DirectILKernelGenerator (runtime IL emission). The old `#if _REGEN` template blocks were removed; where the template source is still useful as reference it survives only as `//`-commented lines next to the generated code.
 
 **Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
-A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (63 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NpyIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NpyIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.
+A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (63 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NDIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NDIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.
 
 **Q: When should I write kernels in `ILKernelGenerator` vs `DirectILKernelGenerator`?**
-A: Match the driving contract. A kernel that runs as the inner loop of an NpyIter pass (the iterator advances the operand pointers, the kernel handles one chunk) belongs in `ILKernelGenerator`. A kernel that takes the whole array plus its shape/strides and walks it itself belongs in `DirectILKernelGenerator`.
+A: Match the driving contract. A kernel that runs as the inner loop of an NDIter pass (the iterator advances the operand pointers, the kernel handles one chunk) belongs in `ILKernelGenerator`. A kernel that takes the whole array plus its shape/strides and walks it itself belongs in `DirectILKernelGenerator`.
 
 **Q: Why is TensorEngine abstracted?**
 A: To support potential future backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS). Not implemented yet, but the architecture allows it.
@@ -718,8 +718,8 @@ A: The `Slice` class parses Python notation (e.g., "1:5:2") into `Start`, `Stop`
 **Q: What are the special Slice instances?**
 A: `Slice.All` (`:` - all elements), `Slice.Ellipsis` (`...` - fill dimensions), `Slice.NewAxis` (insert dimension), `Slice.Index(n)` (single element, reduces dimensionality).
 
-**Q: What is NpyIter?**
-A: The NumPy-aligned multi-operand iterator. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Copy and multi-operand execution go through `NpyIter.Copy` and the multi-operand iterator.
+**Q: What is NDIter?**
+A: The NumPy-aligned multi-operand iterator. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Copy and multi-operand execution go through `NDIter.Copy` and the multi-operand iterator.
 
 **Q: How does broadcasting work?**
 A: Shapes align from the right. Dimensions must be equal OR one must be 1. Dimension of 1 "stretches" to match. Implemented via `DefaultEngine.Broadcast()` which resolves compatible shapes.

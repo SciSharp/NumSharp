@@ -2,7 +2,7 @@
 
 A small Keras-style neural-network framework built on top of NumSharp, plus an
 end-to-end MNIST 2-layer MLP demo that fuses the post-matmul element-wise work
-into a single NpyIter per layer via NpyExpr.
+into a single NDIter per layer via NDExpr.
 
 Dual purpose:
 1. **Library scaffolding** — `BaseLayer`, `BaseActivation`, `BaseCost`,
@@ -23,8 +23,8 @@ dotnet run --no-build --framework net8.0      # or --framework net10.0
 
 The csproj is an **Exe** (not a library) with `OutputType=Exe`,
 `AllowUnsafeBlocks=true`, multi-targets `net8.0;net10.0`. It builds against
-**NumSharp's public API only** (no `InternalsVisibleTo` grant): `NpyIterRef`,
-`NpyExpr`, `GeneratedDelegates.InnerLoopCount` (kernel-cache observability),
+**NumSharp's public API only** (no `InternalsVisibleTo` grant): `NDIterRef`,
+`NDExpr`, `GeneratedDelegates.InnerLoopCount` (kernel-cache observability),
 `DelegateSlots.RegisteredCount`, and raw buffer writes via `NDArray.Unsafe.Address`
 are all public surface.
 
@@ -96,10 +96,10 @@ examples/NeuralNetwork.NumSharp/
 
 All fusion happens in `FullyConnectedFused`. The idea: every post-matmul
 element-wise chunk (bias-add + ReLU, bias-add only, ReLU gradient mask)
-collapses into **one NpyIter kernel**, compiled once per process and
+collapses into **one NDIter kernel**, compiled once per process and
 cache-hit on every subsequent forward/backward pass.
 
-| Stage | NpyExpr tree | Inputs → Output |
+| Stage | NDExpr tree | Inputs → Output |
 |---|---|---|
 | Forward ReLU | `Max(Input(0) + Input(1), Const(0f))` | (preact, bias) → y |
 | Forward linear | `Input(0) + Input(1)` | (preact, bias) → y |
@@ -112,7 +112,7 @@ cache-hit on every subsequent forward/backward pass.
 |---|---|
 | `Program.cs` | Entry point. Loads data, builds 2-FC model, runs fusion probe, trains via MlpTrainer, reports IL-kernel cache + delegate-slot counts. |
 | `MnistLoader.cs` | IDX parser (big-endian) + learnable synthetic fallback (shared class templates across train/test, sigma=2.5 noise). |
-| `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NpyIter kernels (two forward, one backward), cache keys are stable strings. |
+| `FullyConnectedFused.cs` | FC with bias + optional fused activation. Three NDIter kernels (two forward, one backward), cache keys are stable strings. |
 | `SoftmaxCrossEntropy.cs` | Combined loss — numerically stable softmax forward, cached softmax, (softmax-labels)/batch backward. Also ships `OneHot` helper. |
 | `MlpTrainer.cs` | Explicit train loop (`NeuralNet.Train` replacement). Periodic test eval (`min(5, epochs)` cadence). Returns per-epoch loss/train_acc + list of (epoch, test_acc) pairs. |
 | `FusedMlp.cs`, `NaiveMlp.cs` | Side-by-side forward implementations for the correctness probe at Program startup. |
@@ -199,13 +199,13 @@ after `np.random.normal(...)` which returns float64 by default.
 - Total training time: ~70 s (net8.0)
 
 **Fusion probe on post-matmul bias+ReLU, batch (128, 128) fp32:**
-- Fused (1 NpyIter): ~0.14 ms
+- Fused (1 NDIter): ~0.14 ms
 - Naive (np.add + np.maximum): ~0.36 ms
 - Speedup: ~2.5x
 
 **Instrumentation (after a 100-epoch run):**
 - IL kernel cache entries: delta of 6 (all unique fused expressions)
-- NpyExpr delegate slots: 0 (pure DSL, no captured lambdas)
+- NDExpr delegate slots: 0 (pure DSL, no captured lambdas)
 
 ---
 
@@ -234,7 +234,7 @@ where the script references the two projects via `#:project`.
 **Why do we have both `FullyConnected` and `FullyConnectedFused`?**
 `FullyConnected` is the vanilla version that goes through `np.dot + (x + b) +
 activation` as separate ops. `FullyConnectedFused` collapses bias+activation
-into a single NpyIter — the fusion demo's point. Both share the BaseLayer
+into a single NDIter — the fusion demo's point. Both share the BaseLayer
 contract and are interchangeable in a NeuralNet pipeline.
 
 **Why do the metric classes have typos in their names?**
@@ -270,7 +270,7 @@ with this 2-layer MLP should land ~97-98% after 10-20 epochs.
   validation for early stopping.
 - **Adam re-allocates per step.** Each Adam update allocates ~14 temp
   NDArrays per parameter. For a 2-layer FC this is ~200 ms/epoch of GC
-  pressure. Fixable by fusing Adam's update into NpyIter like the rest,
+  pressure. Fixable by fusing Adam's update into NDIter like the rest,
   but out of scope for the current demo.
 - **No model serialization.** Parameters can't be saved / loaded yet.
 - **Activation resolution by string only.** `FullyConnected` takes `act =

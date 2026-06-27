@@ -116,7 +116,7 @@ namespace NumSharp.Backends
         }
 
         private static void CumProdAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
-            => NpyAxisIter.ExecuteSameType<T, CumProdAxisKernel<T>>(input, output, axis);
+            => NDAxisIter.ExecuteSameType<T, CumProdAxisKernel<T>>(input, output, axis);
 
         private static unsafe void CumProdInPlace<T>(nint addr, long size) where T : unmanaged, IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>
         {

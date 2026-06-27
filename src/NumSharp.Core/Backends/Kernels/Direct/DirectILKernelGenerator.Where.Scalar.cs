@@ -17,7 +17,7 @@ using NumSharp.Utilities;
 //   patterns ("if cond then constant else value"). Today asanyarray(scalar)
 //   produces a 0-d array that broadcast_arrays expands to a stride-0 view —
 //   the contig-array gate in np.where_internal fails and we fall through to
-//   NpyIter, which is ~6.5× slower than the IL contig WhereKernel.
+//   NDIter, which is ~6.5× slower than the IL contig WhereKernel.
 //
 // KERNELS (each IL-emitted via DynamicMethod, cached per T):
 //

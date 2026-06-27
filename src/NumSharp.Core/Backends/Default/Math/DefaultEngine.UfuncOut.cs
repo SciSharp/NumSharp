@@ -29,7 +29,7 @@ namespace NumSharp.Backends
     /// Execution: the masked inner loop mirrors NumPy's ufunc machinery
     /// (ufunc_object.c:2190-2226 — wheremask appended as op[nop], outputs
     /// flagged NPY_ITER_WRITEMASKED, trivial loop disabled): the mask rides the
-    /// iterator as a trailing ARRAYMASK operand and <see cref="NpyIterRef.ForEach"/>
+    /// iterator as a trailing ARRAYMASK operand and <see cref="NDIterRef.ForEach"/>
     /// decomposes each inner chunk into mask-true runs, invoking the unmasked
     /// kernel per run. A dtype-mismatched out additionally engages the
     /// Wave-4 windowed buffer machinery (kernel writes the loop dtype into the
@@ -39,32 +39,32 @@ namespace NumSharp.Backends
     {
         // Call-invariant flag arrays for the out=/where= iterator configs
         // (Wave 2.2) -- allocated once, reused every call.
-        private static readonly NpyIterPerOpFlags[] s_ufuncBinaryOutFlags =
+        private static readonly NDIterPerOpFlags[] s_ufuncBinaryOutFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
-        private static readonly NpyIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
+        private static readonly NDIterPerOpFlags[] s_ufuncBinaryOutMaskedFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
-        private static readonly NpyIterPerOpFlags[] s_ufuncUnaryOutFlags =
+        private static readonly NDIterPerOpFlags[] s_ufuncUnaryOutFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
-        private static readonly NpyIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
+        private static readonly NDIterPerOpFlags[] s_ufuncUnaryOutMaskedFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.WRITEMASKED | NpyIterPerOpFlags.NO_BROADCAST | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.ARRAYMASK,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.WRITEMASKED | NDIterPerOpFlags.NO_BROADCAST | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.ARRAYMASK,
         };
 
         // =====================================================================
@@ -156,7 +156,7 @@ namespace NumSharp.Backends
         {
             if (resultType == outType)
                 return;
-            if (NpyIterCasting.CanCast(resultType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (NDIterCasting.CanCast(resultType, outType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
             throw new ArgumentException(
                 $"Cannot cast ufunc '{ufuncName}' output from " +
@@ -177,7 +177,7 @@ namespace NumSharp.Backends
         {
             if (inputType == loopType)
                 return;
-            if (NpyIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (NDIterCasting.CanCast(inputType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return;
             throw new ArgumentException(
                 $"Cannot cast ufunc '{ufuncName}' input from " +
@@ -201,12 +201,12 @@ namespace NumSharp.Backends
         /// <inheritdoc cref="ValidateUnaryInputCast"/>
         private static void ValidateBinaryInputCasts(NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode loopType, string ufuncName)
         {
-            if (lhsType != loopType && !NpyIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (lhsType != loopType && !NDIterCasting.CanCast(lhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException(
                     $"Cannot cast ufunc '{ufuncName}' input 0 from " +
                     $"dtype('{lhsType.AsNumpyDtypeName()}') to " +
                     $"dtype('{loopType.AsNumpyDtypeName()}') with casting rule 'same_kind'");
-            if (rhsType != loopType && !NpyIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
+            if (rhsType != loopType && !NDIterCasting.CanCast(rhsType, loopType, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException(
                     $"Cannot cast ufunc '{ufuncName}' input 1 from " +
                     $"dtype('{rhsType.AsNumpyDtypeName()}') to " +
@@ -302,7 +302,7 @@ namespace NumSharp.Backends
         /// uninitialized result when only <paramref name="where"/> was given),
         /// optionally write-masked by <paramref name="where"/>. The kernel
         /// bodies and cache keys are identical to
-        /// <see cref="TryExecuteBinaryOpViaNpyIter"/> — the routes share
+        /// <see cref="TryExecuteBinaryOpViaNDIter"/> — the routes share
         /// compiled kernels; only the iterator wiring differs (provided
         /// output operand, optional trailing ARRAYMASK, buffered cast when
         /// out's dtype differs from the loop dtype).
@@ -362,17 +362,17 @@ namespace NumSharp.Backends
             // like NumPy (loop dtypes are resolved by then; ufunc_object.c
             // passes the user casting to the iterator the same way).
             bool outNeedsCast = target.typecode != resultType;
-            var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+            var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;
             if (outNeedsCast)
             {
-                globalFlags |= NpyIterGlobalFlags.BUFFERED
-                             | NpyIterGlobalFlags.GROWINNER
-                             | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                globalFlags |= NDIterGlobalFlags.BUFFERED
+                             | NDIterGlobalFlags.GROWINNER
+                             | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
             }
 
-            const NpyIterPerOpFlags Elw = NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+            const NDIterPerOpFlags Elw = NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
 
             if (where is null)
             {
@@ -380,7 +380,7 @@ namespace NumSharp.Backends
                     ? new[] { lhsType, rhsType, resultType }
                     : null;
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, target },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutFlags,
@@ -398,7 +398,7 @@ namespace NumSharp.Backends
                     ? new[] { lhsType, rhsType, resultType, NPTypeCode.Empty }
                     : null;
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     4, new[] { lhs, rhs, target, where },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutMaskedFlags,
@@ -425,7 +425,7 @@ namespace NumSharp.Backends
         /// EVERY numeric dtype (probed: less(f8,f8,out=complex128) works,
         /// True→1), so <see cref="ValidateOutCast"/> is structural here.
         /// The scalar body and npy_cmp_* cache key are shared with
-        /// <see cref="TryExecuteComparisonOpViaNpyIter"/> (same compiled
+        /// <see cref="TryExecuteComparisonOpViaNDIter"/> (same compiled
         /// kernels) and the flag arrays are the binary configs (identical
         /// operand layout) — no new statics. No F-layout post-step: NumPy
         /// returns the provided out untouched (reference identity).
@@ -486,13 +486,13 @@ namespace NumSharp.Backends
             string cacheKey = $"npy_cmp_{op}_{lhsType}_{rhsType}";
 
             bool outNeedsCast = target.typecode != NPTypeCode.Boolean;
-            var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+            var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;
             if (outNeedsCast)
             {
-                globalFlags |= NpyIterGlobalFlags.BUFFERED
-                             | NpyIterGlobalFlags.GROWINNER
-                             | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                globalFlags |= NDIterGlobalFlags.BUFFERED
+                             | NDIterGlobalFlags.GROWINNER
+                             | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
             }
 
@@ -502,7 +502,7 @@ namespace NumSharp.Backends
                     ? new[] { lhsType, rhsType, NPTypeCode.Boolean }
                     : null;
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, target },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutFlags,
@@ -516,7 +516,7 @@ namespace NumSharp.Backends
                     ? new[] { lhsType, rhsType, NPTypeCode.Boolean, NPTypeCode.Empty }
                     : null;
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     4, new[] { lhs, rhs, target, where },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncBinaryOutMaskedFlags,
@@ -537,7 +537,7 @@ namespace NumSharp.Backends
         /// Run <c>op(nd)</c> into <paramref name="@out"/> (or a fresh
         /// uninitialized result when only <paramref name="where"/> was given),
         /// optionally write-masked. Mirrors
-        /// <see cref="TryExecuteUnaryOpViaNpyIter"/>'s body construction —
+        /// <see cref="TryExecuteUnaryOpViaNDIter"/>'s body construction —
         /// including the promoting buffered-cast configuration (Wave 4: the
         /// input is cast to the compute dtype in buffer windows and the
         /// same-dtype SIMD body runs over the buffer), which composes with a
@@ -563,7 +563,7 @@ namespace NumSharp.Backends
             if (target.size == 0)
                 return target;
 
-            // Body construction — same decision tree as TryExecuteUnaryOpViaNpyIter.
+            // Body construction — same decision tree as TryExecuteUnaryOpViaNDIter.
             var key = new UnaryKernelKey(inputType, outputType, op, IsContiguous: true);
             bool simdViable = DirectILKernelGenerator.CanUseUnarySimd(key);
 
@@ -616,15 +616,15 @@ namespace NumSharp.Backends
             // the out dtype differs from the compute dtype — both are CAST
             // operands handled by the windowed machinery.
             bool outNeedsCast = target.typecode != outputType;
-            var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+            var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;
             NPTypeCode kernelIn = inputType;
             NPTypeCode[]? opDtypes = null;
             if (bufferedPromoting || outNeedsCast)
             {
-                globalFlags |= NpyIterGlobalFlags.BUFFERED
-                             | NpyIterGlobalFlags.GROWINNER
-                             | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                globalFlags |= NDIterGlobalFlags.BUFFERED
+                             | NDIterGlobalFlags.GROWINNER
+                             | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
                 NPTypeCode inRequest = bufferedPromoting ? outputType : inputType;
                 kernelIn = bufferedPromoting ? outputType : inputType;
@@ -633,11 +633,11 @@ namespace NumSharp.Backends
                     : new[] { inRequest, outputType, NPTypeCode.Empty };
             }
 
-            const NpyIterPerOpFlags Elw = NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+            const NDIterPerOpFlags Elw = NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
 
             if (where is null)
             {
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     2, new[] { nd, target },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncUnaryOutFlags,
@@ -647,7 +647,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { nd, target, where },
                     globalFlags, NPY_ORDER.NPY_CORDER, casting,
                     s_ufuncUnaryOutMaskedFlags,

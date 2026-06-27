@@ -13,14 +13,14 @@ using Unsafe = System.Runtime.CompilerServices.Unsafe;
 //                                       at runtime inside the kernel body)
 //   - GetWeightedSumIterKernel(key)   — single user-facing entry point;
 //                                       cached per dtype, returns the IL-emitted
-//                                       NpyInnerLoopFunc that np.average
-//                                       hands to NpyIter.ForEach
+//                                       NDInnerLoopFunc that np.average
+//                                       hands to NDIter.ForEach
 //   - CreateWeightedSumIterKernel     — factory; the only place that switches
 //                                       on NPTypeCode (one-time per dtype,
 //                                       result cached forever in
 //                                       _weightedSumCache)
 //   - WeightedSumIterKernelBody<T>    — single generic helper that handles all
-//                                       NpyIter shapes: pinned-output (reduce
+//                                       NDIter shapes: pinned-output (reduce
 //                                       axis is innermost) and scatter-output
 //                                       (reduce axis is outer). Uses Vector256<T>
 //                                       SIMD via the existing AddOp<T>/MulOp<T>
@@ -56,18 +56,18 @@ namespace NumSharp.Backends.Kernels
     {
         public readonly record struct WeightedSumKernelKey(NPTypeCode Dtype);
 
-        internal static readonly ConcurrentDictionary<WeightedSumKernelKey, NpyInnerLoopFunc?> _weightedSumCache = new();
+        internal static readonly ConcurrentDictionary<WeightedSumKernelKey, NDInnerLoopFunc?> _weightedSumCache = new();
 
         /// <summary>
         /// Returns the cached IL-emitted weighted-sum kernel for the given dtype,
         /// or null if the dtype isn't supported (Bool/Char/Half/Complex/Decimal).
-        /// The kernel signature matches NpyInnerLoopFunc; pass it to
-        /// NpyIter.ForEach over the 4-operand [a, w, num_out, scl_out] iterator.
+        /// The kernel signature matches NDInnerLoopFunc; pass it to
+        /// NDIter.ForEach over the 4-operand [a, w, num_out, scl_out] iterator.
         /// </summary>
-        public static NpyInnerLoopFunc? GetWeightedSumIterKernel(WeightedSumKernelKey key) =>
+        public static NDInnerLoopFunc? GetWeightedSumIterKernel(WeightedSumKernelKey key) =>
             _weightedSumCache.GetOrAdd(key, CreateWeightedSumIterKernel);
 
-        private static NpyInnerLoopFunc? CreateWeightedSumIterKernel(WeightedSumKernelKey key) =>
+        private static NDInnerLoopFunc? CreateWeightedSumIterKernel(WeightedSumKernelKey key) =>
             key.Dtype switch
             {
                 NPTypeCode.Single  => CreateWeightedSumIterKernelTyped<float>(),
@@ -83,7 +83,7 @@ namespace NumSharp.Backends.Kernels
                 _                  => null
             };
 
-        private static unsafe NpyInnerLoopFunc CreateWeightedSumIterKernelTyped<T>() where T : unmanaged
+        private static unsafe NDInnerLoopFunc CreateWeightedSumIterKernelTyped<T>() where T : unmanaged
         {
             // Closure over T captures the generic specialization. The JIT compiles
             // one specialized closure per T, just like AxisReductionSimdHelper<T>.

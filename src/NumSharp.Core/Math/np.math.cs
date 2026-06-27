@@ -88,7 +88,7 @@ namespace NumSharp
 
             // Route through the engine (same path as the unary `-` operator and nd.negate()):
             // the IL kernel negates unsigned integers by two's-complement wrap (NumPy: -1u -> 255)
-            // and handles non-contiguous operands via NpyIter. The legacy hand-written nd.negative()
+            // and handles non-contiguous operands via NDIter. The legacy hand-written nd.negative()
             // threw NotSupportedException for unsigned dtypes and required a flat Address.
             var result = nd.TensorEngine.Negate(nd, dtype);
             // NumPy-aligned layout preservation: negative preserves F-contig input.

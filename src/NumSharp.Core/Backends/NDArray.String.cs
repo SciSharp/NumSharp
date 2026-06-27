@@ -89,7 +89,7 @@ namespace NumSharp
                     fixed (char* retChars = ret)
                     {
                         var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), src.Shape.Clean());
-                        NpyIter.Copy(dst, src);
+                        NDIter.Copy(dst, src);
                     }
 
                     return ret;

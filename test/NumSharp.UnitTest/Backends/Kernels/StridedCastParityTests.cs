@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 
 /// <summary>
 /// Pins the cross-dtype strided cast path (<c>astype</c> on a non-contiguous view →
-/// <c>NpyIter.Copy</c> cross-dtype → <c>NpyIterCasting.CopyStridedToStridedWithCast</c>).
+/// <c>NDIter.Copy</c> cross-dtype → <c>NDIterCasting.CopyStridedToStridedWithCast</c>).
 ///
 /// That fallback (taken by every cast the SIMD <c>StridedCastKernel</c> rejects, i.e. any
 /// pair involving Boolean/Char/Half/Decimal/Complex, AND every contiguous cast of those

@@ -5,7 +5,7 @@
 // =============================================================================
 // cast_matrix_bench.cs — NumSharp side. Phase 0 of CAST_BEAT_NUMPY_PLAN.md.
 // Full-matrix cast discovery: for every src dtype × layout × dst dtype at 1M,
-// times v.astype(dst, copy:true) — the astype → DefaultEngine.Cast → NpyIter.Copy
+// times v.astype(dst, copy:true) — the astype → DefaultEngine.Cast → NDIter.Copy
 // path. astype(copy:true, order:'K') is NumPy-faithful (forces a real cast/copy
 // even on the src==dst diagonal, so the same-type-copy path is regression-checked
 // in the same sweep).

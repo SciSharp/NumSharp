@@ -1031,7 +1031,7 @@ namespace NumSharp.Backends
         protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
         {
             if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
-            // SIMD copy-with-cast via NpyIter. Was: scalar sourceArray.CastTo<TOut>() loop.
+            // SIMD copy-with-cast via NDIter. Was: scalar sourceArray.CastTo<TOut>() loop.
             return (ArraySlice<TOut>)CastSliceViaIterator(sourceArray, InfoOf<TOut>.NPTypeCode);
         }
 
@@ -1512,7 +1512,7 @@ namespace NumSharp.Backends
             if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
-                NpyIter.Copy(new UnmanagedStorage(dst, Shape.Clean()), this);
+                NDIter.Copy(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 

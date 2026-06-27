@@ -1,9 +1,9 @@
-# Iterator Benchmark — NpyIter vs NumPy (full sheet)
+# Iterator Benchmark — NDIter vs NumPy (full sheet)
 
 > _Auto-generated after each release by the [Benchmark workflow](https://github.com/SciSharp/NumSharp/blob/master/.github/workflows/benchmark.yml) — do not edit by hand. This is the canonical sheet the cards on [Benchmarks vs NumPy](benchmarks.md) render from. speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)._
 
 ```
-NumSharp NpyIter — canonical benchmark · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
+NumSharp NDIter — canonical benchmark · 2026-06-13 · speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)
 198 measured pairs (35 NA) · best-of-rounds, Release · matched kernels/ids
 %NumPy🕐 = NumSharp ÷ NumPy × 100 = share of NumPy's time NumSharp uses (8% = takes only 8% as long; <100% = faster)
 

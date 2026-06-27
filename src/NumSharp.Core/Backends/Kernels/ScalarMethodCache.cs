@@ -24,7 +24,7 @@ using System.Reflection;
 //   * Clip.cs                  Math binary dispatch
 //   * Binary.cs                Math.Floor
 //   * NonZero.cs               BitOperations.{PopCount, TrailingZeroCount}
-//   * NpyExpr.cs               Math.X (expression dispatch)
+//   * NDExpr.cs               Math.X (expression dispatch)
 //
 // Naming convention follows VectorMethodCache: the API is a small set of
 // strongly-typed convenience methods (BinaryOp, UnaryOp, Predicate, MathFn1/2,

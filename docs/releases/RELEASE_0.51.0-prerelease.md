@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-This release lands a **full NumPy `nditer` port** (`NpyIter`), a **composable expression DSL** (`NpyExpr`) with a three-tier custom-op API, **multi-order memory layout** (C/F/A/K) wired through the whole API surface, **stride-native matmul** for all 12 dtypes (eliminates a 100× slowdown on transposed inputs), a new **`Char8`** dtype (1-byte NumPy `S1` equivalent with 100% Python `bytes` parity), and a complete **trainable MNIST MLP example** that fuses bias+activation passes into single iterator invocations.
+This release lands a **full NumPy `nditer` port** (`NDIter`), a **composable expression DSL** (`NDExpr`) with a three-tier custom-op API, **multi-order memory layout** (C/F/A/K) wired through the whole API surface, **stride-native matmul** for all 12 dtypes (eliminates a 100× slowdown on transposed inputs), a new **`Char8`** dtype (1-byte NumPy `S1` equivalent with 100% Python `bytes` parity), and a complete **trainable MNIST MLP example** that fuses bias+activation passes into single iterator invocations.
 
 - **+50,426 / −1,188 lines across 156 files**
 - **6,710 tests passing** on net8.0 + net10.0 (zero regressions)
@@ -13,7 +13,7 @@ This release lands a **full NumPy `nditer` port** (`NpyIter`), a **composable ex
 
 ## Headline Features
 
-### 1. `NpyIter` — full NumPy `nditer` port
+### 1. `NDIter` — full NumPy `nditer` port
 
 A from-scratch C# port of NumPy 2.4.2's `nditer` machinery, located under `src/NumSharp.Core/Backends/Iterators/`. Implements virtually the entire NumPy nditer surface (32+ APIs) with byte-for-byte semantic parity.
 
@@ -29,13 +29,13 @@ A from-scratch C# port of NumPy 2.4.2's `nditer` machinery, located under `src/N
 | APIs ported | `Copy`, `GotoIndex`, `GotoMultiIndex`, `RemoveAxis`, `RemoveMultiIndex`, `ResetBasePointers`, `GetMultiIndexFunc`, `GetInnerFixedStrideArray`, `GetAxisStrideArray`, `CreateCompatibleStrides`, `DebugPrint`, `GetIterView`, `IterRange`, `Iternext`, `GetValue<T>`/`SetValue<T>`, `Finished`, `Shape`, `OVERLAP_ASSUME_ELEMENTWISE`, `TRANSFERFLAGS`, reduction-axis encoding (`axis + (1<<30)`), and more |
 | Battletest | 491-scenario random fuzz (seed 42) + 75 structured scenarios — all match NumPy 2.4.2 |
 
-### 2. `NpyExpr` DSL + three-tier custom-op API
+### 2. `NDExpr` DSL + three-tier custom-op API
 
-User-extensible kernel layer on top of `NpyIter`, with three tiers of escalating control:
+User-extensible kernel layer on top of `NDIter`, with three tiers of escalating control:
 
 - **Tier 3A — `ExecuteRawIL(body, key, aux)`**: raw IL against the NumPy ufunc signature.
 - **Tier 3B — `ExecuteElementWise(scalar, vector, ...)`**: per-element IL + 4×-unrolled SIMD shell with scalar tail and strided fallback.
-- **Tier 3C — `ExecuteExpression(expr, inputTypes, outputType)`**: compose `NpyExpr` trees, no IL exposure, auto-derived cache key.
+- **Tier 3C — `ExecuteExpression(expr, inputTypes, outputType)`**: compose `NDExpr` trees, no IL exposure, auto-derived cache key.
 
 **DSL coverage:** `Add Sub Mul Div Mod Power FloorDiv ATan2`, bitwise (`& | ^ ~`), unary math (`Abs Sign Sqrt Cbrt Square Reciprocal Floor Ceil Round Truncate Exp Exp2 Expm1 Log Log2 Log10 Log1p Sin Cos Tan Sinh Cosh Tanh ASin ACos ATan Deg2Rad Rad2Deg`), predicates (`IsNaN IsFinite IsInf LogicalNot`), comparisons (`Equal NotEqual Less Greater LessEqual GreaterEqual`), combinators (`Min Max Clamp Where`), plus full operator overloads (`+ - * / % & | ^ ~ !`).
 
@@ -84,7 +84,7 @@ NumSharp now correctly tracks and preserves Fortran-contiguous (column-major) la
 `examples/NeuralNetwork.NumSharp/MnistMlp/` — a runnable end-to-end classifier demonstrating fusion:
 
 - **Architecture**: 784 → 128 (ReLU) → 10, float32, He-init, Adam optimizer.
-- **Forward fusion**: post-matmul `bias + ReLU` collapses into one `NpyIter` per layer (`NpyExpr.Max(Input(0) + Input(1), 0)`).
+- **Forward fusion**: post-matmul `bias + ReLU` collapses into one `NDIter` per layer (`NDExpr.Max(Input(0) + Input(1), 0)`).
 - **Backward fusion**: `gradOut * (y > 0)` ReLU mask fused in one iter.
 - **Loss**: `SoftmaxCrossEntropy` (combined, numerically stable, max-subtracted).
 - **Trainer**: `MlpTrainer.cs` with periodic test eval (every `min(5, epochs)` epochs).
@@ -112,7 +112,7 @@ New `NumSharp.Char8` type (`[StructLayout(Sequential, Size=1)]` readonly struct)
 
 ### 7. Bug fixes (NPTypeCode + dispatch)
 
-- **`NPTypeCode.Char.SizeOf()` returned 1, real is 2** (UTF-16). Affected `NpyIter.SetOpDType` (`ElementSizes[op]` × stride in 8 places), 8 cast sites, `np.frombuffer`, `np.dtype(char).itemsize`, axis reductions. Survived without test failures because NumPy has no native char dtype and ASCII reads accidentally land on the right byte.
+- **`NPTypeCode.Char.SizeOf()` returned 1, real is 2** (UTF-16). Affected `NDIter.SetOpDType` (`ElementSizes[op]` × stride in 8 places), 8 cast sites, `np.frombuffer`, `np.dtype(char).itemsize`, axis reductions. Survived without test failures because NumPy has no native char dtype and ASCII reads accidentally land on the right byte.
 - **`GetPriority(Decimal) = 5*10*32` was stale** after the prior Decimal SizeOf fix — corrected to `5*10*16=800` (no behavioral change; relative ordering preserved).
 - **`DefaultEngine.IsInf` was stubbed to return null** (NRE on any `IsInf` call). Now wired through `ExecuteUnaryOp` with the existing IL kernel.
 - **`NDArray.Copy.cs` share-by-reference bug** — `new Shape(this.Shape.dimensions, 'F')` aliased the source `int[]`; cloned now.
@@ -120,7 +120,7 @@ New `NumSharp.Char8` type (`[StructLayout(Sequential, Size=1)]` readonly struct)
 
 ### 8. Documentation
 
-- **`docs/website-src/docs/NDIter.md`** (1,934 lines) — comprehensive NpyIter reference: 7-technique quick reference, decision tree, full Tier C node catalog with NumPy-equivalent column, type discipline, SIMD coverage rules, caching/auto-keys, validation, gotchas, debugging, memory model + lifetime, 19 worked examples (Swish, GELU, Heaviside, Horner polynomial, fused sigmoid, NaN replacement, etc.).
+- **`docs/website-src/docs/NDIter.md`** (1,934 lines) — comprehensive NDIter reference: 7-technique quick reference, decision tree, full Tier C node catalog with NumPy-equivalent column, type discipline, SIMD coverage rules, caching/auto-keys, validation, gotchas, debugging, memory model + lifetime, 19 worked examples (Swish, GELU, Heaviside, Horner polynomial, fused sigmoid, NaN replacement, etc.).
 - **`docs/website-src/docs/ndarray.md`** (537 lines) — NDArray reference: anatomy, creation helpers, indexing/slicing, views vs copies, operator quirks, dtype conversion, 0-d scalars, generic `NDArray<T>`, save/load, memory layout, equality, troubleshooting.
 - **`docs/NPYITER_AUDIT.md`**, **`NPYITER_DEEP_AUDIT.md`**, **`NPYITER_NUMPY_DIFFERENCES.md`**, **`NPYITER_BUFFERED_REDUCE_ANALYSIS.md`** — implementation audit reports.
 - Tier names renamed `A/B/C → 3A/3B/3C` to make the layer-3 sub-tier relationship explicit (100 references across 6 files).
@@ -146,8 +146,8 @@ New `NumSharp.Char8` type (`[StructLayout(Sequential, Size=1)]` readonly struct)
 
 - **6,710 tests** pass on net8.0 + net10.0 (CI filter: `TestCategory!=OpenBugs&TestCategory!=HighMemory`); zero regressions.
 - **+566 NumPy 2.4.2 nditer parity scenarios** (491 random fuzz, 75 structured) — element sequences, stride arrays, multi-indices, reduction outputs all byte-equivalent to Python NumPy.
-- **+264 NpyExpr + custom-op tests** (`NpyIterCustomOpTests`, `NpyIterCustomOpEdgeCaseTests`, `NpyExprExtensiveTests`, `NpyExprCallTests`).
-- **+94 nditer API parity tests** (`NpyIterAxisStrideArrayTests`, `NpyIterCreateCompatibleStridesTests`, etc.).
+- **+264 NDExpr + custom-op tests** (`NDIterCustomOpTests`, `NDIterCustomOpEdgeCaseTests`, `NDExprExtensiveTests`, `NDExprCallTests`).
+- **+94 nditer API parity tests** (`NDIterAxisStrideArrayTests`, `NDIterCreateCompatibleStridesTests`, etc.).
 - **+28 `MatMulStridedTests`**.
 - **+69 `Char8` cases** (source-generated discovery).
 - **+150 OrderSupport TDD tests** across 51 sections.

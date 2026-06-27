@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Sorting
 {
     /// <summary>
     /// np.sort / np.argsort parity with NumPy 2.4.2 (values produced by running NumPy).
-    /// Implementation: NpyIter IterAllButAxis drive + native-width LSD radix line kernel
+    /// Implementation: NDIter IterAllButAxis drive + native-width LSD radix line kernel
     /// (scalar introsort with NumPy comparators for Half/Complex/Decimal).
     /// </summary>
     [TestClass]

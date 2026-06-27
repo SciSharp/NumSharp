@@ -34,7 +34,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         ///     Try to get a boolean axis reduction kernel (All / Any).
         ///     Returns null for non-SIMD-capable dtypes (Half, Complex, Decimal, Char) so the
-        ///     caller can fall back to the NpyAxisIter scalar path.
+        ///     caller can fall back to the NDAxisIter scalar path.
         /// </summary>
         public static AxisReductionKernel? TryGetBooleanAxisReductionKernel(AxisReductionKernelKey key)
         {

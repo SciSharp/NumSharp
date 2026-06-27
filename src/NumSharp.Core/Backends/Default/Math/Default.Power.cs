@@ -27,7 +27,7 @@ namespace NumSharp.Backends
         /// Stride/layout: routes through <c>ExecuteBinaryOp</c>, which handles
         /// contiguous + sliced + broadcast + F-contig via the IL kernel's
         /// SimdFull/SimdScalarRight/SimdScalarLeft/SimdChunk/General paths.
-        /// The integer kernel calls <see cref="Utilities.NpyIntegerPower"/> for
+        /// The integer kernel calls <see cref="Utilities.NDIntegerPower"/> for
         /// exact dtype wrapping (replaces the previous double round-trip).
         /// </summary>
         public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)

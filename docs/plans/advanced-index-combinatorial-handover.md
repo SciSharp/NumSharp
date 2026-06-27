@@ -82,7 +82,7 @@ The 61 random divergences were 5 buckets; ALL are fixed, committed, and CI-pinne
 | **R1** | value must broadcast to an EMPTY / scalar selection on assignment, else `ValueError` (0-d-bool-False branch, scalar-element target = "setting an array element with a sequence", bool-mask zero-select) | `aea9fc78` |
 | **B2** | a 0-d (scalar) array rejects any axis-consuming single index → "too many indices" (the single-index path bypasses `PrepareIndex`) | `fe80982b` |
 | **B3** | empty advanced indices gather an empty result: skip fancy-array bounds when the block is empty (`FinishPrepare`), and a zero-length bool mask axis matches ANY axis size (`IsPartialShapeMatch`) | `880bc3df` |
-| **B4** | basic assignment into an EMPTY slice selection is a no-op, not a `NpyIter.Copy` crash (`UnmanagedStorage.SetData`) | `b0a3048f` |
+| **B4** | basic assignment into an EMPTY slice selection is a no-op, not a `NDIter.Copy` crash (`UnmanagedStorage.SetData`) | `b0a3048f` |
 | **R2** | non-consecutive 0-d-bool/int advanced block moves to FRONT (`TryBuild0dBoolWithBasic` bails → grid; grid carries the pure-0-d-bool block dims via `outShape`) **+ a core `Shape.Broadcast` hash collision** (`(1,1)`≡`(0,1)` → broadcast_to wrongly no-op'd to an empty target) | `d6f30629` |
 | — | (found while writing the regression tests) a MULTI-DIM empty bool mask was routed as a single empty fancy → wrong rank; now stays a mask | `7e968f5e` |
 

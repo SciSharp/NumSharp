@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.Backends
         [TestMethod]
         public void BinaryOp_EmptyBroadcast_ReturnsEmptyResult()
         {
-            // (3,1,1) * (1,0,2) broadcasts to (3,0,2) — zero elements. The IL/NpyIter
+            // (3,1,1) * (1,0,2) broadcasts to (3,0,2) — zero elements. The IL/NDIter
             // element-wise path previously corrupted the heap; it must short-circuit.
             var a = np.ones(new Shape(3, 1, 1), typeof(double));
             var b = np.zeros(new Shape(1, 0, 2), typeof(double));

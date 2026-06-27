@@ -43,7 +43,7 @@ namespace NumSharp.Backends
             // EmitScalarOperation special-cases ATan2 (Math.Atan2 /
             // DecimalMath.ATan2) and the mixed-dtype body converts both
             // operands to the loop dtype first. This is arctan2's first
-            // NpyIter-backed execution; the plain path below keeps its
+            // NDIter-backed execution; the plain path below keeps its
             // Direct MixedTypeKernel route.
             if (@out is not null || where is not null)
             {

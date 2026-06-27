@@ -8,7 +8,7 @@ namespace NumSharp.Backends
     /// <summary>
     /// np.evaluate — fused expression evaluation (roadmap Wave 6.1).
     ///
-    /// Compiles an <see cref="NpyExpr"/> tree to ONE NpyIter pass: every
+    /// Compiles an <see cref="NDExpr"/> tree to ONE NDIter pass: every
     /// elementwise node runs inside a single inner-loop kernel, so a chained
     /// expression like (a-b)/(a+b) reads each operand once and writes the
     /// result once — no intermediate arrays, no extra memory traffic. The POC
@@ -16,7 +16,7 @@ namespace NumSharp.Backends
     /// shapes.
     ///
     /// Semantics:
-    ///   • dtypes follow NumPy 2.x result_type per NODE (NpyExpr.Typing.cs):
+    ///   • dtypes follow NumPy 2.x result_type per NODE (NDExpr.Typing.cs):
     ///     the fused result is bit-compatible with the unfused NumPy sequence,
     ///     including int32 wraparound before promotion.
     ///   • operands broadcast together exactly like a ufunc call; repeated
@@ -24,7 +24,7 @@ namespace NumSharp.Backends
     ///   • out= joins the broadcast (never stretched), needs a same_kind cast
     ///     from the resolved dtype, and may alias an input — COPY_IF_OVERLAP
     ///     gives ufunc-grade overlap safety.
-    ///   • a root ReduceNode (NpyExpr.Sum/Prod/Min/Max/Mean) runs a one-pass
+    ///   • a root ReduceNode (NDExpr.Sum/Prod/Min/Max/Mean) runs a one-pass
     ///     accumulating kernel over the inputs only: sum(a*b) never
     ///     materializes a*b.
     ///
@@ -41,54 +41,54 @@ namespace NumSharp.Backends
         // Per-arity flag arrays for the evaluate iterator configs — allocated
         // once per input count (Wave 2.2 discipline: no per-call new[] for
         // call-invariant data).
-        private static readonly ConcurrentDictionary<int, NpyIterPerOpFlags[]> s_evalElementwiseFlags = new();
-        private static readonly ConcurrentDictionary<int, NpyIterPerOpFlags[]> s_evalReduceFlags = new();
+        private static readonly ConcurrentDictionary<int, NDIterPerOpFlags[]> s_evalElementwiseFlags = new();
+        private static readonly ConcurrentDictionary<int, NDIterPerOpFlags[]> s_evalReduceFlags = new();
 
-        private static NpyIterPerOpFlags[] EvalElementwiseFlags(int nIn)
+        private static NDIterPerOpFlags[] EvalElementwiseFlags(int nIn)
             => s_evalElementwiseFlags.GetOrAdd(nIn, static n =>
             {
-                var flags = new NpyIterPerOpFlags[n + 1];
+                var flags = new NDIterPerOpFlags[n + 1];
                 for (int i = 0; i < n; i++)
-                    flags[i] = NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
-                flags[n] = NpyIterPerOpFlags.WRITEONLY
-                           | NpyIterPerOpFlags.NO_BROADCAST
-                           | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+                    flags[i] = NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+                flags[n] = NDIterPerOpFlags.WRITEONLY
+                           | NDIterPerOpFlags.NO_BROADCAST
+                           | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
                 return flags;
             });
 
-        private static NpyIterPerOpFlags[] EvalReduceFlags(int nIn)
+        private static NDIterPerOpFlags[] EvalReduceFlags(int nIn)
             => s_evalReduceFlags.GetOrAdd(nIn, static n =>
             {
-                var flags = new NpyIterPerOpFlags[n];
+                var flags = new NDIterPerOpFlags[n];
                 for (int i = 0; i < n; i++)
-                    flags[i] = NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
+                    flags[i] = NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP;
                 return flags;
             });
 
         /// <summary>
         /// Evaluate a tree whose array leaves are embedded NDArrays
-        /// (<see cref="NpyExpr.Arr"/> / implicit conversion).
+        /// (<see cref="NDExpr.Arr"/> / implicit conversion).
         /// </summary>
-        public override unsafe NDArray Evaluate(NpyExpr expr, NDArray @out = null)
+        public override unsafe NDArray Evaluate(NDExpr expr, NDArray @out = null)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
 
-            var bind = new NpyExprBindContext();
+            var bind = new NDExprBindContext();
             var bound = expr.BindArrays(bind);
             if (bind.Operands.Count == 0)
                 throw new ArgumentException(
                     "expression references no arrays — embed NDArrays in the tree " +
-                    "(NpyExpr.Arr / implicit conversion) or use the (expr, operands) overload with NpyExpr.Input(i) leaves.",
+                    "(NDExpr.Arr / implicit conversion) or use the (expr, operands) overload with NDExpr.Input(i) leaves.",
                     nameof(expr));
 
             return EvaluateCore(bound, bind.Operands.ToArray(), @out);
         }
 
         /// <summary>
-        /// Evaluate a tree built over positional <see cref="NpyExpr.Input"/>
+        /// Evaluate a tree built over positional <see cref="NDExpr.Input"/>
         /// leaves against an explicit operand list.
         /// </summary>
-        public override unsafe NDArray Evaluate(NpyExpr expr, NDArray[] operands, NDArray @out = null)
+        public override unsafe NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
         {
             if (expr is null) throw new ArgumentNullException(nameof(expr));
             if (operands is null) throw new ArgumentNullException(nameof(operands));
@@ -98,7 +98,7 @@ namespace NumSharp.Backends
                 if (op is null)
                     throw new ArgumentNullException(nameof(operands), "no operand may be null.");
 
-            var bind = new NpyExprBindContext();
+            var bind = new NDExprBindContext();
             var bound = expr.BindArrays(bind);
             if (bind.Operands.Count != 0)
                 throw new ArgumentException(
@@ -108,7 +108,7 @@ namespace NumSharp.Backends
             return EvaluateCore(bound, operands, @out);
         }
 
-        private unsafe NDArray EvaluateCore(NpyExpr bound, NDArray[] ops, NDArray @out)
+        private unsafe NDArray EvaluateCore(NDExpr bound, NDArray[] ops, NDArray @out)
         {
             if (bound is ReduceNode reduce)
             {
@@ -140,7 +140,7 @@ namespace NumSharp.Backends
 
             var iterShape = ResolveUfuncIterationShape(inputShape.Clean(), ops, @out, null).Clean();
 
-            // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNpyIter):
+            // NumPy-aligned layout preservation (mirrors TryExecuteBinaryOpViaNDIter):
             // when every input operand is strictly F-contiguous, allocate the result
             // column-major and iterate F-order so the iterator coalesces to ONE
             // contiguous inner loop. Forcing C-order here made np.evaluate stride across
@@ -164,7 +164,7 @@ namespace NumSharp.Backends
                 : NPY_ORDER.NPY_CORDER;
 
             bool outNeedsCast = target.typecode != resolvedType;
-            var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+            var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
             var casting = NPY_CASTING.NPY_SAFE_CASTING;
             NPTypeCode[] opDtypes = null;
             if (outNeedsCast)
@@ -172,9 +172,9 @@ namespace NumSharp.Backends
                 // The kernel writes the resolved dtype into the out operand's
                 // buffer; the windowed flush casts (same_kind was validated, so
                 // the iterator runs UNSAFE exactly like NumPy's ufunc layer).
-                globalFlags |= NpyIterGlobalFlags.BUFFERED
-                             | NpyIterGlobalFlags.GROWINNER
-                             | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                globalFlags |= NDIterGlobalFlags.BUFFERED
+                             | NDIterGlobalFlags.GROWINNER
+                             | NDIterGlobalFlags.DELAY_BUFALLOC;
                 casting = NPY_CASTING.NPY_UNSAFE_CASTING;
                 opDtypes = new NPTypeCode[ops.Length + 1];
                 Array.Copy(inputTypes, opDtypes, ops.Length);
@@ -185,7 +185,7 @@ namespace NumSharp.Backends
             Array.Copy(ops, operands, ops.Length);
             operands[ops.Length] = target;
 
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 operands.Length, operands,
                 globalFlags, order, casting,
                 EvalElementwiseFlags(ops.Length),
@@ -229,12 +229,12 @@ namespace NumSharp.Backends
         // Fused reductions
         // =====================================================================
 
-        private static string ReduceUfuncName(NpyExprReduceKind kind) => kind switch
+        private static string ReduceUfuncName(NDExprReduceKind kind) => kind switch
         {
-            NpyExprReduceKind.Sum => "add",
-            NpyExprReduceKind.Prod => "multiply",
-            NpyExprReduceKind.Min => "minimum",
-            NpyExprReduceKind.Max => "maximum",
+            NDExprReduceKind.Sum => "add",
+            NDExprReduceKind.Prod => "multiply",
+            NDExprReduceKind.Min => "minimum",
+            NDExprReduceKind.Max => "maximum",
             _ => "mean",
         };
 
@@ -273,14 +273,14 @@ namespace NumSharp.Backends
             {
                 switch (reduce.Kind)
                 {
-                    case NpyExprReduceKind.Min:
-                    case NpyExprReduceKind.Max:
+                    case NDExprReduceKind.Min:
+                    case NDExprReduceKind.Max:
                         throw new ArgumentException(
                             $"zero-size array to reduction operation {ReduceUfuncName(reduce.Kind)} which has no identity");
-                    case NpyExprReduceKind.Prod:
+                    case NDExprReduceKind.Prod:
                         WriteOne(slot, accType);
                         break;
-                    case NpyExprReduceKind.Mean:
+                    case NDExprReduceKind.Mean:
                         WriteMeanOfEmpty(slot, accType); // NaN, like np.mean([]) (NumPy warns)
                         break;
                         // Sum: identity 0 already in the slot.
@@ -290,26 +290,26 @@ namespace NumSharp.Backends
             {
                 switch (reduce.Kind)
                 {
-                    case NpyExprReduceKind.Prod:
+                    case NDExprReduceKind.Prod:
                         WriteOne(slot, accType);
                         break;
-                    case NpyExprReduceKind.Min:
-                    case NpyExprReduceKind.Max:
-                        WriteMinMaxIdentity(slot, accType, isMin: reduce.Kind == NpyExprReduceKind.Min);
+                    case NDExprReduceKind.Min:
+                    case NDExprReduceKind.Max:
+                        WriteMinMaxIdentity(slot, accType, isMin: reduce.Kind == NDExprReduceKind.Min);
                         break;
                         // Sum / Mean: identity 0 already in the slot.
                 }
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     ops.Length, ops,
-                    NpyIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
+                    NDIterGlobalFlags.EXTERNAL_LOOP, NPY_ORDER.NPY_KEEPORDER,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     EvalReduceFlags(ops.Length),
                     null);
 
                 iter.ForEach(kernel, slot);
 
-                if (reduce.Kind == NpyExprReduceKind.Mean)
+                if (reduce.Kind == NDExprReduceKind.Mean)
                 {
                     switch (accType)
                     {
@@ -331,7 +331,7 @@ namespace NumSharp.Backends
             var result = @out ?? new NDArray(resultType, Shape.NewScalar(), false);
             byte* dst = (byte*)result.Address
                         + (long)result.Shape.offset * result.typecode.SizeOf();
-            NpyIterCasting.ConvertValue(slot, dst, accType, result.typecode);
+            NDIterCasting.ConvertValue(slot, dst, accType, result.typecode);
             return result;
         }
 
@@ -367,9 +367,9 @@ namespace NumSharp.Backends
                 // Seed the accumulator with the reduction identity (Mean accumulates a Sum).
                 var seedOp = reduce.Kind switch
                 {
-                    NpyExprReduceKind.Prod => ReductionOp.Prod,
-                    NpyExprReduceKind.Min => ReductionOp.Min,
-                    NpyExprReduceKind.Max => ReductionOp.Max,
+                    NDExprReduceKind.Prod => ReductionOp.Prod,
+                    NDExprReduceKind.Min => ReductionOp.Min,
+                    NDExprReduceKind.Max => ReductionOp.Max,
                     _ => ReductionOp.Sum, // Sum / Mean
                 };
                 ILKernelGenerator.SeedReduceIdentity(outAcc, seedOp);
@@ -399,19 +399,19 @@ namespace NumSharp.Backends
                     }
                     operands[ops.Length] = outAcc;
 
-                    var opFlags = new NpyIterPerOpFlags[ops.Length + 1];
-                    for (int i = 0; i < ops.Length; i++) opFlags[i] = NpyIterPerOpFlags.READONLY;
-                    opFlags[ops.Length] = NpyIterPerOpFlags.READWRITE;
+                    var opFlags = new NDIterPerOpFlags[ops.Length + 1];
+                    for (int i = 0; i < ops.Length; i++) opFlags[i] = NDIterPerOpFlags.READONLY;
+                    opFlags[ops.Length] = NDIterPerOpFlags.READWRITE;
 
-                    using var iter = NpyIterRef.AdvancedNew(
+                    using var iter = NDIterRef.AdvancedNew(
                         operands.Length, operands,
-                        NpyIterGlobalFlags.REDUCE_OK | NpyIterGlobalFlags.EXTERNAL_LOOP,
+                        NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
                         NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_NO_CASTING,
                         opFlags, null, ndim, opAxes);
                     iter.ForEach(kernel);
                 }
 
-                if (reduce.Kind == NpyExprReduceKind.Mean)
+                if (reduce.Kind == NDExprReduceKind.Mean)
                     ILKernelGenerator.MeanDivideByCount(outAcc, axisSize);
             }
 

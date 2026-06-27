@@ -22,7 +22,7 @@ namespace NumSharp.Backends.Kernels
         // is the same bit-exact, NumPy-faithful table FindConverter bound to, so
         // semantics are unchanged; only the indirection is gone.
         //
-        // Addressing is supplied by the caller (NpyIterCasting): this loop just
+        // Addressing is supplied by the caller (NDIterCasting): this loop just
         // walks ONE inner run, advancing each pointer by its per-element BYTE
         // stride (which may be 0 for broadcast, negative for reversed, or any
         // multiple for strided). The caller's incremental-coord outer walk calls

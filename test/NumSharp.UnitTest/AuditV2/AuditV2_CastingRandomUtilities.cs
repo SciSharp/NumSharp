@@ -418,7 +418,7 @@ public class AuditV2_CastingRandomUtilities
     //   the T1.65 roundtrip tests above.
     // -----------------------------------------------------------------------
     [TestMethod, OpenBugs(IssueUrl = "audit-v2-new-typechar-collisions")]
-    public void NEW_NpyTypechar_EnumValueCollisions()
+    public void NEW_NDTypechar_EnumValueCollisions()
     {
         // The enum is internal, so we go through ToString() which surfaces the
         // collision symptom.

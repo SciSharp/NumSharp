@@ -61,12 +61,12 @@ public class AuditV2_NDArrayCreation
     // -----------------------------------------------------------------------
     // T1.9 — np.concatenate crashes on mixed SByte/Half/Complex inputs.
     //   File: src/NumSharp.Core/Creation/np.concatenate.cs:108
-    //          src/NumSharp.Core/Backends/Iterators/NpyIterCasting.cs (root)
+    //          src/NumSharp.Core/Backends/Iterators/NDIterCasting.cs (root)
     //   When two arrays of *different* dtypes are concatenated and one is
-    //   SByte / Half / Complex, NpyIter.Copy routes through
+    //   SByte / Half / Complex, NDIter.Copy routes through
     //   CopyStridedToStridedWithCast which throws
     //   NotSupportedException("Unsupported type: ..."). The branch added
-    //   SByte/Half to NPTypeCode but the NpyIter cast read/write paths
+    //   SByte/Half to NPTypeCode but the NDIter cast read/write paths
     //   never gained corresponding entries.
     // -----------------------------------------------------------------------
     [TestMethod]

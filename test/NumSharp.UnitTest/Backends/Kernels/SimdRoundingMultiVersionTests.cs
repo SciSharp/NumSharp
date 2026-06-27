@@ -70,12 +70,12 @@ public class SimdRoundingMultiVersionTests
         _ => throw new ArgumentException(op),
     };
 
-    private static NpyExpr Fused(string op, NpyExpr a) => op switch
+    private static NDExpr Fused(string op, NDExpr a) => op switch
     {
-        "floor" => NpyExpr.Floor(a),
-        "ceil" => NpyExpr.Ceil(a),
-        "trunc" => NpyExpr.Truncate(a),
-        "round" => NpyExpr.Round(a),
+        "floor" => NDExpr.Floor(a),
+        "ceil" => NDExpr.Ceil(a),
+        "trunc" => NDExpr.Truncate(a),
+        "round" => NDExpr.Round(a),
         _ => throw new ArgumentException(op),
     };
 
@@ -168,7 +168,7 @@ public class SimdRoundingMultiVersionTests
             foreach (var n in Sizes)
             {
                 var src = SampleD(n);
-                var r = np.evaluate(Fused(op, NpyExpr.Arr(np.array(src))));
+                var r = np.evaluate(Fused(op, NDExpr.Arr(np.array(src))));
                 for (int i = 0; i < n; i++)
                     r.GetDouble(i).Should().Be(Oracle(op, src[i]),
                         $"np.evaluate({op}(double[{n}]))[{i}] must match NumPy on every .NET version/width");
@@ -184,7 +184,7 @@ public class SimdRoundingMultiVersionTests
                 var src = SampleD(n);
                 var f = new float[n];
                 for (int i = 0; i < n; i++) f[i] = (float)src[i];
-                var r = np.evaluate(Fused(op, NpyExpr.Arr(np.array(f))));
+                var r = np.evaluate(Fused(op, NDExpr.Arr(np.array(f))));
                 for (int i = 0; i < n; i++)
                     r.GetSingle(i).Should().Be((float)Oracle(op, f[i]),
                         $"np.evaluate({op}(float[{n}]))[{i}] must match NumPy on every .NET version/width");
@@ -204,7 +204,7 @@ public class SimdRoundingMultiVersionTests
         foreach (var op in Ops)
         {
             NDArray r = null;
-            new Action(() => r = np.evaluate(Fused(op, NpyExpr.Arr(ints)))).Should().NotThrow(
+            new Action(() => r = np.evaluate(Fused(op, NDExpr.Arr(ints)))).Should().NotThrow(
                 $"np.evaluate({op}(int[])) must not vectorize an integer rounding op (no " +
                 "Vector{N} integer loop) — it must use the scalar identity emit");
             for (int i = 0; i < ints.size; i++)
@@ -223,7 +223,7 @@ public class SimdRoundingMultiVersionTests
         const int n = 200;
         var src = SampleD(n);
         var a = np.array(src);
-        var r = np.evaluate(NpyExpr.Floor(NpyExpr.Arr(a) * NpyExpr.Arr(a)));
+        var r = np.evaluate(NDExpr.Floor(NDExpr.Arr(a) * NDExpr.Arr(a)));
         for (int i = 0; i < n; i++)
             r.GetDouble(i).Should().Be(Math.Floor(src[i] * src[i]),
                 $"np.evaluate(floor(a*a))[{i}] must match NumPy (Binary->Unary SIMD recursion)");

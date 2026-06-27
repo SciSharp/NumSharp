@@ -10,7 +10,7 @@ This document provides comprehensive guidance for working with the NumSharp benc
 script AND any `#:project`-referenced NumSharp.Core in Debug** with
 `DebuggableAttribute(DisableOptimizations)` — the JIT honors it even over
 `[MethodImpl(AggressiveOptimization)]`. Measured effect: hand-written C# hot
-loops run ~2× slower; `NpyIterRef` construction ~40% slower.
+loops run ~2× slower; `NDIterRef` construction ~40% slower.
 
 **Rule: every timing script must run as `dotnet run -c Release - < script.cs`.**
 - `#:property Optimize=true` fixes only the *script* assembly — NumSharp.Core stays Debug.
@@ -93,7 +93,7 @@ benchmark/
 │   ├── bench_common.py                    # Shared driver for the matrix subsystems (build/run/parse)
 │   └── snapshot_history.py                # Builds history/<date>_<sha>/ + latest (the publish step)
 │
-├── npyiter/                               # Subsystem: iterator machinery (aspect × tier)
+├── nditer/                               # Subsystem: iterator machinery (aspect × tier)
 ├── layout/                                # Subsystem: reduction/copy/elementwise × memory layout × dtype
 │   ├── {reduce_layout,copy_path,elementwise_layout}_bench.{cs,py}
 │   └── layout_sheet.py → layout_results.md (+ .tsv)
@@ -499,7 +499,7 @@ class BenchmarkResult:
 
 > ⚠️ **Convention note.** The **canonical Performance Convention** (project `.claude/CLAUDE.md`)
 > is **NPY/NS**: `ratio = NumPy_ms / NumSharp_ms`, **`>1` = NumSharp faster** (higher is better) —
-> used by the `npyiter` sheet. The legacy `run-benchmarks.ps1`
+> used by the `nditer` sheet. The legacy `run-benchmarks.ps1`
 > table BELOW is the **inverse** (NS/NPY, lower is better). Prefer the canonical NPY/NS direction
 > for any new reporting.
 
@@ -554,19 +554,19 @@ sorting/searching, linear algebra, selection (`where`), and unary extras (cbrt/r
 square/negative/positive/trunc) in addition to the original arithmetic/unary/reduction/
 broadcast/creation/manipulation/slicing suites.
 
-After the op matrix, the orchestrator runs the **NpyIter iterator benchmark**
-(`benchmark/npyiter/`, via `npyiter_sheet.py` + `npyiter_cards.py`) and appends its sheet to
-`benchmark-report.md` as its own section (`--skip-npyiter` opts out). That harness has a
+After the op matrix, the orchestrator runs the **NDIter iterator benchmark**
+(`benchmark/nditer/`, via `nditer_sheet.py` + `nditer_cards.py`) and appends its sheet to
+`benchmark-report.md` as its own section (`--skip-nditer` opts out). That harness has a
 different result model — *aspect × cache-tier* (construction, traversal, reductions, selection,
 dtypes, pathologies, dividends) rather than op/dtype/N — so it is **appended, not merged**: it
 measures the iterator machinery the op matrix cannot isolate. It is file-based and
 section-isolated (each section runs in its own subprocess); a section that hits NumSharp's known
 intermittent AccessViolation across all retries is reported **NA / IGNORED** with a header rather
-than crashing the run. See `benchmark/npyiter/README.md` for the harness internals. Both the
+than crashing the run. See `benchmark/nditer/README.md` for the harness internals. Both the
 `.github/workflows/benchmark.yml` post-release workflow and this entry point produce the same
 unified report + the two README cards (`cards/ops.png`, `cards/cat.png`).
 
-After NpyIter, the orchestrator runs four more **matrix subsystems** that fill axes the
+After NDIter, the orchestrator runs four more **matrix subsystems** that fill axes the
 op/dtype/N matrix cannot express, each appended as its own report section (and `--skip-layout`
 / `--skip-operand` / `--skip-cast` / `--skip-fusion` opt out):
 
@@ -577,7 +577,7 @@ op/dtype/N matrix cannot express, each appended as its own report section (and `
 | **Cast** | `benchmark/cast/` | full `astype` src→dst × 8 layouts at 1M — no op-matrix coverage at all | 15×15 per-layout ratio matrices |
 | **Fusion** | `benchmark/fusion/` | `np.evaluate` fused vs unfused np.* chains (+ NumPy context) | fixed-expression report (fenced) |
 
-Each subsystem mirrors NpyIter's shape: a NumSharp `*_bench.cs` (fed on stdin via
+Each subsystem mirrors NDIter's shape: a NumSharp `*_bench.cs` (fed on stdin via
 `dotnet run -c Release -`, the author's absolute `#:project` path rewritten to the running
 checkout) + a NumPy `*_bench.py` twin emitting identical keys, merged and rendered by a
 `*_sheet.py` to a committed `*_results.md`. The shared build/run/parse plumbing lives in
@@ -596,7 +596,7 @@ reference*, distinct from the gitignored raw scratch:
 | `benchmark/history/latest` | ✅ tracked symlink | relative symlink (git mode 120000) → the newest snapshot. The stable path for docs/CI: `benchmark/history/latest/benchmark-report.md`. |
 
 `benchmark/scripts/snapshot_history.py` assembles the snapshot, repoints `latest`, and
-auto-generates `MANIFEST.md` (provenance, env, methodology, headline geomeans, NpyIter/Cast
+auto-generates `MANIFEST.md` (provenance, env, methodology, headline geomeans, NDIter/Cast
 headlines). `run_benchmark.py` invokes it at the end of every run (skip with `--no-history`):
 
 ```bash

@@ -1,6 +1,0 @@
-# Transient run artifacts. The committed results are npyiter_results.{md,tsv}
-# and cards/*.png (written by npyiter_sheet.py / npyiter_cards.py).
-run.log
-run.*.log
-__pycache__/
-*.pyc

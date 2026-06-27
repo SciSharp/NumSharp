@@ -8,7 +8,7 @@ using NumSharp.Backends.Iteration;
 // ILKernelGenerator.Where.cs — per-chunk multi-operand np.where kernel
 // =============================================================================
 //
-// CONTRACT (NpyInnerLoopFunc — the per-chunk model)
+// CONTRACT (NDInnerLoopFunc — the per-chunk model)
 // -------------------------------------------------
 //   void(void** dataptrs, long* strides, long count, void* aux)
 //
@@ -18,15 +18,15 @@ using NumSharp.Backends.Iteration;
 //   operand 3 = result (T)
 //
 //   strides[op] are BYTE strides for the inner loop (NumPy convention). The
-//   driving NpyIterRef.ForEach advances dataptrs between chunks; this kernel
+//   driving NDIterRef.ForEach advances dataptrs between chunks; this kernel
 //   only walks ONE chunk of `count` elements.
 //
-// WHY A DEDICATED KERNEL (vs NpyExpr.Where)
+// WHY A DEDICATED KERNEL (vs NDExpr.Where)
 // -----------------------------------------
-// The old non-contiguous path compiled np.where through NpyExpr.Where, which:
+// The old non-contiguous path compiled np.where through NDExpr.Where, which:
 //   (a) is scalar-only (WhereNode.SupportsSimd == false), and
 //   (b) loads `cond` AS the output dtype and compares it to zero per element —
-//       NpyExpr's "all inputs load at output dtype" rule forces a bool→T cast
+//       NDExpr's "all inputs load at output dtype" rule forces a bool→T cast
 //       (e.g. bool→double) on every element before a float compare-to-zero.
 // This kernel instead reads cond as a raw bool byte (one Ldind_U1 + brfalse) and
 // adds a SIMD ConditionalSelect fast path — faster even before SIMD fires.
@@ -45,7 +45,7 @@ using NumSharp.Backends.Iteration;
 // The SIMD fast path fires for the common "row mask over a matrix" broadcast
 // (cond shape (1,M) / (M,) broadcasting over rows) and any inner-contiguous
 // view; column-broadcast cond ((N,1)) and genuinely strided layouts use the
-// scalar path — which is still materially faster than the old NpyExpr scalar
+// scalar path — which is still materially faster than the old NDExpr scalar
 // loop because it skips the per-element cond cast.
 //
 // =============================================================================
@@ -57,17 +57,17 @@ namespace NumSharp.Backends.Kernels
         // outType -> compiled per-chunk where kernel. Keyed by output dtype only:
         // cond is always Boolean and x/y/result always share the output dtype by
         // the time np.where reaches the iterator (operands are pre-cast).
-        internal static readonly ConcurrentDictionary<NPTypeCode, NpyInnerLoopFunc> _whereInnerCache = new();
+        internal static readonly ConcurrentDictionary<NPTypeCode, NDInnerLoopFunc> _whereInnerCache = new();
 
         /// <summary>
         /// Get (or generate and cache) the per-chunk np.where inner-loop kernel for
-        /// the given output dtype. Drive it via <c>NpyIterRef.ForEach</c> over a
+        /// the given output dtype. Drive it via <c>NDIterRef.ForEach</c> over a
         /// 4-operand iterator ordered [cond, x, y, result].
         /// </summary>
-        internal static NpyInnerLoopFunc GetWhereInnerLoop(NPTypeCode outType)
+        internal static NDInnerLoopFunc GetWhereInnerLoop(NPTypeCode outType)
             => _whereInnerCache.GetOrAdd(outType, GenerateWhereInnerLoop);
 
-        private static NpyInnerLoopFunc GenerateWhereInnerLoop(NPTypeCode outType)
+        private static NDInnerLoopFunc GenerateWhereInnerLoop(NPTypeCode outType)
         {
             int elemSize = DirectILKernelGenerator.GetTypeSize(outType);
 
@@ -86,7 +86,7 @@ namespace NumSharp.Backends.Kernels
             long vectorCount = emitSimd ? (simdBits / 8) / elemSize : 0;
 
             var dm = new DynamicMethod(
-                name: $"NpyWhereInner_{outType}",
+                name: $"NDWhereInner_{outType}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(void*) },
                 owner: typeof(ILKernelGenerator),
@@ -132,7 +132,7 @@ namespace NumSharp.Backends.Kernels
             EmitWhereScalarStrided(il, outType, pc, px, py, pr, sc, sx, sy, sr, locI);
 
             il.Emit(OpCodes.Ret);
-            return dm.CreateDelegate<NpyInnerLoopFunc>();
+            return dm.CreateDelegate<NDInnerLoopFunc>();
         }
 
         // ----- prologue helpers -------------------------------------------------

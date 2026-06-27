@@ -41,9 +41,9 @@ namespace NumSharp.Backends
         /// Uses the new iterator core for both contiguous and strided layouts.
         /// </summary>
         private static bool AnyImpl<T>(NDArray nd) where T : unmanaged
-            => NpyIter.ReduceBool<T, NpyAnyKernel<T>>(nd);
+            => NDIter.ReduceBool<T, NDAnyKernel<T>>(nd);
 
-        private static bool AnyImplDecimal(NDArray nd) => NpyIter.ReduceBool<decimal, NpyAnyKernel<decimal>>(nd);
+        private static bool AnyImplDecimal(NDArray nd) => NDIter.ReduceBool<decimal, NDAnyKernel<decimal>>(nd);
 
         /// <summary>
         /// Special implementation for Half (float16).
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
             {
                 // Struct-generic early-exit (~13× the old per-element AsIterator on
                 // strided inputs); KEEPORDER is irrelevant to a layout-agnostic "any".
-                using var iter = NpyIterRef.New(nd, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                using var iter = NDIterRef.New(nd, NDIterGlobalFlags.EXTERNAL_LOOP);
                 return iter.ExecuteReducing<HalfAnyKernel, bool>(default, false);
             }
         }
@@ -90,7 +90,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                using var iter = NpyIterRef.New(nd, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                using var iter = NDIterRef.New(nd, NDIterGlobalFlags.EXTERNAL_LOOP);
                 return iter.ExecuteReducing<ComplexAnyKernel, bool>(default, false);
             }
         }

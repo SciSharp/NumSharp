@@ -18,11 +18,11 @@ namespace NeuralNetwork.NumSharp.MnistMlp
     /// <summary>
     /// Fully-connected (dense) layer with a bias term and an optional fused
     /// activation. Forward and backward each collapse their post-matmul
-    /// element-wise chunk into a single NpyIter invocation:
+    /// element-wise chunk into a single NDIter invocation:
     ///
-    ///   Forward  (ReLU): y           = max(xW + b, 0)         — one NpyIter
-    ///   Forward  (None): y           = xW + b                  — one NpyIter
-    ///   Backward (ReLU): gradPreact  = gradOutput * (y &gt; 0)   — one NpyIter
+    ///   Forward  (ReLU): y           = max(xW + b, 0)         — one NDIter
+    ///   Forward  (None): y           = xW + b                  — one NDIter
+    ///   Backward (ReLU): gradPreact  = gradOutput * (y &gt; 0)   — one NDIter
     ///   Backward (None): gradPreact  = gradOutput              — pass-through
     ///
     /// Parameters follow the existing NeuralNetwork.NumSharp convention:
@@ -130,28 +130,28 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         }
 
         // =================================================================
-        // Fused kernels (NpyIter + NpyExpr)
+        // Fused kernels (NDIter + NDExpr)
         // =================================================================
 
-        /// <summary>y = max(preact + bias, 0) — single NpyIter, SIMD-capable.</summary>
+        /// <summary>y = max(preact + bias, 0) — single NDIter, SIMD-capable.</summary>
         private static void FuseBiasRelu(NDArray preact, NDArray bias, NDArray output)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 nop: 3,
                 op:  new[] { preact, bias, output },
-                flags:   NpyIterGlobalFlags.EXTERNAL_LOOP,
+                flags:   NDIterGlobalFlags.EXTERNAL_LOOP,
                 order:   NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_NO_CASTING,
                 opFlags: new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.WRITEONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.WRITEONLY,
                 });
 
-            var expr = NpyExpr.Max(
-                NpyExpr.Input(0) + NpyExpr.Input(1),
-                NpyExpr.Const(0f));
+            var expr = NDExpr.Max(
+                NDExpr.Input(0) + NDExpr.Input(1),
+                NDExpr.Const(0f));
 
             iter.ExecuteExpression(
                 expr,
@@ -160,23 +160,23 @@ namespace NeuralNetwork.NumSharp.MnistMlp
                 cacheKey: KeyBiasRelu);
         }
 
-        /// <summary>y = preact + bias — single NpyIter (final linear layer).</summary>
+        /// <summary>y = preact + bias — single NDIter (final linear layer).</summary>
         private static void FuseBiasOnly(NDArray preact, NDArray bias, NDArray output)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 nop: 3,
                 op:  new[] { preact, bias, output },
-                flags:   NpyIterGlobalFlags.EXTERNAL_LOOP,
+                flags:   NDIterGlobalFlags.EXTERNAL_LOOP,
                 order:   NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_NO_CASTING,
                 opFlags: new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.WRITEONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.WRITEONLY,
                 });
 
-            var expr = NpyExpr.Input(0) + NpyExpr.Input(1);
+            var expr = NDExpr.Input(0) + NDExpr.Input(1);
 
             iter.ExecuteExpression(
                 expr,
@@ -188,27 +188,27 @@ namespace NeuralNetwork.NumSharp.MnistMlp
         /// <summary>
         /// gradPreact[i,j] = gradOutput[i,j] * (activations[i,j] &gt; 0).
         ///
-        /// Single NpyIter: the multiply and the comparison fuse into one
+        /// Single NDIter: the multiply and the comparison fuse into one
         /// element-wise sweep. The comparison result is auto-promoted to the
         /// output dtype (float32 here), so (y &gt; 0) evaluates to 1f or 0f and
         /// the multiply gates the gradient in place.
         /// </summary>
         private static void FuseReluBackward(NDArray gradOutput, NDArray activations, NDArray gradPreact)
         {
-            using var iter = NpyIterRef.MultiNew(
+            using var iter = NDIterRef.MultiNew(
                 nop: 3,
                 op:  new[] { gradOutput, activations, gradPreact },
-                flags:   NpyIterGlobalFlags.EXTERNAL_LOOP,
+                flags:   NDIterGlobalFlags.EXTERNAL_LOOP,
                 order:   NPY_ORDER.NPY_KEEPORDER,
                 casting: NPY_CASTING.NPY_NO_CASTING,
                 opFlags: new[]
                 {
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.READONLY,
-                    NpyIterPerOpFlags.WRITEONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.READONLY,
+                    NDIterPerOpFlags.WRITEONLY,
                 });
 
-            var expr = NpyExpr.Input(0) * NpyExpr.Greater(NpyExpr.Input(1), NpyExpr.Const(0f));
+            var expr = NDExpr.Input(0) * NDExpr.Greater(NDExpr.Input(1), NDExpr.Const(0f));
 
             iter.ExecuteExpression(
                 expr,

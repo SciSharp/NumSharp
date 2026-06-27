@@ -12,17 +12,17 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
-        // Call-invariant per-operand flag arrays for the NpyIter routes
+        // Call-invariant per-operand flag arrays for the NDIter routes
         // (Wave 2.2): identical on every call, so allocating them per call
         // was pure small-N overhead. The operand arrays stay per-call --
         // the iterator stores the reference (_operands) and the overlap
         // machinery can construct nested iterators (np.copyto) on the same
         // thread, so thread-static reuse would alias live iterators.
-        private static readonly NpyIterPerOpFlags[] s_binaryIterFlags =
+        private static readonly NDIterPerOpFlags[] s_binaryIterFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
         /// <summary>
@@ -151,7 +151,7 @@ namespace NumSharp.Backends
             // its OWN dtype (`a * 2` -> int32 0-d; `a * 2.0` -> float64 0-d), so `f32[] * 2`
             // reaches here as f32×int32. resultType already reflects NumPy's weak promotion (here
             // f32), but the same-dtype gate inside TryTrivialContiguousBinaryOp / the SIMD-viability
-            // gate inside TryExecuteBinaryOpViaNpyIter key off the RAW operand dtypes and bail
+            // gate inside TryExecuteBinaryOpViaNDIter key off the RAW operand dtypes and bail
             // (f32 != int32), routing to the heavy per-element-convert mixed path — measured ~2.25×
             // slower than the SimdScalarRight scalar-broadcast loop it should take (100K f32:
             // 0.080 ms vs 0.035 ms). When the ARRAY operand already IS resultType and only the
@@ -185,22 +185,22 @@ namespace NumSharp.Backends
             // have identical shape (no broadcast) and the same dtype as the result
             // (no cast), a single linear walk over all three buffers visits the
             // same logical element — so we route straight to the existing DirectIL
-            // SimdFull whole-array kernel and skip the NpyIter MultiNew/Initialize
+            // SimdFull whole-array kernel and skip the NDIter MultiNew/Initialize
             // construction (measured ~600-2000 ns/call: 22-24% of a small
             // contiguous op, <=3% once n>=64K). Returns null for anything that is
             // not trivially contiguous (broadcast/mixed-C-F/strided/cast/scalar-
-            // broadcast/unsupported emit) → falls through to the NpyIter route
+            // broadcast/unsupported emit) → falls through to the NDIter route
             // below with behaviour unchanged.
             {
                 var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
                 if (trivial is not null) return trivial;
             }
 
-            // -------- NpyIter Tier 3B fast path (all binary ops) -----------
-            // Routes through the NpyIter inner-loop kernel factory, which
+            // -------- NDIter Tier 3B fast path (all binary ops) -----------
+            // Routes through the NDIter inner-loop kernel factory, which
             // collapses coalesce + SIMD dispatch (contig, SimdScalarLeft,
             // SimdScalarRight, scalar-strided) into a single emitted kernel
-            // driven by NpyIter's multi-operand iterator.
+            // driven by NDIter's multi-operand iterator.
             //
             // Same-dtype: full SIMD path (CanSimdAllOperands passes inside
             // the factory). Measured 2.3-4.7× wins across 12 variations,
@@ -212,7 +212,7 @@ namespace NumSharp.Backends
             // is null (factory drops to scalar-strided). Equivalent perf
             // for the mixed-dtype cases the direct path used to handle.
             {
-                var routed = TryExecuteBinaryOpViaNpyIter(lhs, rhs, op, lhsType, rhsType, resultType);
+                var routed = TryExecuteBinaryOpViaNDIter(lhs, rhs, op, lhsType, rhsType, resultType);
                 if (routed is not null) return routed;
             }
 
@@ -243,7 +243,7 @@ namespace NumSharp.Backends
             // Empty broadcast result: no elements to compute. The kernels below assume
             // >= 1 element and walk stride-0 broadcast dims as if non-empty, corrupting
             // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
-            // (The NpyIter fast path above returns early for the same reason.)
+            // (The NDIter fast path above returns early for the same reason.)
             if (result.size == 0)
                 return result;
 
@@ -298,17 +298,17 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Try to execute a binary op via NpyIter Tier 3B for any dtype
+        ///     Try to execute a binary op via NDIter Tier 3B for any dtype
         ///     combination (same or mixed). Returns the result array on
         ///     success, or null if the route is not applicable (broadcast
-        ///     result exceeds int.MaxValue, NpyIter not built for long-
+        ///     result exceeds int.MaxValue, NDIter not built for long-
         ///     shape arithmetic; unsupported op/dtype emit).
         ///
         ///     Allocates the output as F-contig when both inputs are strictly
         ///     F (matches the pre-existing direct-path rule from L3-b) and
-        ///     picks the NpyIter order accordingly: NPY_FORTRANORDER for
+        ///     picks the NDIter order accordingly: NPY_FORTRANORDER for
         ///     strict-F-both, NPY_CORDER everywhere else. NPY_CORDER also
-        ///     handles the reversed-stride case correctly because NpyIter
+        ///     handles the reversed-stride case correctly because NDIter
         ///     normalizes negative inner strides during init.
         ///
         ///     Same-dtype path (<paramref name="lhsType"/> == <paramref name="rhsType"/>
@@ -329,7 +329,7 @@ namespace NumSharp.Backends
         ///     NumPy-aligned rule says it should be F (at least one strict-F
         ///     input, no strict-C input), return <c>result.copy('F')</c>.
         /// </summary>
-        private unsafe NDArray? TryExecuteBinaryOpViaNpyIter(
+        private unsafe NDArray? TryExecuteBinaryOpViaNDIter(
             NDArray lhs, NDArray rhs, BinaryOp op,
             NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType)
         {
@@ -337,7 +337,7 @@ namespace NumSharp.Backends
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
             var cleanShape = leftShape.Clean();
 
-            // NpyIter's internal shape arithmetic is int-bounded; route only
+            // NDIter's internal shape arithmetic is int-bounded; route only
             // when the broadcast result fits. Pre-existing test
             // LongIndexingBroadcastTest exercises the > int.MaxValue path via
             // the direct allocator (which is also int-limited but doesn't
@@ -359,7 +359,7 @@ namespace NumSharp.Backends
 
             // Empty broadcast result (a stride-0 broadcast dim alongside a zero-size
             // dim, e.g. (3,1,1) op (1,0,2) -> (3,0,2)): there is nothing to compute.
-            // Returning here is REQUIRED — the NpyIter element-wise path corrupts the
+            // Returning here is REQUIRED — the NDIter element-wise path corrupts the
             // heap when driven over a 0-element broadcast (the direct kernel path below
             // is guarded the same way). Matches NumPy: empty op -> empty result.
             if (result.size == 0)
@@ -428,9 +428,9 @@ namespace NumSharp.Backends
                 // write/read operands force a write-back temporary; exact
                 // aliasing stays copy-free because this loop is elementwise.
                 // With a freshly allocated result this is a cheap extent check.
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     3, new[] { lhs, rhs, result },
-                    NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP,
+                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
                     order,
                     NPY_CASTING.NPY_SAFE_CASTING,
                     s_binaryIterFlags);
@@ -476,12 +476,12 @@ namespace NumSharp.Backends
         ///     <see cref="ExecuteKernel"/> applies each operand's offset.
         ///
         ///     Routes to the SAME <see cref="ExecutionPath.SimdFull"/> DirectIL
-        ///     kernel the post-NpyIter fallback uses, so results are identical for
+        ///     kernel the post-NDIter fallback uses, so results are identical for
         ///     every dtype/op (the generator emits a SIMD or scalar loop per dtype).
         ///     Unsupported emits (e.g. bool subtract) throw inside the generator;
         ///     we catch and return null so the existing path raises/handles the
         ///     case exactly as before. Any non-trivial case returns null →
-        ///     caller proceeds to the NpyIter route.
+        ///     caller proceeds to the NDIter route.
         /// </summary>
         private unsafe NDArray? TryTrivialContiguousBinaryOp(
             NDArray lhs, NDArray rhs, BinaryOp op,
@@ -489,7 +489,7 @@ namespace NumSharp.Backends
         {
             // No cast: all three dtypes identical. Promotion cases (/ -> f64,
             // int-base ** float -> f64, mixed dtypes) have resultType != input and
-            // are excluded here, deferring to the NpyIter route that does the cast.
+            // are excluded here, deferring to the NDIter route that does the cast.
             if (lhsType != rhsType || lhsType != resultType)
                 return null;
 
@@ -563,9 +563,9 @@ namespace NumSharp.Backends
         ///     or <c>scalar op array</c> where the array operand is contiguous. Routes
         ///     to the existing <see cref="ExecutionPath.SimdScalarRight"/> /
         ///     <see cref="ExecutionPath.SimdScalarLeft"/> DirectIL kernel (scalar read
-        ///     once, array walked linearly), skipping NpyIter construction. The result
+        ///     once, array walked linearly), skipping NDIter construction. The result
         ///     takes the array operand's shape and layout (C, or strictly-F) so the
-        ///     linear write aligns with the linear array read. Returns null (→ NpyIter)
+        ///     linear write aligns with the linear array read. Returns null (→ NDIter)
         ///     when the array operand is non-contiguous or the emit is unsupported.
         ///
         ///     Callers guarantee identical dtypes (same-dtype gate in
@@ -583,7 +583,7 @@ namespace NumSharp.Backends
             bool isC = arrShape.IsContiguous;
             bool isF = !isC && arrShape.IsFContiguous;
             if (!isC && !isF)
-                return null;   // strided/transposed array operand → NpyIter
+                return null;   // strided/transposed array operand → NDIter
 
             var path = scalarIsRhs ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
             var key = new MixedTypeKernelKey(resultType, resultType, resultType, op, path);

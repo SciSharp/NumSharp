@@ -13,11 +13,11 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
-        // Call-invariant flag array for the unary NpyIter route (Wave 2.2).
-        private static readonly NpyIterPerOpFlags[] s_unaryIterFlags =
+        // Call-invariant flag array for the unary NDIter route (Wave 2.2).
+        private static readonly NDIterPerOpFlags[] s_unaryIterFlags =
         {
-            NpyIterPerOpFlags.READONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
-            NpyIterPerOpFlags.WRITEONLY | NpyIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
         };
 
         /// <summary>
@@ -84,10 +84,10 @@ namespace NumSharp.Backends
             // Same rationale as the binary/comparison routes (NumPy
             // check_for_trivial_loop): a single contiguous operand (C or F, not
             // broadcast) routes straight to the existing DirectIL whole-array unary
-            // kernel, skipping NpyIter construction. The result takes the input's
+            // kernel, skipping NDIter construction. The result takes the input's
             // layout so the linear read/write align; in/out dtypes may differ
             // (predicate ops -> bool, Abs(complex) -> double). Returns null for
-            // strided/broadcast/unsupported -> NpyIter route below.
+            // strided/broadcast/unsupported -> NDIter route below.
             {
                 var trivial = TryTrivialContiguousUnaryOp(nd, op, inputType, outputType);
                 if (trivial is not null) return trivial;
@@ -100,7 +100,7 @@ namespace NumSharp.Backends
             // applies the op, and stores contiguously — one pass, no scratch tile,
             // no per-chunk delegate dispatch (cf. the gather-to-scratch buffered
             // path below). Same-width SIMD only; promoting (sqrt(int32)->double),
-            // integer, and predicate cases fall through to the buffered/NpyIter
+            // integer, and predicate cases fall through to the buffered/NDIter
             // routes. Measured ~4x the buffered path and beats NumPy on strided sqrt.
             {
                 var fused = TryStridedSimdUnaryOp(nd, op, inputType, outputType);
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
 
             // -------- Buffered-SIMD path for 1-D strided inputs ------------
             // A non-contiguous (stepped/reversed/strided) 1-D input can't feed
-            // the SIMD inner loop directly — the elementwise NpyIter route falls
+            // the SIMD inner loop directly — the elementwise NDIter route falls
             // to a scalar per-element walk. NumPy's answer is buffering: copy a
             // cache-sized chunk of the strided source into a contiguous tile,
             // run the SIMD kernel on the tile, repeat. We do exactly that here,
@@ -123,8 +123,8 @@ namespace NumSharp.Backends
                 if (buffered is not null) return buffered;
             }
 
-            // -------- NpyIter Tier 3B fast path (all unary ops) ------------
-            // Funnels through the NpyIter inner-loop kernel factory for the
+            // -------- NDIter Tier 3B fast path (all unary ops) ------------
+            // Funnels through the NDIter inner-loop kernel factory for the
             // same architectural reasons as the binary route: unified driver,
             // coalesce + SIMD dispatch baked in, F-aware order handling.
             // Returns null only when EmitUnaryScalarOperation /
@@ -132,7 +132,7 @@ namespace NumSharp.Backends
             // emitters don't cover) — in which case we drop to the existing
             // direct UnaryKernel path below.
             {
-                var routed = TryExecuteUnaryOpViaNpyIter(nd, op, inputType, outputType);
+                var routed = TryExecuteUnaryOpViaNDIter(nd, op, inputType, outputType);
                 if (routed is not null) return routed;
             }
 
@@ -174,7 +174,7 @@ namespace NumSharp.Backends
         ///     <c>TryTrivialContiguousBinaryOp</c>). When the single operand is
         ///     contiguous (C or F, not broadcast), routes straight to the existing
         ///     DirectIL whole-array unary kernel (the contiguous <see cref="UnaryKernelKey"/>
-        ///     variant walks input/output linearly), skipping NpyIter construction.
+        ///     variant walks input/output linearly), skipping NDIter construction.
         ///
         ///     For an F-contig input we force the contiguous kernel AND allocate an
         ///     F result: both buffers are then walked in the same physical-linear =
@@ -182,7 +182,7 @@ namespace NumSharp.Backends
         ///     This matches — and pre-empts — the post-kernel
         ///     <see cref="ShouldProduceFContigOutput(NDArray, Shape)"/> copy('F').
         ///     In/out dtypes may differ (predicate ops -> bool, Abs(complex) ->
-        ///     double); the kernel emits the conversion. Returns null (→ NpyIter)
+        ///     double); the kernel emits the conversion. Returns null (→ NDIter)
         ///     for strided/broadcast inputs or unsupported emit.
         /// </summary>
         private unsafe NDArray? TryTrivialContiguousUnaryOp(
@@ -195,7 +195,7 @@ namespace NumSharp.Backends
             bool isC = s.IsContiguous;
             bool isF = !isC && s.IsFContiguous;
             if (!isC && !isF)
-                return null;   // strided/transposed → NpyIter
+                return null;   // strided/transposed → NDIter
 
             // Contiguous kernel variant (4th arg = isContiguous): linear input[i] -> output[i].
             var key = new UnaryKernelKey(inputType, outputType, op, true);
@@ -237,7 +237,7 @@ namespace NumSharp.Backends
         ///     vector body and there is no lane-width conversion. The float/double restriction
         ///     captures the measured win (expensive vector ops like Sqrt) and keeps the
         ///     per-lane <c>Vector.Create</c> cheap (4–8 lanes). Returns null (→ buffered /
-        ///     NpyIter routes) for non-1-D, contiguous, broadcast, promoting (in != out),
+        ///     NDIter routes) for non-1-D, contiguous, broadcast, promoting (in != out),
         ///     integer, or non-SIMD-capable inputs — including the promoting cases (e.g.
         ///     <c>sqrt(int32) → double</c>) that <see cref="TryBufferedStridedUnaryOp"/> still
         ///     handles. The result is a fresh contiguous 1-D array — the same shape/layout
@@ -255,7 +255,7 @@ namespace NumSharp.Backends
             // Same-width SIMD only: the fused kernel assembles Vector<T> in place, so the
             // input and output dtype must match. Restrict to float/double — the proven win
             // and where Vector.Create over a few lanes is cheap. Promoting/integer cases
-            // fall through to the buffered path / NpyIter.
+            // fall through to the buffered path / NDIter.
             if (inputType != outputType)
                 return null;
             if (inputType != NPTypeCode.Single && inputType != NPTypeCode.Double)
@@ -292,7 +292,7 @@ namespace NumSharp.Backends
         ///     Buffered-SIMD execution for a 1-D non-contiguous (strided / reversed)
         ///     unary input. Gathers the strided source into a contiguous stack tile
         ///     and runs the SIMD contiguous unary kernel on the tile, chunk by chunk —
-        ///     NumPy's buffering strategy. Returns null (→ NpyIter scalar route) when
+        ///     NumPy's buffering strategy. Returns null (→ NDIter scalar route) when
         ///     the input isn't 1-D strided, is broadcast, or the op's contiguous kernel
         ///     isn't SIMD-accelerated (in which case the gather would be pure overhead
         ///     over the scalar walk). The result is a fresh contiguous 1-D array — the
@@ -397,21 +397,21 @@ namespace NumSharp.Backends
             => op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
 
         /// <summary>
-        ///     <see cref="NumSharp.Utilities.NpyComplexMath.Abs"/> — resolved once and
+        ///     <see cref="NumSharp.Utilities.NDComplexMath.Abs"/> — resolved once and
         ///     cached. Routes the Complex-magnitude special case in
-        ///     <see cref="TryExecuteUnaryOpViaNpyIter"/> without depending on
+        ///     <see cref="TryExecuteUnaryOpViaNDIter"/> without depending on
         ///     <c>DirectILKernelGenerator.CachedMethods</c>, which is private to
         ///     the kernel partial. The helper (not <see cref="System.Numerics.Complex.Abs"/>)
         ///     gives NumPy's <c>npy_cabs</c> infinity semantics on net8.0 — see its docs.
         /// </summary>
         private static readonly MethodInfo s_complexAbs =
-            typeof(NumSharp.Utilities.NpyComplexMath).GetMethod(
+            typeof(NumSharp.Utilities.NDComplexMath).GetMethod(
                 "Abs", BindingFlags.Public | BindingFlags.Static,
                 new[] { typeof(System.Numerics.Complex) })
-            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Abs");
+            ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Abs");
 
         /// <summary>
-        ///     Try to execute a unary op via NpyIter Tier 3B. Returns the
+        ///     Try to execute a unary op via NDIter Tier 3B. Returns the
         ///     result on success or null if the route is unsupported (size
         ///     overflow vs int.MaxValue, NotSupportedException from emit).
         ///
@@ -432,7 +432,7 @@ namespace NumSharp.Backends
         ///     compute in input type then convert). Vector body is null
         ///     because cross-type unary SIMD isn't templated in Tier 3B.
         /// </summary>
-        private unsafe NDArray? TryExecuteUnaryOpViaNpyIter(NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        private unsafe NDArray? TryExecuteUnaryOpViaNDIter(NDArray nd, UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
         {
             var cleanShape = nd.Shape.Clean();
             if (cleanShape.size < 0) return null;
@@ -531,20 +531,20 @@ namespace NumSharp.Backends
                 // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE per NumPy's ufunc
                 // iterator flags (ufunc_object.c:1070); cheap extent check here
                 // since the result is freshly allocated.
-                var globalFlags = NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.COPY_IF_OVERLAP;
+                var globalFlags = NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP;
                 NPTypeCode[]? opDtypes = null;
                 var casting = NPY_CASTING.NPY_SAFE_CASTING;
                 if (bufferedPromoting)
                 {
                     // NumPy ufunc config (loop dtypes already resolved → unsafe).
-                    globalFlags |= NpyIterGlobalFlags.BUFFERED
-                                 | NpyIterGlobalFlags.GROWINNER
-                                 | NpyIterGlobalFlags.DELAY_BUFALLOC;
+                    globalFlags |= NDIterGlobalFlags.BUFFERED
+                                 | NDIterGlobalFlags.GROWINNER
+                                 | NDIterGlobalFlags.DELAY_BUFALLOC;
                     opDtypes = new[] { outputType, outputType };
                     casting = NPY_CASTING.NPY_UNSAFE_CASTING;
                 }
 
-                using var iter = NpyIterRef.MultiNew(
+                using var iter = NDIterRef.MultiNew(
                     2, new[] { nd, result },
                     globalFlags,
                     order, casting,

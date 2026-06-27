@@ -4,10 +4,10 @@
 #:property AllowUnsafeBlocks=true
 // =============================================================================
 // copy_path_bench.cs — NumSharp side. For each dtype × layout × size measures:
-//   pos  = np.positive(v)  → the NpyIter ufunc path (identity = copy via iterator)
+//   pos  = np.positive(v)  → the NDIter ufunc path (identity = copy via iterator)
 //   copy = v.copy()        → the current Storage.Clone path (legacy)
 // Companion: copy_path_bench.py (NumPy np.positive baseline, identical keys).
-// Answers "how does the NpyIter copy path compare to NumPy across all
+// Answers "how does the NDIter copy path compare to NumPy across all
 // dtypes/layout variations" — and how much the routing would change vs today.
 // Run ONLY with:  dotnet run -c Release - < benchmark/layout/copy_path_bench.cs
 // =============================================================================

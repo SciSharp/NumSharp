@@ -254,7 +254,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Square:
-                    // NpyComplexMath.Square = FMA-contracted z*z (matches NumPy's complex multiply
+                    // NDComplexMath.Square = FMA-contracted z*z (matches NumPy's complex multiply
                     // overflow/cancellation, which Complex.op_Multiply does not).
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexSquare, null);
                     break;
@@ -316,26 +316,26 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Exp2:
-                    // NpyComplexMath.Exp2 = Exp(z*ln2). Routing through the C99-correct Exp reproduces
+                    // NDComplexMath.Exp2 = Exp(z*ln2). Routing through the C99-correct Exp reproduces
                     // NumPy's non-finite results (exp2(+-inf+0j), exp2(inf+inf j), ...) that
                     // Complex.Pow(2, z) turned into NaN+NaNj.
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexExp2, null);
                     break;
 
                 case UnaryOp.Log1p:
-                    // NpyComplexMath.Log1p = Log((1+re, im)) — preserves a -0 imaginary part that the
+                    // NDComplexMath.Log1p = Log((1+re, im)) — preserves a -0 imaginary part that the
                     // naive Complex.One + z would flip to +0 on the cut.
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog1p, null);
                     break;
 
                 case UnaryOp.Expm1:
-                    // NpyComplexMath.Expm1 = nc_expm1 formula (real = expm1(x)*cos(y) - 2*sin^2(y/2),
+                    // NDComplexMath.Expm1 = nc_expm1 formula (real = expm1(x)*cos(y) - 2*sin^2(y/2),
                     // imag = exp(x)*sin(y)). The naive Complex.Exp(z)-1 loses NumPy's non-finite
                     // imaginary parts and origin signed zeros.
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexExpm1, null);
                     break;
 
-                // Hyperbolic and inverse-trig: NpyComplexMath wraps the BCL with C99 Annex G non-finite
+                // Hyperbolic and inverse-trig: NDComplexMath wraps the BCL with C99 Annex G non-finite
                 // tables and branch-cut/signed-zero fixups so the results match NumPy on every input.
                 case UnaryOp.Sinh:
                     il.EmitCall(OpCodes.Call, CachedMethods.ComplexSinh, null);

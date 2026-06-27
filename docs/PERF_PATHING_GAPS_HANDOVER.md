@@ -41,7 +41,7 @@ dotnet build src/NumSharp.Core/NumSharp.Core.csproj -c Release -v q --nologo "-c
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
-using System.Diagnostics; using NumSharp;            // + using NumSharp.Backends.Iteration; for NpyExpr
+using System.Diagnostics; using NumSharp;            // + using NumSharp.Backends.Iteration; for NDExpr
 var dbg = Attribute.GetCustomAttribute(typeof(np).Assembly, typeof(DebuggableAttribute)) as DebuggableAttribute;
 if (dbg?.IsJITOptimizerDisabled ?? false) { Console.Error.WriteLine("FATAL: Debug core"); return; }
 double Best(Action f,int it,int wm,int rd){for(int i=0;i<wm;i++)f();double b=1e9;for(int r=0;r<rd;r++){var sw=Stopwatch.StartNew();for(int i=0;i<it;i++)f();b=Math.Min(b,sw.Elapsed.TotalMilliseconds/it);}return b;}
@@ -51,7 +51,7 @@ double Best(Action f,int it,int wm,int rd){for(int i=0;i<wm;i++)f();double b=1e9
 **Benchmark subsystems** (committed result sheets land in `benchmark/*/*_results.md`):
 
 ```bash
-python benchmark/run_benchmark.py                       # full op-matrix + npyiter + layout + operand + cast + fusion (~3h)
+python benchmark/run_benchmark.py                       # full op-matrix + nditer + layout + operand + cast + fusion (~3h)
 python benchmark/layout/layout_sheet.py  --skip-build   # reductions/copy/elementwise × layout × dtype
 python benchmark/cast/cast_sheet.py      --skip-build   # astype src→dst × layout × dtype
 python benchmark/fusion/fusion_sheet.py  --skip-build   # np.evaluate
@@ -66,7 +66,7 @@ be bit-identical to the prior path, and these must stay green on **both** framew
 
 ```bash
 cd test/NumSharp.UnitTest && dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
-dotnet test --no-build --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&(ClassName~BinaryOp|ClassName~Arithmetic|ClassName~Promotion|ClassName~Scalar|ClassName~Broadcast|ClassName~Bitwise|ClassName~Comparison|ClassName~Logic|ClassName~Reduction|ClassName~Statistic|ClassName~Math|ClassName~Ufunc|ClassName~Evaluate|ClassName~NpyExpr|ClassName~Cast)"
+dotnet test --no-build --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&(ClassName~BinaryOp|ClassName~Arithmetic|ClassName~Promotion|ClassName~Scalar|ClassName~Broadcast|ClassName~Bitwise|ClassName~Comparison|ClassName~Logic|ClassName~Reduction|ClassName~Statistic|ClassName~Math|ClassName~Ufunc|ClassName~Evaluate|ClassName~NDExpr|ClassName~Cast)"
 # plus the FuzzMatrix differential gate for anything touching kernels:
 dotnet test --no-build --filter "TestCategory=FuzzMatrix"
 ```
@@ -98,7 +98,7 @@ var key = new AxisReductionKernelKey(inputType, outputType, op, shape.IsContiguo
 The fast Direct axis-reduce variant is gated on **C-contiguity** (`shape.IsContiguous`) AND
 reducing the last axis. An F-contiguous array has `IsContiguous == false`, so it can never
 select the fast kernel even when reducing its memory-contiguous axis (axis 0 for column-major).
-`UseNpyIterReduce` only diverts Complex dtypes, so f64/f32/int all land on this Direct kernel.
+`UseNDIterReduce` only diverts Complex dtypes, so f64/f32/int all land on this Direct kernel.
 
 **Still UNKNOWN — run this first** (it was blocked by a broken build last session). Both F and T
 have `flag=false` → the *same* general kernel + (on paper) identical `(8,8000)` strides, yet
@@ -191,7 +191,7 @@ The comparison common type is strong: `np._FindCommonScalarType(Single, Int32) =
 no cheap same-type path to route to.
 
 **Why this is NOT pure ordering:** comparing at result_type (f64 here) is NumSharp's documented,
-test-pinned behaviour (`greater(i8 2^53+1, f8 2^53) → False`, `NpyEvaluateTests`/comparison tests).
+test-pinned behaviour (`greater(i8 2^53+1, f8 2^53) → False`, `NDEvaluateTests`/comparison tests).
 Treating the literal as a *weak* scalar (→ f32) would match NumPy and unlock the fast path but
 **changes comparison semantics** and risks that pinned test.
 
@@ -240,7 +240,7 @@ half-precision vector arithmetic.
 
 | ID | What | Where | Fix |
 |----|------|-------|-----|
-| B1 | `bcast_reduce` canary swung `0.02×` → `516.85×` between runs and contradicts `layout`'s `i32\|bcast\|sum 0.03×` | `benchmark/npyiter/` (PATHOLOGY canary) | Pin the canary's shape/op, assert a correctness check before timing; a 516× "win" is a degenerate/early-return artifact |
+| B1 | `bcast_reduce` canary swung `0.02×` → `516.85×` between runs and contradicts `layout`'s `i32\|bcast\|sum 0.03×` | `benchmark/nditer/` (PATHOLOGY canary) | Pin the canary's shape/op, assert a correctness check before timing; a 516× "win" is a degenerate/early-return artifact |
 | B2 | `dec` reductions show `0.01–0.08×` but that's Decimal-vs-float64 | `benchmark/layout/reduce_layout_bench.py:17` → `("dec", np.float64)  # dec modelled as f64` | Drop `dec` from the twin (like the `cast` subsystem's `—`) or mark non-comparable so it's excluded from ratios |
 | B3 | op-matrix `np.sum f64 @100K` reads `0.089×` but a direct probe is `0.0043 ms` (4× *faster* than NumPy) | `benchmark/NumSharp.Benchmark.GraphEngine` Reduction suite | Per-iteration overhead inflates small-N cells; audit the BDN reduction benchmark setup, cross-check small-N against direct probes |
 

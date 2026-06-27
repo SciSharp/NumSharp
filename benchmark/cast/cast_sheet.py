@@ -4,7 +4,7 @@
 #
 # The op-matrix has no astype/cast coverage at all. This subsystem sweeps the
 # full src→dst cast matrix (15×15 dtypes × 8 memory layouts at 1M) through
-# astype → DefaultEngine.Cast → NpyIter.Copy, NumSharp vs NumPy 2.4.2.
+# astype → DefaultEngine.Cast → NDIter.Copy, NumSharp vs NumPy 2.4.2.
 #
 # Runs cast_matrix_bench.{cs,py} (via benchmark/scripts/bench_common), merges by
 # key (`1M|src|layout|dst`), and renders ONE sheet -> cast_results.md (+ .tsv).

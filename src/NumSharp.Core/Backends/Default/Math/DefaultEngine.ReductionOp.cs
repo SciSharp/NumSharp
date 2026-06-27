@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             // reducing over it is CLOSED-FORM — there is nothing to iterate:
             //     sum → ×D,  prod → ^D,  min/max → identity   (mean = sum/count, in the caller).
             // Drop every broadcast axis to a non-broadcast view of the UNIQUE data (index 0 along
-            // each stride-0 axis — an O(1) view), reduce THAT once via the fast contiguous/NpyIter
+            // each stride-0 axis — an O(1) view), reduce THAT once via the fast contiguous/NDIter
             // path, then apply the collapsed multiplicity to the scalar. O(unique), not the prior
             // O(D×unique) per-copy fold: ~960× NumPy here vs the fold's ~1.0× (measured, Release).
             // Integer and min/max are BIT-EXACT (modular ×/pow; min/max order-independent); float
@@ -72,10 +72,10 @@ namespace NumSharp.Backends
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
 
-            // ─── NpyIter routing for non-contig flat reduction ─────────────
+            // ─── NDIter routing for non-contig flat reduction ─────────────
             // The direct ElementReductionKernel walks non-contig inputs via
             // coordinate math per element, which made strided/transposed
-            // reductions 20-54× slower than NumPy. NpyIter coalesces dims,
+            // reductions 20-54× slower than NumPy. NDIter coalesces dims,
             // permutes axes by stride magnitude (NPY_KEEPORDER-style), and
             // normalizes negative strides — so the kernel is called with a
             // layout it can handle as contig in the inner loop.
@@ -85,14 +85,14 @@ namespace NumSharp.Backends
             // there.
             //
             // ArgMax/ArgMin opt out: the returned index must be the C-order
-            // flat position of the extreme element, but NpyIter permutes axes
+            // flat position of the extreme element, but NDIter permutes axes
             // by stride magnitude which can re-order the traversal and break
             // that contract. (e.g. argmax(arr.T) on a 2D F-contig view: C-order
-            // expects [1,9,2,4]→idx 1; NpyIter's F-walk gives [1,2,9,4]→idx 2.)
+            // expects [1,9,2,4]→idx 1; NDIter's F-walk gives [1,2,9,4]→idx 2.)
             // Direct path's coordinate walk preserves the C-order contract.
             if (!isContiguous && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
             {
-                var routed = TryExecuteElementReductionViaNpyIter<TResult>(arr, op, inputType, accumType);
+                var routed = TryExecuteElementReductionViaNDIter<TResult>(arr, op, inputType, accumType);
                 if (routed.HasValue) return CombineWithCount(routed.Value, bcastMult, op);
             }
 
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
         ///     (dim&gt;1) axis. Those axes repeat their data exactly, so index 0 (offset unchanged,
         ///     axis dropped) yields the unique slice with zero copy. Size-1 and real (stride≠0)
         ///     axes are kept. The result is never broadcast, so the reduction below runs the fast
-        ///     contiguous / NpyIter path over O(unique) elements.
+        ///     contiguous / NDIter path over O(unique) elements.
         /// </summary>
         private static NDArray DropBroadcastAxes(NDArray arr)
         {
@@ -157,10 +157,10 @@ namespace NumSharp.Backends
                     : Slice.All;
 
             // No copy: the unique slice may be strided (e.g. broadcast_to(a["1:-1,1:-1"], …)),
-            // but the reduction below routes a non-contiguous input through NpyIter, which
+            // but the reduction below routes a non-contiguous input through NDIter, which
             // handles strided/offset views correctly and fast (coalesce + axis-permute by
             // stride). The sub-word strided-prod overflow a copy used to dodge is now fixed at
-            // its root (NpyIter.DetermineAccumulatorType delegates to GetAccumulatingType).
+            // its root (NDIter.DetermineAccumulatorType delegates to GetAccumulatingType).
             return arr[slices];
         }
 
@@ -223,7 +223,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     NpyIter routing for non-contig flat reductions.
+        ///     NDIter routing for non-contig flat reductions.
         ///
         ///     The iterator does the heavy lifting before the kernel runs:
         ///     dimension coalescing, axis permutation by stride magnitude,
@@ -235,7 +235,7 @@ namespace NumSharp.Backends
         ///     back to the direct path.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private unsafe TResult? TryExecuteElementReductionViaNpyIter<TResult>(
+        private unsafe TResult? TryExecuteElementReductionViaNDIter<TResult>(
             NDArray arr, ReductionOp op, NPTypeCode inputType, NPTypeCode accumType)
             where TResult : unmanaged
         {
@@ -246,7 +246,7 @@ namespace NumSharp.Backends
 
             try
             {
-                using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.None);
+                using var iter = NDIterRef.New(arr, NDIterGlobalFlags.None);
                 return iter.ExecuteReduction<TResult>(op);
             }
             catch (Exception)
@@ -451,16 +451,16 @@ namespace NumSharp.Backends
             if (TryHalfAccumulateContiguous(arr, isProd: true, out double p))
                 return (Half)p;
 
-            // non-contiguous → NpyIter chunked path (no per-element AsIterator dispatch)
-            return (Half)HalfReduceViaNpyIter(arr, isProd: true);
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return (Half)HalfReduceViaNDIter(arr, isProd: true);
         }
 
         /// <summary>
-        /// Fallback product for Complex via NpyIter's chunked EXTERNAL_LOOP (see
-        /// <see cref="ComplexReduceViaNpyIter"/>).
+        /// Fallback product for Complex via NDIter's chunked EXTERNAL_LOOP (see
+        /// <see cref="ComplexReduceViaNDIter"/>).
         /// </summary>
         private object ProdElementwiseComplexFallback(NDArray arr)
-            => ComplexReduceViaNpyIter(arr, isProd: true);
+            => ComplexReduceViaNDIter(arr, isProd: true);
 
         /// <summary>
         /// Execute element-wise max reduction using IL kernels.
@@ -553,8 +553,8 @@ namespace NumSharp.Backends
                 return acc;
             }
 
-            // non-contiguous → NpyIter chunked path (no per-element AsIterator dispatch)
-            return HalfMinMaxViaNpyIter(arr, isMin: false);
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return HalfMinMaxViaNDIter(arr, isMin: false);
         }
 
         private unsafe object MinElementwiseHalfFallback(NDArray arr)
@@ -568,8 +568,8 @@ namespace NumSharp.Backends
                 return acc;
             }
 
-            // non-contiguous → NpyIter chunked path (no per-element AsIterator dispatch)
-            return HalfMinMaxViaNpyIter(arr, isMin: true);
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return HalfMinMaxViaNDIter(arr, isMin: true);
         }
 
         /// <summary>
@@ -578,7 +578,7 @@ namespace NumSharp.Backends
         /// memory/iteration order) is returned VERBATIM, matching NumPy's minimum/maximum, which
         /// return the NaN operand as-is (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan,0), not (nan,nan)).
         ///
-        /// Routed through <see cref="ComplexMinMaxViaNpyIter"/> (struct-generic ExecuteReducing,
+        /// Routed through <see cref="ComplexMinMaxViaNDIter"/> (struct-generic ExecuteReducing,
         /// NPY_KEEPORDER) instead of the old per-element AsIterator: ~3.6× contiguous / ~8.6×
         /// strided, AND a NumPy-parity fix — KEEPORDER visits elements in MEMORY order, so the NaN
         /// element returned for a non-C-contiguous (e.g. transposed) array now matches NumPy's
@@ -587,21 +587,21 @@ namespace NumSharp.Backends
         /// (np.min(a.T) where a=[[1+1j,nan+5j,3+3j],[nan+7j,2+2j,4+4j]]: NumPy → (nan,5), old → (nan,7)).
         /// </summary>
         private unsafe object MaxElementwiseComplexFallback(NDArray arr)
-            => ComplexMinMaxViaNpyIter(arr, isMin: false);
+            => ComplexMinMaxViaNDIter(arr, isMin: false);
 
         private unsafe object MinElementwiseComplexFallback(NDArray arr)
-            => ComplexMinMaxViaNpyIter(arr, isMin: true);
+            => ComplexMinMaxViaNDIter(arr, isMin: true);
 
         /// <summary>
-        /// Complex min/max via NpyIter's chunked EXTERNAL_LOOP in NPY_KEEPORDER. The accumulator's
+        /// Complex min/max via NDIter's chunked EXTERNAL_LOOP in NPY_KEEPORDER. The accumulator's
         /// Best holds either the lexicographic extremum or — once a NaN-bearing element is seen —
         /// that element verbatim (the kernel aborts on the first NaN). Empty → (0,0), preserving the
         /// prior AsIterator fallback (np.max/np.min of an empty array is guarded upstream).
         /// </summary>
-        private static unsafe System.Numerics.Complex ComplexMinMaxViaNpyIter(NDArray arr, bool isMin)
+        private static unsafe System.Numerics.Complex ComplexMinMaxViaNDIter(NDArray arr, bool isMin)
         {
             if (arr.size == 0) return System.Numerics.Complex.Zero;
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
             var acc = isMin
                 ? iter.ExecuteReducing<ComplexMinKernel, ComplexMinMaxAccumulator>(default, default)
                 : iter.ExecuteReducing<ComplexMaxKernel, ComplexMinMaxAccumulator>(default, default);
@@ -631,7 +631,7 @@ namespace NumSharp.Backends
         /// bit-identical to its UTF-16 code unit, so the char buffer reduces bit-for-bit
         /// through the ushort SIMD reducer (vpminuw/vpmaxuw) — ~100× the scalar char
         /// iterator this used to run, and it reuses ExecuteElementReduction's full routing
-        /// (contig SIMD, broadcast-fold, NpyIter-strided). <see cref="view"/>(ushort) is a
+        /// (contig SIMD, broadcast-fold, NDIter-strided). <see cref="view"/>(ushort) is a
         /// zero-copy byte reinterpret (char and ushort are both 2 bytes, so shape/strides/
         /// offset are preserved across every layout). The same trick that fixed bool/char
         /// amin/amax along an axis.
@@ -691,7 +691,7 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe long ArgMaxHalfFallback(NDArray arr)
         {
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
             var a = iter.ExecuteReducing<HalfArgMaxKernel, HalfArgAccumulator>(
                 default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
@@ -700,7 +700,7 @@ namespace NumSharp.Backends
 
         private unsafe long ArgMinHalfFallback(NDArray arr)
         {
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
             var a = iter.ExecuteReducing<HalfArgMinKernel, HalfArgAccumulator>(
                 default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
@@ -721,7 +721,7 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe long ArgMaxComplexFallback(NDArray arr)
         {
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
             var a = iter.ExecuteReducing<ComplexArgMaxKernel, ComplexArgAccumulator>(
                 default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
@@ -730,7 +730,7 @@ namespace NumSharp.Backends
 
         private unsafe long ArgMinComplexFallback(NDArray arr)
         {
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP,
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
             var a = iter.ExecuteReducing<ComplexArgMinKernel, ComplexArgAccumulator>(
                 default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
@@ -795,13 +795,13 @@ namespace NumSharp.Backends
             var sumType = arr.GetTypeCode.GetAccumulatingType();
 
             // Handle Complex separately - mean is Complex, not double.
-            // Reuse the one-pass SIMD Complex sum (ComplexReduceViaNpyIter, the
+            // Reuse the one-pass SIMD Complex sum (ComplexReduceViaNDIter, the
             // same path np.sum takes) then divide — unifies the Complex sum path
             // and picks up the Vector256 contiguous-chunk kernel. mean of a
             // single element is handled by the scalar guard above.
             if (sumType == NPTypeCode.Complex)
             {
-                var sum = ComplexReduceViaNpyIter(arr, isProd: false);
+                var sum = ComplexReduceViaNDIter(arr, isProd: false);
                 return sum / count;
             }
 
@@ -814,7 +814,7 @@ namespace NumSharp.Backends
             if (sumType == NPTypeCode.Half)
             {
                 if (!TryHalfAccumulateContiguous(arr, isProd: false, out double hsum))
-                    hsum = HalfReduceViaNpyIter(arr, isProd: false);
+                    hsum = HalfReduceViaNDIter(arr, isProd: false);
                 return (Half)(hsum / count);
             }
 
@@ -859,8 +859,8 @@ namespace NumSharp.Backends
             if (TryHalfAccumulateContiguous(arr, isProd: false, out double s))
                 return (Half)s;
 
-            // non-contiguous → NpyIter chunked path (no per-element AsIterator dispatch)
-            return (Half)HalfReduceViaNpyIter(arr, isProd: false);
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return (Half)HalfReduceViaNDIter(arr, isProd: false);
         }
 
         /// <summary>
@@ -892,15 +892,15 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Non-contiguous Half sum/product via NpyIter's chunked EXTERNAL_LOOP
-        /// (<see cref="NpyIterRef.ForEach"/>), accumulated in double. Replaces the per-element
-        /// AsIterator&lt;Half&gt; tail: NpyIter normalizes the strided/transposed layout to
+        /// Non-contiguous Half sum/product via NDIter's chunked EXTERNAL_LOOP
+        /// (<see cref="NDIterRef.ForEach"/>), accumulated in double. Replaces the per-element
+        /// AsIterator&lt;Half&gt; tail: NDIter normalizes the strided/transposed layout to
         /// contiguous-inner chunks and amortizes iterator dispatch over each chunk — ~2.6× the
         /// per-element NDIterator on strided views. sum/prod are commutative, so the permuted
         /// traversal order is value-equivalent (modulo float rounding, which the f16 fuzz tolerates).
         /// Contiguous inputs take <see cref="TryHalfAccumulateContiguous"/> upstream.
         /// </summary>
-        private static unsafe double HalfReduceViaNpyIter(NDArray arr, bool isProd)
+        private static unsafe double HalfReduceViaNDIter(NDArray arr, bool isProd)
         {
             double acc = isProd ? 1.0 : 0.0;
             if (arr.size == 0) return acc;
@@ -912,15 +912,15 @@ namespace NumSharp.Backends
             // the gain is purely devirtualization + register accumulation. sum/prod
             // are commutative ⇒ KEEPORDER's permuted traversal is value-equivalent
             // modulo ULP. Contiguous inputs take TryHalfAccumulateContiguous upstream.
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
             return isProd
                 ? iter.ExecuteReducing<HalfProdKernel, double>(default, acc)
                 : iter.ExecuteReducing<HalfSumKernel, double>(default, acc);
         }
 
         /// <summary>
-        /// Non-contiguous Half min/max via NpyIter's chunked EXTERNAL_LOOP. The min/max VALUE is
-        /// order-independent and NaN propagation (any NaN → NaN) is too, so NpyIter's permuted
+        /// Non-contiguous Half min/max via NDIter's chunked EXTERNAL_LOOP. The min/max VALUE is
+        /// order-independent and NaN propagation (any NaN → NaN) is too, so NDIter's permuted
         /// traversal is safe here — unlike argmin/argmax, whose returned index would shift under the
         /// permutation. Empty → ±inf (matching the prior iterator fallback); any NaN → NaN.
         /// Contiguous inputs take the direct-pointer scan upstream.
@@ -929,12 +929,12 @@ namespace NumSharp.Backends
         /// delegate: a 4-accumulator unroll on the contiguous inner chunk breaks the per-element
         /// dependency chain (~1.3× on 4M) and the JIT inlines the kernel.
         /// </summary>
-        private static unsafe object HalfMinMaxViaNpyIter(NDArray arr, bool isMin)
+        private static unsafe object HalfMinMaxViaNDIter(NDArray arr, bool isMin)
         {
             if (arr.size == 0)
                 return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
 
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
             var acc = isMin
                 ? iter.ExecuteReducing<HalfMinKernel, HalfMinMaxAccumulator>(default, default)
                 : iter.ExecuteReducing<HalfMaxKernel, HalfMinMaxAccumulator>(default, default);
@@ -945,12 +945,12 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Complex sum/product via NpyIter's chunked EXTERNAL_LOOP — replaces the per-element
+        /// Complex sum/product via NDIter's chunked EXTERNAL_LOOP — replaces the per-element
         /// AsIterator&lt;Complex&gt; over EVERY layout (Complex had no contiguous fast path, so this
         /// wins ~2.2× contiguous and ~2.6× strided). Both ops are commutative, so the permuted
         /// traversal is value-equivalent modulo rounding. Empty: sum→0, prod→1 (NumPy parity).
         /// </summary>
-        private static unsafe System.Numerics.Complex ComplexReduceViaNpyIter(NDArray arr, bool isProd)
+        private static unsafe System.Numerics.Complex ComplexReduceViaNDIter(NDArray arr, bool isProd)
         {
             var acc = isProd ? System.Numerics.Complex.One : System.Numerics.Complex.Zero;
             if (arr.size == 0) return acc;
@@ -960,22 +960,22 @@ namespace NumSharp.Backends
             // round-trip the ForEach delegate forced, and sum adds a
             // Vector256<double> contiguous-chunk fast path) — measured ~2.4×
             // (sum) / ~1.5× (prod) the prior ForEach(delegate) fold on 4M
-            // elements, both layouts. KEEPORDER (NpyIterRef.New default) keeps
+            // elements, both layouts. KEEPORDER (NDIterRef.New default) keeps
             // the inner chunk contiguous for transposed views too. Both ops are
             // commutative, so the permuted traversal is value-equivalent modulo
             // ULP-level rounding (same class as the codebase's pairwise sums).
-            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
             return isProd
                 ? iter.ExecuteReducing<ComplexProdKernel, System.Numerics.Complex>(default, acc)
                 : iter.ExecuteReducing<ComplexSumKernel, System.Numerics.Complex>(default, acc);
         }
 
         /// <summary>
-        /// Fallback sum for Complex type via NpyIter's chunked EXTERNAL_LOOP (see
-        /// <see cref="ComplexReduceViaNpyIter"/>).
+        /// Fallback sum for Complex type via NDIter's chunked EXTERNAL_LOOP (see
+        /// <see cref="ComplexReduceViaNDIter"/>).
         /// </summary>
         private object SumElementwiseComplexFallback(NDArray arr)
-            => ComplexReduceViaNpyIter(arr, isProd: false);
+            => ComplexReduceViaNDIter(arr, isProd: false);
 
         #endregion
     }

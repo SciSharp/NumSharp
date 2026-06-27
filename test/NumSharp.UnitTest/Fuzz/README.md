@@ -1,6 +1,6 @@
 # NumPy Differential Fuzzer (Plan A)
 
-Proves every NpyIter-backed operation produces **bit-identical** output to NumPy 2.4.2 across the
+Proves every NDIter-backed operation produces **bit-identical** output to NumPy 2.4.2 across the
 full input space — caught systematically, not by hand-picked cases. The motivating failure (the
 cast saturate-vs-wrap bug, latent in `where`/`copyto`/`concatenate`) must be impossible to ship again.
 

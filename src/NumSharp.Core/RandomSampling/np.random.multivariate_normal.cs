@@ -131,11 +131,11 @@ namespace NumSharp
 
             long n = mean.size;
 
-            // Copy mean (any layout) into a flat double buffer via NpyIter.Copy.
+            // Copy mean (any layout) into a flat double buffer via NDIter.Copy.
             var meanBlock = new UnmanagedMemoryBlock<double>(n);
             var meanSlice = new ArraySlice<double>(meanBlock);
             var meanStorage = new UnmanagedStorage(meanSlice, new Shape(n));
-            NpyIter.Copy(meanStorage, mean.Storage);
+            NDIter.Copy(meanStorage, mean.Storage);
 
             // Copy cov to unmanaged storage (row-major)
             var covBlock = new UnmanagedMemoryBlock<double>(n * n);

@@ -166,7 +166,7 @@ namespace NumSharp.Backends
             var ret = new NDArray(retType, axisedShape, false);
             int _ddof = ddof ?? 0;
             var input = arr.GetTypeCode == NPTypeCode.Double ? arr : Cast(arr, NPTypeCode.Double, copy: true);
-            NpyAxisIter.ReduceDouble<VarAxisDoubleKernel>(input.Storage, ret.Storage, axis, _ddof);
+            NDAxisIter.ReduceDouble<VarAxisDoubleKernel>(input.Storage, ret.Storage, axis, _ddof);
 
             if (keepdims)
                 ret.Storage.ExpandDimension(axis);

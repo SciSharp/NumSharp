@@ -28,7 +28,7 @@ Official NumSharp-vs-NumPy 3-size comparison + the five matrix subsystems, persi
 - **NumPy:** 50 timed iterations / 10 warmup per op (warm long-lived interpreter).
 - **Sizes:** 1,000 / 100,000 / 10,000,000 elements. Same seeds both sides.
 - Join keyed on (op, dtype, N).
-- **Subsystems** appended to `benchmark-report.md`: NpyIter, Layout, Operand, Cast, Fusion.
+- **Subsystems** appended to `benchmark-report.md`: NDIter, Layout, Operand, Cast, Fusion.
 
 ## Headline — op-matrix geomean by size (NPY/NS, >1 = NumSharp faster)
 | Size | geomean | %NumPy🕐 | ✅ / 🟡 / 🟠 / 🔴 |
@@ -39,17 +39,17 @@ Official NumSharp-vs-NumPy 3-size comparison + the five matrix subsystems, persi
 
 Overall op-matrix: **1851 ops | ✅ 792 | 🟡 357 | 🟠 177 | 🔴 72 | ▫ 384 | ⚪ 69**.
 
-NpyIter: _HEADLINE — operation matrix: 1.18× geomean · 85%🕐 of NumPy's time · 72 win / 58 lose over 130 cells_
+NDIter: _HEADLINE — operation matrix: 1.18× geomean · 85%🕐 of NumPy's time · 72 win / 58 lose over 130 cells_
 
 Cast: _**129 / 1568** comparable cells lag (<1.0); **1439** win (≥1.0)._
 
 ## Files
 | file | what |
 |---|---|
-| `benchmark-report.md` | op-matrix (per-(op,dtype,N) ratio) + appended NpyIter/Layout/Operand/Cast/Fusion |
+| `benchmark-report.md` | op-matrix (per-(op,dtype,N) ratio) + appended NDIter/Layout/Operand/Cast/Fusion |
 | `benchmark-report.json` / `.csv` | unified machine-readable / spreadsheet form |
 | `numpy-results.json` | raw NumPy timings (merge input) |
-| `npyiter_results.*` + `cards/` | iterator benchmark sheet + README cards |
+| `nditer_results.*` + `cards/` | iterator benchmark sheet + README cards |
 | `layout_/operand_/cast_/fusion_results.*` | the four matrix-subsystem sheets |
 
 Raw BenchmarkDotNet per-class JSON (~tens of MB) is **not** persisted here (regenerable). Reproduce with `python benchmark/run_benchmark.py`.

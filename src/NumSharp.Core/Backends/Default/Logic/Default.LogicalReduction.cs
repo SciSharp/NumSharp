@@ -53,7 +53,7 @@ namespace NumSharp.Backends
             // Fast path: IL-emitted axis kernel. Inner-axis (stride==1) routes through the
             // SIMD all/any helpers; non-inner uses AVX2 gather (float/double) or a scalar
             // early-exit loop. Returns null for unsupported dtypes (Half / Complex / Decimal),
-            // which fall through to the NpyAxisIter scalar kernel below.
+            // which fall through to the NDAxisIter scalar kernel below.
             ReductionOp op = reduceAll ? ReductionOp.All : ReductionOp.Any;
             var key = new AxisReductionKernelKey(nd.GetTypeCode, NPTypeCode.Boolean, op, InnerAxisContiguous: axis == nd.ndim - 1);
             var kernel = DirectILKernelGenerator.TryGetBooleanAxisReductionKernel(key);
@@ -264,9 +264,9 @@ namespace NumSharp.Backends
             where T : unmanaged
         {
             if (reduceAll)
-                NpyAxisIter.ReduceBool<T, NpyAllKernel<T>>(nd.Storage, result.Storage, axis);
+                NDAxisIter.ReduceBool<T, NDAllKernel<T>>(nd.Storage, result.Storage, axis);
             else
-                NpyAxisIter.ReduceBool<T, NpyAnyKernel<T>>(nd.Storage, result.Storage, axis);
+                NDAxisIter.ReduceBool<T, NDAnyKernel<T>>(nd.Storage, result.Storage, axis);
         }
     }
 }

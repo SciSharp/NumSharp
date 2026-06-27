@@ -15,7 +15,7 @@ using NumSharp.Utilities;
 //   <T>) followed by a hand-written C# row loop. That violated two of the
 //   project's hard rules:
 //       1. "No per-dtype switch — emit IL via DirectILKernelGenerator."
-//       2. "Loops must be IL- or NpyIter-driven."
+//       2. "Loops must be IL- or NDIter-driven."
 //
 // What this kernel does:
 //   * Generates one `DynamicMethod` per `(srcDtype, outDtype, QuantileMethod)`

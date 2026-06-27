@@ -5,7 +5,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Backends.Kernels;
 
 /// <summary>
-/// Pins the NpyIter-routed Half and Decimal axis reductions:
+/// Pins the NDIter-routed Half and Decimal axis reductions:
 ///   - Half MEAN (accumulates in Double, then casts back to Half).
 ///   - Decimal sum/prod/min/max/mean (full-precision, on contiguous stripes).
 /// Half sum/prod/min/max stay on the legacy path (their f16 sequential accumulator
@@ -33,7 +33,7 @@ public class HalfDecimalAxisReductionTests
     }
 
     [TestMethod]
-    public void Half_Mean_Axis0_Axis1_NpyIterPath()
+    public void Half_Mean_Axis0_Axis1_NDIterPath()
     {
         var b = HalfB();
         // NumPy: mean axis0 = [1.667, 2.666, 3.666, 2.334]; axis1 = [1.5, 3.75, 2.5]

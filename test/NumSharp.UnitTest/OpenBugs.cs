@@ -2059,7 +2059,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 21 (FIXED): Boolean mask indexing on 2D arrays returns the
         ///     correct 1-D shape. A full-shape mask now flows through the unified
-        ///     NpyIter gather (DefaultEngine.BooleanMask), so arr[mask] with 3
+        ///     NDIter gather (DefaultEngine.BooleanMask), so arr[mask] with 3
         ///     True values yields shape (3,). Kept as a regression guard.
         /// </summary>
         [TestMethod]

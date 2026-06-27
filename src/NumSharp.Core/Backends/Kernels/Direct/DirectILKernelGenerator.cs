@@ -305,64 +305,64 @@ namespace NumSharp.Backends.Kernels
             // Integer power helpers (squared-exponentiation with native wrapping).
             // Used by EmitPowerOperation when result type is integer to preserve
             // NumPy's exact-wrap semantics that Math.Pow's double round-trip loses.
-            public static readonly MethodInfo IntPowSByte = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowSByte), new[] { typeof(sbyte), typeof(sbyte) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowSByte));
-            public static readonly MethodInfo IntPowByte = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowByte), new[] { typeof(byte), typeof(byte) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowByte));
-            public static readonly MethodInfo IntPowInt16 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowInt16), new[] { typeof(short), typeof(short) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt16));
-            public static readonly MethodInfo IntPowUInt16 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowUInt16), new[] { typeof(ushort), typeof(ushort) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt16));
-            public static readonly MethodInfo IntPowChar = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowChar), new[] { typeof(char), typeof(char) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowChar));
-            public static readonly MethodInfo IntPowInt32 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowInt32), new[] { typeof(int), typeof(int) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt32));
-            public static readonly MethodInfo IntPowUInt32 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowUInt32), new[] { typeof(uint), typeof(uint) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt32));
-            public static readonly MethodInfo IntPowInt64 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowInt64), new[] { typeof(long), typeof(long) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowInt64));
-            public static readonly MethodInfo IntPowUInt64 = typeof(Utilities.NpyIntegerPower).GetMethod(
-                nameof(Utilities.NpyIntegerPower.PowUInt64), new[] { typeof(ulong), typeof(ulong) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyIntegerPower).FullName, nameof(Utilities.NpyIntegerPower.PowUInt64));
+            public static readonly MethodInfo IntPowSByte = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowSByte), new[] { typeof(sbyte), typeof(sbyte) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowSByte));
+            public static readonly MethodInfo IntPowByte = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowByte), new[] { typeof(byte), typeof(byte) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowByte));
+            public static readonly MethodInfo IntPowInt16 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowInt16), new[] { typeof(short), typeof(short) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowInt16));
+            public static readonly MethodInfo IntPowUInt16 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowUInt16), new[] { typeof(ushort), typeof(ushort) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowUInt16));
+            public static readonly MethodInfo IntPowChar = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowChar), new[] { typeof(char), typeof(char) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowChar));
+            public static readonly MethodInfo IntPowInt32 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowInt32), new[] { typeof(int), typeof(int) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowInt32));
+            public static readonly MethodInfo IntPowUInt32 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowUInt32), new[] { typeof(uint), typeof(uint) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowUInt32));
+            public static readonly MethodInfo IntPowInt64 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowInt64), new[] { typeof(long), typeof(long) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowInt64));
+            public static readonly MethodInfo IntPowUInt64 = typeof(Utilities.NDIntegerPower).GetMethod(
+                nameof(Utilities.NDIntegerPower.PowUInt64), new[] { typeof(ulong), typeof(ulong) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDIntegerPower).FullName, nameof(Utilities.NDIntegerPower.PowUInt64));
 
-            // floor-division / remainder helpers (NpyDivision) — NumPy-exact divide-by-zero (-> 0
+            // floor-division / remainder helpers (NDDivision) — NumPy-exact divide-by-zero (-> 0
             // for integers, ±inf/nan for floats) and floored-sign semantics. Used by
             // EmitFloorDivideOperation / EmitModOperation in place of the old double round-trip.
-            private static MethodInfo NpyDiv(string name, Type t) =>
-                typeof(Utilities.NpyDivision).GetMethod(name, new[] { t, t })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyDivision).FullName, name);
+            private static MethodInfo NDDiv(string name, Type t) =>
+                typeof(Utilities.NDDivision).GetMethod(name, new[] { t, t })
+                ?? throw new MissingMethodException(typeof(Utilities.NDDivision).FullName, name);
 
-            public static readonly MethodInfo FloorDivSByte = NpyDiv(nameof(Utilities.NpyDivision.FloorDivSByte), typeof(sbyte));
-            public static readonly MethodInfo FloorDivByte = NpyDiv(nameof(Utilities.NpyDivision.FloorDivByte), typeof(byte));
-            public static readonly MethodInfo FloorDivInt16 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt16), typeof(short));
-            public static readonly MethodInfo FloorDivUInt16 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt16), typeof(ushort));
-            public static readonly MethodInfo FloorDivChar = NpyDiv(nameof(Utilities.NpyDivision.FloorDivChar), typeof(char));
-            public static readonly MethodInfo FloorDivInt32 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt32), typeof(int));
-            public static readonly MethodInfo FloorDivUInt32 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt32), typeof(uint));
-            public static readonly MethodInfo FloorDivInt64 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivInt64), typeof(long));
-            public static readonly MethodInfo FloorDivUInt64 = NpyDiv(nameof(Utilities.NpyDivision.FloorDivUInt64), typeof(ulong));
-            public static readonly MethodInfo FloorDivSingle = NpyDiv(nameof(Utilities.NpyDivision.FloorDivSingle), typeof(float));
-            public static readonly MethodInfo FloorDivDouble = NpyDiv(nameof(Utilities.NpyDivision.FloorDivDouble), typeof(double));
+            public static readonly MethodInfo FloorDivSByte = NDDiv(nameof(Utilities.NDDivision.FloorDivSByte), typeof(sbyte));
+            public static readonly MethodInfo FloorDivByte = NDDiv(nameof(Utilities.NDDivision.FloorDivByte), typeof(byte));
+            public static readonly MethodInfo FloorDivInt16 = NDDiv(nameof(Utilities.NDDivision.FloorDivInt16), typeof(short));
+            public static readonly MethodInfo FloorDivUInt16 = NDDiv(nameof(Utilities.NDDivision.FloorDivUInt16), typeof(ushort));
+            public static readonly MethodInfo FloorDivChar = NDDiv(nameof(Utilities.NDDivision.FloorDivChar), typeof(char));
+            public static readonly MethodInfo FloorDivInt32 = NDDiv(nameof(Utilities.NDDivision.FloorDivInt32), typeof(int));
+            public static readonly MethodInfo FloorDivUInt32 = NDDiv(nameof(Utilities.NDDivision.FloorDivUInt32), typeof(uint));
+            public static readonly MethodInfo FloorDivInt64 = NDDiv(nameof(Utilities.NDDivision.FloorDivInt64), typeof(long));
+            public static readonly MethodInfo FloorDivUInt64 = NDDiv(nameof(Utilities.NDDivision.FloorDivUInt64), typeof(ulong));
+            public static readonly MethodInfo FloorDivSingle = NDDiv(nameof(Utilities.NDDivision.FloorDivSingle), typeof(float));
+            public static readonly MethodInfo FloorDivDouble = NDDiv(nameof(Utilities.NDDivision.FloorDivDouble), typeof(double));
 
-            public static readonly MethodInfo RemSByte = NpyDiv(nameof(Utilities.NpyDivision.RemSByte), typeof(sbyte));
-            public static readonly MethodInfo RemByte = NpyDiv(nameof(Utilities.NpyDivision.RemByte), typeof(byte));
-            public static readonly MethodInfo RemInt16 = NpyDiv(nameof(Utilities.NpyDivision.RemInt16), typeof(short));
-            public static readonly MethodInfo RemUInt16 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt16), typeof(ushort));
-            public static readonly MethodInfo RemChar = NpyDiv(nameof(Utilities.NpyDivision.RemChar), typeof(char));
-            public static readonly MethodInfo RemInt32 = NpyDiv(nameof(Utilities.NpyDivision.RemInt32), typeof(int));
-            public static readonly MethodInfo RemUInt32 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt32), typeof(uint));
-            public static readonly MethodInfo RemInt64 = NpyDiv(nameof(Utilities.NpyDivision.RemInt64), typeof(long));
-            public static readonly MethodInfo RemUInt64 = NpyDiv(nameof(Utilities.NpyDivision.RemUInt64), typeof(ulong));
-            public static readonly MethodInfo RemSingle = NpyDiv(nameof(Utilities.NpyDivision.RemSingle), typeof(float));
-            public static readonly MethodInfo RemDouble = NpyDiv(nameof(Utilities.NpyDivision.RemDouble), typeof(double));
+            public static readonly MethodInfo RemSByte = NDDiv(nameof(Utilities.NDDivision.RemSByte), typeof(sbyte));
+            public static readonly MethodInfo RemByte = NDDiv(nameof(Utilities.NDDivision.RemByte), typeof(byte));
+            public static readonly MethodInfo RemInt16 = NDDiv(nameof(Utilities.NDDivision.RemInt16), typeof(short));
+            public static readonly MethodInfo RemUInt16 = NDDiv(nameof(Utilities.NDDivision.RemUInt16), typeof(ushort));
+            public static readonly MethodInfo RemChar = NDDiv(nameof(Utilities.NDDivision.RemChar), typeof(char));
+            public static readonly MethodInfo RemInt32 = NDDiv(nameof(Utilities.NDDivision.RemInt32), typeof(int));
+            public static readonly MethodInfo RemUInt32 = NDDiv(nameof(Utilities.NDDivision.RemUInt32), typeof(uint));
+            public static readonly MethodInfo RemInt64 = NDDiv(nameof(Utilities.NDDivision.RemInt64), typeof(long));
+            public static readonly MethodInfo RemUInt64 = NDDiv(nameof(Utilities.NDDivision.RemUInt64), typeof(ulong));
+            public static readonly MethodInfo RemSingle = NDDiv(nameof(Utilities.NDDivision.RemSingle), typeof(float));
+            public static readonly MethodInfo RemDouble = NDDiv(nameof(Utilities.NDDivision.RemDouble), typeof(double));
 
             // Decimal conversion methods (to decimal)
             public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
@@ -523,12 +523,12 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingMethodException(typeof(Half).FullName, "NegativeInfinity");
 
             // Complex methods and fields (Complex uses static fields, not properties).
-            // ComplexAbs routes through NpyComplexMath.Abs (npy_cabs / C99 hypot semantics) rather
+            // ComplexAbs routes through NDComplexMath.Abs (npy_cabs / C99 hypot semantics) rather
             // than Complex.Abs directly: the BCL's private Hypot returns NaN for abs(NaN+inf*i) on
             // net8.0, where NumPy returns +inf. The helper defers to Complex.Abs for every
             // finite/NaN-only input, so magnitudes that already match NumPy stay bit-identical.
-            public static readonly MethodInfo ComplexAbs = typeof(Utilities.NpyComplexMath).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(Utilities.NpyComplexMath).FullName, "Abs");
+            public static readonly MethodInfo ComplexAbs = typeof(Utilities.NDComplexMath).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(Utilities.NDComplexMath).FullName, "Abs");
             public static readonly MethodInfo ComplexDivisionByDouble = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Division(Complex, double)");
             public static readonly FieldInfo ComplexZero = typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)
@@ -547,62 +547,62 @@ namespace NumSharp.Backends.Kernels
             // Complex unary operator methods
             public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
-            // Sqrt/Exp/Sin/Cos/Tan route through NpyComplexMath (not Complex.* directly): the BCL
+            // Sqrt/Exp/Sin/Cos/Tan route through NDComplexMath (not Complex.* directly): the BCL
             // matches NumPy on finite interiors but diverges at the C99 edges (non-finite, branch-cut
-            // signs, signed zeros). NpyComplexMath delegates the interior to the BCL and adds the fixups.
-            public static readonly MethodInfo ComplexSqrt = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sqrt");
-            public static readonly MethodInfo ComplexExp = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Exp");
-            // ComplexLog routes through NpyComplexMath.Log (full npy_clog port): Complex.Log drops the
+            // signs, signed zeros). NDComplexMath delegates the interior to the BCL and adds the fixups.
+            public static readonly MethodInfo ComplexSqrt = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Sqrt");
+            public static readonly MethodInfo ComplexExp = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Exp");
+            // ComplexLog routes through NDComplexMath.Log (full npy_clog port): Complex.Log drops the
             // real part to 0 near |z|=1 (it lacks clog's log1p path). Reused by the Log2 composition
-            // and by NpyComplexMath.Log10/Log1p.
-            public static readonly MethodInfo ComplexLog = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log");
-            public static readonly MethodInfo ComplexSin = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sin");
-            public static readonly MethodInfo ComplexCos = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Cos");
-            public static readonly MethodInfo ComplexTan = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Tan");
-            // Hyperbolic and inverse-trig route through NpyComplexMath (not Complex.* directly): the BCL
-            // matches NumPy only on finite interiors; NpyComplexMath adds the C99 Annex G non-finite
+            // and by NDComplexMath.Log10/Log1p.
+            public static readonly MethodInfo ComplexLog = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Log");
+            public static readonly MethodInfo ComplexSin = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Sin");
+            public static readonly MethodInfo ComplexCos = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Cos");
+            public static readonly MethodInfo ComplexTan = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Tan");
+            // Hyperbolic and inverse-trig route through NDComplexMath (not Complex.* directly): the BCL
+            // matches NumPy only on finite interiors; NDComplexMath adds the C99 Annex G non-finite
             // tables and signed-zero/branch-cut fixups so every input matches NumPy.
-            public static readonly MethodInfo ComplexSinh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Sinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Sinh");
-            public static readonly MethodInfo ComplexCosh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Cosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Cosh");
-            public static readonly MethodInfo ComplexTanh = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Tanh");
-            public static readonly MethodInfo ComplexAsin = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Asin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Asin");
-            public static readonly MethodInfo ComplexAcos = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Acos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Acos");
-            public static readonly MethodInfo ComplexAtan = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Atan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Atan");
+            public static readonly MethodInfo ComplexSinh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Sinh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Sinh");
+            public static readonly MethodInfo ComplexCosh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Cosh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Cosh");
+            public static readonly MethodInfo ComplexTanh = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Tanh", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Tanh");
+            public static readonly MethodInfo ComplexAsin = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Asin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Asin");
+            public static readonly MethodInfo ComplexAcos = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Acos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Acos");
+            public static readonly MethodInfo ComplexAtan = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Atan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Atan");
             public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
-            // Log10/Reciprocal/Log1p route through NpyComplexMath (Complex.Log10 drifts past 1 ULP from
+            // Log10/Reciprocal/Log1p route through NDComplexMath (Complex.Log10 drifts past 1 ULP from
             // NumPy; Complex.op_Division / Complex.One+z drop NumPy's signed zeros).
-            public static readonly MethodInfo ComplexLog10 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log10");
-            public static readonly MethodInfo ComplexReciprocal = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Reciprocal", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Reciprocal");
-            // Square routes through NpyComplexMath (FMA-contracted z*z): Complex.op_Multiply lacks FMA,
+            public static readonly MethodInfo ComplexLog10 = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Log10", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Log10");
+            public static readonly MethodInfo ComplexReciprocal = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Reciprocal", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Reciprocal");
+            // Square routes through NDComplexMath (FMA-contracted z*z): Complex.op_Multiply lacks FMA,
             // so it loses NumPy's square(1e-10+1e-10i).real = -2.275e-37 and turns the 1e300 overflow
             // into NaN instead of NumPy's -inf.
-            public static readonly MethodInfo ComplexSquare = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Square", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Square");
-            public static readonly MethodInfo ComplexLog1p = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Log1p");
-            public static readonly MethodInfo ComplexExp2 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Exp2");
-            // Expm1 routes through NpyComplexMath (nc_expm1 formula); Complex.Exp(z)-1 mis-handles the
+            public static readonly MethodInfo ComplexSquare = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Square", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Square");
+            public static readonly MethodInfo ComplexLog1p = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Log1p", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Log1p");
+            public static readonly MethodInfo ComplexExp2 = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Exp2", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Exp2");
+            // Expm1 routes through NDComplexMath (nc_expm1 formula); Complex.Exp(z)-1 mis-handles the
             // non-finite imaginary parts (e.g. expm1(+Inf+0i).imag must be NaN = exp(+Inf)*sin(0)).
-            public static readonly MethodInfo ComplexExpm1 = typeof(NumSharp.Utilities.NpyComplexMath).GetMethod("Expm1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
-                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NpyComplexMath).FullName, "Expm1");
+            public static readonly MethodInfo ComplexExpm1 = typeof(NumSharp.Utilities.NDComplexMath).GetMethod("Expm1", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(NumSharp.Utilities.NDComplexMath).FullName, "Expm1");
             // Complex doesn't have Log2/Exp2/Log1p directly — composed via Log(z, 2), Pow(2, z),
-            // NpyComplexMath.Log1p in EmitUnaryComplexOperation.
+            // NDComplexMath.Log1p in EmitUnaryComplexOperation.
             public static readonly MethodInfo ComplexLogBase = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log(Complex, double)");
             public static readonly MethodInfo ComplexOpSubtraction = typeof(System.Numerics.Complex).GetMethod("op_Subtraction", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
@@ -1275,7 +1275,7 @@ namespace NumSharp.Backends.Kernels
         /// Emit Power operation.
         /// Stack: [base, exponent] -> [result]
         ///
-        /// For integer result types, calls <see cref="Utilities.NpyIntegerPower"/> to
+        /// For integer result types, calls <see cref="Utilities.NDIntegerPower"/> to
         /// preserve dtype-native wrapping (matches NumPy's per-dtype integer power loop).
         /// For float32 result, uses MathF.Pow (single-precision, no f64 round-trip).
         /// For float64 result, uses Math.Pow.
@@ -1286,7 +1286,7 @@ namespace NumSharp.Backends.Kernels
         {
             // Stack has: base (resultType), exponent (resultType)
             //
-            // Integer result types use the NpyIntegerPower helpers (squared-exp with
+            // Integer result types use the NDIntegerPower helpers (squared-exp with
             // native wrapping). The helpers expect non-negative exponents; the caller
             // (DefaultEngine.Power) is responsible for the neg-exp ValueError pre-check.
             var intPow = GetIntegerPowMethod(resultType);
@@ -1347,7 +1347,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Return the <see cref="Utilities.NpyDivision"/> floor-division helper for
+        /// Return the <see cref="Utilities.NDDivision"/> floor-division helper for
         /// <paramref name="resultType"/>, or null if the dtype routes elsewhere
         /// (Decimal/Half/Complex are handled before this is reached).
         /// </summary>
@@ -1371,7 +1371,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Return the <see cref="Utilities.NpyDivision"/> remainder helper for
+        /// Return the <see cref="Utilities.NDDivision"/> remainder helper for
         /// <paramref name="resultType"/>, or null if the dtype routes elsewhere.
         /// </summary>
         private static MethodInfo? GetRemainderMethod(NPTypeCode resultType)
@@ -1394,7 +1394,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit FloorDivide via the <see cref="Utilities.NpyDivision"/> helpers, matching NumPy's
+        /// Emit FloorDivide via the <see cref="Utilities.NDDivision"/> helpers, matching NumPy's
         /// <c>floor_div_@TYPE@</c> (integer ÷0 -> 0, signed floor toward -inf, MIN/-1 wrap) and
         /// <c>npy_floor_divide</c> (CPython divmod port: float ÷0 -> ±inf/nan, snap-to-nearest).
         /// Stack: [dividend, divisor] -> [result]
@@ -1412,7 +1412,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Mod via the <see cref="Utilities.NpyDivision"/> helpers, matching NumPy's integer
+        /// Emit Mod via the <see cref="Utilities.NDDivision"/> helpers, matching NumPy's integer
         /// remainder (÷0 -> 0, floored sign) and <c>npy_remainder</c> (fmod-based CPython divmod).
         /// Stack: [dividend, divisor] -> [result]
         /// </summary>

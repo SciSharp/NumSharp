@@ -414,12 +414,12 @@ public class AuditV2_MathReductions
     // ============================================================================
     // T1.55 — np.copyto(dst_sbyte, src_float) throws NotSupportedException
     // ============================================================================
-    // File: src/NumSharp.Core/Manipulation/np.copyto.cs (delegates to NpyIter.Copy)
+    // File: src/NumSharp.Core/Manipulation/np.copyto.cs (delegates to NDIter.Copy)
     //
     // NumPy: raises TypeError("Cannot cast array data from dtype('float32') to
     //                          dtype('int8') according to the rule 'same_kind'").
     // NumSharp: throws NotSupportedException("Unsupported type: SByte") from a deep
-    //           internal NpyIter copy path — indicating SByte path is unimplemented,
+    //           internal NDIter copy path — indicating SByte path is unimplemented,
     //           not a casting-rule violation. Same call on Byte succeeds (mis-truncates).
     //
     // Both raise SOMETHING, but the error message is misleading and the underlying

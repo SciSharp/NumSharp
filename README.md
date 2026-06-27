@@ -26,11 +26,11 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 * Wide support for `System.Drawing.Bitmap`. ([read more](https://github.com/SciSharp/NumSharp/wiki/Bitmap-Extensions))
 
 ### Performance vs NumPy
-NumSharp's NumPy-aligned iterator (`NpyIter`) benchmarked against NumPy 2.x. The **left card** is the head-to-head comparison — geomean speedup by array-size tier and by operation class. The **right card** is the IL-generation *dividend*: iterator machinery NumPy has no equivalent for — cheaper construction than `np.nditer`, one-pass expression fusion, kernel reuse, and a parallel inner loop. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster), and each also shows **%NumPy🕐** — the share of NumPy's time NumSharp uses (56% = takes just over half as long; <100% = faster). Absolute timings vary by hardware, so only the same-runner ratio is meaningful.
+NumSharp's NumPy-aligned iterator (`NDIter`) benchmarked against NumPy 2.x. The **left card** is the head-to-head comparison — geomean speedup by array-size tier and by operation class. The **right card** is the IL-generation *dividend*: iterator machinery NumPy has no equivalent for — cheaper construction than `np.nditer`, one-pass expression fusion, kernel reuse, and a parallel inner loop. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster), and each also shows **%NumPy🕐** — the share of NumPy's time NumSharp uses (56% = takes just over half as long; <100% = faster). Absolute timings vary by hardware, so only the same-runner ratio is meaningful.
 
-[<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" width="400" height="300" />](benchmark/npyiter/npyiter_results.md)
+[<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/ops.png" width="400" height="300" />](benchmark/nditer/nditer_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/cat.png" width="400" height="300" />](benchmark/nditer/nditer_results.md)
 
-Refreshed automatically after each release. **[Full report →](benchmark/npyiter/npyiter_results.md)**
+Refreshed automatically after each release. **[Full report →](benchmark/nditer/nditer_results.md)**
 
 ### Implemented APIs
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.

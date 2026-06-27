@@ -1,8 +1,8 @@
-# NpyIter — kerneling your NDArray with IL generation
+# NDIter — kerneling your NDArray with IL generation
 
 NumPy's `nditer` is the unsung workhorse of NumPy. Every ufunc, every reduction, every broadcasted operation is scheduled by `nditer` under the covers. It decides which axes to iterate, which to coalesce, whether to buffer, how to walk strided memory — then it hands those decisions to a typed C inner loop generated from C++ templates.
 
-NumSharp has to reach the same destination from the other direction. We have no templates. What we have is `System.Reflection.Emit.DynamicMethod` and a JIT that eagerly autovectorizes tight loops. This page explains how NumSharp's port of `nditer` (`NpyIter`) works, why we diverge from NumPy in a few places, and — most importantly — how `NpyIter.Execution.cs` glues the iterator to `ILKernelGenerator` so a single call like `ExecuteBinary(Add)` cashes out to the same kind of native SIMD loop that NumPy's C++ emits at compile time, but generated at your first call and cached forever after.
+NumSharp has to reach the same destination from the other direction. We have no templates. What we have is `System.Reflection.Emit.DynamicMethod` and a JIT that eagerly autovectorizes tight loops. This page explains how NumSharp's port of `nditer` (`NDIter`) works, why we diverge from NumPy in a few places, and — most importantly — how `NDIter.Execution.cs` glues the iterator to `ILKernelGenerator` so a single call like `ExecuteBinary(Add)` cashes out to the same kind of native SIMD loop that NumPy's C++ emits at compile time, but generated at your first call and cached forever after.
 
 Read this page end-to-end if you're writing a new `np.*` function, porting a ufunc, or trying to squeeze more performance out of an existing operation.
 
@@ -10,7 +10,7 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 
 - [Overview](#overview)
 - [Public Iteration Surface](#public-iteration-surface)
-- [What NpyIter Is](#what-npyiter-is)
+- [What NDIter Is](#what-nditer-is)
 - [Divergences from NumPy](#divergences-from-numpy)
 - [Iterator State](#iterator-state)
 - [Construction](#construction)
@@ -59,43 +59,43 @@ Read this page end-to-end if you're writing a new `np.*` function, porting a ufu
 
 An array is just a pointer plus a shape plus strides. Iterating "through" it means producing, one element (or chunk of elements) at a time, the byte offset into the buffer. For a contiguous row-major 3×4 array this is trivial — walk from 0 to 11 with stride 1. For a transposed view, a sliced view, a broadcasted view, or two arrays with mismatched strides, it is not.
 
-`NpyIter` takes that tangle and produces a single linear schedule of pointer advances. Once you have it, you can write one loop — `do { kernel(dataptrs, strides, count); } while (iternext); ` — and it runs correctly for every memory layout NumSharp supports.
+`NDIter` takes that tangle and produces a single linear schedule of pointer advances. Once you have it, you can write one loop — `do { kernel(dataptrs, strides, count); } while (iternext); ` — and it runs correctly for every memory layout NumSharp supports.
 
 ### Why Build Our Own?
 
 NumPy's `nditer` is C99 with templates mixed in through macro expansion. We can't take it verbatim. At the same time we want every one of its capabilities: coalescing, reordering, negative-stride flipping, ALLOCATE, COPY_IF_OVERLAP, buffered casting, buffered reduction with the double-loop trick, C/F/K ordering, per-operand flags, op_axes with explicit reduction encoding. These are features users rely on without realizing it — `np.sum(a, axis=0)` quietly benefits from four of them.
 
-NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` for unmanaged state and `ILKernelGenerator` for the typed inner loops. The bridge that wires them together is `NpyIter.Execution.cs`, which this page centers on.
+NumSharp implements all of it in managed code with `NativeMemory.AllocZeroed` for unmanaged state and `ILKernelGenerator` for the typed inner loops. The bridge that wires them together is `NDIter.Execution.cs`, which this page centers on.
 
 ---
 
 ## Public Iteration Surface
 
-`NpyIterRef` is the kernel-author engine — the rest of this page is about it. Most application code never constructs one directly. The public, user-facing ways to walk an array are:
+`NDIterRef` is the kernel-author engine — the rest of this page is about it. Most application code never constructs one directly. The public, user-facing ways to walk an array are:
 
 | You want | Use | Notes |
 |----------|-----|-------|
 | Every element of one array, C-order | `foreach (var x in ndarray)` or `ndarray.GetAtIndex(i)` | Resolves slices, strides, offset, and stride-0 broadcast; no intermediate copy. |
-| Each operand of a broadcast, flattened | `np.broadcast(a, b, …).iters[i]` — a `NpyFlatIterator` | One flat C-order stream per operand, each stretched to the broadcast shape (e.g. `np.broadcast([1,2,3], [[10],[20]]).iters[0]` yields `1,2,3,1,2,3`). |
+| Each operand of a broadcast, flattened | `np.broadcast(a, b, …).iters[i]` — a `NDFlatIterator` | One flat C-order stream per operand, each stretched to the broadcast shape (e.g. `np.broadcast([1,2,3], [[10],[20]]).iters[0]` yields `1,2,3,1,2,3`). |
 | The broadcast itself, as tuples | `foreach (object[] vals in np.broadcast(a, b, …))` | NumPy's `np.broadcast` object: one per-operand value tuple per step, with a live `.index` cursor, `.numiter`, `.size`, and `.reset()`. |
 
-There is **no separate per-element iterator class** — `NpyIter` drives every kernel, and the element-level surface above is built on the same `Shape`/stride machinery (`GetAtIndex`). `NpyFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
+There is **no separate per-element iterator class** — `NDIter` drives every kernel, and the element-level surface above is built on the same `Shape`/stride machinery (`GetAtIndex`). `NDFlatIterator` (`NumSharp.Backends.Iteration`) is the small public analog of NumPy's `flatiter`; it is re-enumerable, unlike NumPy's one-shot flatiters.
 
-Like NumSharp's `NpyIter`, `np.broadcast(...)` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp does not (see [Divergences from NumPy](#divergences-from-numpy)).
+Like NumSharp's `NDIter`, `np.broadcast(...)` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp does not (see [Divergences from NumPy](#divergences-from-numpy)).
 
 ---
 
-## What NpyIter Is
+## What NDIter Is
 
-`NpyIter` is a `ref partial struct` living in `NumSharp.Backends.Iteration`. Concretely:
+`NDIter` is a `ref partial struct` living in `NumSharp.Backends.Iteration`. Concretely:
 
 ```
-NpyIterRef (ref partial struct)                ← public handle (~3000 lines across 2 partials)
-    ├── _state: NpyIterState*                  ← heap-allocated unmanaged state
+NDIterRef (ref partial struct)                ← public handle (~3000 lines across 2 partials)
+    ├── _state: NDIterState*                  ← heap-allocated unmanaged state
     ├── _operands: NDArray[]                   ← kept alive by GC root
-    └── _cachedIterNext: NpyIterNextFunc?      ← memoized iterate-advance delegate
+    └── _cachedIterNext: NDIterNextFunc?      ← memoized iterate-advance delegate
 
-NpyIterState (unmanaged struct)                ← ~30 fields, all dynamically sized
+NDIterState (unmanaged struct)                ← ~30 fields, all dynamically sized
     ├── Scalars: NDim, NOp, IterSize, IterIndex, ItFlags, ...
     ├── Dim arrays (size = NDim): Shape*, Coords*, Strides*, Perm*
     ├── Op arrays (size = NOp):   DataPtrs*, ResetDataPtrs*, BufStrides*,
@@ -110,20 +110,20 @@ The public struct is cheap to pass around; the heavy state lives behind one poin
 
 | File | What lives there |
 |------|------------------|
-| `NpyIter.cs` | Construction, iteration wrappers, debug dump, `Copy`, `Dispose` (~3000 lines) |
-| `NpyIter.State.cs` | `NpyIterState` definition, allocation, `Advance`, `Reset`, `GotoIterIndex`, `BufferedReduceAdvance` |
-| `NpyIter.Execution.cs` | **Kernel integration layer** — `ForEach`, `ExecuteGeneric`, `Execute{Binary,Unary,Reduction,Comparison,Scan,Copy}` (~600 lines) |
-| `NpyIterFlags.cs` | `NpyIterFlags`, `NpyIterOpFlags`, `NpyIterGlobalFlags`, `NpyIterPerOpFlags`, casting/order enums |
-| `NpyIterCoalescing.cs` | `CoalesceAxes`, `ReorderAxesForCoalescing`, `FlipNegativeStrides` |
-| `NpyIterCasting.cs` | Safe/same-kind/unsafe cast rules, `ConvertValue`, `FindCommonDtype` |
-| `NpyIterBufferManager.cs` | Aligned buffer allocation, copy-in/copy-out, `GROWINNER`, `BUF_REUSABLE` |
-| `NpyIter.Reduce.cs` | `NewReduce` — builds the reduction iterator (stride-ordered `op_axes`, stride-0 output axis) |
-| `NpyIter.Execution.Custom.cs` | Custom-op tiers: `ExecuteRawIL` (3A), `ExecuteElementWise` (3B), `ExecuteExpression` (3C) |
-| `NpyMemOverlap.cs` | Diophantine memory-overlap solver for `COPY_IF_OVERLAP` (port of NumPy's `mem_overlap.c`) |
-| `NpyExpr.cs`, `NpyExpr.Typing.cs`, `NpyExpr.Evaluate.cs` | Tier 3C / `np.evaluate` expression tree, per-node NEP50 typing, lowering to one pass |
-| `NpyScalarReductionKernels.cs`, `NpyNanReductionKernels.cs` | Half/Complex + NaN-aware scalar (axis=None) reduction kernel structs |
-| `NpyAxisIter.cs`, `NpyAxisIter.State.cs` | Single-axis reduction iterator for `var` / `std` / `cumsum` / `cumprod` |
-| `NpyLogicalReductionKernels.cs` | `All` / `Any` reduction kernel structs |
+| `NDIter.cs` | Construction, iteration wrappers, debug dump, `Copy`, `Dispose` (~3000 lines) |
+| `NDIter.State.cs` | `NDIterState` definition, allocation, `Advance`, `Reset`, `GotoIterIndex`, `BufferedReduceAdvance` |
+| `NDIter.Execution.cs` | **Kernel integration layer** — `ForEach`, `ExecuteGeneric`, `Execute{Binary,Unary,Reduction,Comparison,Scan,Copy}` (~600 lines) |
+| `NDIterFlags.cs` | `NDIterFlags`, `NDIterOpFlags`, `NDIterGlobalFlags`, `NDIterPerOpFlags`, casting/order enums |
+| `NDIterCoalescing.cs` | `CoalesceAxes`, `ReorderAxesForCoalescing`, `FlipNegativeStrides` |
+| `NDIterCasting.cs` | Safe/same-kind/unsafe cast rules, `ConvertValue`, `FindCommonDtype` |
+| `NDIterBufferManager.cs` | Aligned buffer allocation, copy-in/copy-out, `GROWINNER`, `BUF_REUSABLE` |
+| `NDIter.Reduce.cs` | `NewReduce` — builds the reduction iterator (stride-ordered `op_axes`, stride-0 output axis) |
+| `NDIter.Execution.Custom.cs` | Custom-op tiers: `ExecuteRawIL` (3A), `ExecuteElementWise` (3B), `ExecuteExpression` (3C) |
+| `NDMemOverlap.cs` | Diophantine memory-overlap solver for `COPY_IF_OVERLAP` (port of NumPy's `mem_overlap.c`) |
+| `NDExpr.cs`, `NDExpr.Typing.cs`, `NDExpr.Evaluate.cs` | Tier 3C / `np.evaluate` expression tree, per-node NEP50 typing, lowering to one pass |
+| `NDScalarReductionKernels.cs`, `NDNanReductionKernels.cs` | Half/Complex + NaN-aware scalar (axis=None) reduction kernel structs |
+| `NDAxisIter.cs`, `NDAxisIter.State.cs` | Single-axis reduction iterator for `var` / `std` / `cumsum` / `cumprod` |
+| `NDLogicalReductionKernels.cs` | `All` / `Any` reduction kernel structs |
 
 ---
 
@@ -136,13 +136,13 @@ NumPy's `nditer` has two hard-coded limits that NumSharp drops:
 | `NPY_MAXDIMS` | 64 | unlimited (dynamic alloc, soft limit ≈ 300k from `stackalloc`) |
 | `NPY_MAXARGS` | 64 | unlimited (dynamic alloc) |
 
-NumPy uses fixed arrays inside `NpyIter_InternalIterator`. NumSharp allocates everything via `NativeMemory.AllocZeroed` sized to the actual `(ndim, nop)` the caller passes. The trade is marginally more setup cost in exchange for no artificial ceilings and no wasted memory on a 2-operand 1-D iter.
+NumPy uses fixed arrays inside `NDIter_InternalIterator`. NumSharp allocates everything via `NativeMemory.AllocZeroed` sized to the actual `(ndim, nop)` the caller passes. The trade is marginally more setup cost in exchange for no artificial ceilings and no wasted memory on a 2-operand 1-D iter.
 
 Other deliberate differences:
 
 - **Flag bit layout.** NumSharp reserves low bits 0-7 for the compatibility flags (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
 - **Element strides everywhere internally.** NumPy stores byte strides in `NAD_STRIDES`. NumSharp stores element strides in `state.Strides` and multiplies by `ElementSizes[op]` at use. This matches NumSharp's `Shape.strides` convention.
-- **No Python object support.** `REFS_OK`, garbage collection hooks, and `NpyIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
+- **No Python object support.** `REFS_OK`, garbage collection hooks, and `NDIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
 - **Int64 indexing.** Every iteration counter is `long`. Arrays > 2 GB are first-class, unlike NumPy which still uses `npy_intp` (platform-dependent).
 - **NumSharp-only iterator flag.** `PARALLEL_SAFE` marks an iteration range as splittable across workers with no write hazard — set when there is no `REDUCE` operand and at most one write operand whose overlap was resolved by `COPY_IF_OVERLAP`. It has no NumPy equivalent.
 
@@ -186,7 +186,7 @@ public long* BufStrides;        // inner-loop stride per operand in bytes
                                 //   == ElementSizes[op] for buffered operands
 ```
 
-When buffering is active, an operand's `DataPtrs[op]` points into `Buffers[op]`, not into the original NDArray. The kernel sees a contiguous buffer at the buffer dtype; `NpyIterBufferManager` handles the strided copy-in and copy-out.
+When buffering is active, an operand's `DataPtrs[op]` points into `Buffers[op]`, not into the original NDArray. The kernel sees a contiguous buffer at the buffer dtype; `NDIterBufferManager` handles the strided copy-in and copy-out.
 
 ### Reduction Fields (double-loop)
 
@@ -211,16 +211,16 @@ These only come into play when the iterator has both `BUFFER` and `REDUCE` flags
 Creating an iterator looks like this:
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(
+using var iter = NDIterRef.MultiNew(
     nop: 3,
     op: new[] { a, b, out },
-    flags: NpyIterGlobalFlags.EXTERNAL_LOOP | NpyIterGlobalFlags.BUFFERED,
+    flags: NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.BUFFERED,
     order: NPY_ORDER.NPY_KEEPORDER,
     casting: NPY_CASTING.NPY_SAFE_CASTING,
     opFlags: new[] {
-        NpyIterPerOpFlags.READONLY,
-        NpyIterPerOpFlags.READONLY,
-        NpyIterPerOpFlags.WRITEONLY },
+        NDIterPerOpFlags.READONLY,
+        NDIterPerOpFlags.READONLY,
+        NDIterPerOpFlags.WRITEONLY },
     opDtypes: new[] { NPTypeCode.Double, NPTypeCode.Double, NPTypeCode.Double });
 ```
 
@@ -236,13 +236,13 @@ Behind the scenes:
 7. For each operand:
       - SetOpSrcDType (array dtype)
       - SetOpDType (buffer dtype; equals array dtype when not casting)
-      - Translate NpyIterPerOpFlags → NpyIterOpFlags
+      - Translate NDIterPerOpFlags → NDIterOpFlags
       - Mark CAST if dtypes differ
       - Compute strides (respecting op_axes or broadcast)
       - Set data pointer = arr.Address + offset * elemSize
       - Mark SourceBroadcast if any dim has stride 0 with Shape > 1
 8. Validate casting requires BUFFERED flag
-9. NpyIterCasting.ValidateCasts(ref state, casting)
+9. NDIterCasting.ValidateCasts(ref state, casting)
 10. Apply op_axes reduction flags (detects implicit + explicit reduction axes)
 11. FlipNegativeStrides (K-order only; skipped for C/F/A)
 12. If NDim > 1: ReorderAxesForCoalescing → CoalesceAxes
@@ -262,7 +262,7 @@ The result is a state machine ready to produce pointers.
 
 There are four mostly-disjoint flag enums. A quick reference:
 
-**`NpyIterGlobalFlags` — passed at construction, affect the whole iterator.**
+**`NDIterGlobalFlags` — passed at construction, affect the whole iterator.**
 
 | Flag | Meaning |
 |------|---------|
@@ -278,7 +278,7 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `COPY_IF_OVERLAP` | Copy operand if it overlaps another in memory |
 | `RANGED` | Iterator covers a sub-range |
 
-**`NpyIterPerOpFlags` — passed per operand, affect just that operand.**
+**`NDIterPerOpFlags` — passed per operand, affect just that operand.**
 
 | Flag | Meaning |
 |------|---------|
@@ -289,9 +289,9 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `NO_BROADCAST` | Error if this operand would need to broadcast |
 | `WRITEMASKED`, `ARRAYMASK` | Writemask pair for masked writes |
 
-**`NpyIterFlags` — internal state, set/cleared during iteration.** (`IDENTPERM`, `NEGPERM`, `HASINDEX`, `BUFFER`, `REDUCE`, `ONEITERATION`, etc.) These flow from construction decisions.
+**`NDIterFlags` — internal state, set/cleared during iteration.** (`IDENTPERM`, `NEGPERM`, `HASINDEX`, `BUFFER`, `REDUCE`, `ONEITERATION`, etc.) These flow from construction decisions.
 
-**`NpyIterOpFlags` — per-operand internal state.** (`READ`, `WRITE`, `CAST`, `REDUCE`, `VIRTUAL`, `WRITEMASKED`, `BUF_REUSABLE`, `CONTIG`.)
+**`NDIterOpFlags` — per-operand internal state.** (`READ`, `WRITE`, `CAST`, `REDUCE`, `VIRTUAL`, `WRITEMASKED`, `BUF_REUSABLE`, `CONTIG`.)
 
 ---
 
@@ -346,9 +346,9 @@ When an output operand shares memory with an input — `np.add(a, a, out=a)`, `b
 
 ### The flag's contract
 
-Pass `NpyIterGlobalFlags.COPY_IF_OVERLAP` and, for each **write** operand, the constructor checks it against every **read** operand. If they may share memory, the write operand is replaced with a fresh C-order temporary; the kernel writes into the temp, and the temp is copied back over the original when the iterator is disposed. Read operands are never copied — only the writers that would corrupt a reader. This runs in `Initialize` *before* the ALLOCATE step, so an iterator-allocated output can never be made to overlap an input.
+Pass `NDIterGlobalFlags.COPY_IF_OVERLAP` and, for each **write** operand, the constructor checks it against every **read** operand. If they may share memory, the write operand is replaced with a fresh C-order temporary; the kernel writes into the temp, and the temp is copied back over the original when the iterator is disposed. Read operands are never copied — only the writers that would corrupt a reader. This runs in `Initialize` *before* the ALLOCATE step, so an iterator-allocated output can never be made to overlap an input.
 
-### The overlap solver (`NpyMemOverlap.cs`)
+### The overlap solver (`NDMemOverlap.cs`)
 
 "May these two views share memory?" is not the bounding-box question it looks like. `a[::2]` and `a[1::2]` occupy the *same* address range yet never touch the same byte. The exact test is a bounded Diophantine equation — the two arrays overlap iff
 
@@ -356,7 +356,7 @@ Pass `NpyIterGlobalFlags.COPY_IF_OVERLAP` and, for each **write** operand, the c
 Σ strideₐ·xₐ − Σ strideᵦ·xᵦ = baseᵦ − baseₐ      (0 ≤ x[i] < shape[i])
 ```
 
-has an integer solution. `NpyMemOverlap` is a faithful port of NumPy's `numpy/_core/src/common/mem_overlap.c` (Pauli Virtanen's solver), with `System.Int128` standing in for NumPy's `npy_extint128.h`:
+has an integer solution. `NDMemOverlap` is a faithful port of NumPy's `numpy/_core/src/common/mem_overlap.c` (Pauli Virtanen's solver), with `System.Int128` standing in for NumPy's `npy_extint128.h`:
 
 1. **Bounds quick-check.** `GetMemoryExtents` computes each array's half-open `[start, end)` byte range. Disjoint ranges → `No` overlap, no further work (this is NumPy's `MAY_SHARE_BOUNDS`, i.e. `maxWork == 0`).
 2. **Diophantine solve.** Overlapping bounds fall through to `SolveDiophantine` (an extended-Euclid GCD chain plus a depth-first bounded search), which decides whether a *real* shared element exists. The search is **work-capped** by `maxWork`: if the cap is hit the result is `TooHard`, which callers conservatively treat as "may share."
@@ -426,7 +426,7 @@ Buffering solves two problems:
 1. **Casting.** If the caller wants to see doubles but the NDArray is int32, the iterator copies into a double buffer, runs the kernel against the buffer, writes back on dispose.
 2. **Non-contiguous + SIMD.** If the operand is strided (sliced, transposed), copying to a contiguous buffer lets a SIMD kernel work efficiently.
 
-`NpyIterBufferManager.AllocateBuffers` allocates 64-byte-aligned blocks (AVX-512-friendly) per operand that needs buffering. Default buffer size is 8192 elements; this can be tuned per call.
+`NDIterBufferManager.AllocateBuffers` allocates 64-byte-aligned blocks (AVX-512-friendly) per operand that needs buffering. Default buffer size is 8192 elements; this can be tuned per call.
 
 ```
 strided array (stride=5, size=24)       aligned 64-byte buffer (size ≤ 8192)
@@ -438,7 +438,7 @@ strided array (stride=5, size=24)       aligned 64-byte buffer (size ≤ 8192)
 └─────────────────────┘                     BufStrides[op] = sizeof(T)
 ```
 
-Once the buffer is filled, `DataPtrs[op]` moves into the buffer and every inner-loop kernel treats it as a flat contiguous array. When iteration advances past `BufIterEnd`, `NpyIterBufferManager.CopyFromBuffer` writes output back into the original array (respecting original strides) and `CopyToBuffer` refills input buffers for the next chunk.
+Once the buffer is filled, `DataPtrs[op]` moves into the buffer and every inner-loop kernel treats it as a flat contiguous array. When iteration advances past `BufIterEnd`, `NDIterBufferManager.CopyFromBuffer` writes output back into the original array (respecting original strides) and `CopyToBuffer` refills input buffers for the next chunk.
 
 ### GROWINNER
 
@@ -467,7 +467,7 @@ For each buffer fill:
 
 The trick: reduce operands have `BufStrides[op] = 0`, so inside the core loop their pointer stays pinned. The kernel keeps adding into the same output slot until the reduce axis is exhausted; the outer loop then moves to the next output slot.
 
-`NpyIterState.BufferedReduceAdvance()` returns:
+`NDIterState.BufferedReduceAdvance()` returns:
 - `1` — more elements in current buffer (inner or outer)
 - `0` — buffer exhausted, caller must refill
 - `-1` — iteration complete, caller must flush
@@ -487,9 +487,9 @@ if (iter.IsFirstVisit(reduceOp)) *(double*)ptrs[reduceOp] = 0.0;
 
 ## Kernel Integration Layer
 
-Everything up to this point describes `NpyIter`'s scheduling machinery. What `NpyIter.Execution.cs` adds is the connection between that schedule and the SIMD kernels `ILKernelGenerator` emits.
+Everything up to this point describes `NDIter`'s scheduling machinery. What `NDIter.Execution.cs` adds is the connection between that schedule and the SIMD kernels `ILKernelGenerator` emits.
 
-The layer is a partial declaration of `NpyIterRef` that exposes **seven entry points** arranged along an ergonomics-vs-control axis. Pick the one that matches your use case; they all share the same compiled-kernel cache and all run through the same `ForEach` driver at the bottom.
+The layer is a partial declaration of `NDIterRef` that exposes **seven entry points** arranged along an ergonomics-vs-control axis. Pick the one that matches your use case; they all share the same compiled-kernel cache and all run through the same `ForEach` driver at the bottom.
 
 ```
            ergonomics                                                     control
@@ -498,10 +498,10 @@ The layer is a partial declaration of `NpyIterRef` that exposes **seven entry po
   Layer 3     │  ExecuteBinary / Unary / Reduction / Comparison / Scan      │  90% case
               │  "one call, NumPy-style — one line per op"                   │
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C      │  ExecuteExpression(NpyExpr)                                  │  compose
+  Tier 3C      │  ExecuteExpression(NDExpr)                                  │  compose
               │  "build a tree with operators; no IL in caller"              │  with DSL
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Tier 3C+Call │  NpyExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
+  Tier 3C+Call │  NDExpr.Call(Math.X / Func / MethodInfo, args)              │  inject any
               │  "invoke arbitrary managed method per element"               │  BCL / user op
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
   Tier 3B      │  ExecuteElementWiseBinary(scalarBody, vectorBody)            │  hand-tune
@@ -513,11 +513,11 @@ The layer is a partial declaration of `NpyIterRef` that exposes **seven entry po
   Layer 2     │  ExecuteGeneric<TKernel> / ExecuteReducing<TKernel, TAccum>  │  struct-
               │  "zero-alloc; JIT specializes per struct; early-exit reduce" │  generic
   ──────────  │  ─────────────────────────────────────────────────────────  │  ──────────
-  Layer 1     │  ForEach(NpyInnerLoopFunc kernel, void* aux)                 │  delegate,
+  Layer 1     │  ForEach(NDInnerLoopFunc kernel, void* aux)                 │  delegate,
               │  "closest to NumPy's C API; closures welcome"                │  anything goes
               │                                                              │
               ▼                                                              ▼
-           NpyIter state (Shape, Strides, DataPtrs, Buffers, ...)
+           NDIter state (Shape, Strides, DataPtrs, Buffers, ...)
                                   │
                                   ▼
               ILKernelGenerator (DynamicMethod + V128/V256/V512)
@@ -528,12 +528,12 @@ The layer is a partial declaration of `NpyIterRef` that exposes **seven entry po
 | # | Entry point | When to reach for it | Per-call cost |
 |---|-------------|----------------------|---------------|
 | 1 | `ExecuteBinary` / `Unary` / `Reduction` / `Comparison` / `Scan` | The op is a standard NumPy ufunc. 90% of cases. | Cache hit after first call |
-| 2 | `ExecuteExpression(NpyExpr)` | Compose a fused ufunc from DSL nodes (`Add`, `Sqrt`, `Where`, `Exp`, comparisons, `Min`/`Max`/`Clamp`, …). SIMD when dtypes align. | Cache hit after first compile |
-| 3 | `ExecuteExpression(NpyExpr.Call(...))` | DSL doesn't expose the op you want (`Math.BitIncrement`, custom activation, reflected plugin method). | +5-10 ns / element for non-static delegates |
+| 2 | `ExecuteExpression(NDExpr)` | Compose a fused ufunc from DSL nodes (`Add`, `Sqrt`, `Where`, `Exp`, comparisons, `Min`/`Max`/`Clamp`, …). SIMD when dtypes align. | Cache hit after first compile |
+| 3 | `ExecuteExpression(NDExpr.Call(...))` | DSL doesn't expose the op you want (`Math.BitIncrement`, custom activation, reflected plugin method). | +5-10 ns / element for non-static delegates |
 | 4 | `ExecuteElementWiseBinary` / `Unary` / `Ternary` / `ExecuteElementWise` (array form) | You want SIMD + 4× unroll for a fused or non-standard op; the DSL doesn't compose to it, but the loop shape is still element-wise. Hand-write the scalar + vector body. | Cache hit after first compile |
 | 5 | `ExecuteRawIL(emit, key, aux)` | Non-rectangular loop: gather/scatter, cross-element deps, branch-on-auxdata. You emit every opcode. | Cache hit after first compile |
 | 6 | `ExecuteGeneric<TKernel>` / `ExecuteReducing<TKernel, TAccum>` | Custom kernel in struct form. Zero allocation; JIT specializes. **Only** path with early-exit reductions. | No delegate indirection |
-| 7 | `ForEach(NpyInnerLoopFunc)` | Exploratory; one-off fused kernels; anything a closure makes natural. | Delegate allocation per call |
+| 7 | `ForEach(NDInnerLoopFunc)` | Exploratory; one-off fused kernels; anything a closure makes natural. | Delegate allocation per call |
 
 ### Decision tree
 
@@ -600,16 +600,16 @@ GeneratedDelegates.InnerLoopCount      = 4     ← one per unique cache key acro
 DelegateSlots.RegisteredCount          = 131   ← one per Call(lambda) construction
 ```
 
-The `131` reflects the behavior described in the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NpyExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. To keep slot growth flat, register delegates once at startup (`static readonly Func<…>`); see the [registration-once pattern](#memory-model-and-lifetime).
+The `131` reflects the behavior described in the [Memory model and lifetime](#memory-model-and-lifetime) section — every `NDExpr.Call(lambda, …)` constructor call re-registers the delegate, even if the kernel is reused via an explicit `cacheKey`. To keep slot growth flat, register delegates once at startup (`static readonly Func<…>`); see the [registration-once pattern](#memory-model-and-lifetime).
 
 ### Layer 1 — Canonical Inner-Loop API
 
 This is the NumPy-in-C pattern. You hand the iterator a function pointer (a delegate in C#), and it runs the canonical loop:
 
 ```csharp
-public void ForEach(NpyInnerLoopFunc kernel, void* auxdata = null);
+public void ForEach(NDInnerLoopFunc kernel, void* auxdata = null);
 
-public unsafe delegate void NpyInnerLoopFunc(
+public unsafe delegate void NDInnerLoopFunc(
     void** dataptrs, long* strides, long count, void* auxdata);
 ```
 
@@ -627,13 +627,13 @@ The strides passed to the kernel are always in **bytes** — the bridge converts
 **Performance note.** Post-tier-1 the JIT autovectorizes both byte-pointer and typed-pointer loops into Vector256. To get there faster and to keep the fast path as simple as possible, branch on stride at the top and drop to typed pointers:
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(3, new[] { a, b, c },
-    NpyIterGlobalFlags.EXTERNAL_LOOP,
+using var iter = NDIterRef.MultiNew(3, new[] { a, b, c },
+    NDIterGlobalFlags.EXTERNAL_LOOP,
     NPY_ORDER.NPY_KEEPORDER,
     NPY_CASTING.NPY_NO_CASTING,
-    new[] { NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.READONLY,
-            NpyIterPerOpFlags.WRITEONLY });
+    new[] { NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.WRITEONLY });
 
 iter.ForEach((ptrs, strides, count, _) => {
     // Fast branch: contiguous, element stride == sizeof(float).
@@ -662,21 +662,21 @@ Use this when you're writing a one-off operation that doesn't fit the standard u
 Delegates have an indirect call. For hot inner loops, that hurts. Layer 2 trades a delegate for a struct type parameter:
 
 ```csharp
-public interface INpyInnerLoop
+public interface INDInnerLoop
 {
     void Execute(void** dataptrs, long* strides, long count);
 }
 
-public interface INpyReducingInnerLoop<TAccum> where TAccum : unmanaged
+public interface INDReducingInnerLoop<TAccum> where TAccum : unmanaged
 {
     bool Execute(void** dataptrs, long* strides, long count, ref TAccum accumulator);
 }
 
 public void ExecuteGeneric<TKernel>(TKernel kernel)
-    where TKernel : struct, INpyInnerLoop;
+    where TKernel : struct, INDInnerLoop;
 
 public TAccum ExecuteReducing<TKernel, TAccum>(TKernel kernel, TAccum init)
-    where TKernel : struct, INpyReducingInnerLoop<TAccum>
+    where TKernel : struct, INDReducingInnerLoop<TAccum>
     where TAccum : unmanaged;
 ```
 
@@ -685,7 +685,7 @@ Because `TKernel` is constrained to `struct`, the JIT specializes one copy of `E
 The bridge splits `ExecuteGeneric` internally so the single-inner-loop case (the common case: coalesced contig + `EXTERNAL_LOOP`, `ONEITERATION`, or buffered-fits-in-one-fill) goes through `ExecuteGenericSingle` — a tiny `[AggressiveInlining]` method with one `kernel.Execute` call and no `do/while`. That's what lets the JIT autovectorize the kernel's body. The multi-loop path keeps the canonical `do { kernel.Execute(...); } while (iternext); ` driver.
 
 ```csharp
-readonly unsafe struct HypotKernel : INpyInnerLoop
+readonly unsafe struct HypotKernel : INDInnerLoop
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Execute(void** p, long* s, long n)
@@ -714,7 +714,7 @@ iter.ExecuteGeneric(default(HypotKernel));  // zero-alloc, inlined
 For early-exit reductions, the kernel returns `false` to abort:
 
 ```csharp
-readonly unsafe struct AnyNonZero : INpyReducingInnerLoop<bool>
+readonly unsafe struct AnyNonZero : INDReducingInnerLoop<bool>
 {
     public bool Execute(void** p, long* s, long n, ref bool acc)
     {
@@ -751,7 +751,7 @@ Under the hood each helper does four things:
 3. **Prepare args.** `stackalloc` one stride array per operand, fill with element strides, grab `_state->Shape` and data pointers.
 4. **Invoke.** `ILKernelGenerator.GetMixedTypeKernel(key)(...)` — cache hit returns the cached delegate, cache miss emits IL and caches.
 
-For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (always element-sized for the buffer dtype) rather than the original-array strides — the inner loop reads contiguous buffer memory while `NpyIterBufferManager` handles the strided copy-in and copy-out.
+For buffered paths, `ExecuteBinary` dispatches to `RunBufferedBinary`, which runs the kernel against `_state->Buffers` using `BufStrides` (always element-sized for the buffer dtype) rather than the original-array strides — the inner loop reads contiguous buffer memory while `NDIterBufferManager` handles the strided copy-in and copy-out.
 
 ### Custom Operations (Tier 3A / 3B / 3C)
 
@@ -763,7 +763,7 @@ The Custom Operations extension solves this by letting the bridge **IL-generate 
               ┌─────────────────── You provide ────────────────────┐
  Tier 3A       │  the entire inner-loop IL body                     │  Maximum control
  Tier 3B       │  per-element scalar + (optional) vector IL body    │  Shared unroll shell
- Tier 3C       │  an expression tree (NpyExpr)                      │  No IL required
+ Tier 3C       │  an expression tree (NDExpr)                      │  No IL required
               └────────────────────────────────────────────────────┘
                            │
                            ▼
@@ -777,20 +777,20 @@ The Custom Operations extension solves this by letting the bridge **IL-generate 
            + scalar tail)
                  └─────────┬─────────┘
                            ▼
-                  NpyInnerLoopFunc delegate (cached)
+                  NDInnerLoopFunc delegate (cached)
                            │
                            ▼
-                 NpyIterRef.ForEach → do { kernel(...); } while (iternext)
+                 NDIterRef.ForEach → do { kernel(...); } while (iternext)
 ```
 
-All three tiers produce the same delegate shape (`NpyInnerLoopFunc`) and funnel through `ForEach`. The factory emits a runtime contig check at the top of the kernel: if every operand's byte stride equals its element size, take the SIMD path; otherwise fall into the scalar-strided loop. Cache keys are user-supplied strings; Tier 3C derives a structural signature automatically if you don't provide one.
+All three tiers produce the same delegate shape (`NDInnerLoopFunc`) and funnel through `ForEach`. The factory emits a runtime contig check at the top of the kernel: if every operand's byte stride equals its element size, take the SIMD path; otherwise fall into the scalar-strided loop. Cache keys are user-supplied strings; Tier 3C derives a structural signature automatically if you don't provide one.
 
-| Method on `NpyIterRef` | Tier | What you supply |
+| Method on `NDIterRef` | Tier | What you supply |
 |------------------------|------|------------------|
 | `ExecuteRawIL(emit, key, aux)` | A | `Action<ILGenerator>` — the entire method, including `ret` |
 | `ExecuteElementWise(operandTypes, scalarBody, vectorBody, key)` | B | Two `Action<ILGenerator>` — per-element scalar and vector |
 | `ExecuteElementWiseUnary/Binary/Ternary(...)` | B | Typed convenience overloads |
-| `ExecuteExpression(expr, inputTypes, outputType, key?)` | C | An `NpyExpr` tree |
+| `ExecuteExpression(expr, inputTypes, outputType, key?)` | C | An `NDExpr` tree |
 
 #### Tier 3A — Raw IL
 
@@ -876,8 +876,8 @@ The expression DSL lets you compose ops with C# operator syntax, and `Compile()`
 
 ```csharp
 // out = sqrt(a² + b²)
-var expr = NpyExpr.Sqrt(NpyExpr.Square(NpyExpr.Input(0)) +
-                        NpyExpr.Square(NpyExpr.Input(1)));
+var expr = NDExpr.Sqrt(NDExpr.Square(NDExpr.Input(0)) +
+                        NDExpr.Square(NDExpr.Input(1)));
 
 iter.ExecuteExpression(expr,
     inputTypes: new[] { NPTypeCode.Single, NPTypeCode.Single },
@@ -890,8 +890,8 @@ iter.ExecuteExpression(expr,
 
 | Factory | Semantics | NumPy |
 |---------|-----------|-------|
-| `NpyExpr.Input(i)` | Reference operand `i` (0-based input index). Auto-converts to output dtype on load. | — |
-| `NpyExpr.Const(value)` | Literal — `int / long / float / double` overloads. Emitted at the output dtype. | — |
+| `NDExpr.Input(i)` | Reference operand `i` (0-based input index). Auto-converts to output dtype on load. | — |
+| `NDExpr.Const(value)` | Literal — `int / long / float / double` overloads. Emitted at the output dtype. | — |
 
 **Binary arithmetic.**
 
@@ -968,7 +968,7 @@ iter.ExecuteExpression(expr,
 | `Round(x)` | Banker's rounding (half-to-even) | — | `np.rint` (matches NumPy's half-to-even default) |
 | `Truncate(x)` | Toward zero | — | `np.trunc` |
 
-> `Round` and `Truncate` have a working SIMD path on .NET 9+, but NumSharp's library targets .NET 8 as well, where `Vector256.Round/Truncate` don't exist. NpyExpr gates them to the scalar path unconditionally so the compiled kernel works on both frameworks. Other contiguous rounding ops autovectorize after tier-1 JIT promotion.
+> `Round` and `Truncate` have a working SIMD path on .NET 9+, but NumSharp's library targets .NET 8 as well, where `Vector256.Round/Truncate` don't exist. NDExpr gates them to the scalar path unconditionally so the compiled kernel works on both frameworks. Other contiguous rounding ops autovectorize after tier-1 JIT promotion.
 
 **Unary — bitwise / logical / predicates.**
 
@@ -999,10 +999,10 @@ NaN semantics match IEEE 754: any comparison involving NaN produces 0 (false). `
 
 | Factory | Semantics |
 |---------|-----------|
-| `Call<T1…Tn, TR>(Func<T1…Tn, TR> f, NpyExpr a1, …)` | Typed generic overloads for arity 0–4. Accept method groups without cast (`NpyExpr.Call(Math.Sqrt, x)`, `NpyExpr.Call(Math.Pow, x, y)`). |
-| `Call(Delegate func, params NpyExpr[] args)` | Catch-all for pre-constructed delegates. Use when the arity exceeds 4 or when the typed overload is ambiguous. |
-| `Call(MethodInfo staticMethod, params NpyExpr[] args)` | Invoke a reflection-obtained static method. |
-| `Call(MethodInfo instanceMethod, object target, params NpyExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
+| `Call<T1…Tn, TR>(Func<T1…Tn, TR> f, NDExpr a1, …)` | Typed generic overloads for arity 0–4. Accept method groups without cast (`NDExpr.Call(Math.Sqrt, x)`, `NDExpr.Call(Math.Pow, x, y)`). |
+| `Call(Delegate func, params NDExpr[] args)` | Catch-all for pre-constructed delegates. Use when the arity exceeds 4 or when the typed overload is ambiguous. |
+| `Call(MethodInfo staticMethod, params NDExpr[] args)` | Invoke a reflection-obtained static method. |
+| `Call(MethodInfo instanceMethod, object target, params NDExpr[] args)` | Invoke a reflection-obtained instance method against `target`. |
 
 See [Call — invoke any .NET method](#call--invoke-any-net-method) below for dispatch paths, auto-conversion rules, supported signatures, performance envelope, and overload-disambiguation guidance.
 
@@ -1012,13 +1012,13 @@ An expression tree reads like ordinary C#:
 
 ```csharp
 // (a + b) * c + 1
-var linear = (NpyExpr.Input(0) + NpyExpr.Input(1)) * NpyExpr.Input(2) + NpyExpr.Const(1.0f);
+var linear = (NDExpr.Input(0) + NDExpr.Input(1)) * NDExpr.Input(2) + NDExpr.Const(1.0f);
 
 // ReLU via comparison × input
-var relu = NpyExpr.Greater(NpyExpr.Input(0), NpyExpr.Const(0.0f)) * NpyExpr.Input(0);
+var relu = NDExpr.Greater(NDExpr.Input(0), NDExpr.Const(0.0f)) * NDExpr.Input(0);
 
 // Clamp with no named method call
-var clamped = NpyExpr.Min(NpyExpr.Max(NpyExpr.Input(0), NpyExpr.Const(0f)), NpyExpr.Const(1f));
+var clamped = NDExpr.Min(NDExpr.Max(NDExpr.Input(0), NDExpr.Const(0f)), NDExpr.Const(1f));
 ```
 
 Overloads: `+ - * /` (arithmetic), `%` (NumPy mod), `& | ^` (bitwise), unary `-` (negate), `~` (bitwise not), `!` (logical not). No overloads for `<`, `>`, `==`, `!=` (those need to return `bool` in C#, which would collide with `object.Equals` and similar) — use the factory methods (`Less`, `Greater`, `Equal`, `NotEqual`, `LessEqual`, `GreaterEqual`) for comparisons.
@@ -1031,7 +1031,7 @@ The DSL's built-in catalog covers most element-wise math. `Call` is the escape h
 
 ```
                       ┌─────────────────────────┐
-  NpyExpr.Call(...)   │       CallNode          │
+  NDExpr.Call(...)   │       CallNode          │
   ─────────────▶      │  _kind ∈ {              │
                       │    StaticMethod,        │ ← call <methodinfo>
                       │    BoundTarget,         │ ← load target, callvirt
@@ -1045,13 +1045,13 @@ The DSL's built-in catalog covers most element-wise math. `Call` is the escape h
 ```csharp
 // Func<T...> overload: compiler infers delegate signature, no cast needed
 // for non-overloaded methods.
-NpyExpr.Call(Math.Sqrt,   NpyExpr.Input(0));
-NpyExpr.Call(Math.Pow,    NpyExpr.Input(0), NpyExpr.Input(1));
-NpyExpr.Call(MathF.Tanh,  NpyExpr.Input(0));
+NDExpr.Call(Math.Sqrt,   NDExpr.Input(0));
+NDExpr.Call(Math.Pow,    NDExpr.Input(0), NDExpr.Input(1));
+NDExpr.Call(MathF.Tanh,  NDExpr.Input(0));
 
 // MethodInfo overload: useful when reflecting.
 var mi = typeof(Math).GetMethod("BitIncrement", new[] { typeof(double) });
-NpyExpr.Call(mi, NpyExpr.Input(0));
+NDExpr.Call(mi, NDExpr.Input(0));
 ```
 
 Emit: one `call <methodinfo>` opcode after the arguments are pushed. The JIT may inline the target when it's small and visible. No DelegateSlots entry, no runtime lookup. This is the fast path and is what you get automatically whenever the delegate has no captured state.
@@ -1068,7 +1068,7 @@ class Activations
 var inst = new Activations { Temperature = 1.5 };
 var mi = typeof(Activations).GetMethod("Softmax");
 
-NpyExpr.Call(mi, inst, NpyExpr.Input(0));
+NDExpr.Call(mi, inst, NDExpr.Input(0));
 ```
 
 Emit: the kernel first loads the target object from a process-wide `DelegateSlots` registry by integer ID, casts it to the method's declaring type, pushes the arguments, then `callvirt <methodinfo>`. Cost is one dictionary lookup (~5 ns) plus a virtual call. The target object's state is live — mutations are visible to subsequent kernel invocations.
@@ -1079,11 +1079,11 @@ Emit: the kernel first loads the target object from a process-wide `DelegateSlot
 // Works uniformly for lambdas with captures, instance-method-bound delegates,
 // or any pre-constructed Delegate instance.
 Func<double, double> swish = x => x / (1.0 + Math.Exp(-x));
-NpyExpr.Call(swish, NpyExpr.Input(0));
+NDExpr.Call(swish, NDExpr.Input(0));
 
 // Pre-constructed delegate with explicit type (no method-group cast needed here).
 Delegate d = swish;
-NpyExpr.Call(d, NpyExpr.Input(0));
+NDExpr.Call(d, NDExpr.Input(0));
 ```
 
 Emit: the kernel loads the delegate from `DelegateSlots`, casts it to its concrete runtime type (e.g. `Func<double, double>`), pushes arguments, then `callvirt Invoke`. Same ~5-10 ns overhead as Path B, plus the `Delegate.Invoke` dispatch stub (single virtual call).
@@ -1100,38 +1100,38 @@ The node respects the DSL's single-output-dtype invariant:
   └──────────────────┘  └─────────────┘   └───────────────┘   └──────────────────┘
 ```
 
-So `NpyExpr.Call(Math.Sqrt, Input(0))` with an `Int32` input and a `Double` output works end-to-end: the int gets loaded, converted to double at `InputNode`, arrives at the call as double (no further conversion needed for a `Double` param), `Math.Sqrt` runs, the double return flows out to the `Double` output slot. Flip the output dtype to `Single` and you'd get an extra `Conv_R4` after the call.
+So `NDExpr.Call(Math.Sqrt, Input(0))` with an `Int32` input and a `Double` output works end-to-end: the int gets loaded, converted to double at `InputNode`, arrives at the call as double (no further conversion needed for a `Double` param), `Math.Sqrt` runs, the double return flows out to the `Double` output slot. Flip the output dtype to `Single` and you'd get an extra `Conv_R4` after the call.
 
 **Overload disambiguation.**
 
 Non-overloaded static methods bind to the typed `Func<...>` overload via method-group conversion — no cast needed:
 
 ```csharp
-NpyExpr.Call(Math.Sqrt, x);        // ✓ Func<double,double>
-NpyExpr.Call(Math.Cbrt, x);        // ✓ same
-NpyExpr.Call(MathF.Tanh, x);       // ✓ Func<float,float>
-NpyExpr.Call(Math.Pow, x, y);      // ✓ Func<double,double,double>
+NDExpr.Call(Math.Sqrt, x);        // ✓ Func<double,double>
+NDExpr.Call(Math.Cbrt, x);        // ✓ same
+NDExpr.Call(MathF.Tanh, x);       // ✓ Func<float,float>
+NDExpr.Call(Math.Pow, x, y);      // ✓ Func<double,double,double>
 ```
 
 Methods with multiple overloads (same name, different signatures) need a cast to disambiguate which one you want:
 
 ```csharp
 // ERROR: 'Math.Abs' has 9 overloads.
-// NpyExpr.Call(Math.Abs, x);
+// NDExpr.Call(Math.Abs, x);
 //                ^^^^^^^^
 // CS0121: The call is ambiguous between ...
 
 // Cast to the concrete Func<...> you want:
-NpyExpr.Call((Func<double, double>)Math.Abs, x);       // ✓ picks Math.Abs(double)
-NpyExpr.Call((Func<float, float>)MathF.Abs,  x);       // ✓ picks MathF.Abs(float)
-NpyExpr.Call((Func<long, long>)Math.Abs,     x);       // ✓ picks Math.Abs(long)
+NDExpr.Call((Func<double, double>)Math.Abs, x);       // ✓ picks Math.Abs(double)
+NDExpr.Call((Func<float, float>)MathF.Abs,  x);       // ✓ picks MathF.Abs(float)
+NDExpr.Call((Func<long, long>)Math.Abs,     x);       // ✓ picks Math.Abs(long)
 ```
 
 Alternatively, use the `MethodInfo` overload to pick by signature explicitly:
 
 ```csharp
 var mi = typeof(Math).GetMethod(nameof(Math.Abs), new[] { typeof(double) });
-NpyExpr.Call(mi, x);  // unambiguous — the MethodInfo is already picked
+NDExpr.Call(mi, x);  // unambiguous — the MethodInfo is already picked
 ```
 
 **Thread safety.**
@@ -1161,8 +1161,8 @@ Every intermediate value flows through the output dtype: `Input(i)` loads the i-
 var a = np.array(new int[] { 1, 4, 9, 16, 25 });
 var r = np.empty(new Shape(5), np.float64);
 
-using var iter = NpyIterRef.MultiNew(2, new[] { a, r }, ...);
-iter.ExecuteExpression(NpyExpr.Sqrt(NpyExpr.Input(0)),
+using var iter = NDIterRef.MultiNew(2, new[] { a, r }, ...);
+iter.ExecuteExpression(NDExpr.Sqrt(NDExpr.Input(0)),
     inputTypes: new[] { NPTypeCode.Int32 }, outputType: NPTypeCode.Double);
 // r = [1.0, 2.0, 3.0, 4.0, 5.0]
 ```
@@ -1184,20 +1184,20 @@ A tree's `SupportsSimd` is true only if **every** node in it does. One unsupport
 
 ##### Caching and auto-keys
 
-Pass `cacheKey` to share the compiled delegate across iterators; omit it and the compiler auto-derives one from the tree's structural signature plus input/output dtypes. Actual examples (verified against `NpyExpr.AppendSignature`):
+Pass `cacheKey` to share the compiled delegate across iterators; omit it and the compiler auto-derives one from the tree's structural signature plus input/output dtypes. Actual examples (verified against `NDExpr.AppendSignature`):
 
 ```
-NpyExpr:Add(Multiply(In[0],Const[2]),Const[3]):in=Double:out=Double
-NpyExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single
-NpyExpr:Where(CmpGreater(In[0],Const[0]),In[0],Multiply(Const[0.1],In[0])):in=Double:out=Double
-NpyExpr:Min(In[0],In[1]):in=Int32,Int32:out=Int32
-NpyExpr:IsNan(In[0]):in=Double:out=Double
-NpyExpr:LogicalNot(In[0]):in=Double:out=Double
-NpyExpr:BitwiseNot(In[0]):in=Int32:out=Int32
-NpyExpr:Mod(In[0],Const[3]):in=Double:out=Double
-NpyExpr:Sqrt(In[0]):in=Int32:out=Double           ← int input, double output
-NpyExpr:Call[System.Math.Sqrt#100663308@<guid>](In[0]):in=Double:out=Double
-NpyExpr:Call[MyApp.Activations.Swish#167772171@<guid>,target#7](In[0]):in=Double:out=Double
+NDExpr:Add(Multiply(In[0],Const[2]),Const[3]):in=Double:out=Double
+NDExpr:Sqrt(Add(Square(In[0]),Square(In[1]))):in=Single,Single:out=Single
+NDExpr:Where(CmpGreater(In[0],Const[0]),In[0],Multiply(Const[0.1],In[0])):in=Double:out=Double
+NDExpr:Min(In[0],In[1]):in=Int32,Int32:out=Int32
+NDExpr:IsNan(In[0]):in=Double:out=Double
+NDExpr:LogicalNot(In[0]):in=Double:out=Double
+NDExpr:BitwiseNot(In[0]):in=Int32:out=Int32
+NDExpr:Mod(In[0],Const[3]):in=Double:out=Double
+NDExpr:Sqrt(In[0]):in=Int32:out=Double           ← int input, double output
+NDExpr:Call[System.Math.Sqrt#100663308@<guid>](In[0]):in=Double:out=Double
+NDExpr:Call[MyApp.Activations.Swish#167772171@<guid>,target#7](In[0]):in=Double:out=Double
 ```
 
 Enum names appear verbatim (e.g. `Multiply`, not `Mul`; `IsNan`, not `IsNaN` — the enum is spelled `IsNan`).
@@ -1217,7 +1217,7 @@ Two trees with identical structure and types get the same auto-derived key and s
 
 > **Constant value sensitivity.** Two trees that differ only in a constant value (e.g. `x + 1` vs `x + 2`) generate distinct keys — the constant is part of the signature, because it's baked into the emitted IL. If you need many kernels parameterized by a scalar, consider passing the scalar as a second input operand (as a 0-d `NDArray` or a broadcast view) rather than a compile-time constant.
 >
-> **Integer/float const collision.** `NpyExpr.Const(1)` and `NpyExpr.Const(1.0)` both serialize to `Const[1]` when the `double` value is whole. With the same output dtype they produce identical IL, so sharing a cache entry is correct. If you need to distinguish — say, to force a specific integer vs float constant interpretation — construct both trees separately and supply an explicit `cacheKey`.
+> **Integer/float const collision.** `NDExpr.Const(1)` and `NDExpr.Const(1.0)` both serialize to `Const[1]` when the `double` value is whole. With the same output dtype they produce identical IL, so sharing a cache entry is correct. If you need to distinguish — say, to force a specific integer vs float constant interpretation — construct both trees separately and supply an explicit `cacheKey`.
 
 ##### Memory model and lifetime
 
@@ -1225,7 +1225,7 @@ Three things outlive a single Tier 3C call. Knowing what they are and how long t
 
 **1. Compiled kernels (`_innerLoopCache`).**
 
-Every unique `(structural signature, inputTypes, outputType)` triple produces a `DynamicMethod` that's JIT-compiled once and cached in a process-wide `ConcurrentDictionary<string, NpyInnerLoopFunc>` keyed by the cache-key string. The cache is append-only within the process lifetime. Cache keys are strings, so GC collects the old tree nodes once compilation completes, but the compiled delegate itself holds its `DynamicMethod` handle indefinitely.
+Every unique `(structural signature, inputTypes, outputType)` triple produces a `DynamicMethod` that's JIT-compiled once and cached in a process-wide `ConcurrentDictionary<string, NDInnerLoopFunc>` keyed by the cache-key string. The cache is append-only within the process lifetime. Cache keys are strings, so GC collects the old tree nodes once compilation completes, but the compiled delegate itself holds its `DynamicMethod` handle indefinitely.
 
 Typical memory profile:
 - Each compiled kernel is ~2-5 KB of native code + its metadata in the runtime's dynamic-method table.
@@ -1262,7 +1262,7 @@ DelegateSlots.Clear();          // wipe for testing (invalidates kernels that re
 
 **3. NDArrays referenced by the iterator.**
 
-Orthogonal to Tier 3C, but worth mentioning in the same section for completeness: `NpyIterRef` holds a managed `NDArray[]` field so the operands' backing memory isn't collected mid-iteration. The field is released when you `Dispose()` the ref — the `using var iter = ...` pattern handles this automatically. Forgetting to dispose keeps the NDArrays alive for however long the iterator lives.
+Orthogonal to Tier 3C, but worth mentioning in the same section for completeness: `NDIterRef` holds a managed `NDArray[]` field so the operands' backing memory isn't collected mid-iteration. The field is released when you `Dispose()` the ref — the `using var iter = ...` pattern handles this automatically. Forgetting to dispose keeps the NDArrays alive for however long the iterator lives.
 
 **Registration-once pattern.**
 
@@ -1281,8 +1281,8 @@ static class MyActivations
 }
 
 // Usage — reuses the same slot + cached kernel every time:
-var swished = NpyExpr.Call(MyActivations.Swish, NpyExpr.Input(0));
-var gelud   = NpyExpr.Call(MyActivations.GELU,  NpyExpr.Input(0));
+var swished = NDExpr.Call(MyActivations.Swish, NDExpr.Input(0));
+var gelud   = NDExpr.Call(MyActivations.GELU,  NDExpr.Input(0));
 ```
 
 ##### Validation and errors
@@ -1291,9 +1291,9 @@ The DSL fails fast at tree-construction time for structural errors and at compil
 
 | Error condition | Where | Exception |
 |----------------|-------|-----------|
-| `NpyExpr.Input(-1)` | Factory | `ArgumentOutOfRangeException` |
-| `NpyExpr.Sqrt(null)` | Node constructor | `ArgumentNullException` |
-| `NpyExpr.Add(null, x)` / `Add(x, null)` | Node constructor | `ArgumentNullException` |
+| `NDExpr.Input(-1)` | Factory | `ArgumentOutOfRangeException` |
+| `NDExpr.Sqrt(null)` | Node constructor | `ArgumentNullException` |
+| `NDExpr.Add(null, x)` / `Add(x, null)` | Node constructor | `ArgumentNullException` |
 | `ExecuteExpression(expr, null, outType)` | Bridge entry | `ArgumentNullException` |
 | `ExecuteExpression(expr, inputTypes, outType)` with too-few inputs vs operand count | Bridge entry | `ArgumentException` |
 | `Input(5)` when tree compiled with 2 inputs | Compile-time IL emission | `InvalidOperationException` — message: `"Input(5) out of range; compile provided 2 inputs."` |
@@ -1312,32 +1312,32 @@ Non-obvious but permanent behaviors of the DSL:
 - **NaN propagation in `Min`/`Max` matches `np.minimum`/`np.maximum`, not `np.fmin`/`np.fmax`.** If you need NaN-skipping min/max, compose with `IsNaN` and `Where`:
   ```csharp
   // fmin(a, b): return non-NaN if one is NaN, else min
-  var fmin = NpyExpr.Where(NpyExpr.IsNaN(a),
+  var fmin = NDExpr.Where(NDExpr.IsNaN(a),
       b,
-      NpyExpr.Where(NpyExpr.IsNaN(b), a, NpyExpr.Min(a, b)));
+      NDExpr.Where(NDExpr.IsNaN(b), a, NDExpr.Min(a, b)));
   ```
 
-- **`Mod` doesn't match C# `%` for negative operands.** C# truncates toward zero (`-10 % 3 == -1`); NumPy (and `NpyExpr.Mod`) floor toward negative infinity (`-10 mod 3 == 2`). This matches Python `%`.
+- **`Mod` doesn't match C# `%` for negative operands.** C# truncates toward zero (`-10 % 3 == -1`); NumPy (and `NDExpr.Mod`) floor toward negative infinity (`-10 mod 3 == 2`). This matches Python `%`.
 
 - **Integer division by zero throws.** `Divide(int_arr, int_arr_with_zero)` raises `DivideByZeroException` at runtime. Float division is silent (produces `±Infinity`/`NaN`).
 
-- **Constants widen to the output dtype.** `NpyExpr.Const(1_000_000_000) + NpyExpr.Input(0)` where the output is `Byte` will emit `Ldc_I4 1000000000` followed by `Conv_U1` — the billion wraps to a small byte. The DSL won't check that the constant fits; you get silent truncation.
+- **Constants widen to the output dtype.** `NDExpr.Const(1_000_000_000) + NDExpr.Input(0)` where the output is `Byte` will emit `Ldc_I4 1000000000` followed by `Conv_U1` — the billion wraps to a small byte. The DSL won't check that the constant fits; you get silent truncation.
 
-- **Bitwise ops require integer output dtype.** `NpyExpr.Input(0) & NpyExpr.Input(1)` with `outputType = Double` is a malformed tree — `EmitScalarOperation(BitwiseAnd, Double)` doesn't emit `And` for floats. You'll get an `InvalidOperationException` or unverifiable IL at compile time. Use an integer output dtype, or convert through `BitwiseNot`/`BitwiseAnd` in integer land and cast to float separately.
+- **Bitwise ops require integer output dtype.** `NDExpr.Input(0) & NDExpr.Input(1)` with `outputType = Double` is a malformed tree — `EmitScalarOperation(BitwiseAnd, Double)` doesn't emit `And` for floats. You'll get an `InvalidOperationException` or unverifiable IL at compile time. Use an integer output dtype, or convert through `BitwiseNot`/`BitwiseAnd` in integer land and cast to float separately.
 
-- **`LogicalNot` is `x == 0`, not `x != 0`.** It returns 1 when the input is zero and 0 otherwise. Same as Python's `not` applied to a numeric value. If you want "non-zero as 1", use `NpyExpr.NotEqual(x, NpyExpr.Const(0))`.
+- **`LogicalNot` is `x == 0`, not `x != 0`.** It returns 1 when the input is zero and 0 otherwise. Same as Python's `not` applied to a numeric value. If you want "non-zero as 1", use `NDExpr.NotEqual(x, NDExpr.Const(0))`.
 
 - **Input dtype mismatch is silent.** If your `inputTypes[]` says `Int32` but the actual NDArray operand is `Int16`, the kernel reads 4 bytes starting at the int16 pointer — garbage. The iterator's buffer/cast machinery only kicks in with `BUFFERED | NPY_*_CASTING`. For ad-hoc Tier 3C use, make sure `inputTypes[i]` matches the actual NDArray dtype, or run the iterator with casting flags.
 
-- **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NpyExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is rarely the intended comparison. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
+- **Comparisons in non-float arithmetic can be off-by-one.** For integer-output trees, `NDExpr.Greater(x, Const(0.5))` with `x` as `Int32` will compare two integers — `Const(0.5)` gets emitted as `Ldc_I4 0`, because `ConstNode.EmitLoadTyped` converts the literal to the output dtype's CLI type. `Greater(int_x, 0)` is rarely the intended comparison. Use an explicit `Const(1)` with the correct integer threshold, or change the output dtype to a float.
 
 - **`Where` duplicates both branches in IL.** The true-branch IL and false-branch IL are emitted sequentially with a `br` skipping the false side when cond is true. Deeply-nested `Where`s quadruple IL size (1 → 2 → 4 → 8 branches). For more than ~10 levels of nesting, consider flattening with a lookup table via Tier 3B.
 
-- **`Call` delegates are held forever.** `CallNode` stashes captured delegates and bound instance targets in a process-wide `DelegateSlots` dictionary so the emitted IL can look them up. There is no eviction. If you call `NpyExpr.Call(x => x * scale, in0)` inside a hot loop (creating a new closure each iteration), the dictionary grows without bound. Register delegates once at startup — a `static readonly Func<double, double>` field or a DI singleton — and reuse them.
+- **`Call` delegates are held forever.** `CallNode` stashes captured delegates and bound instance targets in a process-wide `DelegateSlots` dictionary so the emitted IL can look them up. There is no eviction. If you call `NDExpr.Call(x => x * scale, in0)` inside a hot loop (creating a new closure each iteration), the dictionary grows without bound. Register delegates once at startup — a `static readonly Func<double, double>` field or a DI singleton — and reuse them.
 
-- **`Call` method-group ambiguity.** `NpyExpr.Call(Math.Abs, x)` fails to compile because `Math.Abs` has nine overloads (`double`, `float`, `int`, `long`, etc.) and the compiler can't pick one. Cast to the specific `Func<...>` you want: `NpyExpr.Call((Func<double, double>)Math.Abs, x)`. Single-overload methods like `Math.Sqrt`, `Math.Cbrt`, `Math.Log` bind without cast.
+- **`Call` method-group ambiguity.** `NDExpr.Call(Math.Abs, x)` fails to compile because `Math.Abs` has nine overloads (`double`, `float`, `int`, `long`, etc.) and the compiler can't pick one. Cast to the specific `Func<...>` you want: `NDExpr.Call((Func<double, double>)Math.Abs, x)`. Single-overload methods like `Math.Sqrt`, `Math.Cbrt`, `Math.Log` bind without cast.
 
-- **`Call` runs at scalar speed.** A managed method call per element forfeits SIMD. For a sustained throughput-critical op, it's ~30-50% slower than the equivalent built-in DSL node because the call itself has overhead beyond just computing the result. Use `Call` for math the DSL doesn't expose (user-defined activations, `MathNet.Numerics` routines, lookup tables via a method), not for things like `Sqrt` where `NpyExpr.Sqrt(x)` is the right answer.
+- **`Call` runs at scalar speed.** A managed method call per element forfeits SIMD. For a sustained throughput-critical op, it's ~30-50% slower than the equivalent built-in DSL node because the call itself has overhead beyond just computing the result. Use `Call` for math the DSL doesn't expose (user-defined activations, `MathNet.Numerics` routines, lookup tables via a method), not for things like `Sqrt` where `NDExpr.Sqrt(x)` is the right answer.
 
 - **`Call` return type widening is lossy for NaN.** If a delegate returns `int` and the tree output is `double`, `Math.Floor(NaN) = NaN` gets cast to `int` (yielding `0` or some CPU-dependent value), which widens back to the float representation of that integer. NaN information is lost across integer-returning calls. Match return dtype to output dtype when NaN correctness matters.
 
@@ -1350,7 +1350,7 @@ Tier 3C kernels are `DynamicMethod` delegates — you can't step into their IL w
 - **Print the auto-derived cache key.** Construct the tree, call `new StringBuilder().Also(e => node.AppendSignature(sb))` (`AppendSignature` is internal). The printed signature is exactly what goes into the cache key — useful for diagnosing "why aren't these two trees sharing a kernel?". For `Call` nodes in particular, the signature includes `MetadataToken` and `ModuleVersionId` — if those differ across two calls of what you thought was the same method, the compiler loaded the method from different assemblies or modules.
 - **Reduce to a minimal tree.** If a compiled kernel misbehaves, isolate the failing subtree by compiling just that fragment against a tiny input (1-3 elements). `ExecuteExpression` on a 3-element array still exercises the scalar path; crashes become reproducible in a few lines.
 - **Watch the output dtype.** `ExecuteExpression` expects `outputType` to match the output NDArray's dtype. If they disagree, the kernel reads/writes wrong byte counts. Double-check both.
-- **Diagnose "method group ambiguous" errors.** If you see `CS0121: The call is ambiguous between the following methods` when writing `NpyExpr.Call(Math.X, ...)`, the method has multiple overloads (e.g. `Math.Abs` has 9). Cast to the specific `Func<...>` you want, or use the `MethodInfo` overload with an explicit parameter-types array to `GetMethod`.
+- **Diagnose "method group ambiguous" errors.** If you see `CS0121: The call is ambiguous between the following methods` when writing `NDExpr.Call(Math.X, ...)`, the method has multiple overloads (e.g. `Math.Abs` has 9). Cast to the specific `Func<...>` you want, or use the `MethodInfo` overload with an explicit parameter-types array to `GetMethod`.
 - **Diagnose "Method X returns void"** errors — you passed a method with no return value to `Call`. Tier 3C requires every node to contribute a value to the output dtype.
 - **Diagnose "Target is X, method declares Y"** errors — your instance `MethodInfo` call received a target that isn't an instance of the method's declaring type. Confirm both the method and the target came from the same type, especially if you're reflecting across a plugin boundary.
 - **Enable IL dumps** by emitting into a persistent assembly instead of `DynamicMethod` — not a supported build configuration, but `ILKernelGenerator.InnerLoop.cs` is a single partial file you can modify in a workspace-only diff if you need to dump bytes during development.
@@ -1439,7 +1439,7 @@ Seventeen worked examples grouped by API tier.
 15. [Heaviside step function](#15-heaviside-step-function)
 16. [Polynomial evaluation via Horner's method](#16-polynomial-evaluation-via-horners-method)
 17. [Piecewise: absolute value of sine (abs(sin(x)))](#17-piecewise-absolute-value-of-sine-abssinx)
-18. [User-defined activation via NpyExpr.Call](#18-user-defined-activation-via-npyexprcall)
+18. [User-defined activation via NDExpr.Call](#18-user-defined-activation-via-npyexprcall)
 19. [Reflected MethodInfo with an instance method](#19-reflected-methodinfo-with-an-instance-method)
 
 ### 1. Three-operand binary over a 3-D contiguous array
@@ -1449,14 +1449,14 @@ var a = np.arange(24, dtype: np.float32).reshape(2, 3, 4);
 var b = (np.arange(24, dtype: np.float32).reshape(2, 3, 4) * 2f).astype(np.float32);
 var c = np.zeros(new Shape(2, 3, 4), np.float32);
 
-using var iter = NpyIterRef.MultiNew(
+using var iter = NDIterRef.MultiNew(
     nop: 3, op: new[] { a, b, c },
-    flags: NpyIterGlobalFlags.None,
+    flags: NDIterGlobalFlags.None,
     order: NPY_ORDER.NPY_KEEPORDER,
     casting: NPY_CASTING.NPY_NO_CASTING,
-    opFlags: new[] { NpyIterPerOpFlags.READONLY,
-                     NpyIterPerOpFlags.READONLY,
-                     NpyIterPerOpFlags.WRITEONLY });
+    opFlags: new[] { NDIterPerOpFlags.READONLY,
+                     NDIterPerOpFlags.READONLY,
+                     NDIterPerOpFlags.WRITEONLY });
 
 iter.ExecuteBinary(BinaryOp.Add);
 // NDim = 1 after coalesce, Path = SimdFull
@@ -1473,7 +1473,7 @@ var vec = np.arange(8, dtype: np.float32);
 var sc  = np.full(new Shape(), 100f, NPTypeCode.Single);   // 0-d scalar
 var res = np.zeros(new Shape(8), np.float32);
 
-using var iter = NpyIterRef.MultiNew(3, new[] { vec, sc, res }, ...);
+using var iter = NDIterRef.MultiNew(3, new[] { vec, sc, res }, ...);
 
 Console.WriteLine(iter.DetectExecutionPath());  // SimdScalarRight
 iter.ExecuteBinary(BinaryOp.Multiply);
@@ -1489,7 +1489,7 @@ var big   = np.arange(20, dtype: np.float32).reshape(4, 5);
 var slice = big[":, 1:4"];     // 4×3 view, strides = [5, 1]
 var dst   = np.zeros(new Shape(4, 3), np.float32);
 
-using var iter = NpyIterRef.MultiNew(2, new[] { slice, dst }, ...);
+using var iter = NDIterRef.MultiNew(2, new[] { slice, dst }, ...);
 iter.ExecuteUnary(UnaryOp.Sqrt);
 // dst[3,2] = sqrt(big[3,3]) = sqrt(18) ≈ 4.243
 ```
@@ -1499,8 +1499,8 @@ The slice can't coalesce (stride 5 on outer axis, stride 1 on inner) so NDim sta
 ### 4. Fused hypot via Layer 1
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(3, new[] { a, b, result },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, ...);
+using var iter = NDIterRef.MultiNew(3, new[] { a, b, result },
+    NDIterGlobalFlags.EXTERNAL_LOOP, ...);
 
 iter.ForEach((ptrs, strides, count, _) => {
     if (strides[0] == 4 && strides[1] == 4 && strides[2] == 4) {
@@ -1527,7 +1527,7 @@ Without Layer 1 this operation would be `sqrt(a * a + b * b)` — three Layer 3 
 var data = np.zeros(new Shape(1_000_000), NPTypeCode.Int32);
 data[500] = 1;
 
-using var iter = NpyIterRef.New(data, flags: NpyIterGlobalFlags.EXTERNAL_LOOP);
+using var iter = NDIterRef.New(data, flags: NDIterGlobalFlags.EXTERNAL_LOOP);
 bool found = iter.ExecuteReducing<AnyNonZero, bool>(default, false);
 // found = true, after exactly one ForEach call (SIMD early exit inside kernel).
 ```
@@ -1537,11 +1537,11 @@ bool found = iter.ExecuteReducing<AnyNonZero, bool>(default, false);
 The same hypot operation written as an expression tree — no IL, no hand-written stride branch. The factory emits a 4×-unrolled V256 kernel on the contiguous path and a scalar-strided fallback on non-contiguous input.
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(3, new[] { a, b, result },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, ...);
+using var iter = NDIterRef.MultiNew(3, new[] { a, b, result },
+    NDIterGlobalFlags.EXTERNAL_LOOP, ...);
 
-var expr = NpyExpr.Sqrt(NpyExpr.Square(NpyExpr.Input(0)) +
-                        NpyExpr.Square(NpyExpr.Input(1)));
+var expr = NDExpr.Sqrt(NDExpr.Square(NDExpr.Input(0)) +
+                        NDExpr.Square(NDExpr.Input(1)));
 
 iter.ExecuteExpression(expr,
     inputTypes: new[] { NPTypeCode.Single, NPTypeCode.Single },
@@ -1589,10 +1589,10 @@ Single pass, no temporaries, SIMD-unrolled. Conceptually the same as `2*a + 3*b`
 ReLU in one fused kernel, leveraging Tier 3C's "comparison returns 0/1 at output dtype" semantics:
 
 ```csharp
-using var iter = NpyIterRef.MultiNew(2, new[] { input, output },
-    NpyIterGlobalFlags.EXTERNAL_LOOP, ...);
+using var iter = NDIterRef.MultiNew(2, new[] { input, output },
+    NDIterGlobalFlags.EXTERNAL_LOOP, ...);
 
-var relu = NpyExpr.Greater(NpyExpr.Input(0), NpyExpr.Const(0.0f)) * NpyExpr.Input(0);
+var relu = NDExpr.Greater(NDExpr.Input(0), NDExpr.Const(0.0f)) * NDExpr.Input(0);
 iter.ExecuteExpression(relu,
     new[] { NPTypeCode.Single }, NPTypeCode.Single);
 // output[i] = max(input[i], 0) for every i
@@ -1603,7 +1603,7 @@ No branch, no intermediate array. The comparison node emits an I4 0/1, gets conv
 ### 9. Clamp with Min/Max
 
 ```csharp
-var clamped = NpyExpr.Clamp(NpyExpr.Input(0), NpyExpr.Const(-1.0), NpyExpr.Const(1.0));
+var clamped = NDExpr.Clamp(NDExpr.Input(0), NDExpr.Const(-1.0), NDExpr.Const(1.0));
 iter.ExecuteExpression(clamped,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 // output[i] = min(max(input[i], -1), 1)
@@ -1617,9 +1617,9 @@ Tier 3C is element-wise; reductions (like summing all elements) aren't expressib
 
 ```csharp
 // out = exp(x - max_x) / sum_exp   — where max_x and sum_exp are precomputed scalars.
-var shifted = NpyExpr.Subtract(NpyExpr.Input(0), NpyExpr.Const(maxX));
-var numerator = NpyExpr.Exp(shifted);
-var result = numerator / NpyExpr.Const(sumExp);
+var shifted = NDExpr.Subtract(NDExpr.Input(0), NDExpr.Const(maxX));
+var numerator = NDExpr.Exp(shifted);
+var result = numerator / NDExpr.Const(sumExp);
 iter.ExecuteExpression(result,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1633,10 +1633,10 @@ The naive `1 / (1 + exp(-x))` overflows for very negative `x` (exp of a large po
 ```csharp
 //           { 1 / (1 + exp(-x))   if x >= 0
 // sigmoid = { exp(x) / (1 + exp(x)) if x < 0
-var x = NpyExpr.Input(0);
-var pos = NpyExpr.Const(1.0) / (NpyExpr.Const(1.0) + NpyExpr.Exp(-x));
-var neg = NpyExpr.Exp(x) / (NpyExpr.Const(1.0) + NpyExpr.Exp(x));
-var stable = NpyExpr.Where(NpyExpr.GreaterEqual(x, NpyExpr.Const(0.0)), pos, neg);
+var x = NDExpr.Input(0);
+var pos = NDExpr.Const(1.0) / (NDExpr.Const(1.0) + NDExpr.Exp(-x));
+var neg = NDExpr.Exp(x) / (NDExpr.Const(1.0) + NDExpr.Exp(x));
+var stable = NDExpr.Where(NDExpr.GreaterEqual(x, NDExpr.Const(0.0)), pos, neg);
 
 iter.ExecuteExpression(stable,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
@@ -1648,8 +1648,8 @@ Every branch computes three `Exp` calls in the worst case, but only the taken br
 
 ```csharp
 // replace NaN with 0
-var x = NpyExpr.Input(0);
-var clean = NpyExpr.Where(NpyExpr.IsNaN(x), NpyExpr.Const(0.0), x);
+var x = NDExpr.Input(0);
+var clean = NDExpr.Where(NDExpr.IsNaN(x), NDExpr.Const(0.0), x);
 iter.ExecuteExpression(clean,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1660,11 +1660,11 @@ iter.ExecuteExpression(clean,
 
 ```csharp
 // leaky_relu(x, alpha=0.1) = x if x > 0 else alpha * x
-var x = NpyExpr.Input(0);
-var leaky = NpyExpr.Where(
-    NpyExpr.Greater(x, NpyExpr.Const(0.0)),
+var x = NDExpr.Input(0);
+var leaky = NDExpr.Where(
+    NDExpr.Greater(x, NDExpr.Const(0.0)),
     x,
-    NpyExpr.Const(0.1) * x);
+    NDExpr.Const(0.1) * x);
 iter.ExecuteExpression(leaky,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1676,30 +1676,30 @@ Contrast with the "branchless" ReLU (`(x > 0) * x`): that works for plain ReLU b
 A worked example of combining comparisons with `Where` for pedagogical purposes (the DSL's `Abs` is faster — it has a SIMD path):
 
 ```csharp
-var x = NpyExpr.Input(0);
-var manualAbs = NpyExpr.Where(
-    NpyExpr.Less(x, NpyExpr.Const(0.0)),
+var x = NDExpr.Input(0);
+var manualAbs = NDExpr.Where(
+    NDExpr.Less(x, NDExpr.Const(0.0)),
     -x,           // operator overload for Negate
     x);
 iter.ExecuteExpression(manualAbs,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
 
-This is ~10% slower than `NpyExpr.Abs(x)` because it runs the scalar-only `Where` instead of the SIMD-vectorized `Abs`. Use the built-in where possible; `Where` is the generalization when no built-in fits.
+This is ~10% slower than `NDExpr.Abs(x)` because it runs the scalar-only `Where` instead of the SIMD-vectorized `Abs`. Use the built-in where possible; `Where` is the generalization when no built-in fits.
 
 ### 15. Heaviside step function
 
 ```csharp
 // heaviside(x, h0) = 0 if x < 0, h0 if x == 0, 1 if x > 0
 // NumPy's np.heaviside(x, 0.5) is the default "midpoint" convention.
-var x = NpyExpr.Input(0);
-var step = NpyExpr.Where(
-    NpyExpr.Less(x, NpyExpr.Const(0.0)),
-    NpyExpr.Const(0.0),
-    NpyExpr.Where(
-        NpyExpr.Greater(x, NpyExpr.Const(0.0)),
-        NpyExpr.Const(1.0),
-        NpyExpr.Const(0.5)));   // h0 value at x == 0
+var x = NDExpr.Input(0);
+var step = NDExpr.Where(
+    NDExpr.Less(x, NDExpr.Const(0.0)),
+    NDExpr.Const(0.0),
+    NDExpr.Where(
+        NDExpr.Greater(x, NDExpr.Const(0.0)),
+        NDExpr.Const(1.0),
+        NDExpr.Const(0.5)));   // h0 value at x == 0
 
 iter.ExecuteExpression(step,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
@@ -1713,11 +1713,11 @@ Evaluate `p(x) = 1·x⁴ + 2·x³ + 3·x² + 4·x + 5` with optimal multiplicati
 
 ```csharp
 // ((((1·x + 2)·x + 3)·x + 4)·x + 5
-var x = NpyExpr.Input(0);
-var poly = (((NpyExpr.Const(1.0) * x + NpyExpr.Const(2.0)) * x
-             + NpyExpr.Const(3.0)) * x
-             + NpyExpr.Const(4.0)) * x
-             + NpyExpr.Const(5.0);
+var x = NDExpr.Input(0);
+var poly = (((NDExpr.Const(1.0) * x + NDExpr.Const(2.0)) * x
+             + NDExpr.Const(3.0)) * x
+             + NDExpr.Const(4.0)) * x
+             + NDExpr.Const(5.0);
 iter.ExecuteExpression(poly,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1729,14 +1729,14 @@ Four `Multiply`s, four `Add`s — all SIMD-capable. Whole tree emits the 4×-unr
 Combine the two unary SIMD-capable ops for the pattern `|sin x|`:
 
 ```csharp
-var expr = NpyExpr.Abs(NpyExpr.Sin(NpyExpr.Input(0)));
+var expr = NDExpr.Abs(NDExpr.Sin(NDExpr.Input(0)));
 iter.ExecuteExpression(expr,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
 
 `Sin` is scalar-only, so the whole tree runs scalar (no 4× unroll). But both ops fuse into one pass — a single `Math.Sin` call + `Math.Abs` per element. The alternative — two Layer 3 calls on three arrays — would allocate a `sin(x)` temporary.
 
-### 18. User-defined activation via `NpyExpr.Call`
+### 18. User-defined activation via `NDExpr.Call`
 
 Say you want **Swish** (`x * sigmoid(x)`, used in EfficientNet and family) but Tier 3C doesn't have a `Sigmoid` node. Drop to `Call`:
 
@@ -1746,7 +1746,7 @@ static readonly Func<double, double> SwishActivation =
     x => x / (1.0 + Math.Exp(-x));
 
 // Tree: out = Swish(x) + bias  (bias is a broadcast-scalar Input, not a Const)
-var expr = NpyExpr.Call(SwishActivation, NpyExpr.Input(0)) + NpyExpr.Input(1);
+var expr = NDExpr.Call(SwishActivation, NDExpr.Input(0)) + NDExpr.Input(1);
 iter.ExecuteExpression(expr,
     new[] { NPTypeCode.Double, NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1755,8 +1755,8 @@ The `SwishActivation` delegate is registered exactly once into `DelegateSlots`; 
 
 For maximum speed, if your activation is hot enough to matter, compose it out of DSL primitives:
 ```csharp
-var x = NpyExpr.Input(0);
-var swish = x / (NpyExpr.Const(1.0) + NpyExpr.Exp(-x));   // same op, no Call overhead
+var x = NDExpr.Input(0);
+var swish = x / (NDExpr.Const(1.0) + NDExpr.Exp(-x));   // same op, no Call overhead
 ```
 
 ### 19. Reflected MethodInfo with an instance method
@@ -1768,7 +1768,7 @@ var provider = new PluginActivations { Temperature = 1.5 };
 var method = provider.GetType().GetMethod("ApplyTempered")!;
 // ApplyTempered(double x) => Math.Pow(x, 1.0 / Temperature);
 
-var expr = NpyExpr.Call(method, provider, NpyExpr.Input(0));
+var expr = NDExpr.Call(method, provider, NDExpr.Input(0));
 iter.ExecuteExpression(expr,
     new[] { NPTypeCode.Double }, NPTypeCode.Double);
 ```
@@ -1795,7 +1795,7 @@ Layer 1 and Layer 2 give you control and fusion. For any standard elementwise uf
 
 **Custom ops (Tier 3B / Tier 3C) hit the Layer 3 envelope.** Because the factory wraps user bodies in the same 4×-unrolled SIMD + remainder + scalar-tail shell, a Tier 3B or Tier 3C kernel for sqrt lands within rounding distance of `ExecuteUnary(Sqrt)` — the only overhead is the runtime contig check (a few stride comparisons at kernel entry). Fused ops like `sqrt(a² + b²)` via Tier 3C are typically faster than composing three Layer 3 calls, because there are no intermediate arrays and the whole computation stays in V256 registers between operations.
 
-**Custom op overhead breakdown.** Tier 3A and Tier 3B kernels share the same `NpyInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier 3C adds:
+**Custom op overhead breakdown.** Tier 3A and Tier 3B kernels share the same `NDInnerLoopFunc` delegate shape as the baked ufuncs; call overhead is identical. Tier 3C adds:
 
 | Overhead source | When | Cost |
 |----------------|------|------|
@@ -1808,7 +1808,7 @@ Layer 1 and Layer 2 give you control and fusion. For any standard elementwise uf
 
 **When fusion pays off.** Fusing `sqrt(a² + b²)` into one Tier 3C kernel avoids materializing the `a²` and `a² + b²` intermediates. For 1M float32 elements, that's 8 MB of memory traffic saved per temporary — on a typical 30-GB/s RAM bandwidth, that's ~300 μs per avoided temporary. Fusing 3 ops into one Tier 3C kernel can beat 3 baked Layer 3 calls by 1-2× when memory-bound.
 
-**When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NpyExpr.Input(0) * NpyExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
+**When Call pays off.** If the user-supplied method does nontrivial work (e.g. three `Math.Exp` calls for a numerically-stable sigmoid), the dispatch overhead is a few-percent tax on something that was never going to SIMD anyway. If the method is trivial (`x => x * 2`), composing out of DSL primitives (`NDExpr.Input(0) * NDExpr.Const(2.0)`) keeps the SIMD path and runs 3-5× faster. Pick Call when the method is the cheapest thing to write and the kernel isn't a hot path; pick DSL composition when the kernel is profiled and matters.
 
 ### JIT warmup and measurement
 
@@ -1868,7 +1868,7 @@ Layer 3 allocates exactly once per call: the stackalloc stride arrays (NDim long
 |------|--------------------|--------------------|
 | Tier 3A (`ExecuteRawIL`) | stackalloc strides + the user's `Action<ILGenerator>` closure on first compile | compiled `DynamicMethod` cached by key; stays live for process lifetime (~2-5 KB native + runtime metadata) |
 | Tier 3B (`ExecuteElementWise`) | stackalloc strides + (on first compile) two `Action<ILGenerator>` closures | compiled kernel cached by key |
-| Tier 3C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NpyExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
+| Tier 3C (`ExecuteExpression`) | stackalloc strides + (on first compile) an NDExpr tree allocated by the caller + StringBuilder for the auto-key | compiled kernel cached by key |
 | Tier 3C with `Call` | same as Tier 3C, plus one `DelegateSlots` entry per unique captured delegate / bound target | registered references live for process lifetime; see [Memory model and lifetime](#memory-model-and-lifetime) |
 
 The one case where allocations grow without bound is the anti-pattern of constructing a new `Call` delegate per iteration — each new delegate reference gets a new slot ID and a new cache entry. Register delegates once at startup to avoid this.
@@ -1877,13 +1877,13 @@ The one case where allocations grow without bound is the anti-pattern of constru
 
 ## Summary
 
-NpyIter is how NumSharp turns "iterate these three arrays of possibly-different shapes, types, and strides" into a deterministic schedule of pointer advances. `NpyIter.Execution.cs` is how that schedule becomes a SIMD kernel call.
+NDIter is how NumSharp turns "iterate these three arrays of possibly-different shapes, types, and strides" into a deterministic schedule of pointer advances. `NDIter.Execution.cs` is how that schedule becomes a SIMD kernel call.
 
-**The core idea.** NumPy's C++ templates compile `for (i = 0; i < n; i++) c[i] = a[i] + b[i]` ahead of time, specialized per type. NumSharp cannot. Instead it emits that same loop as IL via `DynamicMethod` the first time you ask for it, then caches the JIT-compiled delegate forever. `NpyIter` handles the *layout* problem (what offsets, in what order), `ILKernelGenerator` handles the *type* problem (what opcodes, with what SIMD intrinsics), and `NpyIter.Execution.cs` hands the one to the other.
+**The core idea.** NumPy's C++ templates compile `for (i = 0; i < n; i++) c[i] = a[i] + b[i]` ahead of time, specialized per type. NumSharp cannot. Instead it emits that same loop as IL via `DynamicMethod` the first time you ask for it, then caches the JIT-compiled delegate forever. `NDIter` handles the *layout* problem (what offsets, in what order), `ILKernelGenerator` handles the *type* problem (what opcodes, with what SIMD intrinsics), and `NDIter.Execution.cs` hands the one to the other.
 
-**Three layers.** `ExecuteBinary / Unary / Reduction / ...` for standard ufuncs (this is what you want 90% of the time — it's ~3.7× faster than a JIT-autovectorized scalar loop and ~1.15× faster than hand-written Vector256 + 4× unroll). `ExecuteGeneric<TKernel>` for custom kernels that need zero dispatch overhead. `ForEach` with a `NpyInnerLoopFunc` delegate when you're exploring, fusing, or writing something exotic.
+**Three layers.** `ExecuteBinary / Unary / Reduction / ...` for standard ufuncs (this is what you want 90% of the time — it's ~3.7× faster than a JIT-autovectorized scalar loop and ~1.15× faster than hand-written Vector256 + 4× unroll). `ExecuteGeneric<TKernel>` for custom kernels that need zero dispatch overhead. `ForEach` with a `NDInnerLoopFunc` delegate when you're exploring, fusing, or writing something exotic.
 
-**Custom ops extend Layer 3.** When a baked ufunc doesn't match your problem, three tiers let you reach the same SIMD-unrolled performance envelope without leaving the bridge: `ExecuteRawIL` (you emit the whole body), `ExecuteElementWise` (you supply per-element scalar + vector IL; factory wraps the unroll shell), `ExecuteExpression` (compose with `NpyExpr` — no IL required). Each tier is cached, reuses `ILKernelGenerator`'s emit primitives, and runs through the same `ForEach` driver as baked ops.
+**Custom ops extend Layer 3.** When a baked ufunc doesn't match your problem, three tiers let you reach the same SIMD-unrolled performance envelope without leaving the bridge: `ExecuteRawIL` (you emit the whole body), `ExecuteElementWise` (you supply per-element scalar + vector IL; factory wraps the unroll shell), `ExecuteExpression` (compose with `NDExpr` — no IL required). Each tier is cached, reuses `ILKernelGenerator`'s emit primitives, and runs through the same `ForEach` driver as baked ops.
 
 **Coalesce first.** A 3-D contiguous array should run as one flat SIMD loop, not a triple-nested loop. The iterator does this for you — as long as you don't set flags that disable it (`MULTI_INDEX`, `C_INDEX`, `F_INDEX`).
 

@@ -6,7 +6,7 @@ Runs the C# BenchmarkDotNet suite and the NumPy suite across the three cache-tie
 (Small=1K / Medium=100K / Large=10M), then merges them into a single per-(op, dtype, N)
 ratio report. Then appends, as dedicated sections, the complementary harnesses whose result
 models the op/dtype/N matrix cannot express:
-  * NpyIter iterator benchmark (benchmark/npyiter)  — iterator machinery, aspect × tier
+  * NDIter iterator benchmark (benchmark/nditer)  — iterator machinery, aspect × tier
   * Layout suite              (benchmark/layout)    — reduction/copy/elementwise × memory layout
   * Operand layouts           (benchmark/operand)   — 1-D / scalar / mixed-operand / broadcast
   * Cast matrix               (benchmark/cast)      — astype src→dst × layout × dtype
@@ -37,8 +37,8 @@ Usage
   python run_benchmark.py --skip-build            # reuse the existing Release build
   python run_benchmark.py --skip-csharp           # NumPy only
   python run_benchmark.py --skip-python           # C# only (reuse existing numpy JSON)
-  python run_benchmark.py --skip-npyiter          # no NpyIter section
-  python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NpyIter) only
+  python run_benchmark.py --skip-nditer          # no NDIter section
+  python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NDIter) only
   python run_benchmark.py --quick                 # dev: 10 NumPy iterations (C# config fixed)
 """
 import argparse
@@ -59,16 +59,16 @@ MERGE = HERE / "scripts" / "merge-results.py"
 ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"
 TFM = "net10.0"
 
-# NpyIter iterator benchmark (benchmark/npyiter) — a complementary harness with a
+# NDIter iterator benchmark (benchmark/nditer) — a complementary harness with a
 # different result model (aspect x tier, not op/dtype/N), appended to the report.
-NPYITER_DIR = HERE / "npyiter"
-NPYITER_SHEET = NPYITER_DIR / "npyiter_sheet.py"
-NPYITER_CARDS = NPYITER_DIR / "npyiter_cards.py"
-NPYITER_REPORT = NPYITER_DIR / "npyiter_results.md"
-NPYITER_TSV = NPYITER_DIR / "npyiter_results.tsv"
+NPYITER_DIR = HERE / "nditer"
+NPYITER_SHEET = NPYITER_DIR / "nditer_sheet.py"
+NPYITER_CARDS = NPYITER_DIR / "nditer_cards.py"
+NPYITER_REPORT = NPYITER_DIR / "nditer_results.md"
+NPYITER_TSV = NPYITER_DIR / "nditer_results.tsv"
 
 # Matrix subsystems — each fills an axis the op/dtype/N matrix omits and owns a
-# *_sheet.py driver+renderer (mirroring npyiter): a NumSharp `*_bench.cs` + its
+# *_sheet.py driver+renderer (mirroring nditer): a NumSharp `*_bench.cs` + its
 # NumPy `*_bench.py` twin -> a rendered `*_results.md` section appended to the
 # report. Layout = memory-layout axis (op-matrix is C-contiguous only); Cast =
 # astype src→dst matrix (no op-matrix coverage); Fusion = np.evaluate vs unfused.
@@ -153,8 +153,8 @@ def main():
     ap.add_argument("--skip-python", action="store_true", help="Skip the NumPy benchmarks")
     ap.add_argument("--skip-build", action="store_true", help="Reuse the existing Release build")
     ap.add_argument("--quick", action="store_true", help="Dev: fewer NumPy iterations")
-    ap.add_argument("--skip-npyiter", action="store_true",
-                    help="Skip the NpyIter iterator benchmark (benchmark/npyiter)")
+    ap.add_argument("--skip-nditer", action="store_true",
+                    help="Skip the NDIter iterator benchmark (benchmark/nditer)")
     ap.add_argument("--skip-layout", action="store_true",
                     help="Skip the Layout suite (benchmark/layout)")
     ap.add_argument("--skip-cast", action="store_true",
@@ -221,13 +221,13 @@ def main():
     # subsystems below each append one section to it.
     report_md = results_dir / "benchmark-report.md"
 
-    # 4b. NpyIter iterator benchmark — complementary harness (file-based, section-
+    # 4b. NDIter iterator benchmark — complementary harness (file-based, section-
     #     isolated, crash-resilient: a NumSharp AccessViolation is IGNORED and the
     #     section reported NA). Its result model is aspect x tier, not op/dtype/N,
     #     so it is APPENDED to the report as its own section rather than merged —
     #     preserving the iterator-isolation value the op matrix cannot express.
-    if not args.skip_npyiter:
-        print("\n=== NpyIter iterator benchmark (benchmark/npyiter) ===", flush=True)
+    if not args.skip_nditer:
+        print("\n=== NDIter iterator benchmark (benchmark/nditer) ===", flush=True)
         sheet_cmd = [sys.executable, str(NPYITER_SHEET)]
         if args.skip_build:
             sheet_cmd.append("--skip-build")
@@ -238,9 +238,9 @@ def main():
                 shutil.copy(src, results_dir / src.name)
         cards_src = NPYITER_DIR / "cards"
         if cards_src.exists():
-            shutil.copytree(cards_src, results_dir / "npyiter_cards", dirs_exist_ok=True)
+            shutil.copytree(cards_src, results_dir / "nditer_cards", dirs_exist_ok=True)
         if NPYITER_REPORT.exists():
-            section = ("\n\n---\n\n## NpyIter iterator benchmark\n\n"
+            section = ("\n\n---\n\n## NDIter iterator benchmark\n\n"
                        "_Complementary harness: measures the iterator machinery itself "
                        "(construction, traversal, reductions, selection, dtypes, pathologies, "
                        "dividends) across cache tiers — not part of the op/dtype/N matrix above. "

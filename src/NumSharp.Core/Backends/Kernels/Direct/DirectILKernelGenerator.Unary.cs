@@ -266,7 +266,7 @@ namespace NumSharp.Backends.Kernels
         /// (Vector512.Round). Returns false when there is no SIMD hardware (<c>VectorBits == 0</c>),
         /// the type is not float/double, or the running runtime lacks the method at this width. This
         /// is the SINGLE capability gate shared by the direct kernel (<see cref="CanUseUnarySimd"/>)
-        /// and the fused NpyExpr path, so neither can route to <see cref="EmitUnaryVectorOperation"/>
+        /// and the fused NDExpr path, so neither can route to <see cref="EmitUnaryVectorOperation"/>
         /// for a (width, type) the BCL cannot satisfy — closing the "Could not find &lt;op&gt; for
         /// Vector{N}&lt;T&gt;" kernel-compile crash for both AVX-512 floats and integer rounding.
         /// </summary>

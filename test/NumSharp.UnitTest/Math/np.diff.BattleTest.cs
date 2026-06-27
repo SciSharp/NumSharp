@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.Maths
             np.diff(s).Should().BeShaped(0);
         }
 
-        // ---------------------------------------------------------------- diff: layouts (NpyIter fast path)
+        // ---------------------------------------------------------------- diff: layouts (NDIter fast path)
 
         [TestMethod]
         public void Diff_3D_AllAxes()

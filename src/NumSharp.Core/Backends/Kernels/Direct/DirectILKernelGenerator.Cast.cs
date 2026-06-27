@@ -35,7 +35,7 @@ namespace NumSharp.Backends.Kernels
     //     - Outer-strided/inner-contig (e.g. arr[::2,:]): outer coord walk + inner SIMD.
     //
     //   CALLERS:
-    //     - NpyIter.Copy when src.TypeCode != dst.TypeCode (contig => CastKernel,
+    //     - NDIter.Copy when src.TypeCode != dst.TypeCode (contig => CastKernel,
     //       general => StridedCastKernel).
     // =============================================================================
     public static partial class DirectILKernelGenerator
@@ -58,7 +58,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="srcStrides">Source strides in elements (length = ndim).</param>
         /// <param name="dstStrides">Destination strides in elements (length = ndim).</param>
         /// <param name="shape">Shape in elements (length = ndim).</param>
-        /// <param name="ndim">Number of dimensions; coalesced when possible by NpyIter.</param>
+        /// <param name="ndim">Number of dimensions; coalesced when possible by NDIter.</param>
         public unsafe delegate void StridedCastKernel(
             void* src, void* dst,
             long* srcStrides, long* dstStrides,

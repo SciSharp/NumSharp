@@ -71,9 +71,9 @@ namespace NumSharp
                 long m = L > 0 ? L - 1 : 0;
                 var hi = SliceAlongAxis(flat, 0, L - m, L); // flat[1:]
                 var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
-                // Same lean NpyIter subtract as np.diff (uninitialised output,
+                // Same lean NDIter subtract as np.diff (uninitialised output,
                 // no promotion/broadcast re-derivation); `-` operator as fallback.
-                middle = DiffSubtractViaNpyIter(hi, lo) ?? (hi - lo);
+                middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
                 hi.Dispose();
                 lo.Dispose();
 

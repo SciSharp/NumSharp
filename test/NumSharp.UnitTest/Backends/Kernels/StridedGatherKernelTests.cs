@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// same shapes run the scalar-strided fallback — these tests then validate
 /// that fallback, so they are hardware-independent correctness gates.
 ///
-/// Also pins the NpyIterFlags collision regression: the NumSharp extension
+/// Also pins the NDIterFlags collision regression: the NumSharp extension
 /// flags used to alias the shifted NumPy flags (GATHER_ELIGIBLE==ONEITERATION,
 /// CONTIGUOUS==GROWINNER, PARALLEL_SAFE==REDUCE), so setting GATHER_ELIGIBLE
 /// made ForEach run a single inner loop and silently skip every row after
@@ -134,10 +134,10 @@ public class StridedGatherKernelTests
             var v2 = w2["::2"];
             var vOut = outBuf["::2"];
 
-            using (var iter = NpyIterRef.MultiNew(3, new[] { v1, v2, vOut },
-                NpyIterGlobalFlags.EXTERNAL_LOOP,
+            using (var iter = NDIterRef.MultiNew(3, new[] { v1, v2, vOut },
+                NDIterGlobalFlags.EXTERNAL_LOOP,
                 NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
-                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.WRITEONLY }))
+                new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }))
             {
                 var tc = v1.GetTypeCode;
                 iter.ExecuteElementWiseBinary(tc, tc, tc,
@@ -226,19 +226,19 @@ public class StridedGatherKernelTests
     #region iterator flag integrity (collision regression)
 
     [TestMethod]
-    public void NpyIterFlags_ExtensionFlags_DoNotAliasNumPyFlags()
+    public void NDIterFlags_ExtensionFlags_DoNotAliasNumPyFlags()
     {
         // The NumSharp extension flags must not collide with any other
-        // NpyIterFlags member (they used to alias GROWINNER/ONEITERATION/
+        // NDIterFlags member (they used to alias GROWINNER/ONEITERATION/
         // REDUCE, silently corrupting multi-row iteration).
         var extension = new[]
         {
-            NpyIterFlags.CONTIGUOUS, NpyIterFlags.GATHER_ELIGIBLE,
-            NpyIterFlags.PARALLEL_SAFE,
+            NDIterFlags.CONTIGUOUS, NDIterFlags.GATHER_ELIGIBLE,
+            NDIterFlags.PARALLEL_SAFE,
         };
-        foreach (NpyIterFlags value in Enum.GetValues<NpyIterFlags>())
+        foreach (NDIterFlags value in Enum.GetValues<NDIterFlags>())
         {
-            if (value == NpyIterFlags.None || Array.IndexOf(extension, value) >= 0)
+            if (value == NDIterFlags.None || Array.IndexOf(extension, value) >= 0)
                 continue;
             foreach (var ext in extension)
                 Assert.AreEqual(0u, (uint)(value & ext),

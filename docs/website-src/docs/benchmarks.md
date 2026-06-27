@@ -21,9 +21,9 @@ this page shows *what it buys you* against NumPy, head to head.**
 ## The headline
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/ops.png" alt="NpyIter vs NumPy — operations: geomean speedup by array-size tier and by operation class" width="400" height="300">
+  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/ops.png" alt="NDIter vs NumPy — operations: geomean speedup by array-size tier and by operation class" width="400" height="300">
   &nbsp;
-  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/npyiter/cards/cat.png" alt="NpyIter — the IL-generation dividends: iterator construction vs np.nditer, expression fusion, kernel reuse, parallel inner loop" width="400" height="300">
+  <img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/cat.png" alt="NDIter — the IL-generation dividends: iterator construction vs np.nditer, expression fusion, kernel reuse, parallel inner loop" width="400" height="300">
 </p>
 
 The **left card** is the head-to-head against NumPy — geomean speedup by array-size
@@ -49,7 +49,7 @@ both libraries are measured back-to-back on the identical machine against a pinn
 ### What the latest committed run shows
 
 These figures come from the iterator benchmark sheet
-([`benchmark/npyiter/npyiter_results.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/npyiter_results.md)) —
+([`benchmark/nditer/nditer_results.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/nditer/nditer_results.md)) —
 the source of truth that the cards are rendered from.
 
 | Operation class | Speedup (NumPy ÷ NumSharp) | %NumPy🕐 | Reading |
@@ -124,9 +124,9 @@ better than "the closest thing NumPy can do."
 - **Parallel inner loop** — the iterator can fan a strided workload across cores; the report's
   `par8` row shows **up to ~8×** over the single-threaded path on the same machine.
 
-The iterator itself is also cheap to stand up: building and tearing down an `NpyIter` runs
+The iterator itself is also cheap to stand up: building and tearing down an `NDIter` runs
 roughly **2–3× faster than constructing `np.nditer`** in NumPy (see the **Construction**
-section). For more on the iterator, see [NpyIter](NDIter.md).
+section). For more on the iterator, see [NDIter](NDIter.md).
 
 ---
 
@@ -143,7 +143,7 @@ runs that after every release and commits the results:
    This is the broad coverage: every dtype, every operation family, three cache tiers.
 
 2. **The iterator benchmark** — the harness behind the cards
-   ([`benchmark/npyiter/`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/README.md)).
+   ([`benchmark/nditer/`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/nditer/README.md)).
    Its result model is *aspect × cache-tier* (construction, traversal, reductions, selection,
    dtypes, pathologies, dividends) rather than op/dtype/N, so it is **appended** to the report,
    not merged. It isolates the iterator machinery the op matrix can't see.
@@ -164,7 +164,7 @@ A few methodology points worth knowing when you read the sheet:
   silent omission.
 
 For the full harness internals see
-[`benchmark/npyiter/README.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/npyiter/README.md)
+[`benchmark/nditer/README.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/nditer/README.md)
 and the development guide at
 [`benchmark/CLAUDE.md`](https://github.com/SciSharp/NumSharp/blob/master/benchmark/CLAUDE.md).
 
@@ -177,11 +177,11 @@ and the development guide at
 python benchmark/run_benchmark.py
 
 # Iterator benchmark only (renders the two cards)
-python benchmark/npyiter/npyiter_sheet.py
-python benchmark/npyiter/npyiter_cards.py
+python benchmark/nditer/nditer_sheet.py
+python benchmark/nditer/nditer_cards.py
 ```
 
-Both write their reports under `benchmark/` and the cards to `benchmark/npyiter/cards/`. The
+Both write their reports under `benchmark/` and the cards to `benchmark/nditer/cards/`. The
 absolute numbers will differ on your hardware; the ratios are what carry over.
 
 ---

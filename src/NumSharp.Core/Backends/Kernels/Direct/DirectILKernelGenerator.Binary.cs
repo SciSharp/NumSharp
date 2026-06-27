@@ -523,13 +523,13 @@ namespace NumSharp.Backends.Kernels
         /// Emit Power operation for generic type T (same-type contiguous kernel path).
         /// Stack: [base, exponent] -> [result]
         ///
-        /// - Integer T: routes to <see cref="Utilities.NpyIntegerPower"/> for dtype-native wrapping.
+        /// - Integer T: routes to <see cref="Utilities.NDIntegerPower"/> for dtype-native wrapping.
         /// - float: routes to <c>MathF.Pow</c> (single-precision parity with NumPy <c>powf</c>).
         /// - double: routes to <c>Math.Pow</c>.
         /// </summary>
         private static void EmitPowerOperation<T>(ILGenerator il) where T : unmanaged
         {
-            // Integer types: call the matching NpyIntegerPower helper.
+            // Integer types: call the matching NDIntegerPower helper.
             // Stack already holds two T values; the helper signature is (T, T) -> T.
             MethodInfo? intPow = GetIntegerPowMethod<T>();
             if (intPow != null)
@@ -564,7 +564,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Lookup the matching <see cref="Utilities.NpyIntegerPower"/> helper for T,
+        /// Lookup the matching <see cref="Utilities.NDIntegerPower"/> helper for T,
         /// or null if T is not an integer type supported by the helper.
         /// </summary>
         private static MethodInfo? GetIntegerPowMethod<T>() where T : unmanaged
@@ -583,7 +583,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit FloorDivide for generic type T via the <see cref="Utilities.NpyDivision"/> helpers,
+        /// Emit FloorDivide for generic type T via the <see cref="Utilities.NDDivision"/> helpers,
         /// matching NumPy's <c>floor_div_@TYPE@</c> (integer ÷0 -> 0, signed floor toward -inf,
         /// MIN/-1 wrap) and <c>npy_floor_divide</c> (CPython divmod port for floats: ÷0 -> ±inf/nan,
         /// snap-to-nearest). Stack: [dividend, divisor] -> [result]
@@ -601,7 +601,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Return the <see cref="Utilities.NpyDivision"/> floor-division helper for the CLR type
+        /// Return the <see cref="Utilities.NDDivision"/> floor-division helper for the CLR type
         /// <paramref name="t"/>, or null if it routes elsewhere.
         /// </summary>
         private static MethodInfo? GetFloorDivideMethod(Type t)

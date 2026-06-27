@@ -1,13 +1,13 @@
 // =============================================================================
-// ILKernelGenerator — IL-emitted per-chunk kernels driven by NpyIter
+// ILKernelGenerator — IL-emitted per-chunk kernels driven by NDIter
 // =============================================================================
 //
 // MODEL
 // -----
-// The iterator (NpyIterRef) owns the loop. Kernels emitted here implement the
+// The iterator (NDIterRef) owns the loop. Kernels emitted here implement the
 // inner-loop body and are called once per chunk:
 //
-//     unsafe delegate void NpyInnerLoopFunc(
+//     unsafe delegate void NDInnerLoopFunc(
 //         void** dataptrs,   // [nop] current operand pointers
 //         long*  strides,    // [nop] per-operand byte stride for inner loop
 //         long   count,      // number of elements to process this call
@@ -22,10 +22,10 @@
 // ---------------------------------------
 // DirectILKernelGenerator (in ./Direct/) holds the legacy whole-array kernels
 // that iterate the entire array themselves and are called once with shape/
-// strides/iterSize. They bypass NpyIter's iternext machinery.
+// strides/iterSize. They bypass NDIter's iternext machinery.
 //
 // New work registers per-chunk kernels here. As each np.* function migrates
-// to NpyIter-driven execution, its DirectILKernelGenerator partial is
+// to NDIter-driven execution, its DirectILKernelGenerator partial is
 // retired and a new ILKernelGenerator partial takes over.
 //
 // Coexistence is intentional during the migration: both classes share
@@ -38,9 +38,9 @@
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
-    /// Generates per-chunk IL kernels for NpyIter-driven execution.
+    /// Generates per-chunk IL kernels for NDIter-driven execution.
     ///
-    /// Kernels emitted here are called as the inner loop of an NpyIter
+    /// Kernels emitted here are called as the inner loop of an NDIter
     /// iteration — once per chunk, with dataptrs/strides/count provided by
     /// the iterator. The kernel does no axis or stride walking of its own.
     ///

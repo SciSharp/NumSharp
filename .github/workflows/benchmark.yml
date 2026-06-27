@@ -1,8 +1,8 @@
 # =============================================================================
 # Benchmark — decoupled, post-release, semi-manual. Runs the ENTIRE NumSharp-vs-
 # NumPy comparison via benchmark/run_benchmark.py: the official op/dtype/N matrix
-# (BenchmarkDotNet + NumPy across 1K/100K/10M), the NpyIter iterator benchmark
-# (benchmark/npyiter, + README cards), and the matrix subsystems that fill the
+# (BenchmarkDotNet + NumPy across 1K/100K/10M), the NDIter iterator benchmark
+# (benchmark/nditer, + README cards), and the matrix subsystems that fill the
 # axes the op matrix omits — layout (benchmark/layout), cast (benchmark/cast),
 # fusion (benchmark/fusion) — each appended as its own report section.
 #
@@ -18,7 +18,7 @@
 #
 # NOTE on numbers: GitHub runners are shared, variable hardware. ABSOLUTE ms are
 # not comparable run-to-run; every ratio is NumPy / NumSharp on the SAME runner,
-# which stays meaningful. numpy is pinned. The NpyIter harness IGNORES NumSharp's
+# which stays meaningful. numpy is pinned. The NDIter harness IGNORES NumSharp's
 # known intermittent AccessViolation: a crashing section is reported NA.
 # =============================================================================
 name: Benchmark
@@ -63,10 +63,10 @@ jobs:
       - name: Install Python deps (pin numpy for cross-release comparability)
         run: pip install "numpy==2.4.2" matplotlib tabulate
 
-      - name: Run full benchmark (official op suites + NpyIter)
+      - name: Run full benchmark (official op suites + NDIter)
         # run_benchmark.py builds GraphEngine+Core, runs the official suites, then
-        # the NpyIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
-        # the NpyIter section to benchmark-report.md.
+        # the NDIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
+        # the NDIter section to benchmark-report.md.
         run: python benchmark/run_benchmark.py
 
       - name: Render full reports into the docs site
@@ -80,9 +80,9 @@ jobs:
             printf '> _Auto-generated after each release by the [Benchmark workflow](https://github.com/SciSharp/NumSharp/blob/master/.github/workflows/benchmark.yml) — do not edit by hand. Discussion + cards: [Benchmarks vs NumPy](benchmarks.md)._\n\n'
             tail -n +2 benchmark/benchmark-report.md
           } > docs/website-src/docs/benchmark-matrix.md
-          { printf '# Iterator Benchmark — NpyIter vs NumPy (full sheet)\n\n'
+          { printf '# Iterator Benchmark — NDIter vs NumPy (full sheet)\n\n'
             printf '> _Auto-generated after each release by the [Benchmark workflow](https://github.com/SciSharp/NumSharp/blob/master/.github/workflows/benchmark.yml) — do not edit by hand. This is the canonical sheet the cards on [Benchmarks vs NumPy](benchmarks.md) render from. speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)._\n\n'
-            cat benchmark/npyiter/npyiter_results.md
+            cat benchmark/nditer/nditer_results.md
           } > docs/website-src/docs/benchmark-iterator.md
 
       - name: Commit report + cards, redeploy docs
@@ -93,10 +93,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add benchmark/benchmark-report.md \
                   benchmark/benchmark-report.csv \
-                  benchmark/npyiter/npyiter_results.md \
-                  benchmark/npyiter/npyiter_results.tsv \
-                  benchmark/npyiter/cards/ops.png \
-                  benchmark/npyiter/cards/cat.png \
+                  benchmark/nditer/nditer_results.md \
+                  benchmark/nditer/nditer_results.tsv \
+                  benchmark/nditer/cards/ops.png \
+                  benchmark/nditer/cards/cat.png \
                   benchmark/layout/layout_results.md \
                   benchmark/layout/layout_results.tsv \
                   benchmark/operand/operand_results.md \
@@ -116,7 +116,7 @@ jobs:
             echo "No benchmark changes to commit."
             exit 0
           fi
-          git commit -m "bench: refresh report + NpyIter cards + history snapshot [skip ci]"
+          git commit -m "bench: refresh report + NDIter cards + history snapshot [skip ci]"
           git push origin HEAD:master
           # The commit carries [skip ci] so it cannot re-trigger this workflow or the
           # release pipeline (push-to-master). The refreshed report PAGES + cards live

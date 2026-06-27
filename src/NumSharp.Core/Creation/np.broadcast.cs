@@ -13,7 +13,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arrays">
         ///     The arrays to broadcast against one another. NumPy caps this at 64 operands
-        ///     (NPY_MAXARGS); NumSharp imposes no cap, matching its unlimited-operand <c>NpyIter</c>.
+        ///     (NPY_MAXARGS); NumSharp imposes no cap, matching its unlimited-operand <c>NDIter</c>.
         /// </param>
         /// <returns>Broadcast the input parameters against one another, and return an object that encapsulates the result. Amongst others, it has shape and nd properties, and may be used as an iterator.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast.html</remarks>
@@ -40,7 +40,7 @@ namespace NumSharp
         public class Broadcast : IEnumerable<object[]>, IEnumerator<object[]>
         {
             private readonly NDArray[] _ops;
-            private NpyFlatIterator[] _iters;
+            private NDFlatIterator[] _iters;
             private NDArray[] _views;     // operands broadcast to the result shape (lazy)
             private int _index;           // live cursor — NumPy's broadcast.index
             private object[] _current;    // values at the previous cursor position
@@ -61,15 +61,15 @@ namespace NumSharp
             ///     iterators are built lazily on first <see cref="iters"/> access). Incompatible
             ///     shapes raise <see cref="IncorrectShapeException"/> (NumPy parity). Unlike NumPy's
             ///     fixed NPY_MAXARGS=64 cap, any number of operands is accepted — matching NumSharp's
-            ///     unlimited-operand <c>NpyIter</c>.
+            ///     unlimited-operand <c>NDIter</c>.
             /// </summary>
             internal Broadcast(params NDArray[] ops)
             {
                 _ops = ops ?? Array.Empty<NDArray>();
 
                 // NUMSHARP DIVERGENCE: NumPy caps the multi-iterator at NPY_MAXARGS=64, but
-                // NumSharp's NpyIter allocates all per-operand state dynamically and imposes no
-                // operand cap (see NpyIter.State.cs — "UNLIMITED ... matches NumSharp's core
+                // NumSharp's NDIter allocates all per-operand state dynamically and imposes no
+                // operand cap (see NDIter.State.cs — "UNLIMITED ... matches NumSharp's core
                 // philosophy"). np.broadcast follows that engine, so any number of operands is
                 // accepted. 0 operands is legal and yields a 0-d (scalar) broadcast.
                 shape = _ops.Length == 0
@@ -94,16 +94,16 @@ namespace NumSharp
             ///     each iterating that operand broadcast to the result <see cref="shape"/> in C-order
             ///     (e.g. np.broadcast([1,2,3], [[10],[20]]).iters[0] yields 1,2,3,1,2,3). Built lazily
             ///     on first access — np.broadcast() only resolves the shape eagerly — and backed by
-            ///     <see cref="np.broadcast_to(NDArray, Shape)"/> + <see cref="NpyFlatIterator"/>, the
-            ///     NpyIter-aligned replacement for the removed NDIterator. There are <see cref="numiter"/>
+            ///     <see cref="np.broadcast_to(NDArray, Shape)"/> + <see cref="NDFlatIterator"/>, the
+            ///     NDIter-aligned replacement for the removed NDIterator. There are <see cref="numiter"/>
             ///     entries (0 when constructed without operands). Unlike NumPy's flatiters these are
             ///     independent and re-enumerable; they do not share the <see cref="index"/> cursor.
             /// </summary>
-            public NpyFlatIterator[] iters
+            public NDFlatIterator[] iters
             {
                 get => _iters ??= _ops is null
                     ? null
-                    : Views.Select(v => new NpyFlatIterator(v)).ToArray();
+                    : Views.Select(v => new NDFlatIterator(v)).ToArray();
                 internal set => _iters = value;
             }
 

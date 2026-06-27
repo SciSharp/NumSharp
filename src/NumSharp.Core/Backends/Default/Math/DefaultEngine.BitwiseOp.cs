@@ -84,7 +84,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static void ValidateBitwiseLoop(NPTypeCode loopType, string ufuncName)
         {
-            if (loopType == NPTypeCode.Boolean || NpyExprTypeRules.IsIntegerKind(loopType))
+            if (loopType == NPTypeCode.Boolean || NDExprTypeRules.IsIntegerKind(loopType))
                 return;
 
             throw new TypeError(

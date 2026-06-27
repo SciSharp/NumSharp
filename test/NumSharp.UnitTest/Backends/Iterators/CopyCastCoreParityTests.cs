@@ -10,13 +10,13 @@ using NumSharp.Backends.Unmanaged;
 namespace NumSharp.UnitTest.Backends.Iterators
 {
     /// <summary>
-    ///     Regression matrix for the unified copy / retype / cast core (NpyIter.Copy + NpyIter.CopyAs,
+    ///     Regression matrix for the unified copy / retype / cast core (NDIter.Copy + NDIter.CopyAs,
     ///     reached by ndarray.copy(), astype(), Clone(), and np.copyto). These are the probes that
     ///     drove the core's design, pinned as always-on tests. They are SELF-VALIDATING — no committed
     ///     NumPy oracle is needed here (the bytes-exact NumPy differential lives in the FuzzMatrix
     ///     astype/copyto corpora); each assertion compares the core against an INDEPENDENT ground truth:
     ///
-    ///       Part A  — NpyIter.Copy materializes EVERY layout (15 dtypes x 8 layouts) bit-for-bit equal
+    ///       Part A  — NDIter.Copy materializes EVERY layout (15 dtypes x 8 layouts) bit-for-bit equal
     ///                 to a raw stride-walk of the source (a reader that does not touch the copy engine).
     ///       Part B/C— casting is layout-invariant: astype(view) == astype(view.copy()) for cross-dtype
     ///                 pairs across all layouts (the strided / F / broadcast cast kernels must agree with
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // ============================ Part A — materialization (120) ============================
 
         [TestMethod]
-        public void Core_NpyIterCopy_MaterializesEveryLayout_AllDtypes()
+        public void Core_NDIterCopy_MaterializesEveryLayout_AllDtypes()
         {
             var fail = new List<string>();
             int n = 0;
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 var src = build(tc);
                 string truth = RawLogicalHex(src);
                 var dst = new NDArray(tc, new Shape(DimsOf(src)), false);
-                NpyIter.Copy(dst, src);
+                NDIter.Copy(dst, src);
                 if (RawLogicalHex(dst) != truth)
                     fail.Add($"{nm}/{lname}: core != raw-logical");
             }
@@ -195,7 +195,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
                 n++;
                 var cDst = new NDArray(tc, new Shape((long[])dims.Clone()), false);
-                NpyIter.Copy(cDst, src);
+                NDIter.Copy(cDst, src);
                 if (RawLogicalHex(cDst) != truth) fail.Add($"{nm}/[{string.Join(",", dims)}] C-fill != general");
 
                 n++;
@@ -223,12 +223,12 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
                     // FAST path: whole-buffer contiguous dst.
                     var fast = new NDArray(d, new Shape(5), false);
-                    NpyIter.Copy(fast, bcast);
+                    NDIter.Copy(fast, bcast);
 
                     // GENERAL path: strided dst (every other slot of a length-10 buffer) declines the fill.
                     var gbuf = new NDArray(d, new Shape(10), false);
                     var gview = gbuf["::2"];
-                    NpyIter.Copy(gview, bcast);
+                    NDIter.Copy(gview, bcast);
 
                     n++;
                     if (RawLogicalHex(fast) != RawLogicalHex(gview))

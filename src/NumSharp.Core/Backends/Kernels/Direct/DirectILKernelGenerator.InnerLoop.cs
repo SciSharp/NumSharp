@@ -7,7 +7,7 @@ using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 
 // =============================================================================
-// DirectILKernelGenerator.InnerLoop.cs — NpyInnerLoopFunc factory
+// DirectILKernelGenerator.InnerLoop.cs — NDInnerLoopFunc factory
 // =============================================================================
 //
 // Produces kernels with the NumPy ufunc inner-loop signature
@@ -15,24 +15,24 @@ using NumSharp.Backends.Iteration;
 //
 // Unlike the whole-array MixedType kernels (which own the entire loop and take
 // shape/ndim/totalSize parameters), these kernels own only the innermost loop
-// of NpyIter. The iterator drives the outer loop via ForEach / ExecuteGeneric.
+// of NDIter. The iterator drives the outer loop via ForEach / ExecuteGeneric.
 //
 // THREE ENTRY POINTS
 // ------------------
 // 1. CompileRawInnerLoop(body, key)
 //      Caller emits the entire IL body. Full control. Used by Tier 3A of the
-//      NpyIter custom-op API.
+//      NDIter custom-op API.
 //
 // 2. CompileInnerLoop(operandTypes, scalarBody, vectorBody, key)
 //      Caller supplies per-element scalar/vector bodies; the factory wraps
 //      them in the standard 4× unrolled SIMD + remainder + scalar-tail shell,
 //      plus a strided fallback for non-contiguous inner loops. Used by Tier 3B.
 //
-// 3. Indirectly via NpyExpr.Compile — the expression DSL compiles to Tier 3B.
+// 3. Indirectly via NDExpr.Compile — the expression DSL compiles to Tier 3B.
 //
 // STRIDE CONTRACT
 // ---------------
-// NpyInnerLoopFunc receives BYTE strides (matching NumPy's C convention).
+// NDInnerLoopFunc receives BYTE strides (matching NumPy's C convention).
 // The emitted code uses these strides to compute pointer offsets on the
 // scalar-strided path. On the contig-inner SIMD path, offsets are computed
 // as i * elementSize because the inner stride equals elementSize by definition.
@@ -58,7 +58,7 @@ namespace NumSharp.Backends.Kernels
     {
         #region Inner-Loop Kernel Cache
 
-        internal static readonly ConcurrentDictionary<string, NpyInnerLoopFunc> _innerLoopCache = new();
+        internal static readonly ConcurrentDictionary<string, NDInnerLoopFunc> _innerLoopCache = new();
 
         // Cache size + reset are centralized on GeneratedDelegates
         // (GeneratedDelegates.InnerLoopCount / GeneratedDelegates.ClearInnerLoop).
@@ -77,7 +77,7 @@ namespace NumSharp.Backends.Kernels
         ///   arg3: void*  auxdata     — opaque cookie
         /// The body MUST emit its own <c>ret</c>.
         /// </summary>
-        internal static NpyInnerLoopFunc CompileRawInnerLoop(Action<ILGenerator> body, string cacheKey)
+        internal static NDInnerLoopFunc CompileRawInnerLoop(Action<ILGenerator> body, string cacheKey)
         {
             if (body is null) throw new ArgumentNullException(nameof(body));
             if (cacheKey is null) throw new ArgumentNullException(nameof(cacheKey));
@@ -85,14 +85,14 @@ namespace NumSharp.Backends.Kernels
             return _innerLoopCache.GetOrAdd(cacheKey, _ =>
             {
                 var dm = new DynamicMethod(
-                    name: $"NpyInnerLoop_Raw_{Sanitize(cacheKey)}",
+                    name: $"NDInnerLoop_Raw_{Sanitize(cacheKey)}",
                     returnType: typeof(void),
                     parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(void*) },
                     owner: typeof(DirectILKernelGenerator),
                     skipVisibility: true);
 
                 body(dm.GetILGenerator());
-                return dm.CreateDelegate<NpyInnerLoopFunc>();
+                return dm.CreateDelegate<NDInnerLoopFunc>();
             });
         }
 
@@ -120,7 +120,7 @@ namespace NumSharp.Backends.Kernels
         /// runs when the iterator's inner axis is not contiguous for every
         /// operand.
         /// </summary>
-        internal static NpyInnerLoopFunc CompileInnerLoop(
+        internal static NDInnerLoopFunc CompileInnerLoop(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
@@ -136,7 +136,7 @@ namespace NumSharp.Backends.Kernels
                 GenerateTemplatedInnerLoop(operandTypes, scalarBody, vectorBody, cacheKey));
         }
 
-        private static NpyInnerLoopFunc GenerateTemplatedInnerLoop(
+        private static NDInnerLoopFunc GenerateTemplatedInnerLoop(
             NPTypeCode[] operandTypes,
             Action<ILGenerator> scalarBody,
             Action<ILGenerator>? vectorBody,
@@ -147,7 +147,7 @@ namespace NumSharp.Backends.Kernels
             NPTypeCode outType = operandTypes[nIn];
 
             var dm = new DynamicMethod(
-                name: $"NpyInnerLoop_{Sanitize(cacheKey)}",
+                name: $"NDInnerLoop_{Sanitize(cacheKey)}",
                 returnType: typeof(void),
                 parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(void*) },
                 owner: typeof(DirectILKernelGenerator),
@@ -360,7 +360,7 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblEnd);
             il.Emit(OpCodes.Ret);
 
-            return dm.CreateDelegate<NpyInnerLoopFunc>();
+            return dm.CreateDelegate<NDInnerLoopFunc>();
         }
 
         #endregion
@@ -427,7 +427,7 @@ namespace NumSharp.Backends.Kernels
         /// Emit the 4× unrolled SIMD loop + 1-vector remainder + scalar tail
         /// for the contiguous inner-loop fast path. Matches the shape of
         /// <c>EmitSimdFullLoop</c> in MixedType.cs but targets the
-        /// NpyInnerLoopFunc signature.
+        /// NDInnerLoopFunc signature.
         /// </summary>
         private static void EmitSimdContigLoop(
             ILGenerator il,
@@ -562,7 +562,7 @@ namespace NumSharp.Backends.Kernels
         ///   - operandTypes[0] == operandTypes[1] == operandTypes[2] == dtype
         ///   - dtype is SIMD-capable for the user's vectorBody
         ///   - lhs/rhs ptrLocals point at the row's element-0 address
-        ///     (NpyIter has already advanced them to the outer-iter start)
+        ///     (NDIter has already advanced them to the outer-iter start)
         ///   - scalarSide ∈ {0, 1}: 0 = lhs broadcast, 1 = rhs broadcast
         ///   - 4× unroll mirrors EmitSimdContigLoop for consistent pipelining
         /// </summary>

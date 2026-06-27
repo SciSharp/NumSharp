@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void CumSum_OutputLayout_FContiguousSource_StaysF()
         {
             // NumPy: cumsum(F-contig, axis) -> F-contiguous output (KEEPORDER). This is the
-            // long-standing bug the NpyIter accumulate rewrite fixed (was C + post-hoc copy).
+            // long-standing bug the NDIter accumulate rewrite fixed (was C + post-hoc copy).
             var f = np.arange(12).astype(NPTypeCode.Double).reshape(4, 3).T; // (3,4) F-contig
             f.Shape.IsFContiguous.Should().BeTrue("fixture is F-contig");
             foreach (int ax in new[] { 0, 1 })
@@ -442,7 +442,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void CumSum_SignedZero_AxisPath_PreservesNegativeZero()
         {
             // NumPy: cumsum([[-0.0,1.0],[2.0,3.0]], axis=0)[0,0] keeps the sign bit (-0.0).
-            // The NpyIter accumulate path copies the first element (memmove-first), so this matches.
+            // The NDIter accumulate path copies the first element (memmove-first), so this matches.
             var z = np.array(new double[,] { { -0.0, 1.0 }, { 2.0, 3.0 } });
             var r = np.cumsum(z, 0);
             var d = r.GetData<double>().ToArray();
@@ -456,7 +456,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             // KNOWN DIVERGENCE (flat / axis=None path only): NumPy preserves the sign bit of the
             // FIRST element — cumsum([-0.0, 0.0, -0.0]) = [-0.0, 0.0, 0.0] (signbit [T,F,F]).
             // NumSharp's flat scan seeds a +0.0 accumulator and adds, so out[0] = 0.0 + (-0.0) = +0.0
-            // (signbit False). The NpyIter axis path copies the first element and DOES preserve it
+            // (signbit False). The NDIter axis path copies the first element and DOES preserve it
             // (see CumSum_SignedZero_AxisPath_PreservesNegativeZero); only the flat helper diverges.
             // Fixing it cleanly would touch the shared flat IL emitters; scoped out as a minor edge.
             var r = np.cumsum(np.array(new double[] { -0.0, 0.0, -0.0 }));

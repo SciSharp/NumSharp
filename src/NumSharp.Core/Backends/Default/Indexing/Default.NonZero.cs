@@ -266,8 +266,8 @@ namespace NumSharp.Backends
                 return count;
             }
 
-            // Strided path: use NpyIter for layout-aware traversal.
-            using var iter = NpyIterRef.New(x, NpyIterGlobalFlags.EXTERNAL_LOOP);
+            // Strided path: use NDIter for layout-aware traversal.
+            using var iter = NDIterRef.New(x, NDIterGlobalFlags.EXTERNAL_LOOP);
             return iter.ExecuteReducing<CountNonZeroKernel<T>, long>(default, 0L);
         }
 

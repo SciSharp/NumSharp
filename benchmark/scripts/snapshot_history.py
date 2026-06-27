@@ -12,11 +12,11 @@ rendered sheets.
 A snapshot contains *everything we commit and reference*:
 
     MANIFEST.md            provenance / env / methodology / headline geomeans
-    benchmark-report.md    op-matrix + appended NpyIter/Layout/Operand/Cast/Fusion
+    benchmark-report.md    op-matrix + appended NDIter/Layout/Operand/Cast/Fusion
     benchmark-report.json  unified machine-readable op-matrix results
     benchmark-report.csv   spreadsheet form
     numpy-results.json     raw NumPy timings (merge input)
-    npyiter_results.md/.tsv + cards/{ops,cat}.png
+    nditer_results.md/.tsv + cards/{ops,cat}.png
     layout_results.md/.tsv · operand_results.md/.tsv · cast_results.md/.tsv · fusion_results.md
 
 Raw BenchmarkDotNet per-class JSON (~tens of MB) is intentionally NOT persisted
@@ -53,8 +53,8 @@ RESULTS = BENCH / "results"
 
 # rendered sheets a run leaves under benchmark/<subsystem>/ (committed + referenced)
 SUBSYSTEM_FILES = [
-    BENCH / "npyiter" / "npyiter_results.md",
-    BENCH / "npyiter" / "npyiter_results.tsv",
+    BENCH / "nditer" / "nditer_results.md",
+    BENCH / "nditer" / "nditer_results.tsv",
     BENCH / "layout" / "layout_results.md",
     BENCH / "layout" / "layout_results.tsv",
     BENCH / "operand" / "operand_results.md",
@@ -63,7 +63,7 @@ SUBSYSTEM_FILES = [
     BENCH / "cast" / "cast_results.tsv",
     BENCH / "fusion" / "fusion_results.md",
 ]
-CARDS = [BENCH / "npyiter" / "cards" / "ops.png", BENCH / "npyiter" / "cards" / "cat.png"]
+CARDS = [BENCH / "nditer" / "cards" / "ops.png", BENCH / "nditer" / "cards" / "cat.png"]
 # core artifacts that live in results/<ts>/ (the .md is also mirrored at benchmark/ root)
 CORE_FROM_RESULTS = ["benchmark-report.md", "benchmark-report.json",
                      "benchmark-report.csv", "numpy-results.json"]
@@ -152,9 +152,9 @@ def parse_overall(report_md):
         return None
 
 
-def parse_npyiter_headline():
+def parse_nditer_headline():
     try:
-        for line in (BENCH / "npyiter" / "npyiter_results.md").read_text(encoding="utf-8").splitlines():
+        for line in (BENCH / "nditer" / "nditer_results.md").read_text(encoding="utf-8").splitlines():
             if line.startswith("HEADLINE"):
                 return line.strip()
     except Exception:
@@ -204,7 +204,7 @@ def build_manifest(snap_name, run_ts, head, subject, dirty, dirty_files, env,
           "- **NumPy:** 50 timed iterations / 10 warmup per op (warm long-lived interpreter).",
           "- **Sizes:** 1,000 / 100,000 / 10,000,000 elements. Same seeds both sides.",
           "- Join keyed on (op, dtype, N).",
-          "- **Subsystems** appended to `benchmark-report.md`: NpyIter, Layout, Operand, Cast, Fusion.", ""]
+          "- **Subsystems** appended to `benchmark-report.md`: NDIter, Layout, Operand, Cast, Fusion.", ""]
     if size_rows:
         L += ["## Headline — op-matrix geomean by size (NPY/NS, >1 = NumSharp faster)",
               "| Size | geomean | %NumPy🕐 | ✅ / 🟡 / 🟠 / 🔴 |", "|---|--:|--:|---|"]
@@ -215,14 +215,14 @@ def build_manifest(snap_name, run_ts, head, subject, dirty, dirty_files, env,
     if overall:
         L.append(f"Overall op-matrix: **{overall}**.\n")
     if npy_headline:
-        L.append(f"NpyIter: _{npy_headline}_\n")
+        L.append(f"NDIter: _{npy_headline}_\n")
     if cast_headline:
         L.append(f"Cast: _{cast_headline}_\n")
     L += ["## Files", "| file | what |", "|---|---|",
-          "| `benchmark-report.md` | op-matrix (per-(op,dtype,N) ratio) + appended NpyIter/Layout/Operand/Cast/Fusion |",
+          "| `benchmark-report.md` | op-matrix (per-(op,dtype,N) ratio) + appended NDIter/Layout/Operand/Cast/Fusion |",
           "| `benchmark-report.json` / `.csv` | unified machine-readable / spreadsheet form |",
           "| `numpy-results.json` | raw NumPy timings (merge input) |",
-          "| `npyiter_results.*` + `cards/` | iterator benchmark sheet + README cards |",
+          "| `nditer_results.*` + `cards/` | iterator benchmark sheet + README cards |",
           "| `layout_/operand_/cast_/fusion_results.*` | the four matrix-subsystem sheets |", "",
           "Raw BenchmarkDotNet per-class JSON (~tens of MB) is **not** persisted here "
           "(regenerable). Reproduce with `python benchmark/run_benchmark.py`."]
@@ -297,7 +297,7 @@ def make_snapshot(results_dir=None, snap_name=None, head=None, stage=True,
         snap_name, run_ts, head, subject, dirty, dirty_files, env,
         parse_size_summary(snap / "benchmark-report.md"),
         parse_overall(snap / "benchmark-report.md"),
-        parse_npyiter_headline(), parse_cast_headline())
+        parse_nditer_headline(), parse_cast_headline())
     (snap / "MANIFEST.md").write_text(manifest, encoding="utf-8")
     log(f"[snapshot] benchmark/history/{snap_name} — {len(copied)} artifacts + MANIFEST.md")
 

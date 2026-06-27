@@ -2,7 +2,7 @@
 # =============================================================================
 # render_dashboard.py — a dense, numbers-first NumPy-vs-NumSharp dashboard from the
 # merged op-matrix (benchmark-report.json). Same ASCII-bar aesthetic as
-# benchmark/npyiter/npyiter_results.md, applied to the full op × dtype × N comparison:
+# benchmark/nditer/nditer_results.md, applied to the full op × dtype × N comparison:
 # headline geomean, by-size / by-suite / by-dtype bars, the status mix, and the
 # fastest/slowest ops. Graphs + stats + numbers, minimal prose.
 #

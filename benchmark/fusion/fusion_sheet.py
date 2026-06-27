@@ -2,7 +2,7 @@
 # =============================================================================
 # fusion_sheet.py — THE Fusion subsystem orchestrator + renderer.
 #
-# np.evaluate compiles an NpyExpr tree to ONE NpyIter pass (numexpr-style), so
+# np.evaluate compiles an NDExpr tree to ONE NDIter pass (numexpr-style), so
 # chained expressions allocate no intermediates. The op-matrix can't express
 # this. This subsystem runs the fusion gate: evaluate_bench.cs reports fused
 # np.evaluate vs unfused np.* chains (NumSharp-internal speedups), and
@@ -49,7 +49,7 @@ def main():
             + "\n\nNumPy — absolutes on the same box (context for the unfused column):\n\n"
             + py_out)
     md = ("# Fusion — np.evaluate vs unfused chains (and NumPy context)\n\n"
-          "`np.evaluate` runs a whole expression tree in one NpyIter pass (no intermediates). "
+          "`np.evaluate` runs a whole expression tree in one NDIter pass (no intermediates). "
           "Fixed-expression gate plus an operand-layout sweep of the flagship `a*b+c` "
           "(C/F/T/strided/bcast — does the fused single-pass win survive non-contiguous "
           "operands?), not a dtype/layout matrix — so reported as-is.\n\n"

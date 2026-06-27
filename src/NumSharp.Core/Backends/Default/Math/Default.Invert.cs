@@ -21,8 +21,8 @@ namespace NumSharp.Backends
 
             var inputType = nd.typecode;
             var loopType = typeCode ?? inputType;
-            bool inputIntLike = inputType == NPTypeCode.Boolean || NpyExprTypeRules.IsIntegerKind(inputType);
-            bool loopIntLike = loopType == NPTypeCode.Boolean || NpyExprTypeRules.IsIntegerKind(loopType);
+            bool inputIntLike = inputType == NPTypeCode.Boolean || NDExprTypeRules.IsIntegerKind(inputType);
+            bool loopIntLike = loopType == NPTypeCode.Boolean || NDExprTypeRules.IsIntegerKind(loopType);
 
             if (!loopIntLike)
             {

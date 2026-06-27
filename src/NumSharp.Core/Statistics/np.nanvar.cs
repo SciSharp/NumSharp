@@ -77,7 +77,7 @@ namespace NumSharp
                 case NPTypeCode.Single:
                 {
                     // Two-pass algorithm: first compute mean, then variance
-                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter1 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter1.ExecuteReducing<NanMeanFloatKernel, NanMeanAccumulator>(default, default);
 
                     if (accum.Count <= ddof)
@@ -87,7 +87,7 @@ namespace NumSharp
                     else
                     {
                         double mean = accum.Sum / accum.Count;
-                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        using var iter2 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                         double sumSq = iter2.ExecuteReducing<NanSquaredDeviationFloatKernel, double>(
                             new NanSquaredDeviationFloatKernel(mean), 0.0);
                         result = (float)(sumSq / (accum.Count - ddof));
@@ -96,7 +96,7 @@ namespace NumSharp
                 }
                 case NPTypeCode.Double:
                 {
-                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter1 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter1.ExecuteReducing<NanMeanDoubleKernel, NanMeanAccumulator>(default, default);
 
                     if (accum.Count <= ddof)
@@ -106,7 +106,7 @@ namespace NumSharp
                     else
                     {
                         double mean = accum.Sum / accum.Count;
-                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        using var iter2 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                         double sumSq = iter2.ExecuteReducing<NanSquaredDeviationDoubleKernel, double>(
                             new NanSquaredDeviationDoubleKernel(mean), 0.0);
                         result = sumSq / (accum.Count - ddof);
@@ -118,7 +118,7 @@ namespace NumSharp
                     // Half nanvar returns Half (NumPy parity).
                     // Two-pass (two iterators, mirrors the Float/Double paths above):
                     // mean, then mean(|x - mean|²). Accumulate in double, narrow result.
-                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter1 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter1.ExecuteReducing<NanMeanHalfKernel, NanMeanAccumulator>(default, default);
 
                     if (accum.Count <= ddof)
@@ -128,7 +128,7 @@ namespace NumSharp
                     else
                     {
                         double mean = accum.Sum / accum.Count;
-                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        using var iter2 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                         double sumSq = iter2.ExecuteReducing<NanSquaredDeviationHalfKernel, double>(
                             new NanSquaredDeviationHalfKernel(mean), 0.0);
                         result = (Half)(sumSq / (accum.Count - ddof));
@@ -139,7 +139,7 @@ namespace NumSharp
                 {
                     // Complex nanvar returns float64 (NumPy parity).
                     // Variance = mean(|z - mean(z)|²). NaN-containing = Re or Im is NaN.
-                    using var iter1 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                    using var iter1 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                     var accum = iter1.ExecuteReducing<NanMeanComplexKernel, NanMeanComplexAccumulator>(default, default);
 
                     if (accum.Count <= ddof)
@@ -150,7 +150,7 @@ namespace NumSharp
                     {
                         double meanR = accum.Sum.Real / accum.Count;
                         double meanI = accum.Sum.Imaginary / accum.Count;
-                        using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
+                        using var iter2 = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
                         double sumSq = iter2.ExecuteReducing<NanSquaredDeviationComplexKernel, double>(
                             new NanSquaredDeviationComplexKernel(meanR, meanI), 0.0);
                         result = sumSq / (accum.Count - ddof);

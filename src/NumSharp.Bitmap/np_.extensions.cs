@@ -252,7 +252,7 @@ namespace NumSharp
                 if (nd.Shape.IsContiguous)
                     nd.CopyTo(dst);
                 else
-                    NpyIter.Copy(new UnmanagedStorage(dst, Shape.Vector(bitdata.Stride * bitdata.Height)), nd.Unsafe.Storage);
+                    NDIter.Copy(new UnmanagedStorage(dst, Shape.Vector(bitdata.Stride * bitdata.Height)), nd.Unsafe.Storage);
             }
             finally
             {

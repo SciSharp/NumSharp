@@ -21,7 +21,7 @@ public class AuditV2_Iterators
 {
     // =====================================================================
     // T1.1 — Iternext() ignores EXLOOP, advances 1 element at a time.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:1985-2003
+    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:1985-2003
     //
     // The public Iternext() method calls _state->Advance() unconditionally
     // (no EXLOOP branch, no buffered-non-reduce refill branch).
@@ -42,15 +42,15 @@ public class AuditV2_Iterators
     /// as a Shape[NDim-1]-sized chunk → reads 12 * Shape[NDim-1] elements
     /// from a 12-element buffer (overrun).
     ///
-    /// Path: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:Iternext()
+    /// Path: src/NumSharp.Core/Backends/Iterators/NDIter.cs:Iternext()
     /// </summary>
     [TestMethod]
     public void T1_1_Iternext_ExternalLoop_Should_Not_Advance_One_Element_At_A_Time()
     {
         var a = np.arange(12).reshape(3, 4).transpose();  // shape (4,3), non-contig
-        using var it = NpyIterRef.New(
+        using var it = NDIterRef.New(
             a,
-            NpyIterGlobalFlags.EXTERNAL_LOOP,
+            NDIterGlobalFlags.EXTERNAL_LOOP,
             NPY_ORDER.NPY_CORDER,
             NPY_CASTING.NPY_SAFE_CASTING);
 
@@ -75,8 +75,8 @@ public class AuditV2_Iterators
     // =====================================================================
     // T1.2 — Iternext() BUFFERED non-reduce path has no buffer-refill logic
     // → AccessViolationException on the second buffer fill.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:1985-2003
-    //       src/NumSharp.Core/Backends/Iterators/NpyIter.cs:2723-2756 (GetDataPtr)
+    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:1985-2003
+    //       src/NumSharp.Core/Backends/Iterators/NDIter.cs:2723-2756 (GetDataPtr)
     //
     // For BUFFERED + !REDUCE, Iternext() falls through to state.Advance()
     // which doesn't refill the buffer; GetDataPtr then computes a pointer
@@ -105,26 +105,26 @@ public class AuditV2_Iterators
         // That would bring down the entire test runner.
         //
         // To make the bug visible WITHOUT segfaulting, we assert that
-        // NumSharp's NpyIter exposes a buffer-refill path for non-reduce
+        // NumSharp's NDIter exposes a buffer-refill path for non-reduce
         // buffered iteration. NumPy's npyiter_buffered_iternext
         // (`numpy/_core/src/multiarray/nditer_templ.c.src:325`) handles this
         // by refilling READ operands and flushing WRITE operands across
-        // buffer boundaries. NumSharp's public Iternext() at NpyIter.cs:1985
+        // buffer boundaries. NumSharp's public Iternext() at NDIter.cs:1985
         // has no equivalent — for BUFFERED + non-REDUCE, it falls through
         // to state.Advance(), and GetDataPtr then reads past the buffer end.
         //
         // The assertion: NumSharp must define a member named
-        // BufferedNonReduceIternext (or similar refill path) on NpyIterRef
+        // BufferedNonReduceIternext (or similar refill path) on NDIterRef
         // — searching by reflection. When the fix lands and such a method
         // exists (or Iternext() is rewritten to handle the case), this test
         // will start passing.
         var src = np.arange(20000).astype(NPTypeCode.Int32);
         var dtypes = new[] { NPTypeCode.Double };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
-        using var it = NpyIterRef.MultiNew(
+        using var it = NDIterRef.MultiNew(
             1, new[] { src },
-            NpyIterGlobalFlags.BUFFERED,
+            NDIterGlobalFlags.BUFFERED,
             NPY_ORDER.NPY_KEEPORDER,
             NPY_CASTING.NPY_SAFE_CASTING,
             opFlags,
@@ -133,22 +133,22 @@ public class AuditV2_Iterators
         it.IterSize.Should().Be(20000L,
             "the buffered iterator must still advertise all 20000 elements");
 
-        // NpyIterRef is a ref struct; use typeof() rather than GetType().
-        var type = typeof(NpyIterRef);
+        // NDIterRef is a ref struct; use typeof() rather than GetType().
+        var type = typeof(NDIterRef);
         var method = type.GetMethod("BufferedNonReduceIternext",
             System.Reflection.BindingFlags.Instance |
             System.Reflection.BindingFlags.NonPublic |
             System.Reflection.BindingFlags.Public);
 
         method.Should().NotBeNull(
-            "NpyIter must implement BufferedNonReduceIternext (or equivalent buffer-refill logic in Iternext) to safely iterate buffered non-reduce arrays larger than BufferSize. Without it, GetDataPtr reads past the buffer end → AccessViolationException / segfault.");
+            "NDIter must implement BufferedNonReduceIternext (or equivalent buffer-refill logic in Iternext) to safely iterate buffered non-reduce arrays larger than BufferSize. Without it, GetDataPtr reads past the buffer end → AccessViolationException / segfault.");
     }
 
     // =====================================================================
-    // T1.12 — NpyIterCasting buffer paths (CopyToBuffer/CopyFromBuffer) and
+    // T1.12 — NDIterCasting buffer paths (CopyToBuffer/CopyFromBuffer) and
     // ConvertValue(ReadAsDouble/WriteFromDouble) miss SByte, Half, Complex.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIterBufferManager.cs:166-229
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIterCasting.cs:339-381
+    // File: src/NumSharp.Core/Backends/Iterators/NDIterBufferManager.cs:166-229
+    // File: src/NumSharp.Core/Backends/Iterators/NDIterCasting.cs:339-381
     //
     // Constructing a buffered iterator with any of these source dtypes throws
     // NotSupportedException at iterator construction (during buffer copy).
@@ -167,13 +167,13 @@ public class AuditV2_Iterators
     {
         var a = np.array(new sbyte[] { 1, 2, 3 });
         var dtypes = new[] { NPTypeCode.Int64 };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
         Action build = () =>
         {
-            using var it = NpyIterRef.MultiNew(
+            using var it = NDIterRef.MultiNew(
                 1, new[] { a },
-                NpyIterGlobalFlags.BUFFERED,
+                NDIterGlobalFlags.BUFFERED,
                 NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_UNSAFE_CASTING,
                 opFlags, dtypes);
@@ -194,13 +194,13 @@ public class AuditV2_Iterators
     {
         var a = np.array(new Complex[] { new Complex(1, 0), new Complex(2, 0) });
         var dtypes = new[] { NPTypeCode.Complex };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
         Action build = () =>
         {
-            using var it = NpyIterRef.MultiNew(
+            using var it = NDIterRef.MultiNew(
                 1, new[] { a },
-                NpyIterGlobalFlags.BUFFERED,
+                NDIterGlobalFlags.BUFFERED,
                 NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_SAFE_CASTING,
                 opFlags, dtypes);
@@ -210,8 +210,8 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.23 — NpyIter.GetIterView(0) throws OverflowException on 0-d arrays.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:2650-2704
+    // T1.23 — NDIter.GetIterView(0) throws OverflowException on 0-d arrays.
+    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:2650-2704
     //
     // Line 2668 returns original.flat[0] for ndim=0, but flat[0] triggers slice
     // indexing which fails on scalars with OverflowException.
@@ -231,9 +231,9 @@ public class AuditV2_Iterators
         var scalar = np.array(42L);
         scalar.ndim.Should().Be(0);
 
-        using var it = NpyIterRef.New(
+        using var it = NDIterRef.New(
             scalar,
-            NpyIterGlobalFlags.None,
+            NDIterGlobalFlags.None,
             NPY_ORDER.NPY_CORDER,
             NPY_CASTING.NPY_SAFE_CASTING);
 
@@ -247,8 +247,8 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.24 — NpyIter.EnableExternalLoop doesn't validate MULTI_INDEX/HASINDEX.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIter.cs:2852-2857
+    // T1.24 — NDIter.EnableExternalLoop doesn't validate MULTI_INDEX/HASINDEX.
+    // File: src/NumSharp.Core/Backends/Iterators/NDIter.cs:2852-2857
     //
     // NumPy raises ValueError; NumSharp silently sets the flag, leaving the
     // iterator in an illegal (HasMultiIndex && HasExternalLoop) state.
@@ -266,9 +266,9 @@ public class AuditV2_Iterators
     public void T1_24_EnableExternalLoop_Must_Reject_MultiIndex()
     {
         var a = np.arange(12).reshape(3, 4);
-        using var it = NpyIterRef.New(
+        using var it = NDIterRef.New(
             a,
-            NpyIterGlobalFlags.MULTI_INDEX,
+            NDIterGlobalFlags.MULTI_INDEX,
             NPY_ORDER.NPY_CORDER,
             NPY_CASTING.NPY_SAFE_CASTING);
 
@@ -283,7 +283,7 @@ public class AuditV2_Iterators
     // T1.25 — FIXED. The old NDIterator broadcast constructor produced wrong
     // strides (C-order on the broadcast shape instead of stride=0), reading
     // past the source buffer. NDIterator has been removed; the broadcast
-    // iterator is now np.broadcast_to + NpyFlatIterator (np.broadcast(...).iters),
+    // iterator is now np.broadcast_to + NDFlatIterator (np.broadcast(...).iters),
     // which yields the correct cyclic broadcast.
     // =====================================================================
     /// <summary>
@@ -304,20 +304,20 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.34 — NpyExpr Const/Where/Call only support 12 dtypes (no SByte/Half/Complex).
-    // File: src/NumSharp.Core/Backends/Iterators/NpyExpr.cs:406-432 (Const.EmitLoadTyped)
-    // File: src/NumSharp.Core/Backends/Iterators/NpyExpr.cs:762-790 (Where.EmitPushZero)
-    // File: src/NumSharp.Core/Backends/Iterators/NpyExpr.cs:973-980 (Call.IsSupported)
+    // T1.34 — NDExpr Const/Where/Call only support 12 dtypes (no SByte/Half/Complex).
+    // File: src/NumSharp.Core/Backends/Iterators/NDExpr.cs:406-432 (Const.EmitLoadTyped)
+    // File: src/NumSharp.Core/Backends/Iterators/NDExpr.cs:762-790 (Where.EmitPushZero)
+    // File: src/NumSharp.Core/Backends/Iterators/NDExpr.cs:973-980 (Call.IsSupported)
     // =====================================================================
     /// <summary>
-    /// T1.34 — NpyExpr.Const must support Half as output dtype. Compiling
+    /// T1.34 — NDExpr.Const must support Half as output dtype. Compiling
     /// a Const-only expression for Half currently throws NotSupportedException
     /// in ConstNode.EmitLoadTyped.
     /// </summary>
     [TestMethod]
-    public void T1_34_NpyExpr_Const_Half_Must_Compile()
+    public void T1_34_NDExpr_Const_Half_Must_Compile()
     {
-        var expr = NpyExpr.Const(1.5);
+        var expr = NDExpr.Const(1.5);
 
         Action act = () => expr.Compile(new[] { NPTypeCode.Half }, NPTypeCode.Half, "T1_34_Const_Half");
 
@@ -325,12 +325,12 @@ public class AuditV2_Iterators
     }
 
     /// <summary>
-    /// T1.34 — NpyExpr.Const must support SByte as output dtype.
+    /// T1.34 — NDExpr.Const must support SByte as output dtype.
     /// </summary>
     [TestMethod]
-    public void T1_34_NpyExpr_Const_SByte_Must_Compile()
+    public void T1_34_NDExpr_Const_SByte_Must_Compile()
     {
-        var expr = NpyExpr.Const(1);
+        var expr = NDExpr.Const(1);
 
         Action act = () => expr.Compile(new[] { NPTypeCode.SByte }, NPTypeCode.SByte, "T1_34_Const_SByte");
 
@@ -338,12 +338,12 @@ public class AuditV2_Iterators
     }
 
     /// <summary>
-    /// T1.34 — NpyExpr.Const must support Complex as output dtype.
+    /// T1.34 — NDExpr.Const must support Complex as output dtype.
     /// </summary>
     [TestMethod]
-    public void T1_34_NpyExpr_Const_Complex_Must_Compile()
+    public void T1_34_NDExpr_Const_Complex_Must_Compile()
     {
-        var expr = NpyExpr.Const(1);
+        var expr = NDExpr.Const(1);
 
         Action act = () => expr.Compile(new[] { NPTypeCode.Complex }, NPTypeCode.Complex, "T1_34_Const_Complex");
 
@@ -351,16 +351,16 @@ public class AuditV2_Iterators
     }
 
     /// <summary>
-    /// T1.34 — NpyExpr.Where must support Half. Currently throws
+    /// T1.34 — NDExpr.Where must support Half. Currently throws
     /// NotSupportedException in WhereNode.EmitPushZero for Half / SByte / Complex.
     /// </summary>
     [TestMethod]
-    public void T1_34_NpyExpr_Where_Half_Must_Compile()
+    public void T1_34_NDExpr_Where_Half_Must_Compile()
     {
-        var cond = NpyExpr.Input(0);
-        var a = NpyExpr.Const(1);
-        var b = NpyExpr.Const(2);
-        var expr = NpyExpr.Where(cond, a, b);
+        var cond = NDExpr.Input(0);
+        var a = NDExpr.Const(1);
+        var b = NDExpr.Const(2);
+        var expr = NDExpr.Where(cond, a, b);
 
         Action act = () => expr.Compile(new[] { NPTypeCode.Half }, NPTypeCode.Half, "T1_34_Where_Half");
 
@@ -368,18 +368,18 @@ public class AuditV2_Iterators
     }
 
     /// <summary>
-    /// T1.34 — NpyExpr.Call with a Half-typed parameter must be allowed.
+    /// T1.34 — NDExpr.Call with a Half-typed parameter must be allowed.
     /// IsSupported() rejects Half/SByte/Complex as method parameter/return types.
     /// </summary>
     [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.34")]
-    public void T1_34_NpyExpr_Call_Half_Param_Must_Compile()
+    public void T1_34_NDExpr_Call_Half_Param_Must_Compile()
     {
         Func<Half, Half> f = h => h;
-        var arg = NpyExpr.Input(0);
+        var arg = NDExpr.Input(0);
 
         Action act = () =>
         {
-            var expr = NpyExpr.Call(f, arg);
+            var expr = NDExpr.Call(f, arg);
             expr.Compile(new[] { NPTypeCode.Half }, NPTypeCode.Half, "T1_34_Call_Half");
         };
 
@@ -387,10 +387,10 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.38 — NpyIterCasting.IsSafeCast/IsSameKindCast helpers don't list
+    // T1.38 — NDIterCasting.IsSafeCast/IsSameKindCast helpers don't list
     // SByte/Half. IsSafeCast(SByte→Int32) returns false even though NumPy
     // declares it safe; IsSafeCast(Half→Single) returns false.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIterCasting.cs:138-152
+    // File: src/NumSharp.Core/Backends/Iterators/NDIterCasting.cs:138-152
     //
     // The cast failure manifests as InvalidCastException raised by
     // ValidateCasts during iterator construction.
@@ -407,13 +407,13 @@ public class AuditV2_Iterators
     {
         var a = np.array(new sbyte[] { -1, 2 });
         var dtypes = new[] { NPTypeCode.Int32 };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
         Action build = () =>
         {
-            using var it = NpyIterRef.MultiNew(
+            using var it = NDIterRef.MultiNew(
                 1, new[] { a },
-                NpyIterGlobalFlags.BUFFERED,
+                NDIterGlobalFlags.BUFFERED,
                 NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_SAFE_CASTING,
                 opFlags, dtypes);
@@ -432,13 +432,13 @@ public class AuditV2_Iterators
     {
         var a = np.array(new Half[] { (Half)1, (Half)2, (Half)3 });
         var dtypes = new[] { NPTypeCode.Single };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
 
         Action build = () =>
         {
-            using var it = NpyIterRef.MultiNew(
+            using var it = NDIterRef.MultiNew(
                 1, new[] { a },
-                NpyIterGlobalFlags.BUFFERED,
+                NDIterGlobalFlags.BUFFERED,
                 NPY_ORDER.NPY_KEEPORDER,
                 NPY_CASTING.NPY_SAFE_CASTING,
                 opFlags, dtypes);
@@ -448,9 +448,9 @@ public class AuditV2_Iterators
     }
 
     // =====================================================================
-    // T1.39 — NpyIterCasting.ReadAsDouble/WriteFromDouble routes Int64/UInt64
+    // T1.39 — NDIterCasting.ReadAsDouble/WriteFromDouble routes Int64/UInt64
     // through `double`, losing precision for values above 2^53.
-    // File: src/NumSharp.Core/Backends/Iterators/NpyIterCasting.cs:339-381
+    // File: src/NumSharp.Core/Backends/Iterators/NDIterCasting.cs:339-381
     //
     // For an Int64 value of (1<<53)+1 = 9007199254740993, the double round-trip
     // yields 9007199254740992 (off by 1). NumPy's int64→uint64 cast preserves
@@ -471,10 +471,10 @@ public class AuditV2_Iterators
         var src = np.array(new long[] { big, big + 1, big + 2 });
 
         var dtypes = new[] { NPTypeCode.UInt64 };
-        var opFlags = new[] { NpyIterPerOpFlags.READONLY };
-        using var it = NpyIterRef.MultiNew(
+        var opFlags = new[] { NDIterPerOpFlags.READONLY };
+        using var it = NDIterRef.MultiNew(
             1, new[] { src },
-            NpyIterGlobalFlags.BUFFERED,
+            NDIterGlobalFlags.BUFFERED,
             NPY_ORDER.NPY_KEEPORDER,
             NPY_CASTING.NPY_UNSAFE_CASTING,
             opFlags, dtypes);
@@ -499,9 +499,9 @@ public class AuditV2_Iterators
     public void T1_24_EnableExternalLoop_Must_Reject_CIndex()
     {
         var a = np.arange(12).reshape(3, 4);
-        using var it = NpyIterRef.New(
+        using var it = NDIterRef.New(
             a,
-            NpyIterGlobalFlags.C_INDEX,
+            NDIterGlobalFlags.C_INDEX,
             NPY_ORDER.NPY_CORDER,
             NPY_CASTING.NPY_SAFE_CASTING);
 
@@ -517,10 +517,10 @@ public class AuditV2_Iterators
     // =====================================================================
     // T1.40 — FALSE / NOT REPRODUCED
     //
-    // Stress-tested NpyIter.Copy() with buffered+reduce on both 2D and 3D
+    // Stress-tested NDIter.Copy() with buffered+reduce on both 2D and 3D
     // multi-axis op_axes. The copy advanced independently and reported the
     // expected iter index for the original. ResetDataPtrs, ArrayWritebackPtrs,
-    // ReduceOuterPtrs are all copied in the visible code (NpyIter.cs:2991-3003).
+    // ReduceOuterPtrs are all copied in the visible code (NDIter.cs:2991-3003).
     // The audit itself marks T1.40 as "Bug (latent)" — no concrete failure mode
     // was reproducible. Not adding an OpenBugs test until a specific failure
     // pattern is identified.
@@ -535,7 +535,7 @@ public class AuditV2_Iterators
     //
     // NumPy only returns the original (3,4) shape when MULTI_INDEX is explicitly
     // requested — and NumSharp correctly does so too (verified via
-    // NpyIterGlobalFlags.MULTI_INDEX → returns [3,4]).
+    // NDIterGlobalFlags.MULTI_INDEX → returns [3,4]).
     //
     // A different, narrower divergence exists when forcing order='C' on a
     // non-contiguous transposed array (NumPy reports iteration-order shape,
