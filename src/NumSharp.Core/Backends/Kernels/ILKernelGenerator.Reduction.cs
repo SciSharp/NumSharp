@@ -689,10 +689,40 @@ namespace NumSharp.Backends.Kernels
         private static Vector256<T> NaNFoldVec<T>(Vector256<T> acc, Vector256<T> v, bool pickGreater)
             where T : unmanaged, IFloatingPointIeee754<T>
         {
-            var m = pickGreater ? Vector256.Max(acc, v) : Vector256.Min(acc, v);
+            // m is consumed only in lanes where NEITHER operand is NaN (the ConditionalSelect
+            // chain overrides NaN lanes), so the raw VMINPD/VMAXPD (no NaN fixup) is exact here.
+            var m = pickGreater ? RawMax256(acc, v) : RawMin256(acc, v);
             var accNaN = ~Vector256.Equals(acc, acc);   // acc != acc ⇒ NaN lane
             var vNaN = ~Vector256.Equals(v, v);
             return Vector256.ConditionalSelect(accNaN, acc, Vector256.ConditionalSelect(vNaN, v, m));
+        }
+
+        // Raw x86 Avx.Min/Max for float/double — a single VMINPD/VMAXPD WITHOUT the net9+ JIT
+        // NaN-propagation fixup (an extra compare+blend) that Vector256.Min/Max carry (~2x the
+        // raw instruction). SAFE in this file because every caller either tracks a separate
+        // finite mask + cold NaN scan (SimdMinMaxSameType) or overrides NaN lanes via
+        // ConditionalSelect (NaNFoldVec), so the raw op's NaN-dropping is intended. Non-x86
+        // (ARM) falls back to Vector256.Min/Max (no x86 fixup there). typeof(T)/IsSupported
+        // are JIT constants, so each specialization compiles to the single intrinsic.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static Vector256<T> RawMin256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return Avx.Min(a.AsDouble(), b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(float)) return Avx.Min(a.AsSingle(), b.AsSingle()).As<float, T>();
+            }
+            return Vector256.Min(a, b);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static Vector256<T> RawMax256<T>(Vector256<T> a, Vector256<T> b) where T : unmanaged
+        {
+            if (Avx.IsSupported)
+            {
+                if (typeof(T) == typeof(double)) return Avx.Max(a.AsDouble(), b.AsDouble()).As<double, T>();
+                if (typeof(T) == typeof(float)) return Avx.Max(a.AsSingle(), b.AsSingle()).As<float, T>();
+            }
+            return Vector256.Max(a, b);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -731,18 +761,18 @@ namespace NumSharp.Backends.Kernels
                         var v2 = Vector256.Load(id + i + 2 * W);
                         var v3 = Vector256.Load(id + i + 3 * W);
                         if (pickGreater)
-                        { a0 = Vector256.Max(a0, v0); a1 = Vector256.Max(a1, v1); a2 = Vector256.Max(a2, v2); a3 = Vector256.Max(a3, v3); }
+                        { a0 = RawMax256(a0, v0); a1 = RawMax256(a1, v1); a2 = RawMax256(a2, v2); a3 = RawMax256(a3, v3); }
                         else
-                        { a0 = Vector256.Min(a0, v0); a1 = Vector256.Min(a1, v1); a2 = Vector256.Min(a2, v2); a3 = Vector256.Min(a3, v3); }
+                        { a0 = RawMin256(a0, v0); a1 = RawMin256(a1, v1); a2 = RawMin256(a2, v2); a3 = RawMin256(a3, v3); }
                         fin &= Vector256.Equals(v0, v0) & Vector256.Equals(v1, v1) & Vector256.Equals(v2, v2) & Vector256.Equals(v3, v3);
                     }
                     var va = pickGreater
-                        ? Vector256.Max(Vector256.Max(a0, a1), Vector256.Max(a2, a3))
-                        : Vector256.Min(Vector256.Min(a0, a1), Vector256.Min(a2, a3));
+                        ? RawMax256(RawMax256(a0, a1), RawMax256(a2, a3))
+                        : RawMin256(RawMin256(a0, a1), RawMin256(a2, a3));
                     for (; i + W <= count; i += W)
                     {
                         var v = Vector256.Load(id + i);
-                        va = pickGreater ? Vector256.Max(va, v) : Vector256.Min(va, v);
+                        va = pickGreater ? RawMax256(va, v) : RawMin256(va, v);
                         fin &= Vector256.Equals(v, v);
                     }
                     // fin lane = all-ones ⇒ that lane was finite throughout; MSB-extract → bit set.
