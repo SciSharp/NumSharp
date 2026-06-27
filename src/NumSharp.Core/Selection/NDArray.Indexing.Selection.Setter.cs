@@ -178,11 +178,13 @@ namespace NumSharp
                         // passes through below.
                         if (this.ndim == 0 && !(nd.typecode == NPTypeCode.Boolean && nd.ndim == 0))
                             throw new IndexError($"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed");
-                        // An empty index array (size 0) of any dtype is an empty integer fancy index,
-                        // not a boolean mask (NumPy mapping.c:425): a[np.array([],bool)] = v is a no-op.
-                        if (nd.size == 0 && nd.ndim >= 1)
+                        // An empty NON-bool index array (size 0) is an empty integer fancy index. An
+                        // empty BOOLEAN array stays a MASK (falls through below): it consumes mask.ndim
+                        // axes via its nonzero, so the value must broadcast to (0,)+arr.shape[mask.ndim:]
+                        // — treating a multi-dim empty mask as a single empty fancy mis-shapes that check.
+                        if (nd.size == 0 && nd.ndim >= 1 && nd.typecode != NPTypeCode.Boolean)
                         {
-                            SetIndices(this, new NDArray[] { nd.typecode == NPTypeCode.Boolean ? nd.astype(NPTypeCode.Int64) : nd }, values);
+                            SetIndices(this, new NDArray[] { nd }, values);
                             return;
                         }
                         // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer

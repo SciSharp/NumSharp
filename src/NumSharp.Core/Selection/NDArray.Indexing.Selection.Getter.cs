@@ -127,10 +127,14 @@ namespace NumSharp
                         // ellipsis consume no axis and pass through below.
                         if (this.ndim == 0 && !(nd.typecode == NPTypeCode.Boolean && nd.ndim == 0))
                             throw new IndexError($"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed");
-                        // An empty index array (size 0) of any dtype is an empty integer fancy index,
-                        // not a boolean mask (NumPy mapping.c:425): A[np.array([],bool)] -> (0, ...).
-                        if (nd.size == 0 && nd.ndim >= 1)
-                            return FetchIndices(this, new NDArray[] { nd.typecode == NPTypeCode.Boolean ? nd.astype(NPTypeCode.Int64) : nd }, null, true);
+                        // An empty NON-bool index array (size 0) is an empty integer fancy index
+                        // (A[np.array([],int)] -> (0, ...)). An empty BOOLEAN array stays a MASK and
+                        // falls through to the mask path below: NumPy consumes mask.ndim axes via its
+                        // nonzero, so A[np.zeros((3,0),bool)] -> (0,) NOT (3,0,4) — treating it as a
+                        // single empty fancy (which matches only by coincidence for a 1-D mask) gives
+                        // the wrong rank for a multi-dim empty mask.
+                        if (nd.size == 0 && nd.ndim >= 1 && nd.typecode != NPTypeCode.Boolean)
+                            return FetchIndices(this, new NDArray[] { nd }, null, true);
                         // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
                         if (nd.typecode == NPTypeCode.Boolean)
                             return this[nd.MakeGeneric<bool>()];
