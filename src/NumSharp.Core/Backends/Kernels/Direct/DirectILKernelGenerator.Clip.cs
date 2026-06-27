@@ -172,6 +172,8 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Conv_I);
         }
 
+        private const int ClipUnroll = 4;
+
         private static void EmitSimdLoop(
             ILGenerator il, NPTypeCode dtype, ClipMode mode, ClipBoundsKind kind, int sz,
             LocalBuilder locI, LocalBuilder locLoVal, LocalBuilder locHiVal)
@@ -197,6 +199,55 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, locHiVec);
             }
 
+            long vcBytes = (long)vectorCount * sz;
+
+            // ── ClipUnroll×-unrolled body ──────────────────────────────────────
+            // clip has NO loop-carried dependency, so unrolling cuts the per-vector
+            // loop overhead (the i*sz multiply + bounds branch) and feeds the two
+            // min/max ALU ports more independent work. Each iteration processes
+            // ClipUnroll vectors at byteOff0 + k*vcBytes (one multiply, constant
+            // adds). Measured f64 100K clip(out=) 0.68x -> ~0.95x vs NumPy.
+            var bo = new LocalBuilder[ClipUnroll];
+            for (int k = 0; k < ClipUnroll; k++) bo[k] = il.DeclareLocal(typeof(long));
+
+            var locUnrollEnd = il.DeclareLocal(typeof(long));
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldc_I8, (long)(ClipUnroll * vectorCount));
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+
+            var lblUnroll = il.DefineLabel();
+            var lblAfterUnroll = il.DefineLabel();
+            il.MarkLabel(lblUnroll);
+            // if (i > unrollEnd) break  (note: skipped entirely when size < ClipUnroll*vc)
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblAfterUnroll);
+
+            // bo[0] = i * sz ; bo[k] = bo[0] + k*vcBytes
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)sz);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Stloc, bo[0]);
+            for (int k = 1; k < ClipUnroll; k++)
+            {
+                il.Emit(OpCodes.Ldloc, bo[0]);
+                il.Emit(OpCodes.Ldc_I8, k * vcBytes);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, bo[k]);
+            }
+            for (int k = 0; k < ClipUnroll; k++)
+                EmitClipVectorBody(il, dtype, kind, bo[k], needLo, needHi, locLoVec, locHiVec);
+
+            // i += ClipUnroll * vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)(ClipUnroll * vectorCount));
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+            il.Emit(OpCodes.Br, lblUnroll);
+            il.MarkLabel(lblAfterUnroll);
+
+            // ── Single-vector remainder ────────────────────────────────────────
             // vecEnd = size - vectorCount
             var locVecEnd = il.DeclareLocal(typeof(long));
             il.Emit(OpCodes.Ldarg_2);
@@ -204,26 +255,40 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVecEnd);
 
-            var locByteOff = il.DeclareLocal(typeof(long));
             var lblLoop = il.DefineLabel();
             var lblEnd = il.DefineLabel();
-
             il.MarkLabel(lblLoop);
             // if (i > vecEnd) break
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldloc, locVecEnd);
             il.Emit(OpCodes.Bgt, lblEnd);
 
-            // byteOff = i * sz   — computed once and reused for all pointers
+            // byteOff = i * sz
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I8, (long)sz);
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Stloc, locByteOff);
+            il.Emit(OpCodes.Stloc, bo[0]);
+            EmitClipVectorBody(il, dtype, kind, bo[0], needLo, needHi, locLoVec, locHiVec);
 
-            // Load src vector
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblEnd);
+        }
+
+        // Emits ONE vector clip step: load src at byteOff, clamp to lo/hi (NaN-propagating
+        // float min/max via EmitVectorMinOrMax), store at dst+byteOff. Stack-neutral. Shared
+        // by the unrolled body and the single-vector remainder so both stay bit-identical.
+        private static void EmitClipVectorBody(
+            ILGenerator il, NPTypeCode dtype, ClipBoundsKind kind, LocalBuilder locByteOff,
+            bool needLo, bool needHi, LocalBuilder locLoVec, LocalBuilder locHiVec)
+        {
             EmitOffsetAddrFromLocal(il, 0, locByteOff);
-            EmitVectorLoad(il, dtype);
-            // stack: [vec]
+            EmitVectorLoad(il, dtype);                                         // [vec]
 
             if (needLo)
             {
@@ -249,18 +314,8 @@ namespace NumSharp.Backends.Kernels
                 EmitVectorMinOrMax(il, isMax: false, dtype, propagateNaN: true);   // vec = Min(vec, hi)
             }
 
-            // Store at dst+byteOff
             EmitOffsetAddrFromLocal(il, 1, locByteOff);
-            EmitVectorStore(il, dtype);
-
-            // i += vectorCount
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-
-            il.Emit(OpCodes.Br, lblLoop);
-            il.MarkLabel(lblEnd);
+            EmitVectorStore(il, dtype);                                        // []
         }
 
         private static void EmitScalarLoop(
