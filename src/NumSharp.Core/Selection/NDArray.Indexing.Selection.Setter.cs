@@ -727,6 +727,7 @@ namespace NumSharp
                 long len = computedOffsets.size;
 
                 // Handle broadcasting: if values.size == 1, broadcast scalar
+                long valBuf = valuesTyped.Shape.BufferSize;
                 if (valuesTyped.size == 1)
                 {
                     T val = *valAddr;
@@ -736,13 +737,24 @@ namespace NumSharp
                 else if (valuesShape.IsContiguous)
                 {
                     for (long i = 0; i < len; i++)
+                    {
+                        // Memory-safety guard: a value shorter than the selection (a shape NumPy
+                        // would reject) would read past the value buffer.
+                        if (i >= valBuf)
+                            throw new IndexOutOfRangeException(IndexingOobMessage("SetIndices(value)", i, idxAddr[i], 1, valBuf, source.Shape.BufferSize, retShape, subShape));
                         dstAddr[idxAddr[i]] = valAddr[i];
+                    }
                 }
                 else
                 {
                     // Non-contiguous values array
                     for (long i = 0; i < len; i++)
-                        dstAddr[idxAddr[i]] = valAddr[valuesShape.TransformOffset(i)];
+                    {
+                        long vo = valuesShape.TransformOffset(i);
+                        if (vo < 0 || vo >= valBuf)
+                            throw new IndexOutOfRangeException(IndexingOobMessage("SetIndices(value,nl)", vo, idxAddr[i], 1, valBuf, source.Shape.BufferSize, retShape, subShape));
+                        dstAddr[idxAddr[i]] = valAddr[vo];
+                    }
                 }
                 return;
             }
@@ -815,18 +827,36 @@ namespace NumSharp
             T* valuesAddr = values.Address;
             T* dstAddr = dst.Address;
             long copySize = subShapeSize * InfoOf<T>.Size;
+            long dstBuf = dst.Shape.BufferSize;        // element capacity of the destination buffer
+            long valBuf = values.Shape.BufferSize;     // element capacity of the value buffer
             if (values.Shape.IsContiguous)
             {
                 //linear
                 for (long i = 0; i < offsetsSize; i++)
-                    Buffer.MemoryCopy(valuesAddr + i * subShapeSize, dstAddr + *(offsetAddr + i), copySize, copySize);
+                {
+                    long doff = *(offsetAddr + i);
+                    long voff = i * subShapeSize;
+                    // Memory-safety guard: the scatter copies subShapeSize elements per offset but
+                    // the upstream check validated only the block START. A miscomputed retShape/
+                    // subShape would write past the destination's pinned buffer (heap corruption)
+                    // or read past the (broadcast) value buffer. Fault here instead.
+                    if (doff < 0 || doff + subShapeSize > dstBuf || voff + subShapeSize > valBuf)
+                        throw new IndexOutOfRangeException(IndexingOobMessage("SetIndicesND", voff, doff, subShapeSize, valBuf, dstBuf, retShape, subShape));
+                    Buffer.MemoryCopy(valuesAddr + voff, dstAddr + doff, copySize, copySize);
+                }
             }
             else
             {
                 //non-linear
                 ref Shape shape = ref values.Storage.ShapeReference;
                 for (long i = 0; i < offsetsSize; i++)
-                    Buffer.MemoryCopy(valuesAddr + shape.TransformOffset(i), dstAddr + *(offsetAddr + i), copySize, copySize);
+                {
+                    long doff = *(offsetAddr + i);
+                    long voff = shape.TransformOffset(i);
+                    if (doff < 0 || doff + subShapeSize > dstBuf || voff < 0 || voff + subShapeSize > valBuf)
+                        throw new IndexOutOfRangeException(IndexingOobMessage("SetIndicesND(nonlinear)", voff, doff, subShapeSize, valBuf, dstBuf, retShape, subShape));
+                    Buffer.MemoryCopy(valuesAddr + voff, dstAddr + doff, copySize, copySize);
+                }
 
                 //Parallel.For(0, offsetsSize, i =>
                 //    Buffer.MemoryCopy(valuesAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize));

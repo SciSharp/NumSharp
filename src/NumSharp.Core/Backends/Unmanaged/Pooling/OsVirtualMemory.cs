@@ -48,6 +48,8 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         private const uint MEM_RESERVE = 0x2000;
         private const uint MEM_RELEASE = 0x8000;
         private const uint PAGE_READWRITE = 0x04;
+        private const uint PAGE_NOACCESS = 0x01;
+        private const long PageSize = 4096;
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize, uint flAllocationType, uint flProtect);
@@ -55,6 +57,49 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool VirtualFree(IntPtr lpAddress, UIntPtr dwSize, uint dwFreeType);
+
+        /// <summary>
+        ///     Diagnostic page-heap allocator: returns <paramref name="bytes"/> of usable RW memory
+        ///     whose LAST byte sits immediately before an inaccessible (PAGE_NOACCESS) guard page,
+        ///     so any read/write one byte past the buffer faults INSTANTLY (AccessViolation at the
+        ///     offending access) instead of silently corrupting an adjacent allocation. Used only by
+        ///     <see cref="SizeBucketedBufferPool"/>'s opt-in NUMSHARP_GUARD_PAGES mode to localise an
+        ///     out-of-bounds write to the exact code/site/case that performs it. The base of the
+        ///     reserved region (for <see cref="FreeGuarded"/>) is returned via <paramref name="region"/>.
+        ///     Returns <see cref="IntPtr.Zero"/> (and region Zero) on failure.
+        /// </summary>
+        public static IntPtr AllocGuarded(long bytes, out IntPtr region)
+        {
+            region = IntPtr.Zero;
+            if (bytes <= 0)
+                return IntPtr.Zero;
+
+            long dataPages = ((bytes + PageSize - 1) / PageSize) * PageSize;   // usable rounded up to whole pages
+            long total = dataPages + PageSize;                                 // + 1 guard page after the data
+
+            IntPtr basep = VirtualAlloc(IntPtr.Zero, (UIntPtr)(nuint)total, MEM_RESERVE, PAGE_READWRITE);
+            if (basep == IntPtr.Zero)
+                return IntPtr.Zero;
+
+            // Commit the data pages RW; commit the trailing page as NOACCESS (the guard).
+            if (VirtualAlloc(basep, (UIntPtr)(nuint)dataPages, MEM_COMMIT, PAGE_READWRITE) == IntPtr.Zero ||
+                VirtualAlloc((IntPtr)((byte*)basep + dataPages), (UIntPtr)(nuint)PageSize, MEM_COMMIT, PAGE_NOACCESS) == IntPtr.Zero)
+            {
+                VirtualFree(basep, UIntPtr.Zero, MEM_RELEASE);
+                return IntPtr.Zero;
+            }
+
+            region = basep;
+            // Right-align the usable buffer so byte [bytes] is the first byte of the guard page.
+            return (IntPtr)((byte*)basep + (dataPages - bytes));
+        }
+
+        /// <summary>Release a region obtained from <see cref="AllocGuarded"/> (its <c>region</c> base).</summary>
+        public static void FreeGuarded(IntPtr region)
+        {
+            if (region != IntPtr.Zero)
+                VirtualFree(region, UIntPtr.Zero, MEM_RELEASE);
+        }
 
         /// <summary>
         ///     Reserve + commit <paramref name="bytes"/> of zero-initialized

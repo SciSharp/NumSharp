@@ -1272,9 +1272,21 @@ namespace NumSharp
 
             T* dstAddr = (T*)dst.Address;
             long copySize = subShapeSize * InfoOf<T>.Size;
+            long srcBuf = src.Shape.BufferSize;    // element capacity of the source buffer (offsets index into it)
+            long dstBuf = dst.size;                // fresh retShape buffer (or validated contiguous @out)
 
             for (long i = 0; i < offsetsSize; i++)
-                Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize);
+            {
+                long so = *(offsetAddr + i);
+                long doff = i * subShapeSize;
+                // Memory-safety guard: each copy spans subShapeSize elements but the upstream bound
+                // check validated only the block START. A miscomputed retShape/subShape (an exotic
+                // mixed-advanced combo the Try* stack mishandles) would copy past either pinned
+                // buffer -> silent GC-heap corruption. Fault here instead (catchable).
+                if (so < 0 || so + subShapeSize > srcBuf || doff + subShapeSize > dstBuf)
+                    throw new IndexOutOfRangeException(IndexingOobMessage("FetchIndicesND", so, doff, subShapeSize, srcBuf, dstBuf, retShape, subShape));
+                Buffer.MemoryCopy(srcAddr + so, dstAddr + doff, copySize, copySize);
+            }
 
             return dst.MakeGeneric<T>();
         }
@@ -1328,6 +1340,8 @@ namespace NumSharp
 
             T* srcAddr = source.Address;       // buffer base; GetOffset adds the source offset
             T* dstAddr = ret.Address;          // contiguous result (or @out), written in C-order
+            long srcBuf = source.Shape.BufferSize;  // element capacity of the source buffer
+            long dstBuf = ret.size;                 // contiguous result element capacity
 
             long* coord = stackalloc long[srcNdim];
             for (long i = 0; i < size; i++)
@@ -1345,7 +1359,12 @@ namespace NumSharp
                 long baseDst = i * subShapeSize;
                 for (long j = 0; j < subShapeSize; j++)
                 {
-                    dstAddr[baseDst + j] = srcAddr[srcShape.GetOffset(coord, srcNdim)];
+                    long so = srcShape.GetOffset(coord, srcNdim);
+                    // Memory-safety guard (see FetchIndicesND): a miscomputed retShape/subShape
+                    // would write past the pinned result buffer or read past the source buffer.
+                    if (so < 0 || so >= srcBuf || baseDst + j >= dstBuf)
+                        throw new IndexOutOfRangeException(IndexingOobMessage("FetchIndicesNDNonLinear", so, baseDst + j, 1, srcBuf, dstBuf, retShape, subShape));
+                    dstAddr[baseDst + j] = srcAddr[so];
 
                     for (int s = subNdim - 1; s >= 0; s--)
                     {
@@ -1358,5 +1377,15 @@ namespace NumSharp
 
             return ret;
         }
+
+        /// <summary>
+        /// Diagnostic message for the indexing block-copy bounds guards (shared by the getter
+        /// gather and setter scatter). Names the exact copy that would overrun a pinned buffer
+        /// together with the computed <c>retShape</c>/<c>subShape</c> so a divergence is traced to
+        /// the mishandled index combination instead of corrupting the GC heap silently.
+        /// </summary>
+        private static string IndexingOobMessage(string where, long srcOff, long dstOff, long span, long srcCap, long dstCap, long[] retShape, long[] subShape)
+            => $"[indexing OOB guard] {where}: copy src[{srcOff},+{span}) of {srcCap} -> dst[{dstOff},+{span}) of {dstCap} out of bounds " +
+               $"(retShape=[{(retShape == null ? "" : string.Join(",", retShape))}] subShape=[{(subShape == null ? "" : string.Join(",", subShape))}]).";
     }
 }

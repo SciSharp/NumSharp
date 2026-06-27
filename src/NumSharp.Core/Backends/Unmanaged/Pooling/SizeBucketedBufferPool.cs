@@ -92,6 +92,20 @@ namespace NumSharp.Backends.Unmanaged.Pooling
         /// <summary>Per-bucket cap for large (≥ 1 MiB) buckets — bounds peak resident memory.</summary>
         public const int MaxBuffersPerLargeBucket = 2;
 
+        /// <summary>
+        ///     Opt-in diagnostic page-heap mode (env <c>NUMSHARP_GUARD_PAGES=1</c>, Windows only).
+        ///     When on, every <see cref="Take"/>/<see cref="TakeZeroed"/> hands back a buffer whose
+        ///     last byte abuts an inaccessible guard page (<see cref="OsVirtualMemory.AllocGuarded"/>),
+        ///     pooling is bypassed, and any one-past-the-end write faults INSTANTLY at the offending
+        ///     access — used to localise an indexing out-of-bounds write to the exact case/site.
+        ///     Default OFF (the field is read once at startup) so production paths are untouched.
+        /// </summary>
+        public static readonly bool GuardPagesEnabled =
+            OsVirtualMemory.IsSupported && Environment.GetEnvironmentVariable("NUMSHARP_GUARD_PAGES") == "1";
+
+        // Guard-mode bookkeeping: usable pointer -> reserved region base (for FreeGuarded).
+        private static readonly ConcurrentDictionary<IntPtr, IntPtr> _guardRegions = new();
+
         // Bucket map keyed on exact byte size. ConcurrentStack gives lock-
         // free Push/TryPop, which is the entire fast-path here.
         private static readonly ConcurrentDictionary<long, ConcurrentStack<IntPtr>> _buckets = new();
@@ -163,6 +177,9 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             if (bytes > 0)
                 GC.AddMemoryPressure(bytes);
 
+            if (GuardPagesEnabled && bytes > 0)
+                return TakeGuarded(bytes);
+
             if (bytes < MinPoolableBytes || bytes >= MaxPoolableBytes)
             {
                 Interlocked.Increment(ref _misses);
@@ -233,8 +250,26 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             // caller (UnmanagedMemoryBlock.AllocateZeroed) routes them to
             // VirtualAlloc on Windows, and on other platforms calloc already
             // mmaps large blocks lazily.
+            if (GuardPagesEnabled && bytes > 0)
+            {
+                // Guard pages from VirtualAlloc(MEM_COMMIT) are demand-zero already.
+                Interlocked.Increment(ref _zeroedAllocs);
+                return TakeGuarded(bytes);
+            }
+
             Interlocked.Increment(ref _zeroedAllocs);
             return (IntPtr)NativeMemory.AllocZeroed((nuint)bytes);
+        }
+
+        /// <summary>Guard-mode allocation: a page-protected buffer, tracked for <see cref="Return"/>.</summary>
+        private static IntPtr TakeGuarded(long bytes)
+        {
+            var p = OsVirtualMemory.AllocGuarded(bytes, out var region);
+            if (p == IntPtr.Zero)   // VirtualAlloc exhausted: fall back so the run continues
+                return (IntPtr)NativeMemory.Alloc((nuint)bytes);
+            _guardRegions[p] = region;
+            Interlocked.Increment(ref _misses);
+            return p;
         }
 
         /// <summary>
@@ -256,6 +291,13 @@ namespace NumSharp.Backends.Unmanaged.Pooling
             // here regardless of whether it parks in the pool or frees.
             if (bytes > 0)
                 GC.RemoveMemoryPressure(bytes);
+
+            if (GuardPagesEnabled && _guardRegions.TryRemove(ptr, out var region))
+            {
+                OsVirtualMemory.FreeGuarded(region);
+                Interlocked.Increment(ref _returnsFreed);
+                return;
+            }
 
             if (bytes < MinPoolableBytes || bytes >= MaxPoolableBytes)
             {

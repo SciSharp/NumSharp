@@ -163,7 +163,7 @@ namespace NumSharp.Backends.Unmanaged
             // for mid-size calloc. Small sizes and non-Windows fall through to
             // calloc (already lazy via mmap there); so does a VirtualAlloc that
             // unexpectedly fails.
-            if (OsVirtualMemory.IsSupported && bytes >= OsVirtualMemory.ThresholdBytes)
+            if (!SizeBucketedBufferPool.GuardPagesEnabled && OsVirtualMemory.IsSupported && bytes >= OsVirtualMemory.ThresholdBytes)
             {
                 var vptr = OsVirtualMemory.Alloc(bytes);
                 if (vptr != IntPtr.Zero)
