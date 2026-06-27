@@ -236,7 +236,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">Indices for each dimension.</param>
         /// <returns>Element or slice at the given indices.</returns>
-        public NDArray __getitem__(params int[] indices) => this[indices];
+        /// <remarks>
+        /// A comma-separated index list is Python's basic (coordinate) indexing —
+        /// <c>arr[1, 2]</c> selects the element at (1,2), <c>arr[1]</c> the sub-array along
+        /// axis 0 — so it resolves through <see cref="GetData(int[])"/>. (A raw <c>int[]</c>
+        /// passed to the <c>this[...]</c> indexer is now FANCY indexing for NumPy parity;
+        /// fancy/list indexing is reached through the array/NDArray overloads instead.)
+        /// </remarks>
+        public NDArray __getitem__(params int[] indices) => GetData(indices);
 
         /// <summary>
         /// Python-compatible __setitem__ method with integer index.

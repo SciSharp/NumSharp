@@ -79,9 +79,14 @@ namespace NumSharp
                         return np.expand_dims(this, 0); //equivalent to [np.newaxis]
 
                     case int[] coords:
-                        return GetData(coords);
+                        // A raw int[]/long[] as the SOLE index is FANCY indexing — NumPy
+                        // parity: nd[new int[]{0,2}] selects rows 0 and 2 (shape (2, …)),
+                        // NOT the single element at coordinate (0,2). Coordinate access is
+                        // preserved via nd.GetData(coords). (A multi-item tuple already
+                        // treats int[]/long[] as fancy via the _NDArrayFound scan below.)
+                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case long[] coords:
-                        return GetData(coords);
+                        return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case NDArray[] nds:
                         return this[nds];
                     case object[] objs:

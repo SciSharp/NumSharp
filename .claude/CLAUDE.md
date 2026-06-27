@@ -331,6 +331,12 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NpyEvaluateTests.cs`):
 - Integer and slice indexing (`nd[0]`, `nd[1:3]`, `nd[::-1]`)
 - Boolean masking (`nd[mask]`) — read-only
 - Fancy indexing (`nd[indices]`)
+- **Raw `int[]`/`long[]` as the SOLE index is FANCY** (NumPy parity, decision B): `nd[new int[]{0,2}]`
+  selects rows 0 and 2 (shape `(2,…)`), NOT the element at coordinate `(0,2)`. `nd[0,2]` (separate
+  scalar ints) stays coordinate (`HAS_INTEGER`). **Coordinate (element/sub-array) access moved to the
+  shim `nd.GetData(int[]/long[])`** (`Backends/NDArray.cs`) — e.g. `nd.GetData(0, 2)`. Internal
+  coordinate callers must use `GetData`, not `nd[coordArray]` (migrated: batched matmul, `__getitem__`).
+  The typed `NDArray<T>.this[int[]]` is unaffected — it returns a scalar `T` (inherently coordinate).
 
 ---
 

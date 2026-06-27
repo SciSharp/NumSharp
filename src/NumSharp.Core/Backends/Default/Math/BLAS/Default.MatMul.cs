@@ -87,12 +87,15 @@ namespace NumSharp.Backends
             var ret = new NDArray(resultType, resultShape);
 
             // Iterate the batch coordinates; each integer-index slice is a 2-D [n,k]·[k,m]->[n,m].
+            // GetData(coords) is COORDINATE (sub-array) access — a raw long[] passed to the
+            // this[...] indexer is now FANCY indexing (NumPy parity), so the batch sub-matrix
+            // must be taken via GetData, not nd[index].
             var iterShape = new Shape(batch.Length == 0 ? new long[] { 1 } : batch);
             var len = iterShape.size;
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
             for (long i = 0; i < len; i++, incr.Next())
-                MultiplyMatrix(lhsB[index], rhsB[index], ret[index]);
+                MultiplyMatrix(lhsB.GetData(index), rhsB.GetData(index), ret.GetData(index));
 
             return ret;
         }

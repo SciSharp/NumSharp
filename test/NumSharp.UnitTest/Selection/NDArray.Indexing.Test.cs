@@ -112,8 +112,58 @@ namespace NumSharp.UnitTest.Selection
             w[new System.Collections.Generic.List<bool> { true, false, true }] = 7;
             w.Should().BeOfValues(7, 2, 7);
 
-            // a raw int[] index is NOT a mask: NumSharp coordinate access (element at (0,2)).
-            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }].Should().BeScalar(2);
+            // a raw int[] index is NOT a mask: it is FANCY indexing (NumPy parity) —
+            // nd[new int[]{0,2}] selects rows 0 and 2 (shape (2,4)), NOT the element at
+            // coordinate (0,2). Coordinate access moved to nd.GetData(coords).
+            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 8, 9, 10, 11);
+            np.arange(12).reshape(3, 4).GetData(new int[] { 0, 2 }).Should().BeScalar(2); // coordinate shim
+        }
+
+        /// <summary>
+        /// A raw <c>int[]</c> / <c>long[]</c> as the SOLE index is FANCY indexing — 1-to-1
+        /// with NumPy 2.4.2 (verified by differential probe), not the legacy coordinate
+        /// access. Coordinate access moved to <see cref="NDArray.GetData(int[])"/> /
+        /// <see cref="NDArray.GetData(long[])"/>. Covers get + set, 1-D / 2-D / 3-D,
+        /// <c>int[]</c> and <c>long[]</c>, and negative (wrapping) indices.
+        /// </summary>
+        [TestMethod]
+        public void RawIntArrayIndex_IsFancy_NumPyParity()
+        {
+            // ---- GET ----
+            // 2-D: rows 0 and 2            (NumPy: a[[0,2]]   -> (2,4))
+            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 8, 9, 10, 11);
+            // single-element list keeps the fancy axis (NumPy: a[[1]] -> (1,4))
+            np.arange(12).reshape(3, 4)[new int[] { 1 }]
+                .Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
+            // 1-D fancy                    (NumPy: a[[1,3,5]] -> (3,))
+            np.arange(6)[new int[] { 1, 3, 5 }].Should().BeShaped(3).And.BeOfValues(1, 3, 5);
+            // long[] behaves identically   (NumPy: a[[0,2]]   -> (2,))
+            np.arange(6)[new long[] { 0, 2 }].Should().BeShaped(2).And.BeOfValues(0, 2);
+            // negative indices wrap        (NumPy: a[[-1,-2]] -> rows 2,1)
+            np.arange(12).reshape(3, 4)[new int[] { -1, -2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(8, 9, 10, 11, 4, 5, 6, 7);
+            // 3-D: fancy along axis 0      (NumPy: b[[0,1,0]] -> (3,3,4))
+            np.arange(24).reshape(2, 3, 4)[new int[] { 0, 1, 0 }]
+                .Should().BeShaped(3, 3, 4).And.BeOfValues(
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+
+            // ---- SET (scatter; value shaped to the fancy result) ----
+            // 2-D rows                     (NumPy: s2[[0,2]] = rows)
+            var s2 = np.arange(12).reshape(3, 4);
+            s2[new int[] { 0, 2 }] = np.array(new int[,] { { 100, 101, 102, 103 }, { 200, 201, 202, 203 } });
+            s2.Should().BeOfValues(100, 101, 102, 103, 4, 5, 6, 7, 200, 201, 202, 203);
+            // 1-D scatter                  (NumPy: s3[[1,3,5]] = [10,30,50])
+            var s3 = np.arange(6);
+            s3[new long[] { 1, 3, 5 }] = np.array(new int[] { 10, 30, 50 });
+            s3.Should().BeOfValues(0, 10, 2, 30, 4, 50);
+
+            // ---- coordinate access preserved via the GetData shim ----
+            np.arange(12).reshape(3, 4).GetData(new int[] { 0, 2 }).Should().BeScalar(2);
+            np.arange(12).reshape(3, 4).GetData(new long[] { 1, 3 }).Should().BeScalar(7);
         }
 
         [TestMethod]

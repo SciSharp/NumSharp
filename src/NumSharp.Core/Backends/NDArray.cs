@@ -805,17 +805,29 @@ namespace NumSharp
         public IArraySlice GetData() => Storage.GetData();
 
         /// <summary>
-        ///     Gets a NDArray at given <paramref name="indices"/>.
+        ///     Gets a NDArray at the single element addressed by the coordinate
+        ///     <paramref name="indices"/> (one index per axis).
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
-        /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
+        /// <remarks>
+        ///     Does not copy, returns a memory slice. This is the COORDINATE-ACCESS
+        ///     replacement for the old <c>nd[new int[]{…}]</c> behavior: a raw
+        ///     <c>int[]</c> as an index is now FANCY indexing (NumPy parity, selects
+        ///     rows), so use <c>nd.GetData(coords)</c> for the former element access.
+        /// </remarks>
         public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>
-        ///     Gets a NDArray at given <paramref name="indices"/>.
+        ///     Gets a NDArray at the single element addressed by the coordinate
+        ///     <paramref name="indices"/> (one index per axis).
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
-        /// <remarks>Does not copy, returns a memory slice - this is similar to this[long[]]</remarks>
+        /// <remarks>
+        ///     Does not copy, returns a memory slice. This is the COORDINATE-ACCESS
+        ///     replacement for the old <c>nd[new long[]{…}]</c> behavior: a raw
+        ///     <c>long[]</c> as an index is now FANCY indexing (NumPy parity, selects
+        ///     rows), so use <c>nd.GetData(coords)</c> for the former element access.
+        /// </remarks>
         public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>

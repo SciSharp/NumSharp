@@ -190,10 +190,15 @@ namespace NumSharp
                         return; // np.expand_dims(this, 0); //equivalent to [np.newaxis]
 
                     case int[] coords:
-                        SetData(values, coords);
+                        // A raw int[]/long[] as the SOLE index is FANCY scatter — NumPy
+                        // parity: nd[new int[]{0,2}] = v assigns to rows 0 and 2, NOT the
+                        // single element at coordinate (0,2). Coordinate assignment is
+                        // preserved via nd.SetData(values, coords). (A multi-item tuple
+                        // already treats int[]/long[] as fancy via the _NDArrayFound scan.)
+                        SetIndices(this, new NDArray[] { np.array(coords, copy: false) }, values);
                         return;
                     case long[] coords:
-                        SetData(values, coords);
+                        SetIndices(this, new NDArray[] { np.array(coords, copy: false) }, values);
                         return;
                     case NDArray[] nds:
                         this[nds] = values;
@@ -736,8 +741,6 @@ namespace NumSharp
         /// <returns></returns>
         protected static unsafe void SetIndicesND<T>(NDArray<T> dst, NDArray<long> dstOffsets, NDArray[] dstIndices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
         {
-            Debug.Assert(dstOffsets.size == values.size);
-
             //facts:
             //indices are always offsetted to
             Debug.Assert(dstOffsets.ndim == 1);
@@ -747,6 +750,13 @@ namespace NumSharp
             long subShapeSize = 1;
             for (int i = 0; i < subShape.Length; i++)
                 subShapeSize *= subShape[i];
+
+            // Each of the dstOffsets.size selected positions receives one subShapeSize block
+            // from values, so the value buffer holds offsets*subShape elements — NOT offsets.
+            // (The previous assert `dstOffsets.size == values.size` ignored the sub-shape and
+            //  tripped on every subshaped fancy-set, e.g. a[[0,2]] = (2,4); the copy loop below
+            //  already walks offsets*subShape correctly.)
+            Debug.Assert(dstOffsets.size * subShapeSize == values.size);
 
             long* offsetAddr = dstOffsets.Address;
             long offsetsSize = dstOffsets.size;
