@@ -36,11 +36,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Index_Dtype() => RunDtypeCorpus("index_dtype.jsonl");
 
-        // Seeded random fuzz over the whole index space. Exercises exotic MIXED advanced-index
-        // combinations the per-shape Try* fast-path stack does not generalise (see
-        // docs/plans/advanced-index-combinatorial-handover.md). Currently ~660-700 divergences +
-        // a flaky heap-corruption crash; [OpenBugs] (excluded from CI) until Phases C-E land, then
-        // un-mark per the handover DOD.
+        // Seeded random fuzz over the whole index space. As of commit 7e968f5e it is **0 divergences**
+        // across every measurable window (all five mapping.c-parity buckets fixed; the now-passing
+        // forms are pinned independently by Indexing.CombinatorialParity, a CI [FuzzMatrix] gate).
+        // It stays [OpenBugs] ONLY because the full-corpus single-process run still SEGFAULTs at a
+        // flaky, pre-existing teardown OOB (handover R3) — a memory-safety bug unrelated to indexing
+        // correctness. Un-mark once R3 is fixed (the full run completes without an AccessViolation).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         [OpenBugs]

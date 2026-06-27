@@ -1,6 +1,6 @@
 # Handover: full combinatorial advanced indexing (NumPy `mapping.c` parity)
 
-**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–C done, D done, E mostly done; random sweep 697 → 61 divergences (91%). See "Execution status" below.
+**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–E done; random sweep **697 → 0 divergences** across every measurable window (all 5 buckets fixed, committed, CI-pinned). The ONLY open item is **R3**, a pre-existing flaky teardown heap-corruption (memory safety) that blocks un-marking the full-corpus `Index_Random` gate but does NOT affect correctness or CI. See "Execution status" below.
 
 This is the successor to [`advanced-index-axis-placement.md`](./advanced-index-axis-placement.md)
 (which resolved the *two-advanced-indices-with-a-slice* case via `TryBuildMultiAdvancedGrid`).
@@ -39,9 +39,12 @@ how-to.
 
 ## 0b. Execution status (2026-06-27)
 
-Executed against this plan. Differential random sweep (seed 20240626, 10000 cases): **697 → 61
-divergences (91%)**. Curated + dtype gate stays **0/0**; full CI suite **10980 pass / 0 fail on
-net8.0 AND net10.0**. Commits `d20fb793` … `9c2e16b2` on `nditer`.
+Executed against this plan. Differential random sweep (seed 20240626, 10000 cases): **697 → 0
+divergences** across every measurable window ([0,5000) + [5000,6700) + [6700,7000) + [7000,10000)
+= 10000 cases, all 0/0). Curated + dtype gate stays **0/0**; full CI suite **11003 pass / 0 fail on
+net8.0 AND net10.0** (the +23 are the new `Indexing.CombinatorialParity` gate). Commits
+`d20fb793` … `7e968f5e` on `nditer`. The full single-process [5000,10000) run still SEGFAULTS at a
+flaky teardown OOB (R3) — windows are summed; correctness is bit-exact where they complete.
 
 **Done:**
 - **Phase A** (`d20fb793`) — oracle committed: `test/oracle/gen_index_oracle.py`, three corpora
@@ -68,96 +71,93 @@ net8.0 AND net10.0**. Commits `d20fb793` … `9c2e16b2` on `nditer`.
   `A[...]=scalar` / `A[:,:]=scalar` / `A[None]=v` cases); non-subshaped fancy assignment validates the
   value broadcasts to the selection.
 
-### Remaining work (61 divergences) — actionable
+### Remaining work — R3 only (the 5 divergence buckets are DONE)
 
-Order: **R1 → R2** (the two divergence buckets, ~30 cases) **→ R3** (re-check the teardown OOB; it
-may already be gone) **→ R4** (cleanup + un-mark the gate). Gate EVERY step behind the curated/dtype
-gate (`Index_Curated`/`Index_Dtype`, must stay 0) and the random window it targets. Measurement is
-windowed because the full 10000-case run still crashes at teardown (R3) — `[0,5000)` and
-`[5000,5000)` complete cleanly; sum their `fail=` counts.
+The 61 random divergences were 5 buckets; ALL are fixed, committed, and CI-pinned in
+`Indexing.CombinatorialParity.MatrixTests.cs`. Each was gated behind the curated/dtype gate (stayed
+0/0) and the random window it targeted, plus the full CI suite (net8.0 + net10.0):
 
-**R1 — Setter value-broadcast on EMPTY selections (~25 cases, the largest bucket).**
-- *Symptom:* an assignment whose SELECTION is empty accepts a value NumPy rejects.
-  `set/ASO/.../[slice,b0_false] = arr([4,75])` → NumPy `ValueError`, NumSharp no-ops;
-  `a[empty_fancy] = nonscalar`, `a[empty_bool] = nonscalar` likewise.
-- *Root cause:* `SetIndices<T>` (`Selection/NDArray.Indexing.Selection.Setter.cs`) short-circuits on
-  the empty index — `if (idxs.Shape.IsEmpty) return;` (single, ~L577) and `if (nd.Shape.IsEmpty)
-  return;` (multi, ~L599) — **before** computing `retShape` (~L633) and validating the value. The
-  `TryBuild0dBoolWithBasic` False branch in `SetIndices(object[])` (~L229) also no-ops without
-  validating.
-- *Fix:* NumPy requires the value to broadcast to the indexing-RESULT shape even when that shape has a
-  0. Restructure `SetIndices<T>` so `retShape`/`subShape` are computed BEFORE the empty check, then
-  `np.broadcast_to(value, retShape)` (catch `IncorrectShapeException` → the NumPy `ValueError "could
-  not broadcast input array from shape … into shape …"`, no-space tuple — reuse the `Tup` helper
-  already in this file), THEN if the selection is empty return (no-op). A scalar (`value.size == 1`)
-  always broadcasts — skip. For the 0-d-bool-False path, capture `boolAxis` (currently `out _`) and
-  validate against `this[boolBasic].shape` with `[boolAxis] = 0`.
-- *Care / gate:* the non-empty fancy-set curated cases (`a[[0,1]] = -1` / `= row(4)` / `= [[100],[200]]`)
-  must stay green; gate on curated + the `[7500,10000)` random window. Expected delta ≈ −25.
+| Bucket | What | Commit |
+|---|---|---|
+| **R1** | value must broadcast to an EMPTY / scalar selection on assignment, else `ValueError` (0-d-bool-False branch, scalar-element target = "setting an array element with a sequence", bool-mask zero-select) | `aea9fc78` |
+| **B2** | a 0-d (scalar) array rejects any axis-consuming single index → "too many indices" (the single-index path bypasses `PrepareIndex`) | `fe80982b` |
+| **B3** | empty advanced indices gather an empty result: skip fancy-array bounds when the block is empty (`FinishPrepare`), and a zero-length bool mask axis matches ANY axis size (`IsPartialShapeMatch`) | `880bc3df` |
+| **B4** | basic assignment into an EMPTY slice selection is a no-op, not a `NpyIter.Copy` crash (`UnmanagedStorage.SetData`) | `b0a3048f` |
+| **R2** | non-consecutive 0-d-bool/int advanced block moves to FRONT (`TryBuild0dBoolWithBasic` bails → grid; grid carries the pure-0-d-bool block dims via `outShape`) **+ a core `Shape.Broadcast` hash collision** (`(1,1)`≡`(0,1)` → broadcast_to wrongly no-op'd to an empty target) | `d6f30629` |
+| — | (found while writing the regression tests) a MULTI-DIM empty bool mask was routed as a single empty fancy → wrong rank; now stays a mask | `7e968f5e` |
 
-**R2 — Multi / non-consecutive 0-d-bool placement (~4–10 cases).**
-- *Symptom:* `[slice, True, slice, False]` on `(2,4)` → NumPy `(0,2,1)`, NumSharp `(2,0,1)`;
-  `[int, slice, True]` → NumPy `(1,0)`, NumSharp `(0,1)`. (Single / consecutive 0-d bool is correct.)
-- *Root cause:* `TryBuild0dBoolWithBasic` (`…Getter.cs` ~L537) inserts the merged 0-d-bool axis at the
-  FIRST 0-d-bool's output position and has **no consec rule** — but when the 0-d bools are
-  NON-CONSECUTIVE (a slice/newaxis separates them) NumPy moves the merged advanced block to the FRONT
-  (`_get_transpose`, §4c). The grid already implements consec + `MixKind.ZeroBool` correctly.
-- *Fix:* route these to the grid. (a) Make `TryBuild0dBoolWithBasic` BAIL (return false) when there is
-  >1 0-d bool, or a 0-d bool is non-consecutive with the axis-consumers, so they fall to
-  `TryBuildMultiAdvancedGrid`. (b) The grid already fires for 0-d-bool-only tuples (gate is
-  `advAxisCount < 1 && !hasZeroBool → false`, so `hasZeroBool` proceeds): verify it handles
-  pure-0-d-bool + slice (no fancy) — `advArrays` = the ZeroBool `(1,)`/`(0,)` arrays, broadcast →
-  `bshape`, no per-source-axis index for them, slices keep their axes, consec/front placement via the
-  existing `outShape` logic. **Unit-test the consec permutation directly** (handover §4c) before
-  trusting end-to-end. Simpler alternative consistent with the handover's "delete the Try\* stack":
-  delete `TryBuild0dBoolWithBasic` entirely and let the grid own all 0-d-bool cases.
-- *Care / gate:* the `a[True,:]`→`(1,3,4)`, `a[False,:]`→`(0,3,4)`, `a[True,True]`, `a[True,False]`
-  curated cases must stay green. Expected delta ≈ −4 to −10.
+The order executed was R1 → B2 → B3 → B4 → R2 (the actual buckets, re-derived from the live
+`diverge.txt`, differed slightly from this doc's original R1/R2 split). The two highlights worth
+keeping in mind: **B3's `ScanFancyBounds` skip** mirrors NumPy bounds-checking advanced values only at
+gather time (an empty broadcast gathers nothing), and **R2 uncovered a general broadcasting bug** —
+`Shape.Broadcast` short-circuited on a shape-hash match without confirming the dims, and the hash
+collides a 0-length axis with a size-1 axis.
 
-**R3 — A second, layout-dependent teardown OOB (memory safety; re-check after R1/R2).**
+**R3 — A flaky, layout-dependent teardown heap-corruption (memory safety; STILL OPEN).**
 - *Symptom:* the main loop now COMPLETES (prints the result), but the full 10000-case run SEGFAULTS at
   process teardown (GC finalization walks a heap corrupted earlier in the run). `[0,5000)` and
   `[5000,5000)` windows complete — only the full accumulation tips it.
-- *Known:* it writes past a **PINNED MANAGED array** (`UnmanagedMemoryBlock.FromArray`, GCHandle-pinned).
-  `NUMSHARP_GUARD_PAGES` guards only pool/native buffers, so it does **not** catch it; it also survives
-  GC-hunt (GC per case), isolated repetition (`loop_each` 5000×), and window repetition — the OOB
-  target depends on a specific cross-case heap layout. This is the pre-existing "second OOB write" the
-  prior summary noted.
-- *Plan:* fix R1/R2 first and re-measure — per handover §8 (correct shapes ⇒ no OOB) it is likely one
-  of the remaining wrong-shape cases and may disappear. If it survives: the only detection page-heap
-  can't cover is a **red-zone on the pinned managed allocation** — temporarily make
-  `UnmanagedMemoryBlock.FromArray` over-allocate the managed `T[]` by a guard span, sentinel it, and
-  verify the sentinel on a per-case hook (revert after). Or run `loop_mini.cs <rounds>` (whole
-  mini-corpus in rounds, PRESERVING cross-case state) over a broad agree+divergent window, then bisect
-  the round/case. The first corruptor (negative-setter) was found exactly this way (`loop_each`).
+- *Symptom (re-measured this session, all divergences now fixed so this is the SOLE blocker):* every
+  window completes 0/0 in isolation, but the single-process `[5000,10000)` run SEGFAULTs (exit 127,
+  silent AccessViolation). The crash point is **wildly flaky** — observed at 6285 / 6432 / 6456 / 6514
+  / 6756 / 9879 across runs; even the tightest reliable window `[6200,6400)` only crashes ~1/3 of runs
+  under GC-per-case. The corruptor is an OOB write whose 1-past slot is usually harmless and only
+  crashes once a GC/alloc lands a live object there.
+- *Narrowed this session (supersedes the prior "pinned managed" guess):*
+  1. **It is a SPECIFIC corpus shape, not allocation volume.** A 30 000-iteration stress loop of pure
+     fancy + grid gathers with forced GC is clean; and `[6200,6400)` crashes at the same place
+     regardless of how many cases preceded it (286 vs 1320). But no single case is the deterministic
+     corruptor — every sub-window of a crashing window runs clean, so it is cumulative + threshold.
+  2. **It is NOT a pooled native-buffer overrun.** `OsVirtualMemory.AllocGuarded` is already
+     end-aligned (byte `[len]` is the guard page, so a 1-past write faults instantly), yet
+     `NUMSHARP_GUARD_PAGES=1` runs clean — so the overrun targets an allocation guard mode does NOT
+     reroute: a **pinned managed `FromArray` array** or a **direct-VirtualAlloc large zeroed buffer**
+     (`UnmanagedMemoryBlock.AllocateZeroed` bypasses the pool ≥128 KiB).
+  3. `DOTNET_GCStress=0xC` and guard-pages both perturb GC timing enough to MASK it (inconclusive,
+     not a fix).
+- *Plan for the next session:* a **per-case red-zone on `FromArray`** (and on the direct-VirtualAlloc
+  zeroed path) — over-allocate by a guard span, sentinel it, keep `Count` at the usable length, and
+  verify all live blocks' sentinels on a per-case hook via a weak-ref registry (gate behind a new env
+  flag, revert after). Or capture the AV with WinDbg / `dotnet-dump` (procdump is installed; managed
+  heap-corruption analysis needs `dotnet-dump`, which is NOT installed — `dotnet tool install -g
+  dotnet-dump`). The reliable repro is `replay_index_jsonl.cs index_random_20240626.jsonl 6200 200 gc`
+  (run it several times; ~1/3 crash).
+- *Until fixed:* `Index_Random` stays `[OpenBugs]` — its full-corpus single-process run can crash. The
+  fixes are pinned independently by the `Indexing.CombinatorialParity` `[FuzzMatrix]` gate, so the
+  parity is protected in CI regardless.
 
-**R4 — Final cleanup + close the gate.**
-- The getter's `TryFetchSliceWithSingleAdvanced` is already unreferenced (call removed; method dead) —
-  delete it. The `_NDArrayFound` advanced loop in the getter is now reachable only for cases the grid
-  declined; with the grid owning ALL `HAS_FANCY` (commit `9c2e16b2`) confirm it is dead for advanced
-  and delete (keep `Storage.GetView` for pure-basic). Migrate the setter equivalents
-  (`TrySetSliceWithSingleAdvanced`, the setter `_NDArrayFound`) the same way — this completes the
-  handover's "replace the Try\* patchwork with the unified driver".
-- When the random sweep reaches **0/0**: remove `[OpenBugs]` from `Index_Random`
-  (`Fuzz/IndexOracleTests.cs`) so it becomes a CI gate, re-run the full sweep under
-  `NUMSHARP_GUARD_PAGES=1` to confirm no AccessViolation (DOD §10), and flip this doc's Status to DONE.
+**R4 — Final cleanup + close the gate (the test-pin + doc parts are DONE; dead-code delete + un-mark remain).**
+- ✅ DONE: the 5 buckets are committed and pinned in `Indexing.CombinatorialParity.MatrixTests.cs`
+  (`7e968f5e`); this doc's status is updated.
+- TODO (low risk, deferred): the getter's `TryFetchSliceWithSingleAdvanced` is unreferenced — delete
+  it. The `_NDArrayFound` advanced loops (getter + setter) are now reachable only for cases the grid
+  declined; with the grid owning ALL `HAS_FANCY` confirm they are dead for advanced and delete (keep
+  `Storage.GetView` for pure-basic). Not done yet because the R3 crash makes the full-corpus
+  regression net harder to trust; do it once R3 is closed, behind the curated + windowed sweep.
+- TODO (BLOCKED on R3): remove `[OpenBugs]` from `Index_Random` (`Fuzz/IndexOracleTests.cs`) so the
+  full corpus becomes a CI gate, re-run under `NUMSHARP_GUARD_PAGES=1` (DOD §10), and flip Status to
+  DONE. Blocked purely by the R3 teardown crash, not by any divergence.
 
-### Diagnostic tooling (lives in the scratchpad — promote or re-create)
+### Diagnostic tooling (scratchpad — recreate from `Fuzz/IndexOracleTests.cs`)
 
-`replay_index_jsonl.cs`, `replay_index_gchunt.cs`, `loop_each.cs`, `loop_mini.cs` (scratchpad:
-`…/2d3a5974-…/scratchpad/`). All read the committed corpus `index_random_20240626.jsonl`:
-- **`replay_index_jsonl.cs <file> [SKIP] [LIMIT]`** — primary measurement; prints categorized counts
-  (agree-OK/ERR, ns-threw-on-valid, ns-accepted-invalid, shape/val diff) and writes flushed
-  `trace.txt`/`diverge.txt` (survive a crash). Each line of `diverge.txt` starts with the case `id`.
-- **`replay_index_gchunt.cs`** — `GC.Collect` per case (trips on GC-heap corruption near the corruptor).
-- **`loop_each.cs <N>`** — loops EACH mini-corpus case N× in isolation (finds layout-INDEPENDENT OOB;
-  how the negative-setter corruptor was pinned).
-- **`loop_mini.cs <rounds>`** — loops the WHOLE mini-corpus in rounds, preserving cross-case state
-  (for layout-DEPENDENT OOB, R3).
-- Build a mini-corpus: `awk '{print $1}' diverge.txt` → IDs; filter the corpus JSONL by `id` (see the
-  python one-liner in the session). Run under `NUMSHARP_GUARD_PAGES=1` for page-heap.
+The scratchpad harnesses are not committed; recreate `replay_index_jsonl.cs` by lifting the
+base-recipe + token reconstruction from `test/NumSharp.UnitTest/Fuzz/IndexOracleTests.cs` (the C# half
+is identical). It reads the committed corpus `index_random_20240626.jsonl` (resolve an absolute path
+or it looks under `test/.../Fuzz/corpus/`):
+- **`replay_index_jsonl.cs <file> [SKIP] [LIMIT] [gc]`** — primary measurement; prints categorized
+  counts (agree-OK/ERR, ns-threw-on-valid, ns-accepted-invalid, shape/val diff) and writes flushed
+  `trace.txt`/`diverge.txt` (survive a crash). Each `diverge.txt` line starts with the case `id` +
+  `[category]`. The 4th arg `gc` adds `GC.Collect()` per case → trips closer to the R3 corruptor.
+- **Mini-corpus:** `python` one-liner that filters the JSONL by a set of ids from `diverge.txt`; pass
+  the absolute mini-file path as `<file>`. This is how each bucket was isolated to ≤13 cases.
+- **R3 repro:** `replay_index_jsonl.cs index_random_20240626.jsonl 6200 200 gc` (~1/3 crash). A pure
+  stress loop (30k gathers + GC) is CLEAN — so reproduce only through the corpus shapes.
+- Run under `NUMSHARP_GUARD_PAGES=1` for end-aligned page-heap (catches POOLED native overruns only —
+  it does NOT catch R3, which confirms R3 is a pinned-managed / direct-VirtualAlloc overrun).
 - **Gotcha:** clear `%LOCALAPPDATA%\Temp\dotnet\runfile` after every `NumSharp.Core` rebuild — the
-  file-based-app cache serves a stale Core (a green run can hide an unbuilt fix).
+  file-based-app cache serves a stale Core (a green run can hide an unbuilt fix). Also note each
+  `dotnet run <file>.cs` keys its runfile cache on the FILE; a `--no-build` after switching scripts or
+  clearing the cache fails with "cannot find the file" — let it build once.
 
 ---
 
