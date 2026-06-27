@@ -159,21 +159,11 @@ namespace NumSharp.UnitTest.Fuzz
                 return "cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
 
             // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
-            if (ExtremaOps.Contains(c.Op) && kind == DivergenceKind.Value)
-            {
-                // (W7-B) fmax/fmin must IGNORE NaN (return the finite operand); NumSharp propagates
-                // it, so it behaves like maximum/minimum. Scoped to a NaN appearing in NumSharp's out.
-                if ((c.Op == "fmax" || c.Op == "fmin") && diffs.Any(d => d.Actual == "NaN"))
-                    return "fmax/fmin: propagate NaN instead of ignoring it [known bug]";
-                // (W7-A FIXED) the extrema kernel (np.clip) used to read an F-contiguous / strided
-                // bound or source in raw buffer order instead of C-order, scrambling the element
-                // pairing; the float16 scalar path additionally tie-broke signed zero to the wrong
-                // operand. Default.ClipNDArray now normalizes src/dst/lo/hi to C-contiguous offset-0
-                // before the flat kernel (and copies the result back for a non-C-contiguous out=), and
-                // HalfMax/MinNaN tie to the first operand to match NumPy's float16 maximum/minimum.
-                // maximum/minimum are now bit-exact across every layout, so no fallback excuse remains
-                // (fmax/fmin keep only the NaN-propagation excuse above) and the matrix verifies it.
-            }
+            // (W7-B FIXED) maximum/minimum/fmax/fmin are now DIRECT binary ufuncs (BinaryOp.Maximum
+            // /Minimum/FMax/FMin via ExecuteBinaryOp), no longer routed through np.clip. maximum/
+            // minimum PROPAGATE NaN; fmax/fmin IGNORE NaN (return the finite operand, first-operand
+            // on both-NaN) — bit-exact with NumPy 2.4.2 across every dtype pair and layout in
+            // LOGIC_BIN_PAIRS, so NO extrema value excuse remains and the matrix verifies them all.
             // isclose on an F-contiguous complex operand diverges — its own comparison kernel (NOT the
             // now-fixed clip-routed extrema path) still pairs a strided complex operand by buffer order.
             if (c.Op == "isclose" && kind == DivergenceKind.Value)

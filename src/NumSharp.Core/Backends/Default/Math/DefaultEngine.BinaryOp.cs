@@ -125,6 +125,10 @@ namespace NumSharp.Backends
             {
                 if (op == BinaryOp.Add) op = BinaryOp.BitwiseOr;
                 else if (op == BinaryOp.Multiply) op = BinaryOp.BitwiseAnd;
+                // bool has no NaN domain: maximum/fmax == logical OR, minimum/fmin == logical AND
+                // (max(F,T)=T=OR, min(F,T)=F=AND). Remap so the bitwise kernels handle them.
+                else if (op == BinaryOp.Maximum || op == BinaryOp.FMax) op = BinaryOp.BitwiseOr;
+                else if (op == BinaryOp.Minimum || op == BinaryOp.FMin) op = BinaryOp.BitwiseAnd;
             }
 
             // ufunc out=/where= path (Wave 2.1): the loop dtype above is final

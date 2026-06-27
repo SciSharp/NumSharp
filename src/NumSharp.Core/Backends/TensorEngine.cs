@@ -50,6 +50,14 @@ namespace NumSharp
         public abstract NDArray Divide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Mod(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
+        // Element-wise min/max ufuncs (np.maximum / np.minimum / np.fmax / np.fmin).
+        // Maximum/Minimum PROPAGATE NaN (a NaN operand wins); FMax/FMin IGNORE NaN
+        // (the non-NaN operand wins). Same (inputs, typeCode, out, where) house order.
+        public abstract NDArray Maximum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Minimum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray FMax(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray FMin(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
         public abstract NDArray Mean(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Power(NDArray lhs, NDArray rhs, Type type);

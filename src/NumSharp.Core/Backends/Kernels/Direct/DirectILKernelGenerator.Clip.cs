@@ -342,19 +342,30 @@ namespace NumSharp.Backends.Kernels
         // one T. Uses Math.Max/Min where available (covers byte..ulong, float,
         // double, decimal), falls back to small static helpers for Half /
         // Complex (NaN/lex semantics) and to a branch-based emit for Char.
-        private static void EmitScalarClamp(ILGenerator il, NPTypeCode dtype, bool isMax)
+        //
+        // nanIgnore selects the float/double/half/complex NaN policy:
+        //   false (default) — NaN-PROPAGATING (np.clip / np.maximum / np.minimum):
+        //                     a NaN operand wins, first-operand-NaN preferred.
+        //   true            — NaN-IGNORING (np.fmax / np.fmin): the non-NaN operand
+        //                     wins; both-NaN returns the second. Integer / decimal /
+        //                     char have no NaN domain, so the policy is irrelevant there.
+        private static void EmitScalarClamp(ILGenerator il, NPTypeCode dtype, bool isMax, bool nanIgnore = false)
         {
             var clrType = GetClrType(dtype);
 
             if (dtype == NPTypeCode.Half)
             {
-                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(HalfMaxNaN) : nameof(HalfMinNaN)), null);
+                il.EmitCall(OpCodes.Call, GetHelper(nanIgnore
+                    ? (isMax ? nameof(HalfMaxNum) : nameof(HalfMinNum))
+                    : (isMax ? nameof(HalfMaxNaN) : nameof(HalfMinNaN))), null);
                 return;
             }
 
             if (dtype == NPTypeCode.Complex)
             {
-                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN)), null);
+                il.EmitCall(OpCodes.Call, GetHelper(nanIgnore
+                    ? (isMax ? nameof(ComplexMaxNum) : nameof(ComplexMinNum))
+                    : (isMax ? nameof(ComplexMaxNaN) : nameof(ComplexMinNaN))), null);
                 return;
             }
 
@@ -362,12 +373,16 @@ namespace NumSharp.Backends.Kernels
             // and NumPy). Math.Max would resolve the +0/-0 tie to +0 and diverge in the scalar tail.
             if (dtype == NPTypeCode.Single)
             {
-                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(FloatMaxNaN) : nameof(FloatMinNaN)), null);
+                il.EmitCall(OpCodes.Call, GetHelper(nanIgnore
+                    ? (isMax ? nameof(FloatMaxNum) : nameof(FloatMinNum))
+                    : (isMax ? nameof(FloatMaxNaN) : nameof(FloatMinNaN))), null);
                 return;
             }
             if (dtype == NPTypeCode.Double)
             {
-                il.EmitCall(OpCodes.Call, GetHelper(isMax ? nameof(DoubleMaxNaN) : nameof(DoubleMinNaN)), null);
+                il.EmitCall(OpCodes.Call, GetHelper(nanIgnore
+                    ? (isMax ? nameof(DoubleMaxNum) : nameof(DoubleMinNum))
+                    : (isMax ? nameof(DoubleMaxNaN) : nameof(DoubleMinNaN))), null);
                 return;
             }
 
@@ -440,6 +455,23 @@ namespace NumSharp.Backends.Kernels
             return a <= b ? a : b;
         }
 
+        // Half NaN-IGNORING max/min (np.fmax / np.fmin): the non-NaN operand wins.
+        // Tie convention follows HalfMaxNaN/HalfMinNaN (first operand on an equal tie).
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Half HalfMaxNum(Half a, Half b)
+        {
+            if (Half.IsNaN(b)) return a;   // b-first: both-NaN -> a (first), per the array ufunc loop
+            if (Half.IsNaN(a)) return b;
+            return a >= b ? a : b;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Half HalfMinNum(Half a, Half b)
+        {
+            if (Half.IsNaN(b)) return a;
+            if (Half.IsNaN(a)) return b;
+            return a <= b ? a : b;
+        }
+
         // float32/float64 max/min matching the NaN-propagating SIMD path (EmitVectorMinOrMax)
         // and NumPy maximum/minimum/clip. NaN in the first operand propagates; otherwise the
         // STRICT comparison returns the SECOND operand on a tie — so the signed-zero tie resolves
@@ -455,6 +487,23 @@ namespace NumSharp.Backends.Kernels
         internal static double DoubleMaxNaN(double a, double b) => double.IsNaN(a) ? a : (a > b ? a : b);
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static double DoubleMinNaN(double a, double b) => double.IsNaN(a) ? a : (a < b ? a : b);
+
+        // float32/float64 NaN-IGNORING max/min — np.fmax / np.fmin ARRAY semantics (probed
+        // 2.4.2): a NaN operand is skipped and the OTHER operand returned. The NaN checks are
+        // ordered B-FIRST so both-NaN returns the FIRST operand (a): fmax(nanA, nanB) -> nanA,
+        // matching the ufunc loop (NumPy's SCALAR fmax() returns the second — the array loop
+        // does not). For two finite operands the strict comparison returns the SECOND on a tie
+        // — identical to maximum/minimum and the hardware MAXPS/MINPS the SIMD body uses, so
+        // np.fmax([+0],[-0]) -> -0 like np.maximum. Used by EmitScalarClamp(nanIgnore:true) and
+        // the strided fmax/fmin loop.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatMaxNum(float a, float b) => float.IsNaN(b) ? a : (float.IsNaN(a) ? b : (a > b ? a : b));
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static float FloatMinNum(float a, float b) => float.IsNaN(b) ? a : (float.IsNaN(a) ? b : (a < b ? a : b));
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleMaxNum(double a, double b) => double.IsNaN(b) ? a : (double.IsNaN(a) ? b : (a > b ? a : b));
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static double DoubleMinNum(double a, double b) => double.IsNaN(b) ? a : (double.IsNaN(a) ? b : (a < b ? a : b));
 
         // Complex: lex ordering on (real, imag). NaN propagation: if either
         // operand contains a NaN component, that operand wins (first-encountered
@@ -475,6 +524,28 @@ namespace NumSharp.Backends.Kernels
         {
             if (ComplexIsNaN(a)) return a;
             if (ComplexIsNaN(b)) return b;
+            if (a.Real > b.Real) return b;
+            if (a.Real < b.Real) return a;
+            return a.Imaginary > b.Imaginary ? b : a;
+        }
+
+        // Complex NaN-IGNORING max/min (np.fmax / np.fmin): the non-NaN operand wins; lex
+        // ordering on (real, imag) otherwise. Mirrors ComplexMaxNaN/ComplexMinNaN with the
+        // NaN branches returning the OTHER operand instead of the NaN one.
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Complex ComplexMaxNum(Complex a, Complex b)
+        {
+            if (ComplexIsNaN(b)) return a;   // b-first: both-NaN -> a (first)
+            if (ComplexIsNaN(a)) return b;
+            if (a.Real > b.Real) return a;
+            if (a.Real < b.Real) return b;
+            return a.Imaginary > b.Imaginary ? a : b;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static Complex ComplexMinNum(Complex a, Complex b)
+        {
+            if (ComplexIsNaN(b)) return a;
+            if (ComplexIsNaN(a)) return b;
             if (a.Real > b.Real) return b;
             if (a.Real < b.Real) return a;
             return a.Imaginary > b.Imaginary ? b : a;

@@ -179,10 +179,14 @@ namespace NumSharp.Backends.Kernels
         {
             // Add, Subtract, Multiply, Divide have Vector256 operators
             // BitwiseAnd, BitwiseOr, BitwiseXor use Vector256.BitwiseAnd/Or/Xor
+            // Maximum/Minimum/FMax/FMin emit width-adaptive min/max (EmitVectorMinOrMax /
+            //   EmitVectorFMinOrFMax) — float/double NaN-aware, integers bare hardware min/max.
             // Mod requires scalar implementation
             return op == BinaryOp.Add || op == BinaryOp.Subtract ||
                    op == BinaryOp.Multiply || op == BinaryOp.Divide ||
-                   op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor;
+                   op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor ||
+                   op == BinaryOp.Maximum || op == BinaryOp.Minimum ||
+                   op == BinaryOp.FMax || op == BinaryOp.FMin;
         }
 
         /// <summary>

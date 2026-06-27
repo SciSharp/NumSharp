@@ -1173,6 +1173,20 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static void EmitScalarOperation(ILGenerator il, BinaryOp op, NPTypeCode resultType)
         {
+            // Element-wise min/max (np.maximum / np.minimum / np.fmax / np.fmin): one scalar
+            // clamp covers every dtype — the NaN-aware float/double/half/complex helpers,
+            // Math.Max/Min for int + decimal, and a manual select for char. nanIgnore selects
+            // the fmax/fmin (skip NaN) vs maximum/minimum (propagate NaN) policy. Intercept
+            // BEFORE the decimal/half/complex routing so those dtypes also flow through the
+            // shared clamp instead of EmitDecimal/Half/ComplexOperation (which have no min/max).
+            if (op == BinaryOp.Maximum || op == BinaryOp.Minimum || op == BinaryOp.FMax || op == BinaryOp.FMin)
+            {
+                EmitScalarClamp(il, resultType,
+                    isMax: op == BinaryOp.Maximum || op == BinaryOp.FMax,
+                    nanIgnore: op == BinaryOp.FMax || op == BinaryOp.FMin);
+                return;
+            }
+
             // Special handling for decimal (uses operator methods)
             if (resultType == NPTypeCode.Decimal)
             {
@@ -1880,6 +1894,61 @@ namespace NumSharp.Backends.Kernels
             il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [result]
         }
 
+        // NaN-IGNORING vector min/max — np.fmax / np.fmin (ARRAY semantics).
+        //
+        //   Stack in : [a, b]
+        //   Stack out: [result]   result = isNaN(a) ? b : (isNaN(b) ? a : hwMinMax(a, b))
+        //
+        // hwMinMax (raw MAXPS/MINPS, or the EmitFloatTieMinOrMax fallback) returns the SECOND
+        // operand on a ±0 / equal tie — which is exactly what np.fmax/fmin's ARRAY ufunc does
+        // (probed 2.4.2: fmax([+0],[-0]) -> -0, like maximum; NumPy's scalar fmax() differs but
+        // the array loop does not). Only the NaN lanes need overriding: a NaN -> b, b NaN -> a,
+        // both NaN -> b. Integer lanes have no NaN, so the bare hardware op is fmax/fmin too.
+        internal static void EmitVectorFMinOrFMax(ILGenerator il, bool isMax, NPTypeCode type)
+        {
+            string methodName = isMax ? "Max" : "Min";
+            var clrType = GetClrType(type);
+
+            if (type != NPTypeCode.Single && type != NPTypeCode.Double)
+            {
+                EmitRawVectorMinOrMax(il, methodName, clrType);
+                return;
+            }
+
+            var vecType = VectorMethodCache.V(VectorBits, clrType);
+            var locA = il.DeclareLocal(vecType);
+            var locB = il.DeclareLocal(vecType);
+            var locHw = il.DeclareLocal(vecType);
+            var locInner = il.DeclareLocal(vecType);
+
+            il.Emit(OpCodes.Stloc, locB);                       // [a]
+            il.Emit(OpCodes.Stloc, locA);                       // []
+
+            // hw = hwMinMax(a, b)
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locB);
+            EmitRawVectorMinOrMax(il, methodName, clrType);     // [hw]
+            il.Emit(OpCodes.Stloc, locHw);                      // []
+
+            // inner = ConditionalSelect(Equals(a, a), hw, b)  -> a NaN ? b : hw
+            il.Emit(OpCodes.Ldloc, locA);
+            il.Emit(OpCodes.Ldloc, locA);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(VectorBits, clrType), null);   // [aEq]
+            il.Emit(OpCodes.Ldloc, locHw);                     // [aEq, hw]
+            il.Emit(OpCodes.Ldloc, locB);                      // [aEq, hw, b]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [inner]
+            il.Emit(OpCodes.Stloc, locInner);                  // []
+
+            // result = ConditionalSelect(Equals(b, b), inner, a)  -> b NaN ? a : inner
+            // (b-first ordering makes both-NaN return a, the FIRST operand, per the array loop.)
+            il.Emit(OpCodes.Ldloc, locB);
+            il.Emit(OpCodes.Ldloc, locB);
+            il.EmitCall(OpCodes.Call, VectorMethodCache.Equals(VectorBits, clrType), null);   // [bEq]
+            il.Emit(OpCodes.Ldloc, locInner);                  // [bEq, inner]
+            il.Emit(OpCodes.Ldloc, locA);                      // [bEq, inner, a]
+            il.EmitCall(OpCodes.Call, VectorMethodCache.ConditionalSelect(VectorBits, clrType), null); // [result]
+        }
+
         /// <summary>
         /// Emit Vector operation for NPTypeCode (adapts to V128/V256/V512).
         /// Prefers x86 Avx/Avx2 intrinsics where available; falls back to operator overload.
@@ -1905,6 +1974,22 @@ namespace NumSharp.Backends.Kernels
                 }
                 il.EmitCall(OpCodes.Call,
                     VectorMethodCache.Generic(VectorBits, methodName, clrType, paramCount: 2), null);
+                return;
+            }
+
+            // Element-wise min/max SIMD (np.maximum / np.minimum / np.fmax / np.fmin).
+            // maximum/minimum reuse the NaN-PROPAGATING clamp (EmitVectorMinOrMax) — the same
+            // width-adaptive body np.clip uses, fuzz-validated: float/double propagate a NaN
+            // operand (first-operand-NaN preferred, ±0 tie -> second), integers get the bare
+            // hardware min/max. fmax/fmin use the NaN-IGNORING variant (skip a NaN operand).
+            if (op == BinaryOp.Maximum || op == BinaryOp.Minimum)
+            {
+                EmitVectorMinOrMax(il, isMax: op == BinaryOp.Maximum, type, propagateNaN: true);
+                return;
+            }
+            if (op == BinaryOp.FMax || op == BinaryOp.FMin)
+            {
+                EmitVectorFMinOrFMax(il, isMax: op == BinaryOp.FMax, type);
                 return;
             }
 
