@@ -120,6 +120,13 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // A 0-d (scalar) array has NO axes to consume, so any axis-consuming index
+                        // — an integer/boolean ARRAY, even an empty one (s[np.array([],int)]) — is
+                        // "too many indices" (NumPy mapping.c prepare_index). A 0-d boolean
+                        // (s[np.array(True)] -> (1,), s[np.array(False)] -> (0,)) and newaxis /
+                        // ellipsis consume no axis and pass through below.
+                        if (this.ndim == 0 && !(nd.typecode == NPTypeCode.Boolean && nd.ndim == 0))
+                            throw new IndexError($"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed");
                         // An empty index array (size 0) of any dtype is an empty integer fancy index,
                         // not a boolean mask (NumPy mapping.c:425): A[np.array([],bool)] -> (0, ...).
                         if (nd.size == 0 && nd.ndim >= 1)
@@ -148,8 +155,12 @@ namespace NumSharp
                         // NOT the single element at coordinate (0,2). Coordinate access is
                         // preserved via nd.GetData(coords). (A multi-item tuple already
                         // treats int[]/long[] as fancy via the _NDArrayFound scan below.)
+                        if (this.ndim == 0)
+                            throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
                         return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case long[] coords:
+                        if (this.ndim == 0)
+                            throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
                         return FetchIndices(this, new NDArray[] { np.array(coords, copy: false) }, null, true);
                     case NDArray[] nds:
                         return this[nds];

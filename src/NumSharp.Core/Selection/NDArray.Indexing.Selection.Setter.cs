@@ -171,6 +171,13 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // A 0-d (scalar) array has NO axes to consume, so any axis-consuming index
+                        // — an integer/boolean ARRAY, even an empty one — is "too many indices"
+                        // (NumPy mapping.c prepare_index), matching the getter. A 0-d boolean
+                        // (a[np.array(True)] = v / a[np.array(False)] = v) consumes no axis and
+                        // passes through below.
+                        if (this.ndim == 0 && !(nd.typecode == NPTypeCode.Boolean && nd.ndim == 0))
+                            throw new IndexError($"too many indices for array: array is 0-dimensional, but {(nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1)} were indexed");
                         // An empty index array (size 0) of any dtype is an empty integer fancy index,
                         // not a boolean mask (NumPy mapping.c:425): a[np.array([],bool)] = v is a no-op.
                         if (nd.size == 0 && nd.ndim >= 1)
@@ -209,9 +216,13 @@ namespace NumSharp
                         // single element at coordinate (0,2). Coordinate assignment is
                         // preserved via nd.SetData(values, coords). (A multi-item tuple
                         // already treats int[]/long[] as fancy via the _NDArrayFound scan.)
+                        if (this.ndim == 0)
+                            throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
                         SetIndices(this, new NDArray[] { np.array(coords, copy: false) }, values);
                         return;
                     case long[] coords:
+                        if (this.ndim == 0)
+                            throw new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
                         SetIndices(this, new NDArray[] { np.array(coords, copy: false) }, values);
                         return;
                     case NDArray[] nds:
