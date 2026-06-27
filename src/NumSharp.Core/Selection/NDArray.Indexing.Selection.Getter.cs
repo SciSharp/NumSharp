@@ -579,6 +579,14 @@ namespace NumSharp
 
             int firstBoolPos = -1, boolCount = 0;
             bool allTrue = true;
+            // Track the advanced-block span. With a 0-d bool present (HAS_0D_BOOL ⇒ HAS_FANCY),
+            // scalar ints join the advanced block too (mapping.c). When those advanced items are
+            // CONSECUTIVE the merged block stays in place — exactly what this handler emits (a
+            // NewAxis at the first 0-d-bool position). When a slice / newaxis SEPARATES them the
+            // block moves to the FRONT (_get_transpose), which this handler does NOT model — bail
+            // so TryBuildMultiAdvancedGrid (which has the consec/front rule + MixKind.ZeroBool)
+            // owns it. e.g. [int,slice,True] -> NumPy (1,0) not (0,1); [slice,True,slice,False].
+            int minAdvPos = int.MaxValue, maxAdvPos = -1, advCount = 0;
             for (int i = 0; i < items.Length; i++)
             {
                 switch (items[i])
@@ -587,20 +595,32 @@ namespace NumSharp
                         if (firstBoolPos < 0) firstBoolPos = i;
                         boolCount++;
                         if (!(bool)nd) allTrue = false;
+                        if (i < minAdvPos) minAdvPos = i;
+                        maxAdvPos = i; advCount++;
                         break;
                     case NDArray _:        // n-d / non-bool array -> advanced; not this case
                     case int[] _:
                     case long[] _:
                         return false;
                     case Slice _:
+                        break;
                     case int _:
                     case long _:
+                        if (i < minAdvPos) minAdvPos = i;
+                        maxAdvPos = i; advCount++;
                         break;
                     default:
                         return false;
                 }
             }
             if (boolCount == 0)
+                return false;
+
+            // Non-consecutive advanced block (a slice/newaxis separates the 0-d bools / ints):
+            // NumPy moves the merged advanced axis to the FRONT, which this in-place handler can't
+            // express. Defer to the grid. (Consecutive — incl. a single 0-d bool, or A[True,True] /
+            // A[True,False] — stays in place and is handled here.)
+            if (advCount > 1 && (maxAdvPos - minAdvPos + 1) != advCount)
                 return false;
 
             boolValue = allTrue;
@@ -1019,6 +1039,24 @@ namespace NumSharp
             }
 
             grid = np.broadcast_arrays(axisIndex);
+
+            // The advanced-block dims are carried into the grid only by the real fancy (Adv)
+            // arrays (line ~1016). When the block is made PURELY of 0-d bools (no fancy array),
+            // nothing carries bshape, so broadcast_arrays leaves the block at the all-ones default
+            // (1) — wrong for an any-False block, whose merged length is 0 (e.g.
+            // [slice, True, slice, False] must yield a 0 block axis, not 1). outShape already holds
+            // the correct block size, so stretch every grid array to it (a size-1 block broadcasts
+            // to the empty length-0; a no-op when a fancy array already carried the block).
+            // The advanced-block dims are carried into the grid only by the real fancy (Adv) arrays
+            // (line ~1016). When the block is made PURELY of 0-d bools (no fancy array), nothing
+            // carries bshape, so broadcast_arrays leaves the block at the all-ones default (1) —
+            // wrong for an any-False block, whose merged length is 0 ([slice,True,slice,False] must
+            // yield a length-0 block axis, not 1). outShape already holds the correct block size, so
+            // stretch every grid array to it (a no-op when a fancy array already carried the block).
+            var outShapeArr = outShape.ToArray();
+            if (!grid[0].Shape.dimensions.SequenceEqual(outShapeArr))
+                for (int i = 0; i < grid.Length; i++)
+                    grid[i] = np.broadcast_to(grid[i], (Shape)outShapeArr);
             return true;
         }
 

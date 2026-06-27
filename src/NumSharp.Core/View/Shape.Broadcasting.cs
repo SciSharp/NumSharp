@@ -241,8 +241,20 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If shapes cannot be broadcast together.</exception>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
-            if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
-                return (leftShape, rightShape);
+            // Fast path: IDENTICAL shapes broadcast to themselves. The shape hash is only a cheap
+            // pre-filter — it COLLIDES across dims that differ but hash alike (notably a 0-length
+            // axis vs a size-1 axis: (1,1) and (0,1) both hash to the same value). Confirm the
+            // dimensions are actually equal before short-circuiting, else e.g. broadcast_to((1,1),
+            // (0,1)) wrongly returned (1,1) instead of stretching the size-1 axis to the 0 axis.
+            if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode
+                && leftShape.NDim == rightShape.NDim)
+            {
+                bool sameDims = true;
+                for (int d = 0; d < leftShape.NDim; d++)
+                    if (leftShape.dimensions[d] != rightShape.dimensions[d]) { sameDims = false; break; }
+                if (sameDims)
+                    return (leftShape, rightShape);
+            }
 
             int i, nd, k, j;
             long tmp;
