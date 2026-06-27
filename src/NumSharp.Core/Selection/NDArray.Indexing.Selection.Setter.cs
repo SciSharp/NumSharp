@@ -730,8 +730,35 @@ namespace NumSharp
             }
             else
             {
+                // NumPy broadcasts the assigned value to the indexing-RESULT shape
+                // (num_offsets,) + subShape before scattering — a scalar, one sub-row
+                // (subShape,), or any lower-rank value stretches to fill every selected
+                // sub-array (e.g. a[[0,1]] = -1, = [10,20,30,40], = [[100],[200]], = [[1,2,3,4]]).
+                // SetIndicesND block-copies one CONTIGUOUS subShape per offset, so materialize the
+                // (possibly broadcast / strided) value into a contiguous buffer of exactly retShape.
+                // Previously this branch passed the value straight through, tripping a Debug.Assert
+                // in DEBUG and over-reading (valuesAddr + i*subShapeSize past a size-1 buffer) in RELEASE.
+                var typedValues = values.AsOrMakeGeneric<T>();
+                if (!(typedValues.Shape.IsContiguous && typedValues.Shape.dimensions.SequenceEqual(retShape)))
+                {
+                    try
+                    {
+                        typedValues = np.broadcast_to(typedValues, (Shape)retShape).copy().MakeGeneric<T>();
+                    }
+                    catch (IncorrectShapeException)
+                    {
+                        // NumPy: ValueError: shape mismatch: value array of shape (X,) could
+                        // not be broadcast to indexing result of shape (Y, Z).
+                        // NumPy's mapping.c shape string uses NO space after the comma: (2,4).
+                        string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                        throw new ValueError(
+                            $"shape mismatch: value array of shape {Tup(values.Shape.dimensions)} " +
+                            $"could not be broadcast to indexing result of shape {Tup(retShape)}");
+                    }
+                }
+
                 //non linear is handled before calculating computedOffsets
-                SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, values.AsOrMakeGeneric<T>());
+                SetIndicesND(source, computedOffsets, indices, ndsCount, retShape: retShape, subShape: subShape, typedValues);
             }
 
             //return default;

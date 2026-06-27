@@ -276,30 +276,46 @@ namespace NumSharp.UnitTest.Selection
                 new long[]{0,1,2,3,12,13,14,15,8,9,10,11,20,21,22,23}),
         };
 
-        // ── SET bugs: broadcastable value into ≥2-D subshape ─────────────────
+        // ── FIXED: broadcastable value into ≥2-D subshape (was [OpenBugs]) ───
         //
-        // Assigning a BROADCASTABLE value (scalar, or lower-rank) into a ≥2-D
-        // result FANCY set is unsupported in NumSharp (asserts in DEBUG / wrong
-        // values / crash in RELEASE). NumPy handles these fine; they belong in the
-        // [OpenBugs] bucket labeled "known broadcast-value fancy-set gap".
-        //
-        // NumPy expected values are correct; NumSharp produces wrong results.
-
+        // Assigning a BROADCASTABLE value (scalar, or lower-rank) into a ≥2-D fancy
+        // result used to assert in DEBUG / over-read in RELEASE: SetIndicesND block-copies
+        // one contiguous subShape per offset and assumed values.size == offsets*subShape.
+        // Fixed in SetIndices<T>: the value is now broadcast to the indexing-result shape
+        // (num_offsets,) + subShape and materialized contiguously before the scatter,
+        // matching NumPy (scalar / (subShape,) / (n,1) / (1,subShape) all stretch). Kept as
+        // a passing regression guard; NumPy expected values pinned.
         private static readonly GCase[] FancySetBug =
         {
-            // Bug 1: A[IA()] = scalar (-1) into (2,4) subshape
-            // NumPy expected: [-1,-1,-1,-1,-1,-1,-1,-1,8,9,10,11]  (rows 0,1 all set to -1)
+            // A[IA()] = scalar (-1) into (2,4) subshape → rows 0,1 all set to -1.
             new("bug01_A_ia_scalar_set",
                 () => { var a = A(); a[IA()] = (NDArray)(-1L); return a; },
                 new[]{3,4},
                 new long[]{-1,-1,-1,-1,-1,-1,-1,-1,8,9,10,11}),
 
-            // Bug 2: A[IA()] = (4,) array → broadcasts to (2,4) subshape
-            // NumPy expected: [10,20,30,40,10,20,30,40,8,9,10,11]
+            // A[IA()] = (4,) array → broadcasts across both selected rows.
             new("bug02_A_ia_row_bcast",
                 () => { var a = A(); a[IA()] = np.array(new long[]{10,20,30,40}); return a; },
                 new[]{3,4},
                 new long[]{10,20,30,40,10,20,30,40,8,9,10,11}),
+
+            // A[IA()] = (2,1) column → each selected row filled with its scalar.
+            new("bug03_A_ia_col_bcast",
+                () => { var a = A(); a[IA()] = np.array(new long[]{100,200}).reshape(2,1); return a; },
+                new[]{3,4},
+                new long[]{100,100,100,100,200,200,200,200,8,9,10,11}),
+
+            // A[IA()] = (1,4) row → broadcasts across the leading axis.
+            new("bug04_A_ia_1row_bcast",
+                () => { var a = A(); a[IA()] = np.array(new long[]{1,2,3,4}).reshape(1,4); return a; },
+                new[]{3,4},
+                new long[]{1,2,3,4,1,2,3,4,8,9,10,11}),
+
+            // Duplicate selected rows + scalar (last-write-wins is moot for a constant).
+            new("bug05_A_dup_scalar",
+                () => { var a = A(); a[np.array(new long[]{0,2,0})] = (NDArray)(-1L); return a; },
+                new[]{3,4},
+                new long[]{-1,-1,-1,-1,4,5,6,7,-1,-1,-1,-1}),
         };
 
         // ═══════════════════ DYNAMIC DATA SOURCES ════════════════════════════════
@@ -421,24 +437,32 @@ namespace NumSharp.UnitTest.Selection
                 "coordinate (0,2) in A=arange(12).reshape(3,4) is element 2");
         }
 
-        // ── Known bug: broadcastable value into ≥2-D subshape fancy-set ─────
-        // Label: "known broadcast-value fancy-set gap"
-        // MATCHED-shape set works (s03–s08 above); scalar/lower-rank DO NOT.
-
+        // ── FIXED: broadcastable value into ≥2-D subshape fancy-set ─────────
+        // MATCHED-shape set (s03–s08) AND scalar/lower-rank broadcast now both work.
         [DataTestMethod, DynamicData(nameof(FancySetBugData))]
-        [OpenBugs]
         public void FancySetBug_BroadcastableValueIntoSubshape(int i, string name)
         {
-            // This tests the KNOWN BUG: assigning a scalar or lower-rank value
-            // into a ≥2-D subshape from a fancy index fails in NumSharp (DEBUG
-            // asserts / RELEASE OOB). NumPy handles it correctly.
             var c = FancySetBug[i];
-            var r = c.Op();    // BUG: NumSharp asserts / corrupts here
+            var r = c.Op();
             r.shape.Select(x => (int)x).ToArray().Should().Equal(c.Shape, $"{c.Name} shape");
             var flat = new long[r.size];
             var f = r.flat;
             for (long k = 0; k < r.size; k++) flat[k] = Convert.ToInt64(f.GetValue(k));
             flat.Should().Equal(c.Vals, $"{c.Name} values");
+        }
+
+        // ── Value-shape mismatch on a ≥2-D fancy-set raises ValueError ───────
+        // NumPy: ValueError: shape mismatch: value array of shape (3,) could not be
+        // broadcast to indexing result of shape (2,4). NumSharp matches that text.
+        [TestMethod]
+        public void FancySet_ValueShapeMismatch_Throws()
+        {
+            Action act1 = () => { var a = A(); a[IA()] = np.array(new long[]{1,2,3}); };
+            act1.Should().Throw<ValueError>()
+                .WithMessage("*could not be broadcast to indexing result of shape (2,4)*");
+
+            Action act2 = () => { var a = A(); a[IA()] = np.array(new long[]{1,2,3,4}).reshape(2,2); };
+            act2.Should().Throw<ValueError>();
         }
     }
 }
