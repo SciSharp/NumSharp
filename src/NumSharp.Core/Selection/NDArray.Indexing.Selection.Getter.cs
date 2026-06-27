@@ -160,6 +160,15 @@ namespace NumSharp
                 }
             }
 
+            // Phase C gate: classify + VALIDATE the whole tuple the way NumPy's prepare_index does
+            // BEFORE any per-shape fast path runs. This raises the NumPy-correct IndexError for every
+            // structurally invalid combination (too-many-indices, a boolean array whose length != its
+            // axis, >1 ellipsis, a non-integer/boolean array index) — combinations the Try* stack used
+            // to accept and feed malformed shapes to a kernel (silent OOB / wrong result). Valid tuples
+            // pass straight through to the existing dispatch unchanged.
+            if (indicesLen != 1)
+                PrepareIndex(this.Shape, indicesObjects);
+
             // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices adds a
             // size-1 (True) / size-0 (False) axis at its position and KEEPS every source axis
             // (HAS_0D_BOOL): A[True, :] -> (1,3,4), A[:, True] -> (3,1,4), A[False, :] -> (0,3,4).

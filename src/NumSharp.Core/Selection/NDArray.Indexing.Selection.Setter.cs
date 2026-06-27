@@ -222,6 +222,12 @@ namespace NumSharp
                 }
             }
 
+            // Phase C gate (see the getter): NumPy prepare_index classification + validation up front,
+            // so a structurally invalid assignment tuple raises the NumPy IndexError instead of letting
+            // the Try* stack scatter through a malformed shape.
+            if (indicesLen != 1)
+                PrepareIndex(this.Shape, indicesObjects);
+
             // A 0-d boolean (np.array(True)/np.array(False)) mixed with basic indices: True
             // assigns through the size-1 newaxis view (which aliases this, value broadcasting
             // against the (1,...) selection); any-False selects nothing and is a no-op. Mirrors

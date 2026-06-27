@@ -876,10 +876,14 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case10_Multi()
         {
+            // Two fancy indices of incompatible shapes (3,) and (2,) cannot broadcast together.
+            // NumPy raises IndexError "shape mismatch: indexing arrays could not be broadcast
+            // together with shapes (3,) (2,)" (mapping.c:2617). PrepareIndex now matches that exactly
+            // (was: NumSharp's non-NumPy IncorrectShapeException from the downstream broadcast).
             new Action(() =>
             {
                 var ret = y[np.array(new int[] { 0, 2, 4 }), np.array(new int[] { 0, 1 })];
-            }).Should().Throw<IncorrectShapeException>();
+            }).Should().Throw<IndexError>();
         }
 
 
@@ -1299,7 +1303,12 @@ namespace NumSharp.UnitTest.Selection
         private NDArray<long> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<long>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
+            // Match by name + signature: other non-public static methods now take Shape as their first
+            // parameter too (e.g. PrepareIndex(Shape, object[])), so a first-param-only filter is ambiguous.
+            return (NDArray<long>)methods.FirstOrDefault(m => m.Name == "GetIndicesFromSlice"
+                                                              && m.GetParameters().Length == 3
+                                                              && m.GetParameters()[0].ParameterType == typeof(Shape))
+                                          .Invoke(null, new object[] { shape, slice, axis });
         }
 
 
