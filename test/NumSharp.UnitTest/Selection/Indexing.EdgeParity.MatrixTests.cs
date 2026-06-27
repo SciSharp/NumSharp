@@ -80,9 +80,13 @@ public class Indexing_EdgeParity_MatrixTests
         yield return Wrap(new("A_emptyFancyIdx",   () => A()[np.array(new long[] { })],                                        new[] { 0, 4 }, new long[0]));
         yield return Wrap(new("V_emptyFancyIdx",   () => V()[np.array(new long[] { })],                                        new[] { 0 },    new long[0]));
 
-        // ── Index dtype coverage: [1,0,1] selects rows 1,0,1 → (3,4). Every integer
-        //    dtype EXCEPT SByte works (SByte is a real bug — see BugGetCases). ──
+        // ── Index dtype coverage: [1,0,1] selects rows 1,0,1 → (3,4). NumPy accepts
+        //    EVERY integer dtype; all eight (signed int8/16/32/64 + unsigned 8/16/32/64)
+        //    must give the identical fancy result. ──
         var fancyVals = new long[] { 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7 };
+        yield return Wrap(new("FancyIdx_int8",   () => A()[Idx<sbyte>(1, 0, 1)],     new[] { 3, 4 }, fancyVals));
+        // negative int8 indices wrap (sign-extended to int64): [-1,-2] -> rows 2,1.
+        yield return Wrap(new("FancyIdx_int8_neg", () => A()[Idx<sbyte>(-1, -2)],    new[] { 2, 4 }, new long[] { 8, 9, 10, 11, 4, 5, 6, 7 }));
         yield return Wrap(new("FancyIdx_uint8",  () => A()[Idx<byte>(1, 0, 1)],      new[] { 3, 4 }, fancyVals));
         yield return Wrap(new("FancyIdx_int16",  () => A()[Idx<short>(1, 0, 1)],     new[] { 3, 4 }, fancyVals));
         yield return Wrap(new("FancyIdx_uint16", () => A()[Idx<ushort>(1, 0, 1)],    new[] { 3, 4 }, fancyVals));
@@ -152,10 +156,6 @@ public class Indexing_EdgeParity_MatrixTests
         yield return Wrap(new("BUG_A_0dTrue_colon",  () => A()[np.array(true), ":"],  new[] { 1, 3, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
         yield return Wrap(new("BUG_A_0dFalse_colon", () => A()[np.array(false), ":"], new[] { 0, 3, 4 }, new long[0]));
         yield return Wrap(new("BUG_A_colon_0dTrue",  () => A()[":", np.array(true)],  new[] { 3, 1, 4 }, Enumerable.Range(0, 12).Select(x => (long)x).ToArray()));
-
-        // SByte (int8) index dtype rejected. NumPy accepts every integer dtype.
-        //   NumSharp throws IndexOutOfRangeException — NormalizeIndexArray omits NPTypeCode.SByte.
-        yield return Wrap(new("BUG_FancyIdx_int8", () => A()[Idx<sbyte>(1, 0, 1)], new[] { 3, 4 }, new long[] { 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7 }));
     }
 
     [DataTestMethod]

@@ -82,7 +82,9 @@ namespace NumSharp
 
             // Other integer types: convert to Int64 (widest signed integer)
             // This matches NumPy which accepts all integer types for indexing
-            if (tc == NPTypeCode.Byte || tc == NPTypeCode.Int16 || tc == NPTypeCode.UInt16 ||
+            // (signed int8/16 and unsigned 8/16/32/64). astype sign-extends SByte/Int16
+            // and zero-extends the unsigned types, so negative int8 indices wrap correctly.
+            if (tc == NPTypeCode.Byte || tc == NPTypeCode.SByte || tc == NPTypeCode.Int16 || tc == NPTypeCode.UInt16 ||
                 tc == NPTypeCode.UInt32 || tc == NPTypeCode.UInt64)
                 return indices.astype(NPTypeCode.Int64, copy: true);
 
