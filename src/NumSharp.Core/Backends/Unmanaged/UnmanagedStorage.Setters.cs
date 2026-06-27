@@ -329,6 +329,14 @@ namespace NumSharp.Backends
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
+            // Wrap negative coordinates to [0, dim) and bounds-check each axis, exactly as the
+            // getter's GetData(int[]) does. WITHOUT this, a negative scalar-index assignment
+            // (b[(object)-1] = v / b[-1L] = v) wrote at buffer[-1] — an OUT-OF-BOUNDS WRITE that
+            // both silently corrupted adjacent heap memory and left the array unchanged (NumPy
+            // assigns the last element). InferNegativeCoordinates also raises NumPy's IndexError
+            // for a genuinely out-of-range index.
+            indices = Shape.InferNegativeCoordinates(_shape.dimensions, indices);
+
             var valueshape = value.Shape;
             bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
 
