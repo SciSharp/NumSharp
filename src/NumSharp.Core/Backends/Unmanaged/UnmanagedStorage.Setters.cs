@@ -343,7 +343,27 @@ namespace NumSharp.Backends
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                NpyIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                var targetView = GetData(indices);
+                // An EMPTY target region (a basic slice/newaxis/ellipsis that selects 0 elements,
+                // e.g. a[:, 1:1] = v or a[None, :0:3, 2] = v) assigns nothing — but NumPy still
+                // requires the value to broadcast to the target shape (a scalar/size-1 always does;
+                // an incompatible value raises ValueError), then it is a no-op. The copy iterator
+                // indexes the first element of each operand and faults on a 0-size view
+                // (CreateCopyState), so handle the empty target here instead.
+                if (targetView.Shape.size == 0)
+                {
+                    if (value.size != 1)
+                    {
+                        string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                        try { np.broadcast_to(value, targetView.Shape); }
+                        catch (IncorrectShapeException)
+                        {
+                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}");
+                        }
+                    }
+                    return;
+                }
+                NpyIter.Copy(targetView, value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
