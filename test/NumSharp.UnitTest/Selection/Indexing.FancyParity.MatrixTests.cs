@@ -249,6 +249,12 @@ namespace NumSharp.UnitTest.Selection
             new("s08_decB_raw_long_set",
                 () => { var a = A(); a[new long[]{0,2}] = np.arange(200, 208, dtype: np.int64).reshape(2, 4); return a; },
                 new long[]{200,201,202,203,4,5,6,7,204,205,206,207}),
+
+            // ─── multi-fancy with BROADCAST index shapes (shared fix with g28) ───
+            // B[ia.reshape(2,1), ib] broadcasts (2,1)×(2,)->(2,2); matched (2,2,4) value.
+            new("s09_B_bcast_idx_matched",
+                () => { var b = B(); b[IA().reshape(2,1), IB()] = np.arange(100, 116, dtype: np.int64).reshape(2,2,4); return b; },
+                new long[]{100,101,102,103,4,5,6,7,104,105,106,107,108,109,110,111,16,17,18,19,112,113,114,115}),
         };
 
         // ── SET ERROR cases ──────────────────────────────────────────────────────
@@ -265,15 +271,23 @@ namespace NumSharp.UnitTest.Selection
 
         // ═══════════════════ KNOWN BUGS (OpenBugs) ══════════════════════════════
 
-        // ── GET bugs ─────────────────────────────────────────────────────────────
+        // ── FIXED: multi-fancy index broadcast (was [OpenBugs]) ──────────────────
         //
-        // g28: 1-D vs 2-D fancy broadcast shape bug
-        // NumPy: B[IA(), IB().reshape(2,1)] broadcasts (2,)×(2,1)→(2,2) → shape (2,2,4)
-        // NumSharp: does NOT broadcast the index arrays — gives (2,1,4) instead.
+        // Two fancy index arrays of DIFFERENT shapes must broadcast together (NumPy):
+        // (2,) × (2,1) -> (2,2), result (2,2)+trailing. NumSharp detected "broadcast
+        // required" by SIZE equality, so equal-size-but-different-shape pairs like
+        // (2,) vs (2,1) (both size 2) slipped through un-broadcast -> wrong (2,1,4).
+        // Fixed: detect by SHAPE inequality and np.broadcast_arrays the index arrays.
         private static readonly GCase[] FancyGetBug =
         {
             new("g28_B_ia_ib2d", () => B()[IA(), IB().reshape(2,1)], new[]{2,2,4},
                 new long[]{0,1,2,3,12,13,14,15,8,9,10,11,20,21,22,23}),
+            new("g28b_B_ia2d_ib", () => B()[IA().reshape(2,1), IB()], new[]{2,2,4},
+                new long[]{0,1,2,3,8,9,10,11,12,13,14,15,20,21,22,23}),
+            new("g28c_A_ia2d_ib", () => A()[IA().reshape(2,1), IB()], new[]{2,2},
+                new long[]{0,2,4,6}),
+            new("g28d_B_2x1_1x2", () => B()[IA().reshape(2,1), IB().reshape(1,2)], new[]{2,2,4},
+                new long[]{0,1,2,3,8,9,10,11,12,13,14,15,20,21,22,23}),
         };
 
         // ── FIXED: broadcastable value into ≥2-D subshape (was [OpenBugs]) ───
@@ -359,10 +373,9 @@ namespace NumSharp.UnitTest.Selection
             act.Should().Throw<Exception>(name);
         }
 
-        // ── Bug: GET shape with 1-D × 2-D index broadcast ────────────────────
-        // NumPy: (2,) × (2,1) → (2,2) result; NumSharp gives (2,1,4) not (2,2,4).
+        // ── FIXED: GET shape with multi-fancy index broadcast (regression guard) ──
+        // NumPy broadcasts the index arrays together: (2,)×(2,1) → (2,2) → (2,2,4).
         [DataTestMethod, DynamicData(nameof(FancyGetBugData))]
-        [OpenBugs]
         public void FancyGetBug_BroadcastShape(int i, string name) => AssertGet(FancyGetBug[i]);
 
         // ── FIXED: negative OOB now validated (regression guard) ──────────────

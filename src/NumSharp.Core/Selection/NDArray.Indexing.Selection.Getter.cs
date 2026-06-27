@@ -965,8 +965,12 @@ namespace NumSharp
                     if (nd.Shape.IsEmpty)
                         return new NDArray<T>();
 
-                    //test for broadcasting requirement
-                    if (nd.size != indicesSize)
+                    // Broadcasting is required when the index arrays are not ALL the same
+                    // shape — NumPy broadcasts them together (e.g. (2,) with (2,1) -> (2,2),
+                    // result (2,2)+trailing). A size-only check missed equal-size-but-different-
+                    // shape pairs like (2,) vs (2,1) (both size 2), leaving them un-broadcast
+                    // and producing a wrong (2,1,...) result instead of (2,2,...).
+                    if (!nd.Shape.dimensions.SequenceEqual(idxs.Shape.dimensions))
                         broadcastRequired = true;
 
                     //normalize index dtype (accepts all integer types, rejects float/decimal/etc.)
