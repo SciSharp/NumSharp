@@ -1170,17 +1170,25 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         protected static unsafe NDArray<T> FetchIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
         {
-            //facts:
-            //indices are always offsetted to
-            //handle pointers pointing to subshape
-            var subShapeNDim = subShape.Length;
+            // Subshaped fancy gather (ndsCount < source.ndim) from a NON-contiguous source
+            // (transposed / row- or col-strided / negative-stride). The contiguous fast path
+            // (FetchIndicesND) block-copies one CONTIGUOUS subShape per offset, but a strided
+            // source's sub-arrays are not contiguous, so gather element-by-element through the
+            // source strides into the C-contiguous result. NumPy likewise gathers a strided
+            // source straight into a fresh contiguous array.
+            //
+            // (Was broken: it sized the result as subShape instead of retShape and did
+            //  `ret[i] = source[index, ndsCount]` — assigning a whole sub-array into a scalar
+            //  slot — so every single-fancy-on-strided-view threw an IncorrectShapeException.)
+            long subShapeSize = 1;
+            for (int s = 0; s < subShape.Length; s++)
+                subShapeSize *= subShape[s];
 
-            long size = indices[0].size; //first is ok because they are broadcasted t oeac
-            T* srcAddr = source.Address;
+            long size = indices[0].size; // number of selected (broadcast) fancy multi-indices
 
-            NDArray ret;
+            NDArray<T> ret;
             if (@out is null)
-                ret = new NDArray<T>(subShape, false);
+                ret = new NDArray<T>(retShape, false);
             else
             {
                 //compare computed retShape vs given @out
@@ -1189,36 +1197,45 @@ namespace NumSharp
                 if (@out.dtype != typeof(T))
                     throw new ArgumentException($"Given @out NDArray is expected to be dtype '{typeof(T).Name}' but is instead '{@out.dtype.Name}'");
 
-                ret = @out;
+                ret = @out.MakeGeneric<T>();
             }
 
-            T* dstAddr = (T*)ret.Address;
+            var srcShape = source.Shape;
+            int srcNdim = source.ndim;
+            int subNdim = subShape.Length;
+            var indexGetters = PrepareIndexGetters(srcShape, indices);
 
-            var srcDims = indices.Length;
-            var indexGetters = PrepareIndexGetters(source.Shape, indices);
+            T* srcAddr = source.Address;       // buffer base; GetOffset adds the source offset
+            T* dstAddr = ret.Address;          // contiguous result (or @out), written in C-order
 
-            //compute coordinates
-            //for (long i = 0; i < size; i++)
-            long* index = stackalloc long[srcDims];
+            long* coord = stackalloc long[srcNdim];
             for (long i = 0; i < size; i++)
             {
-                //load indices
-                //index[0] = i;
-                for (int k = 0; k < srcDims; k++)
-                    index[k] = indexGetters[k](i); //replace with memory access or iterators
-#if DEBUG
-                var from = source[index, srcDims];
-                var to = ret[i];
+                // Leading coordinates from the fancy index arrays (one per consumed axis);
+                // PrepareIndexGetters has validated/wrapped each to [0, dim-1].
+                for (int k = 0; k < ndsCount; k++)
+                    coord[k] = indexGetters[k](i);
 
-                //assign
-                ret[i] = from;
-#else
-                ret[i] = source[index, srcDims];
-#endif
-            };
-            //}
+                // Walk the trailing subShape axes as an odometer (last axis fastest), copying
+                // each element through the source strides into the contiguous result block.
+                for (int s = 0; s < subNdim; s++)
+                    coord[ndsCount + s] = 0;
 
-            return ret.flat.reshape(retShape).MakeGeneric<T>();
+                long baseDst = i * subShapeSize;
+                for (long j = 0; j < subShapeSize; j++)
+                {
+                    dstAddr[baseDst + j] = srcAddr[srcShape.GetOffset(coord, srcNdim)];
+
+                    for (int s = subNdim - 1; s >= 0; s--)
+                    {
+                        if (++coord[ndsCount + s] < subShape[s])
+                            break;
+                        coord[ndsCount + s] = 0;
+                    }
+                }
+            }
+
+            return ret;
         }
     }
 }

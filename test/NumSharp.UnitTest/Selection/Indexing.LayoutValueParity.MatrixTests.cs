@@ -264,13 +264,12 @@ public class Indexing_LayoutValueParity_MatrixTests
             $"{tc.Name}: values mismatch");
     }
 
-    // ─── Fancy-index-on-view GET cases (feeder; split by clean-build verification) ──
-    // VERIFIED against a clean --no-incremental main-tree build PLUS direct NumPy 2.4.2
-    // probes: only the 5 single-fancy-on-non-contiguous-view cases (RealBugGetCases:
-    // T_fancy/RS_fancy/CS_fancy/NR_fancy/NC_fancy) actually diverge. The combined
-    // [":", Idx] / [Idx, ":"] forms ALL MATCH NumPy and are asserted as PASSING by
-    // CombinedFancyOnView_Passes. (An earlier pass mis-marked every form as a bug
-    // because the authoring worktree served a stale NumSharp.Core binary.)
+    // ─── Fancy-index-on-view GET cases (feeder) ──────────────────────────────────
+    // Every fancy-on-view form below matches NumPy 2.4.2 (probed). The 5 single-fancy-
+    // on-non-contiguous-view cases (T_fancy/RS_fancy/CS_fancy/NR_fancy/NC_fancy) were once
+    // [OpenBugs] — FetchIndicesNDNonLinear mis-sized the result and assigned a whole
+    // sub-array into a scalar slot, throwing a shape/storage error — and are now fixed
+    // (the gather walks the source strides element-by-element). All asserted passing.
     public static IEnumerable<object[]> FancyOnViewGetCases()
     {
         // ── CC bugs: col-fancy and row-fancy+colon ───────────────────────────────
@@ -409,33 +408,12 @@ public class Indexing_LayoutValueParity_MatrixTests
             new[] { 2, 4 }, new long[] { 0, 1, 2, 3, 0, 1, 2, 3 });
     }
 
-    // The genuine divergences (clean-build verified): single fancy index on a
-    // non-C-contiguous view (transposed / row-strided / col-strided / neg-row /
-    // neg-col). NumPy gathers; NumSharp throws a shape/storage error.
-    static readonly string[] _genuineFancyViewBugs =
-        { "T_fancy", "RS_fancy", "CS_fancy", "NR_fancy", "NC_fancy" };
-
-    public static IEnumerable<object[]> RealBugGetCases()
-        => FancyOnViewGetCases().Where(o => _genuineFancyViewBugs.Contains(((GCase)o[0]).Name));
-
-    public static IEnumerable<object[]> CombinedFancyViewPassCases()
-        => FancyOnViewGetCases().Where(o => !_genuineFancyViewBugs.Contains(((GCase)o[0]).Name));
-
-    // Combined fancy + slice/colon on every layout MATCHES NumPy — asserted passing.
+    // Every fancy-on-view form (single fancy, [":", Idx], [Idx, ":"]) on every layout
+    // now matches NumPy — including the single-fancy-on-strided-view cases that were
+    // [OpenBugs] (T/RS/CS/NR/NC _fancy), fixed by the FetchIndicesNDNonLinear rewrite.
     [DataTestMethod]
-    [DynamicData(nameof(CombinedFancyViewPassCases), DynamicDataSourceType.Method)]
-    public void CombinedFancyOnView_Passes(GCase tc)
-    {
-        var result = tc.Op();
-        AssertShape(tc, result);
-        CollectionAssert.AreEqual(tc.ExpVals, result.ravel().ToArray<long>(),
-            $"{tc.Name}: values mismatch");
-    }
-
-    [DataTestMethod]
-    [DynamicData(nameof(RealBugGetCases), DynamicDataSourceType.Method)]
-    [OpenBugs]
-    public void GetCase_Bug(GCase tc)
+    [DynamicData(nameof(FancyOnViewGetCases), DynamicDataSourceType.Method)]
+    public void FancyOnView_Passes(GCase tc)
     {
         var result = tc.Op();
         AssertShape(tc, result);
