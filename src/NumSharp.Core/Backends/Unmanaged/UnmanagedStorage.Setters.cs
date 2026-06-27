@@ -373,16 +373,58 @@ namespace NumSharp.Backends
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
 
-            if (subShape.size % valueshape.size != 0)
-                throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to target shape {subShape}, these shapes can't be broadcasted together.");
-
-            //by now this ndarray is not broadcasted nor sliced
-            unsafe
+            // NumPy assignment lets the SOURCE carry more dims than the target when the extra
+            // LEADING dims are size 1 (they are squeezed away) — e.g. a (1,1,3,3) value into a
+            // (1,3,3) region. Drop those leading ones toward the target rank before broadcasting.
+            var vForBc = value;
+            if (valueshape.NDim > subShape.NDim)
             {
-                //ReSharper disable once RedundantCast
-                //this must be a void* so it'll go through a typed switch.
-                value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                int drop = valueshape.NDim - subShape.NDim;
+                bool leadingOnes = true;
+                for (int i = 0; i < drop; i++)
+                    if (valueshape.dimensions[i] != 1) { leadingOnes = false; break; }
+                if (leadingOnes)
+                {
+                    var ndims = new long[subShape.NDim];
+                    for (int i = 0; i < ndims.Length; i++)
+                        ndims[i] = valueshape.dimensions[drop + i];
+                    vForBc = value.reshape(ndims);
+                }
+                // else: a leading non-1 dim -> broadcast_to below raises -> ValueError.
             }
+
+            // Fast path: the (squeezed) value exactly fills the region in C-order.
+            if (vForBc.Shape.size == subShape.size && vForBc.Shape.dimensions.SequenceEqual(subShape.dimensions))
+            {
+                //by now this ndarray is not broadcasted nor sliced
+                unsafe
+                {
+                    //ReSharper disable once RedundantCast
+                    //this must be a void* so it'll go through a typed switch.
+                    value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                }
+                return;
+            }
+
+            // Otherwise the value must BROADCAST to the target region (NumPy). The old check
+            // only tested divisibility (subShape.size % valueshape.size), which let an
+            // incompatible smaller value through and then copied it PARTIALLY — e.g.
+            // a[0] = [1,2] into a (4,) row wrote [1,2,_,_]. NumPy raises a ValueError here.
+            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+            NDArray broadcasted;
+            try
+            {
+                broadcasted = np.broadcast_to(vForBc, subShape);
+            }
+            catch (IncorrectShapeException)
+            {
+                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}");
+            }
+
+            // A valid broadcast that needs stretching (value smaller than the region, or a
+            // different but compatible rank) -> copy through the iterator, which honours the
+            // stride-0 broadcast dimensions instead of a flat partial memcpy.
+            NpyIter.Copy(GetData(indices), broadcasted.Storage);
         }
 
         /// <summary>

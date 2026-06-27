@@ -370,19 +370,18 @@ public class Indexing_BasicParity_MatrixTests
             $"[{tc.Name}] expected IndexError (NumPy axis-bounds check); per-axis OOB must be validated even when the flat offset is within the buffer");
     }
 
-    // ─────────────────────── BUG: SET shape mismatch ─────────────────────
-    // NumPy raises ValueError when value shape can't broadcast into target.
-    // NumSharp silently assigns partial data.
+    // ─────────────────── FIXED: SET shape mismatch raises (was [OpenBugs]) ──────
+    // NumPy raises ValueError when the value shape can't broadcast into the target.
+    // NumSharp used a divisibility check (subShape.size % value.size) that let an
+    // incompatible smaller value through and then copied it PARTIALLY (a[0]=[1,2] wrote
+    // [1,2,_,_]); fixed to a broadcast-compatibility check in UnmanagedStorage.SetData.
     static readonly ECase[] _bugSetErrCases =
     {
         // NumPy: ValueError: could not broadcast input array from shape (2,) into shape (4,)
-        // NumSharp: silently writes [1,2,2,3,4,5,6,7,8,9,10,11]
-        new ECase("E_S_shapemismatch_row", () =>
-        {
-            var a = A();
-            a["0"] = np.array(new long[]{ 1, 2 }); // (2,) → (4,): shape mismatch
-            return a;
-        }),
+        new ECase("E_S_shapemismatch_row",   () => { var a = A(); a["0"] = np.array(new long[]{ 1, 2 });    return a; }), // (2,) -> (4,)
+        new ECase("E_S_shapemismatch_row3",  () => { var a = A(); a["0"] = np.array(new long[]{ 1, 2, 3 }); return a; }), // (3,) -> (4,)
+        new ECase("E_S_shapemismatch_row5",  () => { var a = A(); a["0"] = np.array(new long[]{ 1, 2, 3, 4, 5 }); return a; }), // (5,) -> (4,)
+        new ECase("E_S_shapemismatch_whole", () => { var a = A(); a[":"] = np.array(new long[]{ 1, 2, 3, 4, 5, 6 }); return a; }), // (6,) -> (3,4)
     };
 
     public static IEnumerable<object[]> BugSetErrCases =>
@@ -390,15 +389,27 @@ public class Indexing_BasicParity_MatrixTests
 
     [DataTestMethod]
     [DynamicData(nameof(BugSetErrCases))]
-    [OpenBugs] // Setter shape mismatch doesn't throw; NumPy raises ValueError
     public void AssertSetError_Bugs(ECase tc)
     {
-        // NumPy: throws ValueError. NumSharp: silently assigns partial data. This test FAILS = known bug.
+        // NumPy raises ValueError; NumSharp now does too (broadcast-compat check). Passing.
         bool threw = false;
         try { tc.Op(); }
         catch { threw = true; }
         Assert.IsTrue(threw,
-            $"[{tc.Name}] expected ValueError (setter shape mismatch); NumSharp does not validate broadcast compatibility");
+            $"[{tc.Name}] expected ValueError (setter shape mismatch); a value that cannot broadcast into the target must raise, not write partial data");
+    }
+
+    // The valid broadcasts that previously wrote PARTIAL data must now stretch correctly.
+    [TestMethod]
+    public void SetBroadcast_SmallerValue_TilesLikeNumPy()
+    {
+        // a[:] = (4,) broadcasts the row across all 3 rows (NumPy), not a partial first-row copy.
+        var a = A(); a[":"] = np.array(new long[] { 10, 20, 30, 40 });
+        a.ravel().ToArray<long>().Should().Equal(new long[] { 10, 20, 30, 40, 10, 20, 30, 40, 10, 20, 30, 40 });
+
+        // a[0] = (1,) fills the row.
+        var b = A(); b["0"] = np.array(new long[] { 9 });
+        b.ravel().ToArray<long>().Should().Equal(new long[] { 9, 9, 9, 9, 4, 5, 6, 7, 8, 9, 10, 11 });
     }
 
     // ─────────────────────── Scalar-index DTYPE coverage ──────────────────────
