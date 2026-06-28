@@ -81,12 +81,11 @@ np                Static API class (like `import numpy as np`)
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest; optimized for performance |
 | Order-aware layout | Row-major (C-order) remains the default. `Shape` also tracks F-contiguity, and APIs with an `order` parameter resolve NumPy `C`/`F`/`A`/`K` modes through `OrderResolver`. |
-| Regen templating (removed) | Legacy type-specific code generation — fully superseded by ILKernelGenerator/DirectILKernelGenerator; the old `#if _REGEN` blocks were stripped and survive only as commented reference |
-| TensorEngine abstract | Future GPU/SIMD backends possible |
+| TensorEngine abstract | Pluggable computation backend behind one contract (`DefaultEngine` = pure C#) |
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NDIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). Superseded the now-removed Regen templates. |
+| ILKernelGenerator + DirectILKernelGenerator | Runtime IL emission with SIMD V128/V256/V512 (~36K lines). Two classes split by kernel-driving contract: `ILKernelGenerator` (per-chunk kernels driven by NDIter — `np.where`, flat/pairwise reductions) and `DirectILKernelGenerator` (whole-array kernels, 63 partials in `Direct/`). |
 
 ## ILKernelGenerator + DirectILKernelGenerator
 
@@ -137,7 +136,7 @@ unsafe delegate void NDInnerLoopFunc(
     void*  auxdata);   // op-specific extras (e.g. axis index)
 ```
 
-Emits the per-chunk kernels run as an NDIter inner loop — currently `np.where` and the flat/pairwise reductions (partials `ILKernelGenerator.{Where,Reduction,Reduction.Pairwise}.cs`). Driven via `NDIterRef.Execute(kernelKey)`.
+Emits the per-chunk kernels run as an NDIter inner loop — `np.where` and the flat/pairwise reductions (partials `ILKernelGenerator.{Where,Reduction,Reduction.Pairwise}.cs`). Driven via `NDIterRef.Execute(kernelKey)`.
 
 ### Shared infrastructure
 
@@ -174,7 +173,7 @@ Both classes use these helpers at `src/NumSharp.Core/Backends/Kernels/` (root, o
 | Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual |
 | Clip/Modf | Clip, Modf (SIMD helpers) |
 | Axis reductions | Sum, Prod, Min, Max, Mean, Std, Var (iterator path) |
-| Cast (SIMD, contig+strided) | float→int32 (cvtt); **float/c128→u32, →u64 (AVX2 mod-2³² reduce + hi/lo split — no AVX512, bit-exact incl. NumPy modular wrap; strided →u64 negcol `[:, ::-1]` uses a contiguous load + VPERMQ reverse, `::2` a 2-load deinterleave (b loaded at `2i+3` so no over-read), c128 negcol an UnpackLow+VPERMQ-0x72 deinterleave-reverse (reals for →u64; reals **and** imags for →bool, `c128|negcol|bool` 0.66→1.5×) — all beat the −1/2-stride gather, Wave 17 buckets B/E)**; float→{i8,u8,i16,u16,char} (cvtt+Narrow); int→narrower-int (Narrow); Half↔ via Giesen bit-fiddle: **f16→f32 widen (NaN-payload exact), f16→i64, f16→{i32,u32,u64,narrow}**; X→Half (Giesen narrow, sNaN-preserving) incl. **i64/u64→f16 (Wave 17, AVX2-only: clamp |v|≥65520→±70000 sentinel → low-32 PermuteVar8x32 pack → cvtdq2ps → Giesen; no AVX512 cvtqq2ps needed; 1.2–2.7× NumPy)**; c128→{int,bool} (real deinterleave); *→bool (!=0; **f16→bool strided via SubwordNarrow-style deinterleave (`::2`)/reverse (`::-1`) + NumPy half-truthiness `(bits & 0x7fff)!=0` so ±0→False, NaN/inf→True — was a 0.14× scalar cliff, now 5–7× NumPy, Wave 17 bucket E**). Strided rows gather (4/8-byte) or stage gather→buffer→convert. **Sub-word (1B/2B) strided/negcol — non-gatherable — use SIMD lane shuffles (`.Cast.SubwordCopy.cs`/`.Cast.SubwordNarrow.cs`): same-type & same-size-bit-reinterpret copies via VPACKUS deinterleave (`[:, ::2]`) / VPSHUFB reverse (`[:, ::-1]`); 2B-int→{1B,bool} via deinterleave/reverse + narrow; 1B-int→2B via deinterleave/reverse + sign/zero `Vector256.Widen` (`.Cast.SubwordWiden.cs`). The inner SIMD loop is inlined in the odometer (a per-row helper costs ~6×).** |
+| Cast (SIMD, contig+strided) | float→int32 (cvtt); float/c128→u32, →u64 (AVX2 mod-2³² reduce + hi/lo split, bit-exact incl. NumPy modular wrap; strided →u64 negcol `[:, ::-1]` via contiguous load + VPERMQ reverse, `::2` via 2-load deinterleave (b loaded at `2i+3` so no over-read), c128 negcol via UnpackLow+VPERMQ-0x72 deinterleave-reverse — reals for →u64, reals **and** imags for →bool); float→{i8,u8,i16,u16,char} (cvtt+Narrow); int→narrower-int (Narrow); Half↔ via Giesen bit-fiddle: f16→f32 widen (NaN-payload exact), f16→i64, f16→{i32,u32,u64,narrow}; X→Half (Giesen narrow, sNaN-preserving) incl. i64/u64→f16 (AVX2: clamp |v|≥65520→±70000 sentinel → low-32 PermuteVar8x32 pack → cvtdq2ps → Giesen); c128→{int,bool} (real deinterleave); *→bool (!=0; f16→bool strided via SubwordNarrow-style deinterleave (`::2`)/reverse (`::-1`) + NumPy half-truthiness `(bits & 0x7fff)!=0` so ±0→False, NaN/inf→True). Strided rows gather (4/8-byte) or stage gather→buffer→convert. Sub-word (1B/2B) strided/negcol (non-gatherable) use SIMD lane shuffles (`.Cast.SubwordCopy.cs`/`.Cast.SubwordNarrow.cs`): same-type & same-size-bit-reinterpret copies via VPACKUS deinterleave (`[:, ::2]`) / VPSHUFB reverse (`[:, ::-1]`); 2B-int→{1B,bool} via deinterleave/reverse + narrow; 1B-int→2B via deinterleave/reverse + sign/zero `Vector256.Widen` (`.Cast.SubwordWiden.cs`). The inner SIMD loop is inlined in the odometer. |
 
 ## Shape Architecture (NumPy-Aligned)
 
@@ -234,20 +233,6 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ---
 
-## Missing Functions (8)
-
-These NumPy functions are **not implemented**:
-
-| Category | Functions |
-|----------|-----------|
-| Sorting | `np.sort` |
-| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90` |
-| Diagonal | `np.diag` |
-| Cumulative | `np.gradient` |
-| Rounding | `np.round` (use `np.round_` or `np.around`) |
-
----
-
 ## Supported np.* APIs
 
 Tested against NumPy 2.x.
@@ -266,7 +251,7 @@ Tested against NumPy 2.x.
 
 **ufunc `out=` / `where=` parameters** are supported on the elementwise core (NumPy semantics, probed against 2.4.2): binary `add`/`subtract`/`multiply`/`divide`/`true_divide`/`mod`/`power`/`floor_divide`/`arctan2`/`bitwise_and`/`bitwise_or`/`bitwise_xor`, unary `sqrt`/`exp`/`log`/`sin`/`cos`/`tan`/`abs`/`absolute`/`negative`/`square`/`log2`/`log10`/`log1p`/`exp2`/`expm1`/`cbrt`/`sign`/`floor`/`ceil`/`trunc`/`reciprocal`/`sinh`/`cosh`/`tanh`/`arcsin`/`arccos`/`arctan`/`deg2rad`(`radians`)/`rad2deg`(`degrees`)/`invert`(`bitwise_not`). `round_`/`around` take `out=` ONLY (np.round is a function, not a ufunc — no where/dtype; decimals≠0 cast errors name ufunc 'multiply' per NumPy's composition). floor/ceil/trunc have IDENTITY loops on every bool/int dtype (dtype preserved; np.round's int path is an identity copy); the loop dtype comes from the input tier (`sinh(i1, out=f8)` stores float16-precision values); reciprocal int 1/0 → signed MinValue (NumPy 2.4.2); sign/positive reject bool with the verbatim no-loop UFuncTypeError; bitwise/invert raise the no-loop TypeError for float inputs (probed order: bad where → no-loop → out-cast → shape). `out` joins the broadcast but is never stretched, requires a same_kind cast from the loop dtype (resolved from inputs), returns the same instance, and may alias an input (overlap-safe via COPY_IF_OVERLAP). `where` must be bool, broadcasts and joins the output shape; masked-off `out` slots keep prior contents. Engine plumbing: `Backends/Default/Math/DefaultEngine.UfuncOut.cs`.
 
-**Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Legacy positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) remain for source compat but are non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.
+**Each of those ufuncs exposes ONE NumPy-shaped overload** — `f(x[, x2], NDArray out = null, NDArray where = null, NPTypeCode? dtype = null)` mirroring NumPy's `f(x1[, x2], /, out=None, *, where=True, dtype=None)`: `out` is the second/third positional slot exactly like NumPy, `where`/`dtype` are reachable by name without `out`. `dtype=` selects the LOOP (NumPy loop-signature semantics, probed): computation runs at that precision even with `out=` (`sqrt([2.], out=f64, dtype=f32)` stores the f32-rounded value; `add(0.1, 0.2, out=f64, dtype=f32)` stores `0.30000001…`), `power(2, -1, dtype: f64) = 0.5` (the negative-int-exponent ValueError applies only to integer loops), `power(10, 11, dtype: f64) = 1e11` exactly (no compute-then-cast), `add(True, True, dtype: i32) = 2` (the bool→logical-OR remap keys off the FINAL loop dtype), `negative(bool, dtype: f64)` is legal, and inputs must reach the loop via same_kind casts (verbatim `Cannot cast ufunc '<name>' input [N] from ...` errors; binary errors are indexed, unary are not). Loop-existence gates raise `No loop matching ... ufunc <name>`: float-only ufuncs (sqrt/exp/log/trig + `divide`/`true_divide`) reject int/bool dtype; bitwise rejects float/complex/decimal dtype. `positive` is a full ufunc (identity loops at every dtype EXCEPT bool: plain `positive(bool)` and `dtype: bool` raise the verbatim `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts; `positive(bool, dtype: f64)` works). `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)` (2nd positional is decimals, NOT out). Positional-dtype overloads (`np.sqrt(x, NPTypeCode.Single)`, `(x, Type)`) also exist for source compat as non-NumPy call forms (NumPy's 2nd positional is `out`). Tests: `Math/UfuncDtypeOverloadTests.cs`.
 
 ### Math — Reductions
 `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var`
@@ -299,11 +284,11 @@ NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b), @out: x);        // one-pass 
 
 Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 - **Dtypes follow NumPy result_type PER NODE** (`NDExpr.Typing.cs`): NEP50 strong-strong incl. the int/float tier crossing (`i4+f4→f8`); weak python-scalar literals (`i4+2→i4`, `f2+2.5→f2`, `bool+2→i64`, out-of-range → OverflowError); `true_divide` ints→f64; `arctan2` tier floats; `power`/`remainder`/`floor_divide` bool→i8; unary math tiers (`bool/i8→f16`, `i16→f32`, `i32+→f64`); comparisons→bool. `(i4*i4)+f8` wraps the multiply in int32 before promoting — bit-compatible with the unfused NumPy sequence.
-- **Reductions are root-only**: `NDExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back — documented divergence from NumPy's pairwise, usually more accurate; min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
+- **Reductions are root-only**: `NDExpr.Sum/Prod/Min/Max/Mean(expr)` run a one-pass accumulating kernel over the inputs (NumPy reduce dtypes; f16/f32 sums accumulate in f64 and cast back (more precise than NumPy's pairwise); min/max NaN-propagate; empty: sum=0, prod=1, mean=NaN, min/max raise).
 - Repeated NDArray references deduplicate to one iterator operand; `out=` follows the ufunc rules above; `ExecuteExpression` (Tier 3C) throws without `EXTERNAL_LOOP` (the ~40× per-element foot-gun) — `np.evaluate` configures the iterator itself.
 
 ### Sorting & Searching
-`argmax`, `argmin`, `argsort`, `argwhere`, `flatnonzero`, `nonzero`, `searchsorted`
+`argmax`, `argmin`, `argsort`, `argwhere`, `flatnonzero`, `nonzero`, `searchsorted`, `sort`
 
 ### Linear Algebra
 `diagonal`, `dot`, `matmul`, `outer`, `trace`
@@ -317,10 +302,10 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`
 
-`NDArray.ToString()` is a **byte-exact port of NumPy 2.4.2's array printing** (`numpy/_core/arrayprint.py` + `dragon4.c`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`, the `str()` form), `ToString(true)` → `np.array_repr` (`array([0, 1, 2], dtype=…)`, the `repr()` form). Covers decimal-point float alignment, the maxprec/unique/fixed floatmodes, exp-format cutoffs (per-dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold` (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`-vs-`repr` asymmetry (`5.0` vs `5.`), and repr dtype/shape suffixes. Float digit generation leans on .NET's shortest-round-trip `ToString("R")` (== Dragon4 unique) but routes **all rounding** through `ToString("F"|"E"+precision)` (rounds the true binary value, IEEE half-to-even) — never the shortest string (the latter diverges ~50 % on adversarial ties). NumSharp's `Char` dtype keeps its legacy string rendering (no NumPy equivalent). Validated against NumPy 2.4.2 across ~18 000 fuzz cases.
+`NDArray.ToString()` is a **byte-exact port of NumPy 2.4.2's array printing** (`numpy/_core/arrayprint.py` + `dragon4.c`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`, the `str()` form), `ToString(true)` → `np.array_repr` (`array([0, 1, 2], dtype=…)`, the `repr()` form). Covers decimal-point float alignment, the maxprec/unique/fixed floatmodes, exp-format cutoffs (per-dtype, native-precision ratio), nan/inf fields, complex, summarization at `threshold` (with `…` and edgeitems), line wrapping at `linewidth`, the 0-d `str`-vs-`repr` asymmetry (`5.0` vs `5.`), and repr dtype/shape suffixes. Float digit generation leans on .NET's shortest-round-trip `ToString("R")` (== Dragon4 unique) but routes **all rounding** through `ToString("F"|"E"+precision)` (rounds the true binary value, IEEE half-to-even) — never the shortest string (the latter diverges ~50 % on adversarial ties). NumSharp's `Char` dtype uses string rendering (no NumPy equivalent). Validated against NumPy 2.4.2 across ~18 000 fuzz cases.
 
 ### Other
-`around`, `asscalar`, `copyto`, `round_`, `size`
+`around`, `asscalar`, `copyto`, `round_`, `size`, `multithreading` (NumSharp extension — `np.multithreading(enabled, max_threads)` opt-in threaded kernels)
 
 ### Operators
 - Arithmetic: `+`, `-`, `*`, `/`, `%`, unary `-`
@@ -331,11 +316,11 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 - Integer and slice indexing (`nd[0]`, `nd[1:3]`, `nd[::-1]`)
 - Boolean masking (`nd[mask]`) — read-only
 - Fancy indexing (`nd[indices]`)
-- **Raw `int[]`/`long[]` as the SOLE index is FANCY** (NumPy parity, decision B): `nd[new int[]{0,2}]`
+- **Raw `int[]`/`long[]` as the SOLE index is FANCY** (NumPy parity): `nd[new int[]{0,2}]`
   selects rows 0 and 2 (shape `(2,…)`), NOT the element at coordinate `(0,2)`. `nd[0,2]` (separate
   scalar ints) stays coordinate (`HAS_INTEGER`). **Coordinate (element/sub-array) access moved to the
   shim `nd.GetData(int[]/long[])`** (`Backends/NDArray.cs`) — e.g. `nd.GetData(0, 2)`. Internal
-  coordinate callers must use `GetData`, not `nd[coordArray]` (migrated: batched matmul, `__getitem__`).
+  coordinate callers must use `GetData`, not `nd[coordArray]`.
   The typed `NDArray<T>.this[int[]]` is unaffected — it returns a scalar `T` (inherently coordinate).
 
 ---
@@ -440,12 +425,13 @@ All NumSharp-vs-NumPy benchmark ratios are reported as **NPY/NS**:
 **Higher is better.** Equivalently `speedup = NumPy_time / NumSharp_time`. A cell of
 `0.5` means NumSharp takes 2× NumPy's time; `2.0` means NumSharp is 2× faster. Use this
 direction **everywhere** — matrices, geomeans, commit messages, and the per-subsystem
-`*_sheet.py` outputs (`nditer`/`layout`/`cast`/`fusion`) — so one glance answers "are we faster?".
+`*_sheet.py` outputs (`nditer`/`layout`/`operand`/`cast`/`fusion`) — so one glance answers "are we faster?".
 
 - Icons used in the matrices: ✅ `≥1.0` · 🟡 `≥0.5` · 🟠 `≥0.2` · 🔴 `<0.2`.
 - Timing scripts MUST run `dotnet run -c Release - < script.cs` (Debug taints hand-written kernels ~2×; see `benchmark/CLAUDE.md`).
 - best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
-- The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/nditer/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The legacy `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
+- The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/nditer/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
+- The op/dtype/N matrix is **BenchmarkDotNet** (`benchmark/NumSharp.Benchmark.CSharp`) timed against a **warm NumPy** process (`benchmark/NumSharp.Benchmark.Python`) across **1K / 100K / 10M × all 15 dtypes** (~615 ops/size), joined on `(op, dtype, N)`. Two methodology guards beyond `-c Release`: the **InProcessEmit** toolchain (sibling `.claude/worktrees/` checkouts hold same-named projects the out-of-process toolchain refuses to build) and a **25 ms-capped 50-iteration** job (so µs–ms array ops skip BenchmarkDotNet's nanosecond invocation ramp — without it the full matrix takes days). The NDIter subsystem reports a section that crashes all retries (the known intermittent `AccessViolation`) as **NA/IGNORED**, never a failure.
 - **What we commit & reference is `benchmark/history/`, not the gitignored `benchmark/results/<ts>/` raw scratch.** Every run writes a committable snapshot `benchmark/history/<date>_<sha>/` (MANIFEST + report.{md,json,csv} + numpy-results.json + all subsystem `*_results.{md,tsv}` + cards — the json/csv are gitignored at the benchmark root, so this is their only tracked home) and repoints `benchmark/history/latest` (a git symlink). Built by `benchmark/scripts/snapshot_history.py` (called by `run_benchmark.py`; `--no-history` opts out). Reference the stable `benchmark/history/latest/benchmark-report.md`. The publish ritual (run → review → commit `benchmark/history/`) is what `.github/workflows/benchmark.yml` performs post-release. See `benchmark/CLAUDE.md` → "History snapshots & the publish ritual".
 
 ## Build & Test
@@ -566,20 +552,25 @@ Proves every NDIter-backed op is **bit-identical** to NumPy 2.4.2 across the inp
 
 ```
 test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
-  layout_catalog.py                   memory-layout builders (the "44 variations")
-  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/…)
+  layout_catalog.py                   memory-layout builders (the "44 variations": 26 single + 9 pair + 5 where)
+  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~90 ops)
+  gen_index_oracle.py                 getter/setter index oracle (token index over 15 base recipes)
   fuzz_random.py                      seeded random fuzzer (imports the other two)
 test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   FuzzCorpus.cs                       rebuilds EXACT NDArray views from (dtype,shape,strides,offset,bytes)
   OpRegistry.cs                       op-name → NumSharp call (pairs 1:1 with gen_oracle.py)
   BitDiff.cs / Shrinker.cs            bit-exact compare (NaN tokenized) / shrink a failure to 1 element
-  MisalignedRegistry.cs               the documented, excused divergences (intended diffs + known bugs)
-  FuzzCorpusTests.cs                  one [FuzzMatrix] test per corpus file
-  corpus/*.jsonl                      committed corpus, copied to test output via the csproj glob
+  MisalignedRegistry.cs               the documented, excused divergences (intended differences and excused cases)
+  FuzzCorpusTests.cs                  one [FuzzMatrix] test per op-corpus file (checks dtype + shape + bytes + error parity)
+  IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
+  MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
+  HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
+  corpus/*.jsonl                      committed corpus (~51K cases / 28 tiers), copied to test output via the csproj glob
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
-- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing errors`) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl`, then `dotnet build` (copies the corpus to test output).
+- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~40K cases / 25 tiers, checking dtype + shape + bytes + error parity), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl`, then `dotnet build` (copies the corpus to test output).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
 
 ## CI Pipeline
@@ -587,6 +578,8 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
 `.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org. The `FuzzMatrix` gate runs here (replays the committed corpora; no Python).
 
 `.github/workflows/fuzz-soak.yml` — nightly soak: sweeps seeds through `test/oracle/fuzz_random.py` (~1M fresh cases/night), replays them, and uploads any failing corpus; copy a shrunk repro into `Fuzz/corpus/regressions/` to pin it on every CI thereafter.
+
+`.github/workflows/benchmark.yml` — decoupled post-release perf run (triggers on a published Release or manual dispatch — a slow/failed benchmark must never gate a release). Runs the whole `benchmark/run_benchmark.py` harness (op/dtype/N matrix + the five subsystems), renders the DocFX benchmark pages, and commits the refreshed report + cards + a `benchmark/history/<date>_<sha>/` snapshot (+ the `latest` symlink) to master with `[skip ci]`.
 
 ## Scripting with `dotnet run` (.NET 10 file-based apps)
 
@@ -666,9 +659,6 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 **Q: Why unmanaged memory instead of Span<T>/Memory<T>?**
 A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed memory allocation optimized for performance.
 
-**Q: What happened to the Regen templating engine?**
-A: It was the original type-specific code generator and has been fully superseded by ILKernelGenerator/DirectILKernelGenerator (runtime IL emission). The old `#if _REGEN` template blocks were removed; where the template source is still useful as reference it survives only as `//`-commented lines next to the generated code.
-
 **Q: Why are there TWO classes — `ILKernelGenerator` AND `DirectILKernelGenerator`?**
 A: They encode two different kernel-driving contracts. `DirectILKernelGenerator` (63 partials in `Direct/`) emits whole-array kernels: one call processes the entire array; the kernel walks dimensions/strides itself. `ILKernelGenerator` (root) emits per-chunk kernels matching NumPy's `PyUFuncGenericFunction` contract: the iterator (`NDIterRef`) drives the loop and the kernel only processes one chunk. The split makes the contract explicit in the type name. A kernel lives in whichever class matches how it is driven — `ILKernelGenerator` for kernels run as an NDIter inner loop (`np.where`, flat/pairwise reductions), `DirectILKernelGenerator` for kernels that own their full-array traversal.
 
@@ -676,19 +666,19 @@ A: They encode two different kernel-driving contracts. `DirectILKernelGenerator`
 A: Match the driving contract. A kernel that runs as the inner loop of an NDIter pass (the iterator advances the operand pointers, the kernel handles one chunk) belongs in `ILKernelGenerator`. A kernel that takes the whole array plus its shape/strides and walks it itself belongs in `DirectILKernelGenerator`.
 
 **Q: Why is TensorEngine abstracted?**
-A: To support potential future backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS). Not implemented yet, but the architecture allows it.
+A: So alternative backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS) can plug in behind one contract; `DefaultEngine` (pure C#) is the engine.
 
 **Q: How closely does the API match NumPy?**
 A: Goal is as close as possible - all edge cases included (NaN handling, multi-type operations, broadcasting). Target is NumPy 2.x.
 
 **Q: Does np.random match NumPy's random state/seed behavior?**
-A: Yes, 1-to-1 matching.
+A: Yes, 1-to-1 matching. The bit generator is **MT19937** (NumPy's Mersenne Twister, `RandomSampling/MT19937.cs`) with Marsaglia-polar Gaussian + cached-Gaussian carry and NumPy's state-tuple `get_state`/`set_state` format, so a given seed produces byte-identical sequences to NumPy 2.4.2.
 
 **Q: What are the primary use cases?**
 A: Anything that can use the capabilities - porting Python ML code, standalone .NET scientific computing, integration with TensorFlow.NET/ML.NET.
 
-**Q: Are there areas of known fragility?**
-A: Slicing/broadcasting system is complex — offset/stride calculations with contiguity detection require careful handling. The `readonly struct Shape` with `ArrayFlags` simplifies this but edge cases remain.
+**Q: Which subsystem is the most intricate?**
+A: Slicing/broadcasting — offset/stride calculations with contiguity detection. The `readonly struct Shape` with cached `ArrayFlags` centralizes it behind O(1) flag checks.
 
 **Q: How is NumPy compatibility validated?**
 A: Written by hand based on NumPy docs and original tests. Testing philosophy: run actual NumPy code, observe output, replicate 1-to-1 in C#.
@@ -698,9 +688,6 @@ A: Sometimes uses other np functions (no DefaultEngine needed). Sometimes requir
 
 **Q: Are breaking changes acceptable?**
 A: Yes - breaking changes are accepted to align with NumPy 2.x behavior.
-
-**Q: What needs the most work?**
-A: Implementations that differ from NumPy 2.x behavior. See the Missing Functions section.
 
 ---
 
@@ -747,20 +734,20 @@ A: Element-wise comparisons (`==`, `!=`, `>`, `<`, etc.) return `NDArray<bool>`.
 A: Integer indices, string slices (`"1:3, :"`), Slice objects, boolean masks, fancy indexing (NDArray<int> indices), and mixed combinations. All in `Selection/NDArray.Indexing*.cs`.
 
 **Q: How is linear algebra implemented?**
-A: Core ops (`dot`, `matmul`, `outer`) in `LinearAlgebra/`; `trace`/`diagonal` in `Indexing/`. Advanced decompositions (`inv`, `qr`, `svd`, `lstsq`) are stub methods that return null/default — there is no LAPACK backend.
+A: Core ops (`dot`, `matmul`, `outer`) in `LinearAlgebra/`; `trace`/`diagonal` in `Indexing/`.
 
 ---
 
 ## Q&A - Development
 
 **Q: What's in the test suite?**
-A: MSTest v3 framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
+A: MSTest v3 framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite, plus the differential-fuzz corpora. Broad coverage across operations, dtypes, and edge cases. Uses source-generated test discovery (no special flags needed).
 
 **Q: What .NET version is targeted?**
 A: Library multi-targets `net8.0` and `net10.0`. Tests also multi-target both frameworks.
 
 **Q: What are the main dependencies?**
-A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` (previously NuGet packages) are built into the .NET 8+ runtime.
+A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` are built into the .NET 8+ runtime.
 
 **Q: What projects use NumSharp?**
 A: TensorFlow.NET, ML.NET integrations, Gym.NET, Pandas.NET, and various scientific computing projects.

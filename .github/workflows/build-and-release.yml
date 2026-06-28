@@ -238,6 +238,36 @@ jobs:
           echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
         fi
 
+    - name: Compose release notes
+      id: notes
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        NOTES_FILE="docs/releases/RELEASE_${VERSION}.md"
+        {
+          echo "## NumSharp v${VERSION}"
+          echo ""
+          echo "### Install via NuGet"
+          echo ""
+          echo '```'
+          echo "dotnet add package NumSharp --version ${VERSION}"
+          echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
+          echo '```'
+          echo ""
+          echo "### Packages"
+          echo ""
+          echo "| Package | NuGet |"
+          echo "|---------|-------|"
+          echo "| NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${VERSION}) |"
+          echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
+        } > RELEASE_BODY.md
+        if [ -f "$NOTES_FILE" ]; then
+          { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md
+          echo "HAS_NOTES=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "HAS_NOTES=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "Composed RELEASE_BODY.md ($(wc -l < RELEASE_BODY.md) lines); notes file present: $([ -f "$NOTES_FILE" ] && echo yes || echo no)"
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
@@ -246,23 +276,8 @@ jobs:
           artifacts/*.sha256
         draft: false
         prerelease: ${{ steps.prerelease.outputs.IS_PRERELEASE }}
-        generate_release_notes: true
-        body: |
-          ## NumSharp v${{ steps.version.outputs.VERSION }}
-
-          ### Install via NuGet
-
-          ```
-          dotnet add package NumSharp --version ${{ steps.version.outputs.VERSION }}
-          dotnet add package NumSharp.Bitmap --version ${{ steps.version.outputs.VERSION }}
-          ```
-
-          ### Packages
-
-          | Package | NuGet |
-          |---------|-------|
-          | NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${{ steps.version.outputs.VERSION }}) |
-          | NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${{ steps.version.outputs.VERSION }}) |
+        generate_release_notes: ${{ steps.notes.outputs.HAS_NOTES != 'true' }}
+        body_path: RELEASE_BODY.md
 
   publish-nuget:
     needs: [validate-release, build-nuget]
