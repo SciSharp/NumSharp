@@ -12,3 +12,6 @@ e0db3c3ed2bac06c255d4b1b7a327efc4e05447b
 
 # Rename Npy* iterator/expression stack to ND* (mechanical, no logic change)
 301229b6100e23aa3d8ab308de3bb543d50507dd
+
+# Rename benchmark projects GraphEngine->CSharp, Exploration->Sandbox (mechanical)
+002bc6219dae5ea8ebe0054dff2a91796375d0fb
