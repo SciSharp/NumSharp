@@ -234,7 +234,7 @@ $numsharpJsonPath = Join-Path $ResultsDir "numsharp-results.json"
 if (-not $SkipCSharp) {
     Write-Status "Building C# benchmarks..."
 
-    $csharpDir = Join-Path $ScriptDir "NumSharp.Benchmark.GraphEngine"
+    $csharpDir = Join-Path $ScriptDir "NumSharp.Benchmark.CSharp"
     Push-Location $csharpDir
 
     try {

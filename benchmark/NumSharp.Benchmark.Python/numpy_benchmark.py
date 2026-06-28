@@ -3,7 +3,7 @@
 NumPy Performance Benchmarks
 ============================
 
-Comprehensive benchmarks matching the C# NumSharp.Benchmark.GraphEngine suite.
+Comprehensive benchmarks matching the C# NumSharp.Benchmark.CSharp suite.
 These provide the baseline for comparing NumSharp performance against NumPy.
 
 Usage:

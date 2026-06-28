@@ -242,7 +242,7 @@ half-precision vector arithmetic.
 |----|------|-------|-----|
 | B1 | `bcast_reduce` canary swung `0.02×` → `516.85×` between runs and contradicts `layout`'s `i32\|bcast\|sum 0.03×` | `benchmark/nditer/` (PATHOLOGY canary) | Pin the canary's shape/op, assert a correctness check before timing; a 516× "win" is a degenerate/early-return artifact |
 | B2 | `dec` reductions show `0.01–0.08×` but that's Decimal-vs-float64 | `benchmark/layout/reduce_layout_bench.py:17` → `("dec", np.float64)  # dec modelled as f64` | Drop `dec` from the twin (like the `cast` subsystem's `—`) or mark non-comparable so it's excluded from ratios |
-| B3 | op-matrix `np.sum f64 @100K` reads `0.089×` but a direct probe is `0.0043 ms` (4× *faster* than NumPy) | `benchmark/NumSharp.Benchmark.GraphEngine` Reduction suite | Per-iteration overhead inflates small-N cells; audit the BDN reduction benchmark setup, cross-check small-N against direct probes |
+| B3 | op-matrix `np.sum f64 @100K` reads `0.089×` but a direct probe is `0.0043 ms` (4× *faster* than NumPy) | `benchmark/NumSharp.Benchmark.CSharp` Reduction suite | Per-iteration overhead inflates small-N cells; audit the BDN reduction benchmark setup, cross-check small-N against direct probes |
 
 Verify B3 quickly: `var a=((np.arange(100_000)%17)+1).astype(np.float64); Best(()=>{var _=np.sum(a);},400,80,6)` → ~0.0043 ms.
 

@@ -52,8 +52,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 HISTORY_DIR = HERE / "history"
-CSHARP_DIR = HERE / "NumSharp.Benchmark.GraphEngine"
-CSHARP_PROJ = CSHARP_DIR / "NumSharp.Benchmark.GraphEngine.csproj"
+CSHARP_DIR = HERE / "NumSharp.Benchmark.CSharp"
+CSHARP_PROJ = CSHARP_DIR / "NumSharp.Benchmark.CSharp.csproj"
 PY_BENCH = HERE / "NumSharp.Benchmark.Python" / "numpy_benchmark.py"
 MERGE = HERE / "scripts" / "merge-results.py"
 ARTIFACTS = CSHARP_DIR / "BenchmarkDotNet.Artifacts" / "results"

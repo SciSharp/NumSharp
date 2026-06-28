@@ -2,7 +2,7 @@
 # =============================================================================
 # layout_sheet.py — THE Layout subsystem orchestrator + renderer.
 #
-# The op-matrix (NumSharp.Benchmark.GraphEngine) measures op × dtype × N on
+# The op-matrix (NumSharp.Benchmark.CSharp) measures op × dtype × N on
 # C-contiguous arrays only. This subsystem fills the memory-LAYOUT axis it omits:
 # reduction / copy / elementwise across C, F(ortran), T(ranspose), strided
 # `[:, ::2]`, sliced (offset), negstride — NumSharp vs NumPy 2.4.2, identical keys.
