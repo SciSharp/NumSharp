@@ -64,7 +64,7 @@ jobs:
         run: pip install "numpy==2.4.2" matplotlib tabulate
 
       - name: Run full benchmark (official op suites + NDIter)
-        # run_benchmark.py builds GraphEngine+Core, runs the official suites, then
+        # run_benchmark.py builds the CSharp bench project + Core, runs the official suites, then
         # the NDIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
         # the NDIter section to benchmark-report.md.
         run: python benchmark/run_benchmark.py

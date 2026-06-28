@@ -53,7 +53,7 @@ The BenchmarkDotNet projects below are unaffected (they already mandate `-c Rele
 The benchmark suite provides fair, reproducible performance comparisons between NumSharp and NumPy. It was designed with these principles:
 
 - **Matching methodology**: Same operations, same array sizes, same random seeds
-- **Comprehensive type coverage**: All 12 NumSharp-supported data types
+- **Comprehensive type coverage**: All 15 NumSharp-supported data types
 - **Categorical organization**: Operations grouped by type (arithmetic, unary, reduction, etc.)
 - **Automated reporting**: JSON export and Markdown report generation
 - **Cross-platform**: Runs on Windows, Linux, macOS
@@ -62,10 +62,12 @@ The benchmark suite provides fair, reproducible performance comparisons between 
 
 | Metric | Current Coverage |
 |--------|-----------------|
-| Operations | 132+ |
-| Data Types | 12 (all NumSharp types) |
-| Suites | 12 (dispatch, fusion, arithmetic, unary, reduction, broadcast, creation, manipulation, slicing, multidim) |
-| Array Sizes | 5 (Scalar, 100, 1K, 100K, 10M) |
+| Operations | ~615 per size (**1,851** op×dtype×N cells in the official op matrix) |
+| Data Types | **15** (all NumSharp types) |
+| Comparison suites | **14** (arithmetic, unary, reduction, broadcast, creation, manipulation, slicing, comparison, bitwise, logic, statistics, sorting, linalg, selection) |
+| Matrix subsystems | **5** appended to every official run (nditer, layout, operand, cast, fusion) |
+| Array Sizes | **3** cache tiers in the official run (1K / 100K / 10M); the C# project also defines Scalar/100 |
+| Convention | **NPY/NS** — ratio = NumPy_ms / NumSharp_ms, **>1 = NumSharp faster** |
 
 ---
 
@@ -110,10 +112,10 @@ benchmark/
 ├── NumSharp.Benchmark.Python/             # Python/NumPy benchmarks
 │   └── numpy_benchmark.py                 # NumPy benchmark implementation
 │
-└── NumSharp.Benchmark.GraphEngine/        # C# BenchmarkDotNet project
+└── NumSharp.Benchmark.CSharp/        # C# BenchmarkDotNet project
     ├── README.md                          # C# benchmark documentation
     ├── Program.cs                         # Entry point with interactive menu
-    ├── NumSharp.Benchmark.GraphEngine.csproj
+    ├── NumSharp.Benchmark.CSharp.csproj
     │
     ├── Infrastructure/                    # Base classes and configuration
     │   ├── BenchmarkConfig.cs             # BenchmarkDotNet configurations
@@ -122,48 +124,40 @@ benchmark/
     │   └── ArraySizeSource.cs             # Standard array size constants
     │
     └── Benchmarks/                        # Benchmark implementations
-        ├── DispatchBenchmarks.cs          # Original: DynamicMethod dispatch
-        ├── FusionBenchmarks.cs            # Original: Kernel fusion patterns
-        ├── NumSharpBenchmarks.cs          # Original: NumSharp baseline
-        ├── DynamicEmissionBenchmarks.cs   # Original: Per-op DynMethod
+        │   # Experimental (no NumPy counterpart — NOT run by run_benchmark.py):
+        ├── DispatchBenchmarks.cs          # DynamicMethod dispatch
+        ├── FusionBenchmarks.cs            # Kernel fusion patterns
+        ├── NumSharpBenchmarks.cs          # NumSharp baseline
+        ├── DynamicEmissionBenchmarks.cs   # Per-op DynMethod
+        ├── SimdVsScalarBenchmarks.cs      # SIMD vs scalar kernels
+        ├── Allocation/                    # Alloc/zero-init micro + size sweeps
+        │   ├── AllocationMicroBenchmarks.cs
+        │   ├── AllocationSizeBenchmarks.cs
+        │   ├── NumSharpAllocationBenchmarks.cs
+        │   └── ZeroInitBenchmarks.cs
         │
-        ├── Arithmetic/                    # Binary arithmetic operations
-        │   ├── AddBenchmarks.cs
-        │   ├── SubtractBenchmarks.cs
-        │   ├── MultiplyBenchmarks.cs
-        │   ├── DivideBenchmarks.cs
-        │   └── ModuloBenchmarks.cs
-        │
-        ├── Unary/                         # Unary operations
-        │   ├── MathBenchmarks.cs          # sqrt, abs, sign, floor, ceil, around, clip
-        │   ├── ExpLogBenchmarks.cs        # exp, exp2, expm1, log, log2, log10, log1p
-        │   ├── TrigBenchmarks.cs          # sin, cos, tan
-        │   └── PowerBenchmarks.cs         # power with scalar exponents
-        │
-        ├── Reduction/                     # Reduction operations
-        │   ├── SumBenchmarks.cs           # sum, cumsum
-        │   ├── MeanBenchmarks.cs          # mean
-        │   ├── VarStdBenchmarks.cs        # var, std
-        │   ├── MinMaxBenchmarks.cs        # amin, amax, argmin, argmax
-        │   └── ProdBenchmarks.cs          # prod
-        │
-        ├── Broadcasting/                  # Broadcasting operations
-        │   └── BroadcastBenchmarks.cs     # Scalar, row, column, 3D, broadcast_to
-        │
-        ├── MultiDim/                      # Multi-dimensional comparisons
-        │   └── MultiDimBenchmarks.cs      # 1D vs 2D vs 3D performance
-        │
-        ├── Slicing/                       # View and slice operations
-        │   └── SliceBenchmarks.cs         # Contiguous, strided, reversed, copy
-        │
-        ├── Creation/                      # Array creation
-        │   └── CreationBenchmarks.cs      # zeros, ones, empty, full, copy, *_like
-        │
-        └── Manipulation/                  # Shape manipulation
-            ├── ReshapeBenchmarks.cs       # reshape, transpose, ravel, flatten
-            ├── StackBenchmarks.cs         # concatenate, stack, hstack, vstack, dstack
-            └── DimsBenchmarks.cs          # squeeze, expand_dims, swapaxes, moveaxis
+        │   # Comparison suites (the 14 run by run_benchmark.py, each with a NumPy twin):
+        ├── Arithmetic/                    # +, -, *, /, % (Add/Subtract/Multiply/Divide/Modulo)
+        ├── Unary/                         # MathBenchmarks, ExpLogBenchmarks, TrigBenchmarks,
+        │                                  #   PowerBenchmarks, UnaryExtraBenchmarks (cbrt/reciprocal/
+        │                                  #   square/negative/positive/trunc)
+        ├── Reduction/                     # Sum, Mean, VarStd, MinMax, Prod,
+        │                                  #   CumulativeBenchmarks (cumsum/cumprod), NanReductionBenchmarks
+        ├── Broadcasting/                  # BroadcastBenchmarks (scalar/row/column/3D/broadcast_to)
+        ├── Creation/                      # CreationBenchmarks (zeros/ones/empty/full/*_like)
+        ├── Manipulation/                  # Reshape, Stack, Dims
+        ├── Slicing/                       # SliceBenchmarks (contiguous/strided/reversed/copy)
+        ├── Comparison/                    # ComparisonBenchmarks (==, !=, <, >, <=, >=)
+        ├── Bitwise/                       # BitwiseBenchmarks (and/or/xor/invert/shifts)
+        ├── Logic/                         # LogicBenchmarks (logical_and/or/not/xor, all/any, isnan/…)
+        ├── Statistics/                    # StatisticsBenchmarks (median/percentile/quantile/average/ptp)
+        ├── Sorting/                       # SortingBenchmarks (sort/argsort/searchsorted)
+        ├── LinearAlgebra/                 # LinAlgBenchmarks (dot/matmul/outer/trace)
+        ├── Selection/                     # WhereBenchmarks (np.where + fancy/boolean selection)
+        └── MultiDim/                      # MultiDimBenchmarks (1D vs 2D vs 3D — experimental)
 ```
+
+> The **14 comparison suites** are wired into `run_benchmark.py`'s `SUITES` map (namespace filters like `*Benchmarks.Statistics.*`); the experimental/allocation classes are excluded because they have no NumPy twin. See `run_benchmark.py` for the authoritative list.
 
 ---
 
@@ -174,7 +168,8 @@ benchmark/
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Report Generation Layer                       │
-│  run-benchmarks.ps1 → benchmark-report.md                        │
+│  run_benchmark.py → merge-results.py + subsystem *_sheet.py       │
+│    → benchmark-report.md + history/<date>_<sha>/  (legacy: ps1)   │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
@@ -262,7 +257,7 @@ Static class providing type collections.
 ```csharp
 public static class TypeParameterSource
 {
-    // All 12 NumSharp types
+    // All 15 NumSharp types
     public static IEnumerable<NPTypeCode> AllNumericTypes;
 
     // Fast subset: int32, int64, float32, float64
@@ -410,6 +405,27 @@ Comparing 1D, 2D, and 3D array performance.
 |------|------------|-------|
 | `MultiDimBenchmarks.cs` | add, sum, sqrt on 1D/2D/3D | Same total elements, different shapes |
 
+### Added comparison categories
+
+These suites were added on top of the original set; each has a NumPy twin in `numpy_benchmark.py` and is wired into `run_benchmark.py`.
+
+| Category (dir) | File | Operations |
+|---|---|---|
+| Comparison | `ComparisonBenchmarks.cs` | `equal`/`not_equal`/`less`/`greater`/`less_equal`/`greater_equal` |
+| Bitwise | `BitwiseBenchmarks.cs` | `bitwise_and`/`or`/`xor`, `invert`, `left_shift`/`right_shift` |
+| Logic | `LogicBenchmarks.cs` | `logical_and`/`or`/`not`/`xor`, `all`/`any`, `isnan`/`isfinite`/`isinf` |
+| Statistics | `StatisticsBenchmarks.cs` | `median`, `percentile`, `quantile`, `average`, `ptp` |
+| Sorting | `SortingBenchmarks.cs` | `sort`, `argsort`, `searchsorted` |
+| LinearAlgebra | `LinAlgBenchmarks.cs` | `dot`, `matmul`, `outer`, `trace` |
+| Selection | `WhereBenchmarks.cs` | `np.where`, fancy / boolean selection |
+| Reduction (+) | `CumulativeBenchmarks.cs`, `NanReductionBenchmarks.cs` | `cumsum`/`cumprod`; `nansum`/`nanmean`/`nanmax`/… |
+| Unary (+) | `UnaryExtraBenchmarks.cs` | `cbrt`, `reciprocal`, `square`, `negative`, `positive`, `trunc` |
+| Allocation* | `Allocation/*.cs` | alloc / zero-init micro + size sweeps (*no NumPy twin — not in the official run) |
+
+### Matrix subsystems (appended, not categories)
+
+Beyond the op-matrix categories, the official run appends five subsystems with their own result models (see **Running Benchmarks → Official run**): `nditer` (iterator machinery × tier), `layout` (op × 8 memory layouts × dtype), `operand` (1-D/scalar/mixed/broadcast), `cast` (full 15×15 `astype` × layout), and `fusion` (`np.evaluate`).
+
 ---
 
 ## Python Benchmark System
@@ -425,14 +441,26 @@ COMMON_DTYPES = ['int32', 'int64', 'float32', 'float64']
 # Benchmark function
 def benchmark(func, n, warmup=10, iterations=50) -> BenchmarkResult
 
-# Suite functions
+# Suite functions (each emits BenchmarkResult rows keyed (op, dtype, n) for the merge)
 def run_arithmetic_benchmarks(n, dtype_name, iterations) -> List[BenchmarkResult]
 def run_unary_benchmarks(n, dtype_name, iterations) -> List[BenchmarkResult]
+def run_unary_extra_benchmarks(n, dtype_name, iterations) -> ...   # cbrt/reciprocal/square/negative/positive/trunc
 def run_reduction_benchmarks(n, dtype_name, iterations) -> List[BenchmarkResult]
+def run_cumulative_benchmarks(n, dtype_name, iterations) -> ...    # cumsum/cumprod
+def run_prod_benchmarks(n, dtype_name, iterations) -> ...
+def run_nan_reduction_benchmarks(n, dtype_name, iterations) -> ... # nansum/nanmean/nanmax/…
 def run_broadcast_benchmarks(n, iterations) -> List[BenchmarkResult]
 def run_creation_benchmarks(n, dtype_name, iterations) -> List[BenchmarkResult]
 def run_manipulation_benchmarks(n, iterations) -> List[BenchmarkResult]
 def run_slicing_benchmarks(n, iterations) -> List[BenchmarkResult]
+def run_comparison_benchmarks(n, dtype_name, iterations) -> ...
+def run_bitwise_benchmarks(n, dtype_name, iterations) -> ...
+def run_logic_benchmarks(n, dtype_name, iterations) -> ...         # + run_bool_logic_benchmarks(n, iterations)
+def run_statistics_benchmarks(n, dtype_name, iterations) -> ...
+def run_sorting_benchmarks(n, dtype_name, iterations) -> ...
+def run_linalg_benchmarks(n, iterations) -> ...
+def run_where_benchmarks(n, iterations) -> ...
+# Experimental (no C# comparison wired into run_benchmark.py):
 def run_dispatch_benchmarks(n, iterations) -> List[BenchmarkResult]
 def run_fusion_benchmarks(n, iterations) -> List[BenchmarkResult]
 ```
@@ -441,13 +469,16 @@ def run_fusion_benchmarks(n, iterations) -> List[BenchmarkResult]
 
 ```bash
 cd NumSharp.Benchmark.Python
-python numpy_benchmark.py                    # All benchmarks
-python numpy_benchmark.py --suite dispatch   # Specific suite
-python numpy_benchmark.py --quick            # 10 iterations
-python numpy_benchmark.py --type int32       # Specific dtype
-python numpy_benchmark.py --size large       # 10M elements
-python numpy_benchmark.py --output results.json  # JSON export
+python numpy_benchmark.py                       # All benchmarks
+python numpy_benchmark.py --suite statistics    # Specific suite
+python numpy_benchmark.py --cache-sizes         # Sweep 1K/100K/10M in one run (what run_benchmark.py uses)
+python numpy_benchmark.py --quick               # 10 iterations
+python numpy_benchmark.py --type int32          # Specific dtype
+python numpy_benchmark.py --size large          # 10M elements
+python numpy_benchmark.py --output results.json # JSON export
 ```
+
+> `run_benchmark.py` invokes this per suite as `--suite <s> --cache-sizes --output <tmp>`; each result carries its own `n`, which the merge keys on.
 
 ### Result Format
 
@@ -471,7 +502,9 @@ class BenchmarkResult:
 
 ## Report Generation
 
-### PowerShell Script (`run-benchmarks.ps1`)
+> **The official report is generated by `run_benchmark.py`** (see **Running Benchmarks → Official run**): it merges the C# + NumPy op matrix via `scripts/merge-results.py`, appends the five subsystem sheets, and writes the committable `history/<date>_<sha>/` snapshot. The `run-benchmarks.ps1` flow below is the **legacy Windows-only** path (NumPy-baseline tables, the inverse NS/NPY icon convention) — kept for reference; prefer `run_benchmark.py` for anything new.
+
+### PowerShell Script (`run-benchmarks.ps1`, legacy)
 
 ```powershell
 # Parameters
@@ -630,7 +663,7 @@ the docs.
 ### C# Interactive Menu
 
 ```bash
-cd NumSharp.Benchmark.GraphEngine
+cd NumSharp.Benchmark.CSharp
 dotnet run -c Release -f net10.0
 ```
 
@@ -690,9 +723,9 @@ python numpy_benchmark.py --type float32 --size medium
 ```csharp
 using BenchmarkDotNet.Attributes;
 using NumSharp;
-using NumSharp.Benchmark.GraphEngine.Infrastructure;
+using NumSharp.Benchmark.CSharp.Infrastructure;
 
-namespace NumSharp.Benchmark.GraphEngine.Benchmarks.YourCategory;
+namespace NumSharp.Benchmark.CSharp.Benchmarks.YourCategory;
 
 /// <summary>
 /// Brief description of what this benchmarks.
@@ -809,6 +842,7 @@ Console.WriteLine("13. Your New Benchmarks");
 |------------|---------|-------------|--------------|
 | Boolean | bool | bool | 1 |
 | Byte | byte | uint8 | 1 |
+| SByte | sbyte | int8 | 1 |
 | Int16 | short | int16 | 2 |
 | UInt16 | ushort | uint16 | 2 |
 | Int32 | int | int32 | 4 |
@@ -816,11 +850,15 @@ Console.WriteLine("13. Your New Benchmarks");
 | Int64 | long | int64 | 8 |
 | UInt64 | ulong | uint64 | 8 |
 | Char | char | uint16 | 2 |
+| Half | System.Half | float16 | 2 |
 | Single | float | float32 | 4 |
 | Double | double | float64 | 8 |
 | Decimal | decimal | float128* | 16 |
+| Complex | System.Numerics.Complex | complex128 | 16 |
 
-*Note: NumPy's float128 is platform-dependent and not exactly equivalent to C# decimal.
+All **15** NumSharp dtypes are swept by the official op matrix and the cast subsystem.
+
+*Note: NumPy's float128 is platform-dependent and not exactly equivalent to C# decimal; the cast subsystem reports `—` for Decimal cells (no NumPy counterpart).*
 
 ### Type Selection Guidelines
 
@@ -955,7 +993,7 @@ np.round_(_a);
 
 ### Build Error: File is locked
 
-**Error**: `The file is locked by: "NumSharp.Benchmark.GraphEngine (PID)"`
+**Error**: `The file is locked by: "NumSharp.Benchmark.CSharp (PID)"`
 
 **Cause**: Previous benchmark run is still executing
 
@@ -1025,7 +1063,7 @@ For 10M elements:
 python NumSharp.Benchmark.Python/numpy_benchmark.py --output benchmark-report.json
 
 # C#
-cd NumSharp.Benchmark.GraphEngine
+cd NumSharp.Benchmark.CSharp
 dotnet run -c Release -- --exporters json
 # Results in BenchmarkDotNet.Artifacts/results/*.json
 ```
@@ -1067,7 +1105,7 @@ jobs:
 
       - name: Run NumSharp benchmarks
         run: |
-          cd benchmark/NumSharp.Benchmark.GraphEngine
+          cd benchmark/NumSharp.Benchmark.CSharp
           dotnet run -c Release -- --job Short --exporters json
 
       - name: Upload results
@@ -1076,7 +1114,7 @@ jobs:
           name: benchmark-results
           path: |
             benchmark/benchmark-report.json
-            benchmark/NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/
+            benchmark/NumSharp.Benchmark.CSharp/BenchmarkDotNet.Artifacts/
 ```
 
 ### Regression Detection
@@ -1120,7 +1158,7 @@ def check_regression(current_file, baseline_file, threshold=1.2):
 .\run-benchmarks.ps1 -Suite arithmetic
 
 # C# interactive
-cd NumSharp.Benchmark.GraphEngine && dotnet run -c Release
+cd NumSharp.Benchmark.CSharp && dotnet run -c Release
 
 # C# specific filter
 dotnet run -c Release -- --filter "*Sum*" --job Short
@@ -1133,14 +1171,17 @@ python NumSharp.Benchmark.Python/numpy_benchmark.py --suite reduction --type flo
 
 | Item | Location |
 |------|----------|
-| C# benchmarks | `NumSharp.Benchmark.GraphEngine/Benchmarks/` |
-| Infrastructure | `NumSharp.Benchmark.GraphEngine/Infrastructure/` |
+| **Official orchestrator** | `run_benchmark.py` |
+| C# benchmarks | `NumSharp.Benchmark.CSharp/Benchmarks/` |
+| Infrastructure | `NumSharp.Benchmark.CSharp/Infrastructure/` |
 | Python benchmarks | `NumSharp.Benchmark.Python/numpy_benchmark.py` |
-| Helper scripts | `scripts/merge-results.py` |
-| Report generator | `run-benchmarks.ps1` |
+| Subsystem sheets | `{nditer,layout,operand,cast,fusion}/*_sheet.py` |
+| Helper scripts | `scripts/{merge-results,bench_common,snapshot_history,render_dashboard}.py` |
 | Generated report | `benchmark-report.md` (also `README.md`) |
-| Results JSON | `benchmark-report.json` |
-| C# JSON | `NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/results/` |
+| Committed snapshots | `history/<date>_<sha>/` + `history/latest` (symlink) |
+| Results JSON / scratch | `benchmark-report.json`; raw per-run under `results/<ts>/` (gitignored) |
+| C# JSON | `NumSharp.Benchmark.CSharp/BenchmarkDotNet.Artifacts/results/` |
+| Report generator (legacy) | `run-benchmarks.ps1` |
 
 ### Type Shorthand
 
@@ -1155,5 +1196,5 @@ python NumSharp.Benchmark.Python/numpy_benchmark.py --suite reduction --type flo
 
 ---
 
-*Last updated: 2026-02-13*
-*Benchmark suite version: 2.0 (comprehensive coverage)*
+*Last updated: 2026-06-27*
+*Benchmark suite version: 3.0 — `run_benchmark.py` orchestrator: 14-suite op matrix (15 dtypes × 1K/100K/10M) + five appended subsystems (nditer/layout/operand/cast/fusion) + committable `history/` snapshots; NPY/NS convention.*
