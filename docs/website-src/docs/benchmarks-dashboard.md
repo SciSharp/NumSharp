@@ -427,13 +427,14 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   display: none !important;
 }
 
+.ns-bench-dashboard .s-extreme { background: linear-gradient(90deg, #0e7490, #14b8a6); }
 .ns-bench-dashboard .s-faster { background: var(--good); }
 .ns-bench-dashboard .s-close { background: #d8a528; }
 .ns-bench-dashboard .s-slower { background: var(--slow); }
 .ns-bench-dashboard .s-much { background: var(--bad); }
 .ns-bench-dashboard .s-nodata { background: #c7ccd1; }
 
-.ns-bench-dashboard .band-faster-100x { background: linear-gradient(90deg, #032a1f, #054936); }
+.ns-bench-dashboard .band-faster-100x { background: linear-gradient(90deg, #0e7490, #14b8a6); }
 .ns-bench-dashboard .band-faster-20 { background: linear-gradient(90deg, #054936, #066345); }
 .ns-bench-dashboard .band-faster-10 { background: linear-gradient(90deg, #066345, #08734f); }
 .ns-bench-dashboard .band-faster-5 { background: linear-gradient(90deg, #08734f, #0d865c); }
@@ -1145,7 +1146,8 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="status-segment band-nodata tip-right" role="listitem" tabindex="0" style="--w:3.73%" aria-label="69 no-data rows pending C# measurements" data-tip="69 no-data rows, pending C# measurements (first 10)&#10;1. matrix + scalar | dtype=float64 | N=1K | pending C#&#10;2. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=1K | pending C#&#10;3. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=1K | pending C#&#10;4. np.broadcast_to(row, (N,M)) | dtype=float64 | N=1K | pending C#&#10;5. matrix + scalar | dtype=float64 | N=100K | pending C#&#10;6. matrix + row_vector (N,M)+(M,) | dtype=float64 | N=100K | pending C#&#10;7. matrix + col_vector (N,M)+(N,1) | dtype=float64 | N=100K | pending C#&#10;8. np.broadcast_to(row, (N,M)) | dtype=float64 | N=100K | pending C#&#10;9. reshape 1D-&gt;2D | dtype=float64 | N=1K | pending C#&#10;10. reshape 2D-&gt;1D | dtype=float64 | N=1K | pending C#"></span>
     </div>
     <div class="legend-grid">
-      <span class="legend-item"><span class="legend-swatch s-faster"></span>929 faster, 1.00-2150.69x</span>
+      <span class="legend-item"><span class="legend-swatch s-extreme"></span>4 x100+ faster</span>
+      <span class="legend-item"><span class="legend-swatch s-faster"></span>925 faster, 1.00-100x</span>
       <span class="legend-item"><span class="legend-swatch s-close"></span>434 close, 0.50-1.00x</span>
       <span class="legend-item"><span class="legend-swatch s-slower"></span>291 slower, 0.20-0.50x</span>
       <span class="legend-item"><span class="legend-swatch s-much"></span>128 much slower, &lt;0.20x</span>
