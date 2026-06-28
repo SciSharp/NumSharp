@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 3; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5, 5, 5);
         }
 
         [TestMethod]
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 3; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5, 5, 5);
         }
 
         [TestMethod]
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 3; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5, 5, 5);
         }
 
         [TestMethod]
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 1; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5);
         }
 
         [TestMethod]
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 1; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5);
         }
 
         [TestMethod]
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Manipulation
             //via for
             for (int i = 0; i < 1; i++) slice.GetValue<int>(i).Should().Be(5);
             //via enumerator
-            new NDIterator<int>(slice).Should().ContainInOrder(5);
+            new NDArray(slice).AsElements<int>().Should().ContainInOrder(5);
         }
 
         [TestMethod]
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Manipulation
             // Note: Step slices preserve IsSliced=true
 
             //via enumerator
-            var iter = new NDIterator<int>(slice);
+            var iter = new NDArray(slice).AsElements<int>();
             for (int i = 0; i < 3 * 3 * 3; i++, iter.HasNext()) iter.MoveNext().Should().Be(5);
         }
 
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.Manipulation
             slice.Shape.IsSliced.Should().BeFalse("Slicing should occurs only when lhs is already sliced.");
 
             //via enumerator
-            var iter = new NDIterator<int>(slice);
+            var iter = new NDArray(slice).AsElements<int>();
             for (int i = 0; i < 6 * 3 * 3; i++, iter.HasNext()) iter.MoveNext().Should().Be(5);
         }
 

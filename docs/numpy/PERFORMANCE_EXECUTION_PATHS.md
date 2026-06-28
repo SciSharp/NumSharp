@@ -160,7 +160,7 @@ np.sum(a, axis=1):
 │   │
 │   └─ Non-contiguous reduction axis?
 │       └─ **Path M: Iterator Reduce**
-│           ├─ NpyIter with EXTERNAL_LOOP
+│           ├─ NDIter with EXTERNAL_LOOP
 │           ├─ Axis reordering for cache
 │           └─ Axis coalescing when possible
 │

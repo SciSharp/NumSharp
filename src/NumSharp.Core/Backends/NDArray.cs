@@ -23,6 +23,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
@@ -38,9 +39,79 @@ namespace NumSharp
     /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html</remarks>
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     [SuppressMessage("ReSharper", "ParameterHidesMember")]
-    public partial class NDArray : IIndex, ICloneable, IEnumerable
+    public partial class NDArray : IIndex, ICloneable, IEnumerable, IDisposable
     {
         protected TensorEngine tensorEngine;
+
+        // ---------------------------------------------------------------
+        // Atomic Reference Counting (ARC) lifecycle
+        //
+        // Every NDArray ctor holds exactly one logical reference on the
+        // underlying MemoryBlock (taken in InitializeArc, called from
+        // every concrete ctor). Dispose drops it. Multiple Disposes are
+        // idempotent. A finalizer is the safety net for the "user forgot"
+        // case — same effect as Dispose, just non-deterministic timing.
+        //
+        // _disposed is int (not byte) because Interlocked.Exchange's
+        // narrowest overload is int. Disposal is gated by a single CAS
+        // so concurrent Dispose calls don't double-Release.
+        // ---------------------------------------------------------------
+        private int _disposed;
+
+        /// <summary>
+        ///     <c>true</c> if <see cref="Dispose"/> has been called on this
+        ///     <see cref="NDArray"/>. Views and shared storage may still be
+        ///     alive; this flag only reflects the local instance.
+        /// </summary>
+        public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+        /// <summary>
+        ///     Called from every concrete ctor after <see cref="Storage"/>
+        ///     is assigned. Bumps the refcount on the underlying buffer so
+        ///     this NDArray's reference is tracked.
+        /// </summary>
+        /// <remarks>
+        ///     Returns silently when <see cref="Storage"/> or its inner
+        ///     <c>IArraySlice</c> is null — that state belongs to
+        ///     mid-construction NDArrays which finish wiring up via
+        ///     <see cref="UnmanagedStorage.Allocate(Shape, Type)"/> shortly
+        ///     after; the eventual TryAddRef call from that path completes
+        ///     the bookkeeping.
+        /// </remarks>
+        private void InitializeArc()
+        {
+            var arr = Storage?.InternalArray;
+            if (arr is null) return;
+            arr.TryAddRef();
+        }
+
+        /// <summary>
+        ///     Releases this <see cref="NDArray"/>'s reference to the
+        ///     underlying unmanaged buffer. When the last reference is
+        ///     released the buffer is freed synchronously on the calling
+        ///     thread; views that still hold references keep working.
+        ///
+        ///     Safe to call multiple times — second and subsequent calls
+        ///     are no-ops.
+        /// </summary>
+        public void Dispose()
+        {
+            // Idempotent: only the first call performs the Release.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            Storage?.InternalArray?.Release();
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        ///     Finalizer safety net: runs only when the user never called
+        ///     <see cref="Dispose"/>. Drops this NDArray's reference so the
+        ///     refcount can still reach zero even without explicit cleanup.
+        /// </summary>
+        ~NDArray()
+        {
+            if (Volatile.Read(ref _disposed) == 0)
+                Storage?.InternalArray?.Release();
+        }
 
         /// <summary>
         /// Gets the array owning the memory, or <c>null</c> if this array owns its data.
@@ -96,7 +167,9 @@ namespace NumSharp
         public NDArray(UnmanagedStorage storage)
         {
             Storage = storage;
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -107,7 +180,9 @@ namespace NumSharp
         protected internal NDArray(UnmanagedStorage storage, Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -118,7 +193,24 @@ namespace NumSharp
         protected internal NDArray(UnmanagedStorage storage, ref Shape shape)
         {
             Storage = storage.Alias(ref shape);
-            tensorEngine = storage.Engine;
+            tensorEngine = storage.Engine ?? BackendFactory.GetEngine();
+            Storage.Engine = tensorEngine;
+            InitializeArc();
+        }
+
+        /// <summary>
+        ///     Hot-path view ctor: wraps an already-aliased storage whose Engine
+        ///     field is known to be set. Skips the standard ctor's
+        ///     <c>storage.Engine ?? BackendFactory.GetEngine()</c> guard and the
+        ///     <c>Storage.Engine = tensorEngine</c> writeback (it's already there).
+        ///     Used by <c>np.split</c> sub-array construction where we already own
+        ///     the parent's resolved engine.
+        /// </summary>
+        internal NDArray(UnmanagedStorage aliasedStorage, TensorEngine engine, bool skipEngineResolve)
+        {
+            Storage = aliasedStorage;
+            tensorEngine = engine;
+            InitializeArc();
         }
 
         /// <summary>
@@ -180,6 +272,7 @@ namespace NumSharp
                 shape = Shape.ExtractShape(values);
 
             Storage.Allocate(values.ResolveRank() != 1 ? ArraySlice.FromArray(Arrays.Flatten(values), false) : ArraySlice.FromArray(values, false), shape);
+            InitializeArc();
         }
 
         /// <summary>
@@ -199,6 +292,7 @@ namespace NumSharp
                 shape = Shape.Vector(values.Count);
 
             Storage.Allocate(values, shape);
+            InitializeArc();
         }
 
         /// <summary>
@@ -308,6 +402,7 @@ namespace NumSharp
         public NDArray(Type dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
+            InitializeArc();
         }
 
         /// <summary>
@@ -321,11 +416,13 @@ namespace NumSharp
         public NDArray(NPTypeCode dtype, Shape shape, bool fillZeros) : this(dtype)
         {
             Storage.Allocate(shape, dtype, fillZeros);
+            InitializeArc();
         }
 
         private NDArray(IArraySlice array, Shape shape) : this(array.TypeCode)
         {
             Storage.Allocate(array, shape);
+            InitializeArc();
         }
 
         #endregion
@@ -432,7 +529,11 @@ namespace NumSharp
         public TensorEngine TensorEngine
         {
             [DebuggerStepThrough] get => tensorEngine ?? Storage.Engine ?? BackendFactory.GetEngine();
-            set => tensorEngine = (value ?? Storage.Engine ?? BackendFactory.GetEngine());
+            set
+            {
+                tensorEngine = value ?? Storage.Engine ?? BackendFactory.GetEngine();
+                Storage.Engine = tensorEngine;
+            }
         }
 
         /// <summary>
@@ -468,16 +569,59 @@ namespace NumSharp
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy = true) => TensorEngine.Cast(this, dtype, copy);
+        public NDArray astype(Type dtype, bool copy = true) => astype(dtype, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        public NDArray astype(Type dtype, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, dtype, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         ///     Copy of the array, cast to a specified type.
         /// </summary>
-        /// <param name="dtype">The dtype to cast this array.</param>
+        /// <param name="typeCode">The dtype to cast this array.</param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
-        /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy = true) => TensorEngine.Cast(this, typeCode, copy);
+        public NDArray astype(NPTypeCode typeCode, bool copy = true) => astype(typeCode, copy, 'K');
+
+        /// <summary>
+        ///     Copy of the array, cast to a specified type and memory layout.
+        /// </summary>
+        /// <param name="typeCode">The dtype to cast this array.</param>
+        /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
+        /// <param name="order">
+        ///     Controls the memory layout: 'C' (row-major), 'F' (column-major),
+        ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
+        ///     'K' (default) - preserve the source layout.
+        /// </param>
+        /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/> with the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
+        public NDArray astype(NPTypeCode typeCode, bool copy, char order)
+        {
+            char physical = OrderResolver.Resolve(order, this.Shape);
+            var casted = TensorEngine.Cast(this, typeCode, copy);
+            if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
+                return casted.copy('F');
+            return casted;
+        }
 
         /// <summary>
         /// Clone the whole NDArray
@@ -491,7 +635,7 @@ namespace NumSharp
         /// internal storage is also cloned into 2nd memory area
         /// </summary>
         /// <returns>Cloned NDArray</returns>
-        public NDArray Clone() => new NDArray(this.Storage.Clone()) {tensorEngine = TensorEngine};
+        public virtual NDArray Clone() => new NDArray(this.Storage.Clone()) { TensorEngine = TensorEngine };
 
         /// <summary>
         /// Returns an enumerator that iterates along the first axis.
@@ -516,46 +660,31 @@ namespace NumSharp
             if (ndim > 1)
                 return _iterSlices().GetEnumerator();
 
-            // 1-D arrays: iterate over scalar elements
-#if _REGEN
-            #region Compute
-		    switch (GetTypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return new NDIterator<#2>(this, false).GetEnumerator();
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
-
-            #region Compute
-
+            // 1-D arrays: iterate over scalar elements.
+            // Materialize via Storage.ToArray<T>() which already handles contig,
+            // sliced, and strided layouts (Buffer.MemoryCopy fast path or
+            // coordinate walk as appropriate). Foreach over a flat T[] avoids
+            // per-element iterator/delegate overhead and lets the JIT inline.
             switch (GetTypeCode)
             {
-                case NPTypeCode.Boolean: return new NDIterator<bool>(this, false).GetEnumerator();
-                case NPTypeCode.Byte: return new NDIterator<byte>(this, false).GetEnumerator();
-                case NPTypeCode.SByte: return new NDIterator<sbyte>(this, false).GetEnumerator();
-                case NPTypeCode.Int16: return new NDIterator<short>(this, false).GetEnumerator();
-                case NPTypeCode.UInt16: return new NDIterator<ushort>(this, false).GetEnumerator();
-                case NPTypeCode.Int32: return new NDIterator<int>(this, false).GetEnumerator();
-                case NPTypeCode.UInt32: return new NDIterator<uint>(this, false).GetEnumerator();
-                case NPTypeCode.Int64: return new NDIterator<long>(this, false).GetEnumerator();
-                case NPTypeCode.UInt64: return new NDIterator<ulong>(this, false).GetEnumerator();
-                case NPTypeCode.Char: return new NDIterator<char>(this, false).GetEnumerator();
-                case NPTypeCode.Half: return new NDIterator<Half>(this, false).GetEnumerator();
-                case NPTypeCode.Double: return new NDIterator<double>(this, false).GetEnumerator();
-                case NPTypeCode.Single: return new NDIterator<float>(this, false).GetEnumerator();
-                case NPTypeCode.Decimal: return new NDIterator<decimal>(this, false).GetEnumerator();
-                case NPTypeCode.Complex: return new NDIterator<System.Numerics.Complex>(this, false).GetEnumerator();
+                case NPTypeCode.Boolean: return _iter1D<bool>().GetEnumerator();
+                case NPTypeCode.Byte: return _iter1D<byte>().GetEnumerator();
+                case NPTypeCode.SByte: return _iter1D<sbyte>().GetEnumerator();
+                case NPTypeCode.Int16: return _iter1D<short>().GetEnumerator();
+                case NPTypeCode.UInt16: return _iter1D<ushort>().GetEnumerator();
+                case NPTypeCode.Int32: return _iter1D<int>().GetEnumerator();
+                case NPTypeCode.UInt32: return _iter1D<uint>().GetEnumerator();
+                case NPTypeCode.Int64: return _iter1D<long>().GetEnumerator();
+                case NPTypeCode.UInt64: return _iter1D<ulong>().GetEnumerator();
+                case NPTypeCode.Char: return _iter1D<char>().GetEnumerator();
+                case NPTypeCode.Half: return _iter1D<Half>().GetEnumerator();
+                case NPTypeCode.Double: return _iter1D<double>().GetEnumerator();
+                case NPTypeCode.Single: return _iter1D<float>().GetEnumerator();
+                case NPTypeCode.Decimal: return _iter1D<decimal>().GetEnumerator();
+                case NPTypeCode.Complex: return _iter1D<System.Numerics.Complex>().GetEnumerator();
                 default:
                     throw new NotSupportedException();
             }
-
-            #endregion
-
-#endif
 
             IEnumerable _empty()
             {
@@ -572,6 +701,13 @@ namespace NumSharp
                     yield return this[i];
                 }
             }
+
+            System.Collections.Generic.IEnumerable<T> _iter1D<T>() where T : unmanaged
+            {
+                var flat = Storage.ToArray<T>();
+                foreach (var v in flat)
+                    yield return v;
+            }
         }
 
         /// <summary>
@@ -587,10 +723,10 @@ namespace NumSharp
         {
             if (dtype == null || dtype == this.dtype)
             {
-                return new NDArray(Storage.Alias()) { tensorEngine = TensorEngine };
+                return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
             }
             // AliasAs reinterprets bytes without conversion (like NumPy's view)
-            return new NDArray(Storage.AliasAs(dtype)) { tensorEngine = TensorEngine };
+            return new NDArray(Storage.AliasAs(dtype)) { TensorEngine = TensorEngine };
         }
 
         /// <summary>
@@ -648,7 +784,7 @@ namespace NumSharp
             var index = iter.Index; //heap the pointer to that array.
             for (long i = 0; i < ret.Length; i++)
             {
-                ret[i] = new NDArray(Storage.GetData(index));
+                ret[i] = new NDArray(Storage.GetData(index)) { TensorEngine = TensorEngine };
                 iter.Next();
             }
 
@@ -669,18 +805,30 @@ namespace NumSharp
         public IArraySlice GetData() => Storage.GetData();
 
         /// <summary>
-        ///     Gets a NDArray at given <paramref name="indices"/>.
+        ///     Gets a NDArray at the single element addressed by the coordinate
+        ///     <paramref name="indices"/> (one index per axis).
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
-        /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
-        public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        /// <remarks>
+        ///     Does not copy, returns a memory slice. This is the COORDINATE-ACCESS
+        ///     replacement for the old <c>nd[new int[]{…}]</c> behavior: a raw
+        ///     <c>int[]</c> as an index is now FANCY indexing (NumPy parity, selects
+        ///     rows), so use <c>nd.GetData(coords)</c> for the former element access.
+        /// </remarks>
+        public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>
-        ///     Gets a NDArray at given <paramref name="indices"/>.
+        ///     Gets a NDArray at the single element addressed by the coordinate
+        ///     <paramref name="indices"/> (one index per axis).
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
-        /// <remarks>Does not copy, returns a memory slice - this is similar to this[long[]]</remarks>
-        public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        /// <remarks>
+        ///     Does not copy, returns a memory slice. This is the COORDINATE-ACCESS
+        ///     replacement for the old <c>nd[new long[]{…}]</c> behavior: a raw
+        ///     <c>long[]</c> as an index is now FANCY indexing (NumPy parity, selects
+        ///     rows), so use <c>nd.GetData(coords)</c> for the former element access.
+        /// </remarks>
+        public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) { TensorEngine = TensorEngine };
 
         /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
@@ -1110,18 +1258,16 @@ namespace NumSharp
         [MethodImpl(Inline)]
         public void SetAtIndex<T>(T value, long index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
-#if _REGEN
-	%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Sets a #2 at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(Inline)]
-        public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
+	// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Sets a #2 at specific coordinates.
+        // /// </summary>
+        // /// <param name="value">The values to assign</param>
+        // /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        // [MethodImpl(Inline)]
+        // public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
 
-    %
-#else
+    // %
         /// <summary>
         ///     Sets a bool at specific coordinates.
         /// </summary>
@@ -1250,7 +1396,6 @@ namespace NumSharp
 
         [MethodImpl(Inline)]
         public void SetComplex(System.Numerics.Complex value, int[] indices) => Storage.SetComplex(value, indices);
-#endif
 
         #region Typed Setters (long[] overloads for int64 indexing)
 

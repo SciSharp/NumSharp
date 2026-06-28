@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -53,16 +54,14 @@ namespace NumSharp.Backends
             ThrowIfNotWriteable();
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                    *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
-                    return;
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                    // *((#2*)Address + _shape.TransformOffset(index)) = (#2) value;
+                    // return;
+                // %
+                // default:
+                    // throw new NotSupportedException();
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
@@ -112,7 +111,6 @@ namespace NumSharp.Backends
                     return;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -162,20 +160,21 @@ namespace NumSharp.Backends
             ThrowIfNotWriteable();
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                    *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
-                    return;
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                    // *((#2*)Address + _shape.GetOffset(indices)) = (#2) value;
+                    // return;
+                // %
+                // default:
+                    // throw new NotSupportedException();
 
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
                     *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
+                    return;
+                case NPTypeCode.SByte:
+                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
                     return;
                 case NPTypeCode.Byte:
                     *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
@@ -201,6 +200,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     *((char*)Address + _shape.GetOffset(indices)) = (char)value;
                     return;
+                case NPTypeCode.Half:
+                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
+                    return;
                 case NPTypeCode.Double:
                     *((double*)Address + _shape.GetOffset(indices)) = (double)value;
                     return;
@@ -210,9 +212,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Decimal:
                     *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
                     return;
+                case NPTypeCode.Complex:
+                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
+                    return;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -233,6 +237,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Boolean:
                     *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
                     return;
+                case NPTypeCode.SByte:
+                    *((sbyte*)Address + _shape.GetOffset(indices)) = (sbyte)value;
+                    return;
                 case NPTypeCode.Byte:
                     *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
                     return;
@@ -257,6 +264,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     *((char*)Address + _shape.GetOffset(indices)) = (char)value;
                     return;
+                case NPTypeCode.Half:
+                    *((Half*)Address + _shape.GetOffset(indices)) = (Half)value;
+                    return;
                 case NPTypeCode.Double:
                     *((double*)Address + _shape.GetOffset(indices)) = (double)value;
                     return;
@@ -265,6 +275,9 @@ namespace NumSharp.Backends
                     return;
                 case NPTypeCode.Decimal:
                     *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
+                    return;
+                case NPTypeCode.Complex:
+                    *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = (System.Numerics.Complex)value;
                     return;
                 default:
                     throw new NotSupportedException();
@@ -316,13 +329,41 @@ namespace NumSharp.Backends
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
+            // Wrap negative coordinates to [0, dim) and bounds-check each axis, exactly as the
+            // getter's GetData(int[]) does. WITHOUT this, a negative scalar-index assignment
+            // (b[(object)-1] = v / b[-1L] = v) wrote at buffer[-1] — an OUT-OF-BOUNDS WRITE that
+            // both silently corrupted adjacent heap memory and left the array unchanged (NumPy
+            // assigns the last element). InferNegativeCoordinates also raises NumPy's IndexError
+            // for a genuinely out-of-range index.
+            indices = Shape.InferNegativeCoordinates(_shape.dimensions, indices);
+
             var valueshape = value.Shape;
             bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
 
             //incase lhs or rhs are broadcasted or sliced (noncontagious)
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                var targetView = GetData(indices);
+                // An EMPTY target region (a basic slice/newaxis/ellipsis that selects 0 elements,
+                // e.g. a[:, 1:1] = v or a[None, :0:3, 2] = v) assigns nothing — but NumPy still
+                // requires the value to broadcast to the target shape (a scalar/size-1 always does;
+                // an incompatible value raises ValueError), then it is a no-op. The copy iterator
+                // indexes the first element of each operand and faults on a 0-size view
+                // (CreateCopyState), so handle the empty target here instead.
+                if (targetView.Shape.size == 0)
+                {
+                    if (value.size != 1)
+                    {
+                        string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                        try { np.broadcast_to(value, targetView.Shape); }
+                        catch (IncorrectShapeException)
+                        {
+                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}");
+                        }
+                    }
+                    return;
+                }
+                NDIter.Copy(targetView, value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -333,15 +374,21 @@ namespace NumSharp.Backends
             if (valueIsScalary && indices.Length != _shape.NDim)
             {
                 GetData(indices).InternalArray.Fill(Converts.ChangeType(value.GetAtIndex(0), _typecode));
-                //MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                //NDIter.Copy(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
             //incase its a scalar to scalar assignment
             if (indices.Length == _shape.NDim)
             {
-                if (!(valueIsScalary))
-                    throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to the target indices, these shapes can't be broadcasted together.");
+                // The coordinate consumes EVERY axis, so the target is a single element (shape ()).
+                // NumPy requires a 0-d / scalar value there: a 1+-D array — even size 1, e.g.
+                // a[3] = np.array([78]) or m[0,2] = np.array([94]) — raises "setting an array
+                // element with a sequence.", it is NOT silently unwrapped to its first element.
+                // (The looser `valueIsScalary`, which also accepts a (1,) array, is correct only
+                // for the sub-array broadcast branch above, NOT for a single-element target.)
+                if (!valueshape.IsScalar)
+                    throw new ValueError("setting an array element with a sequence.");
 
                 SetValue(Converts.ChangeType(value.GetAtIndex(0), _typecode), indices);
                 return;
@@ -350,19 +397,72 @@ namespace NumSharp.Backends
             //regular case
             var (subShape, offset) = _shape.GetSubshape(indices);
 
+            // Empty source: a valid no-op ONLY when the target region is ALSO empty (e.g. np.pad on
+            // an array with an empty axis does `padded[originalSlice] = array` where both are size 0).
+            // Assigning an empty array into a NON-empty region cannot broadcast -> NumPy ValueError.
+            if (valueshape.size == 0)
+            {
+                if (subShape.size == 0)
+                    return;
+                string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
+            }
+
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
 
-            if (subShape.size % valueshape.size != 0)
-                throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to target shape {subShape}, these shapes can't be broadcasted together.");
-
-            //by now this ndarray is not broadcasted nor sliced
-            unsafe
+            // NumPy assignment lets the SOURCE carry more dims than the target when the extra
+            // LEADING dims are size 1 (they are squeezed away) — e.g. a (1,1,3,3) value into a
+            // (1,3,3) region. Drop those leading ones toward the target rank before broadcasting.
+            var vForBc = value;
+            if (valueshape.NDim > subShape.NDim)
             {
-                //ReSharper disable once RedundantCast
-                //this must be a void* so it'll go through a typed switch.
-                value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                int drop = valueshape.NDim - subShape.NDim;
+                bool leadingOnes = true;
+                for (int i = 0; i < drop; i++)
+                    if (valueshape.dimensions[i] != 1) { leadingOnes = false; break; }
+                if (leadingOnes)
+                {
+                    var ndims = new long[subShape.NDim];
+                    for (int i = 0; i < ndims.Length; i++)
+                        ndims[i] = valueshape.dimensions[drop + i];
+                    vForBc = value.reshape(ndims);
+                }
+                // else: a leading non-1 dim -> broadcast_to below raises -> ValueError.
             }
+
+            // Fast path: the (squeezed) value exactly fills the region in C-order.
+            if (vForBc.Shape.size == subShape.size && vForBc.Shape.dimensions.SequenceEqual(subShape.dimensions))
+            {
+                //by now this ndarray is not broadcasted nor sliced
+                unsafe
+                {
+                    //ReSharper disable once RedundantCast
+                    //this must be a void* so it'll go through a typed switch.
+                    value.Storage.CastIfNecessary(_typecode).CopyTo((void*)(this.Address + (this.InternalArray.ItemLength * offset)));
+                }
+                return;
+            }
+
+            // Otherwise the value must BROADCAST to the target region (NumPy). The old check
+            // only tested divisibility (subShape.size % valueshape.size), which let an
+            // incompatible smaller value through and then copied it PARTIALLY — e.g.
+            // a[0] = [1,2] into a (4,) row wrote [1,2,_,_]. NumPy raises a ValueError here.
+            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+            NDArray broadcasted;
+            try
+            {
+                broadcasted = np.broadcast_to(vForBc, subShape);
+            }
+            catch (IncorrectShapeException)
+            {
+                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}");
+            }
+
+            // A valid broadcast that needs stretching (value smaller than the region, or a
+            // different but compatible rank) -> copy through the iterator, which honours the
+            // stride-0 broadcast dimensions instead of a flat partial memcpy.
+            NDIter.Copy(GetData(indices), broadcasted.Storage);
         }
 
         /// <summary>
@@ -388,14 +488,14 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NDIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
             //by now this ndarray is not broadcasted nor sliced
 
             //this must be a void* so it'll go through a typed switch.
-            (value.TypeCode == _typecode ? value : value.CastTo(_typecode))
+            (value.TypeCode == _typecode ? value : CastSliceViaIterator(value, _typecode))
                 .CopyTo(lhs.InternalArray);
         }
 
@@ -426,50 +526,20 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set a <see cref="NDArray"/> at given <see cref="indices"/> (long version).
         /// </summary>
-        public unsafe void SetData(NDArray value, params long[] indices)
+        public void SetData(NDArray value, params long[] indices)
         {
-            ThrowIfNotWriteable();
+            // Delegate to the int[] overload so the SAME semantics apply: a scalar broadcasts
+            // across the WHOLE selected sub-array (a[0] = v fills row 0, not just a[0,0]), a
+            // smaller value broadcasts/tiles, and a value that cannot broadcast raises NumPy's
+            // ValueError. This overload previously wrote only the FIRST element for a scalar and
+            // linear-copied a larger/smaller value WITHOUT validation — reachable via the
+            // object[] single-int setter (b[(object)0] = v) and the long[] coordinate shim.
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
-
-            var valueshape = value.Shape;
-            bool valueIsScalary = valueshape.IsScalar || valueshape.NDim == 1 && valueshape.size == 1;
-
-            //incase lhs or rhs are broadcasted or sliced (noncontagious)
-            if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
-            {
-                MultiIterator.Assign(GetData(indices), value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
-                return;
-            }
-
-            //by now value and this are contagious
-
-            //incase it is 1 value assigned to all
-            if (valueIsScalary)
-            {
-                var lhs = GetData(indices);
-                var rhs = value.Storage;
-                switch (_typecode)
-                {
-                    case NPTypeCode.Boolean: *(bool*)lhs.Address = *(bool*)rhs.Address; break;
-                    case NPTypeCode.Byte: *(byte*)lhs.Address = *(byte*)rhs.Address; break;
-                    case NPTypeCode.Int16: *(short*)lhs.Address = *(short*)rhs.Address; break;
-                    case NPTypeCode.UInt16: *(ushort*)lhs.Address = *(ushort*)rhs.Address; break;
-                    case NPTypeCode.Int32: *(int*)lhs.Address = *(int*)rhs.Address; break;
-                    case NPTypeCode.UInt32: *(uint*)lhs.Address = *(uint*)rhs.Address; break;
-                    case NPTypeCode.Int64: *(long*)lhs.Address = *(long*)rhs.Address; break;
-                    case NPTypeCode.UInt64: *(ulong*)lhs.Address = *(ulong*)rhs.Address; break;
-                    case NPTypeCode.Char: *(char*)lhs.Address = *(char*)rhs.Address; break;
-                    case NPTypeCode.Double: *(double*)lhs.Address = *(double*)rhs.Address; break;
-                    case NPTypeCode.Single: *(float*)lhs.Address = *(float*)rhs.Address; break;
-                    case NPTypeCode.Decimal: *(decimal*)lhs.Address = *(decimal*)rhs.Address; break;
-                    default: throw new NotSupportedException();
-                }
-                return;
-            }
-
-            //copy the value's data to lhs via linear copy
-            value.Storage.InternalArray.CopyTo(GetData(indices).InternalArray);
+            var intIndices = new int[indices.Length];
+            for (int i = 0; i < indices.Length; i++)
+                intIndices[i] = checked((int)indices[i]);
+            SetData(value, intIndices);
         }
 
         /// <summary>
@@ -489,36 +559,34 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
+                NDIter.Copy(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
             //by now this ndarray is not broadcasted nor sliced
 
             //this must be a void* so it'll go through a typed switch.
-            (value.TypeCode == _typecode ? value : value.CastTo(_typecode))
+            (value.TypeCode == _typecode ? value : CastSliceViaIterator(value, _typecode))
                 .CopyTo(lhs.InternalArray);
         }
 
         #region Typed Setters
 
-#if _REGEN
-	%foreach supported_dtypes,supported_dtypes_lowercase%
-        /// <summary>
-        ///     Sets a #2 at specific coordinates.
-        /// </summary>
-        /// <param name="value">The values to assign</param>
-        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(Inline)]
-        public void Set#1(#2 value, int[] indices)         
-        {
-            unsafe {
-                *((#2*)Address + _shape.GetOffset(indices)) = value;
-            }
-        }
+	// %foreach supported_dtypes,supported_dtypes_lowercase%
+        // /// <summary>
+        // ///     Sets a #2 at specific coordinates.
+        // /// </summary>
+        // /// <param name="value">The values to assign</param>
+        // /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        // [MethodImpl(Inline)]
+        // public void Set#1(#2 value, int[] indices)         
+        // {
+            // unsafe {
+                // *((#2*)Address + _shape.GetOffset(indices)) = value;
+            // }
+        // }
 
-    %
-#else
+    // %
         /// <summary>
         ///     Sets a bool at specific coordinates.
         /// </summary>
@@ -758,7 +826,6 @@ namespace NumSharp.Backends
                 *((System.Numerics.Complex*)Address + _shape.GetOffset(indices)) = value;
             }
         }
-#endif
 
         #region Typed Setters (long[] overloads)
 

@@ -101,7 +101,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
             samples.size.Should().Be(5);
             // All values should be in [0, 1]
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThanOrEqualTo(0.0);
                 val.Should().BeLessThanOrEqualTo(1.0);
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
             samples.size.Should().Be(5);
             // All values should be in [0, 1]
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThanOrEqualTo(0.0);
                 val.Should().BeLessThanOrEqualTo(1.0);
@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.triangular(-10, -5, 0, 5);
 
             // All values should be in [-10, 0]
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThanOrEqualTo(-10.0);
                 val.Should().BeLessThanOrEqualTo(0.0);

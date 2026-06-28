@@ -18,14 +18,12 @@ namespace NumSharp.Backends.Unmanaged
 
             switch (elementType.GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                    return UnmanagedMemoryBlock<#2>.FromArray((#2[])arr);
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach supported_dtypes,supported_dtypes_lowercase%
+	            // case NPTypeCode.#1:
+                    // return UnmanagedMemoryBlock<#2>.FromArray((#2[])arr);
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 	            case NPTypeCode.Boolean:
                     return UnmanagedMemoryBlock<bool>.FromArray((bool[])arr);
 	            case NPTypeCode.SByte:
@@ -58,7 +56,6 @@ namespace NumSharp.Backends.Unmanaged
                     return UnmanagedMemoryBlock<Complex>.FromArray((Complex[])arr);
 	            default:
 		            throw new NotSupportedException();
-#endif
             }
         }
 

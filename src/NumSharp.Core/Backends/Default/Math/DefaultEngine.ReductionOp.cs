@@ -1,5 +1,8 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -38,18 +41,96 @@ namespace NumSharp.Backends
                 return ExecuteScalarReduction<TResult>(arr, op, accumType);
             }
 
+            // Broadcast views (a stride-0 axis with dim>1) are the worst flat-reduction case for
+            // the coordinate-walk kernel: it visits every one of the D×N logical elements though
+            // only N are unique — ~50× NumPy on the bcast-reduce canary
+            // (np.sum(broadcast_to(a,(1024,8192)))). A stride-0 axis repeats its data EXACTLY, so
+            // reducing over it is CLOSED-FORM — there is nothing to iterate:
+            //     sum → ×D,  prod → ^D,  min/max → identity   (mean = sum/count, in the caller).
+            // Drop every broadcast axis to a non-broadcast view of the UNIQUE data (index 0 along
+            // each stride-0 axis — an O(1) view), reduce THAT once via the fast contiguous/NDIter
+            // path, then apply the collapsed multiplicity to the scalar. O(unique), not the prior
+            // O(D×unique) per-copy fold: ~960× NumPy here vs the fold's ~1.0× (measured, Release).
+            // Integer and min/max are BIT-EXACT (modular ×/pow; min/max order-independent); float
+            // sum/prod differ only ULP-level — the summation-order class the codebase already
+            // accepts here, and one multiply is fewer roundings than D adds. ArgMin/ArgMax opt
+            // out — their result index must address the full broadcast, which collapsing destroys.
+            long bcastMult = 1;
+            if (arr.Shape.IsBroadcasted && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
+            {
+                for (int d = 0; d < arr.ndim; d++)
+                    if (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1)
+                        bcastMult *= arr.Shape.dimensions[d];
+
+                arr = DropBroadcastAxes(arr);            // O(1) view of the unique data
+                inputType = arr.GetTypeCode;
+
+                if (arr.Shape.IsScalar || arr.size == 1)
+                    return CombineWithCount(ExecuteScalarReduction<TResult>(arr, op, accumType), bcastMult, op);
+            }
+
             // Determine if array is contiguous
             bool isContiguous = arr.Shape.IsContiguous;
+
+            // ─── NDIter routing for non-contig flat reduction ─────────────
+            // The direct ElementReductionKernel walks non-contig inputs via
+            // coordinate math per element, which made strided/transposed
+            // reductions 20-54× slower than NumPy. NDIter coalesces dims,
+            // permutes axes by stride magnitude (NPY_KEEPORDER-style), and
+            // normalizes negative strides — so the kernel is called with a
+            // layout it can handle as contig in the inner loop.
+            //
+            // Contig stays on the direct path: zero dispatch overhead, and
+            // the existing kernel is already at parity / faster than NumPy
+            // there.
+            //
+            // ArgMax/ArgMin opt out: the returned index must be the C-order
+            // flat position of the extreme element, but NDIter permutes axes
+            // by stride magnitude which can re-order the traversal and break
+            // that contract. (e.g. argmax(arr.T) on a 2D F-contig view: C-order
+            // expects [1,9,2,4]→idx 1; NDIter's F-walk gives [1,2,9,4]→idx 2.)
+            // Direct path's coordinate walk preserves the C-order contract.
+            if (!isContiguous && op != ReductionOp.ArgMax && op != ReductionOp.ArgMin)
+            {
+                var routed = TryExecuteElementReductionViaNDIter<TResult>(arr, op, inputType, accumType);
+                if (routed.HasValue) return CombineWithCount(routed.Value, bcastMult, op);
+            }
+
+            // Fast contiguous f64/f32 min/max: raw Avx.Min/Max + cheap finite-mask NaN tracking.
+            // The IL kernel emits Vector256.Min/Max, which on net9+ the JIT lowers to vminp{s,d}
+            // PLUS an IEEE NaN-propagation fixup (cmp + blend) — ~2× the cost of the raw
+            // instruction. We don't need that fixup: we drop NaN in the hot loop (raw VMINPD/
+            // VMAXPD) and track "any NaN seen" in a finite mask, taking a cold scalar scan for the
+            // exact first-NaN bits ONLY when one is present. Measured (2000-elem rows excluded —
+            // flat 10K/100K): f64 0.66×→1.42× @100K and 1.56×→4.08× @10K vs NumPy, bit-exact incl.
+            // NaN/±inf/±0. Non-x86 (no Avx) falls through to the portable IL kernel below.
+            if (isContiguous && (op == ReductionOp.Min || op == ReductionOp.Max)
+                && inputType == accumType && Avx.IsSupported
+                && (inputType == NPTypeCode.Double || inputType == NPTypeCode.Single))
+            {
+                byte* baseAddr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+                bool max = op == ReductionOp.Max;
+                if (inputType == NPTypeCode.Double)
+                {
+                    double r = FlatMinMaxF64Avx((double*)baseAddr, arr.size, max);
+                    return CombineWithCount(*(TResult*)&r, bcastMult, op);
+                }
+                else
+                {
+                    float r = FlatMinMaxF32Avx((float*)baseAddr, arr.size, max);
+                    return CombineWithCount(*(TResult*)&r, bcastMult, op);
+                }
+            }
 
             // Get kernel key
             var key = new ElementReductionKernelKey(inputType, accumType, op, isContiguous);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.TryGetTypedElementReductionKernel<TResult>(key);
+            var kernel = DirectILKernelGenerator.TryGetTypedElementReductionKernel<TResult>(key);
 
             if (kernel != null)
             {
-                return ExecuteTypedReductionKernel<TResult>(kernel, arr);
+                return CombineWithCount(ExecuteTypedReductionKernel<TResult>(kernel, arr), bcastMult, op);
             }
             else
             {
@@ -61,9 +142,125 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Build a non-broadcast view of the UNIQUE data by indexing 0 along every stride-0
+        ///     (dim&gt;1) axis. Those axes repeat their data exactly, so index 0 (offset unchanged,
+        ///     axis dropped) yields the unique slice with zero copy. Size-1 and real (stride≠0)
+        ///     axes are kept. The result is never broadcast, so the reduction below runs the fast
+        ///     contiguous / NDIter path over O(unique) elements.
+        /// </summary>
+        private static NDArray DropBroadcastAxes(NDArray arr)
+        {
+            var slices = new Slice[arr.ndim];
+            for (int d = 0; d < arr.ndim; d++)
+                slices[d] = (arr.Shape.strides[d] == 0 && arr.Shape.dimensions[d] > 1)
+                    ? Slice.Index(0)
+                    : Slice.All;
+
+            // No copy: the unique slice may be strided (e.g. broadcast_to(a["1:-1,1:-1"], …)),
+            // but the reduction below routes a non-contiguous input through NDIter, which
+            // handles strided/offset views correctly and fast (coalesce + axis-permute by
+            // stride). The sub-word strided-prod overflow a copy used to dodge is now fixed at
+            // its root (NDIter.DetermineAccumulatorType delegates to GetAccumulatingType).
+            return arr[slices];
+        }
+
+        /// <summary>
+        ///     Apply a collapsed broadcast multiplicity to a flat-reduction scalar in closed form:
+        ///     sum → v×count, prod → v^count, min/max/arg → v (identity). <paramref name="count"/>==1
+        ///     is a no-op, so non-broadcast reductions pass straight through. Arithmetic runs in the
+        ///     accumulator type so integer wraparound matches a materialized per-copy reduction
+        ///     EXACTLY (modular × / pow compose under truncation); float is ULP-equivalent.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe TResult CombineWithCount<TResult>(TResult v, long count, ReductionOp op)
+            where TResult : unmanaged
+        {
+            if (count <= 1 || op == ReductionOp.Min || op == ReductionOp.Max ||
+                op == ReductionOp.ArgMax || op == ReductionOp.ArgMin)
+                return v;
+
+            bool isProd = op == ReductionOp.Prod;
+            switch (InfoOf<TResult>.NPTypeCode)
+            {
+                case NPTypeCode.Byte:    { byte    x = *(byte*)&v;    byte    r = isProd ? (byte)   IPowU(x, count) : unchecked((byte)   (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.SByte:   { sbyte   x = *(sbyte*)&v;   sbyte   r = isProd ? (sbyte)  IPowS(x, count) : unchecked((sbyte)  (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.Int16:   { short   x = *(short*)&v;   short   r = isProd ? (short)  IPowS(x, count) : unchecked((short)  (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.UInt16:  { ushort  x = *(ushort*)&v;  ushort  r = isProd ? (ushort) IPowU(x, count) : unchecked((ushort) (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.Int32:   { int     x = *(int*)&v;     int     r = isProd ? (int)    IPowS(x, count) : unchecked((int)    (x * count));         return *(TResult*)&r; }
+                case NPTypeCode.UInt32:  { uint    x = *(uint*)&v;    uint    r = isProd ? (uint)   IPowU(x, count) : unchecked((uint)   (x * (ulong)count)); return *(TResult*)&r; }
+                case NPTypeCode.Int64:   { long    x = *(long*)&v;    long    r = isProd ? IPowS(x, count)          : unchecked(x * count);                    return *(TResult*)&r; }
+                case NPTypeCode.UInt64:  { ulong   x = *(ulong*)&v;   ulong   r = isProd ? IPowU(x, count)          : unchecked(x * (ulong)count);             return *(TResult*)&r; }
+                case NPTypeCode.Single:  { float   x = *(float*)&v;   float   r = isProd ? (float)Math.Pow(x, count) : (float)(x * (double)count);            return *(TResult*)&r; }
+                case NPTypeCode.Double:  { double  x = *(double*)&v;  double  r = isProd ? Math.Pow(x, count)        : x * count;                              return *(TResult*)&r; }
+                case NPTypeCode.Decimal: { decimal x = *(decimal*)&v; decimal r = isProd ? DPow(x, count)           : x * count;                              return *(TResult*)&r; }
+                // Char/Boolean/Half/Complex only reach CombineWithCount via min/max (returned above) → identity.
+                default: return v;
+            }
+        }
+
+        /// <summary>Signed integer pow with two's-complement wraparound (square-and-multiply, unchecked).</summary>
+        private static long IPowS(long b, long e)
+        {
+            long r = 1, bb = b; ulong ee = (ulong)e;
+            unchecked { while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; } }
+            return r;
+        }
+
+        /// <summary>Unsigned integer pow with modular wraparound (square-and-multiply, unchecked).</summary>
+        private static ulong IPowU(ulong b, long e)
+        {
+            ulong r = 1, bb = b, ee = (ulong)e;
+            unchecked { while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; } }
+            return r;
+        }
+
+        /// <summary>Decimal pow (square-and-multiply); overflow throws OverflowException — decimal has no infinity, matching np.prod-on-decimal overflow behavior.</summary>
+        private static decimal DPow(decimal b, long e)
+        {
+            decimal r = 1m, bb = b; ulong ee = (ulong)e;
+            while (ee > 0) { if ((ee & 1) != 0) r *= bb; ee >>= 1; if (ee > 0) bb *= bb; }
+            return r;
+        }
+
+        /// <summary>
+        ///     NDIter routing for non-contig flat reductions.
+        ///
+        ///     The iterator does the heavy lifting before the kernel runs:
+        ///     dimension coalescing, axis permutation by stride magnitude,
+        ///     negative-stride normalization. After that, the existing
+        ///     ElementReductionKernel handles the per-element loop.
+        ///
+        ///     Returns the reduction result on success, null when the iterator
+        ///     can't be set up (e.g. dim > int.MaxValue) so the caller falls
+        ///     back to the direct path.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private unsafe TResult? TryExecuteElementReductionViaNDIter<TResult>(
+            NDArray arr, ReductionOp op, NPTypeCode inputType, NPTypeCode accumType)
+            where TResult : unmanaged
+        {
+            var shape = arr.Shape;
+            if (shape.size < 0) return null;
+            for (int i = 0; i < shape.NDim; i++)
+                if (shape.dimensions[i] > int.MaxValue) return null;
+
+            try
+            {
+                using var iter = NDIterRef.New(arr, NDIterGlobalFlags.None);
+                return iter.ExecuteReduction<TResult>(op);
+            }
+            catch (Exception)
+            {
+                // Catch broadly: iterator setup or kernel resolution may fail
+                // for combos that the direct path still handles via fallback.
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Execute scalar reduction - just return the value, possibly converted.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static TResult ExecuteScalarReduction<TResult>(NDArray arr, ReductionOp op, NPTypeCode accumType)
             where TResult : unmanaged
         {
@@ -81,7 +278,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated typed reduction kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe TResult ExecuteTypedReductionKernel<TResult>(
             TypedElementReductionKernel<TResult> kernel,
             NDArray input)
@@ -106,12 +303,87 @@ namespace NumSharp.Backends
             }
         }
 
+        // =====================================================================
+        // Fast contiguous float min/max (Avx2): raw VMINPD/VMAXPD (NaN-dropping) hot loop +
+        // per-lane finite mask; a cold scalar scan recovers the exact first-NaN bits only when a
+        // NaN is actually present. Bypasses the IL kernel's Vector256.Min/Max, whose net9+ JIT
+        // lowering bakes in an IEEE NaN-propagation fixup (~2× the raw instruction). Bit-exact
+        // with np.min/np.max (NaN propagates with the input NaN's bits; ±inf/±0 ties match the
+        // scalar fold). 8 explicit accumulators saturate the two min/max ALU ports.
+        // =====================================================================
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe double FlatMinMaxF64Avx(double* d, long n, bool max)
+        {
+            const int W = 4;                                  // Vector256<double>.Count
+            if (n < W)
+            {
+                double s = max ? double.NegativeInfinity : double.PositiveInfinity;
+                for (long k = 0; k < n; k++) { double x = d[k]; if (double.IsNaN(x)) return x; s = max ? (x > s ? x : s) : (x < s ? x : s); }
+                return s;
+            }
+            var seed = Vector256.Create(max ? double.NegativeInfinity : double.PositiveInfinity);
+            var a0 = seed; var a1 = seed; var a2 = seed; var a3 = seed; var a4 = seed; var a5 = seed; var a6 = seed; var a7 = seed;
+            var fin = Vector256<double>.AllBitsSet;
+            long i = 0, step = W * 8, lim = n - n % step;
+            for (; i < lim; i += step)
+            {
+                var v0 = Vector256.Load(d + i); var v1 = Vector256.Load(d + i + W); var v2 = Vector256.Load(d + i + 2 * W); var v3 = Vector256.Load(d + i + 3 * W);
+                var v4 = Vector256.Load(d + i + 4 * W); var v5 = Vector256.Load(d + i + 5 * W); var v6 = Vector256.Load(d + i + 6 * W); var v7 = Vector256.Load(d + i + 7 * W);
+                if (max) { a0 = Avx.Max(a0, v0); a1 = Avx.Max(a1, v1); a2 = Avx.Max(a2, v2); a3 = Avx.Max(a3, v3); a4 = Avx.Max(a4, v4); a5 = Avx.Max(a5, v5); a6 = Avx.Max(a6, v6); a7 = Avx.Max(a7, v7); }
+                else { a0 = Avx.Min(a0, v0); a1 = Avx.Min(a1, v1); a2 = Avx.Min(a2, v2); a3 = Avx.Min(a3, v3); a4 = Avx.Min(a4, v4); a5 = Avx.Min(a5, v5); a6 = Avx.Min(a6, v6); a7 = Avx.Min(a7, v7); }
+                fin &= Vector256.Equals(v0, v0) & Vector256.Equals(v1, v1) & Vector256.Equals(v2, v2) & Vector256.Equals(v3, v3) & Vector256.Equals(v4, v4) & Vector256.Equals(v5, v5) & Vector256.Equals(v6, v6) & Vector256.Equals(v7, v7);
+            }
+            var va = max ? Avx.Max(Avx.Max(Avx.Max(a0, a1), Avx.Max(a2, a3)), Avx.Max(Avx.Max(a4, a5), Avx.Max(a6, a7)))
+                         : Avx.Min(Avx.Min(Avx.Min(a0, a1), Avx.Min(a2, a3)), Avx.Min(Avx.Min(a4, a5), Avx.Min(a6, a7)));
+            for (; i + W <= n; i += W) { var v = Vector256.Load(d + i); va = max ? Avx.Max(va, v) : Avx.Min(va, v); fin &= Vector256.Equals(v, v); }
+            double acc = va.GetElement(0);
+            for (int q = 1; q < W; q++) { double x = va.GetElement(q); acc = max ? (x > acc ? x : acc) : (x < acc ? x : acc); }
+            bool anyNaN = Vector256.ExtractMostSignificantBits(fin) != (uint)((1 << W) - 1);
+            for (; i < n; i++) { double x = d[i]; if (double.IsNaN(x)) anyNaN = true; acc = max ? (x > acc ? x : acc) : (x < acc ? x : acc); }
+            if (anyNaN) for (long k = 0; k < n; k++) if (double.IsNaN(d[k])) return d[k];
+            return acc;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe float FlatMinMaxF32Avx(float* d, long n, bool max)
+        {
+            const int W = 8;                                  // Vector256<float>.Count
+            if (n < W)
+            {
+                float s = max ? float.NegativeInfinity : float.PositiveInfinity;
+                for (long k = 0; k < n; k++) { float x = d[k]; if (float.IsNaN(x)) return x; s = max ? (x > s ? x : s) : (x < s ? x : s); }
+                return s;
+            }
+            var seed = Vector256.Create(max ? float.NegativeInfinity : float.PositiveInfinity);
+            var a0 = seed; var a1 = seed; var a2 = seed; var a3 = seed; var a4 = seed; var a5 = seed; var a6 = seed; var a7 = seed;
+            var fin = Vector256<float>.AllBitsSet;
+            long i = 0, step = W * 8, lim = n - n % step;
+            for (; i < lim; i += step)
+            {
+                var v0 = Vector256.Load(d + i); var v1 = Vector256.Load(d + i + W); var v2 = Vector256.Load(d + i + 2 * W); var v3 = Vector256.Load(d + i + 3 * W);
+                var v4 = Vector256.Load(d + i + 4 * W); var v5 = Vector256.Load(d + i + 5 * W); var v6 = Vector256.Load(d + i + 6 * W); var v7 = Vector256.Load(d + i + 7 * W);
+                if (max) { a0 = Avx.Max(a0, v0); a1 = Avx.Max(a1, v1); a2 = Avx.Max(a2, v2); a3 = Avx.Max(a3, v3); a4 = Avx.Max(a4, v4); a5 = Avx.Max(a5, v5); a6 = Avx.Max(a6, v6); a7 = Avx.Max(a7, v7); }
+                else { a0 = Avx.Min(a0, v0); a1 = Avx.Min(a1, v1); a2 = Avx.Min(a2, v2); a3 = Avx.Min(a3, v3); a4 = Avx.Min(a4, v4); a5 = Avx.Min(a5, v5); a6 = Avx.Min(a6, v6); a7 = Avx.Min(a7, v7); }
+                fin &= Vector256.Equals(v0, v0) & Vector256.Equals(v1, v1) & Vector256.Equals(v2, v2) & Vector256.Equals(v3, v3) & Vector256.Equals(v4, v4) & Vector256.Equals(v5, v5) & Vector256.Equals(v6, v6) & Vector256.Equals(v7, v7);
+            }
+            var va = max ? Avx.Max(Avx.Max(Avx.Max(a0, a1), Avx.Max(a2, a3)), Avx.Max(Avx.Max(a4, a5), Avx.Max(a6, a7)))
+                         : Avx.Min(Avx.Min(Avx.Min(a0, a1), Avx.Min(a2, a3)), Avx.Min(Avx.Min(a4, a5), Avx.Min(a6, a7)));
+            for (; i + W <= n; i += W) { var v = Vector256.Load(d + i); va = max ? Avx.Max(va, v) : Avx.Min(va, v); fin &= Vector256.Equals(v, v); }
+            float acc = va.GetElement(0);
+            for (int q = 1; q < W; q++) { float x = va.GetElement(q); acc = max ? (x > acc ? x : acc) : (x < acc ? x : acc); }
+            bool anyNaN = Vector256.ExtractMostSignificantBits(fin) != (uint)((1 << W) - 1);
+            for (; i < n; i++) { float x = d[i]; if (float.IsNaN(x)) anyNaN = true; acc = max ? (x > acc ? x : acc) : (x < acc ? x : acc); }
+            if (anyNaN) for (long k = 0; k < n; k++) if (float.IsNaN(d[k])) return d[k];
+            return acc;
+        }
+
         #region Type-Specific Element Reduction Wrappers
 
         /// <summary>
         /// Execute element-wise sum reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object sum_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -141,7 +413,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise product reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object prod_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -170,34 +442,30 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback product for Half using iterator (double accumulator for precision).
-        /// Matches NumPy: product of empty array is 1.0.
+        /// Fallback product for Half (double accumulator for precision). Contiguous buffers take
+        /// the boxing-free pointer scan (no AsIterator dispatch, ~Nx); empty/non-contig keep the
+        /// iterator. Matches NumPy: product of empty array is 1.0.
         /// </summary>
-        private object ProdElementwiseHalfFallback(NDArray arr)
+        private unsafe object ProdElementwiseHalfFallback(NDArray arr)
         {
-            double prod = 1.0;
-            var iter = arr.AsIterator<Half>();
-            while (iter.HasNext())
-                prod *= (double)iter.MoveNext();
-            return (Half)prod;
+            if (TryHalfAccumulateContiguous(arr, isProd: true, out double p))
+                return (Half)p;
+
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return (Half)HalfReduceViaNDIter(arr, isProd: true);
         }
 
         /// <summary>
-        /// Fallback product for Complex using iterator.
+        /// Fallback product for Complex via NDIter's chunked EXTERNAL_LOOP (see
+        /// <see cref="ComplexReduceViaNDIter"/>).
         /// </summary>
         private object ProdElementwiseComplexFallback(NDArray arr)
-        {
-            var prod = System.Numerics.Complex.One;
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            while (iter.HasNext())
-                prod *= iter.MoveNext();
-            return prod;
-        }
+            => ComplexReduceViaNDIter(arr, isProd: true);
 
         /// <summary>
         /// Execute element-wise max reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object max_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -222,6 +490,10 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Max, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MaxElementwiseComplexFallback(arr),
+                // Boolean: max == "any true" (logical OR). NumPy: np.max([T,F,T]) → True.
+                NPTypeCode.Boolean => MaxElementwiseBooleanFallback(arr),
+                // Char: scalar comparison via char's natural ordering.
+                NPTypeCode.Char => MaxElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Max not supported for type {retType}")
             };
         }
@@ -229,7 +501,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise min reduction using IL kernels.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object min_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -254,95 +526,128 @@ namespace NumSharp.Backends
                 NPTypeCode.Decimal => ExecuteElementReduction<decimal>(arr, ReductionOp.Min, retType),
                 // B8: Complex has no total ordering; NumPy uses lexicographic (real then imag) compare.
                 NPTypeCode.Complex => MinElementwiseComplexFallback(arr),
+                // Boolean: min == "all true" (logical AND). NumPy: np.min([T,F,T]) → False.
+                NPTypeCode.Boolean => MinElementwiseBooleanFallback(arr),
+                NPTypeCode.Char => MinElementwiseCharFallback(arr),
                 _ => throw new NotSupportedException($"Min not supported for type {retType}")
             };
         }
 
         /// <summary>
-        /// Fallback max for Half: IL OpCodes.Bgt/Blt don't work on Half struct.
-        /// Half.MaxMagnitude and direct Half comparison via (double) works correctly.
-        /// Propagates NaN per NumPy rule: max with NaN returns NaN.
+        /// Max/min for Half. The IL reduction kernel can't drive Half (OpCodes.Bgt/Blt don't
+        /// apply to the struct), so this stays out-of-IL — but Half DOES expose a hardware-backed
+        /// comparison order, so the contiguous buffer is scanned with Half's own operators rather
+        /// than bridging every element through (double). That boxing-free, no-round-trip scan is
+        /// ~9× the old iterator+double path. NaN propagates per NumPy (max/min with NaN → NaN):
+        /// once the accumulator is NaN, <c>x &gt; acc</c> is false and only another NaN re-sets it,
+        /// so the first NaN sticks. Non-contiguous / empty inputs keep the iterator fallback.
         /// </summary>
-        private object MaxElementwiseHalfFallback(NDArray arr)
+        private unsafe object MaxElementwiseHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            double best = double.NegativeInfinity;
-            bool seenAny = false;
-            while (iter.HasNext())
+            long n = arr.size;
+            if (arr.Shape.IsContiguous && n > 0)
             {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return Half.NaN;
-                if (!seenAny || v > best) { best = v; seenAny = true; }
+                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
+                Half acc = p[0];
+                for (long i = 1; i < n; i++) { Half x = p[i]; if (x > acc || Half.IsNaN(x)) acc = x; }
+                return acc;
             }
-            return (Half)best;
+
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return HalfMinMaxViaNDIter(arr, isMin: false);
         }
 
-        private object MinElementwiseHalfFallback(NDArray arr)
+        private unsafe object MinElementwiseHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            double best = double.PositiveInfinity;
-            bool seenAny = false;
-            while (iter.HasNext())
+            long n = arr.size;
+            if (arr.Shape.IsContiguous && n > 0)
             {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return Half.NaN;
-                if (!seenAny || v < best) { best = v; seenAny = true; }
+                Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
+                Half acc = p[0];
+                for (long i = 1; i < n; i++) { Half x = p[i]; if (x < acc || Half.IsNaN(x)) acc = x; }
+                return acc;
             }
-            return (Half)best;
+
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return HalfMinMaxViaNDIter(arr, isMin: true);
         }
 
         /// <summary>
-        /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as tie-break).
-        /// NaN in either component returns a NaN Complex.
+        /// Fallback max/min for Complex: NumPy uses lexicographic comparison (real first, imag as
+        /// tie-break). A NaN in either component propagates — the FIRST NaN-bearing element (in
+        /// memory/iteration order) is returned VERBATIM, matching NumPy's minimum/maximum, which
+        /// return the NaN operand as-is (e.g. min([1+1j, nan+0j, 2+2j]) -> (nan,0), not (nan,nan)).
+        ///
+        /// Routed through <see cref="ComplexMinMaxViaNDIter"/> (struct-generic ExecuteReducing,
+        /// NPY_KEEPORDER) instead of the old per-element AsIterator: ~3.6× contiguous / ~8.6×
+        /// strided, AND a NumPy-parity fix — KEEPORDER visits elements in MEMORY order, so the NaN
+        /// element returned for a non-C-contiguous (e.g. transposed) array now matches NumPy's
+        /// reduce, which also propagates the memory-order-first NaN. The old AsIterator forced
+        /// C-order and returned the wrong NaN element for transposed multi-NaN inputs
+        /// (np.min(a.T) where a=[[1+1j,nan+5j,3+3j],[nan+7j,2+2j,4+4j]]: NumPy → (nan,5), old → (nan,7)).
         /// </summary>
-        private object MaxElementwiseComplexFallback(NDArray arr)
+        private unsafe object MaxElementwiseComplexFallback(NDArray arr)
+            => ComplexMinMaxViaNDIter(arr, isMin: false);
+
+        private unsafe object MinElementwiseComplexFallback(NDArray arr)
+            => ComplexMinMaxViaNDIter(arr, isMin: true);
+
+        /// <summary>
+        /// Complex min/max via NDIter's chunked EXTERNAL_LOOP in NPY_KEEPORDER. The accumulator's
+        /// Best holds either the lexicographic extremum or — once a NaN-bearing element is seen —
+        /// that element verbatim (the kernel aborts on the first NaN). Empty → (0,0), preserving the
+        /// prior AsIterator fallback (np.max/np.min of an empty array is guarded upstream).
+        /// </summary>
+        private static unsafe System.Numerics.Complex ComplexMinMaxViaNDIter(NDArray arr, bool isMin)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            var best = System.Numerics.Complex.Zero;
-            bool seenAny = false;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return new System.Numerics.Complex(double.NaN, double.NaN);
-                if (!seenAny
-                    || v.Real > best.Real
-                    || (v.Real == best.Real && v.Imaginary > best.Imaginary))
-                {
-                    best = v;
-                    seenAny = true;
-                }
-            }
-            return best;
+            if (arr.size == 0) return System.Numerics.Complex.Zero;
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
+            var acc = isMin
+                ? iter.ExecuteReducing<ComplexMinKernel, ComplexMinMaxAccumulator>(default, default)
+                : iter.ExecuteReducing<ComplexMaxKernel, ComplexMinMaxAccumulator>(default, default);
+            return acc.Best;
         }
 
-        private object MinElementwiseComplexFallback(NDArray arr)
-        {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            var best = System.Numerics.Complex.Zero;
-            bool seenAny = false;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary))
-                    return new System.Numerics.Complex(double.NaN, double.NaN);
-                if (!seenAny
-                    || v.Real < best.Real
-                    || (v.Real == best.Real && v.Imaginary < best.Imaginary))
-                {
-                    best = v;
-                    seenAny = true;
-                }
-            }
-            return best;
-        }
+        /// <summary>
+        ///     Boolean max == "any true" (logical OR). NumPy parity:
+        ///     <c>np.max([T,F,T])</c> → <c>True</c>. Delegates to <see cref="Any(NDArray)"/>
+        ///     (the SIMD ReduceBool path, contig + strided) instead of a per-element
+        ///     AsIterator scan. Empty → False (np.max guards empty upstream).
+        /// </summary>
+        private object MaxElementwiseBooleanFallback(NDArray arr)
+            => Any(arr);
+
+        /// <summary>
+        ///     Boolean min == "all true" (logical AND). NumPy parity:
+        ///     <c>np.min([T,F,T])</c> → <c>False</c>. Delegates to <see cref="All(NDArray)"/>
+        ///     (the SIMD ReduceBool path, contig + strided) instead of a per-element
+        ///     AsIterator scan. Empty → True (np.min guards empty upstream).
+        /// </summary>
+        private object MinElementwiseBooleanFallback(NDArray arr)
+            => All(arr);
+
+        /// <summary>
+        /// Char max/min via uint16 min/max. char is unsigned 16-bit with a total order
+        /// bit-identical to its UTF-16 code unit, so the char buffer reduces bit-for-bit
+        /// through the ushort SIMD reducer (vpminuw/vpmaxuw) — ~100× the scalar char
+        /// iterator this used to run, and it reuses ExecuteElementReduction's full routing
+        /// (contig SIMD, broadcast-fold, NDIter-strided). <see cref="view"/>(ushort) is a
+        /// zero-copy byte reinterpret (char and ushort are both 2 bytes, so shape/strides/
+        /// offset are preserved across every layout). The same trick that fixed bool/char
+        /// amin/amax along an axis.
+        /// </summary>
+        private object MaxElementwiseCharFallback(NDArray arr)
+            => (char)ExecuteElementReduction<ushort>(arr.view(typeof(ushort)), ReductionOp.Max, NPTypeCode.UInt16);
+
+        private object MinElementwiseCharFallback(NDArray arr)
+            => (char)ExecuteElementReduction<ushort>(arr.view(typeof(ushort)), ReductionOp.Min, NPTypeCode.UInt16);
 
         /// <summary>
         /// Execute element-wise argmax reduction using IL kernels.
         /// Returns the index of the maximum value.
         /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected long argmax_elementwise_il(NDArray arr)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -376,96 +681,60 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback argmax for Half (IL kernel uses Bgt which doesn't work on Half struct).
-        /// NumPy: first occurrence of max; NaN propagates (argmax of array with NaN returns index of first NaN).
+        /// Fallback argmax/argmin for Half (the IL kernel uses OpCodes.Bgt/Blt which don't apply to
+        /// the Half struct). NumPy: first occurrence of the extremum; NaN propagates (argmax/argmin
+        /// of an array containing NaN returns the index of the first NaN).
+        ///
+        /// Routed through struct-generic ExecuteReducing with a running C-order index (~2× the old
+        /// per-element AsIterator). NPY_CORDER (NOT the KEEPORDER default) is mandatory: the
+        /// returned index must be the C-order flat position even for transposed/strided views.
         /// </summary>
-        private long ArgMaxHalfFallback(NDArray arr)
+        private unsafe long ArgMaxHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            long bestIdx = 0;
-            long idx = 0;
-            double best = (double)iter.MoveNext();
-            if (double.IsNaN(best)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return idx;
-                if (v > best) { best = v; bestIdx = idx; }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<HalfArgMaxKernel, HalfArgAccumulator>(
+                default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
-        private long ArgMinHalfFallback(NDArray arr)
+        private unsafe long ArgMinHalfFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<Half>();
-            long bestIdx = 0;
-            long idx = 0;
-            double best = (double)iter.MoveNext();
-            if (double.IsNaN(best)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                double v = (double)iter.MoveNext();
-                if (double.IsNaN(v)) return idx;
-                if (v < best) { best = v; bestIdx = idx; }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<HalfArgMinKernel, HalfArgAccumulator>(
+                default, new HalfArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
         /// <summary>
-        /// Fallback argmax for Complex using lexicographic comparison (real, then imag).
-        /// Returns index of first occurrence of the maximum (NumPy tiebreak semantics).
-        /// NaN propagates: a Complex value with NaN in either component "wins" argmax at its first occurrence.
+        /// Fallback argmax/argmin for Complex using lexicographic comparison (real, then imag).
+        /// Returns the C-order flat index of the first occurrence of the extremum (NumPy tiebreak
+        /// semantics). NaN propagates: a Complex value with NaN in either component "wins" at its
+        /// first occurrence.
+        ///
+        /// Routed through struct-generic ExecuteReducing with a running C-order index (~2× the old
+        /// per-element AsIterator). The iterator is built with NPY_CORDER (NOT the KEEPORDER
+        /// default): the returned index must be the C-order position, so traversal must follow
+        /// C-order even on transposed/strided views — matching the contract the IL arg kernels
+        /// already honor for the other dtypes, and NumPy (argmax(a.T) returns a C-order index).
         /// </summary>
-        private long ArgMaxComplexFallback(NDArray arr)
+        private unsafe long ArgMaxComplexFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            long bestIdx = 0;
-            long idx = 0;
-            var best = iter.MoveNext();
-            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
-                if (v.Real > best.Real || (v.Real == best.Real && v.Imaginary > best.Imaginary))
-                {
-                    best = v;
-                    bestIdx = idx;
-                }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<ComplexArgMaxKernel, ComplexArgAccumulator>(
+                default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
-        /// <summary>
-        /// Fallback argmin for Complex using lexicographic comparison (real, then imag).
-        /// NaN propagates: a Complex value with NaN in either component "wins" argmin at its first occurrence.
-        /// </summary>
-        private long ArgMinComplexFallback(NDArray arr)
+        private unsafe long ArgMinComplexFallback(NDArray arr)
         {
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            long bestIdx = 0;
-            long idx = 0;
-            var best = iter.MoveNext();
-            if (double.IsNaN(best.Real) || double.IsNaN(best.Imaginary)) return 0;
-            idx = 1;
-            while (iter.HasNext())
-            {
-                var v = iter.MoveNext();
-                if (double.IsNaN(v.Real) || double.IsNaN(v.Imaginary)) return idx;
-                if (v.Real < best.Real || (v.Real == best.Real && v.Imaginary < best.Imaginary))
-                {
-                    best = v;
-                    bestIdx = idx;
-                }
-                idx++;
-            }
-            return bestIdx;
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP,
+                NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_SAFE_CASTING);
+            var a = iter.ExecuteReducing<ComplexArgMinKernel, ComplexArgAccumulator>(
+                default, new ComplexArgAccumulator { BestIdx = -1, Cur = 0, SawNaNIdx = -1 });
+            return a.SawNaNIdx >= 0 ? a.SawNaNIdx : a.BestIdx;
         }
 
         /// <summary>
@@ -473,7 +742,7 @@ namespace NumSharp.Backends
         /// Returns the index of the minimum value.
         /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected long argmin_elementwise_il(NDArray arr)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -510,7 +779,7 @@ namespace NumSharp.Backends
         /// Execute element-wise mean using IL kernels for sum.
         /// Mean = Sum / count
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         protected object mean_elementwise_il(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
@@ -525,18 +794,28 @@ namespace NumSharp.Backends
             long count = arr.size;
             var sumType = arr.GetTypeCode.GetAccumulatingType();
 
-            // Handle Complex separately - mean is Complex, not double
+            // Handle Complex separately - mean is Complex, not double.
+            // Reuse the one-pass SIMD Complex sum (ComplexReduceViaNDIter, the
+            // same path np.sum takes) then divide — unifies the Complex sum path
+            // and picks up the Vector256 contiguous-chunk kernel. mean of a
+            // single element is handled by the scalar guard above.
             if (sumType == NPTypeCode.Complex)
             {
-                var sum = ExecuteElementReduction<System.Numerics.Complex>(arr, ReductionOp.Sum, sumType);
+                var sum = ComplexReduceViaNDIter(arr, isProd: false);
                 return sum / count;
             }
 
-            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean
+            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean.
+            // NumPy upcasts float16 for the mean accumulation. Accumulating the sum in Half
+            // (the previous ExecuteElementReduction<Half> path) overflowed to garbage on large
+            // arrays — mean([2.5]×100k) returned 0.08 instead of 2.5 — and was also the slowest
+            // half reduction (~32 ms/4M). Accumulate in double (the precision NumPy uses for the
+            // f16 mean), then narrow: correct AND faster.
             if (sumType == NPTypeCode.Half)
             {
-                var sum = ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType);
-                return (Half)((double)sum / count);
+                if (!TryHalfAccumulateContiguous(arr, isProd: false, out double hsum))
+                    hsum = HalfReduceViaNDIter(arr, isProd: false);
+                return (Half)(hsum / count);
             }
 
             // NumPy 2.x: mean preserves float types, promotes int to float64
@@ -567,158 +846,136 @@ namespace NumSharp.Backends
 
         #endregion
 
-        #region Axis Reduction Methods
-
-        /// <summary>
-        /// Try to execute an axis reduction using SIMD kernel.
-        /// Returns null if SIMD kernel is not available, allowing fallback to iterator-based approach.
-        /// </summary>
-        /// <param name="arr">Input array</param>
-        /// <param name="axis">Axis to reduce along (already normalized to positive)</param>
-        /// <param name="op">Reduction operation</param>
-        /// <param name="outputTypeCode">Output type code</param>
-        /// <returns>Result array, or null if SIMD kernel not available</returns>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        protected unsafe NDArray TryExecuteAxisReductionSimd(
-            NDArray arr,
-            int axis,
-            ReductionOp op,
-            NPTypeCode outputTypeCode)
-        {
-            var inputType = arr.GetTypeCode;
-            var inputShape = arr.Shape;
-
-            // SIMD kernels only support same input/output type for Sum/Prod/Max/Min
-            // (type promotion handled by caller creating output array)
-            if (inputType != outputTypeCode)
-                return null;
-
-            // Check if the reduction axis is contiguous (stride == 1 for last axis)
-            // For row-major (C order), the last axis (axis == ndim-1) has stride 1
-            bool innerAxisContiguous = (axis == arr.ndim - 1) && inputShape.IsContiguous;
-
-            // Create kernel key
-            var key = new AxisReductionKernelKey(
-                inputType,
-                outputTypeCode,
-                op,
-                innerAxisContiguous
-            );
-
-            // Try to get SIMD kernel
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
-            if (kernel == null)
-                return null;
-
-            // Compute output shape (remove the axis dimension)
-            var outputDims = new long[arr.ndim - 1];
-            for (int d = 0, od = 0; d < arr.ndim; d++)
-            {
-                if (d != axis)
-                    outputDims[od++] = inputShape.dimensions[d];
-            }
-
-            // Create output array
-            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
-            var output = new NDArray(outputTypeCode, outputShape, false);
-
-            // Execute the kernel
-            long axisSize = inputShape.dimensions[axis];
-            long outputSize = output.size > 0 ? output.size : 1;
-
-            // Get element size
-            int elemSize = arr.dtypesize;
-
-            // Calculate base address accounting for shape offset (for sliced views)
-            byte* inputAddr = (byte*)arr.Address + inputShape.offset * elemSize;
-
-            fixed (long* inputStrides = inputShape.strides)
-            fixed (long* inputDims = inputShape.dimensions)
-            fixed (long* outputStrides = output.Shape.strides)
-            {
-                kernel(
-                    (void*)inputAddr,
-                    (void*)output.Address,
-                    inputStrides,
-                    inputDims,
-                    outputStrides,
-                    axis,
-                    axisSize,
-                    arr.ndim,
-                    outputSize
-                );
-            }
-
-            return output;
-        }
-
-        /// <summary>
-        /// Execute axis reduction for Sum with SIMD optimization.
-        /// Falls back to iterator-based approach if SIMD not available.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray sum_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
-        {
-            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Sum, outputTypeCode);
-        }
-
-        /// <summary>
-        /// Execute axis reduction for Prod with SIMD optimization.
-        /// Falls back to iterator-based approach if SIMD not available.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray prod_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
-        {
-            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Prod, outputTypeCode);
-        }
-
-        /// <summary>
-        /// Execute axis reduction for Max with SIMD optimization.
-        /// Falls back to iterator-based approach if SIMD not available.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray max_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
-        {
-            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Max, outputTypeCode);
-        }
-
-        /// <summary>
-        /// Execute axis reduction for Min with SIMD optimization.
-        /// Falls back to iterator-based approach if SIMD not available.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray min_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
-        {
-            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Min, outputTypeCode);
-        }
-
-        #endregion
-
         #region Half/Complex Fallback Methods
 
         /// <summary>
-        /// Fallback sum for Half type using iterator.
+        /// Fallback sum for Half (double accumulator). Contiguous buffers take the boxing-free
+        /// pointer scan (no AsIterator dispatch, ~Nx); empty/non-contig keep the iterator. The
+        /// double accumulate then narrows to Half — so a large sum saturates to ±inf exactly like
+        /// NumPy's float16 reduce (e.g. sum([2.5]×100k) → inf).
         /// </summary>
-        private object SumElementwiseHalfFallback(NDArray arr)
+        private unsafe object SumElementwiseHalfFallback(NDArray arr)
         {
-            double sum = 0.0;
-            var iter = arr.AsIterator<Half>();
-            while (iter.HasNext())
-                sum += (double)iter.MoveNext();
-            return (Half)sum;
+            if (TryHalfAccumulateContiguous(arr, isProd: false, out double s))
+                return (Half)s;
+
+            // non-contiguous → NDIter chunked path (no per-element AsIterator dispatch)
+            return (Half)HalfReduceViaNDIter(arr, isProd: false);
         }
 
         /// <summary>
-        /// Fallback sum for Complex type using iterator.
+        /// Boxing-free contiguous Half sum/product accumulated in <see cref="double"/> — the
+        /// precision NumSharp's f16 reductions already use (and NumPy uses for the f16 mean). Half
+        /// has no Vector&lt;Half&gt; in the BCL, but reading the raw buffer and widening each element
+        /// avoids the legacy NDIterator's virtual MoveNext/HasNext per element, which dominated
+        /// these reductions (sum/prod ~14×, mean ~53× the double path). Returns false for empty or
+        /// non-contiguous inputs so the caller keeps its iterator path. Offset-contiguous (sliced)
+        /// views are honored via <see cref="Shape.offset"/>.
+        /// </summary>
+        private static unsafe bool TryHalfAccumulateContiguous(NDArray arr, bool isProd, out double result)
+        {
+            long n = arr.size;
+            if (!arr.Shape.IsContiguous || n <= 0)
+            {
+                result = isProd ? 1.0 : 0.0;
+                return false;
+            }
+
+            Half* p = (Half*)((byte*)arr.Address + arr.Shape.offset * 2);
+            double acc = isProd ? 1.0 : 0.0;
+            if (isProd)
+                for (long i = 0; i < n; i++) acc *= (double)p[i];
+            else
+                for (long i = 0; i < n; i++) acc += (double)p[i];
+            result = acc;
+            return true;
+        }
+
+        /// <summary>
+        /// Non-contiguous Half sum/product via NDIter's chunked EXTERNAL_LOOP
+        /// (<see cref="NDIterRef.ForEach"/>), accumulated in double. Replaces the per-element
+        /// AsIterator&lt;Half&gt; tail: NDIter normalizes the strided/transposed layout to
+        /// contiguous-inner chunks and amortizes iterator dispatch over each chunk — ~2.6× the
+        /// per-element NDIterator on strided views. sum/prod are commutative, so the permuted
+        /// traversal order is value-equivalent (modulo float rounding, which the f16 fuzz tolerates).
+        /// Contiguous inputs take <see cref="TryHalfAccumulateContiguous"/> upstream.
+        /// </summary>
+        private static unsafe double HalfReduceViaNDIter(NDArray arr, bool isProd)
+        {
+            double acc = isProd ? 1.0 : 0.0;
+            if (arr.size == 0) return acc;
+
+            // Struct-generic ExecuteReducing — the accumulator stays in a register
+            // instead of the per-element *aux memory round-trip the ForEach delegate
+            // forced (~1.6× on 4M, both layouts). Half has no Vector<Half> in the BCL
+            // and the f16→f64 widen is the wall, so there is no SIMD/unroll win here;
+            // the gain is purely devirtualization + register accumulation. sum/prod
+            // are commutative ⇒ KEEPORDER's permuted traversal is value-equivalent
+            // modulo ULP. Contiguous inputs take TryHalfAccumulateContiguous upstream.
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
+            return isProd
+                ? iter.ExecuteReducing<HalfProdKernel, double>(default, acc)
+                : iter.ExecuteReducing<HalfSumKernel, double>(default, acc);
+        }
+
+        /// <summary>
+        /// Non-contiguous Half min/max via NDIter's chunked EXTERNAL_LOOP. The min/max VALUE is
+        /// order-independent and NaN propagation (any NaN → NaN) is too, so NDIter's permuted
+        /// traversal is safe here — unlike argmin/argmax, whose returned index would shift under the
+        /// permutation. Empty → ±inf (matching the prior iterator fallback); any NaN → NaN.
+        /// Contiguous inputs take the direct-pointer scan upstream.
+        ///
+        /// Struct-generic ExecuteReducing (HalfMaxKernel/HalfMinKernel) replaces the ForEach
+        /// delegate: a 4-accumulator unroll on the contiguous inner chunk breaks the per-element
+        /// dependency chain (~1.3× on 4M) and the JIT inlines the kernel.
+        /// </summary>
+        private static unsafe object HalfMinMaxViaNDIter(NDArray arr, bool isMin)
+        {
+            if (arr.size == 0)
+                return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
+
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
+            var acc = isMin
+                ? iter.ExecuteReducing<HalfMinKernel, HalfMinMaxAccumulator>(default, default)
+                : iter.ExecuteReducing<HalfMaxKernel, HalfMinMaxAccumulator>(default, default);
+
+            if (acc.SawNaN) return Half.NaN;
+            if (!acc.Seen) return isMin ? Half.PositiveInfinity : Half.NegativeInfinity;
+            return (Half)acc.Best;
+        }
+
+        /// <summary>
+        /// Complex sum/product via NDIter's chunked EXTERNAL_LOOP — replaces the per-element
+        /// AsIterator&lt;Complex&gt; over EVERY layout (Complex had no contiguous fast path, so this
+        /// wins ~2.2× contiguous and ~2.6× strided). Both ops are commutative, so the permuted
+        /// traversal is value-equivalent modulo rounding. Empty: sum→0, prod→1 (NumPy parity).
+        /// </summary>
+        private static unsafe System.Numerics.Complex ComplexReduceViaNDIter(NDArray arr, bool isProd)
+        {
+            var acc = isProd ? System.Numerics.Complex.One : System.Numerics.Complex.Zero;
+            if (arr.size == 0) return acc;
+
+            // Struct-generic ExecuteReducing (devirtualized + inlined; the
+            // accumulator stays in a register instead of the per-element memory
+            // round-trip the ForEach delegate forced, and sum adds a
+            // Vector256<double> contiguous-chunk fast path) — measured ~2.4×
+            // (sum) / ~1.5× (prod) the prior ForEach(delegate) fold on 4M
+            // elements, both layouts. KEEPORDER (NDIterRef.New default) keeps
+            // the inner chunk contiguous for transposed views too. Both ops are
+            // commutative, so the permuted traversal is value-equivalent modulo
+            // ULP-level rounding (same class as the codebase's pairwise sums).
+            using var iter = NDIterRef.New(arr, NDIterGlobalFlags.EXTERNAL_LOOP);
+            return isProd
+                ? iter.ExecuteReducing<ComplexProdKernel, System.Numerics.Complex>(default, acc)
+                : iter.ExecuteReducing<ComplexSumKernel, System.Numerics.Complex>(default, acc);
+        }
+
+        /// <summary>
+        /// Fallback sum for Complex type via NDIter's chunked EXTERNAL_LOOP (see
+        /// <see cref="ComplexReduceViaNDIter"/>).
         /// </summary>
         private object SumElementwiseComplexFallback(NDArray arr)
-        {
-            var sum = System.Numerics.Complex.Zero;
-            var iter = arr.AsIterator<System.Numerics.Complex>();
-            while (iter.HasNext())
-                sum += iter.MoveNext();
-            return sum;
-        }
+            => ComplexReduceViaNDIter(arr, isProd: false);
 
         #endregion
     }

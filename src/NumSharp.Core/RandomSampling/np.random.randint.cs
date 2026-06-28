@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -98,186 +99,26 @@ namespace NumSharp
 
         private void FillRandintInt(NDArray nd, int low, int high, NPTypeCode typecode)
         {
-            switch (typecode)
-            {
-                case NPTypeCode.Byte:
-                {
-                    var data = (ArraySlice<byte>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (byte)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.SByte:
-                {
-                    var data = (ArraySlice<sbyte>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (sbyte)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Int16:
-                {
-                    var data = (ArraySlice<short>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (short)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt16:
-                {
-                    var data = (ArraySlice<ushort>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (ushort)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Int32:
-                {
-                    var data = (ArraySlice<int>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt32:
-                {
-                    var data = (ArraySlice<uint>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (uint)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Int64:
-                {
-                    var data = (ArraySlice<long>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt64:
-                {
-                    var data = (ArraySlice<ulong>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (ulong)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Char:
-                {
-                    var data = (ArraySlice<char>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (char)randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Double:
-                {
-                    var data = (ArraySlice<double>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Single:
-                {
-                    var data = (ArraySlice<float>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.Next(low, high);
-                    break;
-                }
-                case NPTypeCode.Decimal:
-                {
-                    var data = (ArraySlice<decimal>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.Next(low, high);
-                    break;
-                }
-            }
+            NpFunc.Invoke(typecode, FillRandintIntDispatch<int>, nd.Array, randomizer, low, high);
         }
 
         private void FillRandintLong(NDArray nd, long low, long high, NPTypeCode typecode)
         {
-            // Use NextLong for all types when range exceeds int32
-            // Then cast the result to the target type
-            switch (typecode)
-            {
-                case NPTypeCode.Byte:
-                {
-                    var data = (ArraySlice<byte>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (byte)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.SByte:
-                {
-                    var data = (ArraySlice<sbyte>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (sbyte)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Int16:
-                {
-                    var data = (ArraySlice<short>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (short)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt16:
-                {
-                    var data = (ArraySlice<ushort>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (ushort)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Int32:
-                {
-                    var data = (ArraySlice<int>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (int)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt32:
-                {
-                    var data = (ArraySlice<uint>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (uint)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Int64:
-                {
-                    var data = (ArraySlice<long>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.UInt64:
-                {
-                    var data = (ArraySlice<ulong>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (ulong)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Char:
-                {
-                    var data = (ArraySlice<char>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = (char)randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Double:
-                {
-                    var data = (ArraySlice<double>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Single:
-                {
-                    var data = (ArraySlice<float>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.NextLong(low, high);
-                    break;
-                }
-                case NPTypeCode.Decimal:
-                {
-                    var data = (ArraySlice<decimal>)nd.Array;
-                    for (long i = 0; i < data.Count; i++)
-                        data[i] = randomizer.NextLong(low, high);
-                    break;
-                }
-            }
+            NpFunc.Invoke(typecode, FillRandintLongDispatch<int>, nd.Array, randomizer, low, high);
+        }
+
+        private static void FillRandintIntDispatch<T>(IArraySlice array, MT19937 rng, int low, int high) where T : unmanaged, INumberBase<T>
+        {
+            var data = (ArraySlice<T>)array;
+            for (long i = 0; i < data.Count; i++)
+                data[i] = T.CreateTruncating(rng.Next(low, high));
+        }
+
+        private static void FillRandintLongDispatch<T>(IArraySlice array, MT19937 rng, long low, long high) where T : unmanaged, INumberBase<T>
+        {
+            var data = (ArraySlice<T>)array;
+            for (long i = 0; i < data.Count; i++)
+                data[i] = T.CreateTruncating(rng.NextLong(low, high));
         }
     }
 }

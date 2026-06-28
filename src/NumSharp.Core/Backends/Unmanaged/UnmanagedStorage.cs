@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
@@ -26,10 +27,8 @@ namespace NumSharp.Backends
     /// </remarks>
     public partial class UnmanagedStorage : ICloneable
     {
-#if _REGEN
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        protected ArraySlice<#2> _array#1;
-#else
+        // %foreach supported_dtypes,supported_dtypes_lowercase%
+        // protected ArraySlice<#2> _array#1;
         protected ArraySlice<bool> _arrayBoolean;
         protected ArraySlice<sbyte> _arraySByte;
         protected ArraySlice<byte> _arrayByte;
@@ -45,7 +44,6 @@ namespace NumSharp.Backends
         protected ArraySlice<float> _arraySingle;
         protected ArraySlice<decimal> _arrayDecimal;
         protected ArraySlice<System.Numerics.Complex> _arrayComplex;
-#endif
         public IArraySlice InternalArray;
         public unsafe byte* Address;
         public long Count;
@@ -140,8 +138,15 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The size in bytes of a single value of <see cref="DType"/>
+        ///     as stored in the unmanaged buffer.
         /// </summary>
-        /// <remarks>Computed by <see cref="Marshal.SizeOf(object)"/></remarks>
+        /// <remarks>
+        /// Returns the in-memory element stride, not the marshaling size.
+        /// For bool that is 1, not <see cref="Marshal.SizeOf(object)"/>'s 4
+        /// (bool is marshaled to win32 BOOL = int). All pointer arithmetic
+        /// over <c>Address</c> uses this value, so the in-memory layout is
+        /// the only correct reference.
+        /// </remarks>
         public int DTypeSize
         {
             get
@@ -151,7 +156,7 @@ namespace NumSharp.Backends
                     return IntPtr.Size;
                 }
 
-                return Marshal.SizeOf(_dtype);
+                return _typecode.SizeOf();
             }
         }
 
@@ -273,6 +278,7 @@ namespace NumSharp.Backends
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
             ret._baseStorage = storage._baseStorage ?? storage;
+            ret.Engine = storage.Engine;
             return ret;
         }
 
@@ -331,29 +337,27 @@ namespace NumSharp.Backends
                 throw new ArgumentNullException(nameof(shape));
 
             if (shape.size != arraySlice.Count)
-                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({Count})");
+                throw new IncorrectShapeException($"Given shape size ({shape.size}) does not match the size of the given storage size ({arraySlice.Count})");
 
             _Allocate(shape, arraySlice);
         }
 
 
-#if _REGEN
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        public UnmanagedStorage(#2 scalar)
-        {            
-            _dtype = typeof(#1);
-            _typecode = InfoOf<#2>.NPTypeCode;
-            _shape = Shape.Scalar;
-            InternalArray = _array#1 = ArraySlice.Scalar<#2>(scalar);
-            unsafe
-            {
-                Address = (byte*)_array#1.Address;
-                Count = _array#1.Count;
-            }
-        }
+        // %foreach supported_dtypes,supported_dtypes_lowercase%
+        // public UnmanagedStorage(#2 scalar)
+        // {            
+            // _dtype = typeof(#1);
+            // _typecode = InfoOf<#2>.NPTypeCode;
+            // _shape = Shape.Scalar;
+            // InternalArray = _array#1 = ArraySlice.Scalar<#2>(scalar);
+            // unsafe
+            // {
+                // Address = (byte*)_array#1.Address;
+                // Count = _array#1.Count;
+            // }
+        // }
 
-        %
-#else
+        // %
         public UnmanagedStorage(bool scalar)
         {
             _dtype = typeof(Boolean);
@@ -509,25 +513,22 @@ namespace NumSharp.Backends
                 Count = _arrayDecimal.Count;
             }
         }
-#endif
-#if _REGEN
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        public UnmanagedStorage(#1[] values)
-        {            
-            if (values == null)
-                throw new ArgumentNullException(nameof(values));
-            _dtype = typeof(#1);
-            _typecode = _dtype.GetTypeCode();
-            _shape = new Shape(values.Length);
-            InternalArray = _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
-            unsafe
-            {
-                Address = (byte*)_array#1.Address;
-                Count = values.Length;
-            }
-        }
-        %
-#else
+        // %foreach supported_dtypes,supported_dtypes_lowercase%
+        // public UnmanagedStorage(#1[] values)
+        // {            
+            // if (values == null)
+                // throw new ArgumentNullException(nameof(values));
+            // _dtype = typeof(#1);
+            // _typecode = _dtype.GetTypeCode();
+            // _shape = new Shape(values.Length);
+            // InternalArray = _array#1 = new ArraySlice<#2>(UnmanagedMemoryBlock<#2>.FromArray(values));
+            // unsafe
+            // {
+                // Address = (byte*)_array#1.Address;
+                // Count = values.Length;
+            // }
+        // }
+        // %
         public UnmanagedStorage(Boolean[] values)
         {
             if (values == null)
@@ -707,7 +708,6 @@ namespace NumSharp.Backends
                 Count = values.Length;
             }
         }
-#endif
 
         #region Switched Accessing
 
@@ -720,20 +720,18 @@ namespace NumSharp.Backends
         {
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                {
-                    InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
-                    Address = (byte*) _array#1.Address;
-                    Count = _array#1.Count;
-                    break;
-                }
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                // {
+                    // InternalArray = _array#1 = ArraySlice.FromArray<#2>((#2[])array);
+                    // Address = (byte*) _array#1.Address;
+                    // Count = _array#1.Count;
+                    // break;
+                // }
+                // %
+                // default:
+                    // throw new NotSupportedException();
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
                 {
@@ -857,7 +855,6 @@ namespace NumSharp.Backends
 
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -870,20 +867,18 @@ namespace NumSharp.Backends
         {
             switch (_typecode)
             {
-#if _REGEN
-                //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
-                %foreach supported_dtypes,supported_dtypes_lowercase%
-                case NPTypeCode.#1:
-                {
-                    InternalArray = _array#1 = (ArraySlice<#2>)array;
-                    Address = (byte*) _array#1.Address;
-                    Count = _array#1.Count;
-                    break;
-                }
-                %
-                default:
-                    throw new NotSupportedException();
-#else
+                // //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
+                // %foreach supported_dtypes,supported_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                // {
+                    // InternalArray = _array#1 = (ArraySlice<#2>)array;
+                    // Address = (byte*) _array#1.Address;
+                    // Count = _array#1.Count;
+                    // break;
+                // }
+                // %
+                // default:
+                    // throw new NotSupportedException();
                 //Since it is a single assignment, we do not use 'as' casting but rather explicit casting that'll also type-check.
                 case NPTypeCode.Boolean:
                 {
@@ -1007,7 +1002,6 @@ namespace NumSharp.Backends
 
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -1037,7 +1031,8 @@ namespace NumSharp.Backends
         protected static ArraySlice<TOut> _ChangeTypeOfArray<TOut>(IArraySlice sourceArray) where TOut : unmanaged
         {
             if (typeof(TOut) == sourceArray.GetType().GetElementType()) return (ArraySlice<TOut>)sourceArray;
-            return (ArraySlice<TOut>)sourceArray.CastTo<TOut>();
+            // SIMD copy-with-cast via NDIter. Was: scalar sourceArray.CastTo<TOut>() loop.
+            return (ArraySlice<TOut>)CastSliceViaIterator(sourceArray, InfoOf<TOut>.NPTypeCode);
         }
 
         #region Allocation
@@ -1235,25 +1230,23 @@ namespace NumSharp.Backends
         /// <param name="address">The address to copy to.</param>
         public unsafe void CopyTo(void* address)
         {
-#if _REGEN
-            #region Compute
+            // #region Compute
 
-		    switch (TypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-			    {
-				    CopyTo<#2>((#2*)address);
-                    break;
-			    }
+		    // switch (TypeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+			    // {
+				    // CopyTo<#2>((#2*)address);
+                    // break;
+			    // }
 
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
 
-            #endregion
-#else
+            // #endregion
 
             #region Compute
 
@@ -1268,6 +1261,12 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                 {
                     CopyTo<byte>((byte*)address);
+                    break;
+                }
+
+                case NPTypeCode.SByte:
+                {
+                    CopyTo<sbyte>((sbyte*)address);
                     break;
                 }
 
@@ -1313,6 +1312,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    CopyTo<Half>((Half*)address);
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     CopyTo<double>((double*)address);
@@ -1331,13 +1336,18 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Complex:
+                {
+                    CopyTo<System.Numerics.Complex>((System.Numerics.Complex*)address);
+                    break;
+                }
+
                 default:
                     throw new NotSupportedException();
             }
 
             #endregion
 
-#endif
         }
 
         /// <summary>
@@ -1352,25 +1362,23 @@ namespace NumSharp.Backends
             if (Count > block.Count)
                 throw new ArgumentOutOfRangeException(nameof(block), $"Unable to copy from this storage to given memory block because this storage count is larger than the given memory block's length.");
 
-#if _REGEN
-            #region Compute
+            // #region Compute
 
-		    switch (TypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-			    {
-				    CopyTo<#2>((#2*)slice.Address);
-                    break;
-			    }
+		    // switch (TypeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+			    // {
+				    // CopyTo<#2>((#2*)slice.Address);
+                    // break;
+			    // }
 
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
 
-            #endregion
-#else
+            // #endregion
 
             #region Compute
 
@@ -1385,6 +1393,12 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                 {
                     CopyTo<byte>((byte*)block.Address);
+                    break;
+                }
+
+                case NPTypeCode.SByte:
+                {
+                    CopyTo<sbyte>((sbyte*)block.Address);
                     break;
                 }
 
@@ -1430,6 +1444,12 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    CopyTo<Half>((Half*)block.Address);
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     CopyTo<double>((double*)block.Address);
@@ -1448,13 +1468,18 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Complex:
+                {
+                    CopyTo<System.Numerics.Complex>((System.Numerics.Complex*)block.Address);
+                    break;
+                }
+
                 default:
                     throw new NotSupportedException();
             }
 
             #endregion
 
-#endif
         }
 
         /// <summary>
@@ -1487,7 +1512,7 @@ namespace NumSharp.Backends
             if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
-                MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
+                NDIter.Copy(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 

@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.View
             view.Reshape(10);
             Assert.AreEqual(new Shape(10), view.Shape);
             new long[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }.Should().BeEquivalentTo(view.ToArray<long>());
-            new NDArray(view).ToString(flat: true).Should().Be("array([5, 6, 7, 8, 9, 15, 16, 17, 18, 19])");
+            new NDArray(view).ToString(flat: true).Should().Be("array([ 5,  6,  7,  8,  9, 15, 16, 17, 18, 19])");
         }
 
         [TestMethod]
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.View
             t.Shape.IsSliced.Should().Be(false);
             var view = t.GetView(":, 1:");
             view.Shape.IsSliced.Should().Be(true);
-            new NDArray(view).ToString(flat: true).Should().Be("array([[1, 2], [4, 5]])");
+            new NDArray(view).ToString(flat: true).Should().Be("array([[1, 2],\n       [4, 5]])");
 
             // Reshape makes a copy for non-contiguous arrays (NumPy behavior)
             view.Reshape(2, 1, 2, 1);
@@ -75,10 +75,10 @@ namespace NumSharp.UnitTest.View
             view.GetView("1").GetView("0").GetView("1").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 5, });
 
             // this is to show that ToString works in principle:
-            np.arange(4).reshape(2, 1, 2, 1).ToString(flat: true).Should().Be("array([[[[0], [1]]], [[[2], [3]]]])");
+            np.arange(4).reshape(2, 1, 2, 1).ToString(flat: true).Should().Be("array([[[[0],\n         [1]]],\n\n\n       [[[2],\n         [3]]]])");
             var nd = new NDArray(view);
             // and now tostring of the reshaped
-            nd.ToString(flat: true).Should().Be("array([[[[1], [2]]], [[[4], [5]]]])");
+            nd.ToString(flat: true).Should().Be("array([[[[1],\n         [2]]],\n\n\n       [[[4],\n         [5]]]])");
         }
 
         [TestMethod]
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new long[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<long>());
             var v1 = view.GetView("1::2");
             AssertAreEqual(new long[] { 6, 8, 15, 17, 19 }, v1.ToArray<long>());
-            new NDArray(v1).ToString(flat: true).Should().Be("array([6, 8, 15, 17, 19])");
+            new NDArray(v1).ToString(flat: true).Should().Be("array([ 6,  8, 15, 17, 19])");
         }
 
         [TestMethod]
@@ -105,25 +105,25 @@ namespace NumSharp.UnitTest.View
             var view = t.GetView("::-1");
             view.Reshape(5, 4);  // Makes a copy (reversed array is non-contiguous)
             var v1 = view.GetView(":, 1:-1");
-            new NDArray(v1).ToString(flat: true).Should().Be("array([[18, 17], [14, 13], [10, 9], [6, 5], [2, 1]])");
+            new NDArray(v1).ToString(flat: true).Should().Be("array([[18, 17],\n       [14, 13],\n       [10,  9],\n       [ 6,  5],\n       [ 2,  1]])");
             v1.Reshape(1, 2, 5);  // Makes a copy (column slice is non-contiguous)
-            new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10], [9, 6, 5, 2, 1]]])");
+            new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10],\n        [ 9,  6,  5,  2,  1]]])");
             var v2 = v1.GetView(":, ::-1, ::-2");
-            new NDArray(v2).ToString(flat: true).Should().Be("array([[[1, 5, 9], [10, 14, 18]]])");
+            new NDArray(v2).ToString(flat: true).Should().Be("array([[[ 1,  5,  9],\n        [10, 14, 18]]])");
             v2.Reshape(2, 3, 1);  // Makes a copy
-            new NDArray(v2).ToString(flat: true).Should().Be("array([[[1], [5], [9]], [[10], [14], [18]]])");
+            new NDArray(v2).ToString(flat: true).Should().Be("array([[[ 1],\n        [ 5],\n        [ 9]],\n\n       [[10],\n        [14],\n        [18]]])");
             var v3 = v2.GetView(":,::-2, 0");
-            new NDArray(v3).ToString(flat: true).Should().Be("array([[9, 1], [18, 10]])");
+            new NDArray(v3).ToString(flat: true).Should().Be("array([[ 9,  1],\n       [18, 10]])");
 
             // Modify v3 - changes propagate to v2 (shared memory via slicing)
             // but NOT to v1 or t (reshape created copies)
             v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }), new int[0]);
-            new NDArray(v3).ToString(flat: true).Should().Be("array([[99, 11], [-18, -10]])");
-            new NDArray(v2).ToString(flat: true).Should().Be("array([[[11], [5], [99]], [[-10], [14], [-18]]])");
+            new NDArray(v3).ToString(flat: true).Should().Be("array([[ 99,  11],\n       [-18, -10]])");
+            new NDArray(v2).ToString(flat: true).Should().Be("array([[[ 11],\n        [  5],\n        [ 99]],\n\n       [[-10],\n        [ 14],\n        [-18]]])");
             // v1 unchanged (reshape made a copy)
-            new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10], [9, 6, 5, 2, 1]]])");
+            new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10],\n        [ 9,  6,  5,  2,  1]]])");
             // t unchanged (reshape made a copy)
-            new NDArray(t).ToString(flat: true).Should().Be("array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])");
+            new NDArray(t).ToString(flat: true).Should().Be("array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,\n       17, 18, 19])");
         }
 
         [TestMethod]

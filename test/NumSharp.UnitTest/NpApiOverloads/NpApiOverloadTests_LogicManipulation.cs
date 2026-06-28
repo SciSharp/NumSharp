@@ -825,7 +825,6 @@ public class NpApiOverloadTests_LogicManipulation
     }
 
     [TestMethod]
-    [OpenBugs]  // np.dot(matrix, vector) has existing bug - memory corruption
     public void Dot_MatrixVector_Compiles()
     {
         // NumPy: np.dot([[1, 2], [3, 4]], [1, 1]) -> [3, 7]

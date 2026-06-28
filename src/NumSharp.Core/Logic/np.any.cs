@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using NumSharp.Backends;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -6,132 +8,164 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Test whether any array element along a given axis evaluates to True.
+        ///     Test whether any array element evaluates to True.
         /// </summary>
         /// <param name="a">Input array or object that can be converted to an array.</param>
         /// <returns>True if any element evaluates to True (non-zero).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
         public static bool any(NDArray a)
         {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
             return a.TensorEngine.Any(a);
         }
 
         /// <summary>
         ///     Test whether any array element along a given axis evaluates to True.
         /// </summary>
-        /// <param name="nd">Input array or object that can be converted to an array.</param>
-        /// <param name="axis">Axis or axes along which a logical OR reduction is performed. The default (axis = None) is to perform a logical OR over all the dimensions of the input array. axis may be negative, in which case it counts from the last to the first axis.</param>
+        /// <param name="nd">Input array.</param>
+        /// <param name="axis">Axis along which a logical OR reduction is performed.</param>
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
         /// <returns>A new boolean ndarray is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
         public static NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
         {
             if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+
+            if (nd.TensorEngine is DefaultEngine defaultEngine)
+                return defaultEngine.Any(nd, axis, keepdims);
+
+            var result = nd.TensorEngine.Any(nd, axis);
+            if (keepdims && nd.ndim > 0)
             {
-                throw new ArgumentNullException(nameof(nd), "Can't operate with null array");
+                axis = DefaultEngine.NormalizeAxis(axis, nd.ndim);
+                var dims = (long[])nd.shape.Clone();
+                dims[axis] = 1;
+                result.Storage.Reshape(new Shape(dims));
             }
 
-            // Handle 0D arrays specially - NumPy 2.x allows axis=0 or axis=-1 on 0D arrays
-            if (nd.ndim == 0)
-            {
-                if (axis == 0 || axis == -1)
-                {
-                    // Return the scalar result as a 0D boolean array
-                    bool result = nd.TensorEngine.Any(nd);
-                    return np.array(result).MakeGeneric<bool>();
-                }
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension 0");
-            }
-
-            if (axis < 0)
-                axis = nd.ndim + axis;
-            if (axis < 0 || axis >= nd.ndim)
-            {
-                throw new ArgumentOutOfRangeException(nameof(axis));
-            }
-
-            long[] inputShape = nd.shape;
-            long[] outputShape = new long[keepdims ? inputShape.Length : inputShape.Length - 1];
-            int outputIndex = 0;
-            for (int i = 0; i < inputShape.Length; i++)
-            {
-                if (i != axis)
-                {
-                    outputShape[outputIndex++] = inputShape[i];
-                }
-                else if (keepdims)
-                {
-                    outputShape[outputIndex++] = 1;
-                }
-            }
-
-            NDArray<bool> resultArray = zeros<bool>(outputShape).MakeGeneric<bool>();
-
-            long axisSize = inputShape[axis];
-
-            long postAxisStride = 1;
-            for (int i = axis + 1; i < inputShape.Length; i++)
-            {
-                postAxisStride *= inputShape[i];
-            }
-
-            // Dispatch by type
-            bool success = nd.typecode switch
-            {
-                NPTypeCode.Boolean => ComputeAnyPerAxis(nd.MakeGeneric<bool>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Byte => ComputeAnyPerAxis(nd.MakeGeneric<byte>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.SByte => ComputeAnyPerAxis(nd.MakeGeneric<sbyte>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Int16 => ComputeAnyPerAxis(nd.MakeGeneric<short>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.UInt16 => ComputeAnyPerAxis(nd.MakeGeneric<ushort>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Int32 => ComputeAnyPerAxis(nd.MakeGeneric<int>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.UInt32 => ComputeAnyPerAxis(nd.MakeGeneric<uint>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Int64 => ComputeAnyPerAxis(nd.MakeGeneric<long>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.UInt64 => ComputeAnyPerAxis(nd.MakeGeneric<ulong>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Char => ComputeAnyPerAxis(nd.MakeGeneric<char>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Half => ComputeAnyPerAxis(nd.MakeGeneric<Half>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Double => ComputeAnyPerAxis(nd.MakeGeneric<double>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Single => ComputeAnyPerAxis(nd.MakeGeneric<float>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Decimal => ComputeAnyPerAxis(nd.MakeGeneric<decimal>(), axisSize, postAxisStride, resultArray),
-                NPTypeCode.Complex => ComputeAnyPerAxis(nd.MakeGeneric<System.Numerics.Complex>(), axisSize, postAxisStride, resultArray),
-                _ => throw new NotSupportedException($"Type {nd.typecode} is not supported")
-            };
-
-            if (!success)
-            {
-                throw new InvalidOperationException("Failed to compute any() along the specified axis");
-            }
-
-            return resultArray;
+            return result;
         }
 
-        private static unsafe bool ComputeAnyPerAxis<T>(NDArray<T> nd, long axisSize, long postAxisStride, NDArray<bool> result) where T : unmanaged
+        /// <summary>
+        ///     Test whether any array element along the given axes evaluates to True.
+        ///     Multiple axes can be specified by passing an array of ints.
+        /// </summary>
+        /// <param name="nd">Input array.</param>
+        /// <param name="axis">Tuple of axes along which a logical OR reduction is performed.
+        ///     An empty array returns the input cast to bool (no reduction).</param>
+        /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
+        /// <returns>A new boolean ndarray is returned.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        public static NDArray<bool> any(NDArray nd, int[] axis, bool keepdims = false)
         {
-            // Use pointer-based access to support long indexing (arrays >2GB)
-            T* inputPtr = (T*)nd.Address;
-            bool* resultPtr = (bool*)result.Address;
-            long resultLength = result.size;
+            if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+            if (axis is null)
+                throw new ArgumentNullException(nameof(axis));
 
-            for (long o = 0; o < resultLength; o++)
+            if (nd.TensorEngine is DefaultEngine defaultEngine)
+                return defaultEngine.Any(nd, axis, keepdims);
+
+            if (axis.Length == 0)
+                return DefaultEngine.CastToBoolPreservingShape(nd);
+
+            var normalized = axis.Select(a => DefaultEngine.NormalizeAxis(a, nd.ndim)).ToArray();
+            Array.Sort(normalized);
+
+            NDArray<bool> result = null;
+            NDArray current = nd;
+            for (int i = normalized.Length - 1; i >= 0; i--)
             {
-                long blockIndex = o / postAxisStride;
-                long inBlockIndex = o % postAxisStride;
-                long inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
-
-                bool currentResult = false;
-                for (long a = 0; a < axisSize; a++)
-                {
-                    long inputIndex = inputStartIndex + a * postAxisStride;
-                    if (!inputPtr[inputIndex].Equals(default(T)))
-                    {
-                        currentResult = true;
-                        break;
-                    }
-                }
-                resultPtr[o] = currentResult;
+                result = any(current, normalized[i], keepdims: true);
+                current = result;
             }
 
-            return true;
+            if (!keepdims)
+                result = SqueezeAxes(result, normalized);
+
+            return result;
+        }
+
+        /// <summary>
+        ///     Test whether any array element evaluates to True, optionally keeping reduced dimensions.
+        ///     Reduces over all axes (axis = None semantics).
+        /// </summary>
+        /// <param name="nd">Input array.</param>
+        /// <param name="keepdims">If True, the result has all dimensions as size 1 (broadcast-compatible
+        ///     with the input). Otherwise the result is a 0-d array.</param>
+        /// <returns>A new boolean ndarray.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        public static NDArray<bool> any(NDArray nd, bool keepdims)
+        {
+            if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+
+            bool scalar = any(nd);
+            if (!keepdims || nd.ndim == 0)
+                return np.array(scalar).MakeGeneric<bool>();
+
+            var dims = new long[nd.ndim];
+            for (int i = 0; i < dims.Length; i++) dims[i] = 1;
+            var result = np.array(scalar).MakeGeneric<bool>();
+            result.Storage.Reshape(new Shape(dims));
+            return result;
+        }
+
+        /// <summary>
+        ///     Test whether any array element along the given axis evaluates to True, with optional
+        ///     out= destination and where= mask. Matches NumPy 2.x:
+        ///     <c>any(a, axis=None, out=None, keepdims=False, *, where=True)</c>.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="axis">Axis along which to reduce. Pass <c>null</c> for axis=None (all axes).</param>
+        /// <param name="out">Destination array. Its dtype is preserved. Pass <c>null</c> to allocate fresh.</param>
+        /// <param name="keepdims">If True, the reduced axes are left as size-one dimensions.</param>
+        /// <param name="where">Boolean (or numeric-treated-as-bool) mask, broadcastable against
+        ///     <paramref name="a"/>. Elements where <c>where=False</c> are excluded from the reduction
+        ///     and contribute the identity value (False for <c>any</c>). Pass <c>null</c> for no mask.</param>
+        /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        public static NDArray any(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+        {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
+
+            NDArray<bool> reduced = ReduceAnyWithWhere(a, axis, keepdims, @where);
+            return @out is null ? reduced : WriteToOut(reduced, @out);
+        }
+
+        /// <summary>
+        ///     Tuple-axis variant of the full <c>np.any</c> overload (with <paramref name="out"/> and <paramref name="where"/>).
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="axis">Axes along which to reduce.</param>
+        /// <param name="out">Destination array. Its dtype is preserved.</param>
+        /// <param name="keepdims">If True, reduced axes are left as size-one dimensions.</param>
+        /// <param name="where">Boolean mask, broadcastable against <paramref name="a"/>.</param>
+        /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
+        public static NDArray any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
+        {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
+            if (axis is null)
+                throw new ArgumentNullException(nameof(axis));
+
+            NDArray effective = @where is null ? a : ApplyWhereForAny(a, @where);
+            NDArray<bool> reduced = any(effective, axis, keepdims);
+            return @out is null ? reduced : WriteToOut(reduced, @out);
+        }
+
+        private static NDArray<bool> ReduceAnyWithWhere(NDArray a, int? axis, bool keepdims, NDArray @where)
+        {
+            NDArray effective = @where is null ? a : ApplyWhereForAny(a, @where);
+
+            if (!axis.HasValue)
+                return any(effective, keepdims);
+
+            return any(effective, axis.Value, keepdims);
         }
     }
 }

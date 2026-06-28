@@ -245,8 +245,11 @@ namespace NumSharp.UnitTest.NewDtypes
         {
             var a = np.array(new Complex[] { C(1, 2), C(double.NaN, 0), C(3, 1) });
             var r = np.min(a).GetAtIndex<Complex>(0);
+            // NumPy parity: min/max return the NaN-bearing element VERBATIM (the first NaN in
+            // iteration order wins), not a synthesized (nan,nan). Here that element is (nan, 0),
+            // so the imaginary part is 0 — verified: np.min([1+2j, nan+0j, 3+1j]) == (nan+0j).
             double.IsNaN(r.Real).Should().BeTrue();
-            double.IsNaN(r.Imaginary).Should().BeTrue();
+            r.Imaginary.Should().Be(0d);
         }
 
         #endregion

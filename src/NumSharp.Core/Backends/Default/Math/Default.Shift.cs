@@ -1,4 +1,6 @@
 using System;
+using System.Reflection.Emit;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -6,8 +8,16 @@ namespace NumSharp.Backends
 {
     /// <summary>
     /// Bit shift operations: left_shift and right_shift.
-    /// Integer types only. Uses arithmetic shift for signed types.
-    /// SIMD optimized for scalar shift amounts, scalar loop for array shifts.
+    ///
+    /// NumPy alignment (probed against NumPy 2.4.2): both are integer ufuncs whose loops are
+    /// all same-type (<c>bb-&gt;b</c> .. <c>QQ-&gt;Q</c>). Mixed operands therefore promote to
+    /// <c>result_type(x1, x2)</c> and the shift runs at that width; bool inputs (no bool loop)
+    /// promote to int8. The op is wired into the shared binary pipeline
+    /// (<see cref="DefaultEngine.ExecuteBinaryOp"/>) so promotion, broadcasting, strided/sliced
+    /// views and scalar×scalar all flow through NDIter + the IL scalar kernel — the per-element
+    /// shift IL lives in <see cref="DirectILKernelGenerator.EmitShiftFromStack"/>. The common
+    /// <c>array &lt;&lt; scalar</c> case takes a dedicated 4×-unrolled SIMD kernel
+    /// (<see cref="DirectILKernelGenerator.GetShiftScalarKernel{T}"/>).
     /// </summary>
     public partial class DefaultEngine
     {
@@ -16,249 +26,232 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray LeftShift(NDArray lhs, NDArray rhs)
         {
-            ValidateIntegerType(lhs, "left_shift");
-            ValidateIntegerType(rhs, "left_shift");
-            return ExecuteShiftOp(lhs, rhs, isLeftShift: true);
+            ValidateShiftType(lhs, "left_shift");
+            ValidateShiftType(rhs, "left_shift");
+            return ExecuteShift(lhs, rhs, isLeftShift: true);
         }
 
         /// <summary>
         /// Bitwise right shift (x1 &gt;&gt; x2).
-        /// Uses arithmetic shift for signed types (sign bit extended).
-        /// Uses logical shift for unsigned types (zeros filled).
+        /// Arithmetic shift for signed types (sign bit extended); logical shift for unsigned.
         /// </summary>
         public override NDArray RightShift(NDArray lhs, NDArray rhs)
         {
-            ValidateIntegerType(lhs, "right_shift");
-            ValidateIntegerType(rhs, "right_shift");
-            return ExecuteShiftOp(lhs, rhs, isLeftShift: false);
+            ValidateShiftType(lhs, "right_shift");
+            ValidateShiftType(rhs, "right_shift");
+            return ExecuteShift(lhs, rhs, isLeftShift: false);
         }
 
         /// <summary>
-        /// Validate that the array is an integer type.
-        /// Raises TypeError to match NumPy's ufunc dtype rejection.
+        /// Validate that the array dtype has a shift loop. NumPy's left_shift/right_shift loops
+        /// cover bool and the integer dtypes; bool promotes to int8 (handled in
+        /// <see cref="ExecuteBinaryOp"/>). Char rides along as a NumSharp integer extension.
+        /// Float/complex/decimal raise NumPy's verbatim no-loop TypeError.
         /// </summary>
-        private static void ValidateIntegerType(NDArray arr, string opName)
+        private static void ValidateShiftType(NDArray arr, string opName)
         {
             var typeCode = arr.GetTypeCode;
-            if (typeCode != NPTypeCode.Byte && typeCode != NPTypeCode.SByte &&
-                typeCode != NPTypeCode.Int16 && typeCode != NPTypeCode.UInt16 &&
-                typeCode != NPTypeCode.Int32 && typeCode != NPTypeCode.UInt32 &&
-                typeCode != NPTypeCode.Int64 && typeCode != NPTypeCode.UInt64)
-            {
-                throw new TypeError($"ufunc '{opName}' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
-            }
+            if (typeCode.IsInteger() || typeCode == NPTypeCode.Boolean || typeCode == NPTypeCode.Char)
+                return;
+
+            throw new TypeError($"ufunc '{opName}' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
         }
 
         /// <summary>
-        /// Execute shift operation with array operands (element-wise shifts).
-        /// Uses IL kernel for scalar loop (no SIMD for variable shift amounts).
+        /// Resolve a shift through the shared binary pipeline. The hot <c>array &lt;&lt; scalar</c>
+        /// case is intercepted by the SIMD kernel; everything else (mixed dtype, strided,
+        /// broadcast, scalar×scalar) flows through <see cref="ExecuteBinaryOp"/>, which handles
+        /// NEP50 promotion and drives the per-element shift IL via NDIter.
         /// </summary>
-        private unsafe NDArray ExecuteShiftOp(NDArray lhs, NDArray rhs, bool isLeftShift)
+        private unsafe NDArray ExecuteShift(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
-            var (broadcastedLhs, broadcastedRhs) = np.broadcast_arrays(lhs, rhs);
-            // Create result with clean (contiguous) strides, not broadcast strides
-            var resultDimensions = broadcastedLhs.shape;
-            var result = new NDArray(lhs.typecode, new Shape(resultDimensions), fillZeros: false);
-            var len = result.size;
+            // Fast path: contiguous `array << scalar` — the dedicated uniform-count SIMD kernel
+            // (covers every width incl. 8/16-bit via Vector{N}.ShiftLeft).
+            var fast = TrySimdScalarShift(lhs, rhs, isLeftShift);
+            if (fast is not null)
+                return fast;
 
-            // Materialize non-contiguous arrays to allow raw pointer access.
-            // This handles broadcast arrays where stride=0 would cause incorrect reads.
-            var contiguousLhs = broadcastedLhs.Shape.IsContiguous ? broadcastedLhs : broadcastedLhs.copy();
+            // Everything else (array << array, strided, broadcast, transposed, mixed dtype) goes
+            // through the NDIter Tier-3B kernel: a per-vector variable shift drives the factory's
+            // 4×-unrolled contiguous, scalar-broadcast, and AVX2-gather strided SIMD paths, with a
+            // scalar inner loop where no per-lane SIMD shift exists (8/16-bit, int64 arith-right
+            // without AVX512).
+            var viaIter = ExecuteShiftViaNDIter(lhs, rhs, isLeftShift);
+            if (viaIter is not null)
+                return viaIter;
 
-            // Cast RHS to Int32 for shift amounts (C# shift operators require int for shift amount).
-            // Also materialize if non-contiguous to allow raw pointer access.
-            var rhsInt32 = broadcastedRhs.GetTypeCode == NPTypeCode.Int32
-                ? broadcastedRhs
-                : broadcastedRhs.astype(NPTypeCode.Int32);
-            var contiguousRhs = rhsInt32.Shape.IsContiguous ? rhsInt32 : rhsInt32.copy();
+            // Backstop for scalar×scalar and shapes beyond int range: the unified binary pipeline
+            // (with the EmitShiftFromStack scalar kernel) handles them correctly.
+            var op = isLeftShift ? BinaryOp.LeftShift : BinaryOp.RightShift;
+            return ExecuteBinaryOp(lhs, rhs, op);
+        }
 
-            var shiftPtr = (int*)contiguousRhs.Address;
+        /// <summary>
+        /// Drive the shift through the NDIter Tier-3B inner-loop factory. Operands are cast to
+        /// the promoted loop dtype so the iterator sees one dtype (same-dtype views are kept
+        /// strided so the factory's hardware-gather path can SIMD them without materializing).
+        /// The vector body (<see cref="DirectILKernelGenerator.EmitShiftVectorBody"/>) is supplied
+        /// when the dtype/direction has a per-lane variable shift; otherwise the factory uses the
+        /// overflow-correct scalar body. Returns null for scalar×scalar and over-int-range shapes
+        /// so the caller can fall back to the unified pipeline.
+        /// </summary>
+        private unsafe NDArray? ExecuteShiftViaNDIter(NDArray lhs, NDArray rhs, bool isLeftShift)
+        {
+            // scalar × scalar → let ExecuteBinaryOp's dedicated scalar path handle it.
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.size <= 1;
+            if (lhsScalar && rhsScalar)
+                return null;
 
-            switch (lhs.GetTypeCode)
+            var resultType = ShiftResultType(lhs, rhs);
+
+            // Cast inputs to the loop dtype (NumPy casts to the loop signature). Same-dtype
+            // operands keep their view (possibly strided) — the gather SIMD path reads them in
+            // place; a differing dtype materializes to a contiguous copy at the loop dtype.
+            var value = lhs.GetTypeCode == resultType ? lhs : lhs.astype(resultType);
+            var count = rhs.GetTypeCode == resultType ? rhs : rhs.astype(resultType);
+
+            var (valueShape, countShape) = Broadcast(value.Shape, count.Shape);
+            var cleanShape = valueShape.Clean();
+            if (cleanShape.size < 0)
+                return null;
+            for (int i = 0; i < cleanShape.NDim; i++)
+                if (cleanShape.dimensions[i] > int.MaxValue)
+                    return null;
+
+            // Mirror the unified path's NumPy-aligned F-order preservation.
+            bool allStrictFContig = AreAllOperandsStrictFContig(value, count, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+
+            var result = new NDArray(resultType, resultShape, false);
+            if (result.size == 0)
+                return result;
+
+            var order = allStrictFContig ? NPY_ORDER.NPY_FORTRANORDER : NPY_ORDER.NPY_CORDER;
+
+            var capType = resultType;
+            bool capLeft = isLeftShift;
+            Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitShiftFromStack(il, capType, capLeft);
+            Action<ILGenerator>? vectorBody = DirectILKernelGenerator.ShiftVariableSupported(resultType, isLeftShift)
+                ? il => DirectILKernelGenerator.EmitShiftVectorBody(il, capType, capLeft)
+                : null;
+            string cacheKey = $"npy_shift_{(isLeftShift ? "L" : "R")}_{resultType}";
+
+            using (var iter = NDIterRef.MultiNew(
+                3, new[] { value, count, result },
+                NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
+                order, NPY_CASTING.NPY_SAFE_CASTING, s_binaryIterFlags))
             {
-                case NPTypeCode.Byte:
-                    ExecuteShiftArray<byte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.SByte:
-                    ExecuteShiftArray<sbyte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int16:
-                    ExecuteShiftArray<short>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt16:
-                    ExecuteShiftArray<ushort>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int32:
-                    ExecuteShiftArray<int>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt32:
-                    ExecuteShiftArray<uint>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int64:
-                    ExecuteShiftArray<long>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt64:
-                    ExecuteShiftArray<ulong>(contiguousLhs, shiftPtr, result, len, isLeftShift);
-                    break;
-                default:
-                    throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
+                iter.ExecuteElementWiseBinary(resultType, resultType, resultType, scalarBody, vectorBody, cacheKey);
             }
+
+            if (!allStrictFContig && ShouldProduceFContigOutput(value, count, result.Shape))
+                return result.copy('F');
 
             return result;
         }
 
         /// <summary>
-        /// Execute element-wise shift using IL kernel.
+        /// NumPy shift promotion: the same-type loop selected for <c>result_type(lhs, rhs)</c>,
+        /// with bool bumped to int8 (no bool shift loop). Mirrors the promotion
+        /// <see cref="ExecuteBinaryOp"/> applies, so the SIMD fast path and the general path agree.
         /// </summary>
-        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, long count, bool isLeftShift) where T : unmanaged
+        private static NPTypeCode ShiftResultType(NDArray lhs, NDArray rhs)
         {
-            var kernel = ILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
-            if (kernel != null)
-            {
-                kernel((T*)input.Address, shifts, (T*)output.Address, count);
-            }
-            else
-            {
-                // Fallback: scalar loop (should not happen if IL generation is enabled)
-                var inPtr = (T*)input.Address;
-                var outPtr = (T*)output.Address;
-                for (long i = 0; i < count; i++)
-                {
-                    outPtr[i] = ShiftScalar(inPtr[i], shifts[i], isLeftShift);
-                }
-            }
+            var rt = np._FindCommonType(lhs, rhs);
+            return rt == NPTypeCode.Boolean ? NPTypeCode.SByte : rt;
         }
 
         /// <summary>
-        /// Execute shift operation with scalar operand (uniform shift).
-        /// SIMD optimized path for contiguous arrays.
+        /// SIMD fast path for <c>contiguous array &lt;&lt; scalar</c>. The shift amount is uniform,
+        /// so the overflow check is resolved once and the 4×-unrolled <c>Vector{N}.Shift*</c>
+        /// kernel runs over the whole buffer. Returns null (→ <see cref="ExecuteBinaryOp"/>) when
+        /// the shape is not array-vs-scalar, the value operand is non-contiguous, or the promoted
+        /// dtype has no vector shift (Char).
         /// </summary>
-        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
+        private unsafe NDArray TrySimdScalarShift(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
-            // Converts.ToInt32 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
-            int shiftAmount = Converts.ToInt32(rhs);
+            // Only array (value) << scalar (count). scalar×scalar and scalar<<array fall through.
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.size == 1;
+            bool lhsArray = !(lhs.Shape.IsScalar || lhs.size <= 1);
+            if (!rhsScalar || !lhsArray)
+                return null;
 
-            // For contiguous arrays, allocate result and use SIMD kernel
-            // For sliced arrays, clone first then apply shift in-place
-            NDArray result;
-            NDArray input;
+            var resultType = ShiftResultType(lhs, rhs);
+            if (!DirectILKernelGenerator.IsShiftSimdSupported(resultType))
+                return null;
 
-            if (lhs.Shape.IsContiguous)
-            {
-                result = new NDArray(lhs.typecode, new Shape(lhs.shape), fillZeros: false);
-                input = lhs;
-            }
+            // The kernel walks the value buffer linearly, so the value operand (widened to the
+            // result dtype) must be contiguous. A same-dtype strided view defers to NDIter.
+            NDArray value;
+            if (lhs.GetTypeCode != resultType)
+                value = lhs.astype(resultType);          // contiguous C-order copy at the loop dtype
+            else if (lhs.Shape.IsContiguous)
+                value = lhs;
             else
-            {
-                result = lhs.Clone();  // Clone also handles non-contiguous arrays
-                input = result;        // Shift in-place on the cloned result
-            }
+                return null;
 
-            var len = result.size;
+            if (!value.Shape.IsContiguous)
+                return null;
 
-            switch (lhs.GetTypeCode)
-            {
-                case NPTypeCode.Byte:
-                    ExecuteShiftScalar<byte>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.SByte:
-                    ExecuteShiftScalar<sbyte>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int16:
-                    ExecuteShiftScalar<short>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt16:
-                    ExecuteShiftScalar<ushort>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int32:
-                    ExecuteShiftScalar<int>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt32:
-                    ExecuteShiftScalar<uint>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.Int64:
-                    ExecuteShiftScalar<long>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                case NPTypeCode.UInt64:
-                    ExecuteShiftScalar<ulong>(input, result, shiftAmount, len, isLeftShift);
-                    break;
-                default:
-                    throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
-            }
+            int bitWidth = resultType.SizeOf() * 8;
+            int shiftArg = ReadSaturatedShiftCount(rhs, bitWidth);
 
+            var result = new NDArray(resultType, new Shape((long[])value.shape.Clone()), false);
+            if (result.size == 0)
+                return result;
+
+            NpFunc.Invoke(resultType, SimdScalarShiftDispatch<int>, value, result, shiftArg, isLeftShift);
             return result;
         }
 
         /// <summary>
-        /// Execute scalar shift using IL kernel (SIMD optimized).
+        /// Read the single shift count from a scalar/size-1 operand and saturate it into
+        /// <c>[0, bitWidth]</c>: any count that is negative or &gt;= <paramref name="bitWidth"/>
+        /// maps to <paramref name="bitWidth"/> so the kernel's once-per-call overflow branch
+        /// fires (left/unsigned-right → 0, signed-right → sign fill), matching NumPy. Reading at
+        /// the operand's own dtype preserves the magnitude decision regardless of promotion.
         /// </summary>
-        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, long count, bool isLeftShift) where T : unmanaged
+        private static unsafe int ReadSaturatedShiftCount(NDArray rhs, int bitWidth)
         {
-            var kernel = ILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
-            if (kernel != null)
+            byte* p = (byte*)rhs.Address + (long)rhs.Shape.offset * rhs.dtypesize;
+            long s;
+            switch (rhs.GetTypeCode)
             {
-                kernel((T*)input.Address, (T*)output.Address, shiftAmount, count);
-            }
-            else
-            {
-                // Fallback: scalar loop (should not happen if IL generation is enabled)
-                var inPtr = (T*)input.Address;
-                var outPtr = (T*)output.Address;
-                for (long i = 0; i < count; i++)
+                case NPTypeCode.Boolean: s = (*p != 0) ? 1 : 0; break;
+                case NPTypeCode.Byte:    s = *p; break;
+                case NPTypeCode.SByte:   s = *(sbyte*)p; break;
+                case NPTypeCode.Int16:   s = *(short*)p; break;
+                case NPTypeCode.UInt16:  s = *(ushort*)p; break;
+                case NPTypeCode.Char:    s = *(char*)p; break;
+                case NPTypeCode.Int32:   s = *(int*)p; break;
+                case NPTypeCode.UInt32:  s = *(uint*)p; break;
+                case NPTypeCode.Int64:   s = *(long*)p; break;
+                case NPTypeCode.UInt64:
                 {
-                    outPtr[i] = ShiftScalar(inPtr[i], shiftAmount, isLeftShift);
+                    ulong u = *(ulong*)p;
+                    return u >= (ulong)bitWidth ? bitWidth : (int)u;
                 }
+                default: return bitWidth;
             }
+            return (s < 0 || s >= bitWidth) ? bitWidth : (int)s;
         }
 
         /// <summary>
-        /// Fallback scalar shift operation for a single element.
+        /// Typecode-dispatched (via <see cref="NpFunc"/>) invocation of the SIMD scalar-shift
+        /// kernel. The value operand is contiguous; its base address honours
+        /// <see cref="Shape.offset"/> so a contiguous slice is handled without a copy.
         /// </summary>
-        private static T ShiftScalar<T>(T value, int shift, bool isLeftShift) where T : unmanaged
+        private static unsafe void SimdScalarShiftDispatch<T>(NDArray value, NDArray output, int shiftArg, bool isLeftShift) where T : unmanaged
         {
-            // Use dynamic to handle all integer types
-            // This is only used as fallback when IL kernel is not available
-            if (typeof(T) == typeof(byte))
-            {
-                var v = (byte)(object)value;
-                return (T)(object)(byte)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(sbyte))
-            {
-                var v = (sbyte)(object)value;
-                return (T)(object)(sbyte)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(short))
-            {
-                var v = (short)(object)value;
-                return (T)(object)(short)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(ushort))
-            {
-                var v = (ushort)(object)value;
-                return (T)(object)(ushort)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(int))
-            {
-                var v = (int)(object)value;
-                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(uint))
-            {
-                var v = (uint)(object)value;
-                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(long))
-            {
-                var v = (long)(object)value;
-                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            if (typeof(T) == typeof(ulong))
-            {
-                var v = (ulong)(object)value;
-                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
-            }
-            throw new NotSupportedException($"Shift not supported for type {typeof(T)}");
+            var kernel = DirectILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
+            if (kernel == null)
+                throw new NotSupportedException($"Shift SIMD kernel unavailable for {typeof(T).Name}.");
+
+            byte* inBase = (byte*)value.Address + (long)value.Shape.offset * value.dtypesize;
+            kernel((T*)inBase, (T*)output.Address, shiftArg, output.size);
         }
     }
 }

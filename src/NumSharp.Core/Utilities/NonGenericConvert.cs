@@ -8,21 +8,19 @@ namespace NumSharp.Utilities
     /// </summary>
     public static class NonGenericConvert
     {
-#if _REGEN
-        %foreach forevery(supported_primitives, supported_primitives, true)%
-        /// <summary>
-        ///     Convert from #1 to #2 when input is a boxed non-generic <see cref="object"/>.
-        /// </summary>
-        /// <param name="input">The object that will be casted to <see cref="#1"/> and then converted to <see cref="#2"/></param>
-        /// <returns>#2</returns>
-        [MethodImpl(Inline)]
-        public static #2 From#1To#2(object input)
-        {
-            return Converts.To#2((#1)input);
-        }
+        // %foreach forevery(supported_primitives, supported_primitives, true)%
+        // /// <summary>
+        // ///     Convert from #1 to #2 when input is a boxed non-generic <see cref="object"/>.
+        // /// </summary>
+        // /// <param name="input">The object that will be casted to <see cref="#1"/> and then converted to <see cref="#2"/></param>
+        // /// <returns>#2</returns>
+        // [MethodImpl(Inline)]
+        // public static #2 From#1To#2(object input)
+        // {
+            // return Converts.To#2((#1)input);
+        // }
 
-        %
-#else
+        // %
 
         /// <summary>
         ///     Convert from Boolean to Byte when input is a boxed non-generic <see cref="object"/>.
@@ -1739,6 +1737,5 @@ namespace NumSharp.Utilities
         {
             return Converts.ToDecimal((String)input);
         }
-#endif
     }
 }

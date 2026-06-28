@@ -194,8 +194,10 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvolveSame(NDArray a, NDArray v, NPTypeCode retType)
         {
-            // Compute full convolution first
-            var full = ConvolveFull(a, v, retType);
+            // full is an owning intermediate — once we've sliced + materialized the centre
+            // section into a fresh copy, the underlying na+nv-1 buffer is dead. Release it
+            // atomically rather than waiting on the finalizer queue.
+            using var full = ConvolveFull(a, v, retType);
 
             long na = a.size;
             long nv = v.size;
@@ -215,8 +217,8 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvolveValid(NDArray a, NDArray v, NPTypeCode retType)
         {
-            // Compute full convolution first
-            var full = ConvolveFull(a, v, retType);
+            // full is an owning intermediate — see ConvolveSame for why.
+            using var full = ConvolveFull(a, v, retType);
 
             long na = a.size;
             long nv = v.size;

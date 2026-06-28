@@ -51,7 +51,7 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty || lhs.size == 0)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            return lhs.TensorEngine.Compare(lhs, rhs);
+            return lhs.TensorEngine.Compare(lhs, rhs).AsGeneric<bool>();
         }
 
         /// <summary>

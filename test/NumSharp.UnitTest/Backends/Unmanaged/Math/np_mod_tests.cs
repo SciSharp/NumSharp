@@ -13,11 +13,9 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
     {
         #region Regular Tests
         
-#if _REGEN
-        %a = except(supported_dtypes, "NDArray", "Boolean")
-        %foreach a
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
-#else
+        // %a = except(supported_dtypes, "NDArray", "Boolean")
+        // %foreach a
+        // [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
@@ -28,7 +26,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
-#endif
         [TestMethod]
         public void ModAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
         {
@@ -155,28 +152,26 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
         #endregion
 
-#if _REGEN
-        %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
-        %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
-        %mod = "%"
-        %foreach forevery(a,a,true), forevery(b,b,true)%
-        [TestMethod]
-        public void Mod_#1_To_#2()
-        {
-            var left = np.full(new Shape(5, 5), 4, NPTypeCode.#1);
-            var right = np.full(new Shape(5, 5), 3, NPTypeCode.#2);
-            var ret = left #(mod) right;
+        // %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
+        // %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
+        // %mod = "%"
+        // %foreach forevery(a,a,true), forevery(b,b,true)%
+        // [TestMethod]
+        // public void Mod_#1_To_#2()
+        // {
+            // var left = np.full(new Shape(5, 5), 4, NPTypeCode.#1);
+            // var right = np.full(new Shape(5, 5), 3, NPTypeCode.#2);
+            // var ret = left #(mod) right;
 
-            for (int i = 0; i < ret.size; i++)
-            {
-                |#res = str(b[a.IndexOf("#2")]
-                var val = ret.GetAtIndex(i);
-                val.Should().Be(#(#2 == "Boolean" | "0" | (#1=="Boolean"|"1"|res) ));
-                Console.WriteLine(val);
-            }
-        }
-        %
-#else
+            // for (int i = 0; i < ret.size; i++)
+            // {
+                // |#res = str(b[a.IndexOf("#2")]
+                // var val = ret.GetAtIndex(i);
+                // val.Should().Be(#(#2 == "Boolean" | "0" | (#1=="Boolean"|"1"|res) ));
+                // Console.WriteLine(val);
+            // }
+        // }
+        // %
 
         [TestMethod]
         public void Mod_Boolean_To_Byte()
@@ -1550,6 +1545,5 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-#endif
     }
 }

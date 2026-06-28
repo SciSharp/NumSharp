@@ -1,0 +1,125 @@
+# =============================================================================
+# Benchmark — decoupled, post-release, semi-manual. Runs the ENTIRE NumSharp-vs-
+# NumPy comparison via benchmark/run_benchmark.py: the official op/dtype/N matrix
+# (BenchmarkDotNet + NumPy across 1K/100K/10M), the NDIter iterator benchmark
+# (benchmark/nditer, + README cards), and the matrix subsystems that fill the
+# axes the op matrix omits — layout (benchmark/layout), cast (benchmark/cast),
+# fusion (benchmark/fusion) — each appended as its own report section.
+#
+# Trigger is the GitHub Release being published (the "after a successful release"
+# signal — 'Build and Release' creates it on a v* tag) or a manual dispatch. It
+# is a SEPARATE workflow from the release pipeline on purpose: a slow/failed
+# benchmark must never gate a release.
+#
+# It commits the refreshed report + cards + the benchmark/history/<date>_<sha>/
+# snapshot (and the `latest` symlink — see benchmark/scripts/snapshot_history.py)
+# straight to master with '[skip ci]' (so the push cannot re-trigger anything).
+# GITHUB_TOKEN + contents:write — no PAT.
+#
+# NOTE on numbers: GitHub runners are shared, variable hardware. ABSOLUTE ms are
+# not comparable run-to-run; every ratio is NumPy / NumSharp on the SAME runner,
+# which stays meaningful. numpy is pinned. The NDIter harness IGNORES NumSharp's
+# known intermittent AccessViolation: a crashing section is reported NA.
+# =============================================================================
+name: Benchmark
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write   # dispatch the Deploy Docs workflow after committing refreshed report pages
+
+concurrency:
+  group: benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Setup .NET (8 + 10)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps (pin numpy for cross-release comparability)
+        run: pip install "numpy==2.4.2" matplotlib tabulate
+
+      - name: Run full benchmark (official op suites + NDIter)
+        # run_benchmark.py builds the CSharp bench project + Core, runs the official suites, then
+        # the NDIter sheet (section-isolated, AV-ignored→NA) + cards, and appends
+        # the NDIter section to benchmark-report.md.
+        run: python benchmark/run_benchmark.py
+
+      - name: Render full reports into the docs site
+        # The op matrix + the iterator sheet become searchable DocFX pages (a
+        # different result model from the cards, so they are whole-page includes,
+        # not merged). Regenerated here from the just-produced reports so the site
+        # always matches the run. The op matrix drops its own H1 (tail -n +2) so the
+        # page carries a single title; the iterator sheet is a fenced block with no H1.
+        run: |
+          { printf '# Operation Matrix — NumSharp vs NumPy (full report)\n\n'
+            printf '> _Auto-generated after each release by the [Benchmark workflow](https://github.com/SciSharp/NumSharp/blob/master/.github/workflows/benchmark.yml) — do not edit by hand. Discussion + cards: [Benchmarks vs NumPy](benchmarks.md)._\n\n'
+            tail -n +2 benchmark/benchmark-report.md
+          } > docs/website-src/docs/benchmark-matrix.md
+          { printf '# Iterator Benchmark — NDIter vs NumPy (full sheet)\n\n'
+            printf '> _Auto-generated after each release by the [Benchmark workflow](https://github.com/SciSharp/NumSharp/blob/master/.github/workflows/benchmark.yml) — do not edit by hand. This is the canonical sheet the cards on [Benchmarks vs NumPy](benchmarks.md) render from. speedup = NumPy ÷ NumSharp (>1.0× = NumSharp faster)._\n\n'
+            cat benchmark/nditer/nditer_results.md
+          } > docs/website-src/docs/benchmark-iterator.md
+
+      - name: Commit report + cards, redeploy docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add benchmark/benchmark-report.md \
+                  benchmark/benchmark-report.csv \
+                  benchmark/nditer/nditer_results.md \
+                  benchmark/nditer/nditer_results.tsv \
+                  benchmark/nditer/cards/ops.png \
+                  benchmark/nditer/cards/cat.png \
+                  benchmark/layout/layout_results.md \
+                  benchmark/layout/layout_results.tsv \
+                  benchmark/operand/operand_results.md \
+                  benchmark/operand/operand_results.tsv \
+                  benchmark/cast/cast_results.md \
+                  benchmark/cast/cast_results.tsv \
+                  benchmark/fusion/fusion_results.md \
+                  benchmark/history/ \
+                  docs/website-src/docs/benchmark-matrix.md \
+                  docs/website-src/docs/benchmark-iterator.md
+          # benchmark/history/ holds the committable snapshot run_benchmark.py wrote
+          # (via benchmark/scripts/snapshot_history.py): the report + every subsystem
+          # sheet + cards + the json/csv/numpy-results that are gitignored at the
+          # benchmark root, under history/<date>_<sha>/, plus the `latest` symlink —
+          # the durable provenance and the stable path the docs reference.
+          if git diff --cached --quiet; then
+            echo "No benchmark changes to commit."
+            exit 0
+          fi
+          git commit -m "bench: refresh report + NDIter cards + history snapshot [skip ci]"
+          git push origin HEAD:master
+          # The commit carries [skip ci] so it cannot re-trigger this workflow or the
+          # release pipeline (push-to-master). The refreshed report PAGES + cards live
+          # under docs/website-src/**, so explicitly redeploy the docs to publish them
+          # (workflow_dispatch ignores docs.yml's path filter).
+          gh workflow run docs.yml --ref master

@@ -1089,7 +1089,6 @@ public class BooleanIndexing_BattleTests
     }
 
     [TestMethod]
-    [OpenBugs] // np.isinf is not implemented (returns null)
     public void Case24_IsInf_Mask()
     {
         var arr = np.array(new[] { 1.0, double.PositiveInfinity, 3.0, double.NegativeInfinity, 5.0 });

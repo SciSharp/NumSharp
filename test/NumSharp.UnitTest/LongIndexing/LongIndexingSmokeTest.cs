@@ -435,7 +435,6 @@ public class LongIndexingSmokeTest
     }
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Truncate for Vector512" on AVX-512 capable runners
     public void NDArray_Trunc_WorksWithLargeArray()
     {
         var arr = np.full(new Shape(TestSize), 3.7, np.float64);
@@ -739,7 +738,6 @@ public class LongIndexingSmokeTest
     }
 
     [TestMethod]
-    [OpenBugs] // isinf not implemented - returns null (Default.IsInf.cs)
     public void NDArray_Isinf_WorksWithLargeArray()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });

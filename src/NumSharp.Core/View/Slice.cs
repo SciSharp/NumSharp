@@ -330,7 +330,10 @@ namespace NumSharp
                 var start = Start ?? dim - 1;
                 var stop = Stop ?? -1;
                 if (start < 0)
-                    start = Math.Abs(start) <= dim ? dim + start : 0;
+                    // A negative start more negative than -dim clamps to -1 ("before the beginning"
+                    // when walking backwards) -> empty slice, NOT 0. NumPy: arange(3)[-7::-2] == [].
+                    // (Clamping to 0 wrongly yielded a length-1 slice starting at index 0.)
+                    start = Math.Abs(start) <= dim ? dim + start : -1;
                 if (start >= dim)
                     start = dim - 1;
                 if (Stop < 0)

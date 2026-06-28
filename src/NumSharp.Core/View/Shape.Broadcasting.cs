@@ -241,14 +241,29 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If shapes cannot be broadcast together.</exception>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
-            if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
-                return (leftShape, rightShape);
+            // Fast path: IDENTICAL shapes broadcast to themselves. The shape hash is only a cheap
+            // pre-filter — it COLLIDES across dims that differ but hash alike (notably a 0-length
+            // axis vs a size-1 axis: (1,1) and (0,1) both hash to the same value). Confirm the
+            // dimensions are actually equal before short-circuiting, else e.g. broadcast_to((1,1),
+            // (0,1)) wrongly returned (1,1) instead of stretching the size-1 axis to the 0 axis.
+            if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode
+                && leftShape.NDim == rightShape.NDim)
+            {
+                bool sameDims = true;
+                for (int d = 0; d < leftShape.NDim; d++)
+                    if (leftShape.dimensions[d] != rightShape.dimensions[d]) { sameDims = false; break; }
+                if (sameDims)
+                    return (leftShape, rightShape);
+            }
 
             int i, nd, k, j;
             long tmp;
 
-            // Is left a scalar - broadcast to right's shape with zero strides
-            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
+            // Is left a scalar / size-1 — broadcast to right's shape with zero strides. Guard on
+            // rightShape.NDim >= leftShape.NDim: a 1-D [1] broadcast against a 0-D scalar must keep
+            // its rank (result [1], not []), so the size-1 collapse only applies when the other
+            // operand has at least as many dimensions. NumPy: result ndim == max(ndims).
+            if ((leftShape.IsScalar || (leftShape.NDim == 1 && leftShape.size == 1)) && rightShape.NDim >= leftShape.NDim)
             {
                 var zeroStrides = new long[rightShape.NDim];
                 long leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
@@ -261,8 +276,10 @@ namespace NumSharp
                 return (left, rightShape);
             }
 
-            // Is right a scalar - broadcast to left's shape with zero strides
-            if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
+            // Is right a scalar / size-1 — broadcast to left's shape with zero strides. Symmetric
+            // guard: leftShape.NDim >= rightShape.NDim so a 0-D right against a 1-D [1] left keeps
+            // rank (result [1]).
+            if ((rightShape.IsScalar || (rightShape.NDim == 1 && rightShape.size == 1)) && leftShape.NDim >= rightShape.NDim)
             {
                 var zeroStrides = new long[leftShape.NDim];
                 long rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;

@@ -72,19 +72,15 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Integer Power Tests (from test_integer_power*)
 
         [TestMethod]
-        [Misaligned] // NumSharp uses Math.Pow (double precision) which loses precision for large integers
         public void Power_Integer_LargeValues()
         {
-            // NumPy: 15**15 = 437893890380859375
-            // NumSharp uses Math.Pow which can't exactly represent integers > 2^53
-            // This is a known limitation - would need integer-based exponentiation to fix
+            // NumPy: 15**15 = 437893890380859375 (exact)
+            // Integer power now uses native squared-exponentiation (no double round-trip),
+            // so large-integer precision is preserved.
             var a = np.array(new long[] { 15, 15 });
             var result = np.power(a, a);
-            // Allow small precision loss due to double conversion
-            var expected = 437893890380859375L;
-            var actual = result.GetInt64(0);
-            var relativeError = Math.Abs((double)(actual - expected) / expected);
-            Assert.IsTrue(relativeError < 1e-14, $"Expected ~{expected}, got {actual}, relative error {relativeError}");
+            Assert.AreEqual(437893890380859375L, result.GetInt64(0));
+            Assert.AreEqual(437893890380859375L, result.GetInt64(1));
         }
 
         [TestMethod]

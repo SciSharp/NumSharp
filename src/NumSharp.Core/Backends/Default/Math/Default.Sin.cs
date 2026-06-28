@@ -10,9 +10,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise sine using IL-generated kernels.
         /// </summary>
-        public override NDArray Sin(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Sin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Sin, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Sin, ResolveUnaryFloatReturnType(nd, typeCode, "sin"), @out, where);
         }
     }
 }

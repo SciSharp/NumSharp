@@ -16,6 +16,31 @@
   href: array-api-standard.md
 - name: IL Generation
   href: il-generation.md
+- name: Benchmarks
+  href: benchmarks-dashboard.md
+  expanded: true
+  items:
+  - name: Dashboard
+    href: benchmarks-dashboard.md
+  - name: Raw Reports
+    expanded: true
+    items:
+    - name: Snapshot Manifest
+      href: ../../../benchmark/history/latest/MANIFEST.md
+    - name: Unified Benchmark Report
+      href: ../../../benchmark/history/latest/benchmark-report.md
+    - name: Cast Matrix
+      href: ../../../benchmark/history/latest/cast_results.md
+    - name: Fusion Results
+      href: ../../../benchmark/history/latest/fusion_results.md
+    - name: Layout Matrix
+      href: ../../../benchmark/history/latest/layout_results.md
+    - name: NDIter Results
+      href: ../../../benchmark/history/latest/nditer_results.md
+    - name: Operand Layouts
+      href: ../../../benchmark/history/latest/operand_results.md
+- name: NDIter (Kerneling NDArray)
+  href: NDIter.md
 - name: Extending Libraries
   href: extensions/index.md
   expanded: false

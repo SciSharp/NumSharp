@@ -139,13 +139,11 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if _REGEN
-	            %foreach all_dtypes,all_dtypes_lowercase%
-	            case NPTypeCode.#1: return typeof(#2);
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach all_dtypes,all_dtypes_lowercase%
+	            // case NPTypeCode.#1: return typeof(#2);
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Complex: return typeof(Complex);
                 case NPTypeCode.Boolean: return typeof(bool);
                 case NPTypeCode.SByte: return typeof(sbyte);
@@ -164,7 +162,6 @@ namespace NumSharp
                 case NPTypeCode.String: return typeof(string);
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -190,13 +187,11 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN
-	            %foreach all_dtypes,all_dtypes_lowercase%
-	            case NPTypeCode.#1: return InfoOf<#2>.Size;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            // %foreach all_dtypes,all_dtypes_lowercase%
+	            // case NPTypeCode.#1: return InfoOf<#2>.Size;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Complex: return InfoOf<Complex>.Size;
                 case NPTypeCode.Boolean: return 1;
                 case NPTypeCode.SByte: return 1;
@@ -207,15 +202,14 @@ namespace NumSharp
                 case NPTypeCode.UInt32: return 4;
                 case NPTypeCode.Int64: return 8;
                 case NPTypeCode.UInt64: return 8;
-                case NPTypeCode.Char: return 1;
+                case NPTypeCode.Char: return 2;
                 case NPTypeCode.Half: return 2;
                 case NPTypeCode.Double: return 8;
                 case NPTypeCode.Single: return 4;
-                case NPTypeCode.Decimal: return 32;
+                case NPTypeCode.Decimal: return 16;
                 case NPTypeCode.String: return 1; //because it is a char basically.
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -228,13 +222,12 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN //true was done manually.
-	            %foreach all_dtypes%
-	            case NPTypeCode.#1: return false;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            //true was done manually.
+	            // %foreach all_dtypes%
+	            // case NPTypeCode.#1: return false;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Complex: return true;
                 case NPTypeCode.Boolean: return false;
                 case NPTypeCode.SByte: return false;
@@ -253,7 +246,6 @@ namespace NumSharp
                 case NPTypeCode.String: return false;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -266,13 +258,12 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN //true was done manually.
-	            %foreach all_dtypes%
-	            case NPTypeCode.#1: return false;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            //true was done manually.
+	            // %foreach all_dtypes%
+	            // case NPTypeCode.#1: return false;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return true;
                 case NPTypeCode.SByte: return false;
@@ -291,7 +282,6 @@ namespace NumSharp
                 case NPTypeCode.String: return true;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -304,13 +294,12 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN //true was done manually.
-	            %foreach all_dtypes%
-	            case NPTypeCode.#1: return false;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            //true was done manually.
+	            // %foreach all_dtypes%
+	            // case NPTypeCode.#1: return false;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Complex: return false;
                 case NPTypeCode.Boolean: return false;
                 case NPTypeCode.SByte: return true;
@@ -329,7 +318,6 @@ namespace NumSharp
                 case NPTypeCode.String: return false;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -342,13 +330,12 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN //true was done manually.
-	            %foreach all_dtypes%
-	            case NPTypeCode.#1: return false;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            //true was done manually.
+	            // %foreach all_dtypes%
+	            // case NPTypeCode.#1: return false;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Boolean: return -1;
 
                 case NPTypeCode.String: return 0;
@@ -373,7 +360,6 @@ namespace NumSharp
                 case NPTypeCode.Complex: return 10;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -386,13 +372,12 @@ namespace NumSharp
         {
             switch (typeCode)
             {
-#if __REGEN //true was done manually.
-	            %foreach all_dtypes%
-	            case NPTypeCode.#1: return false;
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+	            //true was done manually.
+	            // %foreach all_dtypes%
+	            // case NPTypeCode.#1: return false;
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
                 case NPTypeCode.Boolean: return 0;
                 case NPTypeCode.String: return 0;
                 case NPTypeCode.Byte: return 0;
@@ -410,12 +395,11 @@ namespace NumSharp
                 case NPTypeCode.Half: return 5 * 10 * 2;
                 case NPTypeCode.Single: return 5 * 10 * 4;
                 case NPTypeCode.Double: return 5 * 10 * 8;
-                case NPTypeCode.Decimal: return 5 * 10 * 32;
+                case NPTypeCode.Decimal: return 5 * 10 * 16;
 
                 case NPTypeCode.Complex: return 5000;
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
@@ -626,18 +610,16 @@ namespace NumSharp
         /// <returns>dtype in case when statistics are computed like <see cref="np.sum"/></returns>
         public static NPTypeCode GetAccumulatingType(this NPTypeCode typeCode)
         {
-#if _REGEN
-            #region Compute
-		    switch (typeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_accumulatingType%
-			    case NPTypeCode.#1: return NPTypeCode.#2;
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+            // #region Compute
+		    // switch (typeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_accumulatingType%
+			    // case NPTypeCode.#1: return NPTypeCode.#2;
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
             #region Compute
 		    // NumPy 2.x uses int64/uint64 for accumulating integer types to prevent overflow
 		    switch (typeCode)
@@ -661,7 +643,6 @@ namespace NumSharp
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
             return typeCode;
         }
@@ -671,18 +652,16 @@ namespace NumSharp
         /// </summary>
         public static object GetDefaultValue(this NPTypeCode typeCode)
         {
-#if _REGEN
-            #region Compute
-		    switch (typeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1: return default(#2);
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+            // #region Compute
+		    // switch (typeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1: return default(#2);
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
             #region Compute
 		    switch (typeCode)
 		    {
@@ -705,7 +684,6 @@ namespace NumSharp
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
         }
 
         /// <summary>

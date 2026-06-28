@@ -13,7 +13,16 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray round_(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray round_(NDArray x, int decimals = 0, NDArray @out = null)
+            => x.TensorEngine.Round(x, decimals, null, @out);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload. NumPy's np.round/np.around accept <c>out=</c> only (they are
+        ///     functions, not ufuncs — no where=/dtype= kwargs; probed 2.4.2).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        public static NDArray round_(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Round(x, dtype);
 
         /// <summary>
@@ -25,7 +34,13 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray round_(NDArray x, int decimals, NPTypeCode? dtype = null)
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (out= only at the NumPy-shaped surface; see above).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        public static NDArray round_(NDArray x, int decimals, NPTypeCode dtype)
             => x.TensorEngine.Round(x, decimals, dtype);
 
         /// <summary>
@@ -59,7 +74,16 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray around(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray around(NDArray x, int decimals = 0, NDArray @out = null)
+            => x.TensorEngine.Round(x, decimals, null, @out);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload. NumPy's np.round/np.around accept <c>out=</c> only (they are
+        ///     functions, not ufuncs — no where=/dtype= kwargs; probed 2.4.2).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        public static NDArray around(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Round(x, dtype);
 
         /// <summary>
@@ -71,7 +95,13 @@ namespace NumSharp
         /// <returns>An array of the same type as a, containing the rounded values. Unless out was specified, a new array is created. A reference to the result is returned.
         ///  The real and imaginary parts of complex numbers are rounded separately.The result of rounding a float is a float.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
-        public static NDArray around(NDArray x, int decimals, NPTypeCode? dtype = null)
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (out= only at the NumPy-shaped surface; see above).
+        /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.around.html</remarks>
+        public static NDArray around(NDArray x, int decimals, NPTypeCode dtype)
             => x.TensorEngine.Round(x, decimals, dtype);
 
         /// <summary>

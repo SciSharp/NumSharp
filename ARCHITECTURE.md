@@ -409,120 +409,46 @@ public static (Shape, Shape) Broadcast(Shape left, Shape right)
 }
 ```
 
-### MultiIterator
+### Multi-operand iteration
 
-For element-wise operations with broadcasting:
-
-```csharp
-public static class MultiIterator
-{
-    // Creates paired iterators with broadcasting
-    public static (NDIterator, NDIterator) GetIterators(
-        UnmanagedStorage lhs,
-        UnmanagedStorage rhs,
-        bool broadcast);
-
-    // Assignment with broadcasting
-    public static void Assign(NDArray lhs, NDArray rhs);
-}
-```
+Element-wise operations with broadcasting are driven by the NumPy-aligned multi-operand iterator `NDIter` (see [Iterator System](#iterator-system)): it aligns operand shapes, applies stride-0 broadcasting, and synchronizes traversal across all operands in a single pass. (The earlier `MultiIterator` helper was removed.)
 
 ---
 
 ## Iterator System
 
-### NDIterator<T>
+### NDIter
 
-The iterator system handles traversal of arrays with different memory layouts:
-
-```csharp
-public class NDIterator<T> where T : unmanaged
-{
-    public Func<T> MoveNext;                    // Get next value
-    public MoveNextReferencedDelegate<T> MoveNextReference;  // Get reference
-    public Func<bool> HasNext;                  // Check if more elements
-    public Action Reset;                        // Reset to beginning
-
-    public bool AutoReset;  // For broadcasting (smaller array loops)
-    public IteratorType Type;  // Scalar, Vector, Matrix, Tensor
-}
-```
-
-### Iterator Types
-
-```csharp
-public enum IteratorType
-{
-    Scalar,  // Single element
-    Vector,  // 1D array
-    Matrix,  // 2D array
-    Tensor   // 3D+ array
-}
-```
+Array traversal goes through `NDIter` (`Backends/Iterators/NDIter.cs`), a NumPy-aligned multi-operand iterator modeled on NumPy's `NDIter`. It handles C/F/A/K order, broadcasting, external loops, buffering, casting, masks, reductions, and synchronized traversal for copy and elementwise kernels. Single-operand flat traversal uses `NDFlatIterator`. (The legacy `NDIterator<T>` / `MultiIterator` stack was removed and replaced wholesale by this.)
 
 ### Optimization Paths
 
-The iterator chooses different code paths based on:
+`NDIter` picks a traversal strategy from each operand's layout (classified once via `ArrayFlags`):
 
-1. **Contiguous arrays**: Direct pointer increment
-2. **Sliced arrays**: Coordinate-to-offset calculation
-3. **Auto-reset mode**: For broadcasting smaller arrays
+1. **Contiguous**: direct pointer increment (the SIMD fast path in the emitted kernels)
+2. **Strided / sliced**: coordinate-to-offset via `Shape.GetOffset`, honoring `Shape.offset`
+3. **Broadcast (stride 0)**: the dimension is re-read without advancing — read-only
 
-```csharp
-// Contiguous: fast path
-MoveNext = () => *((T*)Address + index++);
-
-// Sliced: uses shape.GetOffset
-MoveNext = () => *((T*)Address + shape.GetOffset(index++));
-```
+The per-chunk inner loop is an IL-emitted kernel (see [Code Generation](#code-generation)): `NDIter` advances the operand pointers and hands each chunk to the kernel (`NDIterRef` drives the `ILKernelGenerator` loops).
 
 ---
 
 ## Code Generation
 
-### Regen Templating
+### Runtime IL Kernels
 
-NumSharp uses Regen (a custom templating engine) to generate type-specific code. This results in approximately **200,000 lines of generated code**.
+NumSharp emits type-specific kernels at runtime via `System.Reflection.Emit.DynamicMethod`, detecting SIMD width (V128 / V256 / V512) at startup. Two generators split by kernel-driving contract — `DirectILKernelGenerator` (whole-array kernels) and `ILKernelGenerator` (NDIter-driven per-chunk kernels). Each kernel is emitted once per signature and cached.
 
-The pattern appears in many files:
+### Legacy: Regen Templating (removed)
 
-```csharp
-#if _REGEN
-    #region Compute
-    switch (typeCode)
-    {
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        case NPTypeCode.#1: return DoOperation<#2>(arr);
-        %
-        default:
-            throw new NotSupportedException();
-    }
-    #endregion
-#else
-    // Generated code follows...
-    switch (typeCode)
-    {
-        case NPTypeCode.Boolean: return DoOperation<bool>(arr);
-        case NPTypeCode.Byte: return DoOperation<byte>(arr);
-        case NPTypeCode.Int16: return DoOperation<short>(arr);
-        // ... all 12 types
-    }
-#endif
-```
+The original backend used **Regen** (a custom C#-like templating engine) to pre-generate type-specific code into `#if _REGEN ... #else <generated> #endif` blocks. That engine has been fully superseded by the runtime IL kernels above. The `#if _REGEN` blocks were removed; where the template source is still useful as reference it survives only as `//`-commented lines next to the code it once produced (`_REGEN` is never defined, so nothing compiles from it).
 
-### Why Code Generation?
+### Why Runtime IL?
 
-- **Performance**: Avoids boxing and virtual dispatch
-- **Type safety**: Compile-time checks for each type
-- **NumPy compatibility**: Exact type handling behavior
-
-### Trade-offs
-
-- **Heavy codebase**: 200K lines of generated code
-- **Maintenance burden**: Changes require regeneration
-- **Compile time**: Longer builds
-
-> **Note**: Migration to T4 templates or C# source generators is possible but not currently prioritized.
+- **Performance**: SIMD vectorization with no boxing or virtual dispatch
+- **Type safety**: one emitted kernel per dtype, cached and reused
+- **NumPy compatibility**: Exact per-type handling behavior
+- **Smaller source tree**: no large generated-code checkout to maintain or regenerate
 
 ---
 
@@ -650,8 +576,7 @@ Integer indexing, string slice notation, Slice objects, boolean masking, fancy i
 ### Potential Future Directions
 
 1. **Alternative Backends**: GPU (CUDA), SIMD intrinsics, MKL/BLAS
-2. **Source Generator Migration**: Replace Regen with C# source generators
-3. **Span<T>/Memory<T> Integration**: Where beneficial without breaking changes
+2. **Span<T>/Memory<T> Integration**: Where beneficial without breaking changes
 
 ### Breaking Changes
 
@@ -668,7 +593,7 @@ The library accepts breaking changes - it was deprecated for an extended period 
 | Shape | `View/Shape.cs` |
 | Slicing | `View/Slice.cs` |
 | TensorEngine | `Backends/TensorEngine.cs`, `Backends/Default/DefaultEngine.*.cs` |
-| Iterators | `Backends/Iterators/NDIterator.cs`, `MultiIterator.cs` |
+| Iterators | `Backends/Iterators/NDIter.cs`, `NDFlatIterator.cs` |
 | np API | `APIs/np.cs`, individual `np.*.cs` files |
 | Operators | `Operations/Elementwise/NDArray.Primitive.cs` |
 | Type Info | `Utilities/InfoOf.cs`, `Backends/NPTypeCode.cs` |
@@ -683,7 +608,7 @@ When contributing to NumSharp:
 
 1. **Match NumPy exactly** - Run Python code, observe behavior, replicate
 2. **Write tests first** - Based on actual NumPy output
-3. **Handle all types** - Use Regen patterns or switch statements for all 12 dtypes
+3. **Handle all types** - Use type-switch statements for all dtypes
 4. **Consider edge cases** - NaN, empty arrays, scalar vs array, broadcasting
 5. **Document behavior** - Reference NumPy docs in comments
 

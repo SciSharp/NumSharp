@@ -1,5 +1,6 @@
 ﻿using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
@@ -38,111 +39,157 @@ namespace NumSharp
 
         #endregion
 
-        public abstract NDArray Add(NDArray lhs, NDArray rhs);
-        public abstract NDArray Subtract(NDArray lhs, NDArray rhs);
-        public abstract NDArray Multiply(NDArray lhs, NDArray rhs);
-        public abstract NDArray Divide(NDArray lhs, NDArray rhs);
-        public abstract NDArray Mod(NDArray lhs, NDArray rhs);
+        // Binary arithmetic ufuncs — house parameter order (inputs, typeCode,
+        // out, where). typeCode is NumPy's ufunc dtype=: it selects the LOOP
+        // (computation runs in that dtype; inputs must be same_kind-castable
+        // to it; out is validated against it). Divide is float-only — an
+        // integer/bool dtype= raises NumPy's no-loop TypeError.
+        public abstract NDArray Add(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Subtract(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Multiply(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Divide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Mod(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
+        // Element-wise min/max ufuncs (np.maximum / np.minimum / np.fmax / np.fmin).
+        // Maximum/Minimum PROPAGATE NaN (a NaN operand wins); FMax/FMin IGNORE NaN
+        // (the non-NaN operand wins). Same (inputs, typeCode, out, where) house order.
+        public abstract NDArray Maximum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Minimum(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray FMax(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray FMin(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Mean(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Power(NDArray lhs, NDArray rhs, Type type);
-        public abstract NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null);
+        public abstract NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, Type dtype);
-        public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null);
+        public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sum(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(NDArray nd, int axis, Type dtype, bool keepdims = false);
-        public abstract NDArray Negate(NDArray nd);
+        public abstract NDArray Negate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy 'positive' — identity at every numeric dtype (no bool loop).
+        ///     typeCode selects the loop (positive(i32, dtype=f64) widens; a bool
+        ///     loop request raises NumPy's did-not-contain-a-loop TypeError).
+        /// </summary>
+        public abstract NDArray Positive(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray Dot(NDArray x, NDArray y);
         public abstract NDArray Matmul(NDArray lhs, NDArray rhs);
 
         public abstract NDArray Abs(NDArray nd, Type dtype);
-        public abstract NDArray Abs(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Abs(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sqrt(NDArray nd, Type dtype);
-        public abstract NDArray Sqrt(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sqrt(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log(NDArray nd, Type dtype);
-        public abstract NDArray Log(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log2(NDArray nd, Type dtype);
-        public abstract NDArray Log2(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log2(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log10(NDArray nd, Type dtype);
-        public abstract NDArray Log10(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log10(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Log1p(NDArray nd, Type dtype);
-        public abstract NDArray Log1p(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Log1p(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Exp(NDArray nd, Type dtype);
-        public abstract NDArray Exp(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Exp(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Exp2(NDArray nd, Type dtype);
-        public abstract NDArray Exp2(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Exp2(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Expm1(NDArray nd, Type dtype);
-        public abstract NDArray Expm1(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Expm1(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Tan(NDArray nd, Type dtype);
-        public abstract NDArray Tan(NDArray nd, NPTypeCode? typeCod = null);
+        public abstract NDArray Tan(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sin(NDArray nd, Type dtype);
-        public abstract NDArray Sin(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cos(NDArray nd, Type dtype);
-        public abstract NDArray Cos(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cos(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sign(NDArray nd, Type dtype);
-        public abstract NDArray Sign(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sign(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Floor(NDArray nd, Type dtype);
-        public abstract NDArray Floor(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Floor(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Ceil(NDArray nd, Type dtype);
-        public abstract NDArray Ceil(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Ceil(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Round(NDArray nd, Type dtype);
         public abstract NDArray Round(NDArray nd, int decimals, Type dtype);
-        public abstract NDArray Round(NDArray nd, NPTypeCode? typeCode = null);
-        public abstract NDArray Round(NDArray nd, int decimals, NPTypeCode? typeCode = null);
+        public abstract NDArray Round(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Round(NDArray nd, int decimals, NPTypeCode? typeCode = null, NDArray @out = null);
         public abstract NDArray Truncate(NDArray nd, Type dtype);
-        public abstract NDArray Truncate(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Truncate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Reciprocal(NDArray nd, Type dtype);
-        public abstract NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Square(NDArray nd, Type dtype);
-        public abstract NDArray Square(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Square(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Deg2Rad(NDArray nd, Type dtype);
-        public abstract NDArray Deg2Rad(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Deg2Rad(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Rad2Deg(NDArray nd, Type dtype);
-        public abstract NDArray Rad2Deg(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Rad2Deg(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Invert(NDArray nd, Type dtype);
-        public abstract NDArray Invert(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Invert(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cbrt(NDArray nd, Type dtype);
-        public abstract NDArray Cbrt(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cbrt(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, Type dtype);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, NPTypeCode? typeCode = null);
        
         public abstract NDArray Tanh(NDArray nd, Type dtype);
-        public abstract NDArray Tanh(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Tanh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Cosh(NDArray nd, Type dtype);
-        public abstract NDArray Cosh(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cosh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Sinh(NDArray nd, Type dtype);
-        public abstract NDArray Sinh(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Sinh(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray ATan(NDArray nd, Type dtype);
-        public abstract NDArray ATan(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray ATan(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ATan2(NDArray y, NDArray x, Type dtype);
-        public abstract NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null);
+        public abstract NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ACos(NDArray nd, Type dtype);
-        public abstract NDArray ACos(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray ACos(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray ASin(NDArray nd, Type dtype);
-        public abstract NDArray ASin(NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray ASin(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null);
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null);
+
+        /// <summary>
+        ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator
+        ///     pass (np.evaluate, roadmap Wave 6.1). Virtual with a
+        ///     NotSupported default so alternative engines opt in explicitly.
+        /// </summary>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray @out = null)
+            => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
+
+        /// <summary>
+        ///     Fused evaluation against an explicit operand list
+        ///     (<see cref="NDExpr.Input"/> leaves reference operands by position).
+        /// </summary>
+        public virtual NDArray Evaluate(NDExpr expr, NDArray[] operands, NDArray @out = null)
+            => throw new NotSupportedException($"{GetType().Name} does not support fused expression evaluation.");
 
         #endregion
 
         #region Logic
 
-        // Comparison operations - all return NDArray<bool>
-        public abstract NDArray<bool> Compare(NDArray lhs, NDArray rhs);  // Equal
-        public abstract NDArray<bool> NotEqual(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> Less(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> LessEqual(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> Greater(NDArray lhs, NDArray rhs);
-        public abstract NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs);
+        // Comparison ufuncs — ONE NumPy-shaped member each (no bare/out split),
+        // house parameter order (typeCode, out, where) like the unary family.
+        // The loop output is bool: typeCode may only request Boolean (NumPy
+        // raises the no-loop TypeError for anything else — dtype= is a
+        // validate-only parameter on comparisons); with out= the provided
+        // array is returned as-is (any numeric dtype — bool casts same_kind
+        // to all of them), so the static return type is plain NDArray.
+        // CONTRACT: a plain call (out == null && where == null) must return an
+        // NDArray<bool> instance — the C# comparison operators rely on it for
+        // their zero-alloc AsGeneric<bool>() typed sugar.
+        public abstract NDArray Compare(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);  // Equal
+        public abstract NDArray NotEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Less(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray LessEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Greater(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray GreaterEqual(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
-        // Bitwise operations
-        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs);
-        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs);
-        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs);
+        // Bitwise operations — typeCode (ufunc dtype=) selects the loop among
+        // the bool/integer loops; float/complex/decimal requests raise NumPy's
+        // no-loop TypeError (the bitwise family has no such loops).
+        public abstract NDArray BitwiseAnd(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         // Bit shift operations (integer types only)
         public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);
@@ -154,9 +201,12 @@ namespace NumSharp
         public abstract NDArray<bool> Any(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
-        public abstract NDArray<bool> IsFinite(NDArray a);
-        public abstract NDArray<bool> IsNan(NDArray a);
-        public abstract NDArray<bool> IsInf(NDArray a);
+        // Predicate ufuncs — same single-member rule as the comparisons above
+        // (bool loop, validate-only typeCode, plain-NDArray return, plain
+        // calls must return an NDArray<bool> instance).
+        public abstract NDArray IsFinite(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray IsNan(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray IsInf(NDArray a, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
 
         #endregion
 
@@ -206,12 +256,18 @@ namespace NumSharp
 
         public abstract NDArray<long>[] NonZero(NDArray a);
 
+        public abstract NDArray<long> FlatNonZero(NDArray a);
+
+        public abstract NDArray Argwhere(NDArray a);
+
         public abstract long CountNonZero(NDArray a);
 
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
 
         // Boolean masking
         public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
+
+        public abstract void BooleanMaskSet(NDArray arr, NDArray mask, NDArray value);
 
         #endregion
     }

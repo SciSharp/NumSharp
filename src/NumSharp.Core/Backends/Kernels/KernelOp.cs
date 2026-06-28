@@ -22,7 +22,16 @@ namespace NumSharp.Backends.Kernels
         RightShift,
         // Transcendental binary
         /// <summary>Element-wise arc tangent of y/x choosing the quadrant correctly (np.arctan2)</summary>
-        ATan2
+        ATan2,
+        // Element-wise min/max (np.maximum/minimum/fmax/fmin)
+        /// <summary>Element-wise maximum, NaN-propagating (np.maximum): a NaN operand wins.</summary>
+        Maximum,
+        /// <summary>Element-wise minimum, NaN-propagating (np.minimum): a NaN operand wins.</summary>
+        Minimum,
+        /// <summary>Element-wise maximum, NaN-ignoring (np.fmax): returns the non-NaN operand.</summary>
+        FMax,
+        /// <summary>Element-wise minimum, NaN-ignoring (np.fmin): returns the non-NaN operand.</summary>
+        FMin
     }
 
     /// <summary>
@@ -67,6 +76,8 @@ namespace NumSharp.Backends.Kernels
         BitwiseNot,
         /// <summary>Logical NOT for boolean arrays (! operator, not ~ bitwise)</summary>
         LogicalNot,
+        /// <summary>Identity at every dtype (NumPy 'positive'; also the masked-copy vehicle for out=/where= compositions)</summary>
+        Positive,
 
         // Floating-point classification (returns bool)
         /// <summary>Test element-wise for finiteness (not infinity and not NaN)</summary>

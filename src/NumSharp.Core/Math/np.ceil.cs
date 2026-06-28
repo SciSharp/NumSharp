@@ -13,7 +13,17 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The ceiling of each element in x, with float dtype. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ceil.html</remarks>
-        public static NDArray ceil(NDArray x, NPTypeCode? dtype = null)
+        public static NDArray ceil(NDArray x, NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
+            => x.TensorEngine.Ceil(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Computed in <paramref name="dtype"/> — positional-dtype convenience
+        ///     overload (NumPy accepts dtype only as a keyword).
+        /// </summary>
+        /// <param name="x">Input array.</param>
+        /// <param name="dtype">The loop dtype the computation should run in.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ceil.html</remarks>
+        public static NDArray ceil(NDArray x, NPTypeCode dtype)
             => x.TensorEngine.Ceil(x, dtype);
 
         /// <summary>

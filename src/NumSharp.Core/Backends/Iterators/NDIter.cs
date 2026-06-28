@@ -1,0 +1,4575 @@
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
+
+namespace NumSharp.Backends.Iteration
+{
+    /// <summary>
+    /// Function to advance iterator to next position.
+    /// Returns true if more iterations remain.
+    /// </summary>
+    public unsafe delegate bool NDIterNextFunc(ref NDIterState state);
+
+    /// <summary>
+    /// Function to get multi-index at current position.
+    /// </summary>
+    public unsafe delegate void NDIterGetMultiIndexFunc(ref NDIterState state, long* outCoords);
+
+    /// <summary>
+    /// Inner loop kernel called by iterator.
+    /// </summary>
+    public unsafe delegate void NDIterInnerLoopFunc(
+        void** dataptrs,
+        long* strides,
+        long count,
+        void* auxdata);
+
+    /// <summary>
+    /// High-performance multi-operand iterator matching NumPy's nditer API.
+    /// </summary>
+    public unsafe ref partial struct NDIterRef
+    {
+        private NDIterState* _state;
+        private bool _ownsState;
+        private NDArray[]? _operands;
+        private NDIterNextFunc? _cachedIterNext;
+
+        /// <summary>
+        /// Write-back registrations created by COPY_IF_OVERLAP: when entry i is
+        /// non-null, <see cref="_operands"/>[i] is a temporary copy and the
+        /// stored array is the user's original operand. <see cref="Dispose"/>
+        /// copies the temporary back (NumPy's WRITEBACKIFCOPY resolved at
+        /// NDIter_Deallocate). Not duplicated by <see cref="Copy"/> and not
+        /// carried by <c>TransferStateOwnership</c> — the write-back belongs to
+        /// the constructing NDIterRef.
+        /// </summary>
+        private NDArray?[]? _writebackOriginals;
+
+        // =========================================================================
+        // Factory Methods
+        // =========================================================================
+
+        /// <summary>
+        /// Create single-operand iterator.
+        /// Equivalent to NumPy's NDIter_New.
+        /// </summary>
+        public static NDIterRef New(
+            NDArray op,
+            NDIterGlobalFlags flags = NDIterGlobalFlags.None,
+            NPY_ORDER order = NPY_ORDER.NPY_KEEPORDER,
+            NPY_CASTING casting = NPY_CASTING.NPY_SAFE_CASTING,
+            NPTypeCode? dtype = null)
+        {
+            var opFlags = new[] { NDIterPerOpFlags.READONLY };
+            var dtypes = dtype.HasValue ? new[] { dtype.Value } : null;
+            return MultiNew(1, new[] { op }, flags, order, casting, opFlags, dtypes);
+        }
+
+        /// <summary>
+        /// Create multi-operand iterator.
+        /// Equivalent to NumPy's NDIter_MultiNew.
+        /// </summary>
+        public static NDIterRef MultiNew(
+            int nop,
+            NDArray[] op,
+            NDIterGlobalFlags flags,
+            NPY_ORDER order,
+            NPY_CASTING casting,
+            NDIterPerOpFlags[] opFlags,
+            NPTypeCode[]? opDtypes = null)
+        {
+            return AdvancedNew(nop, op, flags, order, casting, opFlags, opDtypes);
+        }
+
+        /// <summary>
+        /// Create iterator with full control over all parameters.
+        /// Equivalent to NumPy's NDIter_AdvancedNew.
+        /// </summary>
+        public static NDIterRef AdvancedNew(
+            int nop,
+            NDArray[] op,
+            NDIterGlobalFlags flags,
+            NPY_ORDER order,
+            NPY_CASTING casting,
+            NDIterPerOpFlags[] opFlags,
+            NPTypeCode[]? opDtypes = null,
+            int opAxesNDim = -1,
+            int[][]? opAxes = null,
+            long[]? iterShape = null,
+            long bufferSize = 0)
+        {
+            if (nop < 1)
+                throw new ArgumentOutOfRangeException(nameof(nop), "At least one operand is required");
+
+            if (op == null || op.Length < nop)
+                throw new ArgumentException("Operand array must contain at least nop elements", nameof(op));
+
+            if (opFlags == null || opFlags.Length < nop)
+                throw new ArgumentException("OpFlags array must contain at least nop elements", nameof(opFlags));
+
+            // Allocate state on heap for ref struct lifetime
+            var statePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+
+            try
+            {
+                var iter = new NDIterRef
+                {
+                    _state = statePtr,
+                    _ownsState = true,
+                    _operands = op,
+                };
+
+                iter.Initialize(nop, op, flags, order, casting, opFlags, opDtypes, opAxesNDim, opAxes, iterShape, bufferSize);
+                return iter;
+            }
+            catch
+            {
+                // Free dimension arrays if they were allocated
+                statePtr->FreeDimArrays();
+                NativeMemory.Free(statePtr);
+                throw;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private void Initialize(
+            int nop,
+            NDArray[] op,
+            NDIterGlobalFlags flags,
+            NPY_ORDER order,
+            NPY_CASTING casting,
+            NDIterPerOpFlags[] opFlags,
+            NPTypeCode[]? opDtypes,
+            int opAxesNDim,
+            int[][]? opAxes,
+            long[]? iterShape,
+            long bufferSize)
+        {
+            _state->MaskOp = -1;
+            _state->IterStart = 0;
+
+            // Pre-check per-operand flags BEFORE allocation (nop arg, not state):
+            // WRITEMASKED/ARRAYMASK pairing, VIRTUAL/null-operand rules.
+            // The actual MaskOp assignment happens after AllocateDimArrays when NOp is set.
+            if (opFlags != null)
+                PreCheckMaskOpPairing(nop, op, opFlags);
+
+            // Calculate broadcast shape, optionally overridden by iterShape.
+            // Dimensions are long (NumPy npy_intp parity) so large axes (> int.MaxValue
+            // elements) survive iterator construction without narrowing.
+            long[] broadcastShape;
+            if (iterShape != null && iterShape.Length > 0)
+            {
+                // Use explicit iterShape - allows specifying iteration shape different from broadcast
+                // NumPy's NDIter_AdvancedNew() uses this for reductions and custom iteration patterns
+                broadcastShape = (long[])iterShape.Clone();
+                // Validate that operands are compatible with the specified shape
+                // Pass opAxes so validation accounts for -1 entries (broadcast/reduce axes)
+                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
+            }
+            else
+            {
+                broadcastShape = CalculateBroadcastShape(nop, op, opFlags, opAxesNDim, opAxes);
+                // Validate NO_BROADCAST operands match without stretching
+                ValidateIterShape(nop, op, opFlags, broadcastShape, opAxesNDim, opAxes);
+            }
+
+            // COPY_IF_OVERLAP: if any write operand may share memory with any
+            // read operand, replace the WRITE operand with a temporary copy and
+            // register a write-back to the original on Dispose. This is what
+            // makes ufunc-style calls with overlapping in/out well-defined
+            // (e.g. add(a[:-1], a[:-1], out=a[1:])). Runs before the ALLOCATE
+            // loop so iterator-allocated outputs (null here) are skipped — a
+            // fresh allocation can never overlap an input.
+            // NumPy: nditer_constr.c:3083-3168 (npyiter_allocate_arrays).
+            if ((flags & NDIterGlobalFlags.COPY_IF_OVERLAP) != 0)
+            {
+                var forceCopy = ComputeCopyIfOverlap(nop, op, opFlags);
+                if (forceCopy != null)
+                    MaterializeForcedCopies(nop, op, opFlags, forceCopy);
+            }
+
+            // Allocate null operands that have ALLOCATE or VIRTUAL set.
+            // NumPy: npyiter_allocate_arrays in nditer_constr.c allocates a temp
+            // array for EVERY null operand — including VIRTUAL ones, whose
+            // NPY_OP_ITFLAG_VIRTUAL is consumed nowhere but DebugPrint (the
+            // NEP-12 buffer-only semantics never landed). Verified NumPy 2.4.2:
+            // a virtual operand gets a real backing array; writes through the
+            // iterator land in it; it.operands[i] exposes it.
+            // Allocated output has shape = broadcastShape (accounting for op_axes).
+            // Dtype: ALLOCATE takes opDtypes[opIdx] (NumSharp requires it);
+            // VIRTUAL-only DISCARDS any requested dtype (npyiter_prepare_one_operand
+            // c:1037-1039 nulls op_dtype for the non-ALLOCATE branch) and resolves
+            // the common dtype of the real operands instead — except an ARRAYMASK
+            // operand, which defaults to bool (c:1041-1049). When both flags are
+            // set, ALLOCATE wins (c:1009 checks it first) and the request holds.
+            for (int opIdx = 0; opIdx < nop; opIdx++)
+            {
+                if (op[opIdx] is null &&
+                    (opFlags[opIdx] & (NDIterPerOpFlags.ALLOCATE | NDIterPerOpFlags.VIRTUAL)) != 0)
+                {
+                    NPTypeCode allocDtype;
+                    bool isArrayMaskOp = (opFlags[opIdx] & NDIterPerOpFlags.ARRAYMASK) != 0;
+                    if ((opFlags[opIdx] & NDIterPerOpFlags.ALLOCATE) != 0)
+                    {
+                        bool hasRequest = opDtypes != null && opIdx < opDtypes.Length &&
+                                          opDtypes[opIdx] != NPTypeCode.Empty;
+                        if (hasRequest)
+                            allocDtype = opDtypes[opIdx];
+                        else if (isArrayMaskOp)
+                            allocDtype = NPTypeCode.Boolean;  // mask default (c:1041-1049)
+                        else
+                            throw new ArgumentException(
+                                $"Operand {opIdx} is null with ALLOCATE flag but opDtypes is not provided", nameof(opDtypes));
+                    }
+                    else if (isArrayMaskOp)
+                    {
+                        allocDtype = NPTypeCode.Boolean;  // virtual mask default (c:1041-1049)
+                    }
+                    else
+                    {
+                        // VIRTUAL: common dtype over the real operands (the
+                        // requested dtype was discarded, NumPy parity).
+                        allocDtype = NPTypeCode.Empty;
+                        for (int j = 0; j < nop; j++)
+                        {
+                            if (op[j] is null)
+                                continue;
+                            allocDtype = allocDtype == NPTypeCode.Empty
+                                ? op[j].typecode
+                                : NDIterCasting.PromoteTypes(allocDtype, op[j].typecode);
+                        }
+                        if (allocDtype == NPTypeCode.Empty)
+                            throw new ArgumentException(
+                                "at least one array or dtype is required");
+                    }
+
+                    // Determine output shape: for op_axes, filter out -1 entries
+                    long[] outputShape;
+                    if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)
+                    {
+                        var axisMap = opAxes[opIdx];
+                        // Count non-negative entries
+                        int realNDim = 0;
+                        for (int i = 0; i < axisMap.Length; i++)
+                            if (axisMap[i] >= 0) realNDim++;
+
+                        outputShape = new long[realNDim];
+                        int outIdx = 0;
+                        for (int iterAxis = 0; iterAxis < axisMap.Length && iterAxis < broadcastShape.Length; iterAxis++)
+                        {
+                            // Non-negative entries map iterShape axes to output axes
+                            if (axisMap[iterAxis] >= 0)
+                                outputShape[axisMap[iterAxis]] = broadcastShape[iterAxis];
+                            // -1 entries are "reduced" dimensions - not in output shape
+                        }
+                    }
+                    else
+                    {
+                        // No op_axes: output has full broadcast shape
+                        outputShape = (long[])broadcastShape.Clone();
+                    }
+
+                    // Allocate the NDArray with the resolved dtype and shape
+                    var shape = outputShape.Length == 0 ? new Shape() : new Shape(outputShape);
+                    op[opIdx] = np.zeros(shape, allocDtype);
+                }
+            }
+            // Update _operands so it reflects the allocated arrays
+            _operands = op;
+
+            // =========================================================================
+            // NUMSHARP DIVERGENCE: Allocate dimension arrays dynamically
+            // Unlike NumPy's fixed NPY_MAXDIMS=64, NumSharp supports unlimited dimensions.
+            // Arrays are allocated based on actual ndim for memory efficiency.
+            // =========================================================================
+            _state->AllocateDimArrays(broadcastShape.Length, nop);
+
+            // Set IDENTPERM on construction. Perm starts as identity (set by AllocateDimArrays);
+            // reordering (ReorderAxesForCoalescing) and flipping (FlipNegativeStrides) clear
+            // this flag when they mutate perm. Matches NumPy nditer_constr.c:262-264.
+            _state->ItFlags |= (uint)NDIterFlags.IDENTPERM;
+
+            // Set MaskOp for ARRAYMASK operand (if any). Requires NOp to be set by
+            // AllocateDimArrays above. NumPy nditer_constr.c:1184-1196.
+            if (opFlags != null)
+                SetMaskOpFromFlags(opFlags);
+
+            _state->IterSize = 1;
+
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                _state->Shape[d] = broadcastShape[d];
+                _state->IterSize *= broadcastShape[d];
+            }
+
+            _state->IterEnd = _state->IterSize;
+
+            // Handle zero-size iteration
+            if (_state->IterSize == 0 && (flags & NDIterGlobalFlags.ZEROSIZE_OK) == 0)
+            {
+                // Just allow it anyway for now
+            }
+
+            // Determine common dtype if COMMON_DTYPE flag is set
+            NPTypeCode? commonDtype = null;
+            if ((flags & NDIterGlobalFlags.COMMON_DTYPE) != 0)
+            {
+                commonDtype = NDIterCasting.FindCommonDtype(op, nop);
+            }
+
+            // Set up operands
+            bool anyNeedsCast = false;
+            for (int i = 0; i < nop; i++)
+            {
+                var arr = op[i];
+                var arrShape = arr.Shape;
+
+                // Store source dtype (actual array dtype)
+                _state->SetOpSrcDType(i, arr.typecode);
+
+                // Determine buffer/target dtype. virtual-without-allocate is a
+                // single masked equality so the common path pays one AND.
+                NPTypeCode bufferDtype;
+                bool virtualAllocated =
+                    (opFlags[i] & (NDIterPerOpFlags.VIRTUAL | NDIterPerOpFlags.ALLOCATE))
+                        == NDIterPerOpFlags.VIRTUAL;
+                if (virtualAllocated)
+                {
+                    // VIRTUAL discarded any requested dtype at allocation
+                    // (NumPy parity — see the allocation loop above): the
+                    // freshly allocated array IS the iteration dtype, no cast.
+                    bufferDtype = arr.typecode;
+                }
+                else if (opDtypes != null && i < opDtypes.Length && opDtypes[i] != NPTypeCode.Empty)
+                {
+                    bufferDtype = opDtypes[i];
+                }
+                else if (commonDtype.HasValue)
+                {
+                    bufferDtype = commonDtype.Value;
+                }
+                else
+                {
+                    bufferDtype = arr.typecode;
+                }
+                _state->SetOpDType(i, bufferDtype);
+
+                // Track if any operand needs casting
+                if (arr.typecode != bufferDtype)
+                {
+                    anyNeedsCast = true;
+                }
+
+                // Set operand flags
+                var opFlag = TranslateOpFlags(opFlags[i]);
+
+                // If operand needs casting, add CAST flag
+                if (arr.typecode != bufferDtype)
+                {
+                    opFlag |= NDIterOpFlags.CAST;
+                }
+
+                // COPY_IF_OVERLAP replaced this operand with a temporary that
+                // is written back on Dispose (NumPy: FORCECOPY + WRITEBACKIFCOPY).
+                if (_writebackOriginals?[i] is not null)
+                {
+                    opFlag |= NDIterOpFlags.FORCECOPY | NDIterOpFlags.HAS_WRITEBACK;
+                }
+
+                _state->SetOpFlags(i, opFlag);
+
+                // Calculate strides for this operand
+                var stridePtr = _state->GetStridesPointer(i);
+                byte* basePtr;
+
+                // Check if op_axes is provided for this operand
+                if (opAxes != null && i < opAxes.Length && opAxes[i] != null)
+                {
+                    // Use op_axes mapping to set up strides directly.
+                    // NumPy fill_axisdata parity (nditer_constr.c:1618-1679):
+                    // the stride is 0 when the iterator dim is 1, when the entry
+                    // is a broadcast/reduction axis (-1 or REDUCTION_AXIS-encoded),
+                    // or when the operand's mapped axis has length 1 (broadcast
+                    // stretch) — using the raw array stride for a stretched size-1
+                    // axis walked out of bounds.
+                    var opAxisMap = opAxes[i];
+                    var arrStrides = arrShape.strides;
+                    var arrDims = arrShape.dimensions;
+
+                    // Operand base must point to the view's LOGICAL origin: add
+                    // Shape.offset (in elements). The standard-broadcast branch below
+                    // already does this (lines ~473/481); the op_axes branch did not,
+                    // so any op_axes reduction over a view whose offset lives in
+                    // Shape.offset (sliced a[1:3,1:3], negative-stride a[::-1] / a[:,::-1])
+                    // read from the buffer base instead — wrong cells, and after
+                    // FlipNegativeStrides moved the pointer, out-of-bounds reads/writes
+                    // (garbage / NaN). Views with offset==0 (C-/F-contig, transpose,
+                    // positive strided) were unaffected, which is why it hid so long.
+                    // Use NPTypeCode.SizeOf() (1 byte for bool) NOT arr.dtypesize.
+                    basePtr = (byte*)arr.Address + (arrShape.offset * arr.GetTypeCode.SizeOf());
+
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        if (_state->Shape[d] == 1)
+                        {
+                            // Iterator dim of size 1: never advanced; NumPy forces
+                            // stride 0 (the coalesce trivial-branch and merge rule
+                            // rely on this invariant).
+                            stridePtr[d] = 0;
+                        }
+                        else if (d < opAxisMap.Length)
+                        {
+                            int opAxis = NDIterUtils.GetOpAxis(opAxisMap[d], out _);
+                            if (opAxis < 0)
+                            {
+                                // -1 means broadcast/reduce this dimension
+                                stridePtr[d] = 0;
+                            }
+                            else if (opAxis < arrStrides.Length)
+                            {
+                                // Operand axis of length 1 is broadcast-stretched
+                                // to the iter dim: stride 0, not the raw stride.
+                                stridePtr[d] = arrDims[opAxis] == 1 ? 0 : arrStrides[opAxis];
+                            }
+                            else
+                            {
+                                stridePtr[d] = 0;
+                            }
+                        }
+                        else
+                        {
+                            stridePtr[d] = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // Standard broadcasting.
+                    //
+                    // NOTE: must use NPTypeCode.SizeOf() (1 byte for bool) and
+                    // NOT arr.dtypesize, which is implemented via
+                    // Marshal.SizeOf and returns 4 for bool because bool is
+                    // marshaled as win32 BOOL. In-memory layout uses 1 byte
+                    // per bool element, so Marshal-based sizing produces
+                    // pointer offsets 4x too large.
+                    int elemBytes = arr.GetTypeCode.SizeOf();
+
+                    // Fast path (per-call construction cost): when the operand's
+                    // shape already equals the iteration shape, np.broadcast_to is
+                    // an identity transform — same offset, same strides, no stride-0
+                    // insertion. Detect that and copy the operand's own offset/strides
+                    // directly, skipping the broadcast_to call and its Shape allocation.
+                    // This is the dominant elementwise case (a OP b, both same shape)
+                    // and was ~25% of the iterator's setup overhead.
+                    bool sameAsIter = arrShape.NDim == _state->NDim;
+                    if (sameAsIter)
+                    {
+                        var adims = arrShape.dimensions;
+                        for (int d = 0; d < _state->NDim; d++)
+                            if (adims[d] != _state->Shape[d]) { sameAsIter = false; break; }
+                    }
+
+                    // NumPy fill_axisdata parity (nditer_constr.c:1594-1615): any
+                    // iterator axis of size 1 gets stride 0 for every operand. The
+                    // raw stride of a size-1 axis is arbitrary (transposed/sliced
+                    // views carry nonzero values there) and must never survive
+                    // into the iterator — CoalesceAxes' trivial-branch and merge
+                    // rule both rely on the size-1 ⇒ stride-0 invariant.
+                    if (sameAsIter)
+                    {
+                        basePtr = (byte*)arr.Address + (arrShape.offset * elemBytes);
+                        var astrides = arrShape.strides;
+                        for (int d = 0; d < _state->NDim; d++)
+                            stridePtr[d] = _state->Shape[d] == 1 ? 0 : astrides[d];
+                    }
+                    else
+                    {
+                        var broadcastArr = np.broadcast_to(arrShape, new Shape(broadcastShape));
+                        basePtr = (byte*)arr.Address + (broadcastArr.offset * elemBytes);
+
+                        for (int d = 0; d < _state->NDim; d++)
+                        {
+                            stridePtr[d] = _state->Shape[d] == 1 ? 0 : broadcastArr.strides[d];
+                        }
+                    }
+                }
+
+                _state->SetDataPtr(i, basePtr);
+                _state->SetResetDataPtr(i, basePtr);
+
+                // Scan stretched dimensions (stride 0 with iter dim > 1).
+                // Read operands: record SourceBroadcast (legacy layout flag).
+                // Write operands: a stretched dim means several iterations land
+                // on the same element — that is a reduction. NumPy fill_axisdata
+                // (nditer_constr.c:1601-1611, npyiter_check_reduce_ok_and_set_flags)
+                // refuses it unless REDUCE_OK is set and the operand is readable;
+                // NumSharp previously filled stride 0 silently and let the
+                // colliding writes race. op_axes-mapped operands get the same
+                // treatment in ApplyOpAxes, which owns reduction semantics for
+                // mapped axes (including REDUCTION_AXIS-encoded entries).
+                bool opAxesMapped = opAxes != null && i < opAxes.Length && opAxes[i] != null;
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    if (_state->Shape[d] > 1 && stridePtr[d] == 0)
+                    {
+                        if (!opAxesMapped && (opFlag & NDIterOpFlags.WRITE) != 0)
+                        {
+                            if ((flags & NDIterGlobalFlags.REDUCE_OK) == 0)
+                            {
+                                throw new ArgumentException(
+                                    $"output operand requires a reduction along dimension {d}, " +
+                                    "but the reduction is not enabled. The dimension size of 1 " +
+                                    "does not match the expected output shape.");
+                            }
+
+                            if ((opFlag & NDIterOpFlags.READ) == 0)
+                            {
+                                throw new ArgumentException(
+                                    "output operand requires a reduction, but is flagged as " +
+                                    "write-only, not read-write");
+                            }
+
+                            // The ARRAYMASK operand may never be the result of a
+                            // reduction: a slot could be written while the mask
+                            // reads True, then the reduction overwrite the mask
+                            // to False — retroactively invalidating the write and
+                            // violating the strict masking semantics. NumPy
+                            // npyiter_check_reduce_ok_and_set_flags
+                            // (nditer_constr.c:1404-1421).
+                            if (i == _state->MaskOp)
+                            {
+                                throw new ArgumentException(
+                                    "output operand requires a " +
+                                    "reduction, but is flagged as " +
+                                    "the ARRAYMASK operand which " +
+                                    "is not permitted to be the " +
+                                    "result of a reduction");
+                            }
+
+                            opFlag |= NDIterOpFlags.REDUCE;
+                            _state->SetOpFlags(i, opFlag);
+                            _state->ItFlags |= (uint)NDIterFlags.REDUCE;
+                        }
+                        else
+                        {
+                            _state->ItFlags |= (uint)NDIterFlags.SourceBroadcast;
+                        }
+                    }
+                }
+            }
+
+            // Validate that casting requires BUFFERED flag
+            if (anyNeedsCast && (flags & NDIterGlobalFlags.BUFFERED) == 0)
+            {
+                throw new ArgumentException(
+                    "Casting between different dtypes requires the BUFFERED flag. " +
+                    "Add NDIterGlobalFlags.BUFFERED to enable type conversion.");
+            }
+
+            // Validate casting rules
+            NDIterCasting.ValidateCasts(ref *_state, casting);
+
+            // Apply op_axes remapping if provided
+            if (opAxes != null && opAxesNDim >= 0)
+            {
+                ApplyOpAxes(opAxesNDim, opAxes, flags);
+            }
+
+            // Deferred WRITEMASKED + REDUCE validation: every operand's strides
+            // are final here (standard fill AND op_axes both done), so the
+            // per-dim "one mask value per WRITEMASKED element" invariant can be
+            // checked against the mask's strides regardless of operand order.
+            // NumPy runs the identical loop at the tail of
+            // npyiter_allocate_arrays (nditer_constr.c:3351-3370).
+            if (_state->MaskOp >= 0)
+            {
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) &
+                         (NDIterOpFlags.WRITEMASKED | NDIterOpFlags.REDUCE)) ==
+                        (NDIterOpFlags.WRITEMASKED | NDIterOpFlags.REDUCE))
+                    {
+                        CheckMaskForWriteMaskedReduction(iop);
+                    }
+                }
+            }
+
+            // Apply axis reordering based on iteration order.
+            // NumPy reorders axes based on the order parameter, then coalesces if MULTI_INDEX is not set.
+            //
+            // Order semantics:
+            // - C-order: last axis innermost (row-major logical iteration)
+            // - F-order: first axis innermost (column-major logical iteration)
+            // - K-order: smallest stride innermost (memory-order iteration)
+            //
+            // When MULTI_INDEX is set:
+            // - Axes are reordered for the specified iteration order
+            // - No coalescing (would invalidate multi-index tracking)
+            // - GetMultiIndex/GotoMultiIndex use Perm to map between internal and original coords
+            //
+            // When MULTI_INDEX is NOT set:
+            // - Axes are reordered AND coalesced for maximum efficiency
+            bool hasMultiIndex = (flags & NDIterGlobalFlags.MULTI_INDEX) != 0;
+            // HASINDEX (C_INDEX or F_INDEX): need original axis structure preserved
+            // to compute the flat index correctly. Coalescing loses this info.
+            bool hasFlatIndex = (flags & (NDIterGlobalFlags.C_INDEX | NDIterGlobalFlags.F_INDEX)) != 0;
+
+            // Step 0: Flip negative strides for memory-order iteration
+            // NumPy's npyiter_flip_negative_strides() (nditer_constr.c:297-307):
+            //   if (!(itflags & NPY_ITFLAG_FORCEDORDER)) {
+            //       if (!any_allocate && !(flags & NPY_ITER_DONT_NEGATE_STRIDES)) {
+            //           npyiter_flip_negative_strides(iter);
+            //       }
+            //   }
+            //
+            // Only K-order does NOT set FORCEDORDER. C, F, and A orders all set FORCEDORDER
+            // (see npyiter_apply_forced_iteration_order in nditer_constr.c:2490).
+            // So negative strides should only be flipped for K-order.
+            //
+            // User-visible behavior:
+            // - K-order on reversed array: iterate in memory order (faster)
+            // - C/F/A order on reversed array: iterate in logical order (user asked for it)
+            bool isForcedOrder = order == NPY_ORDER.NPY_CORDER
+                              || order == NPY_ORDER.NPY_FORTRANORDER
+                              || order == NPY_ORDER.NPY_ANYORDER;
+            if (!isForcedOrder && (flags & NDIterGlobalFlags.DONT_NEGATE_STRIDES) == 0)
+            {
+                NDIterCoalescing.FlipNegativeStrides(ref *_state);
+            }
+
+            if (_state->NDim > 1)
+            {
+                // NumPy's coalescing strategy depends on the order parameter:
+                //
+                // Key insight: Coalescing produces MEMORY-order iteration. This is correct for:
+                // - K-order: Memory order is exactly what we want
+                // - C-order on C-contiguous: Memory order == C-order
+                // - F-order on F-contiguous: Memory order == F-order
+                //
+                // But for F-order on C-contiguous (or C-order on F-contiguous), coalescing
+                // would produce the WRONG iteration order, so we must not coalesce.
+                //
+                // NumPy's behavior:
+                // - K-order on contiguous: Sort by stride, coalesce → memory order
+                // - K-order on non-contiguous: Fall back to C-order (no stride sorting)
+                // - C-order on C-contiguous: Sort by stride, coalesce → memory order (== C-order)
+                // - C-order on non-C-contiguous: Keep C-order, no coalescing
+                // - F-order on F-contiguous: Sort by stride, coalesce → memory order (== F-order)
+                // - F-order on C-contiguous: NO coalescing, reverse axes, iterate F-order
+
+                // Check contiguity once, use for all order decisions.
+                // allowFlip=true (absolute strides) only when FlipNegativeStrides will run,
+                // which is only for K-order (non-forced order).
+                // For C/F/A forced orders, negative strides are not contiguous since we
+                // preserve logical iteration order instead of memory order.
+                bool allowFlip = !isForcedOrder && (flags & NDIterGlobalFlags.DONT_NEGATE_STRIDES) == 0;
+                bool isCContiguous = CheckAllOperandsContiguous(true, allowFlip);
+                bool isFContiguous = CheckAllOperandsContiguous(false, allowFlip);
+                bool hasBroadcast = HasBroadcastStrides();
+
+                // For coalescing to work correctly:
+                // 1. All operands must be contiguous (either C or F order)
+                //    - This includes reversed arrays (negative strides become positive after flip)
+                // 2. No broadcast dimensions (stride=0) - breaks stride-based sorting
+                bool isContiguous = (isCContiguous || isFContiguous) && !hasBroadcast;
+
+                // Determine effective order for non-contiguous arrays.
+                //
+                // NumPy K-order reorders axes by |stride| to match memory traversal even for
+                // non-contiguous views (e.g., transposed arrays). The only case where the
+                // stride-based sort produces wrong results is with BROADCAST axes (stride=0),
+                // because stride=0 breaks the ordering signal — we can't tell which broadcast
+                // axis should be innermost.
+                //
+                // So: fall back to C-order only when broadcast is present. For merely
+                // non-contiguous (transposed, strided views, negative strides), K-order does
+                // a proper descending-stride sort to match NumPy memory-order iteration.
+                NPY_ORDER effectiveOrder = order;
+                if ((order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER) && hasBroadcast)
+                {
+                    effectiveOrder = NPY_ORDER.NPY_CORDER;
+                }
+
+                if (!hasMultiIndex && !hasFlatIndex)
+                {
+                    // Coalescing is possible when:
+                    // - Arrays are contiguous in the REQUESTED order
+                    // - No broadcast dimensions that would break stride-based sorting
+                    // - No index tracking (C_INDEX/F_INDEX need original axis structure)
+                    // Example: F-order on C-contiguous array should NOT coalesce
+                    //          (coalescing produces memory-order which is C-order, wrong for F-order)
+                    bool canCoalesce;
+
+                    if (order == NPY_ORDER.NPY_KEEPORDER || order == NPY_ORDER.NPY_ANYORDER)
+                    {
+                        // K-order: coalesce if contiguous in either C or F order
+                        canCoalesce = isContiguous;
+                    }
+                    else if (order == NPY_ORDER.NPY_CORDER)
+                    {
+                        // C-order: coalesce only if C-contiguous (no broadcast)
+                        canCoalesce = isCContiguous && !hasBroadcast;
+                    }
+                    else // NPY_FORTRANORDER
+                    {
+                        // F-order: coalesce only if F-contiguous (no broadcast)
+                        canCoalesce = isFContiguous && !hasBroadcast;
+                    }
+
+                    if (canCoalesce)
+                    {
+                        // Sort axes by stride, then coalesce
+                        NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, NPY_ORDER.NPY_KEEPORDER, forCoalescing: true);
+                        NDIterCoalescing.CoalesceAxes(ref *_state);
+                    }
+                    else
+                    {
+                        // Can't coalesce - reorder for the requested iteration order
+                        NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
+
+                        // NumPy coalesces UNCONDITIONALLY after order resolution
+                        // (npyiter_coalesce_axes has no contiguity guard), which
+                        // absorbs every size-1 axis via the strict trivial branch.
+                        // NumSharp's full coalesce is gated on all-contiguous, so
+                        // absorb the size-1 axes here explicitly — a trailing one
+                        // would sit innermost (stride 0 under the fill invariant),
+                        // collapsing EXLOOP to one-element inner loops and failing
+                        // the buffer-manager linearity test. Safe on this branch
+                        // only: no multi-index/flat-index is tracked.
+                        NDIterCoalescing.RemoveUnitAxes(ref *_state);
+                    }
+                }
+                else
+                {
+                    // With MULTI_INDEX or HASINDEX (C_INDEX/F_INDEX), just reorder axes
+                    // without coalescing. Use effectiveOrder which applies K-order → C-order
+                    // fallback for non-contiguous arrays.
+                    NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, effectiveOrder, forCoalescing: false);
+                }
+            }
+
+            // Set external loop flag separately (after coalescing)
+            if ((flags & NDIterGlobalFlags.EXTERNAL_LOOP) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.EXLOOP;
+            }
+
+            // Set GROWINNER flag to maximize inner loop size during buffering
+            if ((flags & NDIterGlobalFlags.GROWINNER) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.GROWINNER;
+            }
+
+            // Track multi-index if requested
+            if ((flags & NDIterGlobalFlags.MULTI_INDEX) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.HASMULTIINDEX;
+            }
+
+            // Track flat index if requested (C_INDEX or F_INDEX)
+            if ((flags & NDIterGlobalFlags.C_INDEX) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.HASINDEX;
+                _state->IsCIndex = true;
+            }
+            else if ((flags & NDIterGlobalFlags.F_INDEX) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.HASINDEX;
+                _state->IsCIndex = false;
+            }
+
+            // Compute initial FlatIndex based on current coordinates (handles NEGPERM)
+            // Must be called after HASINDEX is set and negative strides are flipped
+            _state->InitializeFlatIndex();
+
+            // Update inner strides cache
+            // Note: CoalesceAxes calls this internally, but we need to ensure it's
+            // called even when coalescing is skipped (NDim <= 1 or MULTI_INDEX set)
+            if (_state->NDim <= 1 || (flags & NDIterGlobalFlags.MULTI_INDEX) != 0)
+            {
+                _state->UpdateInnerStrides();
+            }
+
+            // Update contiguity flags
+            UpdateContiguityFlags();
+
+            // Set up buffering if requested
+            if ((flags & NDIterGlobalFlags.BUFFERED) != 0)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.BUFFER;
+                _state->BufferSize = bufferSize > 0 ? bufferSize : NDIterBufferManager.DefaultBufferSize;
+
+                bool isReduce = (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0;
+
+                if (!isReduce && (flags & NDIterGlobalFlags.DELAY_BUFALLOC) != 0)
+                {
+                    // DELAY_BUFALLOC: defer allocation + first fill until first
+                    // use. NumPy demands an explicit Reset before iterating
+                    // (ValueError otherwise); NumSharp auto-ensures at the
+                    // execution entry points (EnsureBuffersReady) instead, so
+                    // construction stays allocation-free for the common
+                    // construct-then-execute pattern. Ignored for buffered
+                    // REDUCE, whose double-loop setup is construction-bound.
+                    _state->ItFlags |= (uint)NDIterFlags.DELAYBUF;
+                }
+                else if (!isReduce)
+                {
+                    // Windowed buffered iteration (non-reduce): allocate and
+                    // prime the first window. FillBufferWindow swaps buffered
+                    // operands' DataPtrs to their buffers and records the
+                    // array write-back positions.
+                    NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+                    NDIterBufferManager.FillBufferWindow(ref *_state,
+                        NDIterBufferManager.ComputeTransferSize(ref *_state));
+                }
+                else
+                {
+                    // Buffered REDUCE keeps its dedicated double-loop machinery
+                    // (BufferedReduceIternext) and legacy initial fill. NOTE:
+                    // that machinery predates masked copy-back; construction
+                    // with WRITEMASKED succeeds (NumPy parity — 2.4.2 accepts
+                    // the aligned-mask pattern) but the legacy write-back
+                    // refuses loudly in CopyReduceBuffersToArrays instead of
+                    // silently writing unmasked slots. Proper masked support
+                    // lands with reductions-through-core (roadmap Wave 5).
+                    NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+
+                    // Copy initial data to buffers (with casting if needed)
+                    long copyCount = Math.Min(_state->IterSize, _state->BufferSize);
+                    for (int op1 = 0; op1 < nop; op1++)
+                    {
+                        var opFlag = _state->GetOpFlags(op1);
+                        if ((opFlag & NDIterOpFlags.READ) != 0 || (opFlag & NDIterOpFlags.READWRITE) != 0)
+                        {
+                            NDIterBufferManager.CopyToBuffer(ref *_state, op1, copyCount);
+                        }
+                    }
+
+                    _state->BufIterEnd = copyCount;
+                    SetupBufferedReduction(copyCount);
+                }
+            }
+
+            // Handle single iteration optimization
+            if (_state->IterSize <= 1)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.ONEITERATION;
+            }
+
+            // PARALLEL_SAFE (NumSharp extension): the iteration range can be
+            // split across workers (RANGED + Copy() per worker) without write
+            // hazards when:
+            //  - there is no REDUCE operand (cross-iteration accumulation on a
+            //    shared slot; stretched write dims were flagged REDUCE above), and
+            //  - there are no WRITE operands at all, or exactly one WRITE operand
+            //    whose potential overlap with the inputs was already resolved by
+            //    COPY_IF_OVERLAP processing (forced copy + write-back on Dispose).
+            // Costs nothing extra at construction — it only reuses decisions the
+            // overlap machinery already made. Consumed by the parallel ForEach
+            // work (roadmap Wave 6.2).
+            if ((_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0)
+            {
+                int writeCount = 0;
+                for (int iop = 0; iop < nop; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) & NDIterOpFlags.WRITE) != 0)
+                        writeCount++;
+                }
+
+                if (writeCount == 0 ||
+                    (writeCount == 1 && (flags & NDIterGlobalFlags.COPY_IF_OVERLAP) != 0))
+                {
+                    _state->ItFlags |= (uint)NDIterFlags.PARALLEL_SAFE;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Compute iteration (broadcast) shape from operands.
+        /// Uses production NumSharp.Shape.ResolveReturnShape for standard broadcasting.
+        /// For op_axes, constructs a virtual shape per operand reflecting the mapping,
+        /// then broadcasts those virtual shapes together.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static long[] CalculateBroadcastShape(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags,
+            int opAxesNDim = -1, int[][]? opAxes = null)
+        {
+            // Validate null operands have ALLOCATE or VIRTUAL (NumPy
+            // npyiter_prepare_one_operand, nditer_constr.c:999-1007).
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null &&
+                    (opFlags[i] & (NDIterPerOpFlags.ALLOCATE | NDIterPerOpFlags.VIRTUAL)) == 0)
+                    throw new ArgumentException(
+                        "Iterator operand was NULL, but neither the " +
+                        "ALLOCATE nor the VIRTUAL flag was specified");
+            }
+
+            // With op_axes, iteration ndim is set by opAxesNDim. Each operand's virtual
+            // shape per-iter-axis = opShape[op_axis] if op_axis >= 0, else 1.
+            if (opAxes != null && opAxesNDim >= 0)
+            {
+                // opAxesNDim == 0: every iterated axis was dropped (the IterAllButAxis shape on a
+                // 1-D operand, or any drop-all-axes request). NumPy's NDIter_RemoveAxis leaves a
+                // 0-dimensional iterator with GetIterSize() == 1 — ONE iteration whose data pointer
+                // is the operand base (the dropped axis is the caller's responsibility, walked via
+                // its saved stride). Return an empty iteration shape so IterSize == 1. The previous
+                // `opAxesNDim > 0` gate fell through to natural broadcasting and returned the
+                // operand's own shape [N], so the kernel was driven N times — O(N^2) for the sort
+                // driver, whose line kernel re-sorts the whole line on every call.
+                if (opAxesNDim == 0)
+                    return Array.Empty<long>();
+
+                var virtualShapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
+                for (int opIdx = 0; opIdx < nop; opIdx++)
+                {
+                    if (op[opIdx] is null)
+                        continue;  // ALLOCATE operand adopts broadcast result
+
+                    var virtualDims = new long[opAxesNDim];
+                    if (opIdx < opAxes.Length && opAxes[opIdx] != null)
+                    {
+                        var axisMap = opAxes[opIdx];
+                        var opShape = op[opIdx].shape;
+                        for (int iterAxis = 0; iterAxis < opAxesNDim; iterAxis++)
+                        {
+                            int rawOpAxis = iterAxis < axisMap.Length ? axisMap[iterAxis] : -1;
+                            // Decode NPY_ITER_REDUCTION_AXIS encoding (common.h:347).
+                            int opAxis = NDIterUtils.GetOpAxis(rawOpAxis, out bool isReduction);
+
+                            if (isReduction)
+                            {
+                                // Explicit reduction axis: operand's axis length must be exactly 1.
+                                // If opAxis == -1, treat as broadcast (virtual dim = 1).
+                                if (opAxis < 0)
+                                {
+                                    virtualDims[iterAxis] = 1;
+                                }
+                                else if (opAxis >= opShape.Length)
+                                {
+                                    throw new IncorrectShapeException(
+                                        $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                                }
+                                else
+                                {
+                                    long len = opShape[opAxis];
+                                    if (len != 1)
+                                    {
+                                        throw new IncorrectShapeException(
+                                            $"Operand {opIdx} reduction axis {opAxis} has length {len}, must be 1.");
+                                    }
+                                    virtualDims[iterAxis] = 1;
+                                }
+                            }
+                            else if (opAxis < 0)
+                            {
+                                virtualDims[iterAxis] = 1;  // broadcast this dim
+                            }
+                            else if (opAxis >= opShape.Length)
+                            {
+                                throw new IncorrectShapeException(
+                                    $"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+                            }
+                            else
+                            {
+                                virtualDims[iterAxis] = opShape[opAxis];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // No op_axes for this operand: right-align shape to opAxesNDim
+                        var opShape = op[opIdx].shape;
+                        int offset = opAxesNDim - opShape.Length;
+                        if (offset < 0)
+                            throw new IncorrectShapeException(
+                                $"Operand {opIdx} has {opShape.Length} dims but opAxesNDim={opAxesNDim}");
+                        for (int d = 0; d < opAxesNDim; d++)
+                            virtualDims[d] = d < offset ? 1 : opShape[d - offset];
+                    }
+                    virtualShapes.Add(new NumSharp.Shape(virtualDims));
+                }
+
+                if (virtualShapes.Count == 0)
+                    return Array.Empty<long>();
+
+                var resolved = NumSharp.Shape.ResolveReturnShape(virtualShapes.ToArray());
+                var dims = resolved.dimensions;
+                var result = new long[dims.Length];
+                for (int i = 0; i < dims.Length; i++)
+                    result[i] = dims[i];
+                return result;
+            }
+
+            // Fast path (per-call construction cost): when every non-null operand
+            // shares identical dimensions — the dominant elementwise case
+            // (a OP b, out all same shape) — broadcasting is an identity, so the
+            // result shape is just those shared dims. Skip the List + ToArray +
+            // ResolveReturnShape + Shape allocations and return the dims directly.
+            // Dimensions stay long (NumPy npy_intp parity) — no int narrowing.
+            {
+                long[] commonDims = null;
+                bool allSame = true;
+                for (int i = 0; i < nop; i++)
+                {
+                    if (op[i] is null) continue;
+                    var d = op[i].Shape.dimensions;
+                    if (commonDims is null) { commonDims = d; continue; }
+                    if (d.Length != commonDims.Length) { allSame = false; break; }
+                    for (int k = 0; k < d.Length; k++)
+                        if (d[k] != commonDims[k]) { allSame = false; break; }
+                    if (!allSame) break;
+                }
+                if (allSame && commonDims != null)
+                {
+                    // commonDims aliases the first non-null operand's immutable dimensions
+                    // array. The returned broadcastShape is consumed strictly read-only by
+                    // Initialize — copied element-wise into _state->Shape and (only for
+                    // ALLOCATE outputs) cloned, never mutated in place — so hand back the
+                    // shared reference and skip the defensive new long[] + Array.Copy.
+                    return commonDims;
+                }
+            }
+
+            // Standard broadcasting: use production NumSharp.Shape.ResolveReturnShape
+            var shapes = new System.Collections.Generic.List<NumSharp.Shape>(nop);
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null)
+                    continue;  // ALLOCATE operand adopts broadcast result
+                shapes.Add(op[i].Shape);
+            }
+
+            if (shapes.Count == 0)
+                return Array.Empty<long>();
+
+            var resolvedShape = NumSharp.Shape.ResolveReturnShape(shapes.ToArray());
+            var resultDims = resolvedShape.dimensions;
+            var finalResult = new long[resultDims.Length];
+            for (int i = 0; i < resultDims.Length; i++)
+                finalResult[i] = resultDims[i];
+            return finalResult;
+        }
+
+        /// <summary>
+        /// Validate that operands are compatible with the specified iterShape.
+        /// Each operand dimension must either equal the iterShape or be 1 (broadcastable).
+        /// When opAxes is provided, -1 entries indicate dimensions that don't need validation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void ValidateIterShape(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags,
+            long[] iterShape, int opAxesNDim, int[][]? opAxes)
+        {
+            for (int opIdx = 0; opIdx < nop; opIdx++)
+            {
+                // Skip null (ALLOCATE) operands - they will adopt the iterShape
+                if (op[opIdx] is null)
+                    continue;
+
+                bool noBroadcast = (opFlags[opIdx] & NDIterPerOpFlags.NO_BROADCAST) != 0;
+                var opShape = op[opIdx].shape;
+
+                // When opAxes is provided for this operand, use it for validation
+                if (opAxes != null && opIdx < opAxes.Length && opAxes[opIdx] != null)
+                {
+                    var opAxisMap = opAxes[opIdx];
+                    int mapLength = Math.Min(opAxisMap.Length, iterShape.Length);
+
+                    for (int iterAxis = 0; iterAxis < mapLength; iterAxis++)
+                    {
+                        // Decode NPY_ITER_REDUCTION_AXIS encoding (common.h:347)
+                        int opAxis = NDIterUtils.GetOpAxis(opAxisMap[iterAxis], out bool isReduction);
+
+                        // Broadcast or reduction-broadcast: no further shape validation needed
+                        if (opAxis < 0)
+                            continue;
+
+                        // Validate that the operand axis exists and is compatible
+                        if (opAxis >= opShape.Length)
+                            throw new IncorrectShapeException($"Operand {opIdx} op_axes refers to non-existent axis {opAxis}");
+
+                        // Explicit reduction axis must have length 1 on the operand
+                        if (isReduction && opShape[opAxis] != 1)
+                            throw new IncorrectShapeException(
+                                $"Operand {opIdx} explicit reduction axis {opAxis} has length {opShape[opAxis]}, must be 1.");
+
+                        long opDim = opShape[opAxis];
+                        long iterDim = iterShape[iterAxis];
+
+                        // opDim must equal iterDim or be 1 (broadcastable)
+                        if (opDim != iterDim && opDim != 1)
+                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {iterAxis}");
+
+                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
+                        if (noBroadcast && opDim == 1 && iterDim != 1)
+                            throw new InvalidOperationException(
+                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
+                    }
+                }
+                else
+                {
+                    // No opAxes for this operand, use standard broadcasting validation
+                    int offset = iterShape.Length - opShape.Length;
+
+                    // Operand must have fewer or equal dimensions
+                    if (offset < 0)
+                        throw new IncorrectShapeException($"Operand {opIdx} has more dimensions than iterShape");
+
+                    // NO_BROADCAST: operand must match iterShape ndim (no prepending of size-1)
+                    if (noBroadcast && offset > 0)
+                        throw new InvalidOperationException(
+                            $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                            $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
+
+                    for (int d = 0; d < opShape.Length; d++)
+                    {
+                        long opDim = opShape[d];
+                        long iterDim = iterShape[offset + d];
+
+                        // opDim must equal iterDim or be 1 (broadcastable)
+                        if (opDim != iterDim && opDim != 1)
+                            throw new IncorrectShapeException($"Operand {opIdx} shape incompatible with iterShape at axis {d}");
+
+                        // NO_BROADCAST: dim of 1 that needs stretching is forbidden
+                        if (noBroadcast && opDim == 1 && iterDim != 1)
+                            throw new InvalidOperationException(
+                                $"non-broadcastable operand with shape ({string.Join(",", opShape)}) " +
+                                $"doesn't match the broadcast shape ({string.Join(",", iterShape)})");
+                    }
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static NDIterOpFlags TranslateOpFlags(NDIterPerOpFlags flags)
+        {
+            var result = NDIterOpFlags.None;
+
+            if ((flags & NDIterPerOpFlags.READONLY) != 0)
+                result |= NDIterOpFlags.READ;
+            if ((flags & NDIterPerOpFlags.WRITEONLY) != 0)
+                result |= NDIterOpFlags.WRITE;
+            if ((flags & NDIterPerOpFlags.READWRITE) != 0)
+                result |= NDIterOpFlags.READWRITE;
+            if ((flags & NDIterPerOpFlags.COPY) != 0)
+                result |= NDIterOpFlags.FORCECOPY;
+            if ((flags & NDIterPerOpFlags.CONTIG) != 0)
+                result |= NDIterOpFlags.CONTIG;
+            // WRITEMASKED: the operand is written only where the mask (ARRAYMASK) is true.
+            // Requires a corresponding ARRAYMASK operand. NumPy nditer_constr.c:950-965.
+            if ((flags & NDIterPerOpFlags.WRITEMASKED) != 0)
+                result |= NDIterOpFlags.WRITEMASKED;
+            // VIRTUAL: the operand had no backing array — the iterator allocated
+            // one (NumPy 2.x allocate-equivalent semantics; the flag survives
+            // only as state, mirroring NPY_OP_ITFLAG_VIRTUAL whose sole consumer
+            // is DebugPrint). NumPy nditer_constr.c:967-975.
+            if ((flags & NDIterPerOpFlags.VIRTUAL) != 0)
+                result |= NDIterOpFlags.VIRTUAL;
+
+            return result;
+        }
+
+        /// <summary>
+        /// Pre-construction per-operand flag validation. Matches NumPy's
+        /// npyiter_prepare_operands loop (nditer_constr.c:1159-1242): per-op
+        /// flag consistency (npyiter_check_per_op_flags, c:951-975), ARRAYMASK
+        /// uniqueness, null/VIRTUAL operand rules (npyiter_prepare_one_operand,
+        /// c:999-1062), then the WRITEMASKED/ARRAYMASK pairing checks — in
+        /// NumPy's exact order, with NumPy's exact error texts.
+        /// Runs before state allocation (uses the raw <paramref name="nop"/> arg).
+        /// </summary>
+        private static void PreCheckMaskOpPairing(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags)
+        {
+            // Fast path (small-N construction cost): one OR-sweep decides
+            // whether any operand carries a mask/virtual flag or is null;
+            // the typical elementwise construction (plain READ/WRITE flags,
+            // non-null operands) pays 1 OR + 1 null-test per op and skips
+            // the full validation loop entirely.
+            NDIterPerOpFlags combined = NDIterPerOpFlags.None;
+            bool anyNull = false;
+            for (int iop = 0; iop < nop && iop < opFlags.Length; iop++)
+            {
+                combined |= opFlags[iop];
+                anyNull |= iop < op.Length && op[iop] is null;
+            }
+
+            if (!anyNull &&
+                (combined & (NDIterPerOpFlags.WRITEMASKED |
+                             NDIterPerOpFlags.ARRAYMASK |
+                             NDIterPerOpFlags.VIRTUAL)) == 0)
+                return;
+
+            int maskOp = -1;
+            bool anyWriteMasked = false;
+
+            for (int iop = 0; iop < nop && iop < opFlags.Length; iop++)
+            {
+                var flags = opFlags[iop];
+                bool isArrayMask = (flags & NDIterPerOpFlags.ARRAYMASK) != 0;
+                bool isWriteMasked = (flags & NDIterPerOpFlags.WRITEMASKED) != 0;
+
+                // WRITEMASKED needs a writable operand (nditer_constr.c:951-957).
+                if (isWriteMasked &&
+                    (flags & (NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.READWRITE)) == 0)
+                    throw new ArgumentException(
+                        "The iterator flag WRITEMASKED may only " +
+                        "be used with READWRITE or WRITEONLY");
+
+                // The mask cannot itself be write-masked (nditer_constr.c:958-963).
+                if (isWriteMasked && isArrayMask)
+                    throw new ArgumentException(
+                        "The iterator flag WRITEMASKED may not " +
+                        "be used together with ARRAYMASK");
+
+                // VIRTUAL requires READWRITE (nditer_constr.c:967-973). NumPy's
+                // message carries a doubled "be" — matched verbatim.
+                if ((flags & NDIterPerOpFlags.VIRTUAL) != 0 &&
+                    (flags & NDIterPerOpFlags.READWRITE) == 0)
+                    throw new ArgumentException(
+                        "The iterator flag VIRTUAL should be " +
+                        "be used together with READWRITE");
+
+                if (isArrayMask)
+                {
+                    if (maskOp >= 0)
+                        throw new ArgumentException(
+                            "Only one iterator operand may receive an " +
+                            "ARRAYMASK flag");
+                    maskOp = iop;
+                }
+
+                if (isWriteMasked) anyWriteMasked = true;
+
+                // npyiter_prepare_one_operand: null operands must be ALLOCATE
+                // or VIRTUAL; VIRTUAL operands must be null (c:999-1062).
+                if (iop < op.Length && op[iop] is null)
+                {
+                    if ((flags & (NDIterPerOpFlags.ALLOCATE | NDIterPerOpFlags.VIRTUAL)) == 0)
+                        throw new ArgumentException(
+                            "Iterator operand was NULL, but neither the " +
+                            "ALLOCATE nor the VIRTUAL flag was specified");
+                }
+                else if ((flags & NDIterPerOpFlags.VIRTUAL) != 0)
+                {
+                    throw new ArgumentException(
+                        "Iterator operand flag VIRTUAL was specified, " +
+                        "but the operand was not NULL");
+                }
+            }
+
+            if (anyWriteMasked && maskOp < 0)
+                throw new ArgumentException(
+                    "An iterator operand was flagged as WRITEMASKED, " +
+                    "but no ARRAYMASK operand was given to supply " +
+                    "the mask");
+            if (!anyWriteMasked && maskOp >= 0)
+                throw new ArgumentException(
+                    "An iterator operand was flagged as the ARRAYMASK, " +
+                    "but no WRITEMASKED operands were given to use " +
+                    "the mask");
+        }
+
+        // =========================================================================
+        // COPY_IF_OVERLAP (NumPy nditer_constr.c:3083-3168)
+        // =========================================================================
+
+        /// <summary>
+        /// Decide which WRITE operands must be force-copied because they may
+        /// share memory with a READ operand. Returns null when no copies are
+        /// needed (the common case — fresh outputs never overlap inputs, and
+        /// the memory-extent fast path rejects disjoint buffers cheaply).
+        ///
+        /// Mirrors NumPy's check loop exactly: only write operands are copied
+        /// ("a more sophisticated heuristic could be substituted here later"),
+        /// read operands already force-copied are skipped, and the
+        /// OVERLAP_ASSUME_ELEMENTWISE pair short-circuit allows exact aliasing
+        /// (same data, same layout, no internal overlap) without a copy because
+        /// the caller's inner loop reads each element before writing it.
+        /// </summary>
+        private static bool[]? ComputeCopyIfOverlap(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags)
+        {
+            bool[]? force = null;
+
+            for (int iop = 0; iop < nop; iop++)
+            {
+                if (op[iop] is null)
+                    continue; // iterator will allocate — cannot overlap
+
+                if ((opFlags[iop] & (NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.READWRITE)) == 0)
+                    continue; // copy output operands only, not inputs
+
+                bool mayShare = false;
+                for (int iother = 0; iother < nop; iother++)
+                {
+                    if (iother == iop || op[iother] is null)
+                        continue;
+
+                    if ((opFlags[iother] & (NDIterPerOpFlags.READONLY | NDIterPerOpFlags.READWRITE)) == 0)
+                        continue; // no data dependence for arrays not read from
+
+                    if (force != null && force[iother])
+                        continue; // already copied
+
+                    if (AssumeElementwiseExactAlias(op[iop], op[iother], opFlags[iop], opFlags[iother]))
+                        continue;
+
+                    // Use max work = 1, as NumPy does for this check.
+                    if (NDMemOverlap.SolveMayShareMemory(op[iop], op[iother], maxWork: 1) != MemOverlap.No)
+                    {
+                        mayShare = true;
+                        break;
+                    }
+                }
+
+                if (mayShare)
+                {
+                    force ??= new bool[nop];
+                    force[iop] = true;
+                }
+            }
+
+            return force;
+        }
+
+        /// <summary>
+        /// The OVERLAP_ASSUME_ELEMENTWISE short-circuit: views of exactly the
+        /// same data with identical layout need no copy when the caller
+        /// accesses data strictly element-by-element in iterator order — but
+        /// only if the array has no internal overlap (e.g. a stride-0
+        /// broadcast dimension). NumPy nditer_constr.c:3130-3152.
+        /// </summary>
+        private static bool AssumeElementwiseExactAlias(NDArray a, NDArray b, NDIterPerOpFlags aFlags, NDIterPerOpFlags bFlags)
+        {
+            if ((aFlags & NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP) == 0 ||
+                (bFlags & NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP) == 0)
+                return false;
+
+            if (a.GetTypeCode != b.GetTypeCode)
+                return false;
+
+            var sa = a.Shape;
+            var sb = b.Shape;
+            if (sa.NDim != sb.NDim)
+                return false;
+
+            int itemsize = a.GetTypeCode.SizeOf();
+            byte* baseA = (byte*)a.Address + (long)sa.offset * itemsize;
+            byte* baseB = (byte*)b.Address + (long)sb.offset * itemsize;
+            if (baseA != baseB)
+                return false;
+
+            var dimsA = sa.dimensions;
+            var dimsB = sb.dimensions;
+            var stridesA = sa.strides;
+            var stridesB = sb.strides;
+            for (int d = 0; d < sa.NDim; d++)
+            {
+                if (dimsA[d] != dimsB[d] || stridesA[d] != stridesB[d])
+                    return false;
+            }
+
+            return NDMemOverlap.SolveMayHaveInternalOverlap(a, maxWork: 1) == MemOverlap.No;
+        }
+
+        /// <summary>
+        /// Replace each force-copied WRITE operand with a fresh C-order
+        /// temporary: copy the original in when the operand is also READ, and
+        /// register the original for write-back on <see cref="Dispose"/>.
+        /// NumPy: the FORCECOPY branch of npyiter_allocate_arrays
+        /// (nditer_constr.c:3259-3311, WRITEBACKIFCOPY).
+        /// </summary>
+        private void MaterializeForcedCopies(int nop, NDArray[] op, NDIterPerOpFlags[] opFlags, bool[] forceCopy)
+        {
+            for (int iop = 0; iop < nop; iop++)
+            {
+                if (!forceCopy[iop])
+                    continue;
+
+                var original = op[iop];
+                var temp = new NDArray(original.GetTypeCode, original.Shape.Clean(), fillZeros: false);
+
+                // If the data will be read, copy it into the temporary.
+                if ((opFlags[iop] & (NDIterPerOpFlags.READONLY | NDIterPerOpFlags.READWRITE)) != 0)
+                    np.copyto(temp, original);
+
+                op[iop] = temp;
+
+                _writebackOriginals ??= new NDArray?[nop];
+                _writebackOriginals[iop] = original;
+            }
+        }
+
+        /// <summary>
+        /// Resolve pending COPY_IF_OVERLAP write-backs: copy each temporary
+        /// operand back into the user's original array. Idempotent. NumPy
+        /// resolves WRITEBACKIFCOPY in NDIter_Deallocate.
+        /// </summary>
+        private void ResolveWritebacks()
+        {
+            var originals = _writebackOriginals;
+            if (originals is null)
+                return;
+            _writebackOriginals = null;
+
+            var ops = _operands;
+            if (ops is null)
+                return;
+
+            for (int iop = 0; iop < originals.Length && iop < ops.Length; iop++)
+            {
+                var original = originals[iop];
+                if (original is null)
+                    continue;
+                np.copyto(original, ops[iop]);
+            }
+        }
+
+        /// <summary>
+        /// Sets <see cref="NDIterState.MaskOp"/> from the ARRAYMASK operand (if any).
+        /// Pre-validated by <see cref="PreCheckMaskOpPairing"/>.
+        /// </summary>
+        private void SetMaskOpFromFlags(NDIterPerOpFlags[] opFlags)
+        {
+            for (int iop = 0; iop < _state->NOp && iop < opFlags.Length; iop++)
+            {
+                if ((opFlags[iop] & NDIterPerOpFlags.ARRAYMASK) != 0)
+                {
+                    _state->MaskOp = iop;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Validates that a WRITEMASKED + REDUCE operand has exactly one mask value per
+        /// reduction element. Matches NumPy's check_mask_for_writemasked_reduction
+        /// (nditer_constr.c:1328-1377).
+        ///
+        /// The pathological case: maskstride != 0 && operand_stride == 0 on any axis
+        /// means the operand is being broadcast but the mask is not — producing
+        /// multiple mask values per reduction element, which is invalid.
+        /// </summary>
+        private void CheckMaskForWriteMaskedReduction(int iop)
+        {
+            int maskOp = _state->MaskOp;
+            if (maskOp < 0) return;
+
+            int stridesNDim = _state->StridesNDim;
+            for (int idim = 0; idim < _state->NDim; idim++)
+            {
+                long iStride = _state->Strides[iop * stridesNDim + idim];
+                long maskStride = _state->Strides[maskOp * stridesNDim + idim];
+
+                if (maskStride != 0 && iStride == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Iterator reduction operand is WRITEMASKED, but also broadcasts " +
+                        "to multiple mask values. There can be only one mask value per " +
+                        "WRITEMASKED element.");
+                }
+            }
+        }
+
+        private void UpdateContiguityFlags()
+        {
+            if (_state->IterSize <= 1)
+            {
+                _state->ItFlags |= (uint)(NDIterFlags.SourceContiguous | NDIterFlags.DestinationContiguous | NDIterFlags.CONTIGUOUS);
+                return;
+            }
+
+            bool allContiguous = true;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var stridePtr = _state->GetStridesPointer(op);
+                if (!CheckContiguous(_state->GetShapePointer(), stridePtr, _state->NDim))
+                {
+                    allContiguous = false;
+                    break;
+                }
+            }
+
+            if (allContiguous)
+            {
+                _state->ItFlags |= (uint)NDIterFlags.CONTIGUOUS;
+            }
+            else
+            {
+                // GATHER_ELIGIBLE: every operand is a gather-capable element
+                // width (32/64-bit) and every inner-axis byte stride fits the
+                // int32 gather-index budget — the Tier-3B kernels' AVX2
+                // hardware-gather strided path can service the inner loop.
+                // Informational (kernels re-check at runtime); used by
+                // DebugPrint and future per-layout kernel-key selection.
+                bool gatherEligible = true;
+                int innerDim = _state->NDim - 1;
+                for (int op = 0; op < _state->NOp && gatherEligible; op++)
+                {
+                    int elemSize = _state->GetOpDType(op).SizeOf();
+                    if (elemSize != 4 && elemSize != 8)
+                    {
+                        gatherEligible = false;
+                        break;
+                    }
+                    long byteStride = _state->GetStridesPointer(op)[innerDim] * elemSize;
+                    if (byteStride > DirectILKernelGenerator.GatherStrideLimit ||
+                        byteStride < -DirectILKernelGenerator.GatherStrideLimit)
+                    {
+                        gatherEligible = false;
+                    }
+                }
+
+                if (gatherEligible)
+                    _state->ItFlags |= (uint)NDIterFlags.GATHER_ELIGIBLE;
+            }
+
+            // Set legacy flags for first two operands
+            if (_state->NOp >= 1)
+            {
+                var stridePtr = _state->GetStridesPointer(0);
+                if (CheckContiguous(_state->GetShapePointer(), stridePtr, _state->NDim))
+                    _state->ItFlags |= (uint)NDIterFlags.SourceContiguous;
+            }
+
+            if (_state->NOp >= 2)
+            {
+                var stridePtr = _state->GetStridesPointer(1);
+                if (CheckContiguous(_state->GetShapePointer(), stridePtr, _state->NDim))
+                    _state->ItFlags |= (uint)NDIterFlags.DestinationContiguous;
+            }
+        }
+
+        private static bool CheckContiguous(long* shape, long* strides, int ndim)
+        {
+            if (ndim == 0)
+                return true;
+
+            long expected = 1;
+            for (int axis = ndim - 1; axis >= 0; axis--)
+            {
+                long dim = shape[axis];
+                if (dim == 0)
+                    return true;
+                if (dim != 1)
+                {
+                    if (strides[axis] != expected)
+                        return false;
+                    expected *= dim;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if all operands are contiguous in the specified order.
+        /// Uses the ORIGINAL operand arrays (before any axis reordering).
+        /// </summary>
+        /// <param name="cOrder">True for C-order (row-major), false for F-order (column-major)</param>
+        /// <param name="allowFlip">True if negative strides will be flipped (K-order).
+        /// When true, uses absolute values for stride comparison. When false (C/F/A forced
+        /// orders), requires actual positive strides for contiguity.</param>
+        private bool CheckAllOperandsContiguous(bool cOrder, bool allowFlip = true)
+        {
+            if (_operands is null)
+                return false;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var arr = _operands[op];
+                if (arr is null)
+                    continue;
+
+                // Check if operand is contiguous in the requested order
+                var arrShape = arr.shape;
+                if (arr.ndim == 0 || arr.size <= 1)
+                    continue;  // Trivially contiguous
+
+                // Get strides from the original array
+                var strides = arr.strides;
+
+                // Check contiguity using actual strides.
+                // Negative strides are only treated as "contiguous" when FlipNegativeStrides
+                // will run (K-order / A-order without FORCEDORDER). For forced C/F order,
+                // negative strides break contiguity because the iterator will traverse
+                // logical order, not memory order.
+                long expected = 1;
+                if (cOrder)
+                {
+                    // C-order: last axis fastest, check from end to start
+                    for (int axis = arr.ndim - 1; axis >= 0; axis--)
+                    {
+                        long dim = arrShape[axis];
+                        if (dim == 1)
+                            continue;  // Size-1 dimensions are always contiguous
+                        // Check stride (abs if flipping, actual if not)
+                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        if (stride != expected)
+                            return false;
+                        expected *= dim;
+                    }
+                }
+                else
+                {
+                    // F-order: first axis fastest, check from start to end
+                    for (int axis = 0; axis < arr.ndim; axis++)
+                    {
+                        long dim = arrShape[axis];
+                        if (dim == 1)
+                            continue;  // Size-1 dimensions are always contiguous
+                        // Check stride (abs if flipping, actual if not)
+                        long stride = allowFlip ? Math.Abs(strides[axis]) : strides[axis];
+                        if (stride != expected)
+                            return false;
+                        expected *= dim;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if any operand has broadcast strides (stride=0) in the iterator state.
+        /// Broadcasting breaks stride-based sorting for K-order iteration.
+        /// </summary>
+        private bool HasBroadcastStrides()
+        {
+            if (_state->NDim <= 1)
+                return false;
+
+            int stridesNDim = _state->StridesNDim;
+            var strides = _state->Strides;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                int baseIdx = op * stridesNDim;
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    // stride=0 with shape > 1 indicates a broadcast dimension
+                    if (strides[baseIdx + d] == 0 && _state->Shape[d] > 1)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Set up buffered reduction double-loop parameters.
+        /// Implements NumPy's pattern from nditer_api.c lines 2142-2149.
+        ///
+        /// The double-loop separates iteration into:
+        /// - Inner loop: CoreSize elements (non-reduce dimensions)
+        /// - Outer loop: ReduceOuterSize iterations (reduce dimension)
+        ///
+        /// Key insight: reduce operands have ReduceOuterStride=0, so their pointer
+        /// stays fixed while input advances, accumulating values without re-buffering.
+        /// </summary>
+        private void SetupBufferedReduction(long transferSize)
+        {
+            // Find the outermost reduce dimension (dimension with stride=0 for a reduce operand)
+            // For simplicity, we use the outermost dimension with any reduce operand having stride=0
+            int outerDim = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                for (int op = 0; op < _state->NOp; op++)
+                {
+                    var opFlags = _state->GetOpFlags(op);
+                    if ((opFlags & NDIterOpFlags.REDUCE) != 0)
+                    {
+                        long stride = _state->GetStride(d, op);
+                        if (stride == 0 && _state->Shape[d] > 1)
+                        {
+                            outerDim = d;
+                            break;  // Found reduce dimension
+                        }
+                    }
+                }
+                if (outerDim >= 0)
+                    break;
+            }
+
+            if (outerDim < 0)
+            {
+                // No actual reduce dimension found, treat as normal buffering
+                _state->CoreSize = transferSize;
+                _state->ReduceOuterSize = 1;
+                _state->ReducePos = 0;
+                _state->OuterDim = 0;
+                return;
+            }
+
+            _state->OuterDim = outerDim;
+
+            // Count non-reduce axes. The double-loop (inner reduce-axis, outer non-reduce-axis)
+            // only supports ONE non-reduce axis. For multiple non-reduce axes, the outer
+            // advance needs multi-axis carry which single-stride double-loop can't express.
+            int nonReduceAxisCount = 0;
+            int firstNonReduceAxis = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                if (d != outerDim && _state->Shape[d] > 1)
+                {
+                    nonReduceAxisCount++;
+                    if (firstNonReduceAxis < 0) firstNonReduceAxis = d;
+                }
+            }
+
+            // When the iteration fits entirely in the buffer AND has >1 non-reduce axis,
+            // defer to the regular N-D Advance() path (which correctly carries multiple
+            // non-reduce axes via Coords + per-axis strides). Setting CoreSize = 0
+            // short-circuits the BUFFER+REDUCE fast path in Iternext().
+            if (nonReduceAxisCount > 1)
+            {
+                _state->CoreSize = 0;
+                _state->ReduceOuterSize = 1;
+                _state->ReducePos = 0;
+                _state->CorePos = 0;
+                return;
+            }
+
+            // CoreSize = size of the REDUCE dimension (how many inputs accumulate per output).
+            // Inner loop iterates CoreSize times along the reduce axis, with the reduce
+            // operand fixed (stride=0) and non-reduce operands advancing along that axis.
+            long coreSize = _state->Shape[outerDim];
+            if (coreSize < 1)
+                coreSize = 1;
+
+            _state->CoreSize = coreSize;
+
+            // ReduceOuterSize = number of output slots = total iterations / inputs per output
+            _state->ReduceOuterSize = transferSize / coreSize;
+            if (_state->ReduceOuterSize < 1)
+                _state->ReduceOuterSize = 1;
+
+            // Reset reduce position and core position
+            _state->ReducePos = 0;
+            _state->CorePos = 0;
+
+            // Identify a non-reduce axis: any axis with Shape > 1 that is not the reduce axis.
+            // For 2D single-reduce cases this is unambiguous. For higher-dim cases, NumPy
+            // splits across multiple levels; we pick the first non-reduce axis found (limited
+            // support for >2D reduce — caller should broadcast into 2D when possible).
+            int nonReduceAxis = -1;
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                if (d != outerDim && _state->Shape[d] > 1)
+                {
+                    nonReduceAxis = d;
+                    break;
+                }
+            }
+
+            int stridesNDim = _state->StridesNDim;
+
+            // Set up per-operand strides for the double-loop.
+            //
+            // Inner loop (BufStride): advances along the REDUCE axis (outerDim).
+            //   - Reduce operand: stride 0 on reduce axis → BufStride = 0 (stays on same output)
+            //   - Non-reduce operand: array stride along reduce axis (in bytes)
+            //
+            // Outer loop (ReduceOuterStride): advances along the NON-reduce axis.
+            //   - Reduce operand: stride along non-reduce axis (in bytes) — moves to next output
+            //   - Non-reduce operand: stride along non-reduce axis (in bytes) — moves to next input column
+            //
+            // Matches NumPy nditer_api.c:npyiter_copy_to_buffers buffered-reduce path.
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                int elemSize = _state->GetElementSize(op);
+
+                long innerElemStride = _state->Strides[op * stridesNDim + outerDim];
+                long outerElemStride = nonReduceAxis >= 0
+                    ? _state->Strides[op * stridesNDim + nonReduceAxis]
+                    : 0;
+
+                _state->SetBufStride(op, innerElemStride * elemSize);
+                _state->SetReduceOuterStride(op, outerElemStride * elemSize);
+            }
+
+            // Set buffer iteration end
+            // When bufferSize < coreSize, we can't fit a full core in one buffer
+            // In this case, use bufferSize as the inner loop size, not coreSize
+            long effectiveInnerSize = Math.Min(_state->BufferSize, coreSize);
+            _state->BufIterEnd = effectiveInnerSize;
+
+            // Recalculate ReduceOuterSize based on what fits in buffer
+            // This represents how many complete output positions we can process per buffer
+            // When buffer is smaller than core, ReduceOuterSize = 1 (one partial core at a time)
+            if (_state->BufferSize < coreSize)
+            {
+                _state->ReduceOuterSize = 1;  // Process one (partial) output at a time
+            }
+
+            // Save current array positions for writeback BEFORE overwriting with buffer pointers
+            // DataPtrs currently point to array positions (from initialization)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
+            }
+
+            // For buffered reduce, DataPtrs need to point into buffers, not original arrays
+            // BufferedReduceAdvance will update these using BufStrides
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var buffer = _state->GetBuffer(op);
+                if (buffer != null)
+                {
+                    _state->SetDataPtr(op, buffer);
+                }
+            }
+
+            // Initialize reduce outer pointers from current data pointers (now pointing to buffers)
+            _state->InitReduceOuterPtrs();
+        }
+
+        /// <summary>
+        /// Validate op_axes mappings and set reduction flags where applicable.
+        /// Strides are already correctly set in the main operand setup loop - this method
+        /// only handles the reduction semantics (detecting reduce axes, validating REDUCE_OK).
+        /// </summary>
+        private void ApplyOpAxes(int opAxesNDim, int[][] opAxes, NDIterGlobalFlags globalFlags)
+        {
+            if (opAxes == null || opAxesNDim <= 0)
+                return;
+
+            int iterNDim = Math.Min(opAxesNDim, _state->NDim);
+            bool reduceOkSet = (globalFlags & NDIterGlobalFlags.REDUCE_OK) != 0;
+
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                // Skip if no mapping for this operand
+                if (op >= opAxes.Length || opAxes[op] == null)
+                    continue;
+
+                var opAxisMap = opAxes[op];
+                var opFlags = _state->GetOpFlags(op);
+                // Check if WRITE flag is set (includes both WRITE-only and READWRITE)
+                bool isWriteable = (opFlags & NDIterOpFlags.WRITE) != 0;
+                bool hasReductionAxis = false;
+
+                // Scan for reduction axes (op_axis=-1 on a writeable operand,
+                // OR explicit encoding via NDIterUtils.ReductionAxis).
+                for (int iterAxis = 0; iterAxis < iterNDim && iterAxis < opAxisMap.Length; iterAxis++)
+                {
+                    int rawOpAxis = opAxisMap[iterAxis];
+                    int opAxis = NDIterUtils.GetOpAxis(rawOpAxis, out bool explicitReduction);
+
+                    if (explicitReduction)
+                    {
+                        // Explicit reduction axis: must be READWRITE and REDUCE_OK set.
+                        // NumPy nditer_constr.c:1621-1638 additionally validates operand's
+                        // axis length is exactly 1; that check is handled during broadcast
+                        // shape resolution via CalculateBroadcastShape.
+                        if (!reduceOkSet)
+                        {
+                            throw new ArgumentException(
+                                $"Operand {op} uses an explicit reduction axis at iter dim {iterAxis}, " +
+                                "but REDUCE_OK is not set. Add NDIterGlobalFlags.REDUCE_OK.");
+                        }
+
+                        hasReductionAxis = true;
+                    }
+                    else if (opAxis < 0)
+                    {
+                        // Implicit reduction or broadcast: op_axis = -1
+                        if (isWriteable && _state->Shape[iterAxis] > 1)
+                        {
+                            hasReductionAxis = true;
+
+                            if (!reduceOkSet)
+                            {
+                                throw new ArgumentException(
+                                    $"Output operand {op} requires a reduction along dimension {iterAxis}, " +
+                                    "but the reduction is not enabled. " +
+                                    "Add NDIterGlobalFlags.REDUCE_OK to allow reduction.");
+                            }
+                        }
+                        else
+                        {
+                            // Read-only operand with stride=0 is a broadcast
+                            _state->ItFlags |= (uint)NDIterFlags.SourceBroadcast;
+                        }
+                    }
+                    else if (_operands?[op] is { } mappedArr
+                             && opAxis < mappedArr.Shape.dimensions.Length
+                             && mappedArr.Shape.dimensions[opAxis] == 1
+                             && _state->Shape[iterAxis] > 1)
+                    {
+                        // Operand axis of length 1 broadcast-stretched to a larger
+                        // iter dim: same reduction semantics as op_axis = -1 when
+                        // the operand is writeable. NumPy fill_axisdata
+                        // (nditer_constr.c:1653-1661). The stride for this dim was
+                        // already forced to 0 during operand setup.
+                        if (isWriteable)
+                        {
+                            hasReductionAxis = true;
+
+                            if (!reduceOkSet)
+                            {
+                                throw new ArgumentException(
+                                    $"Output operand {op} requires a reduction along dimension {iterAxis}, " +
+                                    "but the reduction is not enabled. " +
+                                    "Add NDIterGlobalFlags.REDUCE_OK to allow reduction.");
+                            }
+                        }
+                        else
+                        {
+                            _state->ItFlags |= (uint)NDIterFlags.SourceBroadcast;
+                        }
+                    }
+                }
+
+                // Set reduction flags if this operand has reduction axes
+                if (hasReductionAxis)
+                {
+                    // NumPy requires READWRITE, not WRITEONLY for reduction operands
+                    // because reduction must read existing value before accumulating
+                    if ((opFlags & NDIterOpFlags.READ) == 0)
+                    {
+                        throw new ArgumentException(
+                            $"Output operand {op} requires a reduction, but is flagged as " +
+                            "write-only, not read-write. Use READWRITE instead of WRITEONLY.");
+                    }
+
+                    // The ARRAYMASK operand may never be the result of a reduction
+                    // (strict masking semantics — see the standard-path check).
+                    // NumPy npyiter_check_reduce_ok_and_set_flags (c:1404-1421).
+                    if (op == _state->MaskOp)
+                    {
+                        throw new ArgumentException(
+                            "output operand requires a " +
+                            "reduction, but is flagged as " +
+                            "the ARRAYMASK operand which " +
+                            "is not permitted to be the " +
+                            "result of a reduction");
+                    }
+
+                    _state->ItFlags |= (uint)NDIterFlags.REDUCE;
+                    _state->SetOpFlags(op, opFlags | NDIterOpFlags.REDUCE);
+
+                    // WRITEMASKED + REDUCE mask-broadcast validation is deferred
+                    // to the unified post-ApplyOpAxes loop in Initialize (NumPy
+                    // defers it to the tail of npyiter_allocate_arrays the same
+                    // way, c:3351-3370) so the standard and op_axes paths share
+                    // one check site after ALL operands' strides are final.
+                }
+            }
+        }
+
+        // =========================================================================
+        // Properties
+        // =========================================================================
+
+        /// <summary>Number of operands.</summary>
+        public int NOp => _state->NOp;
+
+        /// <summary>
+        /// Index of the ARRAYMASK operand (used by WRITEMASKED operands), or -1 if none.
+        /// Matches NumPy's NIT_MASKOP(iter).
+        /// </summary>
+        public int MaskOp => _state->MaskOp;
+
+        /// <summary>
+        /// True if any operand is flagged WRITEMASKED (and a corresponding ARRAYMASK exists).
+        /// </summary>
+        public bool HasWriteMaskedOperand
+        {
+            get
+            {
+                if (_state->MaskOp < 0) return false;
+                for (int iop = 0; iop < _state->NOp; iop++)
+                {
+                    if ((_state->GetOpFlags(iop) & NDIterOpFlags.WRITEMASKED) != 0)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Number of dimensions after coalescing.</summary>
+        public int NDim => _state->NDim;
+
+        /// <summary>Total iteration count.</summary>
+        public long IterSize => _state->IterSize;
+
+        /// <summary>Current iteration index.</summary>
+        public long IterIndex => _state->IterIndex;
+
+        /// <summary>Whether iterator requires buffering.</summary>
+        public bool RequiresBuffering => (_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0;
+
+        /// <summary>Whether all operands are contiguous.</summary>
+        public bool IsContiguous => (_state->ItFlags & (uint)NDIterFlags.CONTIGUOUS) != 0;
+
+        /// <summary>
+        /// Whether the iteration range can be split across parallel workers
+        /// without write hazards (see <see cref="NDIterFlags.PARALLEL_SAFE"/>):
+        /// no REDUCE operand, and either no WRITE operands or exactly one whose
+        /// potential overlap with inputs was resolved by COPY_IF_OVERLAP.
+        /// </summary>
+        public bool IsParallelSafe => (_state->ItFlags & (uint)NDIterFlags.PARALLEL_SAFE) != 0;
+
+        /// <summary>Whether iterator has external loop.</summary>
+        public bool HasExternalLoop => (_state->ItFlags & (uint)NDIterFlags.EXLOOP) != 0;
+
+        /// <summary>Whether iterator uses GROWINNER optimization for buffering.</summary>
+        public bool HasGrowInner => (_state->ItFlags & (uint)NDIterFlags.GROWINNER) != 0;
+
+        // =========================================================================
+        // Iteration Methods
+        // =========================================================================
+
+        /// <summary>
+        /// Get the iteration-advance function.
+        /// </summary>
+        public NDIterNextFunc GetIterNext()
+        {
+            if (_cachedIterNext != null)
+                return _cachedIterNext;
+
+            var itflags = (NDIterFlags)_state->ItFlags;
+
+            if ((itflags & NDIterFlags.ONEITERATION) != 0)
+                _cachedIterNext = SingleIterationNext;
+            else if ((itflags & NDIterFlags.BUFFER) != 0 && (itflags & NDIterFlags.REDUCE) == 0)
+            {
+                // NumPy protocol split (nditer_templ.c.src): with EXTERNAL_LOOP
+                // the user consumes one buffer fill per iternext (window jump);
+                // without it, iternext presents ONE ELEMENT at a time, walking
+                // the buffer by BufStrides and refilling at the window edge.
+                _cachedIterNext = (itflags & NDIterFlags.EXLOOP) != 0
+                    ? BufferedNext
+                    : BufferedElementNext;
+            }
+            else if ((itflags & NDIterFlags.EXLOOP) != 0)
+                _cachedIterNext = ExternalLoopNext;
+            else
+                _cachedIterNext = StandardNext;
+
+            return _cachedIterNext;
+        }
+
+        private static bool SingleIterationNext(ref NDIterState state)
+        {
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+            state.IterIndex = state.IterEnd;
+            return false;
+        }
+
+        /// <summary>
+        /// iternext for windowed buffered (non-reduce) iteration. Matches
+        /// NumPy's npyiter_buffered_iternext (nditer_templ.c.src): flush the
+        /// current window's WRITE operands back to their arrays, advance to the
+        /// window end, reposition into the source arrays, and fill the next
+        /// window. Returns false when iteration is complete — by which point
+        /// the final window has been flushed.
+        /// </summary>
+        private static bool BufferedNext(ref NDIterState state)
+        {
+            NDIterBufferManager.FlushBufferWindow(ref state);
+
+            state.IterIndex = state.BufIterEnd;
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            // Reposition DataPtrs into the source arrays at the new index
+            // (GotoIterIndex computes from ResetDataPtrs — the array bases).
+            state.GotoIterIndex(state.IterIndex);
+
+            long count = NDIterBufferManager.ComputeTransferSize(ref state);
+            NDIterBufferManager.FillBufferWindow(ref state, count);
+            return true;
+        }
+
+        /// <summary>
+        /// Per-element iternext for buffered (non-reduce) iteration WITHOUT
+        /// EXTERNAL_LOOP — NumPy's user-facing nditer protocol: each call
+        /// advances one element, walking the current buffer window via
+        /// BufStrides; at the window edge the WRITE operands are flushed and
+        /// the next window is filled. (NumPy nditer_templ.c.src buffered
+        /// specialization + npyiter_buffered_iternext slow path.)
+        /// </summary>
+        private static bool BufferedElementNext(ref NDIterState state)
+        {
+            long next = state.IterIndex + 1;
+            if (next < state.BufIterEnd)
+            {
+                state.IterIndex = next;
+                for (int op = 0; op < state.NOp; op++)
+                    state.DataPtrs[op] += state.BufStrides[op];
+                return true;
+            }
+
+            // Window exhausted — flush, then refill at the next position.
+            // NOTE: FlushBufferWindow relies on Coords still describing the
+            // fill start; per-element stepping above only moved DataPtrs.
+            NDIterBufferManager.FlushBufferWindow(ref state);
+
+            state.IterIndex = state.BufIterEnd;
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            state.GotoIterIndex(state.IterIndex);
+            long count = NDIterBufferManager.ComputeTransferSize(ref state);
+            NDIterBufferManager.FillBufferWindow(ref state, count);
+            return true;
+        }
+
+        private static bool ExternalLoopNext(ref NDIterState state)
+        {
+            // For external loop, we advance outer dimensions
+            // Inner dimension is handled by caller
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            state.IterIndex += state.Shape[state.NDim - 1];
+
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            // Advance outer coordinates. DataPtrs traverse SOURCE-array memory,
+            // so multiply element strides by the SOURCE element size (the buffer
+            // dtype's ElementSizes diverges under a buffered cast — bug (b)).
+            for (int axis = state.NDim - 2; axis >= 0; axis--)
+            {
+                state.Coords[axis]++;
+
+                if (state.Coords[axis] < state.Shape[axis])
+                {
+                    // Update data pointers
+                    for (int op = 0; op < state.NOp; op++)
+                    {
+                        long stride = state.GetStride(axis, op);
+                        state.DataPtrs[op] += stride * state.SrcElementSizes[op];
+                    }
+                    return true;
+                }
+
+                // Carry
+                state.Coords[axis] = 0;
+                for (int op = 0; op < state.NOp; op++)
+                {
+                    long stride = state.GetStride(axis, op);
+                    state.DataPtrs[op] -= stride * (state.Shape[axis] - 1) * state.SrcElementSizes[op];
+                }
+            }
+
+            return true;
+        }
+
+        private static bool StandardNext(ref NDIterState state)
+        {
+            if (state.IterIndex >= state.IterEnd)
+                return false;
+
+            state.Advance();
+            return state.IterIndex < state.IterEnd;
+        }
+
+        /// <summary>
+        /// Get array of current data pointers.
+        /// </summary>
+        public void** GetDataPtrArray()
+        {
+            return (void**)Unsafe.AsPointer(ref _state->DataPtrs[0]);
+        }
+
+        /// <summary>
+        /// Get inner loop stride array.
+        /// </summary>
+        public long* GetInnerStrideArray()
+        {
+            // For each operand, return the stride for the innermost dimension
+            // These are stored at offset [op * StridesNDim + (NDim - 1)]
+            return _state->GetInnerStrideArray();
+        }
+
+        /// <summary>
+        /// Get pointer to inner loop size.
+        /// </summary>
+        public long* GetInnerLoopSizePtr()
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                // Buffered REDUCE keeps its legacy double-loop semantics where
+                // BufIterEnd doubles as the inner count; the windowed non-reduce
+                // path exposes the fill size (NumPy's NBF_SIZE).
+                if ((_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0)
+                    return &_state->BufIterEnd;
+                return &_state->BufTransferSize;
+            }
+
+            // Return pointer to innermost shape dimension
+            return &_state->Shape[_state->NDim - 1];
+        }
+
+        /// <summary>
+        /// Reset iterator to the beginning. For windowed buffered iterators this
+        /// flushes the pending window (NumPy flushes in NDIter_Reset too),
+        /// materializes DELAY_BUFALLOC buffers, and primes the first window.
+        /// </summary>
+        public bool Reset()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) != 0 && (f & (uint)NDIterFlags.REDUCE) == 0)
+            {
+                if ((f & (uint)NDIterFlags.DELAYBUF) != 0)
+                {
+                    if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                        return false;
+                    _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
+                }
+                else
+                {
+                    NDIterBufferManager.FlushBufferWindow(ref *_state);
+                }
+
+                _state->Reset();
+                NDIterBufferManager.FillBufferWindow(ref *_state,
+                    NDIterBufferManager.ComputeTransferSize(ref *_state));
+                return true;
+            }
+
+            _state->Reset();
+            return true;
+        }
+
+        /// <summary>
+        /// Materialize DELAY_BUFALLOC buffers and prime the first window. No-op
+        /// unless BUFFER+DELAYBUF are pending. NumPy requires an explicit Reset
+        /// before iterating a delay-allocated iterator; NumSharp auto-ensures at
+        /// the execution entry points instead.
+        /// </summary>
+        public void EnsureBuffersReady()
+        {
+            uint f = _state->ItFlags;
+            if ((f & (uint)NDIterFlags.BUFFER) == 0 || (f & (uint)NDIterFlags.DELAYBUF) == 0)
+                return;
+
+            NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize);
+            _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
+            NDIterBufferManager.FillBufferWindow(ref *_state,
+                NDIterBufferManager.ComputeTransferSize(ref *_state));
+        }
+
+        /// <summary>
+        /// Fetch the NDArrayMethodFlags (runtime) flags for all transfer functions
+        /// (i.e. copy to buffer/casts). Matches NumPy's NDIter_GetTransferFlags
+        /// (nditer_api.c:903). Decoded from the top 8 bits of ItFlags.
+        ///
+        /// In .NET context, REQUIRES_PYAPI is never set — included for API parity only.
+        /// </summary>
+        public NDArrayMethodFlags GetTransferFlags()
+        {
+            return (NDArrayMethodFlags)(_state->ItFlags >> NDIterConstants.TRANSFERFLAGS_SHIFT);
+        }
+
+        /// <summary>
+        /// Dumps a verbose textual representation of the iterator's internal state to
+        /// the specified TextWriter. Matches NumPy's NDIter_DebugPrint (nditer_api.c:1402)
+        /// format as closely as possible.
+        ///
+        /// Output includes: ItFlags (decoded), NDim, NOp, IterSize/Start/End/Index,
+        /// Perm, DTypes, DataPtrs, BaseOffsets, OpItFlags, BufferData, and per-axis data.
+        /// </summary>
+        public void DebugPrint(System.IO.TextWriter writer)
+        {
+            if (writer == null) throw new ArgumentNullException(nameof(writer));
+
+            uint itf = _state->ItFlags;
+            int ndim = _state->NDim;
+            int nop = _state->NOp;
+
+            writer.WriteLine();
+            writer.WriteLine("------ BEGIN ITERATOR DUMP ------");
+            writer.WriteLine($"| Iterator Address: 0x{(nuint)_state:X}");
+
+            // Decode ItFlags
+            writer.Write("| ItFlags: ");
+            if ((itf & (uint)NDIterFlags.IDENTPERM) != 0) writer.Write("IDENTPERM ");
+            if ((itf & (uint)NDIterFlags.NEGPERM) != 0) writer.Write("NEGPERM ");
+            if ((itf & (uint)NDIterFlags.HASINDEX) != 0) writer.Write("HASINDEX ");
+            if ((itf & (uint)NDIterFlags.HASMULTIINDEX) != 0) writer.Write("HASMULTIINDEX ");
+            if ((itf & (uint)NDIterFlags.FORCEDORDER) != 0) writer.Write("FORCEDORDER ");
+            if ((itf & (uint)NDIterFlags.EXLOOP) != 0) writer.Write("EXLOOP ");
+            if ((itf & (uint)NDIterFlags.RANGE) != 0) writer.Write("RANGE ");
+            if ((itf & (uint)NDIterFlags.BUFFER) != 0) writer.Write("BUFFER ");
+            if ((itf & (uint)NDIterFlags.GROWINNER) != 0) writer.Write("GROWINNER ");
+            if ((itf & (uint)NDIterFlags.ONEITERATION) != 0) writer.Write("ONEITERATION ");
+            if ((itf & (uint)NDIterFlags.DELAYBUF) != 0) writer.Write("DELAYBUF ");
+            if ((itf & (uint)NDIterFlags.REDUCE) != 0) writer.Write("REDUCE ");
+            if ((itf & (uint)NDIterFlags.REUSE_REDUCE_LOOPS) != 0) writer.Write("REUSE_REDUCE_LOOPS ");
+            writer.WriteLine();
+
+            writer.WriteLine($"| NDim: {ndim}");
+            writer.WriteLine($"| NOp: {nop}");
+            if (_state->MaskOp >= 0) writer.WriteLine($"| MaskOp: {_state->MaskOp}");
+            writer.WriteLine($"| IterSize: {_state->IterSize}");
+            writer.WriteLine($"| IterStart: {_state->IterStart}");
+            writer.WriteLine($"| IterEnd: {_state->IterEnd}");
+            writer.WriteLine($"| IterIndex: {_state->IterIndex}");
+            writer.WriteLine("|");
+
+            // Perm array
+            writer.Write("| Perm: ");
+            for (int idim = 0; idim < ndim; idim++)
+                writer.Write($"{_state->Perm[idim]} ");
+            writer.WriteLine();
+
+            // DTypes (per operand, NPTypeCode names since we don't have PyArray_Descr)
+            writer.Write("| DTypes: ");
+            for (int iop = 0; iop < nop; iop++)
+            {
+                var dt = _state->GetOpDType(iop);
+                writer.Write($"{dt.AsNumpyDtypeName()} ");
+            }
+            writer.WriteLine();
+
+            // Initial data ptrs (reset ptrs)
+            writer.Write("| InitDataPtrs: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"0x{_state->ResetDataPtrs[iop]:X} ");
+            writer.WriteLine();
+
+            // Base offsets
+            writer.Write("| BaseOffsets: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"{_state->BaseOffsets[iop]} ");
+            writer.WriteLine();
+
+            // Current data pointers
+            writer.Write("| Ptrs: ");
+            for (int iop = 0; iop < nop; iop++)
+                writer.Write($"0x{_state->DataPtrs[iop]:X} ");
+            writer.WriteLine();
+
+            if ((itf & (uint)NDIterFlags.HASINDEX) != 0)
+                writer.WriteLine($"| FlatIndex: {_state->FlatIndex}");
+
+            // OpItFlags
+            writer.WriteLine("| OpItFlags:");
+            for (int iop = 0; iop < nop; iop++)
+            {
+                writer.Write($"|   Flags[{iop}]: ");
+                var of = _state->GetOpFlags(iop);
+                if ((of & NDIterOpFlags.READ) != 0) writer.Write("READ ");
+                if ((of & NDIterOpFlags.WRITE) != 0) writer.Write("WRITE ");
+                if ((of & NDIterOpFlags.CAST) != 0) writer.Write("CAST ");
+                if ((of & NDIterOpFlags.BUFNEVER) != 0) writer.Write("BUFNEVER ");
+                if ((of & NDIterOpFlags.REDUCE) != 0) writer.Write("REDUCE ");
+                if ((of & NDIterOpFlags.VIRTUAL) != 0) writer.Write("VIRTUAL ");
+                if ((of & NDIterOpFlags.WRITEMASKED) != 0) writer.Write("WRITEMASKED ");
+                if ((of & NDIterOpFlags.BUF_SINGLESTRIDE) != 0) writer.Write("BUF_SINGLESTRIDE ");
+                if ((of & NDIterOpFlags.CONTIG) != 0) writer.Write("CONTIG ");
+                if ((of & NDIterOpFlags.BUF_REUSABLE) != 0) writer.Write("BUF_REUSABLE ");
+                writer.WriteLine();
+            }
+            writer.WriteLine("|");
+
+            // Buffer data
+            if ((itf & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                writer.WriteLine("| BufferData:");
+                writer.WriteLine($"|   BufferSize: {_state->BufferSize}");
+                writer.WriteLine($"|   BufIterEnd: {_state->BufIterEnd}");
+                writer.WriteLine($"|   CoreSize: {_state->CoreSize}");
+                if ((itf & (uint)NDIterFlags.REDUCE) != 0)
+                {
+                    writer.WriteLine($"|   REDUCE Pos: {_state->ReducePos}");
+                    writer.WriteLine($"|   REDUCE OuterSize: {_state->ReduceOuterSize}");
+                    writer.WriteLine($"|   REDUCE OuterDim: {_state->OuterDim}");
+                }
+                writer.Write("|   BufStrides: ");
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"{_state->BufStrides[iop]} ");
+                writer.WriteLine();
+                if ((itf & (uint)NDIterFlags.REDUCE) != 0)
+                {
+                    writer.Write("|   REDUCE Outer Strides: ");
+                    for (int iop = 0; iop < nop; iop++)
+                        writer.Write($"{_state->ReduceOuterStrides[iop]} ");
+                    writer.WriteLine();
+                    writer.Write("|   REDUCE Outer Ptrs: ");
+                    for (int iop = 0; iop < nop; iop++)
+                        writer.Write($"0x{_state->ReduceOuterPtrs[iop]:X} ");
+                    writer.WriteLine();
+                }
+                writer.Write("|   Buffers: ");
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"0x{_state->Buffers[iop]:X} ");
+                writer.WriteLine();
+                writer.WriteLine("|");
+            }
+
+            // Per-axis data
+            for (int idim = 0; idim < ndim; idim++)
+            {
+                writer.WriteLine($"| AxisData[{idim}]:");
+                writer.WriteLine($"|   Shape: {_state->Shape[idim]}");
+                writer.WriteLine($"|   Index: {_state->Coords[idim]}");
+                writer.Write("|   Strides: ");
+                int stridesNDim = _state->StridesNDim;
+                for (int iop = 0; iop < nop; iop++)
+                    writer.Write($"{_state->Strides[iop * stridesNDim + idim]} ");
+                writer.WriteLine();
+            }
+
+            writer.WriteLine("------- END ITERATOR DUMP -------");
+            writer.Flush();
+        }
+
+        /// <summary>
+        /// Dumps iterator state to standard output. See <see cref="DebugPrint(System.IO.TextWriter)"/>.
+        /// </summary>
+        public void DebugPrint()
+        {
+            DebugPrint(Console.Out);
+        }
+
+        /// <summary>
+        /// Returns the debug dump as a string.
+        /// </summary>
+        public string DebugPrintToString()
+        {
+            using var sw = new System.IO.StringWriter();
+            DebugPrint(sw);
+            return sw.ToString();
+        }
+
+        /// <summary>
+        /// Builds a set of strides that match the iterator's axis ordering for a
+        /// hypothetical contiguous array (like the result of NPY_ITER_ALLOCATE).
+        /// Matches NumPy's NDIter_CreateCompatibleStrides (nditer_api.c:1058).
+        ///
+        /// Use case: match the shape/layout of an iterator while tacking on extra
+        /// dimensions (e.g., gradient vector per element, Hessian matrix).
+        /// If an array is created with these strides, adding <paramref name="itemsize"/>
+        /// each iteration traverses the array matching the iterator.
+        ///
+        /// Requirements:
+        /// - Iterator must be tracking a multi-index (HASMULTIINDEX flag).
+        /// - No axis may be flipped (NPY_ITER_DONT_NEGATE_STRIDES must have been used,
+        ///   or the iterator must have no negative-stride axes to flip).
+        /// </summary>
+        /// <param name="itemsize">Base stride (typically element size in bytes).</param>
+        /// <param name="outStrides">Output span of length ≥ NDim, one stride per axis
+        ///                          in original array order (C-order).</param>
+        public bool CreateCompatibleStrides(long itemsize, scoped Span<long> outStrides)
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) == 0)
+            {
+                throw new InvalidOperationException(
+                    "Iterator CreateCompatibleStrides may only be called if a multi-index is being tracked.");
+            }
+
+            if (outStrides.Length < _state->NDim)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NDim} elements.", nameof(outStrides));
+
+            // Walk from innermost axis outward, accumulating itemsize.
+            // NumSharp's innermost is at NDim-1 (opposite of NumPy's reversed storage
+            // where idim=0 is innermost). So we iterate NDim-1 down to 0.
+            for (int idim = _state->NDim - 1; idim >= 0; idim--)
+            {
+                int p = _state->Perm[idim];
+                bool flipped = p < 0;
+                int originalAxis;
+
+                if (flipped)
+                {
+                    throw new InvalidOperationException(
+                        "Iterator CreateCompatibleStrides may only be called if " +
+                        "DONT_NEGATE_STRIDES was used to prevent reverse iteration of an axis.");
+                }
+                else
+                {
+                    originalAxis = p;
+                }
+
+                outStrides[originalAxis] = itemsize;
+                itemsize *= _state->Shape[idim];
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the array of strides for the specified axis, one stride per operand.
+        /// Matches NumPy's NDIter_GetAxisStrideArray (nditer_api.c:1309).
+        ///
+        /// If the iterator is tracking a multi-index, returns strides for the user-supplied
+        /// axis in original-array coordinates (perm is walked to locate the internal axis).
+        /// Otherwise returns strides for iteration axis <paramref name="axis"/> in Fortran
+        /// order (fastest-changing axis first).
+        ///
+        /// Strides are returned in BYTES (multiplying NumSharp's internal element-count
+        /// strides by the operand's element size) to match NumPy's byte-stride convention.
+        /// </summary>
+        /// <param name="axis">Axis index (0-based). With HASMULTIINDEX: original-array axis.
+        ///                    Without: fastest-changing-first (Fortran) ordering.</param>
+        /// <param name="outStrides">Output span of length ≥ NOp; filled with byte strides.</param>
+        public void GetAxisStrideArray(int axis, scoped Span<long> outStrides)
+        {
+            if (axis < 0 || axis >= _state->NDim)
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} out of bounds for iterator with NDim={_state->NDim}");
+
+            if (outStrides.Length < _state->NOp)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+
+            int nop = _state->NOp;
+            int stridesNDim = _state->StridesNDim;
+            int internalIdim;
+
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) != 0)
+            {
+                // Walk perm to find the internal axis corresponding to the user's axis.
+                // NumSharp's perm[idim] = original_axis (or -1-original if flipped).
+                // (Unlike NumPy, NumSharp does NOT reverse axis storage, so no axis reversal
+                // is needed on the input.)
+                internalIdim = -1;
+                for (int idim = 0; idim < _state->NDim; idim++)
+                {
+                    int p = _state->Perm[idim];
+                    if (p == axis || -1 - p == axis)
+                    {
+                        internalIdim = idim;
+                        break;
+                    }
+                }
+                if (internalIdim < 0)
+                    throw new InvalidOperationException("internal error in iterator perm");
+            }
+            else
+            {
+                // Non-MULTI_INDEX: axis is in Fortran order (fastest-first).
+                // NumSharp's innermost axis is at NDim-1, so internal idim = NDim-1-axis.
+                internalIdim = _state->NDim - 1 - axis;
+            }
+
+            // Return byte strides (NumPy convention). Internal strides are element
+            // counts of the SOURCE arrays (NumPy's NAD_STRIDES are array byte
+            // strides), so the multiplier is the SOURCE element size — ElementSizes
+            // is the buffer dtype size and diverges under a buffered cast (bug (b)
+            // family).
+            for (int op = 0; op < nop; op++)
+            {
+                long elemStride = _state->Strides[op * stridesNDim + internalIdim];
+                outStrides[op] = elemStride * _state->SrcElementSizes[op];
+            }
+        }
+
+        /// <summary>
+        /// Copies the array of strides that are fixed during iteration into <paramref name="outStrides"/>.
+        /// Matches NumPy's NDIter_GetInnerFixedStrideArray (nditer_api.c:1357).
+        ///
+        /// Buffered iterators copy <see cref="NDIterState.BufStrides"/>. Non-buffered iterators
+        /// copy the innermost-axis stride from <see cref="NDIterState.Strides"/> and convert it
+        /// to bytes.
+        /// </summary>
+        /// <param name="outStrides">Output span of length at least NOp.</param>
+        public void GetInnerFixedStrideArray(scoped Span<long> outStrides)
+        {
+            if (outStrides.Length < _state->NOp)
+                throw new ArgumentException(
+                    $"outStrides must have at least {_state->NOp} elements.", nameof(outStrides));
+
+            int nop = _state->NOp;
+
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                // Buffered: BufStrides already stored in bytes (NDIterBufferManager assigns
+                // BufStrides[op] = GetElementSize(op)).
+                for (int op = 0; op < nop; op++)
+                    outStrides[op] = _state->BufStrides[op];
+            }
+            else
+            {
+                // Non-buffered: innermost-axis stride for each operand, converted to BYTE units
+                // to match NumPy (NumSharp internally stores element-count strides).
+                if (_state->NDim == 0)
+                {
+                    for (int op = 0; op < nop; op++)
+                        outStrides[op] = 0;
+                }
+                else
+                {
+                    int innermost = _state->NDim - 1;
+                    int stridesNDim = _state->StridesNDim;
+                    for (int op = 0; op < nop; op++)
+                    {
+                        long elemStride = _state->Strides[op * stridesNDim + innermost];
+                        // Strides traverse source-array memory → source element
+                        // size. (Equal to ElementSizes on this branch: casts
+                        // require BUFFER, which took the BufStrides branch above.)
+                        outStrides[op] = elemStride * _state->SrcElementSizes[op];
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Resets the iterator to its initial state with new base data pointers.
+        /// Matches NumPy's NDIter_ResetBasePointers (nditer_api.c:314).
+        ///
+        /// For each operand, sets resetdataptr[iop] = baseptrs[iop] + baseoffsets[iop],
+        /// where baseoffsets is the cumulative byte offset recorded by FlipNegativeStrides.
+        /// Then repositions the iterator to IterStart.
+        ///
+        /// The new arrays pointed to by baseptrs MUST have the exact same shape, dtype,
+        /// and memory layout as the original operands. This is typically used in nested
+        /// iteration (ufunc-style) where one iterator feeds data pointers to another.
+        ///
+        /// Throws ArgumentException if baseptrs.Length != NOp.
+        /// </summary>
+        /// <param name="baseptrs">Array of new base data pointers, one per operand.</param>
+        /// <returns>True on success.</returns>
+        public bool ResetBasePointers(scoped ReadOnlySpan<IntPtr> baseptrs)
+        {
+            if (baseptrs.Length != _state->NOp)
+            {
+                throw new ArgumentException(
+                    $"baseptrs length {baseptrs.Length} does not match operand count {_state->NOp}.",
+                    nameof(baseptrs));
+            }
+
+            uint itFlags = _state->ItFlags;
+
+            // If buffering, handle pending buffer state first
+            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                if ((itFlags & (uint)NDIterFlags.DELAYBUF) != 0)
+                {
+                    // Delayed buffer allocation: allocate now
+                    if (!NDIterBufferManager.AllocateBuffers(ref *_state, _state->BufferSize))
+                    {
+                        return false;
+                    }
+                    _state->ItFlags &= ~(uint)NDIterFlags.DELAYBUF;
+                }
+                else if ((itFlags & (uint)NDIterFlags.REDUCE) != 0)
+                {
+                    // Flush any pending writes before replacing pointers
+                    CopyReduceBuffersToArrays();
+                }
+                else
+                {
+                    // Windowed path: flush the pending window before replacing pointers
+                    NDIterBufferManager.FlushBufferWindow(ref *_state);
+                }
+            }
+
+            // Install new reset pointers: resetdataptr[iop] = baseptrs[iop] + baseoffsets[iop].
+            // NumPy nditer_api.c:343-345.
+            for (int iop = 0; iop < _state->NOp; iop++)
+            {
+                _state->ResetDataPtrs[iop] = (long)baseptrs[iop] + _state->BaseOffsets[iop];
+            }
+
+            // Reposition to IterStart using the new base pointers.
+            _state->GotoIterIndex(_state->IterStart);
+
+            // Re-prime buffers if buffered
+            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                if ((itFlags & (uint)NDIterFlags.REDUCE) == 0)
+                {
+                    // Windowed path: prime a fresh window at the new position.
+                    NDIterBufferManager.FillBufferWindow(ref *_state,
+                        NDIterBufferManager.ComputeTransferSize(ref *_state));
+                }
+                else
+                {
+                    long remaining = _state->IterEnd - _state->IterIndex;
+                    long copyCount = Math.Min(remaining, _state->BufferSize);
+                    if (copyCount > 0)
+                    {
+                        for (int iop = 0; iop < _state->NOp; iop++)
+                        {
+                            var opFlags = _state->GetOpFlags(iop);
+                            if ((opFlags & NDIterOpFlags.READ) != 0)
+                            {
+                                NDIterBufferManager.CopyToBuffer(ref *_state, iop, copyCount);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Convenience overload: resets base pointers using the data pointers of new NDArray operands.
+        /// The new arrays must have the same shape, dtype, and layout as the original operands.
+        /// </summary>
+        public unsafe bool ResetBasePointers(NDArray[] newOperands)
+        {
+            if (newOperands == null)
+                throw new ArgumentNullException(nameof(newOperands));
+            if (newOperands.Length != _state->NOp)
+            {
+                throw new ArgumentException(
+                    $"newOperands length {newOperands.Length} does not match operand count {_state->NOp}.",
+                    nameof(newOperands));
+            }
+
+            Span<IntPtr> baseptrs = stackalloc IntPtr[newOperands.Length];
+            for (int i = 0; i < newOperands.Length; i++)
+            {
+                var arr = newOperands[i];
+                if (arr is null)
+                    throw new ArgumentException($"newOperands[{i}] is null.");
+                // arr.GetTypeCode.SizeOf() — not arr.dtypesize — because the
+                // latter uses Marshal.SizeOf(bool) == 4 while in-memory bool
+                // storage is 1 byte per element.
+                int elemBytes = arr.GetTypeCode.SizeOf();
+                byte* basePtr = (byte*)arr.Address + (arr.Shape.offset * elemBytes);
+                baseptrs[i] = (IntPtr)basePtr;
+            }
+
+            return ResetBasePointers(baseptrs);
+        }
+
+        /// <summary>
+        /// Advance to next position and return whether more iterations remain.
+        /// Matches NumPy's iternext() behavior.
+        /// Returns true if more elements exist, false when iteration is complete.
+        ///
+        /// When BUFFERED + REDUCE flags are set, uses the double-loop pattern
+        /// from NumPy's npyiter_buffered_reduce_iternext (nditer_templ.c.src lines 131-210).
+        /// </summary>
+        public bool Iternext()
+        {
+            if (_state->IterIndex >= _state->IterEnd)
+                return false;
+
+            // Check for buffered reduce path
+            // Use double-loop for any buffered reduction (even when ReduceOuterSize = 1)
+            // because we need to use BufStrides which has 0 for reduce operands
+            uint itFlags = _state->ItFlags;
+            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0 &&
+                (itFlags & (uint)NDIterFlags.REDUCE) != 0 &&
+                _state->CoreSize > 0)
+            {
+                return BufferedReduceIternext();
+            }
+
+            // Respect EXLOOP / ONEITERATION. The kernel processes the innermost
+            // loop, so a plain one-element Advance() over-steps an external-loop
+            // iterator by NDim-1 positions per call (reading past the inner-loop
+            // buffer). GetIterNext() returns the correct advancer — ExternalLoopNext
+            // for EXLOOP, SingleIterationNext for ONEITERATION, StandardNext
+            // otherwise. StandardNext is byte-for-byte the old Advance() path for
+            // the common (non-EXLOOP, non-ONEITERATION) case, so this is a strict
+            // correction with no behavior change there.
+            return GetIterNext()(ref *_state);
+        }
+
+        /// <summary>
+        /// Buffered reduce iteration using NumPy's double-loop pattern.
+        /// Avoids re-buffering during reduction by separating iteration into:
+        /// - Inner loop: CoreSize elements
+        /// - Outer loop: ReduceOuterSize iterations
+        /// </summary>
+        private bool BufferedReduceIternext()
+        {
+            int result = _state->BufferedReduceAdvance();
+
+            if (result == 1)
+            {
+                // More elements in current buffer
+                return true;
+            }
+
+            if (result == -1)
+            {
+                // Iteration complete - write back remaining buffer contents
+                CopyReduceBuffersToArrays();
+                return false;
+            }
+
+            // result == 0: Buffer exhausted, need to refill
+
+            // Write back reduce buffers to arrays
+            CopyReduceBuffersToArrays();
+
+            // Check if we're past the end
+            if (_state->IterIndex >= _state->IterEnd)
+            {
+                return false;
+            }
+
+            // Move to next buffer position - this updates DataPtrs to current array positions
+            _state->GotoIterIndex(_state->IterIndex);
+
+            // Calculate how much to copy for next buffer
+            long remaining = _state->IterEnd - _state->IterIndex;
+            long copyCount = Math.Min(remaining, _state->BufferSize);
+
+            // Copy to buffers
+            // For reduce operands, check if we're at a NEW output position
+            // (i.e., the reduce operand's array pointer changed from the previous writeback position)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var opFlags = _state->GetOpFlags(op);
+
+                // For reduce operands, only reload if at a new output position
+                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
+                {
+                    void* currentArrayPos = _state->GetDataPtr(op);
+                    void* previousWritebackPos = _state->GetArrayWritebackPtr(op);
+
+                    // If pointer changed, we're at a new output position - reload
+                    // If same, we're continuing the same output - skip reload
+                    if (currentArrayPos == previousWritebackPos)
+                    {
+                        continue;  // Same output position, keep accumulating
+                    }
+                }
+
+                if ((opFlags & NDIterOpFlags.READ) != 0 || (opFlags & NDIterOpFlags.READWRITE) != 0)
+                {
+                    NDIterBufferManager.CopyToBuffer(ref *_state, op, copyCount);
+                }
+            }
+
+            // Save current array positions for writeback (after checking but before buffer overwrite)
+            // These are the positions where CopyReduceBuffersToArrays will write
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                _state->SetArrayWritebackPtr(op, _state->GetDataPtr(op));
+            }
+
+            // Reset DataPtrs to point to buffer start (BufferedReduceAdvance uses these)
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var buffer = _state->GetBuffer(op);
+                if (buffer != null)
+                {
+                    _state->SetDataPtr(op, buffer);
+                }
+            }
+
+            // For small buffer handling, set ReduceOuterSize based on buffer capacity
+            _state->ReduceOuterSize = 1;
+            _state->ReducePos = 0;
+            _state->CorePos = 0;
+
+            // Set buffer iteration end
+            _state->BufIterEnd = _state->IterIndex + copyCount;
+
+            // Initialize reduce outer pointers (pointing to buffer start)
+            _state->InitReduceOuterPtrs();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Copy reduce buffers back to original arrays.
+        /// For reduce operands, only copies CoreSize elements (the accumulated results).
+        /// For non-reduce operands, copies CoreSize * ReduceOuterSize elements.
+        /// Uses ArrayWritebackPtrs (saved during buffer fill) as destination.
+        /// </summary>
+        private void CopyReduceBuffersToArrays()
+        {
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                var opFlags = _state->GetOpFlags(op);
+
+                // Only copy WRITE or READWRITE operands
+                if ((opFlags & NDIterOpFlags.WRITE) == 0 && (opFlags & NDIterOpFlags.READWRITE) == 0)
+                    continue;
+
+                var buffer = _state->GetBuffer(op);
+                if (buffer == null)
+                    continue;
+
+                // The legacy reduce write-back predates masked copy-back: it
+                // would write the buffer's unmasked slots too, silently
+                // violating WRITEMASKED. Refuse at the exact corruption point
+                // (construction succeeds, NumPy parity). Masked reduce
+                // write-back lands with reductions-through-core (roadmap Wave 5);
+                // the windowed non-reduce path already enforces masks
+                // (NDIterBufferManager.FlushBufferWindow).
+                if ((opFlags & NDIterOpFlags.WRITEMASKED) != 0)
+                {
+                    throw new NotSupportedException(
+                        "WRITEMASKED write-back is not supported on a buffered REDUCE " +
+                        "iterator yet (legacy buffered-reduce machinery; roadmap Wave 5). " +
+                        "Use an unbuffered iterator (mask enforcement is then the " +
+                        "kernel's responsibility, matching NumPy) or drop REDUCE.");
+                }
+
+                // Get array writeback pointer (saved at buffer start)
+                // Falls back to ResetDataPtr if ArrayWritebackPtr not set
+                void* dst = _state->GetArrayWritebackPtr(op);
+                if (dst == null)
+                    dst = _state->GetResetDataPtr(op);
+                if (dst == null)
+                    continue;
+
+                int elemSize = _state->GetElementSize(op);
+
+                // For reduce operands, buffer has ReduceOuterSize unique output positions
+                // For non-reduce operands, buffer has full CoreSize * ReduceOuterSize elements
+                long copyCount;
+                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
+                {
+                    // Reduce operand: ReduceOuterSize unique output positions
+                    // (each position accumulated CoreSize inputs)
+                    copyCount = _state->ReduceOuterSize;
+                }
+                else
+                {
+                    // Non-reduce operand: full buffer contents
+                    copyCount = _state->CoreSize * _state->ReduceOuterSize;
+                }
+
+                // For reduce operands, we have stride=0 in the reduce dimension
+                // which means all output goes to the same position(s)
+                // Just copy CoreSize elements from buffer to array
+                if ((opFlags & NDIterOpFlags.REDUCE) != 0)
+                {
+                    // Simple copy - buffer[0:CoreSize] to dst[0:CoreSize]
+                    Buffer.MemoryCopy(buffer, dst, copyCount * elemSize, copyCount * elemSize);
+                }
+                else
+                {
+                    // Non-reduce: need strided copy (handled by existing logic)
+                    // Temporarily set DataPtr to array position for CopyFromBuffer
+                    void* savedDataPtr = _state->GetDataPtr(op);
+                    _state->SetDataPtr(op, dst);
+                    NDIterBufferManager.CopyFromBuffer(ref *_state, op, copyCount);
+                    _state->SetDataPtr(op, savedDataPtr);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reset iterator to a specific iteration range.
+        /// Enables ranged iteration for parallel chunking.
+        /// </summary>
+        /// <param name="start">Start index (inclusive)</param>
+        /// <param name="end">End index (exclusive)</param>
+        /// <returns>True if range is valid, false otherwise</returns>
+        public bool ResetToIterIndexRange(long start, long end)
+        {
+            if (start < 0 || end > _state->IterSize || start > end)
+                return false;
+
+            _state->IterStart = start;
+            _state->IterEnd = end;
+            _state->ItFlags |= (uint)NDIterFlags.RANGE;
+
+            GotoIterIndex(start);
+            return true;
+        }
+
+        /// <summary>
+        /// Get the current iteration range start.
+        /// </summary>
+        public long IterStart => _state->IterStart;
+
+        /// <summary>
+        /// Get the current iteration range end.
+        /// </summary>
+        public long IterEnd => _state->IterEnd;
+
+        /// <summary>
+        /// Check if iterator is using ranged iteration.
+        /// </summary>
+        public bool IsRanged => (_state->ItFlags & (uint)NDIterFlags.RANGE) != 0;
+
+        /// <summary>
+        /// Jump to a specific iteration index.
+        /// </summary>
+        public void GotoIterIndex(long iterindex)
+        {
+            _state->GotoIterIndex(iterindex);
+        }
+
+        /// <summary>
+        /// Returns a specialized delegate for computing multi-index based on iterator flags.
+        /// Matches NumPy's NDIter_GetGetMultiIndex (nditer_templ.c.src:481).
+        ///
+        /// NumPy generates 12 specializations on (HASINDEX × IDENTPERM × NEGPERM × BUFFER).
+        /// NumSharp dispatches to 3 variants (BUFFER and HASINDEX don't affect coords):
+        ///   1. IDENTPERM — direct copy of internal coords
+        ///   2. Positive perm — apply perm[] mapping
+        ///   3. NEGPERM — apply perm[] with flip decoding
+        ///
+        /// The returned delegate takes raw NDIterState and a pointer to output coords.
+        /// </summary>
+        /// <param name="errmsg">Set on failure; null on success.</param>
+        /// <returns>Delegate, or null if iterator is not tracking multi-index.</returns>
+        public NDIterGetMultiIndexFunc? GetMultiIndexFunc(out string? errmsg)
+        {
+            errmsg = null;
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) == 0)
+            {
+                errmsg = "Iterator not tracking multi-index. Use NDIterGlobalFlags.MULTI_INDEX during construction.";
+                return null;
+            }
+
+            uint itf = _state->ItFlags;
+            if ((itf & (uint)NDIterFlags.IDENTPERM) != 0)
+                return GetMultiIndex_Identity;
+            if ((itf & (uint)NDIterFlags.NEGPERM) != 0)
+                return GetMultiIndex_NegPerm;
+            return GetMultiIndex_PosPerm;
+        }
+
+        /// <summary>
+        /// Returns a specialized delegate for computing multi-index.
+        /// Matches NumPy's NDIter_GetGetMultiIndex. Throws on failure instead of
+        /// returning null (thin wrapper over the out-errmsg overload).
+        /// </summary>
+        public NDIterGetMultiIndexFunc GetMultiIndexFunc()
+        {
+            var fn = GetMultiIndexFunc(out string? errmsg);
+            if (fn == null) throw new InvalidOperationException(errmsg ?? "GetMultiIndexFunc unavailable");
+            return fn;
+        }
+
+        /// <summary>
+        /// Invokes the specialized multi-index delegate with this iterator's internal state.
+        /// This mirrors NumPy's pattern: <c>fn(iter, outcoords)</c>, where NumSharp's iterator
+        /// handle is a ref struct and the state is held internally.
+        /// </summary>
+        public void InvokeMultiIndex(NDIterGetMultiIndexFunc fn, long* outCoords)
+        {
+            if (fn == null) throw new ArgumentNullException(nameof(fn));
+            fn(ref *_state, outCoords);
+        }
+
+        /// <summary>
+        /// Span overload of <see cref="InvokeMultiIndex"/>.
+        /// </summary>
+        public void InvokeMultiIndex(NDIterGetMultiIndexFunc fn, scoped Span<long> outCoords)
+        {
+            if (fn == null) throw new ArgumentNullException(nameof(fn));
+            if (outCoords.Length < _state->NDim)
+                throw new ArgumentException($"outCoords must have at least {_state->NDim} elements.", nameof(outCoords));
+            fixed (long* ptr = outCoords)
+            {
+                fn(ref *_state, ptr);
+            }
+        }
+
+        // Specialized implementations — matches NumPy's 3 structural patterns
+        // (HASINDEX and BUFFER don't affect coord output so they're not specialized).
+
+        private static void GetMultiIndex_Identity(ref NDIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+                outCoords[d] = state.Coords[d];
+        }
+
+        private static void GetMultiIndex_PosPerm(ref NDIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+            {
+                int p = state.Perm[d];
+                outCoords[p] = state.Coords[d];
+            }
+        }
+
+        private static void GetMultiIndex_NegPerm(ref NDIterState state, long* outCoords)
+        {
+            for (int d = 0; d < state.NDim; d++)
+            {
+                int p = state.Perm[d];
+                if (p < 0)
+                {
+                    int originalAxis = -1 - p;
+                    outCoords[originalAxis] = state.Shape[d] - state.Coords[d] - 1;
+                }
+                else
+                {
+                    outCoords[p] = state.Coords[d];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get the current multi-index (coordinates) in original axis order.
+        /// Uses the Perm array to map internal coordinates to original array coordinates.
+        /// When NEGPERM is set, flipped axes have negative perm entries and their
+        /// coordinates are reversed (shape - coord - 1).
+        /// Requires MULTI_INDEX flag to be set during construction.
+        /// </summary>
+        public void GetMultiIndex(scoped Span<long> outCoords)
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking multi-index. Use NDIterGlobalFlags.MULTI_INDEX during construction.");
+
+            if (outCoords.Length < _state->NDim)
+                throw new ArgumentException($"Output span must have at least {_state->NDim} elements", nameof(outCoords));
+
+            // Fast path: IDENTPERM means perm is identity (no reordering or flipping)
+            if ((_state->ItFlags & (uint)NDIterFlags.IDENTPERM) != 0)
+            {
+                for (int d = 0; d < _state->NDim; d++)
+                    outCoords[d] = _state->Coords[d];
+                return;
+            }
+
+            // Apply permutation: Perm[internal_axis] = original_axis (or -1-original if flipped)
+            // When perm[d] >= 0: outCoords[perm[d]] = Coords[d]
+            // When perm[d] < 0: original = -1 - perm[d], and coordinate is flipped
+            bool hasNegPerm = (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
+
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                int p = _state->Perm[d];
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: original = -1 - p, coordinate = shape - coord - 1
+                    int originalAxis = -1 - p;
+                    outCoords[originalAxis] = _state->Shape[d] - _state->Coords[d] - 1;
+                }
+                else
+                {
+                    outCoords[p] = _state->Coords[d];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Jump to a specific multi-index (coordinates) given in original axis order.
+        /// Uses the Perm array to map original coordinates to internal iteration order.
+        /// When NEGPERM is set, flipped axes have negative perm entries and their
+        /// coordinates are reversed when mapping to internal coordinates.
+        /// Requires MULTI_INDEX flag to be set during construction.
+        /// </summary>
+        public void GotoMultiIndex(scoped ReadOnlySpan<long> coords)
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking multi-index. Use NDIterGlobalFlags.MULTI_INDEX during construction.");
+
+            if (coords.Length < _state->NDim)
+                throw new ArgumentException($"Coordinates must have at least {_state->NDim} elements", nameof(coords));
+
+            bool hasNegPerm = (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
+
+            // Apply permutation: Perm[internal_axis] = original_axis (or -1-original if flipped)
+            // When perm[d] >= 0: Coords[d] = coords[perm[d]]
+            // When perm[d] < 0: original = -1 - perm[d], Coords[d] = shape[d] - coords[original] - 1
+            long iterIndex = 0;
+            long multiplier = 1;
+
+            for (int d = _state->NDim - 1; d >= 0; d--)
+            {
+                int p = _state->Perm[d];
+                int originalAxis;
+                long coord;
+
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: map original coord to internal (flipped)
+                    originalAxis = -1 - p;
+                    coord = _state->Shape[d] - coords[originalAxis] - 1;
+                }
+                else
+                {
+                    originalAxis = p;
+                    coord = coords[originalAxis];
+                }
+
+                if (coord < 0 || coord >= _state->Shape[d])
+                    throw new IndexOutOfRangeException($"Coordinate {coords[originalAxis]} out of range for original axis {originalAxis} (size {_state->Shape[d]})");
+
+                _state->Coords[d] = coord;
+                iterIndex += coord * multiplier;
+                multiplier *= _state->Shape[d];
+            }
+
+            _state->IterIndex = iterIndex;
+
+            // Update flat index if tracking (C_INDEX or F_INDEX)
+            // Note: C_INDEX/F_INDEX are computed in ORIGINAL array order, not iteration order
+            // The coords provided by the user are in original order, so use them directly
+            if ((_state->ItFlags & (uint)NDIterFlags.HASINDEX) != 0)
+            {
+                // Build original shape for index computation (handle NEGPERM)
+                var origShape = stackalloc long[_state->NDim];
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    int p = _state->Perm[d];
+                    int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                    origShape[origAxis] = _state->Shape[d];
+                }
+
+                if (_state->IsCIndex)
+                {
+                    // C-order flat index in original array
+                    long cIndex = 0;
+                    multiplier = 1;
+                    for (int d = _state->NDim - 1; d >= 0; d--)
+                    {
+                        cIndex += coords[d] * multiplier;
+                        multiplier *= origShape[d];
+                    }
+                    _state->FlatIndex = cIndex;
+                }
+                else
+                {
+                    // F-order flat index in original array
+                    long fIndex = 0;
+                    multiplier = 1;
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        fIndex += coords[d] * multiplier;
+                        multiplier *= origShape[d];
+                    }
+                    _state->FlatIndex = fIndex;
+                }
+            }
+
+            // Update data pointers using internal coordinates. ResetDataPtrs are
+            // source-array bases — multiply by the SOURCE element size (bug (b):
+            // ElementSizes is the buffer dtype size under a buffered cast).
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                long offset = 0;
+                for (int d = 0; d < _state->NDim; d++)
+                    offset += _state->Coords[d] * _state->GetStride(d, op);
+
+                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->SrcElementSizes[op];
+            }
+        }
+
+        /// <summary>
+        /// Check if iterator is tracking multi-index.
+        /// </summary>
+        public bool HasMultiIndex => (_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) != 0;
+
+        /// <summary>
+        /// Check if iterator is tracking a flat index.
+        /// </summary>
+        public bool HasIndex => (_state->ItFlags & (uint)NDIterFlags.HASINDEX) != 0;
+
+        /// <summary>
+        /// Check if any axes have negative permutation entries (flipped for memory-order iteration).
+        /// When NEGPERM is set, GetMultiIndex reverses indices for those axes.
+        /// </summary>
+        public bool HasNegPerm => (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
+
+        /// <summary>
+        /// Check if the axis permutation is identity (no reordering).
+        /// Mutually exclusive with NEGPERM - if NEGPERM is set, IDENTPERM is cleared.
+        /// </summary>
+        public bool HasIdentPerm => (_state->ItFlags & (uint)NDIterFlags.IDENTPERM) != 0;
+
+        /// <summary>
+        /// Check if iteration is finished.
+        /// </summary>
+        public bool Finished => _state->IterIndex >= _state->IterEnd;
+
+        /// <summary>
+        /// Get the current iterator shape in original axis order.
+        /// When MULTI_INDEX is set, returns shape in original axis order.
+        /// When NEGPERM is set, handles flipped axes correctly.
+        /// Otherwise returns internal (possibly coalesced) shape.
+        /// </summary>
+        public long[] Shape
+        {
+            get
+            {
+                var result = new long[_state->NDim];
+
+                if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) != 0)
+                {
+                    bool hasNegPerm = (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
+
+                    // Return shape in original axis order
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        int p = _state->Perm[d];
+                        int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                        result[origAxis] = _state->Shape[d];
+                    }
+                }
+                else
+                {
+                    // Return internal (coalesced) shape
+                    for (int d = 0; d < _state->NDim; d++)
+                        result[d] = _state->Shape[d];
+                }
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Get the current iteration range as (start, end) tuple.
+        /// </summary>
+        public (long Start, long End) IterRange => (_state->IterStart, _state->IterEnd);
+
+        /// <summary>
+        /// Get the current flat index.
+        /// Requires C_INDEX or F_INDEX flag to be set during construction.
+        /// </summary>
+        public long GetIndex()
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking index. Use NDIterGlobalFlags.C_INDEX or F_INDEX during construction.");
+
+            return _state->FlatIndex;
+        }
+
+        /// <summary>
+        /// Jump to a specific flat index position (C or F order based on construction flags).
+        /// Requires C_INDEX or F_INDEX flag to be set during construction.
+        /// Matches NumPy's NDIter_GotoIndex behavior.
+        /// When NEGPERM is set, handles flipped axes correctly.
+        /// </summary>
+        /// <param name="flatIndex">The flat index in C or F order (depending on flags)</param>
+        public void GotoIndex(long flatIndex)
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking index. Use NDIterGlobalFlags.C_INDEX or F_INDEX during construction.");
+
+            if (flatIndex < 0 || flatIndex >= _state->IterSize)
+                throw new IndexOutOfRangeException($"Flat index {flatIndex} out of range [0, {_state->IterSize})");
+
+            bool hasNegPerm = (_state->ItFlags & (uint)NDIterFlags.NEGPERM) != 0;
+
+            // Get original shape (using Perm to map internal to original)
+            // Handle NEGPERM: when perm[d] < 0, originalAxis = -1 - perm[d]
+            var origShape = stackalloc long[_state->NDim];
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                int p = _state->Perm[d];
+                int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                origShape[origAxis] = _state->Shape[d];
+            }
+
+            // Convert flat index to original coordinates
+            var coords = stackalloc long[_state->NDim];
+            long remaining = flatIndex;
+
+            if (_state->IsCIndex)
+            {
+                // C-order: last axis changes fastest
+                for (int d = _state->NDim - 1; d >= 0; d--)
+                {
+                    coords[d] = remaining % origShape[d];
+                    remaining /= origShape[d];
+                }
+            }
+            else
+            {
+                // F-order: first axis changes fastest
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    coords[d] = remaining % origShape[d];
+                    remaining /= origShape[d];
+                }
+            }
+
+            // Update state
+            _state->FlatIndex = flatIndex;
+
+            // Convert original coords to internal coords and update position
+            // Handle NEGPERM: flipped axes need reversed coordinates
+            long iterIndex = 0;
+            long multiplier = 1;
+
+            for (int d = _state->NDim - 1; d >= 0; d--)
+            {
+                int p = _state->Perm[d];
+                int origAxis;
+                long coord;
+
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: map original coord to internal (flipped)
+                    origAxis = -1 - p;
+                    coord = _state->Shape[d] - coords[origAxis] - 1;
+                }
+                else
+                {
+                    origAxis = p;
+                    coord = coords[origAxis];
+                }
+
+                _state->Coords[d] = coord;
+                iterIndex += coord * multiplier;
+                multiplier *= _state->Shape[d];
+            }
+
+            _state->IterIndex = iterIndex;
+
+            // Update data pointers (source element size — see GotoIterIndex / bug (b))
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                long offset = 0;
+                for (int d = 0; d < _state->NDim; d++)
+                    offset += _state->Coords[d] * _state->GetStride(d, op);
+
+                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->SrcElementSizes[op];
+            }
+        }
+
+        /// <summary>
+        /// Get operand arrays.
+        /// </summary>
+        public NDArray[]? GetOperandArray() => _operands;
+
+        /// <summary>
+        /// Returns a view of the i-th operand with the iterator's internal axes ordering.
+        /// A C-order iteration of this view is equivalent to the iterator's iteration order.
+        ///
+        /// For example, if a 3D array was coalesced to 1D, this returns a 1D view.
+        /// If axes were reordered for memory efficiency, this reflects that reordering.
+        ///
+        /// Not available when buffering is enabled.
+        /// Matches NumPy's NDIter_GetIterView behavior.
+        /// </summary>
+        /// <param name="operand">The operand index (0 to NOp-1)</param>
+        /// <returns>An NDArray view with the iterator's internal shape and strides</returns>
+        public NDArray GetIterView(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand), $"Operand index {operand} out of range [0, {_state->NOp})");
+
+            // Cannot provide views when buffering is enabled (data may be in temporary buffers)
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                throw new InvalidOperationException("Cannot provide an iterator view when buffering is enabled");
+
+            if (_operands == null || _operands.Length <= operand)
+                throw new InvalidOperationException("Operand array not available");
+
+            var original = _operands[operand];
+            int ndim = _state->NDim;
+
+            if (ndim == 0)
+            {
+                // Scalar case - return a scalar view
+                return original.flat[0];
+            }
+
+            // Build shape and strides from the iterator's internal state
+            // NumSharp's internal Shape[0] is already the outermost axis, matching standard convention
+            // (NumPy reverses because their axisdata iteration starts from innermost, but we don't need to)
+            var viewShape = new long[ndim];
+            var viewStrides = new long[ndim];
+
+            for (int d = 0; d < ndim; d++)
+            {
+                viewShape[d] = _state->Shape[d];
+                viewStrides[d] = _state->GetStride(d, operand);
+            }
+
+            // Get the reset data pointer (base pointer for this operand)
+            void* dataPtr = _state->GetResetDataPtr(operand);
+
+            // Create a view that shares storage with the original
+            // We need to create an NDArray that points to the same underlying storage
+            // but with the iterator's shape and strides
+            var storage = original.Storage;
+
+            // Calculate the offset from storage base to the reset data pointer
+            int elementSize = _state->GetElementSize(operand);
+            long offsetBytes = (long)dataPtr - (long)storage.Address;
+            long offsetElements = offsetBytes / elementSize;
+
+            // Calculate total buffer size (from original storage)
+            long bufferSize = storage.Count;
+
+            // Create a new shape with the offset using internal constructor
+            var viewShapeWithOffset = new Shape(viewShape, viewStrides, offsetElements, bufferSize);
+
+            // Create a view NDArray that shares the same storage
+            return new NDArray(storage, viewShapeWithOffset);
+        }
+
+        /// <summary>
+        /// Get operand dtypes.
+        /// </summary>
+        public NPTypeCode[] GetDescrArray()
+        {
+            var result = new NPTypeCode[_state->NOp];
+            for (int i = 0; i < _state->NOp; i++)
+                result[i] = _state->GetOpDType(i);
+            return result;
+        }
+
+        /// <summary>
+        /// Get pointer to current data for operand.
+        /// When buffering is enabled, returns pointer to buffer position.
+        /// Otherwise returns pointer to source array position.
+        /// Matches NumPy's dataptrs[i] access.
+        /// </summary>
+        public void* GetDataPtr(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+
+            uint itFlags = _state->ItFlags;
+
+            // If buffering is enabled and we have a buffer, use it
+            if ((itFlags & (uint)NDIterFlags.BUFFER) != 0)
+            {
+                var buffer = _state->GetBuffer(operand);
+                if (buffer != null)
+                {
+                    // REDUCE mode: DataPtrs track the current array/buffer position.
+                    // - With CoreSize > 0 (double-loop active): BufferedReduceAdvance maintains DataPtrs.
+                    // - With CoreSize == 0 (fallback to regular Advance): DataPtrs maintained by
+                    //   Advance() using per-axis strides (stride=0 on reduce axis keeps pointer fixed).
+                    // In both cases, DataPtrs is correct; don't override via IterIndex-indexed buffer.
+                    if ((itFlags & (uint)NDIterFlags.REDUCE) != 0)
+                    {
+                        return _state->GetDataPtr(operand);
+                    }
+
+                    // Windowed buffered iteration keeps DataPtrs correct at all
+                    // times: FillBufferWindow swaps buffered operands' pointers to
+                    // their buffers and BufferedElementNext walks them by
+                    // BufStrides. The legacy recomputation that used to live here
+                    // (IterIndex - (BufIterEnd - BufferSize)) silently broke on
+                    // the PARTIAL final window — e.g. 20005 elements with the
+                    // default 8192 buffer put the third window's start at
+                    // 20005-8192=11813 instead of 16384, reading stale data from
+                    // the previous fill. DataPtrs is the single source of truth.
+                    return _state->GetDataPtr(operand);
+                }
+            }
+
+            return _state->GetDataPtr(operand);
+        }
+
+        /// <summary>
+        /// Get current value for operand as T.
+        /// When buffering with casting is enabled, reads from buffer (which has target dtype).
+        /// </summary>
+        public T GetValue<T>(int operand = 0) where T : unmanaged
+        {
+            return *(T*)GetDataPtr(operand);
+        }
+
+        /// <summary>
+        /// Set current value for operand.
+        /// When buffering with casting is enabled, writes to buffer (which has target dtype).
+        /// </summary>
+        public void SetValue<T>(T value, int operand = 0) where T : unmanaged
+        {
+            *(T*)GetDataPtr(operand) = value;
+        }
+
+        // =========================================================================
+        // Configuration Methods
+        // =========================================================================
+
+        /// <summary>
+        /// Remove axis from iteration (enables external loop for that axis).
+        /// Matches NumPy's NDIter_RemoveAxis behavior.
+        /// </summary>
+        public bool RemoveAxis(int axis)
+        {
+            if (axis < 0 || axis >= _state->NDim)
+                return false;
+
+            // Shift dimensions down
+            for (int d = axis; d < _state->NDim - 1; d++)
+            {
+                _state->Shape[d] = _state->Shape[d + 1];
+                _state->Coords[d] = _state->Coords[d + 1];
+
+                for (int op = 0; op < _state->NOp; op++)
+                {
+                    _state->SetStride(d, op, _state->GetStride(d + 1, op));
+                }
+            }
+
+            _state->NDim--;
+
+            // Recalculate itersize based on remaining shape
+            _state->IterSize = 1;
+            for (int d = 0; d < _state->NDim; d++)
+                _state->IterSize *= _state->Shape[d];
+            _state->IterEnd = _state->IterSize;
+
+            // Update inner strides cache after dimension change
+            _state->UpdateInnerStrides();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Remove multi-index tracking and enable coalescing.
+        /// Matches NumPy's NDIter_RemoveMultiIndex behavior.
+        /// Note: Resets iterator position to the beginning.
+        /// </summary>
+        public bool RemoveMultiIndex()
+        {
+            if ((_state->ItFlags & (uint)NDIterFlags.HASMULTIINDEX) == 0)
+                return false;
+
+            // Clear the multi-index flag
+            _state->ItFlags &= ~(uint)NDIterFlags.HASMULTIINDEX;
+
+            // Perform axis reordering and coalescing now that multi-index is disabled
+            // This matches NumPy behavior: when MULTI_INDEX is set during construction,
+            // axis reordering is skipped. RemoveMultiIndex enables both reordering and coalescing.
+            if (_state->NDim > 1)
+            {
+                // Step 1: Reorder axes by stride (smallest first = innermost in memory)
+                NDIterCoalescing.ReorderAxesForCoalescing(ref *_state, NPY_ORDER.NPY_KEEPORDER);
+
+                // Step 2: Coalesce adjacent axes that have compatible strides
+                NDIterCoalescing.CoalesceAxes(ref *_state);
+            }
+
+            // Reset iterator to beginning (NumPy behavior)
+            _state->Reset();
+
+            // Clear cached iteration function
+            _cachedIterNext = null;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Enable external loop handling.
+        /// </summary>
+        public bool EnableExternalLoop()
+        {
+            _state->ItFlags |= (uint)NDIterFlags.EXLOOP;
+            _cachedIterNext = null;
+            return true;
+        }
+
+        // =========================================================================
+        // Reduction Support
+        // =========================================================================
+
+        /// <summary>
+        /// Check if iteration includes reduction operands.
+        /// </summary>
+        public bool IsReduction => (_state->ItFlags & (uint)NDIterFlags.REDUCE) != 0;
+
+        /// <summary>
+        /// Check if a specific operand is a reduction operand (has stride=0 for READWRITE).
+        /// </summary>
+        public bool IsOperandReduction(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+
+            return (_state->GetOpFlags(operand) & NDIterOpFlags.REDUCE) != 0;
+        }
+
+        /// <summary>
+        /// Check if this is the first visit to the current element of a reduction operand.
+        /// This is used for initialization (e.g., set to 0 before summing).
+        ///
+        /// For reduction operands (stride=0 on some axes), returns true when all
+        /// coordinates on reduction axes are 0. Returns false when any coordinate
+        /// on a reduction axis is non-zero (meaning we've already visited this
+        /// output element from another input element).
+        ///
+        /// For non-reduction operands, always returns true (every visit is "first").
+        ///
+        /// Matches NumPy's NDIter_IsFirstVisit behavior.
+        /// </summary>
+        public bool IsFirstVisit(int operand)
+        {
+            if ((uint)operand >= (uint)_state->NOp)
+                throw new ArgumentOutOfRangeException(nameof(operand));
+
+            // If this operand is not a reduction, every visit is "first"
+            if ((_state->GetOpFlags(operand) & NDIterOpFlags.REDUCE) == 0)
+                return true;
+
+            // Part 1: Check coordinates (unbuffered reduction check)
+            // For reduction operands, check if any reduction axis coordinate is non-zero
+            // A reduction axis is one where stride = 0 (but shape > 1)
+            for (int d = 0; d < _state->NDim; d++)
+            {
+                long stride = _state->GetStride(d, operand);
+                long coord = _state->Coords[d];
+
+                // If this is a reduction dimension (stride=0) and coordinate is not 0,
+                // we've already visited this output element
+                if (stride == 0 && coord != 0)
+                    return false;
+            }
+
+            // Part 2: Check buffer positions (buffered reduction check)
+            // When BUFFERED flag is set, use CorePos to determine first visit
+            // CorePos = 0 means we're at the start of a new output element
+            if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 && _state->CoreSize > 0)
+            {
+                // For buffered reduce, first visit is only when CorePos = 0
+                // (at the start of accumulation for each output element)
+                if (_state->CorePos != 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Create an independent copy of the iterator at its current position.
+        /// Matches NumPy's NDIter_Copy behavior.
+        /// The copy has its own state and can be advanced independently.
+        /// </summary>
+        public NDIterRef Copy()
+        {
+            // Allocate new state on heap
+            var newStatePtr = (NDIterState*)NativeMemory.AllocZeroed((nuint)sizeof(NDIterState));
+
+            try
+            {
+                // Copy scalar fields (excludes pointers since they will be re-allocated)
+                newStatePtr->ItFlags = _state->ItFlags;
+                newStatePtr->NDim = _state->NDim;
+                newStatePtr->NOp = _state->NOp;
+                newStatePtr->MaskOp = _state->MaskOp;
+                newStatePtr->IterSize = _state->IterSize;
+                newStatePtr->IterIndex = _state->IterIndex;
+                newStatePtr->IterStart = _state->IterStart;
+                newStatePtr->IterEnd = _state->IterEnd;
+                newStatePtr->FlatIndex = _state->FlatIndex;
+                newStatePtr->IsCIndex = _state->IsCIndex;
+                newStatePtr->DType = _state->DType;
+                newStatePtr->StridesNDim = _state->StridesNDim;
+                newStatePtr->BufferSize = _state->BufferSize;
+                newStatePtr->BufIterEnd = _state->BufIterEnd;
+                newStatePtr->BufTransferSize = _state->BufTransferSize;
+                newStatePtr->BufFlushed = _state->BufFlushed;
+                newStatePtr->ReducePos = _state->ReducePos;
+                newStatePtr->ReduceOuterSize = _state->ReduceOuterSize;
+                newStatePtr->CoreSize = _state->CoreSize;
+                newStatePtr->CorePos = _state->CorePos;
+                newStatePtr->OuterDim = _state->OuterDim;
+                newStatePtr->CoreOffset = _state->CoreOffset;
+
+                // ALWAYS allocate new arrays (both dimension and operand arrays are dynamic now)
+                newStatePtr->AllocateDimArrays(_state->NDim, _state->NOp, _state->StridesNDim);
+
+                // Copy dimension arrays (if NDim > 0)
+                if (_state->NDim > 0)
+                {
+                    // Copy Shape
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Shape[d] = _state->Shape[d];
+
+                    // Copy Coords
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Coords[d] = _state->Coords[d];
+
+                    // Copy Perm
+                    for (int d = 0; d < _state->NDim; d++)
+                        newStatePtr->Perm[d] = _state->Perm[d];
+
+                    // Copy Strides
+                    int strideCount = _state->StridesNDim * _state->NOp;
+                    for (int i = 0; i < strideCount; i++)
+                        newStatePtr->Strides[i] = _state->Strides[i];
+                }
+
+                // Copy per-operand arrays
+                int nop = _state->NOp;
+                for (int op = 0; op < nop; op++)
+                {
+                    newStatePtr->DataPtrs[op] = _state->DataPtrs[op];
+                    newStatePtr->ResetDataPtrs[op] = _state->ResetDataPtrs[op];
+                    newStatePtr->BaseOffsets[op] = _state->BaseOffsets[op];
+                    newStatePtr->OpItFlags[op] = _state->OpItFlags[op];
+                    newStatePtr->OpDTypes[op] = _state->OpDTypes[op];
+                    newStatePtr->OpSrcDTypes[op] = _state->OpSrcDTypes[op];
+                    newStatePtr->ElementSizes[op] = _state->ElementSizes[op];
+                    newStatePtr->SrcElementSizes[op] = _state->SrcElementSizes[op];
+                    newStatePtr->InnerStrides[op] = _state->InnerStrides[op];
+                    newStatePtr->BufStrides[op] = _state->BufStrides[op];
+                    newStatePtr->ReduceOuterStrides[op] = _state->ReduceOuterStrides[op];
+                    newStatePtr->ReduceOuterPtrs[op] = _state->ReduceOuterPtrs[op];
+                    newStatePtr->ArrayWritebackPtrs[op] = _state->ArrayWritebackPtrs[op];
+
+                    var sourceBuffer = (void*)_state->Buffers[op];
+                    if (sourceBuffer != null)
+                    {
+                        var buffer = NDIterBufferManager.AllocateAligned(_state->BufferSize, (NPTypeCode)_state->OpDTypes[op]);
+                        if (buffer == null)
+                            throw new OutOfMemoryException("Failed to allocate iterator copy buffer.");
+
+                        var bytes = _state->BufferSize * _state->ElementSizes[op];
+                        Buffer.MemoryCopy(sourceBuffer, buffer, bytes, bytes);
+                        newStatePtr->Buffers[op] = (long)buffer;
+
+                        var dataPtr = _state->DataPtrs[op];
+                        var bufferStart = _state->Buffers[op];
+                        var bufferEnd = bufferStart + bytes;
+                        if (dataPtr >= bufferStart && dataPtr < bufferEnd)
+                            newStatePtr->DataPtrs[op] = (long)buffer + (dataPtr - bufferStart);
+                    }
+                }
+
+                // Create new iterator owning the state
+                return new NDIterRef
+                {
+                    _state = newStatePtr,
+                    _ownsState = true,
+                    _operands = _operands,  // Share operand references (they're not modified)
+                    _cachedIterNext = null  // Don't copy cached delegate
+                };
+            }
+            catch
+            {
+                if ((newStatePtr->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                    NDIterBufferManager.FreeBuffers(ref *newStatePtr);
+                newStatePtr->FreeDimArrays();
+                NativeMemory.Free(newStatePtr);
+                throw;
+            }
+        }
+
+        // =========================================================================
+        // Lifecycle
+        // =========================================================================
+
+        /// <summary>
+        /// Deallocate iterator resources.
+        /// </summary>
+        public void Dispose()
+        {
+            // Windowed buffered iteration: flush the pending window so kernels
+            // that consumed the final fill without a trailing iternext (e.g. the
+            // single-inner-loop fast path) still land their writes (NumPy
+            // resolves pending buffer write-backs in NDIter_Deallocate too).
+            // Must run BEFORE ResolveWritebacks so the buffer contents reach the
+            // forced-copy temp before that temp is copied to the user's array.
+            if (_state != null &&
+                (_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0 &&
+                (_state->ItFlags & (uint)NDIterFlags.REDUCE) == 0 &&
+                (_state->ItFlags & (uint)NDIterFlags.DELAYBUF) == 0)
+            {
+                NDIterBufferManager.FlushBufferWindow(ref *_state);
+            }
+
+            // COPY_IF_OVERLAP write-backs must resolve regardless of state
+            // ownership (NumPy resolves WRITEBACKIFCOPY in NDIter_Deallocate).
+            ResolveWritebacks();
+
+            if (_ownsState && _state != null)
+            {
+                // Free any buffers using NDIterBufferManager.FreeBuffers
+                // NOTE: Buffers are allocated with AlignedAlloc, must be freed with AlignedFree
+                if ((_state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                {
+                    NDIterBufferManager.FreeBuffers(ref *_state);
+                }
+
+                // Free dynamically allocated dimension arrays
+                // NUMSHARP DIVERGENCE: Unlike NumPy's fixed arrays, we allocate dynamically
+                _state->FreeDimArrays();
+
+                NativeMemory.Free(_state);
+                _state = null;
+                _ownsState = false;
+            }
+        }
+
+        /// <summary>
+        /// Transfer ownership of the underlying <see cref="NDIterState"/>
+        /// pointer out of this <see cref="NDIterRef"/>. After the call, this
+        /// instance's <see cref="Dispose"/> is a no-op and the returned
+        /// pointer becomes the caller's responsibility to free via
+        /// <see cref="FreeState"/> (or equivalent manual teardown:
+        /// <see cref="NDIterBufferManager.FreeBuffers"/> when BUFFER is set,
+        /// <see cref="NDIterState.FreeDimArrays"/>, and
+        /// <see cref="NativeMemory.Free"/>).
+        ///
+        /// Intended for callers that need to hold the iterator state across a
+        /// non-ref-struct boundary (class fields, long-lived objects) where a
+        /// ref struct can't live.
+        /// </summary>
+        public NDIterState* ReleaseState()
+        {
+            if (!_ownsState)
+                throw new InvalidOperationException("Iterator does not own its state; cannot release.");
+
+            var released = _state;
+            _state = null;
+            _ownsState = false;
+            return released;
+        }
+
+        /// <summary>
+        /// Tear down a state pointer previously obtained from
+        /// <see cref="ReleaseState"/>. Mirrors <see cref="Dispose"/>'s cleanup
+        /// path but operates on a bare pointer so long-lived owners can free
+        /// the state without reconstructing an NDIterRef.
+        /// </summary>
+        public static void FreeState(NDIterState* state)
+        {
+            if (state == null) return;
+            if ((state->ItFlags & (uint)NDIterFlags.BUFFER) != 0)
+                NDIterBufferManager.FreeBuffers(ref *state);
+            state->FreeDimArrays();
+            NativeMemory.Free(state);
+        }
+    }
+
+    // =========================================================================
+    // Static NDIter Class (backward compatible API)
+    // =========================================================================
+
+    /// <summary>
+    /// Static iterator helper methods (backward compatible API).
+    ///
+    /// NUMSHARP DIVERGENCE: These methods support unlimited dimensions via dynamic allocation.
+    /// Dimension arrays are allocated on demand and freed after use.
+    /// </summary>
+    public static unsafe class NDIter
+    {
+        /// <inheritdoc cref="ReduceBool{T, TKernel}(UnmanagedStorage)"/>
+        public static bool ReduceBool<T, TKernel>(NDArray src)
+            where T : unmanaged
+            where TKernel : struct, INDBooleanReductionKernel<T>
+            => ReduceBool<T, TKernel>(src.Storage);
+
+        public static bool ReduceBool<T, TKernel>(UnmanagedStorage src)
+            where T : unmanaged
+            where TKernel : struct, INDBooleanReductionKernel<T>
+        {
+            var state = CreateReductionState(src);
+            try
+            {
+                if (state.Size == 0)
+                    return TKernel.Identity;
+
+                if ((state.Flags & NDIterFlags.SourceContiguous) != 0)
+                {
+                    var input = (void*)state.GetDataPointer(0);
+                    return TKernel.Identity
+                        ? DirectILKernelGenerator.AllSimdHelper<T>(input, state.Size)
+                        : DirectILKernelGenerator.AnySimdHelper<T>(input, state.Size);
+                }
+
+                return ReduceBoolGeneral<T, TKernel>(ref state);
+            }
+            finally
+            {
+                // Free dynamically allocated dimension arrays
+                state.FreeDimArrays();
+            }
+        }
+
+        // True when src and dst occupy a single gap-free buffer with the SAME layout: same shape,
+        // identical strides, and contiguous in C OR F order. Then every logical index maps to the
+        // same byte offset in both, so the whole copy is one flat cpblk regardless of C/F order.
+        // (Differing orders — e.g. F-contig transpose src into a C-contig dst — have non-identical
+        // strides and are correctly excluded, keeping the transpose copy on its strided path.)
+        private static bool IsSameFlatLayout(Shape a, Shape b)
+        {
+            int nd = a.NDim;
+            if (nd != b.NDim) return false;
+            if (!(a.IsContiguous || a.IsFContiguous)) return false;
+            var ad = a.dimensions; var bd = b.dimensions;
+            var asr = a.strides; var bsr = b.strides;
+            for (int i = 0; i < nd; i++)
+                if (ad[i] != bd[i] || asr[i] != bsr[i]) return false;
+            return true;
+        }
+
+        /// <inheritdoc cref="TryCopySameType(UnmanagedStorage, UnmanagedStorage)"/>
+        public static bool TryCopySameType(NDArray dst, NDArray src)
+            => TryCopySameType(dst.Storage, src.Storage);
+
+        public static bool TryCopySameType(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            if (dst.TypeCode != src.TypeCode)
+                return false;
+
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // Scalar-broadcast fast path: src has ALL strides 0, so every logical element is the
+            // SAME single value. When dst is a gap-free, whole-buffer C- OR F-contiguous target, fill
+            // it with one typed fill (1-byte InitBlock/memset, wider unrolled/SIMD) instead of the
+            // per-element strided walk the general path takes here (IsContiguousCopy is false for a
+            // broadcast src, so the cpblk tier below is skipped). Mirrors the IsScalarBroadcast tier
+            // in UnmanagedStorage.CloneData and is bit-identical: the same GetValue(0) value lands in
+            // every slot (read once, before the write, so a src/dst alias is safe). 6-8x for 1-byte,
+            // ~2x wider. The fill is order-independent — every slot gets the same value — so an F-
+            // contiguous whole buffer (offset 0, size == Count, no gaps) is equally fillable as C.
+            // GetValue(0) is offset-aware (GetOffset honours the broadcast strides) and boxes as the
+            // storage dtype, which IArraySlice.Fill unboxes via the same-type cast.
+            if (src.Shape.IsScalarBroadcast
+                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                && dst.Shape.offset == 0
+                && dst.Shape.size > 0
+                && dst.Shape.size == dst.InternalArray.Count)
+            {
+                dst.InternalArray.Fill(src.GetValue(0));
+                return true;
+            }
+
+            var state = CreateCopyState(src, dst);
+            try
+            {
+                if (state.Size == 0)
+                    return true;
+
+                // Contiguous fast path: existing IL CopyKernel uses cpblk — single block copy,
+                // minimal overhead. Cross-platform memcpy is the cheapest possible.
+                //
+                // IsContiguousCopy keys off C-contiguity only. A same-type copy whose src and dst
+                // share an identical-stride GAP-FREE buffer (C- OR F-contiguous) is equally a single
+                // flat cpblk — the i-th logical element sits at the same byte offset in both. astype
+                // preserves order (F-src -> F-dst), so this is the common F-contiguous case; without
+                // it the Vector-less dtypes (Boolean/Char/Half/Complex) the strided cast kernel
+                // rejects fall to the slow per-element CopyGeneralSameType (the bool|F 0.18x cliff).
+                if (state.IsContiguousCopy || IsSameFlatLayout(src.Shape, dst.Shape))
+                {
+                    var copyKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.Contiguous));
+                    if (copyKernel != null)
+                    {
+                        copyKernel(
+                            (void*)state.GetDataPointer(0),
+                            (void*)state.GetDataPointer(1),
+                            state.GetStridesPointer(0),
+                            state.GetStridesPointer(1),
+                            state.GetShapePointer(),
+                            state.NDim,
+                            state.Size);
+                        return true;
+                    }
+                }
+
+                // General path (strided / broadcast): route through the IL StridedCastKernel —
+                // detects unit-stride innermost axis and uses Buffer.MemoryCopy per row; falls
+                // back to scalar incremental-coord inner loop when inner is also strided. Returns
+                // null for the Vector-less dtypes (Char/Half/Decimal/Complex/Boolean), which then
+                // take the CopyGeneralSameType fallback below — same row-memcpy + incremental-coord
+                // shape, just without the SIMD cast body they can't use anyway for a same-type copy.
+                var stridedKernel = DirectILKernelGenerator.TryGetStridedCastKernel(dst.TypeCode, dst.TypeCode);
+                if (stridedKernel != null)
+                {
+                    stridedKernel(
+                        (void*)state.GetDataPointer(0),
+                        (void*)state.GetDataPointer(1),
+                        state.GetStridesPointer(0),
+                        state.GetStridesPointer(1),
+                        state.GetShapePointer(),
+                        state.NDim);
+                    return true;
+                }
+
+                // Fallback for the dtypes the StridedCastKernel rejects (Char/Half/Decimal/
+                // Complex/Boolean): CopyGeneralSameType — row-memcpy + incremental-coord, dtype-
+                // agnostic byte movement that matches the StridedCastKernel's wall time.
+                var fallbackKernel = DirectILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, CopyExecutionPath.General));
+                if (fallbackKernel == null)
+                    return false;
+
+                fallbackKernel(
+                    (void*)state.GetDataPointer(0),
+                    (void*)state.GetDataPointer(1),
+                    state.GetStridesPointer(0),
+                    state.GetStridesPointer(1),
+                    state.GetShapePointer(),
+                    state.NDim,
+                    state.Size);
+
+                return true;
+            }
+            finally
+            {
+                state.FreeDimArrays();
+            }
+        }
+
+        /// <summary>
+        /// Copy <paramref name="src"/> into <paramref name="dst"/> with full
+        /// support for broadcast, stride, and cross-dtype conversion.
+        ///
+        /// <list type="bullet">
+        ///   <item>Same dtype (the common case) routes through the SIMD-accelerated
+        ///   <see cref="TryCopySameType(UnmanagedStorage, UnmanagedStorage)"/>
+        ///   IL copy kernel — broadcast and arbitrary strides are absorbed by the
+        ///   coalesced iteration state.</item>
+        ///   <item>Cross dtype falls through to a per-element cast loop
+        ///   (<see cref="NDIterCasting.CopyStridedToStridedWithCast"/>) reusing
+        ///   the same broadcast/coalescing state.</item>
+        /// </list>
+        ///
+        /// Drop-in replacement for the legacy <c>MultiIterator.Assign(dst, src)</c>:
+        /// matches its broadcast-src-to-dst-shape semantics and its cast-on-write
+        /// behavior (read src as src.TypeCode, convert, write dst.TypeCode).
+        /// </summary>
+        /// <exception cref="NumSharpException">If <paramref name="dst"/> is not writeable (e.g., broadcast view).</exception>
+        public static void Copy(NDArray dst, NDArray src)
+        {
+            if (dst is null) throw new ArgumentNullException(nameof(dst));
+            if (src is null) throw new ArgumentNullException(nameof(src));
+            Copy(dst.Storage, src.Storage);
+        }
+
+        /// <summary>
+        ///     The unified allocate-and-fill core for copying, retyping, and casting. Allocates a
+        ///     fresh array of <paramref name="dstType"/> whose physical layout follows
+        ///     <paramref name="order"/> (NumPy C/F/A/K resolved via <see cref="OrderResolver"/>),
+        ///     then fills it from <paramref name="src"/> through the in-place <see cref="Copy(NDArray, NDArray)"/>
+        ///     primitive. Every elementwise concern — broadcast, arbitrary strides, transpose, and
+        ///     cross-dtype conversion — is absorbed by the NDIter copy core, so a single call covers
+        ///     <c>ndarray.copy()</c>, <c>astype()</c>, and <c>Clone()</c> alike.
+        /// </summary>
+        /// <param name="dstType">dtype of the result (equal to <paramref name="src"/>'s dtype for a plain copy/retype).</param>
+        /// <param name="src">source array of any layout (contiguous, sliced, strided, broadcast, transposed, scalar, empty).</param>
+        /// <param name="order">
+        ///     'C' (row-major), 'F' (column-major), 'A' ('F' iff src is F-contiguous and not C), or
+        ///     'K' (default; KEEPORDER — mirror src contiguity, matching NumPy astype order='K').
+        /// </param>
+        /// <param name="engine">tensor engine assigned to the result; defaults to <paramref name="src"/>'s engine.</param>
+        /// <returns>A freshly allocated, owning array of <paramref name="dstType"/> holding src's values.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="src"/> is null.</exception>
+        public static NDArray CopyAs(NPTypeCode dstType, NDArray src, char order = 'K', TensorEngine engine = null)
+        {
+            if (src is null) throw new ArgumentNullException(nameof(src));
+
+            engine = engine ?? src.TensorEngine;
+            Shape srcShape = src.Shape;
+
+            // 0-D scalar has no axes to order; everything else allocates with the resolved layout
+            // (KEEPORDER lets an F-contiguous / transposed source cast as a single flat pass).
+            Shape outShape;
+            if (srcShape.NDim == 0)
+                outShape = Shape.NewScalar();
+            else
+            {
+                char physical = OrderResolver.Resolve(order, srcShape);
+                outShape = new Shape((long[])srcShape.dimensions.Clone(), physical);
+            }
+
+            var dst = new NDArray(dstType, outShape, false) { TensorEngine = engine };
+            Copy(dst, src);
+            return dst;
+        }
+
+        /// <inheritdoc cref="Copy(NDArray, NDArray)"/>
+        public static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
+        {
+            if (dst is null) throw new ArgumentNullException(nameof(dst));
+            if (src is null) throw new ArgumentNullException(nameof(src));
+
+            // OVERLAP GUARD — NumPy PyArray_AssignArray (array_assign_array.c:371-399).
+            // A forward element/row copy reads source lanes after destination writes have
+            // already clobbered them when src and dst alias the same buffer. A same-direction
+            // 1-D run coalesces to a memmove-safe block copy and is fine; but 1-D opposite-
+            // direction strides (e.g. a[:] = a[::-1]) and ANY multi-dimensional copy must
+            // first materialize src into a temporary. Detection reuses the shared solver
+            // (NDMemOverlap = NumPy solve_may_share_memory) directly on the storages — NOT via
+            // throwaway NDArray wrappers, which under ARC would retain the buffers. A cross-dtype
+            // copy targets a distinct buffer, so the bounds test short-circuits to No for free.
+            if (NeedsAssignmentTemp(dst.Shape, src.Shape)
+                && NDMemOverlap.StoragesMayShareMemory(src, dst))
+            {
+                src = src.Clone();
+            }
+
+            // Same-dtype fast path: SIMD copy kernel, broadcast + stride aware.
+            if (TryCopySameType(dst, src))
+                return;
+
+            // Cross-dtype: per-element cast via NDIterCasting.ConvertValue,
+            // driven by the same coalesced broadcast state used by TryCopySameType.
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // Scalar-broadcast cross-dtype fast path: the source is a single value (ALL strides 0),
+            // so convert it ONCE with the same NumPy-faithful NDIterCasting.ConvertValue the scalar
+            // fallback below uses, then typed-fill the whole contiguous dst — instead of casting the
+            // identical value per element. Whole-buffer C/F-contiguous dst only (offset 0, size ==
+            // Count); the fill is order-independent. dst[0] is written first (offset 0 ⇒ buffer[0]),
+            // then read back boxed as dst's dtype and replicated across every slot via IArraySlice.Fill.
+            if (src.Shape.IsScalarBroadcast
+                && (dst.Shape.IsContiguous || dst.Shape.IsFContiguous)
+                && dst.Shape.offset == 0
+                && dst.Shape.size > 0
+                && dst.Shape.size == dst.InternalArray.Count)
+            {
+                byte* sp = src.Address + src.Shape.offset * src.InternalArray.ItemLength;
+                NDIterCasting.ConvertValue(sp, (void*)dst.Address, src.TypeCode, dst.TypeCode);
+                dst.InternalArray.Fill(dst.GetValue(0));
+                return;
+            }
+
+            var state = CreateCopyState(src, dst);
+            try
+            {
+                if (state.Size == 0)
+                    return;
+
+                // SIMD fast path 1: both src and dst contiguous, no broadcast.
+                // IL-generated contig cast kernel — minimal overhead for the common case.
+                if (state.IsContiguousCopy && state.Size > 0)
+                {
+                    var castKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                        .TryGetCastKernel(src.TypeCode, dst.TypeCode);
+                    if (castKernel != null)
+                    {
+                        castKernel((void*)state.GetDataPointer(0), (void*)state.GetDataPointer(1), state.Size);
+                        return;
+                    }
+                }
+
+                // SIMD fast path 2: strided/broadcast cast. IL kernel walks outer dims via incremental
+                // coord advance and uses the same SIMD body as the contig kernel for any inner axis
+                // with stride==1 for both src and dst. Falls back internally to scalar strided inner
+                // loop when the innermost axis has non-unit stride for either side.
+                if (state.Size > 0)
+                {
+                    var stridedKernel = NumSharp.Backends.Kernels.DirectILKernelGenerator
+                        .TryGetStridedCastKernel(src.TypeCode, dst.TypeCode);
+                    if (stridedKernel != null)
+                    {
+                        stridedKernel(
+                            (void*)state.GetDataPointer(0),
+                            (void*)state.GetDataPointer(1),
+                            state.GetStridesPointer(0),
+                            state.GetStridesPointer(1),
+                            state.GetShapePointer(),
+                            state.NDim);
+                        return;
+                    }
+                }
+
+                // Scalar dispatch: Decimal/Complex/Half/Char/Boolean involved.
+                NDIterCasting.CopyStridedToStridedWithCast(
+                    (void*)state.GetDataPointer(0),
+                    state.GetStridesPointer(0),
+                    src.TypeCode,
+                    (void*)state.GetDataPointer(1),
+                    state.GetStridesPointer(1),
+                    dst.TypeCode,
+                    state.GetShapePointer(),
+                    state.NDim,
+                    state.Size);
+            }
+            finally
+            {
+                state.FreeDimArrays();
+            }
+        }
+
+        /// <summary>
+        /// NumPy's array_assign_array.c:371-381 gate: which (dst, src) layouts can corrupt
+        /// themselves under a forward copy when the operands overlap. A 1-D copy is memmove-safe
+        /// ONLY as a same-direction UNIT-stride run — it coalesces to a single Buffer.MemoryCopy,
+        /// which tolerates overlap. A non-unit stride walks element-by-element (no memmove) and an
+        /// opposite-direction stride reverses the read order; either way a write-before-read overlap
+        /// clobbers the source mid-copy. So everything except a unit-stride forward run — non-unit
+        /// strides, opposite directions, or any <c>dst.ndim &gt; 1</c> — must copy through a temporary
+        /// when src and dst share memory. Allocation-free; the actual overlap test runs only when
+        /// this returns true (and a distinct-buffer / non-overlapping pair short-circuits to No there).
+        /// </summary>
+        private static bool NeedsAssignmentTemp(Shape dst, Shape src)
+        {
+            int dn = (int)dst.NDim;
+            if (dn > 1)
+                return true;
+
+            int sn = (int)src.NDim;
+            if (dn == 1 && sn >= 1)
+            {
+                long ds = dst.strides[0];
+                long ss = src.strides[sn - 1];
+                // Memmove-safe only when BOTH innermost strides are unit (same forward block).
+                // Non-unit (element-by-element, no memmove) or opposite-direction needs a temp:
+                // e.g. copyto(a[2:8:2], a[0:6:2]) writes a[2] then reads it for the next element.
+                if (!(ds == 1 && ss == 1))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ReduceBoolGeneral<T, TKernel>(ref NDIterState state)
+            where T : unmanaged
+            where TKernel : struct, INDBooleanReductionKernel<T>
+        {
+            var shape = state.GetShapePointer();
+            var strides = state.GetStridesPointer(0);
+            var coords = state.GetCoordsPointer();
+            var data = (T*)state.GetDataPointer(0);
+
+            long offset = 0;
+            bool accumulator = TKernel.Identity;
+
+            for (long linearIndex = 0; linearIndex < state.Size; linearIndex++)
+            {
+                accumulator = TKernel.Accumulate(accumulator, data[offset]);
+                if (TKernel.ShouldExit(accumulator))
+                    break;
+
+                Advance(shape, strides, coords, state.NDim, ref offset);
+            }
+
+            return accumulator;
+        }
+
+        /// <summary>
+        /// Create state for copy operation.
+        /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
+        /// </summary>
+        public static NDIterState CreateCopyState(UnmanagedStorage src, UnmanagedStorage dst)
+        {
+            // Fast path: when src and dst have identical dimensions, no broadcast
+            // is needed — the broadcast result is just src.Shape (same dims, same
+            // strides, same offset). Skip np.broadcast_to entirely to avoid the
+            // ValidateBroadcastTo loop and function-dispatch overhead per call.
+            //
+            // Strides are intentionally NOT compared: the iterator uses src.strides
+            // for reads and dst.strides for writes, regardless of how each side's
+            // memory is laid out. As long as the dimensions match position-by-position,
+            // no broadcast stretching is required.
+            //
+            // Falls through to np.broadcast_to for:
+            //   - Different NDim (e.g. src=(N,), dst=(M,N) requires dim prepend)
+            //   - Any axis where src=1 but dst>1 (broadcast stretch → stride 0)
+            //   - Any axis where src!=dst (validation throws)
+            Shape broadcastSrcShape;
+            if (ShapesMatchExactly(src.Shape, dst.Shape))
+                broadcastSrcShape = src.Shape;
+            else
+                broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
+
+            int ndim = checked((int)dst.Shape.NDim);
+
+            // NUMSHARP DIVERGENCE: No MaxDims limit - supports unlimited dimensions
+            var state = new NDIterState
+            {
+                Size = dst.Shape.size,
+                DType = dst.TypeCode,
+                Flags = NDIterFlags.None,
+            };
+
+            // Allocate dimension arrays dynamically
+            state.AllocateDimArrays(ndim, 2);
+
+            state.SetOpDType(0, src.TypeCode);
+            state.SetOpDType(1, dst.TypeCode);
+
+            state.SetDataPointer(0, (IntPtr)((byte*)src.Address + (broadcastSrcShape.offset * src.InternalArray.ItemLength)));
+            state.SetDataPointer(1, (IntPtr)((byte*)dst.Address + (dst.Shape.offset * dst.InternalArray.ItemLength)));
+
+            var shape = state.GetShapePointer();
+            var srcStridePtr = state.GetStridesPointer(0);
+            var dstStridePtr = state.GetStridesPointer(1);
+
+            for (int axis = 0; axis < ndim; axis++)
+            {
+                shape[axis] = dst.Shape.dimensions[axis];
+                srcStridePtr[axis] = broadcastSrcShape.strides[axis];
+                dstStridePtr[axis] = dst.Shape.strides[axis];
+
+                if (shape[axis] > 1 && srcStridePtr[axis] == 0)
+                    state.Flags |= NDIterFlags.SourceBroadcast;
+            }
+
+            CoalesceAxes(ref state, shape, srcStridePtr, dstStridePtr);
+
+            // K-order axis permutation (descending by absolute stride).
+            //
+            // Without this, F-contiguous and transposed inputs whose sliced
+            // dst is non-contig end up with the unit-stride axis at position
+            // 0 (outermost) — leaving the strided cast kernel's "inner-contig"
+            // fast path unused because the innermost axis has large stride.
+            //
+            // Example: F-contig dst (2000, 1000) sliced as dst[0:1000, :]
+            //   shape=(1000, 1000), src=(1, 1000), dst=(1, 2000)
+            // After CoalesceAxes (no coalescing possible), the innermost axis
+            // has src=1000, dst=2000 — strided. Descending sort puts unit
+            // stride at the innermost axis:
+            //   shape=(1000, 1000), src=(1000, 1), dst=(2000, 1)
+            // The IL kernel then emits 1000 inner memcpys of 1000 elements
+            // each, ~17x faster than the scalar strided inner loop.
+            //
+            // K-order matches NumPy's `iter._kind == "K"` behavior for plain
+            // copies. Skipped when only one axis remains (no-op).
+            if (state.NDim > 1)
+                NDIterCoalescing.ReorderAxesForCoalescing(
+                    ref state, NPY_ORDER.NPY_KEEPORDER, forCoalescing: false);
+
+            UpdateLayoutFlags(ref state, shape, srcStridePtr, dstStridePtr);
+
+            return state;
+        }
+
+        /// <summary>
+        ///     Returns true iff <paramref name="src"/> and <paramref name="dst"/>
+        ///     have the same number of dimensions and every dimension matches
+        ///     position-by-position. When this is true, no broadcast stretching
+        ///     is required and the copy iterator can reuse <c>src</c>'s shape
+        ///     directly (its strides and offset are preserved as-is).
+        /// </summary>
+        /// <remarks>
+        ///     Strides are intentionally NOT compared — different layouts
+        ///     (e.g. C-contig src vs F-contig dst) still iterate correctly
+        ///     because the iterator walks each side using its own strides.
+        ///     Only dimension equality matters for "no broadcast needed".
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool ShapesMatchExactly(in Shape src, in Shape dst)
+        {
+            if (src.NDim != dst.NDim) return false;
+
+            // Scalar fast path: both 0-D = both scalar = match.
+            if (src.NDim == 0) return true;
+
+            var srcDims = src.dimensions;
+            var dstDims = dst.dimensions;
+            for (int i = 0; i < srcDims.Length; i++)
+                if (srcDims[i] != dstDims[i]) return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Create state for reduction operation.
+        /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
+        /// </summary>
+        public static NDIterState CreateReductionState(UnmanagedStorage src)
+        {
+            int ndim = checked((int)src.Shape.NDim);
+
+            // NUMSHARP DIVERGENCE: No MaxDims limit - supports unlimited dimensions
+            var state = new NDIterState
+            {
+                Size = src.Shape.size,
+                DType = src.TypeCode,
+                Flags = src.Shape.IsContiguous ? NDIterFlags.SourceContiguous : NDIterFlags.None,
+            };
+
+            // Allocate dimension arrays dynamically
+            state.AllocateDimArrays(ndim, 1);
+
+            state.SetOpDType(0, src.TypeCode);
+            state.SetDataPointer(0, (IntPtr)((byte*)src.Address + (src.Shape.offset * src.InternalArray.ItemLength)));
+
+            var shape = state.GetShapePointer();
+            var srcStridePtr = state.GetStridesPointer(0);
+
+            for (int axis = 0; axis < ndim; axis++)
+            {
+                shape[axis] = src.Shape.dimensions[axis];
+                srcStridePtr[axis] = src.Shape.strides[axis];
+            }
+
+            return state;
+        }
+
+        public static void CoalesceAxes(ref NDIterState state, long* shape, long* srcStrides, long* dstStrides)
+        {
+            if (state.NDim <= 1)
+                return;
+
+            int writeAxis = 0;
+            int newNDim = 1;
+
+            for (int axis = 0; axis < state.NDim - 1; axis++)
+            {
+                int nextAxis = axis + 1;
+                long shape0 = shape[writeAxis];
+                long shape1 = shape[nextAxis];
+
+                bool srcCanCoalesce =
+                    ((shape0 == 1 && srcStrides[writeAxis] == 0) ||
+                     (shape1 == 1 && srcStrides[nextAxis] == 0) ||
+                     (srcStrides[writeAxis] * shape0 == srcStrides[nextAxis]));
+
+                bool dstCanCoalesce =
+                    ((shape0 == 1 && dstStrides[writeAxis] == 0) ||
+                     (shape1 == 1 && dstStrides[nextAxis] == 0) ||
+                     (dstStrides[writeAxis] * shape0 == dstStrides[nextAxis]));
+
+                if (srcCanCoalesce && dstCanCoalesce)
+                {
+                    shape[writeAxis] *= shape1;
+                    if (srcStrides[writeAxis] == 0)
+                        srcStrides[writeAxis] = srcStrides[nextAxis];
+                    if (dstStrides[writeAxis] == 0)
+                        dstStrides[writeAxis] = dstStrides[nextAxis];
+                }
+                else
+                {
+                    writeAxis++;
+                    if (writeAxis != nextAxis)
+                    {
+                        shape[writeAxis] = shape[nextAxis];
+                        srcStrides[writeAxis] = srcStrides[nextAxis];
+                        dstStrides[writeAxis] = dstStrides[nextAxis];
+                    }
+                    newNDim++;
+                }
+            }
+
+            state.NDim = newNDim;
+        }
+
+        public static void UpdateLayoutFlags(ref NDIterState state, long* shape, long* srcStrides, long* dstStrides)
+        {
+            if (state.Size <= 1)
+            {
+                state.Flags |= NDIterFlags.SourceContiguous | NDIterFlags.DestinationContiguous;
+                return;
+            }
+
+            if (IsContiguous(shape, srcStrides, state.NDim))
+                state.Flags |= NDIterFlags.SourceContiguous;
+            if (IsContiguous(shape, dstStrides, state.NDim))
+                state.Flags |= NDIterFlags.DestinationContiguous;
+        }
+
+        public static bool IsContiguous(long* shape, long* strides, int ndim)
+        {
+            if (ndim == 0)
+                return true;
+
+            long expected = 1;
+            for (int axis = ndim - 1; axis >= 0; axis--)
+            {
+                long dim = shape[axis];
+                if (dim == 0)
+                    return true;
+                if (dim != 1)
+                {
+                    if (strides[axis] != expected)
+                        return false;
+                    expected *= dim;
+                }
+            }
+
+            return true;
+        }
+
+        public static void Advance(long* shape, long* strides, long* coords, int ndim, ref long offset)
+        {
+            for (int axis = ndim - 1; axis >= 0; axis--)
+            {
+                long next = coords[axis] + 1;
+                if (next < shape[axis])
+                {
+                    coords[axis] = next;
+                    offset += strides[axis];
+                    return;
+                }
+
+                coords[axis] = 0;
+                offset -= strides[axis] * (shape[axis] - 1);
+            }
+        }
+    }
+}

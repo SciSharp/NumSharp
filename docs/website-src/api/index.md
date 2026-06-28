@@ -339,8 +339,9 @@ These types are for advanced users extending NumSharp or understanding its inter
 
 | Type | Description |
 |------|-------------|
-| @NumSharp.NDIterator | Traverses arrays with different memory layouts |
-| @NumSharp.MultiIterator | Paired iteration for broadcasting |
+| @NumSharp.Backends.Iteration.NDIterRef | NumPy-aligned multi-operand iterator (broadcasting, buffering, casting, reductions); drives every kernel |
+| @NumSharp.Backends.Iteration.NDFlatIterator | Flat C-order element iterator; backs `np.broadcast(...).iters` |
+| @NumSharp.np.Broadcast | Broadcast result object — N operands, iterable, with `.iters` / `.index` / `.reset()` |
 
 ### Memory Management
 

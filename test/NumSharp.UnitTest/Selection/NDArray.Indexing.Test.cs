@@ -63,9 +63,10 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void MaskSetter()
         {
+            // A raw bool[] / bool[,] (not NDArray<bool>) is recognized as a boolean mask, as
+            // NumPy treats any boolean array index. Previously these raised IndexError.
             NDArray nd = new double[] { 1, 2, 3 };
             nd[new bool[] { true, false, true }] = 99;
             nd.Should().BeOfValues(99, 2, 99);
@@ -76,10 +77,128 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
+        public void MaskGetter_RawBoolArray()
+        {
+            // Getter + combined-indexing parity for raw boolean arrays (pinned to NumPy 2.4.2).
+            NDArray a1 = new double[] { 1, 2, 3 };
+            a1[new bool[] { true, false, true }].Should().BeShaped(2).And.BeOfValues(1, 3);
+
+            var a2 = np.arange(12).reshape(3, 4);
+            a2[new bool[,] { { true, false, true, false }, { false, true, false, true }, { true, true, false, false } }]
+                .Should().BeShaped(6).And.BeOfValues(0, 2, 5, 7, 8, 9);
+
+            // combined: raw bool[] mask + scalar int / + slice
+            a2[new bool[] { true, false, true }, 2].Should().BeShaped(2).And.BeOfValues(2, 10);
+
+            var a3 = np.arange(12).reshape(3, 4);
+            a3[new bool[] { true, false, true }, "1:3"] = (NDArray)(-1L);
+            a3.Should().BeOfValues(0, -1, -1, 3, 4, 5, 6, 7, 8, -1, -1, 11);
+        }
+
+        [TestMethod]
+        public void MaskIndex_BoolArrayLikeForms()
+        {
+            // Any boolean array-like is a mask: rectangular bool[,,] of any rank, and any
+            // IEnumerable<bool> (List<bool>, …). Integer arrays keep coordinate semantics.
+            var b = np.arange(24).reshape(2, 3, 4);
+            var m = new bool[2, 3, 4];
+            m[0, 0, 0] = true; m[1, 2, 3] = true;                 // bool[,,] -> trailing rows selected
+            b[m].Should().BeShaped(2).And.BeOfValues(0, 23);
+
+            NDArray v = new double[] { 1, 2, 3 };
+            v[new System.Collections.Generic.List<bool> { true, false, true }].Should().BeShaped(2).And.BeOfValues(1, 3);
+
+            NDArray w = new double[] { 1, 2, 3 };
+            w[new System.Collections.Generic.List<bool> { true, false, true }] = 7;
+            w.Should().BeOfValues(7, 2, 7);
+
+            // a raw int[] index is NOT a mask: it is FANCY indexing (NumPy parity) —
+            // nd[new int[]{0,2}] selects rows 0 and 2 (shape (2,4)), NOT the element at
+            // coordinate (0,2). Coordinate access moved to nd.GetData(coords).
+            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 8, 9, 10, 11);
+            np.arange(12).reshape(3, 4).GetData(new int[] { 0, 2 }).Should().BeScalar(2); // coordinate shim
+        }
+
+        /// <summary>
+        /// A raw <c>int[]</c> / <c>long[]</c> as the SOLE index is FANCY indexing — 1-to-1
+        /// with NumPy 2.4.2 (verified by differential probe), not the legacy coordinate
+        /// access. Coordinate access moved to <see cref="NDArray.GetData(int[])"/> /
+        /// <see cref="NDArray.GetData(long[])"/>. Covers get + set, 1-D / 2-D / 3-D,
+        /// <c>int[]</c> and <c>long[]</c>, and negative (wrapping) indices.
+        /// </summary>
+        [TestMethod]
+        public void RawIntArrayIndex_IsFancy_NumPyParity()
+        {
+            // ---- GET ----
+            // 2-D: rows 0 and 2            (NumPy: a[[0,2]]   -> (2,4))
+            np.arange(12).reshape(3, 4)[new int[] { 0, 2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 8, 9, 10, 11);
+            // single-element list keeps the fancy axis (NumPy: a[[1]] -> (1,4))
+            np.arange(12).reshape(3, 4)[new int[] { 1 }]
+                .Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
+            // 1-D fancy                    (NumPy: a[[1,3,5]] -> (3,))
+            np.arange(6)[new int[] { 1, 3, 5 }].Should().BeShaped(3).And.BeOfValues(1, 3, 5);
+            // long[] behaves identically   (NumPy: a[[0,2]]   -> (2,))
+            np.arange(6)[new long[] { 0, 2 }].Should().BeShaped(2).And.BeOfValues(0, 2);
+            // negative indices wrap        (NumPy: a[[-1,-2]] -> rows 2,1)
+            np.arange(12).reshape(3, 4)[new int[] { -1, -2 }]
+                .Should().BeShaped(2, 4).And.BeOfValues(8, 9, 10, 11, 4, 5, 6, 7);
+            // 3-D: fancy along axis 0      (NumPy: b[[0,1,0]] -> (3,3,4))
+            np.arange(24).reshape(2, 3, 4)[new int[] { 0, 1, 0 }]
+                .Should().BeShaped(3, 3, 4).And.BeOfValues(
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+
+            // ---- SET (scatter; value shaped to the fancy result) ----
+            // 2-D rows                     (NumPy: s2[[0,2]] = rows)
+            var s2 = np.arange(12).reshape(3, 4);
+            s2[new int[] { 0, 2 }] = np.array(new int[,] { { 100, 101, 102, 103 }, { 200, 201, 202, 203 } });
+            s2.Should().BeOfValues(100, 101, 102, 103, 4, 5, 6, 7, 200, 201, 202, 203);
+            // 1-D scatter                  (NumPy: s3[[1,3,5]] = [10,30,50])
+            var s3 = np.arange(6);
+            s3[new long[] { 1, 3, 5 }] = np.array(new int[] { 10, 30, 50 });
+            s3.Should().BeOfValues(0, 10, 2, 30, 4, 50);
+
+            // ---- coordinate access preserved via the GetData shim ----
+            np.arange(12).reshape(3, 4).GetData(new int[] { 0, 2 }).Should().BeScalar(2);
+            np.arange(12).reshape(3, 4).GetData(new long[] { 1, 3 }).Should().BeScalar(7);
+        }
+
+        // Regression: the object[] single-int setter (b[(object)0] = v) and the long[]
+        // coordinate shim (b.SetData(v, 0L)) must behave EXACTLY like b[0] = v — found by the
+        // differential index sweep. SetData(NDArray, long[]) used to write only the FIRST
+        // element for a scalar and linear-copy a larger/smaller value without validation.
+        [TestMethod]
+        public void ObjectArraySingleInt_Setter_BroadcastsAndValidates()
+        {
+            // scalar broadcasts across the WHOLE row (NumPy b[0] = -1)
+            var a = np.arange(12L).reshape(3, 4);
+            a[new object[] { 0 }] = (NDArray)(-1L);
+            a.ravel().ToArray<long>().Should().Equal(new long[] { -1, -1, -1, -1, 4, 5, 6, 7, 8, 9, 10, 11 });
+
+            // matched row value
+            var b = np.arange(12L).reshape(3, 4);
+            b[new object[] { 0 }] = np.array(new long[] { 10, 20, 30, 40 });
+            b.ravel().ToArray<long>().Should().Equal(new long[] { 10, 20, 30, 40, 4, 5, 6, 7, 8, 9, 10, 11 });
+
+            // incompatible value -> ValueError (was a silent partial write)
+            new Action(() => { var c = np.arange(12L).reshape(3, 4); c[new object[] { 0 }] = np.array(new long[] { 1, 2 }); })
+                .Should().Throw<ValueError>();
+
+            // the public long[] coordinate shim mirrors it
+            var d = np.arange(12L).reshape(3, 4);
+            d.SetData((NDArray)(-1L), new long[] { 1 });
+            d.ravel().ToArray<long>().Should().Equal(new long[] { 0, 1, 2, 3, -1, -1, -1, -1, 8, 9, 10, 11 });
+        }
+
+        [TestMethod]
         public void Compare()
         {
-            throw new Exception("This test kills test engine process due to Debug.Assert");
+            // Previously [OpenBugs]: nd[(nd < 3)] = -2 (a scalar into a boolean-mask subspace)
+            // tripped a Debug.Assert / killed the test host. Fixed by the broadcast-value
+            // assignment path; the whole flow now matches NumPy.
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             (nd < 3).Should().BeOfValues(true, true, false, false, false, false);
 
@@ -429,9 +548,9 @@ namespace NumSharp.UnitTest.Selection
         public void Slice_Step3()
         {
             var x = np.arange(5);
-            Assert.AreEqual("[0, 1, 2, 3, 4]", x.ToString());
+            Assert.AreEqual("[0 1 2 3 4]", x.ToString());
             var y = x["::2"];
-            Assert.AreEqual("[0, 2, 4]", y.ToString());
+            Assert.AreEqual("[0 2 4]", y.ToString());
         }
 
         [TestMethod]
@@ -680,10 +799,14 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case3()
         {
+            // x = arange(10,1,-1) has size 9; index 20 is out of bounds. NumPy raises
+            // IndexError "index 20 is out of bounds for axis 0 with size 9" — NumSharp now
+            // matches (per-axis validation in PrepareIndexGetters), where it previously threw
+            // a generic IndexOutOfRangeException from the flat-offset bound check.
             new Action(() =>
             {
                 var a = x[np.array(new int[] { 3, 3, 20, 8 })];
-            }).Should().Throw<IndexOutOfRangeException>();
+            }).Should().Throw<IndexError>();
         }
 
         [TestMethod]
@@ -753,10 +876,14 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case10_Multi()
         {
+            // Two fancy indices of incompatible shapes (3,) and (2,) cannot broadcast together.
+            // NumPy raises IndexError "shape mismatch: indexing arrays could not be broadcast
+            // together with shapes (3,) (2,)" (mapping.c:2617). PrepareIndex now matches that exactly
+            // (was: NumSharp's non-NumPy IncorrectShapeException from the downstream broadcast).
             new Action(() =>
             {
                 var ret = y[np.array(new int[] { 0, 2, 4 }), np.array(new int[] { 0, 1 })];
-            }).Should().Throw<IncorrectShapeException>();
+            }).Should().Throw<IndexError>();
         }
 
 
@@ -984,7 +1111,9 @@ namespace NumSharp.UnitTest.Selection
             var ret = b[1, 2];
             var str = ret.ToString(true);
             Console.WriteLine(str);
-            str.Should().Be(np.array(4, 5, 6, 7).reshape(2, 2).ToString(true));
+            // ret is int64 (from np.arange); construct the expected with a matching dtype so the
+            // repr's "dtype=" suffix (now NumPy-faithful) lines up.
+            str.Should().Be(np.array(new long[] { 4, 5, 6, 7 }).reshape(2, 2).ToString(true));
         }
 
         [TestMethod]
@@ -1110,17 +1239,12 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Masking_2D_over_3D()
         {
+            // A 2-D boolean mask over the FIRST TWO axes of a 3-D array (partial mask:
+            // mask.ndim < arr.ndim). Each True at (i,j) selects the trailing (5,) row
+            // x[i,j], so the result is (count, 5).
             //>>> x = np.arange(30).reshape(2,3,5)
-            //>>> x
-            //array([[[ 0,  1,  2,  3,  4],
-            //        [ 5,  6,  7,  8,  9],
-            //        [10, 11, 12, 13, 14]],
-            //       [[15, 16, 17, 18, 19],
-            //        [20, 21, 22, 23, 24],
-            //        [25, 26, 27, 28, 29]]])
             //>>> b = np.array([[True, True, False], [False, True, True]])
             //>>> x[b]
             //array([[ 0,  1,  2,  3,  4],
@@ -1129,7 +1253,7 @@ namespace NumSharp.UnitTest.Selection
             //       [25, 26, 27, 28, 29]])
             var x = np.arange(30).reshape(2, 3, 5);
             var b = np.array(new[,] { { true, true, false }, { false, true, true } }).MakeGeneric<bool>();
-            y[b[":, 5"]].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
+            x[b].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
         }
 
         [TestMethod]
@@ -1144,7 +1268,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void Combining_IndexArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1158,7 +1281,6 @@ namespace NumSharp.UnitTest.Selection
 
 
         [TestMethod]
-        [OpenBugs]
         public void Combining_MaskArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1181,7 +1303,12 @@ namespace NumSharp.UnitTest.Selection
         private NDArray<long> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<long>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
+            // Match by name + signature: other non-public static methods now take Shape as their first
+            // parameter too (e.g. PrepareIndex(Shape, object[])), so a first-param-only filter is ambiguous.
+            return (NDArray<long>)methods.FirstOrDefault(m => m.Name == "GetIndicesFromSlice"
+                                                              && m.GetParameters().Length == 3
+                                                              && m.GetParameters()[0].ParameterType == typeof(Shape))
+                                          .Invoke(null, new object[] { shape, slice, axis });
         }
 
 
@@ -1290,10 +1417,40 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs] // newaxis indexing returns wrong shape
         public void IndexNDArray_NewAxis_Case2()
         {
+            // A 0-D advanced index (np.array(0)) mixed with newaxes used to leave a spurious
+            // leading size-1 axis ((1,1,1,1,2)); it behaves like the scalar-int Case1 -> (1,1,1,2).
             np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_ScalarArrayIndex_ReducesAxis_LikeInt()
+        {
+            // A 0-D integer array index behaves EXACTLY like a scalar int: its shape () is
+            // prepended to the subshape, so it REDUCES its axis. (A 1-D length-1 index keeps a
+            // size-1 axis instead.) Matches NumPy: a[np.array(0)] == a[0].
+            var a = np.arange(4).reshape(2, 2);
+            a[np.array(0)].Should().BeShaped(2).And.BeOfValues(0, 1);                 // not (1, 2)
+            a[np.array(1)].Should().BeShaped(2).And.BeOfValues(2, 3);
+            a[np.array(-1)].Should().BeShaped(2).And.BeOfValues(2, 3);                // negative wraps
+            a[np.array(0), Slice.All].Should().BeShaped(2).And.BeOfValues(0, 1);      // 0-D + slice
+            a[np.array(0), Slice.NewAxis].Should().BeShaped(1, 2).And.BeOfValues(0, 1);
+
+            np.arange(5)[np.array(2)].Should().BeScalar(2);                           // 1-D src -> 0-D scalar
+            np.arange(5)[np.array(-1)].Should().BeScalar(4);
+            a[np.array(0), np.array(1)].Should().BeScalar(1);                         // two 0-D advanced -> scalar
+
+            a[np.array(new int[] { 0 })].Should().BeShaped(1, 2).And.BeOfValues(0, 1); // 1-D len-1 KEEPS the axis
+        }
+
+        [TestMethod]
+        public void IndexNDArray_ScalarArrayIndex_Set_LikeInt()
+        {
+            // Setter mirror: assigning through a 0-D advanced index targets the reduced axis.
+            var a = np.arange(4).reshape(2, 2);
+            a[np.array(0), Slice.All] = NDArray.Scalar<int>(-1);
+            a.Should().BeShaped(2, 2).And.BeOfValues(-1, -1, 2, 3);
         }
 
         [TestMethod]
@@ -1421,9 +1578,13 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Get_Case4_Broadcasted()
         {
+            // np: a[0:1:-1, :] -> a reversed row-slice (start 0, stop 1, step -1) is empty -> (0, 4).
+            // (Previously asserted via a no-arg BeShaped(), which resolves to the all-optional
+            //  overload and checks nothing — strengthened to pin NumPy's empty-shape result.)
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             var g = a["0:1:-1, :"];
-            g.Should().BeShaped();
+            g.Should().BeShaped(0, 4);
+            g.size.Should().Be(0);
         }
 
 
@@ -1442,48 +1603,60 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case7_Broadcasted()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[[1], :]
-            //
-            //(1, 4)
-            //[[0 1 2 3]]
+            // Single advanced index + slice on a BROADCASTED source (axis-0 stride 0).
+            // a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
+            // a[[1], :] -> (1, 4) [[0 1 2 3]]  (row 1 == row 0, the broadcast is materialized)
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case7()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8)) # np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[np.arange(1) + 1, :]
-            //
-            //(1, 1, 8)
-            //[[[0 1 2 3 4 5 6 7]]]
+            // Single advanced index + slice on a 3-D BROADCASTED source (axis-0 stride 0).
+            // a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8))
+            // a[np.arange(1) + 1, :] -> (1, 1, 8) [[[0 1 2 3 4 5 6 7]]]
             var a = np.broadcast_to(np.arange(8).reshape(1, 1, 8), (2, 1, 8));
             var b = a[np.arange(1) + 1, Slice.All];
-            print(b);
-            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0,1,2,3,4,5,6,7);
+            b.Should().BeShaped(1, 1, 8).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
         }
 
 
         [TestMethod]
-        [OpenBugs]
         public void IndexNDArray_Get_Case8_Broadcasted()
         {
-            //TODO: this produces incorrect return shape
-            //a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4))
-            //a = a[[1], :]
-            //
-            //(1, 4)
-            //[[0 1 2 3]]
+            // Single advanced index + slice on a 3-D BROADCASTED source (axis-0 stride 0).
+            // The slice keeps its own output axis (NOT broadcast together with the advanced
+            // index), so the trailing (2, 4) block is preserved:
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[1], :] -> (1, 2, 4) [0 1 2 3 4 5 6 7]   (a[1] == a[0], broadcast materialized)
             var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
-            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
+            a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 2, 4).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case9_Broadcasted_AdvIntSlice()
+        {
+            // Advanced index + scalar int + slice on a broadcasted source: the int reduces
+            // axis 1, the slice keeps axis 2.
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[1], 1, :] -> (1, 4) [4 5 6 7]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
+            a[np.array(new long[] { 1 }), 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
+        }
+
+        [TestMethod]
+        public void IndexNDArray_Get_Case10_Broadcasted_TwoAdvanced()
+        {
+            // Two advanced indices (axes 0 and 1) on a broadcasted source — they broadcast
+            // TOGETHER (no slice), so the result is the (2,) pair plus the trailing axis 2.
+            // a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4))
+            // a[[0, 1], [1, 0]] -> (2, 4) [4 5 6 7 0 1 2 3]
+            var a = np.broadcast_to(np.arange(8).reshape(1, 2, 4), (2, 2, 4));
+            a[np.array(new long[] { 0, 1 }), np.array(new long[] { 1, 0 })]
+                .Should().BeShaped(2, 4).And.BeOfValues(4, 5, 6, 7, 0, 1, 2, 3);
         }
     }
 }

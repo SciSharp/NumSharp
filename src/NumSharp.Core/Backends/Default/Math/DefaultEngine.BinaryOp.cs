@@ -1,5 +1,7 @@
-using System;
+﻿using System;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -10,6 +12,19 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
+        // Call-invariant per-operand flag arrays for the NDIter routes
+        // (Wave 2.2): identical on every call, so allocating them per call
+        // was pure small-N overhead. The operand arrays stay per-call --
+        // the iterator stores the reference (_operands) and the overlap
+        // machinery can construct nested iterators (np.copyto) on the same
+        // thread, so thread-static reuse would alias live iterators.
+        private static readonly NDIterPerOpFlags[] s_binaryIterFlags =
+        {
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.READONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+            NDIterPerOpFlags.WRITEONLY | NDIterPerOpFlags.OVERLAP_ASSUME_ELEMENTWISE_PER_OP,
+        };
+
         /// <summary>
         /// Execute a binary operation using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
@@ -17,9 +32,23 @@ namespace NumSharp.Backends
         /// <param name="lhs">Left operand</param>
         /// <param name="rhs">Right operand</param>
         /// <param name="op">Operation to perform</param>
-        /// <returns>Result array with promoted type</returns>
+        /// <param name="@out">Optional provided output (NumPy ufunc out=): the
+        /// result is written into it (dtype must be same_kind-castable from the
+        /// loop dtype, shape joins the broadcast without stretching) and the
+        /// same instance is returned.</param>
+        /// <param name="where">Optional bool write mask (NumPy ufunc where=):
+        /// only mask-true elements are computed/written; false slots keep the
+        /// prior out contents (uninitialized for a fresh result).</param>
+        /// <param name="dtype">Optional explicit loop dtype (NumPy ufunc dtype=):
+        /// overrides NEP50 promotion — the loop COMPUTES in this dtype (probed
+        /// 2.4.2: power(10,11,dtype=f64) = 1e11 exactly, no int wrap; the
+        /// f32-rounding of sqrt/power dtype=f32 lands even in a wider out).
+        /// Each input must be same_kind-castable to it, and a provided out is
+        /// validated against it rather than the promoted dtype.</param>
+        /// <returns>Result array with promoted type (or <paramref name="@out"/>)</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op)
+        internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op,
+            NDArray @out = null, NDArray where = null, NPTypeCode? dtype = null)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -35,28 +64,81 @@ namespace NumSharp.Backends
                 resultType = NPTypeCode.Double;
             }
 
-            // NumPy Power type promotion rules (special cases):
-            // - int^float → float64 (regardless of float precision)
-            // - float32^float64 → float64 (promoted)
-            // - float32^int → float32 (preserved, matches Python int behavior)
-            // - float32^float32 → float32 (preserved)
-            // - float64^* → float64 (preserved)
-            // - int^int → int (preserved)
+            // NumPy Power promotion (NEP50). Most cases are already handled by
+            // _FindCommonType (which applies weak/strict scalar rules correctly):
+            //   - i32_arr ** i32_arr  → int32
+            //   - i32_arr ** i64_arr  → int64
+            //   - f32_arr ** f64_arr  → float64
+            //   - f32_arr ** i32_arr  → float64 (NEP50 strict)
+            //   - f32_arr ** Python int (0-D weak) → float32 (NEP50 weak)
+            //   - i32_arr ** f32_scalar (cross-array)  → float64 (handled below)
             //
-            // Note: NumPy has a subtle distinction where float32^np.int32 → float64, but
-            // float32^2 (Python int) → float32. Since C# int maps to Python int semantics,
-            // we preserve float32 for int exponents. This matches the common use case.
+            // The one rule _FindCommonType doesn't cover is `int_scalar ** float_arr`:
+            // a 0-D int scalar is treated as "weak", which preserves the float's dtype,
+            // but NumPy's int-base + float-exp rule promotes unconditionally to float64.
+            // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
+            //
+            // Known limitation: explicit 0-D integer arrays (`np.array(2, int32)`)
+            // are indistinguishable from C# `int 2` after `np.asanyarray`. NumPy would
+            // strict-promote `f32_arr ** np.int32(2)` to float64; NumSharp preserves
+            // float32 for both `f32_arr ** 2` (correct) and `f32_arr ** np.array(2, int32)`
+            // (misaligned with NumPy but rare in idiomatic C# code).
             if (op == BinaryOp.Power)
             {
                 var lhsGroup = lhsType.GetGroup();
                 var rhsGroup = rhsType.GetGroup();
 
-                // int base with float exponent → always float64
-                // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
                 if (lhsGroup <= 2 && rhsGroup == 3)
                 {
                     resultType = NPTypeCode.Double;
                 }
+            }
+
+            // ufunc dtype= (NumPy loop-signature override): the loop runs IN the
+            // requested dtype — inputs are cast (same_kind-validated, NumPy's
+            // UFuncTypeError text) and computation happens at that precision.
+            // Replaces the promoted dtype BEFORE the out/where branch so a
+            // provided out is validated against the dtype-overridden loop
+            // (probed: power(dtype=f32, out=i32) reports float32 → int32).
+            if (dtype.HasValue && dtype.Value != resultType)
+            {
+                ValidateBinaryInputCasts(lhsType, rhsType, dtype.Value, UfuncName(op));
+                resultType = dtype.Value;
+            }
+
+            // NumPy shift ufuncs have NO bool loop (left_shift/right_shift loops are bb->b ..
+            // QQ->Q only). A bool input therefore promotes to the smallest integer loop, int8,
+            // e.g. left_shift(bool, bool) -> int8 (probed 2.4.2). Bump BEFORE the bool->logical
+            // remap below so shift never takes the bitwise-OR/AND path.
+            if ((op == BinaryOp.LeftShift || op == BinaryOp.RightShift) && resultType == NPTypeCode.Boolean)
+                resultType = NPTypeCode.SByte;
+
+            // NumPy bool arithmetic: the bool dtype has no integer add/multiply ufunc loop — `+`
+            // is logical OR and `*` is logical AND (so True + True == True, raw byte 1, not 2).
+            // The remap keys off the FINAL loop dtype (i.e. AFTER the dtype= override):
+            // add(bool, bool, dtype=i32) runs the i32 add loop and returns 2 (probed 2.4.2),
+            // while add(bool, bool) and add(bool, bool, dtype=bool) stay logical OR. The op
+            // remap makes every downstream kernel path (SIMD/scalar, same-type/mixed) emit
+            // the bitwise op and write a normalized 0/1 byte. (`-` has no bool loop and
+            // already throws like NumPy.)
+            if (resultType == NPTypeCode.Boolean)
+            {
+                if (op == BinaryOp.Add) op = BinaryOp.BitwiseOr;
+                else if (op == BinaryOp.Multiply) op = BinaryOp.BitwiseAnd;
+                // bool has no NaN domain: maximum/fmax == logical OR, minimum/fmin == logical AND
+                // (max(F,T)=T=OR, min(F,T)=F=AND). Remap so the bitwise kernels handle them.
+                else if (op == BinaryOp.Maximum || op == BinaryOp.FMax) op = BinaryOp.BitwiseOr;
+                else if (op == BinaryOp.Minimum || op == BinaryOp.FMin) op = BinaryOp.BitwiseAnd;
+            }
+
+            // ufunc out=/where= path (Wave 2.1): the loop dtype above is final
+            // (NumPy resolves the loop from the INPUTS; out only constrains the
+            // final cast), so branch after promotion and before any allocation.
+            // NumPy likewise disables the trivial loop when a wheremask or
+            // provided out needs the full iterator (ufunc_object.c:2213).
+            if (@out is not null || where is not null)
+            {
+                return ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
             }
 
             // Handle scalar × scalar case
@@ -65,32 +147,139 @@ namespace NumSharp.Backends
                 return ExecuteScalarScalar(lhs, rhs, op, resultType);
             }
 
+            // NEP50 weak-scalar fast-path enablement. A Python-scalar literal arrives wrapped at
+            // its OWN dtype (`a * 2` -> int32 0-d; `a * 2.0` -> float64 0-d), so `f32[] * 2`
+            // reaches here as f32×int32. resultType already reflects NumPy's weak promotion (here
+            // f32), but the same-dtype gate inside TryTrivialContiguousBinaryOp / the SIMD-viability
+            // gate inside TryExecuteBinaryOpViaNDIter key off the RAW operand dtypes and bail
+            // (f32 != int32), routing to the heavy per-element-convert mixed path — measured ~2.25×
+            // slower than the SimdScalarRight scalar-broadcast loop it should take (100K f32:
+            // 0.080 ms vs 0.035 ms). When the ARRAY operand already IS resultType and only the
+            // 0-d/size-1 scalar differs, materialize that scalar at resultType (one element —
+            // exactly what NumPy does, casting the scalar to the loop dtype), so both operands share
+            // resultType and the same-dtype SIMD paths below light up. When the array ALSO differs
+            // (e.g. int32[] * 2.5 -> float64) we leave it: the array genuinely needs a cast, which is
+            // the mixed path's job. (scalar×scalar already returned above; value is identical either
+            // way — the mixed path converts the same scalar to resultType per element.)
+            if (lhsType != rhsType)
+            {
+                bool lhsScalarLike = lhs.Shape.IsScalar || lhs.Shape.size == 1;
+                bool rhsScalarLike = rhs.Shape.IsScalar || rhs.Shape.size == 1;
+                if (rhsScalarLike && !lhsScalarLike && lhsType == resultType)
+                {
+                    rhs = Cast(rhs, resultType, copy: true);
+                    rhsType = resultType;
+                }
+                else if (lhsScalarLike && !rhsScalarLike && rhsType == resultType)
+                {
+                    lhs = Cast(lhs, resultType, copy: true);
+                    lhsType = resultType;
+                }
+            }
+
+            // -------- O(1) trivial-loop bypass -----------------------------
+            // NumSharp analogue of NumPy's check_for_trivial_loop +
+            // try_trivial_single_output_loop (ufunc_object.c), which handle a
+            // single strided inner loop "without using the (heavy) iterator."
+            // When both operands share ONE contiguous layout (both C, or both F),
+            // have identical shape (no broadcast) and the same dtype as the result
+            // (no cast), a single linear walk over all three buffers visits the
+            // same logical element — so we route straight to the existing DirectIL
+            // SimdFull whole-array kernel and skip the NDIter MultiNew/Initialize
+            // construction (measured ~600-2000 ns/call: 22-24% of a small
+            // contiguous op, <=3% once n>=64K). Returns null for anything that is
+            // not trivially contiguous (broadcast/mixed-C-F/strided/cast/scalar-
+            // broadcast/unsupported emit) → falls through to the NDIter route
+            // below with behaviour unchanged.
+            {
+                var trivial = TryTrivialContiguousBinaryOp(lhs, rhs, op, lhsType, rhsType, resultType);
+                if (trivial is not null) return trivial;
+            }
+
+            // -------- NDIter Tier 3B fast path (all binary ops) -----------
+            // Routes through the NDIter inner-loop kernel factory, which
+            // collapses coalesce + SIMD dispatch (contig, SimdScalarLeft,
+            // SimdScalarRight, scalar-strided) into a single emitted kernel
+            // driven by NDIter's multi-operand iterator.
+            //
+            // Same-dtype: full SIMD path (CanSimdAllOperands passes inside
+            // the factory). Measured 2.3-4.7× wins across 12 variations,
+            // at parity with NumPy 2.x.
+            //
+            // Mixed-dtype: scalar body emits per-operand EmitConvertTo
+            // before EmitScalarOperation, mirroring the direct path's
+            // EmitConvertTo + EmitScalarOperation sequence. Vector body
+            // is null (factory drops to scalar-strided). Equivalent perf
+            // for the mixed-dtype cases the direct path used to handle.
+            {
+                var routed = TryExecuteBinaryOpViaNDIter(lhs, rhs, op, lhsType, rhsType, resultType);
+                if (routed is not null) return routed;
+            }
+
             // Broadcast shapes
             var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
-            var resultShape = leftShape.Clean();
+            var cleanShape = leftShape.Clean();
+
+            // NumPy-aligned layout preservation: when EVERY non-scalar operand is strictly
+            // F-contig, allocate the result in F-order up front and skip the post-kernel
+            // copy. Pre-L3-a this branch ran with C-allocated result + `result.copy('F')`
+            // at the end. Allocating F here saves the copy AND lets the L3-a coalesce
+            // collapse to 1-D SimdFull (≈15× speedup for the 1K×1K F-contig case).
+            //
+            // The stricter "all-F" rule is required for kernel correctness: kernels still
+            // walk the result buffer with linear `i*elemSize` indexing (C-order coords).
+            // If result is F-contig but any input operand is neither C nor F (e.g. negative
+            // strides, partial broadcast), the kernel writes positions that don't match
+            // the input's logical coords. The legacy `result.copy('F')` path stays for
+            // the looser "any F, no strict C" case via the post-kernel branch below.
+            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
 
             // Allocate result
             var result = new NDArray(resultType, resultShape, false);
 
-            // Classify execution path using strides
-            ExecutionPath path;
-            fixed (long* lhsStrides = leftShape.strides)
-            fixed (long* rhsStrides = rightShape.strides)
-            fixed (long* shape = resultShape.dimensions)
+            // Empty broadcast result: no elements to compute. The kernels below assume
+            // >= 1 element and walk stride-0 broadcast dims as if non-empty, corrupting
+            // memory when a sibling dim is 0 (e.g. (3,1,1) op (1,0,2) -> (3,0,2)).
+            // (The NDIter fast path above returns early for the same reason.)
+            if (result.size == 0)
+                return result;
+
+            // L3-a: pre-coalesce adjacent dims with compatible strides for BOTH operands
+            // (and the result). This collapses F-contig N-D to 1-D contig, so the path
+            // classifier promotes from `General` (≈13× slower) to `SimdFull`. Broadcast
+            // and arbitrary strided cases survive unchanged because their cross-axis
+            // stride relationships don't satisfy the merge condition.
+            int origNdim = resultShape.NDim;
+            long* coalShape = stackalloc long[origNdim > 0 ? origNdim : 1];
+            long* coalLhsStr = stackalloc long[origNdim > 0 ? origNdim : 1];
+            long* coalRhsStr = stackalloc long[origNdim > 0 ? origNdim : 1];
+            long* coalResStr = stackalloc long[origNdim > 0 ? origNdim : 1];
+            for (int d = 0; d < origNdim; d++)
             {
-                path = ClassifyPath(lhsStrides, rhsStrides, shape, resultShape.NDim, resultType);
+                coalShape[d] = resultShape.dimensions[d];
+                coalLhsStr[d] = leftShape.strides[d];
+                coalRhsStr[d] = rightShape.strides[d];
+                coalResStr[d] = resultShape.strides[d];
             }
+            int coalNdim = CoalesceTernaryDimensions(coalShape, coalLhsStr, coalRhsStr, coalResStr, origNdim);
+
+            // Classify execution path using coalesced strides
+            ExecutionPath path = ClassifyPath(coalLhsStr, coalRhsStr, coalShape, coalNdim, resultType);
 
             // Get kernel key
             var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, path);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
             if (kernel != null)
             {
-                // Execute IL kernel
-                ExecuteKernel(kernel, lhs, rhs, result, leftShape, rightShape);
+                // Execute IL kernel using coalesced shape/strides
+                ExecuteKernelCoalesced(kernel, lhs, rhs, result, leftShape, rightShape,
+                    coalShape, coalLhsStr, coalRhsStr, coalNdim);
             }
             else
             {
@@ -98,7 +287,478 @@ namespace NumSharp.Backends
                 FallbackBinaryOp(lhs, rhs, result, op, leftShape, rightShape);
             }
 
+            // NumPy F-output preservation for the LOOSER case (at least one strict-F operand
+            // but not all): result is currently C-contig (correct kernel output). Copy to F
+            // to match NumPy. The strict-all-F case skipped this branch by allocating F up
+            // front and the equality below short-circuits.
+            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+                return result.copy('F');
+
             return result;
+        }
+
+        /// <summary>
+        ///     Try to execute a binary op via NDIter Tier 3B for any dtype
+        ///     combination (same or mixed). Returns the result array on
+        ///     success, or null if the route is not applicable (broadcast
+        ///     result exceeds int.MaxValue, NDIter not built for long-
+        ///     shape arithmetic; unsupported op/dtype emit).
+        ///
+        ///     Allocates the output as F-contig when both inputs are strictly
+        ///     F (matches the pre-existing direct-path rule from L3-b) and
+        ///     picks the NDIter order accordingly: NPY_FORTRANORDER for
+        ///     strict-F-both, NPY_CORDER everywhere else. NPY_CORDER also
+        ///     handles the reversed-stride case correctly because NDIter
+        ///     normalizes negative inner strides during init.
+        ///
+        ///     Same-dtype path (<paramref name="lhsType"/> == <paramref name="rhsType"/>
+        ///     == <paramref name="resultType"/>): scalar body is
+        ///     <see cref="DirectILKernelGenerator.EmitScalarOperation"/>; vector
+        ///     body is supplied when the dtype and op both support SIMD.
+        ///
+        ///     Mixed-dtype path: scalar body emits a load-shuffle that
+        ///     converts each input from its source dtype to the result
+        ///     dtype before invoking EmitScalarOperation — mirrors the
+        ///     direct path's EmitConvertTo + EmitScalarOperation sequence
+        ///     in EmitGeneralLoop / EmitChunkLoop. Vector body is null
+        ///     because Tier 3B's <c>CanSimdAllOperands</c> rejects mixed
+        ///     dtypes; factory drops straight to the scalar-strided loop.
+        ///
+        ///     After the kernel runs, applies the "looser-F" post-copy step
+        ///     that the direct path uses: if the result is C-contig but the
+        ///     NumPy-aligned rule says it should be F (at least one strict-F
+        ///     input, no strict-C input), return <c>result.copy('F')</c>.
+        /// </summary>
+        private unsafe NDArray? TryExecuteBinaryOpViaNDIter(
+            NDArray lhs, NDArray rhs, BinaryOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType)
+        {
+            // Broadcast → clean shape so we know what the result looks like.
+            var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
+            var cleanShape = leftShape.Clean();
+
+            // NDIter's internal shape arithmetic is int-bounded; route only
+            // when the broadcast result fits. Pre-existing test
+            // LongIndexingBroadcastTest exercises the > int.MaxValue path via
+            // the direct allocator (which is also int-limited but doesn't
+            // throw on the shape calc itself). Falling through to the direct
+            // path keeps the prior behaviour for those edge cases.
+            if (cleanShape.size < 0) return null;
+            for (int i = 0; i < cleanShape.NDim; i++)
+                if (cleanShape.dimensions[i] > int.MaxValue) return null;
+
+            // Mirror the direct path: F-allocate output when every non-scalar
+            // operand is strict-F. Otherwise default to C and let the
+            // post-kernel "looser-F" copy step rectify when needed.
+            bool allStrictFContig = AreAllOperandsStrictFContig(lhs, rhs, cleanShape);
+            Shape resultShape = allStrictFContig
+                ? new Shape((long[])cleanShape.dimensions.Clone(), 'F')
+                : cleanShape;
+
+            var result = new NDArray(resultType, resultShape, false);
+
+            // Empty broadcast result (a stride-0 broadcast dim alongside a zero-size
+            // dim, e.g. (3,1,1) op (1,0,2) -> (3,0,2)): there is nothing to compute.
+            // Returning here is REQUIRED — the NDIter element-wise path corrupts the
+            // heap when driven over a 0-element broadcast (the direct kernel path below
+            // is guarded the same way). Matches NumPy: empty op -> empty result.
+            if (result.size == 0)
+                return result;
+
+            // Order selection — see method-summary comment.
+            var order = allStrictFContig
+                ? NPY_ORDER.NPY_FORTRANORDER
+                : NPY_ORDER.NPY_CORDER;
+
+            // SIMD viability: requires equal dtypes (CanSimdAllOperands in
+            // the Tier 3B factory enforces this anyway, but we short-circuit
+            // here to keep the vector body null when known to be unusable).
+            // Op gate: Decimal/Half/Complex go scalar-only (CanUseSimd
+            // returns false for them); Mod/Power/FloorDivide/ATan2 go
+            // scalar-only via CanUseSimdForOp.
+            bool sameDtype = lhsType == rhsType && lhsType == resultType;
+            bool simdViable = sameDtype
+                              && DirectILKernelGenerator.CanUseSimd(resultType)
+                              && DirectILKernelGenerator.CanUseSimdForOp(op);
+
+            // NOTE (Wave 4, measured): the buffered-cast route (NumPy's ufunc
+            // config — cast inputs to the computation dtype in 8192-element
+            // windows, then run the same-dtype SIMD body) was implemented and
+            // A/B-measured here, and LOST to this fused per-element-convert
+            // path for every SIMD-able binary op class on i9-13900K/Release:
+            //   add contig 2M:  buffered 2.20 ms vs fused 1.49 ms
+            //   add strided 1M: buffered 3.18 ms vs fused 2.98 ms
+            //   div contig 2M:  buffered 1.72 ms vs fused 1.61 ms
+            // The extra buffer round-trip (~16 B/element of L2 traffic + window
+            // machinery) outweighs the SIMD gain on cheap ops. NumPy buffers
+            // because its AOT C loops cannot fuse casts; our runtime IL CAN —
+            // the fused path also beats NumPy itself (i32+f64 4M: 5.8-6.9 ms vs
+            // NumPy 7.3-7.6 ms). Promoting UNARY math ops (sqrt/exp/...) DO use
+            // the buffered-cast route (see DefaultEngine.UnaryOp) where the
+            // SIMD body wins 1.36x+. Revisit only with new A/B evidence.
+            //
+            // Build per-element scalar emit body. For same-dtype we just call
+            // EmitScalarOperation directly. For mixed-dtype we wrap it with
+            // a per-operand convert pass (the direct path's
+            // EmitGeneralLoop / EmitChunkLoop does the same).
+            Action<ILGenerator> scalarBody;
+            if (sameDtype)
+            {
+                scalarBody = il => DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+            }
+            else
+            {
+                NPTypeCode capLhs = lhsType, capRhs = rhsType, capRes = resultType;
+                BinaryOp capOp = op;
+                scalarBody = il => EmitMixedScalarBody(il, capLhs, capRhs, capRes, capOp);
+            }
+
+            Action<ILGenerator>? vectorBody = simdViable
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, op, resultType)
+                : null;
+
+            // Cache key MUST encode all three dtypes; mixed-dtype kernels
+            // are distinct from same-dtype ones for the same op.
+            string cacheKey = $"npy_binop_{op}_{lhsType}_{rhsType}_{resultType}";
+
+            try
+            {
+                // COPY_IF_OVERLAP + OVERLAP_ASSUME_ELEMENTWISE mirrors NumPy's
+                // ufunc iterator flags (ufunc_object.c:1070): overlapping
+                // write/read operands force a write-back temporary; exact
+                // aliasing stays copy-free because this loop is elementwise.
+                // With a freshly allocated result this is a cheap extent check.
+                using var iter = NDIterRef.MultiNew(
+                    3, new[] { lhs, rhs, result },
+                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.COPY_IF_OVERLAP,
+                    order,
+                    NPY_CASTING.NPY_SAFE_CASTING,
+                    s_binaryIterFlags);
+
+                iter.ExecuteElementWiseBinary(lhsType, rhsType, resultType, scalarBody, vectorBody, cacheKey);
+            }
+            catch (NotSupportedException)
+            {
+                // EmitScalarOperation / EmitVectorOperation / EmitConvertTo
+                // can throw for combos they don't cover. Surface as null so
+                // the caller falls back to the direct path.
+                return null;
+            }
+
+            // Looser-F preservation: matches the post-kernel branch in the
+            // direct path. Triggers when the result is currently C-contig but
+            // the NumPy rule says it should be F because at least one input
+            // is strict-F and no input is strict-C.
+            if (!allStrictFContig && ShouldProduceFContigOutput(lhs, rhs, result.Shape))
+                return result.copy('F');
+
+            return result;
+        }
+
+        /// <summary>
+        ///     O(1)-gated trivial-loop bypass — the NumSharp analogue of NumPy's
+        ///     <c>check_for_trivial_loop</c> + <c>try_trivial_single_output_loop</c>
+        ///     (ufunc_object.c), which handle a single strided inner loop "without
+        ///     using the (heavy) iterator."
+        ///
+        ///     Fires only when the op needs neither broadcasting nor casting and
+        ///     both operands share ONE contiguous layout, so element k of each
+        ///     operand's buffer (from its own offset) is the same logical element:
+        ///       • dtypes identical (lhs == rhs == result) — no cast;
+        ///       • shapes identical (<see cref="Shape.Equals(Shape)"/>, which
+        ///         compares size + dimensions and ignores strides) — no broadcast;
+        ///       • neither operand broadcasted (stride-0 dim with extent > 1);
+        ///       • both C-contiguous (→ C result) or both F-contiguous (→ F result).
+        ///     1-D arrays are both C and F; the C branch is tested first (C result
+        ///     == F result there), so the F branch implies ndim > 1 strictly-F,
+        ///     matching <see cref="AreAllOperandsStrictFContig"/>'s F-alloc rule.
+        ///     Contiguous slices (offset != 0) qualify because
+        ///     <see cref="ExecuteKernel"/> applies each operand's offset.
+        ///
+        ///     Routes to the SAME <see cref="ExecutionPath.SimdFull"/> DirectIL
+        ///     kernel the post-NDIter fallback uses, so results are identical for
+        ///     every dtype/op (the generator emits a SIMD or scalar loop per dtype).
+        ///     Unsupported emits (e.g. bool subtract) throw inside the generator;
+        ///     we catch and return null so the existing path raises/handles the
+        ///     case exactly as before. Any non-trivial case returns null →
+        ///     caller proceeds to the NDIter route.
+        /// </summary>
+        private unsafe NDArray? TryTrivialContiguousBinaryOp(
+            NDArray lhs, NDArray rhs, BinaryOp op,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType)
+        {
+            // No cast: all three dtypes identical. Promotion cases (/ -> f64,
+            // int-base ** float -> f64, mixed dtypes) have resultType != input and
+            // are excluded here, deferring to the NDIter route that does the cast.
+            if (lhsType != rhsType || lhsType != resultType)
+                return null;
+
+            var ls = lhs.Shape;
+            var rs = rhs.Shape;
+
+            // Scalar-broadcast: exactly one operand is scalar/size-1 and the other
+            // is a contiguous array (size > 1). NumPy's trivial loop broadcasts 0-D
+            // operands this way. The scalar is read once, the array walked linearly,
+            // and the result takes the array operand's shape+layout. (Both size-1, or
+            // both size > 1, fall through to the equal-shape branch below.)
+            bool lhsScalarLike = ls.IsScalar || ls.size == 1;
+            bool rhsScalarLike = rs.IsScalar || rs.size == 1;
+            if (lhsScalarLike ^ rhsScalarLike)
+            {
+                return TryScalarBroadcastBinaryOp(
+                    lhs, rhs, op, resultType,
+                    array: rhsScalarLike ? lhs : rhs,
+                    scalarIsRhs: rhsScalarLike);
+            }
+
+            // Identical logical shape (no broadcast). Shape.Equals compares size +
+            // dimensions and ignores strides/offset — exactly the "same shape,
+            // either layout" test we want.
+            if (!ls.Equals(rs))
+                return null;
+
+            // A stride-0 dim with extent > 1 breaks the linear-walk assumption even
+            // if the contiguity flags happen to look set; exclude explicitly.
+            if (ls.IsBroadcasted || rs.IsBroadcasted)
+                return null;
+
+            // One shared contiguous layout (C checked first; see summary).
+            bool bothC = ls.IsContiguous && rs.IsContiguous;
+            bool bothF = !bothC && ls.IsFContiguous && rs.IsFContiguous;
+            if (!bothC && !bothF)
+                return null;
+
+            // SimdFull kernel: ignores strides, walks result.size linearly. Emit may
+            // be unsupported for some op/dtype (e.g. bool '-') — fall through to the
+            // existing path so it raises (or handles) the case identically.
+            var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, ExecutionPath.SimdFull);
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            // Reuse a canonical input shape (offset 0, owns its buffer, right order)
+            // instead of cloning dims + reconstructing strides/flags. bothF implies
+            // strictly column-major ls (1-D would have satisfied bothC first).
+            Shape resultShape = CanonicalResultShape(ls, bothF);
+            var result = new NDArray(resultType, resultShape, false);
+
+            // Empty result: nothing to compute (the kernel assumes >= 1 element).
+            if (result.size == 0)
+                return result;
+
+            ExecuteKernel(kernel, lhs, rhs, result, ls, rs);
+            return result;
+        }
+
+        /// <summary>
+        ///     Scalar-broadcast arm of the trivial-loop bypass: <c>array op scalar</c>
+        ///     or <c>scalar op array</c> where the array operand is contiguous. Routes
+        ///     to the existing <see cref="ExecutionPath.SimdScalarRight"/> /
+        ///     <see cref="ExecutionPath.SimdScalarLeft"/> DirectIL kernel (scalar read
+        ///     once, array walked linearly), skipping NDIter construction. The result
+        ///     takes the array operand's shape and layout (C, or strictly-F) so the
+        ///     linear write aligns with the linear array read. Returns null (→ NDIter)
+        ///     when the array operand is non-contiguous or the emit is unsupported.
+        ///
+        ///     Callers guarantee identical dtypes (same-dtype gate in
+        ///     <see cref="TryTrivialContiguousBinaryOp"/>), so the kernel key uses
+        ///     <paramref name="resultType"/> for all three operand slots.
+        /// </summary>
+        private unsafe NDArray? TryScalarBroadcastBinaryOp(
+            NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode resultType,
+            NDArray array, bool scalarIsRhs)
+        {
+            var arrShape = array.Shape;
+            if (arrShape.IsBroadcasted)
+                return null;
+
+            bool isC = arrShape.IsContiguous;
+            bool isF = !isC && arrShape.IsFContiguous;
+            if (!isC && !isF)
+                return null;   // strided/transposed array operand → NDIter
+
+            var path = scalarIsRhs ? ExecutionPath.SimdScalarRight : ExecutionPath.SimdScalarLeft;
+            var key = new MixedTypeKernelKey(resultType, resultType, resultType, op, path);
+            MixedTypeKernel kernel;
+            try
+            {
+                kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            if (kernel == null)
+                return null;
+
+            Shape resultShape = CanonicalResultShape(arrShape, isF);
+            var result = new NDArray(resultType, resultShape, false);
+            if (result.size == 0)
+                return result;
+
+            // lhs/rhs keep their original operand positions; the SimdScalarRight/Left
+            // kernel reads the scalar side once and walks the array side linearly.
+            ExecuteKernel(kernel, lhs, rhs, result, lhs.Shape, rhs.Shape);
+            return result;
+        }
+
+        /// <summary>
+        ///     Mixed-dtype scalar-body emitter. On entry the stack carries
+        ///     <c>[lhs (lhsType), rhs (rhsType)]</c>. On exit it carries one
+        ///     value of <paramref name="resultType"/>. Handles all three
+        ///     conversion combinations (lhs-only, rhs-only, both) via a
+        ///     temp local for the rhs value so we can reach the lhs at the
+        ///     bottom of the stack.
+        ///
+        ///     Same-dtype callers do NOT go through this path — they call
+        ///     <see cref="DirectILKernelGenerator.EmitScalarOperation"/> directly,
+        ///     skipping the local allocation and reload.
+        /// </summary>
+        private static void EmitMixedScalarBody(
+            ILGenerator il,
+            NPTypeCode lhsType, NPTypeCode rhsType, NPTypeCode resultType,
+            BinaryOp op)
+        {
+            // Stack: [lhs (lhsType), rhs (rhsType)]
+            //
+            // Stash rhs into a local so we can convert the bottom-of-stack lhs
+            // first, then reload rhs and convert it. Doing it this order keeps
+            // the final stack as [lhs (resultType), rhs (resultType)] which
+            // is what EmitScalarOperation expects.
+            var locRhs = il.DeclareLocal(DirectILKernelGenerator.GetClrType(rhsType));
+            il.Emit(OpCodes.Stloc, locRhs);
+            if (lhsType != resultType)
+                DirectILKernelGenerator.EmitConvertTo(il, lhsType, resultType);
+            il.Emit(OpCodes.Ldloc, locRhs);
+            if (rhsType != resultType)
+                DirectILKernelGenerator.EmitConvertTo(il, rhsType, resultType);
+
+            DirectILKernelGenerator.EmitScalarOperation(il, op, resultType);
+        }
+
+        /// <summary>
+        /// NumPy-aligned rule: the output is F-contiguous when every non-scalar operand
+        /// is strictly F-contiguous (IsFContiguous && !IsContiguous).
+        /// Scalars (and 1-element shapes, both C and F) do not change the decision.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static bool ShouldProduceFContigOutput(NDArray a, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+            var s = a.Shape;
+            // Scalars and size-1 shapes don't force a preference.
+            if (s.IsScalar || s.size <= 1)
+                return false;
+            return s.IsFContiguous && !s.IsContiguous;
+        }
+
+        /// <summary>
+        ///     Stricter L3-a rule: every non-scalar operand must be strictly F-contiguous
+        ///     (not just one of them). Required for the F-allocated-result optimization
+        ///     because the kernel walks the result buffer linearly. If any operand is
+        ///     neither C nor F (negative strides, partial broadcast, custom view), its
+        ///     linear walk doesn't align with the F-output's linear walk → wrong values.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static bool AreAllOperandsStrictFContig(NDArray lhs, NDArray rhs, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
+
+            bool lhsPureF = !lhsScalar && lhs.Shape.IsFContiguous && !lhs.Shape.IsContiguous;
+            bool rhsPureF = !rhsScalar && rhs.Shape.IsFContiguous && !rhs.Shape.IsContiguous;
+
+            // Strict-all-F requires every non-scalar operand to be pure-F.
+            // The "all scalars" case never reaches here (excluded upstream).
+            if (!lhsScalar && !lhsPureF) return false;
+            if (!rhsScalar && !rhsPureF) return false;
+
+            // At least one non-scalar op must be pure-F (otherwise both are scalars,
+            // which the upstream IsScalar+IsScalar path already short-circuits).
+            return lhsPureF || rhsPureF;
+        }
+
+        /// <summary>
+        /// Binary variant — require that every non-scalar operand is strictly F-contiguous
+        /// and at least one of them is (otherwise the scalar+scalar case is excluded upstream).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        internal static bool ShouldProduceFContigOutput(NDArray lhs, NDArray rhs, Shape resultShape)
+        {
+            if (resultShape.NDim <= 1 || resultShape.size <= 1)
+                return false;
+
+            bool lhsScalar = lhs.Shape.IsScalar || lhs.Shape.size <= 1;
+            bool rhsScalar = rhs.Shape.IsScalar || rhs.Shape.size <= 1;
+
+            bool lhsPureF = !lhsScalar && lhs.Shape.IsFContiguous && !lhs.Shape.IsContiguous;
+            bool rhsPureF = !rhsScalar && rhs.Shape.IsFContiguous && !rhs.Shape.IsContiguous;
+            bool lhsPureC = !lhsScalar && lhs.Shape.IsContiguous && !lhs.Shape.IsFContiguous;
+            bool rhsPureC = !rhsScalar && rhs.Shape.IsContiguous && !rhs.Shape.IsFContiguous;
+
+            // If any non-scalar operand is strictly C-contig, fall through to the C default.
+            if (lhsPureC || rhsPureC)
+                return false;
+
+            // At least one non-scalar operand must be strictly F-contig to trigger F output.
+            return lhsPureF || rhsPureF;
+        }
+
+        /// <summary>
+        ///     Build the result <see cref="Shape"/> for a trivial-loop bypass without the
+        ///     redundant dims-clone + strides-alloc + flag/size/stride walks that
+        ///     <c>new Shape(dims[, 'F'])</c> performs.
+        ///
+        ///     The bypass result must be a clean, offset-0, owns-its-buffer layout whose
+        ///     dimensions match <paramref name="src"/> in the requested order. When
+        ///     <paramref name="src"/> is ALREADY canonical — <c>offset == 0</c>, the backing
+        ///     buffer is exactly <c>size</c> elements (<c>bufferSize == size</c>, i.e. not a
+        ///     window into a larger parent) and it is contiguous in the target order — it is
+        ///     byte-for-byte what the constructor would produce. Because <see cref="Shape"/>
+        ///     is an immutable readonly struct whose <c>dimensions</c>/<c>strides</c> arrays
+        ///     are never mutated after construction, the result can share it verbatim, and we
+        ///     skip: the <c>dimensions.Clone()</c>, the <c>ComputeContiguousStrides</c>
+        ///     allocation, and the four array walks (strides + size/hash +
+        ///     <c>ComputeFlagsStatic</c>'s C/F/broadcast passes).
+        ///
+        ///     A sliced source (<c>offset != 0</c>) or a view into a larger buffer
+        ///     (<c>bufferSize &gt; size</c>) must NOT be reused — the freshly-allocated result
+        ///     starts at 0 and owns exactly <c>size</c> elements, so inheriting the source's
+        ///     offset/bufferSize would mis-describe it. Those fall back to building a fresh
+        ///     canonical Shape exactly as before.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static Shape CanonicalResultShape(Shape src, bool wantF)
+        {
+            if (src.offset == 0 && src.bufferSize == src.size)
+            {
+                // 1-D arrays are both C- and F-contiguous; the C check (taken first for
+                // wantF==false) returns them, so the F branch only fires for strictly
+                // column-major (ndim > 1) sources — matching new Shape(dims, 'F').
+                if (!wantF)
+                {
+                    if (src.IsContiguous) return src;
+                }
+                else if (src.IsFContiguous && !src.IsContiguous)
+                {
+                    return src;
+                }
+            }
+
+            var dims = (long[])src.dimensions.Clone();
+            return wantF ? new Shape(dims, 'F') : new Shape(dims);
         }
 
         /// <summary>
@@ -109,7 +769,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new BinaryScalarKernelKey(lhsType, rhsType, resultType, op);
-            var func = ILKernelGenerator.GetBinaryScalarDelegate(key);
+            var func = DirectILKernelGenerator.GetBinaryScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch
@@ -136,7 +796,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Continue binary scalar dispatch with typed LHS value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray InvokeBinaryScalarLhs<TLhs>(
             Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType, NPTypeCode resultType)
         {
@@ -165,7 +825,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Complete binary scalar dispatch with typed LHS and RHS values.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static NDArray InvokeBinaryScalarRhs<TLhs, TRhs>(
             Delegate func, TLhs lhsVal, TRhs rhsVal, NPTypeCode resultType)
         {
@@ -194,7 +854,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Classify execution path based on strides.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe ExecutionPath ClassifyPath(
             long* lhsStrides, long* rhsStrides, long* shape, int ndim, NPTypeCode resultType)
         {
@@ -217,10 +877,13 @@ namespace NumSharp.Backends
             if (lhsScalar && rhsContiguous)
                 return ExecutionPath.SimdScalarLeft;
 
-            // Check for inner-contiguous (chunk-able)
-            long lhsInner = lhsStrides[ndim - 1];
-            long rhsInner = rhsStrides[ndim - 1];
-            if ((lhsInner == 1 || lhsInner == 0) && (rhsInner == 1 || rhsInner == 0))
+            // L3-a/L3-b: SimdChunk now handles ANY constant-stride inner dim
+            // (contig=1, broadcast=0, strided>1, negative-stride). The emitted IL
+            // hoists outer coord calc out of the inner loop, so even arbitrary
+            // strided cases beat the General path's per-element mod/div by ~4-5×.
+            // General is left as a safety fallback but is no longer reachable for
+            // ndim >= 1 — kept for documentation / future use cases.
+            if (ndim >= 1)
                 return ExecutionPath.SimdChunk;
 
             return ExecutionPath.General;
@@ -229,7 +892,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute the IL-generated kernel.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void ExecuteKernel(
             MixedTypeKernel kernel,
             NDArray lhs, NDArray rhs, NDArray result,
@@ -259,6 +922,163 @@ namespace NumSharp.Backends
                     result.size
                 );
             }
+        }
+
+        /// <summary>
+        ///     Execute kernel using pre-coalesced shape and strides (L3-a). The kernel
+        ///     iterates <c>result.size</c> elements writing to the original (uncoalesced)
+        ///     result buffer; the coalesced shape/strides only steer the read pattern
+        ///     and path classification. For <see cref="ExecutionPath.SimdFull"/> the
+        ///     kernel ignores strides anyway, so coalescing F-contig N-D to 1-D contig
+        ///     is a free win.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void ExecuteKernelCoalesced(
+            MixedTypeKernel kernel,
+            NDArray lhs, NDArray rhs, NDArray result,
+            Shape lhsShape, Shape rhsShape,
+            long* coalShape, long* coalLhsStr, long* coalRhsStr, int coalNdim)
+        {
+            int lhsElemSize = lhs.dtypesize;
+            int rhsElemSize = rhs.dtypesize;
+
+            byte* lhsAddr = (byte*)lhs.Address + lhsShape.offset * lhsElemSize;
+            byte* rhsAddr = (byte*)rhs.Address + rhsShape.offset * rhsElemSize;
+
+            kernel(
+                (void*)lhsAddr,
+                (void*)rhsAddr,
+                (void*)result.Address,
+                coalLhsStr,
+                coalRhsStr,
+                coalShape,
+                coalNdim,
+                result.size
+            );
+        }
+
+        /// <summary>
+        ///     Merge adjacent dims of a 2-operand iteration into a smaller ndim
+        ///     whenever both operands share a compatible cross-axis stride relation.
+        ///     Mutates the input buffers in place; returns the new ndim.
+        ///
+        ///     Two adjacent dims (d, d+1) merge when, for BOTH operands:
+        ///       • either dim has size 1 (trivial), or
+        ///       • C-order: stride[d] == stride[d+1] * shape[d+1], or
+        ///       • F-order: stride[d+1] == stride[d] * shape[d], or
+        ///       • both strides are 0 (joint broadcast).
+        ///     Mixed cases (one operand C-order, the other F-order; one broadcast,
+        ///     the other not) leave the dims separate — the path classifier picks
+        ///     <see cref="ExecutionPath.SimdChunk"/> or <see cref="ExecutionPath.General"/>
+        ///     instead.
+        /// </summary>
+        /// <remarks>
+        ///     The merged stride is the smaller non-zero one (the contiguous neighbour);
+        ///     if both are 0, the result stays 0. Shape merges as <c>shape[d]*shape[d+1]</c>.
+        /// </remarks>
+        /// <summary>
+        ///     Merge-direction classifier for one operand on an adjacent pair of dims.
+        ///     <list type="bullet">
+        ///       <item><see cref="MergeMode.Trivial"/> — either dim is size 1, or both
+        ///       strides are 0 (joint broadcast). Can merge in any direction.</item>
+        ///       <item><see cref="MergeMode.COrder"/> — stride[d] == stride[d+1]*shape[d+1]
+        ///       (descending stride order = row-major).</item>
+        ///       <item><see cref="MergeMode.FOrder"/> — stride[d+1] == stride[d]*shape[d]
+        ///       (ascending stride order = column-major).</item>
+        ///       <item><see cref="MergeMode.None"/> — neither relation holds; the dims
+        ///       can't be coalesced for this operand.</item>
+        ///     </list>
+        ///     The 3-operand merge requires either all-Trivial or one consistent order
+        ///     (Trivial mixes with anything). Mixing C and F silently transposes — that
+        ///     was the bug in <c>arr * arr.T</c> and reversed-transposed adds.
+        /// </summary>
+        private enum MergeMode { None, COrder, FOrder, Trivial }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static MergeMode ClassifyMergePair(long sw, long sr, long strideW, long strideR)
+        {
+            if (sw == 1 || sr == 1) return MergeMode.Trivial;
+            if (strideW == 0 && strideR == 0) return MergeMode.Trivial;
+            // C-order: outer stride spans the inner dim's full extent.
+            if (strideW == strideR * sr) return MergeMode.COrder;
+            // F-order: inner stride spans the outer dim's full extent.
+            if (strideR == strideW * sw) return MergeMode.FOrder;
+            return MergeMode.None;
+        }
+
+        /// <summary>
+        ///     Coalesce adjacent dims when ALL THREE operands (lhs, rhs, result) agree
+        ///     on the merge direction. Trivial classifications mix with either order;
+        ///     mixing COrder and FOrder among operands rejects the merge to avoid the
+        ///     "silent transpose" bug (the kernel walks linearly across heterogeneously
+        ///     ordered operands — element positions diverge).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int CoalesceTernaryDimensions(
+            long* shape, long* lhsStrides, long* rhsStrides, long* resStrides, int ndim)
+        {
+            if (ndim <= 1) return ndim;
+
+            int writeAxis = 0;
+            int newNdim = 1;
+
+            for (int readAxis = 1; readAxis < ndim; readAxis++)
+            {
+                long shapeW = shape[writeAxis];
+                long shapeR = shape[readAxis];
+
+                var lhsMode = ClassifyMergePair(shapeW, shapeR, lhsStrides[writeAxis], lhsStrides[readAxis]);
+                var rhsMode = ClassifyMergePair(shapeW, shapeR, rhsStrides[writeAxis], rhsStrides[readAxis]);
+                var resMode = ClassifyMergePair(shapeW, shapeR, resStrides[writeAxis], resStrides[readAxis]);
+
+                bool canMerge = lhsMode != MergeMode.None
+                             && rhsMode != MergeMode.None
+                             && resMode != MergeMode.None
+                             && AgreeOnOrder(lhsMode, rhsMode, resMode);
+
+                if (canMerge)
+                {
+                    shape[writeAxis] = shapeW * shapeR;
+                    lhsStrides[writeAxis] = MergeStride(lhsStrides[writeAxis], lhsStrides[readAxis]);
+                    rhsStrides[writeAxis] = MergeStride(rhsStrides[writeAxis], rhsStrides[readAxis]);
+                    resStrides[writeAxis] = MergeStride(resStrides[writeAxis], resStrides[readAxis]);
+                }
+                else
+                {
+                    writeAxis++;
+                    if (writeAxis != readAxis)
+                    {
+                        shape[writeAxis] = shapeR;
+                        lhsStrides[writeAxis] = lhsStrides[readAxis];
+                        rhsStrides[writeAxis] = rhsStrides[readAxis];
+                        resStrides[writeAxis] = resStrides[readAxis];
+                    }
+                    newNdim++;
+                }
+            }
+
+            return newNdim;
+        }
+
+        /// <summary>
+        ///     True when the three merge modes are mutually consistent. Trivial pairs
+        ///     with anything; COrder and FOrder are mutually exclusive once present.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static bool AgreeOnOrder(MergeMode a, MergeMode b, MergeMode c)
+        {
+            bool hasC = a == MergeMode.COrder || b == MergeMode.COrder || c == MergeMode.COrder;
+            bool hasF = a == MergeMode.FOrder || b == MergeMode.FOrder || c == MergeMode.FOrder;
+            return !(hasC && hasF);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+        private static long MergeStride(long strideW, long strideR)
+        {
+            if (strideW == 0 && strideR == 0) return 0;
+            if (strideW == 0) return strideR;
+            if (strideR == 0) return strideW;
+            return strideW < strideR ? strideW : strideR;
         }
 
         /// <summary>

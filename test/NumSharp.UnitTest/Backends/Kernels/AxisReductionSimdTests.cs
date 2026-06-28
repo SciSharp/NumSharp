@@ -196,11 +196,11 @@ public class AxisReductionSimdTests
             InnerAxisContiguous: true
         );
 
-        var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+        var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
 
         // Kernel may be null if IL generation is disabled, but should not throw
         // If SIMD is available, kernel should be non-null
-        if (ILKernelGenerator.VectorBits > 0 && ILKernelGenerator.Enabled)
+        if (DirectILKernelGenerator.VectorBits > 0 && DirectILKernelGenerator.Enabled)
         {
             Assert.IsNotNull(kernel);
         }

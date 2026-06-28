@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
         /// Used as fallback when explicit type pair not found in FindConverter.
         /// Uses NumPy-compatible wrapping behavior for integer overflow (no exceptions).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static Func<TIn, TOut> CreateFallbackConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
@@ -55,7 +55,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Creates a converter for integer types using Converts.ToXxx methods with unchecked wrapping.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Func<TIn, TOut> CreateIntegerConverter<TIn, TOut, TIntermediate>(
             NPTypeCode tinCode,
             Func<long, TIntermediate> fromLong,
@@ -81,7 +81,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Returns true if the type code represents an integer type.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool IsIntegerType(NPTypeCode code) => code switch
         {
             NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16 or NPTypeCode.UInt16 or
@@ -94,7 +94,7 @@ namespace NumSharp.Utilities
         /// Creates a default converter for non-integer types (Single, Double, Decimal, Boolean).
         /// Routes through Converts.ChangeType which is NumPy-aware for NaN/Inf/overflow/char.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Func<TIn, TOut> CreateDefaultConverter<TIn, TOut>()
         {
             var toutCode = InfoOf<TOut>.NPTypeCode;
@@ -241,7 +241,7 @@ namespace NumSharp.Utilities
         // timedelta64 semantics: both expose int64 Ticks and route through the numeric Ticks
         // value. The fallback goes through Converts.ToXxx(object) which has explicit
         // DateTime/TimeSpan cases in the object dispatcher.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool ToBoolean_NumPy(object value) => value switch
         {
             bool b => b,
@@ -265,7 +265,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToBoolean(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static byte ToByte_NumPy(object value) => value switch
         {
             byte b => b,
@@ -289,7 +289,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToByte(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static sbyte ToSByte_NumPy(object value) => value switch
         {
             sbyte sb => sb,
@@ -313,7 +313,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToSByte(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static short ToInt16_NumPy(object value) => value switch
         {
             short s => s,
@@ -337,7 +337,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt16(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ushort ToUInt16_NumPy(object value) => value switch
         {
             ushort us => us,
@@ -361,7 +361,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt16(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int ToInt32_NumPy(object value) => value switch
         {
             int i => i,
@@ -385,7 +385,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt32(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static uint ToUInt32_NumPy(object value) => value switch
         {
             uint ui => ui,
@@ -409,7 +409,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt32(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ToInt64_NumPy(object value) => value switch
         {
             long l => l,
@@ -433,7 +433,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToInt64(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ulong ToUInt64_NumPy(object value) => value switch
         {
             ulong ul => ul,
@@ -457,7 +457,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToUInt64(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static float ToSingle_NumPy(object value) => value switch
         {
             float f => f,
@@ -481,7 +481,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToSingle(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static double ToDouble_NumPy(object value) => value switch
         {
             double d => d,
@@ -505,7 +505,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToDouble(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static decimal ToDecimal_NumPy(object value) => value switch
         {
             decimal m => m,
@@ -529,7 +529,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToDecimal(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Half ToHalf_NumPy(object value) => value switch
         {
             Half h => h,
@@ -553,7 +553,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToHalf(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static Complex ToComplex_NumPy(object value) => value switch
         {
             Complex c => c,
@@ -577,7 +577,7 @@ namespace NumSharp.Utilities
             _ => Converts.ToComplex(value)
         };
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ToLong_NumPy(object value) => value switch
         {
             long l => l,
@@ -624,23 +624,21 @@ namespace NumSharp.Utilities
             // of Int32, but the object can't actually be cast to an Int32.
             //            if (v.GetNPTypeCode() == NPTypeCode) return value;
 
-#if _REGEN
-            switch (typeCode)
-            {
-	            %foreach supported_dtypes, supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                    switch (InfoOf<T>.NPTypeCode)
-                    {
-                	    %foreach supported_dtypes, supported_dtypes_lowercase%
-	                    case NPTypeCode.#101: return Converts.To#1(Unsafe.As<T, #102>(ref value));
-	                    %
-                        default: throw new NotSupportedException();
-                    }
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
+            // switch (typeCode)
+            // {
+	            // %foreach supported_dtypes, supported_dtypes_lowercase%
+	            // case NPTypeCode.#1:
+                    // switch (InfoOf<T>.NPTypeCode)
+                    // {
+                	    // %foreach supported_dtypes, supported_dtypes_lowercase%
+	                    // case NPTypeCode.#101: return Converts.To#1(Unsafe.As<T, #102>(ref value));
+	                    // %
+                        // default: throw new NotSupportedException();
+                    // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+            // }
 
             switch (typeCode)
             {
@@ -883,7 +881,6 @@ namespace NumSharp.Utilities
                 default:
                     return ChangeType((object)value, typeCode);
             }
-#endif
         }
 
 
@@ -908,25 +905,23 @@ namespace NumSharp.Utilities
             // of Int32, but the object can't actually be cast to an Int32.
             //            if (v.GetNPTypeCode() == NPTypeCode) return value;
 
-#if _REGEN
-            switch (InfoOf<TOut>.NPTypeCode)
-            {
-	            %foreach supported_dtypes, supported_dtypes_lowercase%
-	            case NPTypeCode.#1: {
-                    |#2 res;
-                    switch (InfoOf<TIn>.NPTypeCode)
-                    {
-                	    %foreach supported_dtypes, supported_dtypes_lowercase%
-	                    case NPTypeCode.#101: res = Converts.To#1(Unsafe.As<TIn, #102>(ref value)); return Unsafe.As<#2, TOut>(ref res);
-	                    %
-                        default: throw new NotSupportedException();
-                    }
-                }
-	            %
-	            default:
-		            throw new NotSupportedException();
-            }
-#else
+            // switch (InfoOf<TOut>.NPTypeCode)
+            // {
+	            // %foreach supported_dtypes, supported_dtypes_lowercase%
+	            // case NPTypeCode.#1: {
+                    // |#2 res;
+                    // switch (InfoOf<TIn>.NPTypeCode)
+                    // {
+                	    // %foreach supported_dtypes, supported_dtypes_lowercase%
+	                    // case NPTypeCode.#101: res = Converts.To#1(Unsafe.As<TIn, #102>(ref value)); return Unsafe.As<#2, TOut>(ref res);
+	                    // %
+                        // default: throw new NotSupportedException();
+                    // }
+                // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
+            // }
 
             switch (InfoOf<TOut>.NPTypeCode)
             {
@@ -1161,7 +1156,6 @@ namespace NumSharp.Utilities
 	            default:
 		            return ChangeType<TOut>((object)value);
             }
-#endif
         }
 
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
@@ -1199,39 +1193,37 @@ namespace NumSharp.Utilities
         /// <typeparam name="TOut">The type we expect to convert to.</typeparam>
         public static Func<TIn, TOut> FindConverter<TIn, TOut>()
         {
-#if _REGEN
-#region Compute
-            //#n is input, #10n is output
-		    switch (InfoOf<TIn>.NPTypeCode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-			    {
-				    switch (InfoOf<TOut>.NPTypeCode)
-		            {
-			            %foreach supported_dtypes,supported_dtypes_lowercase%
-			            case NPTypeCode.#101:
-			            {
-				            Func<#2, #102> ret = Converts.55To#101;
-                            return (Func<TIn, TOut>) (object) ret;
-			            }
-			            %
-			            default:
-                        {
-                            var tout = typeof(TOut);
-                            return @in => (TOut)Convert.ChangeType(@in, tout);
-                        }
-		            }
-			    }
-			    %
-			    default:
-                {
-                    var tout = typeof(TOut);
-                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                }
-		    }
-#endregion
-#else
+// #region Compute
+            // //#n is input, #10n is output
+		    // switch (InfoOf<TIn>.NPTypeCode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+			    // {
+				    // switch (InfoOf<TOut>.NPTypeCode)
+		            // {
+			            // %foreach supported_dtypes,supported_dtypes_lowercase%
+			            // case NPTypeCode.#101:
+			            // {
+				            // Func<#2, #102> ret = Converts.55To#101;
+                            // return (Func<TIn, TOut>) (object) ret;
+			            // }
+			            // %
+			            // default:
+                        // {
+                            // var tout = typeof(TOut);
+                            // return @in => (TOut)Convert.ChangeType(@in, tout);
+                        // }
+		            // }
+			    // }
+			    // %
+			    // default:
+                // {
+                    // var tout = typeof(TOut);
+                    // return @in => (TOut)Convert.ChangeType(@in, tout);
+                // }
+		    // }
+// #endregion
 
 #region Compute
 
@@ -1250,6 +1242,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<bool, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<bool, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1287,6 +1284,11 @@ namespace NumSharp.Utilities
                                     Func<bool, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<bool, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<bool, double> ret = Converts.ToDouble;
@@ -1300,6 +1302,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<bool, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<bool, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1318,6 +1325,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<byte, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<byte, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1355,6 +1367,11 @@ namespace NumSharp.Utilities
                                     Func<byte, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<byte, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<byte, double> ret = Converts.ToDouble;
@@ -1368,6 +1385,94 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<byte, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<byte, System.Numerics.Complex> ret = Converts.ToComplex;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            default:
+                                    return CreateFallbackConverter<TIn, TOut>();
+                        }
+                    }
+                case NPTypeCode.SByte:
+                    {
+                        switch (InfoOf<TOut>.NPTypeCode)
+                        {
+                            case NPTypeCode.Boolean:
+                                {
+                                    Func<sbyte, bool> ret = Converts.ToBoolean;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Byte:
+                                {
+                                    Func<sbyte, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<sbyte, sbyte> ret = Converts.ToSByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int16:
+                                {
+                                    Func<sbyte, short> ret = Converts.ToInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt16:
+                                {
+                                    Func<sbyte, ushort> ret = Converts.ToUInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int32:
+                                {
+                                    Func<sbyte, int> ret = Converts.ToInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt32:
+                                {
+                                    Func<sbyte, uint> ret = Converts.ToUInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int64:
+                                {
+                                    Func<sbyte, long> ret = Converts.ToInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt64:
+                                {
+                                    Func<sbyte, ulong> ret = Converts.ToUInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Char:
+                                {
+                                    Func<sbyte, char> ret = Converts.ToChar;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<sbyte, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Double:
+                                {
+                                    Func<sbyte, double> ret = Converts.ToDouble;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Single:
+                                {
+                                    Func<sbyte, float> ret = Converts.ToSingle;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Decimal:
+                                {
+                                    Func<sbyte, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<sbyte, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1386,6 +1491,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<short, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<short, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1423,6 +1533,11 @@ namespace NumSharp.Utilities
                                     Func<short, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<short, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<short, double> ret = Converts.ToDouble;
@@ -1436,6 +1551,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<short, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<short, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1454,6 +1574,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<ushort, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<ushort, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1491,6 +1616,11 @@ namespace NumSharp.Utilities
                                     Func<ushort, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<ushort, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<ushort, double> ret = Converts.ToDouble;
@@ -1504,6 +1634,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<ushort, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<ushort, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1522,6 +1657,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<int, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<int, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1559,6 +1699,11 @@ namespace NumSharp.Utilities
                                     Func<int, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<int, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<int, double> ret = Converts.ToDouble;
@@ -1572,6 +1717,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<int, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<int, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1590,6 +1740,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<uint, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<uint, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1627,6 +1782,11 @@ namespace NumSharp.Utilities
                                     Func<uint, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<uint, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<uint, double> ret = Converts.ToDouble;
@@ -1640,6 +1800,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<uint, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<uint, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1658,6 +1823,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<long, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<long, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1695,6 +1865,11 @@ namespace NumSharp.Utilities
                                     Func<long, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<long, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<long, double> ret = Converts.ToDouble;
@@ -1708,6 +1883,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<long, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<long, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1726,6 +1906,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<ulong, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<ulong, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1763,6 +1948,11 @@ namespace NumSharp.Utilities
                                     Func<ulong, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<ulong, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<ulong, double> ret = Converts.ToDouble;
@@ -1776,6 +1966,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<ulong, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<ulong, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1794,6 +1989,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<char, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<char, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1831,6 +2031,11 @@ namespace NumSharp.Utilities
                                     Func<char, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<char, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<char, double> ret = Converts.ToDouble;
@@ -1844,6 +2049,94 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<char, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<char, System.Numerics.Complex> ret = Converts.ToComplex;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            default:
+                                    return CreateFallbackConverter<TIn, TOut>();
+                        }
+                    }
+                case NPTypeCode.Half:
+                    {
+                        switch (InfoOf<TOut>.NPTypeCode)
+                        {
+                            case NPTypeCode.Boolean:
+                                {
+                                    Func<Half, bool> ret = Converts.ToBoolean;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Byte:
+                                {
+                                    Func<Half, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<Half, sbyte> ret = Converts.ToSByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int16:
+                                {
+                                    Func<Half, short> ret = Converts.ToInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt16:
+                                {
+                                    Func<Half, ushort> ret = Converts.ToUInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int32:
+                                {
+                                    Func<Half, int> ret = Converts.ToInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt32:
+                                {
+                                    Func<Half, uint> ret = Converts.ToUInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int64:
+                                {
+                                    Func<Half, long> ret = Converts.ToInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt64:
+                                {
+                                    Func<Half, ulong> ret = Converts.ToUInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Char:
+                                {
+                                    Func<Half, char> ret = Converts.ToChar;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<Half, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Double:
+                                {
+                                    Func<Half, double> ret = Converts.ToDouble;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Single:
+                                {
+                                    Func<Half, float> ret = Converts.ToSingle;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Decimal:
+                                {
+                                    Func<Half, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<Half, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1862,6 +2155,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<double, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<double, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1899,6 +2197,11 @@ namespace NumSharp.Utilities
                                     Func<double, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<double, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<double, double> ret = Converts.ToDouble;
@@ -1912,6 +2215,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<double, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<double, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1930,6 +2238,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<float, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<float, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -1967,6 +2280,11 @@ namespace NumSharp.Utilities
                                     Func<float, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<float, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<float, double> ret = Converts.ToDouble;
@@ -1980,6 +2298,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Decimal:
                                 {
                                     Func<float, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<float, System.Numerics.Complex> ret = Converts.ToComplex;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
@@ -1998,6 +2321,11 @@ namespace NumSharp.Utilities
                             case NPTypeCode.Byte:
                                 {
                                     Func<decimal, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<decimal, sbyte> ret = Converts.ToSByte;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             case NPTypeCode.Int16:
@@ -2035,6 +2363,11 @@ namespace NumSharp.Utilities
                                     Func<decimal, char> ret = Converts.ToChar;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<decimal, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             case NPTypeCode.Double:
                                 {
                                     Func<decimal, double> ret = Converts.ToDouble;
@@ -2050,6 +2383,94 @@ namespace NumSharp.Utilities
                                     Func<decimal, decimal> ret = Converts.ToDecimal;
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<decimal, System.Numerics.Complex> ret = Converts.ToComplex;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            default:
+                                    return CreateFallbackConverter<TIn, TOut>();
+                        }
+                    }
+                case NPTypeCode.Complex:
+                    {
+                        switch (InfoOf<TOut>.NPTypeCode)
+                        {
+                            case NPTypeCode.Boolean:
+                                {
+                                    Func<System.Numerics.Complex, bool> ret = Converts.ToBoolean;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Byte:
+                                {
+                                    Func<System.Numerics.Complex, byte> ret = Converts.ToByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.SByte:
+                                {
+                                    Func<System.Numerics.Complex, sbyte> ret = Converts.ToSByte;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int16:
+                                {
+                                    Func<System.Numerics.Complex, short> ret = Converts.ToInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt16:
+                                {
+                                    Func<System.Numerics.Complex, ushort> ret = Converts.ToUInt16;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int32:
+                                {
+                                    Func<System.Numerics.Complex, int> ret = Converts.ToInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt32:
+                                {
+                                    Func<System.Numerics.Complex, uint> ret = Converts.ToUInt32;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Int64:
+                                {
+                                    Func<System.Numerics.Complex, long> ret = Converts.ToInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.UInt64:
+                                {
+                                    Func<System.Numerics.Complex, ulong> ret = Converts.ToUInt64;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Char:
+                                {
+                                    Func<System.Numerics.Complex, char> ret = Converts.ToChar;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Half:
+                                {
+                                    Func<System.Numerics.Complex, Half> ret = Converts.ToHalf;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Double:
+                                {
+                                    Func<System.Numerics.Complex, double> ret = Converts.ToDouble;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Single:
+                                {
+                                    Func<System.Numerics.Complex, float> ret = Converts.ToSingle;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Decimal:
+                                {
+                                    Func<System.Numerics.Complex, decimal> ret = Converts.ToDecimal;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
+                            case NPTypeCode.Complex:
+                                {
+                                    Func<System.Numerics.Complex, System.Numerics.Complex> ret = Converts.ToComplex;
+                                    return (Func<TIn, TOut>)(object)ret;
+                                }
                             default:
                                     return CreateFallbackConverter<TIn, TOut>();
                         }
@@ -2060,27 +2481,24 @@ namespace NumSharp.Utilities
 
 #endregion
 
-#endif
         }
 
 #region ToScalar
 
-#if _REGEN
-#region Compute
+// #region Compute
 
-		%foreach supported_dtypes,supported_dtypes_lowercase%
-		[MethodImpl(Inline)]
-        public static #2 To#1(NDArray nd)
-        {
-            if (nd.size != 1)
-                throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
+		// %foreach supported_dtypes,supported_dtypes_lowercase%
+		// [MethodImpl(Inline)]
+        // public static #2 To#1(NDArray nd)
+        // {
+            // if (nd.size != 1)
+                // throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
 
-            return nd.typecode == NPTypeCode.#1 ? nd.GetAtIndex<#2>(0) : Converts.To#1(nd.GetAtIndex(0));
-        }
-		%
+            // return nd.typecode == NPTypeCode.#1 ? nd.GetAtIndex<#2>(0) : Converts.To#1(nd.GetAtIndex(0));
+        // }
+		// %
 			    
-#endregion
-#else
+// #endregion
 
 #region Compute
 
@@ -2194,7 +2612,6 @@ namespace NumSharp.Utilities
 
 #endregion
 
-#endif
 
 #endregion
     }

@@ -127,7 +127,8 @@ public class NpApiOverloadTests_UnaryMath
         var a = np.array(new double[] { 1.0, 4.0, 9.0 });
         var result = np.sqrt(a, typeof(float));
         Assert.IsNotNull(result);
-        // Note: sqrt(a, Type) doesn't actually convert dtype in current impl
+        // sqrt(a, Type) used to silently drop the dtype; it now routes it.
+        Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
     #endregion
@@ -222,7 +223,6 @@ public class NpApiOverloadTests_UnaryMath
     #region Trunc - np.trunc (2 overloads)
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Truncate for Vector512" on AVX-512 capable runners
     public void Trunc_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -247,7 +247,6 @@ public class NpApiOverloadTests_UnaryMath
     #region Round_ - np.round_ (4 overloads)
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -292,7 +291,6 @@ public class NpApiOverloadTests_UnaryMath
     #region Around - np.around (4 overloads)
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Around_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -379,24 +377,29 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [TestMethod]
-    [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [TestMethod] // was OpenBugs: exp2 Single-output emitter left the stack unbalanced (InvalidProgramException). Fixed.
     public void Exp2_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
         var result = np.exp2(a, typeof(float));
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        // Values must be 2^x = [1, 2, 4], not the old locExp=2.0 artifact (Pow(2,2)=4 everywhere).
+        Assert.AreEqual(1.0f, result.GetSingle(0), 1e-6f);
+        Assert.AreEqual(2.0f, result.GetSingle(1), 1e-6f);
+        Assert.AreEqual(4.0f, result.GetSingle(2), 1e-6f);
     }
 
-    [TestMethod]
-    [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
+    [TestMethod] // was OpenBugs: same exp2 Single-output IL bug via the NPTypeCode overload. Fixed.
     public void Exp2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
         var result = np.exp2(a, NPTypeCode.Single);
         Assert.IsNotNull(result);
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
+        Assert.AreEqual(1.0f, result.GetSingle(0), 1e-6f);
+        Assert.AreEqual(2.0f, result.GetSingle(1), 1e-6f);
+        Assert.AreEqual(4.0f, result.GetSingle(2), 1e-6f);
     }
 
     #endregion

@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -134,7 +135,7 @@ namespace NumSharp.Backends
             }
 
             // IL-generated axis reduction fast path - handles all numeric types
-            if (ILKernelGenerator.Enabled)
+            if (DirectILKernelGenerator.Enabled)
             {
                 // B16: std axis preserves float input dtype (half → half). Complex → Double (std
                 // is a non-negative real number). Integer → Double.
@@ -156,38 +157,13 @@ namespace NumSharp.Backends
         /// </summary>
         private NDArray ExecuteAxisStdReductionFallback(NDArray arr, int axis, bool keepdims, NPTypeCode? typeCode, int? ddof)
         {
-            var shape = arr.Shape;
-            Shape axisedShape = Shape.GetAxis(shape, axis);
+            Shape axisedShape = Shape.GetAxis(arr.Shape, axis);
             var retType = typeCode ?? arr.GetTypeCode.GetComputingType();
 
             var ret = new NDArray(retType, axisedShape, false);
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
-            var iterIndex = iterRet.Index;
-            var slices = iterAxis.Slices;
-
             int _ddof = ddof ?? 0;
-
-            // Use double accumulator for all types (sufficient precision)
-            do
-            {
-                var slice = arr[slices];
-                var xmean = MeanElementwise<double>(slice, NPTypeCode.Double);
-
-                double sum = 0;
-                var iter = slice.AsIterator<double>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-
-                while (hasNext())
-                {
-                    var a = moveNext() - xmean;
-                    sum += a * a;
-                }
-
-                var std = Math.Sqrt(sum / (slice.size - _ddof));
-                ret.SetDouble(Converts.ToDouble(std), iterIndex);
-            } while (iterAxis.Next() != null && iterRet.Next() != null);
+            var input = arr.GetTypeCode == NPTypeCode.Double ? arr : Cast(arr, NPTypeCode.Double, copy: true);
+            NDAxisIter.ReduceDouble<StdAxisDoubleKernel>(input.Storage, ret.Storage, axis, _ddof);
 
             if (keepdims)
                 ret.Storage.ExpandDimension(axis);
@@ -212,7 +188,7 @@ namespace NumSharp.Backends
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
 
             // SIMD fast-path for contiguous arrays
-            if (ILKernelGenerator.Enabled && arr.Shape.IsContiguous)
+            if (DirectILKernelGenerator.Enabled && arr.Shape.IsContiguous)
             {
                 int _ddof = ddof ?? 0;
                 double std;
@@ -222,34 +198,34 @@ namespace NumSharp.Backends
                     switch (arr.GetTypeCode)
                     {
                         case NPTypeCode.Single:
-                            std = ILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Double:
-                            std = ILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Byte:
-                            std = ILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.SByte:
-                            std = ILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int16:
-                            std = ILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt16:
-                            std = ILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int32:
-                            std = ILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt32:
-                            std = ILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.Int64:
-                            std = ILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
                             break;
                         case NPTypeCode.UInt64:
-                            std = ILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
+                            std = DirectILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
                             break;
                         default:
                             goto fallback;
@@ -267,67 +243,34 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Fallback element-wise std using iterators.
+        /// Fallback element-wise std. Shares the strided, zero-copy two-pass moment helpers with
+        /// var (<see cref="VarMomentsReal{TIn}"/> / <see cref="VarMomentsDecimal"/> /
+        /// <see cref="VarMomentsComplex"/>) and takes the square root — strided / transposed /
+        /// sliced / reversed views are iterated in place via their strides, not copied.
         /// </summary>
-        private object std_elementwise_fallback(NDArray arr, NPTypeCode retType, int? ddof)
+        private unsafe object std_elementwise_fallback(NDArray arr, NPTypeCode retType, int? ddof)
         {
             int _ddof = ddof ?? 0;
+            var tc = arr.GetTypeCode;
+            byte* basePtr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+            bool contig = arr.Shape.IsContiguous;
+            var dims = arr.shape;
+            var strides = arr.strides;
+            int ndim = arr.ndim;
+            long n = arr.size;
 
-            // Handle Decimal separately for precision
-            if (arr.GetTypeCode == NPTypeCode.Decimal)
+            if (tc == NPTypeCode.Decimal)
             {
-                var iter = arr.AsIterator<decimal>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                var xmean = MeanElementwise<decimal>(arr, NPTypeCode.Decimal);
-
-                decimal sum = 0;
-                while (hasNext())
-                {
-                    var a = moveNext() - xmean;
-                    sum += a * a;
-                }
-
-                var std = Utilities.DecimalMath.Sqrt(sum / ((decimal)arr.size - _ddof));
+                decimal std = Utilities.DecimalMath.Sqrt(VarMomentsDecimal((decimal*)basePtr, dims, strides, ndim, contig, n, _ddof));
                 return Converts.ChangeType(std, retType);
             }
 
-            // Handle Complex separately - std uses |x - mean|^2 and returns float64
-            if (arr.GetTypeCode == NPTypeCode.Complex)
-            {
-                var iter = arr.AsIterator<System.Numerics.Complex>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                var xmean = (System.Numerics.Complex)mean_elementwise_il(arr, null);
+            // Complex std uses |x - mean|^2 and returns float64.
+            if (tc == NPTypeCode.Complex)
+                return Math.Sqrt(VarMomentsComplex((System.Numerics.Complex*)basePtr, dims, strides, ndim, contig, n, _ddof));
 
-                double sum = 0;
-                while (hasNext())
-                {
-                    var diff = moveNext() - xmean;
-                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary; // |diff|^2
-                }
-
-                var std = Math.Sqrt(sum / (arr.size - _ddof));
-                return std; // Complex std returns float64
-            }
-
-            // All other types: iterate as double
-            {
-                var iter = arr.AsIterator<double>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                var xmean = MeanElementwise<double>(arr, NPTypeCode.Double);
-
-                double sum = 0;
-                while (hasNext())
-                {
-                    var a = moveNext() - xmean;
-                    sum += a * a;
-                }
-
-                var std = Math.Sqrt(sum / (arr.size - _ddof));
-                return Converts.ChangeType(std, retType);
-            }
+            double variance = VarMomentsRealDispatch(tc, basePtr, dims, strides, ndim, contig, n, _ddof);
+            return Converts.ChangeType(Math.Sqrt(variance), retType);
         }
 
         /// <summary>
@@ -340,7 +283,7 @@ namespace NumSharp.Backends
 
             // Std axis reduction always outputs double for accuracy
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Double, ReductionOp.Std, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
 
             if (kernel == null)
                 return null;

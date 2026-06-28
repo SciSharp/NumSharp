@@ -55,7 +55,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Adds a value, growing the storage if necessary.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void Add(long value)
         {
             if (_count >= _capacity)
@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public long this[long index]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             get => ((long*)_storage.Address)[index];
         }
 

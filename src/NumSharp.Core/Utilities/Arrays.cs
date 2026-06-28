@@ -455,16 +455,14 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
-                %foreach all_dtypes,all_dtypes_lowercase%
-                case NPTypeCode.#1:
-                {
-                    return new #2[length];
-                }
-                %
-                default:
-                    throw new NotImplementedException();
-#else
+                // %foreach all_dtypes,all_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                // {
+                    // return new #2[length];
+                // }
+                // %
+                // default:
+                    // throw new NotImplementedException();
                 case NPTypeCode.Complex:
                 {
                     return new Complex[length];
@@ -547,7 +545,6 @@ namespace NumSharp.Utilities
 
                 default:
                     throw new NotImplementedException();
-#endif
             }
         }
 
@@ -575,16 +572,14 @@ namespace NumSharp.Utilities
         {
             switch (typeCode)
             {
-#if _REGEN
-                %foreach all_dtypes,all_dtypes_lowercase%
-                case NPTypeCode.#1:
-                {
-                    return new #2[1] {(#1)value};
-                }
-                %
-                default:
-                    throw new NotImplementedException();
-#else
+                // %foreach all_dtypes,all_dtypes_lowercase%
+                // case NPTypeCode.#1:
+                // {
+                    // return new #2[1] {(#1)value};
+                // }
+                // %
+                // default:
+                    // throw new NotImplementedException();
                 case NPTypeCode.Complex:
                 {
                     return new Complex[1] {(Complex)value};
@@ -657,7 +652,6 @@ namespace NumSharp.Utilities
 
                 default:
                     throw new NotImplementedException();
-#endif
             }
         }
 

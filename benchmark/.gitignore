@@ -1,8 +1,11 @@
 # Generated benchmark outputs (recreated by run-benchmarks.ps1)
 # README.md and benchmark-report.md are tracked (results documentation)
-# Only JSON and CSV are ignored as intermediate/machine-readable outputs
+# JSON / CSV and the dashboard intermediate are ignored as machine-readable /
+# regenerated outputs (the dashboard's tracked form is the DocFX page
+# docs/website-src/docs/benchmarks-dashboard.md, seeded from this file)
 /benchmark-report.json
 /benchmark-report.csv
+/benchmark-dashboard.md
 
 # Benchmark run outputs
 *.txt

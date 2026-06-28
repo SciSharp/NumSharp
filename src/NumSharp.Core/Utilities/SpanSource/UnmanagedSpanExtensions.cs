@@ -23,7 +23,7 @@ namespace NumSharp.Utilities
         /// Searches for the specified value and returns true if found.
         /// Uses SIMD acceleration for numeric types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool Contains<T>(this UnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
         {
             return Contains((ReadOnlyUnmanagedSpan<T>)span, value);
@@ -48,7 +48,7 @@ namespace NumSharp.Utilities
             return UnmanagedSpanHelpers.Contains(ref searchSpace, value, length);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryContainsValueType<T>(ref T searchSpace, T value, long length, out bool result) where T : unmanaged
         {
             result = false;
@@ -115,7 +115,7 @@ namespace NumSharp.Utilities
         /// Searches for the specified value and returns the index of its first occurrence.
         /// Returns -1 if not found. Uses SIMD acceleration for numeric types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static long IndexOf<T>(this UnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
         {
             return IndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
@@ -140,7 +140,7 @@ namespace NumSharp.Utilities
             return UnmanagedSpanHelpers.IndexOf(ref searchSpace, value, length);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryIndexOfValueType<T>(ref T searchSpace, T value, long length, out long result) where T : unmanaged
         {
             result = -1;
@@ -207,7 +207,7 @@ namespace NumSharp.Utilities
         /// Searches for the specified value and returns the index of its last occurrence.
         /// Returns -1 if not found. Uses SIMD acceleration for numeric types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static long LastIndexOf<T>(this UnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
         {
             return LastIndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
@@ -232,7 +232,7 @@ namespace NumSharp.Utilities
             return UnmanagedSpanHelpers.LastIndexOf(ref searchSpace, value, length);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryLastIndexOfValueType<T>(ref T searchSpace, T value, long length, out long result) where T : unmanaged
         {
             result = -1;
@@ -284,7 +284,7 @@ namespace NumSharp.Utilities
         /// Determines whether two spans are equal by comparing elements using IEquatable{T}.Equals.
         /// Uses SIMD acceleration for numeric types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool SequenceEqual<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : unmanaged, IEquatable<T>
         {
             return SequenceEqual((ReadOnlyUnmanagedSpan<T>)span, other);
@@ -313,7 +313,7 @@ namespace NumSharp.Utilities
             return UnmanagedSpanHelpers.SequenceEqual(ref first, ref second, length);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TrySequenceEqualValueType<T>(ref T first, ref T second, long length, out bool result) where T : unmanaged
         {
             result = false;
@@ -474,7 +474,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Determines whether the span starts with the specified value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool StartsWith<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : unmanaged, IEquatable<T>
         {
             return StartsWith((ReadOnlyUnmanagedSpan<T>)span, value);
@@ -483,7 +483,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Determines whether the span starts with the specified value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool StartsWith<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : unmanaged, IEquatable<T>
         {
             if (value.Length > span.Length)
@@ -495,7 +495,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Determines whether the span ends with the specified value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool EndsWith<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : unmanaged, IEquatable<T>
         {
             return EndsWith((ReadOnlyUnmanagedSpan<T>)span, value);
@@ -504,7 +504,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Determines whether the span ends with the specified value.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static bool EndsWith<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : unmanaged, IEquatable<T>
         {
             if (value.Length > span.Length)
@@ -520,7 +520,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Copies the contents of this span into a destination span.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void CopyTo<T>(this ReadOnlyUnmanagedSpan<T> source, UnmanagedSpan<T> destination) where T : unmanaged
         {
             if (source.Length > destination.Length)
@@ -538,7 +538,7 @@ namespace NumSharp.Utilities
         /// Attempts to copy the contents of this span into a destination span.
         /// Returns false if the destination is too short.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe bool TryCopyTo<T>(this ReadOnlyUnmanagedSpan<T> source, UnmanagedSpan<T> destination) where T : unmanaged
         {
             if (source.Length > destination.Length)

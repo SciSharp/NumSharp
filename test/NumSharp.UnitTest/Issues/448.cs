@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Issues
             nd[(NDArray)(nd < 3)] = -2;
             var values = new int[] {-2, -2, 3, 4, 5, 6};
 
-            var iter = nd.AsIterator<double>();
+            var iter = nd.AsElements<double>();
             var next = iter.MoveNext;
             var hasnext = iter.HasNext;
             for (int i = 0; i < values.Length; i++)

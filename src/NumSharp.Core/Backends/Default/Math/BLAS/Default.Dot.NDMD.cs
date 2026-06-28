@@ -53,7 +53,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// SIMD-optimized N-D dot product for contiguous float/double arrays.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool TryDotNDMDSimd(NDArray lhs, NDArray rhs, NDArray result,
             long[] lshape, long[] rshape, long K)
         {
@@ -186,7 +186,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Compute iteration strides for multi-index decomposition (64-bit).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long[] ComputeIterStrides64(long[] shape)
         {
             var strides = new long[shape.Length];
@@ -203,7 +203,7 @@ namespace NumSharp.Backends
         /// Compute base offset for lhs array from linear index (64-bit).
         /// Maps linear index over lshape to offset in lhs storage (using lhs strides, not contract dim).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ComputeBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, int ndim)
         {
             long offset = 0;
@@ -221,7 +221,7 @@ namespace NumSharp.Backends
         /// rshape excludes the contracting dimension (second-to-last in original rhs).
         /// We need to map indices back, skipping the contract dim.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long ComputeRhsBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, long[] rshape, int rhsNdim)
         {
             long offset = 0;
@@ -387,7 +387,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Decompose linear index into coordinates for lhs (first ndim dims, 64-bit).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void DecomposeIndex64(long linearIdx, long[] iterStrides, long[] coords, int ndim)
         {
             for (int d = 0; d < ndim; d++)
@@ -400,7 +400,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Decompose linear index into coordinates for rhs, skipping the contract dimension (64-bit).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static void DecomposeRhsIndex64(long linearIdx, long[] iterStrides, long[] coords, long[] rshape, int rhsNdim)
         {
             int contractDimIdx = rhsNdim - 2;

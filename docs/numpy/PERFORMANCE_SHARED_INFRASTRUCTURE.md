@@ -6,7 +6,7 @@ This document describes the common infrastructure that NumPy operations share. U
 
 | Component | Lines | Shared % | Used By |
 |-----------|-------|----------|---------|
-| NpyIter | 8,425 | 100% | All multi-dim ops |
+| NDIter | 8,425 | 100% | All multi-dim ops |
 | ufunc_object.c | 6,805 | 90% | All ufuncs |
 | fast_loop_macros.h | 380 | 100% | All inner loops |
 | type_resolution.c | 2,258 | 100% | All type dispatch |
@@ -31,8 +31,8 @@ All ufuncs flow through a common execution pipeline:
 │     └─ Cache lookup (O(1) identity hash)                            │
 │  4. try_trivial_single_output_loop() ← Fast path for simple cases   │
 │     └─ If contiguous: skip iterator, direct loop call               │
-│  5. execute_ufunc_loop()          ← Full NpyIter path               │
-│     ├─ NpyIter_AdvancedNew()      ← Iterator construction           │
+│  5. execute_ufunc_loop()          ← Full NDIter path               │
+│     ├─ NDIter_AdvancedNew()      ← Iterator construction           │
 │     ├─ Broadcasting resolution    ← Automatic shape matching        │
 │     ├─ Memory overlap check       ← Automatic safety                │
 │     └─ Buffered iteration         ← If casting needed               │
@@ -131,14 +131,14 @@ The `*_FAST` macros automatically dispatch to the best path:
 
 ---
 
-## 3. NpyIter Infrastructure
+## 3. NDIter Infrastructure
 
 Location: `numpy/_core/src/multiarray/nditer_*.c` (~8,425 lines)
 
 ### Core Structure
 
 ```c
-struct NpyIter_InternalOnly {
+struct NDIter_InternalOnly {
     npy_uint32 itflags;           // NPY_ITFLAG_* flags
     npy_uint8 ndim;               // Number of dimensions
     int nop;                      // Number of operands
@@ -151,7 +151,7 @@ struct NpyIter_InternalOnly {
 ### Common Iterator Setup
 
 ```c
-NpyIter *iter = NpyIter_AdvancedNew(
+NDIter *iter = NDIter_AdvancedNew(
     nop, op_arrays,
     NPY_ITER_EXTERNAL_LOOP |      // We handle inner loop
     NPY_ITER_BUFFERED |           // Enable type casting buffers
@@ -164,10 +164,10 @@ NpyIter *iter = NpyIter_AdvancedNew(
 );
 
 // Get iteration pointers
-NpyIter_IterNextFunc *iternext = NpyIter_GetIterNext(iter, NULL);
-char **dataptr = NpyIter_GetDataPtrArray(iter);
-npy_intp *strideptr = NpyIter_GetInnerStrideArray(iter);
-npy_intp *countptr = NpyIter_GetInnerLoopSizePtr(iter);
+NDIter_IterNextFunc *iternext = NDIter_GetIterNext(iter, NULL);
+char **dataptr = NDIter_GetDataPtrArray(iter);
+npy_intp *strideptr = NDIter_GetInnerStrideArray(iter);
+npy_intp *countptr = NDIter_GetInnerLoopSizePtr(iter);
 
 // Main iteration
 do {
@@ -464,7 +464,7 @@ NPY_NO_EXPORT void @TYPE@_myop(...) {
 
 ### What You Get for Free
 
-- Broadcasting (via NpyIter)
+- Broadcasting (via NDIter)
 - Type casting (via buffered iteration)
 - Memory safety (via overlap detection)
 - `out=` parameter support
@@ -506,7 +506,7 @@ NPY_NO_EXPORT void @TYPE@_myop(...) {
 
 ### Systems Using Ufunc Infrastructure (This Document)
 
-| System | Uses NpyIter | Uses Loop Macros | Uses SIMD Templates |
+| System | Uses NDIter | Uses Loop Macros | Uses SIMD Templates |
 |--------|--------------|------------------|---------------------|
 | 1. Ufunc Binary | Yes | Yes | Yes |
 | 2. Ufunc Unary | Yes | Yes | Yes |

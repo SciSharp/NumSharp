@@ -26,8 +26,32 @@ namespace NumSharp.Backends
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null)
+        public override NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
+            // NumPy validation order: where parse -> loop resolution -> out
+            // cast -> shape (probed 2.4.2).
+            ValidateWhereMask(where);
+
+            // arctan2 is float-only ('ee->e','ff->f','dd->d','gg->g' -- no
+            // int/bool loops): an integer/bool dtype= request raises the
+            // no-loop error (probed verbatim).
+            if (typeCode.HasValue && typeCode.Value < NPTypeCode.Single)
+                throw new IncorrectTypeException(
+                    "No loop matching the specified signature and casting was found for ufunc arctan2");
+
+            // ufunc out=/where= ride the shared binary Into-path:
+            // EmitScalarOperation special-cases ATan2 (Math.Atan2 /
+            // DecimalMath.ATan2) and the mixed-dtype body converts both
+            // operands to the loop dtype first. This is arctan2's first
+            // NDIter-backed execution; the plain path below keeps its
+            // Direct MixedTypeKernel route.
+            if (@out is not null || where is not null)
+            {
+                var loopType = typeCode ?? PromoteATan2Binary(y.GetTypeCode, x.GetTypeCode);
+                return ExecuteBinaryUfuncInto(y, x, BinaryOp.ATan2,
+                    y.GetTypeCode, x.GetTypeCode, loopType, @out, where);
+            }
+
             // Handle empty array
             if (y.size == 0)
                 return y.Clone();
@@ -85,7 +109,7 @@ namespace NumSharp.Backends
             var key = new MixedTypeKernelKey(yType, xType, resultType, BinaryOp.ATan2, path);
 
             // Get or generate kernel
-            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
+            var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);
 
             if (kernel != null)
             {

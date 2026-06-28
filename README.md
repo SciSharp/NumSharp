@@ -25,6 +25,13 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 * Almost non-effort copy-pasting numpy code from python to C#.
 * Wide support for `System.Drawing.Bitmap`. ([read more](https://github.com/SciSharp/NumSharp/wiki/Bitmap-Extensions))
 
+### Performance vs NumPy
+NumSharp's NumPy-aligned iterator (`NDIter`) benchmarked against NumPy 2.x. The **left card** is the head-to-head comparison — geomean speedup by array-size tier and by operation class. The **right card** is the IL-generation *dividend*: iterator machinery NumPy has no equivalent for — cheaper construction than `np.nditer`, one-pass expression fusion, kernel reuse, and a parallel inner loop. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster), and each also shows **%NumPy🕐** — the share of NumPy's time NumSharp uses (56% = takes just over half as long; <100% = faster). Absolute timings vary by hardware, so only the same-runner ratio is meaningful.
+
+[<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/ops.png" width="400" height="300" />](benchmark/nditer/nditer_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/cat.png" width="400" height="300" />](benchmark/nditer/nditer_results.md)
+
+Refreshed automatically after each release. **[Full report →](benchmark/nditer/nditer_results.md)**
+
 ### Implemented APIs
 The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
 
@@ -109,7 +116,6 @@ You might also be interested in NumSharp's sister project [Numpy.NET](https://gi
 
 NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
 
-### Regen Templating
-Our library contains over 150,000 lines of repetitive generated code, mostly for handling different data types without hurting performance.<br>
-The templates can be recognized with `#if _REGEN` blocks and are powered by [Regen Templating Engine](https://github.com/Nucs/Regen).<br>
-Regen is a powerful external tool (Visual studio extension, [download here](https://github.com/Nucs/Regen/tree/master/releases)) that generates on demand based on a C#-like `regen-lang`.
+### Code Generation
+Type-specific kernels are emitted at runtime via `ILKernelGenerator` / `DirectILKernelGenerator` (`System.Reflection.Emit`), with SIMD (V128/V256/V512) selected at startup.<br>
+This superseded the original [Regen](https://github.com/Nucs/Regen) template engine: the old `#if _REGEN` template blocks have been removed, surviving only as `//`-commented reference next to the code they once generated.

@@ -297,7 +297,6 @@ public class UnaryOpTests
     }
 
     [TestMethod]
-    [OpenBugs] // NumSharp throws NotSupportedException for unsigned negative
     public void Negative_Byte_Overflow()
     {
         // NumPy: negative([1, 2, 3, 4, 5]) for uint8 = [255, 254, 253, 252, 251]
@@ -344,7 +343,6 @@ public class UnaryOpTests
     #region Rounding Operations - Banker's Rounding
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_BankersRounding()
     {
         // NumPy uses banker's rounding (round half to even)

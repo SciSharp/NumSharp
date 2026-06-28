@@ -14,6 +14,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cumsum.html</remarks>
         public static NDArray cumsum(NDArray arr, int? axis = null, NPTypeCode? typeCode = null)
         {
+            // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
+            // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
+            // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.
             return arr.TensorEngine.ReduceCumAdd(arr, axis, typeCode);
         }
     }

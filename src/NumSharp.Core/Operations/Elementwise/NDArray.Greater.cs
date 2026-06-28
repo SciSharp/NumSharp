@@ -17,7 +17,7 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty || lhs.size == 0)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            return lhs.TensorEngine.Greater(lhs, rhs);
+            return lhs.TensorEngine.Greater(lhs, rhs).AsGeneric<bool>();
         }
 
         /// <summary>
@@ -55,7 +55,7 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty || lhs.size == 0)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            return lhs.TensorEngine.GreaterEqual(lhs, rhs);
+            return lhs.TensorEngine.GreaterEqual(lhs, rhs).AsGeneric<bool>();
         }
 
         /// <summary>

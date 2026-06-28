@@ -1,0 +1,707 @@
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Numerics;
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.Intrinsics;
+
+// =============================================================================
+// DirectILKernelGenerator.Unary.cs - Unary Kernel Infrastructure
+// =============================================================================
+//
+// RESPONSIBILITY:
+//   - Unary kernel cache and API (GetUnaryKernel, TryGetUnaryKernel)
+//   - SIMD loop emission with 4x unrolling
+//   - Scalar and strided fallback loops
+//   - Capability detection (CanUseUnarySimd, IsPredicateOp)
+//
+// RELATED FILES:
+//   - DirectILKernelGenerator.Unary.Math.cs - Math function emission
+//   - DirectILKernelGenerator.Unary.Predicate.cs - IsNaN/IsFinite/IsInf
+//   - DirectILKernelGenerator.Unary.Decimal.cs - Decimal operations
+//   - DirectILKernelGenerator.Unary.Vector.cs - SIMD vector operations
+//   - DirectILKernelGenerator.Scalar.cs - Scalar kernel delegates
+//
+// =============================================================================
+
+// =============================================================================
+// DirectILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
+// =============================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// This partial class generates high-performance kernels at runtime using IL emission.
+// The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
+// Kernels are cached by operation key to avoid repeated IL generation.
+//
+// FLOW: Caller (DefaultEngine, np.*, NDArray ops)
+//         -> Requests kernel via Get*Kernel() or *Helper() methods
+//         -> DirectILKernelGenerator checks cache, generates IL if needed
+//         -> Returns delegate that caller invokes with array pointers
+//
+// =============================================================================
+// PARTIAL CLASS FILES
+// =============================================================================
+//
+// DirectILKernelGenerator.cs
+//   OWNERSHIP: Core infrastructure - foundation for all other partial files
+//   RESPONSIBILITY:
+//     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
+//     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
+//     - Shared IL emission primitives used by all other partials
+//   DEPENDENCIES: None (other partials depend on this)
+//
+// DirectILKernelGenerator.Binary.cs
+//   OWNERSHIP: Same-type binary operations on contiguous arrays (fast path)
+//   RESPONSIBILITY:
+//     - Optimized kernels when both operands have identical type and layout
+//     - SIMD loop + scalar tail for Add, Sub, Mul, Div
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for same-type contiguous operations
+//
+// DirectILKernelGenerator.MixedType.cs
+//   OWNERSHIP: Mixed-type binary operations with type promotion
+//   RESPONSIBILITY:
+//     - Handles all binary ops where operand types may differ
+//     - Generates path-specific kernels based on stride patterns
+//     - Owns ClearAll() which clears ALL caches across all partials
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for general binary operations
+//
+// DirectILKernelGenerator.Unary.cs (THIS FILE)
+//   OWNERSHIP: Unary element-wise operations and scalar delegates
+//   RESPONSIBILITY:
+//     - Array kernels for unary math: Negate, Abs, Sqrt, Sin, Cos, Exp, Log,
+//       Sign, Floor, Ceil, Round, Tan, Sinh, Cosh, Tanh, ASin, ACos, ATan,
+//       Exp2, Expm1, Log2, Log10, Log1p
+//     - SIMD support for Negate, Abs, Sqrt, Floor, Ceil on float/double
+//     - Scalar delegates (Func<TIn, TOut>) for single-value operations
+//     - Binary scalar delegates (Func<TLhs, TRhs, TResult>) for mixed-type scalars
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW:
+//     - Array kernels: Called by DefaultEngine for np.sqrt, np.sin, etc.
+//     - Scalar delegates: Used internally for broadcasting and element access
+//   KEY MEMBERS:
+//     - UnaryKernel delegate, _unaryCache - array operations
+//     - _unaryScalarCache - Func<TIn, TOut> for scalar unary ops
+//     - _binaryScalarCache - Func<TLhs, TRhs, TResult> for scalar binary ops
+//     - GetUnaryKernel(), TryGetUnaryKernel(), ClearUnary()
+//     - GetUnaryScalarDelegate(), GetBinaryScalarDelegate()
+//     - EmitUnaryScalarOperation() - central dispatcher for all unary ops
+//     - EmitMathCall(), EmitSignCall() - Math/MathF function emission
+//     - EmitUnarySimdLoop(), EmitUnaryScalarLoop(), EmitUnaryStridedLoop()
+//
+// DirectILKernelGenerator.Comparison.cs
+//   OWNERSHIP: Comparison operations returning boolean arrays
+//   RESPONSIBILITY:
+//     - Element-wise comparisons: ==, !=, <, >, <=, >=
+//     - SIMD comparison with efficient mask-to-bool extraction
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Called by NDArray comparison operators
+//
+// DirectILKernelGenerator.Reduction.cs
+//   OWNERSHIP: Reduction operations and specialized SIMD helpers
+//   RESPONSIBILITY:
+//     - Reductions: Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any
+//     - SIMD helpers called directly by np.all/any/nonzero/masking
+//   DEPENDENCIES: Uses core emit helpers from DirectILKernelGenerator.cs
+//   FLOW: Kernels called by DefaultEngine; helpers called directly by np.*
+//
+// =============================================================================
+
+namespace NumSharp.Backends.Kernels
+{
+    public static partial class DirectILKernelGenerator
+    {
+        #region Unary Kernel Generation
+
+        /// <summary>
+        /// Cache for unary kernels.
+        /// Key: UnaryKernelKey (InputType, OutputType, Op, IsContiguous)
+        /// </summary>
+        internal static readonly ConcurrentDictionary<UnaryKernelKey, UnaryKernel> _unaryCache = new();
+
+        /// <summary>
+        /// Get or generate a unary kernel for the specified key.
+        /// </summary>
+        public static UnaryKernel GetUnaryKernel(UnaryKernelKey key)
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            return _unaryCache.GetOrAdd(key, GenerateUnaryKernel);
+        }
+
+        /// <summary>
+        /// Generate a unary kernel for the specified key.
+        /// </summary>
+        private static UnaryKernel GenerateUnaryKernel(UnaryKernelKey key)
+        {
+            // UnaryKernel signature:
+            // void(void* input, void* output, long* strides, long* shape, int ndim, long totalSize)
+            var dm = new DynamicMethod(
+                name: $"Unary_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*), typeof(void*),
+                    typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
+                },
+                owner: typeof(DirectILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            int inputSize = GetTypeSize(key.InputType);
+            int outputSize = GetTypeSize(key.OutputType);
+
+            if (key.IsContiguous)
+            {
+                // Check if we can use SIMD for this operation
+                bool canSimd = CanUseUnarySimd(key);
+                if (canSimd)
+                {
+                    EmitUnarySimdLoop(il, key, inputSize, outputSize);
+                }
+                else
+                {
+                    EmitUnaryScalarLoop(il, key, inputSize, outputSize);
+                }
+            }
+            else
+            {
+                EmitUnaryStridedLoop(il, key, inputSize, outputSize);
+            }
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<UnaryKernel>();
+        }
+
+        /// <summary>
+        /// Check if this is a predicate operation (returns bool based on input type).
+        /// These operations should NOT convert input to output type before the operation.
+        /// </summary>
+        private static bool IsPredicateOp(UnaryOp op)
+        {
+            return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
+        }
+
+        /// <summary>
+        /// Check if SIMD can be used for this unary operation.
+        /// </summary>
+        internal static bool CanUseUnarySimd(UnaryKernelKey key)
+        {
+            // SIMD only for same-type operations
+            if (!key.IsSameType)
+                return false;
+
+            // BitwiseNot works for integer types only (and bool)
+            if (key.Op == UnaryOp.BitwiseNot)
+            {
+                return key.InputType != NPTypeCode.Single &&
+                       key.InputType != NPTypeCode.Double &&
+                       key.InputType != NPTypeCode.Decimal;
+            }
+
+            // LogicalNot is boolean-only, no SIMD (uses scalar comparison)
+            if (key.Op == UnaryOp.LogicalNot)
+                return false;
+
+            // Negate / Abs SIMD also works on signed/unsigned integer types in .NET 8+.
+            // Vector.Negate on unsigned does two's-complement wrap (matches NumPy scalar
+            // semantics: -np.uint32(1) == 4294967295). Vector.Abs on unsigned is identity
+            // (matches np.abs(uint) returning the value unchanged). Square (x*x) also
+            // works for integer SIMD via Vector.Multiply.
+            //
+            // Excluded: Int64/UInt64. Vector256.Abs<long> has no x86 intrinsic; the JIT
+            // emulates it via compare+xor+sub which is SLOWER than the scalar abs loop
+            // (measured: 2222µs scalar → 2569µs SIMD on 1M int64). int32 and narrower
+            // use PABSD/PABSW/PABSB which are single-cycle intrinsics.
+            if (key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Square)
+            {
+                return key.InputType == NPTypeCode.SByte ||
+                       key.InputType == NPTypeCode.Byte ||
+                       key.InputType == NPTypeCode.Int16 ||
+                       key.InputType == NPTypeCode.UInt16 ||
+                       key.InputType == NPTypeCode.Int32 ||
+                       key.InputType == NPTypeCode.UInt32 ||
+                       key.InputType == NPTypeCode.Single ||
+                       key.InputType == NPTypeCode.Double;
+            }
+
+            // Float/double-only operations
+            if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
+                return false;
+
+            // Floor/Ceiling (.NET 7+) and Round/Truncate (.NET 9+) bind to per-type, non-generic
+            // Vector{128,256,512} BCL methods whose presence depends on BOTH the running runtime
+            // AND the active vector width: net8.0 has no Vector*.Round/Truncate at any width, and a
+            // runtime can ship Vector256.Round before Vector512.Round (the exact case that crashed
+            // AVX-512 CI runners — "Could not find Round for Vector512" — while non-AVX-512 hosts,
+            // running the Vector256 path, passed). Probe the EXACT method the emitter will bind
+            // (same VectorMethodCache entry) for the active VectorBits and fall back to scalar when
+            // it is absent, instead of letting EmitUnaryVectorOperation hit its "Could not find ..."
+            // throw at kernel-compile time. This supersedes the old `#if NET8_0` guard, which was a
+            // compile-time switch (it could not see the actual runtime/width at all) and therefore
+            // could not protect the net10.0 target when a given runtime lacked Vector512.Round.
+            if (key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil ||
+                key.Op == UnaryOp.Round || key.Op == UnaryOp.Truncate)
+            {
+                return RoundingVectorSimdAvailable(key.Op, key.InputType);
+            }
+
+            return key.Op == UnaryOp.Sqrt || key.Op == UnaryOp.Reciprocal ||
+                   key.Op == UnaryOp.Deg2Rad || key.Op == UnaryOp.Rad2Deg;
+        }
+
+        /// <summary>
+        /// Whether the active SIMD width can lower a rounding-family op (<c>Floor</c>/<c>Ceil</c>/
+        /// <c>Round</c>/<c>Truncate</c>) for element type <paramref name="t"/>. These bind per-type,
+        /// non-generic <c>Vector{N}</c> BCL methods that exist ONLY for float/double (Floor/Ceiling
+        /// .NET 7+, Round/Truncate .NET 9+) — integer "rounding" is an identity the scalar path
+        /// owns, and a runtime can expose a width's method (e.g. Vector256.Round) before another's
+        /// (Vector512.Round). Returns false when there is no SIMD hardware (<c>VectorBits == 0</c>),
+        /// the type is not float/double, or the running runtime lacks the method at this width. This
+        /// is the SINGLE capability gate shared by the direct kernel (<see cref="CanUseUnarySimd"/>)
+        /// and the fused NDExpr path, so neither can route to <see cref="EmitUnaryVectorOperation"/>
+        /// for a (width, type) the BCL cannot satisfy — closing the "Could not find &lt;op&gt; for
+        /// Vector{N}&lt;T&gt;" kernel-compile crash for both AVX-512 floats and integer rounding.
+        /// </summary>
+        internal static bool RoundingVectorSimdAvailable(UnaryOp op, NPTypeCode t)
+        {
+            if (VectorBits == 0) return false;
+            if (t != NPTypeCode.Single && t != NPTypeCode.Double) return false;
+            return VectorMethodCache.ContainerUnaryOrNull(
+                VectorBits, VectorRoundingMethodName(op), GetClrType(t)) != null;
+        }
+
+        /// <summary>
+        /// BCL method name for the rounding-family unary ops on the <c>Vector{N}</c> container
+        /// (<c>Floor</c>/<c>Ceiling</c>/<c>Round</c>/<c>Truncate</c>). Kept identical to the
+        /// <c>methodName</c> switch in <see cref="EmitUnaryVectorOperation"/> so the eligibility
+        /// gate probes exactly the method the emitter will bind.
+        /// </summary>
+        private static string VectorRoundingMethodName(UnaryOp op) => op switch
+        {
+            UnaryOp.Floor => "Floor",
+            UnaryOp.Ceil => "Ceiling",   // Vector container spells it "Ceiling", not "Ceil"
+            UnaryOp.Round => "Round",
+            UnaryOp.Truncate => "Truncate",
+            _ => throw new ArgumentOutOfRangeException(nameof(op), op, "not a rounding-family op")
+        };
+
+        /// <summary>
+        /// Emit SIMD loop for contiguous unary operations with 4x unrolling.
+        /// </summary>
+        private static void EmitUnarySimdLoop(ILGenerator il, UnaryKernelKey key,
+            int inputSize, int outputSize)
+        {
+            long vectorCount = GetVectorCount(key.InputType);
+            int unrollFactor = 4;
+            long unrollStep = vectorCount * unrollFactor;
+
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - unrollStep
+            var locVectorEnd = il.DeclareLocal(typeof(long)); // totalSize - vectorCount
+
+            var lblUnrollLoop = il.DefineLabel();
+            var lblUnrollLoopEnd = il.DefineLabel();
+            var lblRemainderLoop = il.DefineLabel();
+            var lblRemainderLoopEnd = il.DefineLabel();
+            var lblTailLoop = il.DefineLabel();
+            var lblTailLoopEnd = il.DefineLabel();
+
+            // unrollEnd = totalSize - unrollStep
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
+
+            // vectorEnd = totalSize - vectorCount
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // === 4x UNROLLED SIMD LOOP ===
+            il.MarkLabel(lblUnrollLoop);
+
+            // if (i > unrollEnd) goto UnrollLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrollLoopEnd);
+
+            // Process 4 vectors
+            for (int n = 0; n < unrollFactor; n++)
+            {
+                long offset = n * vectorCount;
+
+                // Load input vector at (i + offset) * inputSize
+                il.Emit(OpCodes.Ldarg_0); // input
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad(il, key.InputType);
+
+                // Vector operation
+                EmitUnaryVectorOperation(il, key.Op, key.InputType);
+
+                // Store result vector at (i + offset) * outputSize
+                il.Emit(OpCodes.Ldarg_1); // output
+                il.Emit(OpCodes.Ldloc, locI);
+                if (offset > 0)
+                {
+                    il.Emit(OpCodes.Ldc_I8, offset);
+                    il.Emit(OpCodes.Add);
+                }
+                il.Emit(OpCodes.Ldc_I8, (long)outputSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Add);
+                EmitVectorStore(il, key.OutputType);
+            }
+
+            // i += unrollStep
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblUnrollLoop);
+            il.MarkLabel(lblUnrollLoopEnd);
+
+            // === REMAINDER SIMD LOOP (0-3 vectors) ===
+            il.MarkLabel(lblRemainderLoop);
+
+            // if (i > vectorEnd) goto RemainderLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblRemainderLoopEnd);
+
+            // Load input vector
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+
+            // Vector operation
+            EmitUnaryVectorOperation(il, key.Op, key.InputType);
+
+            // Store result vector
+            il.Emit(OpCodes.Ldarg_1); // output
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitVectorStore(il, key.OutputType);
+
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblRemainderLoop);
+            il.MarkLabel(lblRemainderLoopEnd);
+
+            // === SCALAR TAIL LOOP ===
+            il.MarkLabel(lblTailLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
+            il.Emit(OpCodes.Bge, lblTailLoopEnd);
+
+            // output[i] = op(input[i])
+            il.Emit(OpCodes.Ldarg_1); // output
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            if (IsPredicateOp(key.Op))
+            {
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else
+            {
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
+
+            EmitStoreIndirect(il, key.OutputType);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblTailLoop);
+            il.MarkLabel(lblTailLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit scalar loop for contiguous unary operations (no SIMD).
+        /// </summary>
+        private static void EmitUnaryScalarLoop(ILGenerator il, UnaryKernelKey key,
+            int inputSize, int outputSize)
+        {
+            // Args: void* input (0), void* output (1),
+            //       long* strides (2), long* shape (3),
+            //       int ndim (4), long totalSize (5)
+
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // output[i] = op(input[i])
+            // Load output address
+            il.Emit(OpCodes.Ldarg_1); // output
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            // Load input[i]
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            // and the operation itself produces bool. For other ops, convert first.
+            if (IsPredicateOp(key.Op))
+            {
+                // Perform operation on input type - produces bool
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else if (key.Op == UnaryOp.Abs && key.InputType == NPTypeCode.Complex)
+            {
+                // Special case: Complex abs returns magnitude (double), not Real part
+                // NumPy: np.abs(complex) returns float64 array of magnitudes
+                il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                // Result is double - convert to output type if needed
+                if (key.OutputType != NPTypeCode.Double)
+                    EmitConvertTo(il, NPTypeCode.Double, key.OutputType);
+            }
+            else
+            {
+                // Convert to output type, then perform operation
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
+
+            // Store result
+            EmitStoreIndirect(il, key.OutputType);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit strided loop for non-contiguous unary operations.
+        /// Uses coordinate-based iteration.
+        /// </summary>
+        private static void EmitUnaryStridedLoop(ILGenerator il, UnaryKernelKey key,
+            int inputSize, int outputSize)
+        {
+            // Args: void* input (0), void* output (1),
+            //       long* strides (2), long* shape (3),
+            //       int ndim (4), long totalSize (5)
+
+            var locI = il.DeclareLocal(typeof(long)); // linear index
+            var locD = il.DeclareLocal(typeof(int)); // dimension counter
+            var locInputOffset = il.DeclareLocal(typeof(long)); // input offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate (long for int64 shapes)
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation (long for int64 shapes)
+
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+            var lblDimLoop = il.DefineLabel();
+            var lblDimLoopEnd = il.DefineLabel();
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // Main loop
+            il.MarkLabel(lblLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // totalSize
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // Calculate inputOffset from linear index
+            // inputOffset = 0
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            il.Emit(OpCodes.Stloc, locInputOffset);
+
+            // idx = i (for coordinate calculation)
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // For each dimension (right to left): coord = idx % shape[d], idx /= shape[d]
+            // d = ndim - 1
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // ndim
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.MarkLabel(lblDimLoop);
+
+            // if (d < 0) goto DimLoopEnd
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Blt, lblDimLoopEnd);
+
+            // coord = idx % shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_3); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Rem);
+            il.Emit(OpCodes.Stloc, locCoord);
+
+            // idx /= shape[d]
+            il.Emit(OpCodes.Ldloc, locIdx);
+            il.Emit(OpCodes.Ldarg_3); // shape
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Div);
+            il.Emit(OpCodes.Stloc, locIdx);
+
+            // inputOffset += coord * strides[d]
+            il.Emit(OpCodes.Ldloc, locInputOffset);
+            il.Emit(OpCodes.Ldloc, locCoord);
+            il.Emit(OpCodes.Ldarg_2); // strides
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4_8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Ldind_I8);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locInputOffset);
+
+            // d--
+            il.Emit(OpCodes.Ldloc, locD);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locD);
+
+            il.Emit(OpCodes.Br, lblDimLoop);
+            il.MarkLabel(lblDimLoopEnd);
+
+            // Now compute: output[i] = op(input[inputOffset])
+            // Load output address (contiguous output)
+            il.Emit(OpCodes.Ldarg_1); // output
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+
+            // Load input[inputOffset]
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locInputOffset);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.InputType);
+
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            if (IsPredicateOp(key.Op))
+            {
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else if (key.Op == UnaryOp.Abs && key.InputType == NPTypeCode.Complex)
+            {
+                // Special case: Complex abs returns magnitude (double), not Real part
+                il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                if (key.OutputType != NPTypeCode.Double)
+                    EmitConvertTo(il, NPTypeCode.Double, key.OutputType);
+            }
+            else
+            {
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
+
+            // Store
+            EmitStoreIndirect(il, key.OutputType);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I8, 1L);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        #endregion
+    }
+}

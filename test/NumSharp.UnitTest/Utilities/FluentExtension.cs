@@ -462,44 +462,42 @@ namespace NumSharp.UnitTest.Utilities
 
             Subject.size.Should().Be(values.Length, "the method BeOfValues also confirms the sizes are matching with given values.");
 
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsIterator<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    for (int i = 0; i < values.Length; i++)
-                    {
-                        _chain
-                            .ForCondition(hasnext())
-                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // for (int i = 0; i < values.Length; i++)
+                    // {
+                        // _chain
+                            // .ForCondition(hasnext())
+                            // .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
 
-                        var expected = Convert.To#1(values[i]);
-                        var nextval = next();
+                        // var expected = Convert.To#1(values[i]);
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(expected == nextval)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(expected == nextval)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
 		    {
 			    case NPTypeCode.Boolean:
                 {
-                    var iter = Subject.AsIterator<bool>();
+                    var iter = Subject.AsElements<bool>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -517,9 +515,29 @@ namespace NumSharp.UnitTest.Utilities
                     }
                     break;
                 }
+			    case NPTypeCode.SByte:
+                {
+                    var iter = Subject.AsElements<sbyte>();
+                    var next = iter.MoveNext;
+                    var hasnext = iter.HasNext;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        _chain
+                            .ForCondition(hasnext())
+                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+
+                        var expected = Convert.ToSByte(values[i]);
+                        var nextval = next();
+
+                        _chain
+                            .ForCondition(expected == nextval)
+                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: SByte).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    }
+                    break;
+                }
 			    case NPTypeCode.Byte:
                 {
-                    var iter = Subject.AsIterator<byte>();
+                    var iter = Subject.AsElements<byte>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -539,7 +557,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int16:
                 {
-                    var iter = Subject.AsIterator<short>();
+                    var iter = Subject.AsElements<short>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -559,7 +577,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt16:
                 {
-                    var iter = Subject.AsIterator<ushort>();
+                    var iter = Subject.AsElements<ushort>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -579,7 +597,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int32:
                 {
-                    var iter = Subject.AsIterator<int>();
+                    var iter = Subject.AsElements<int>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -600,7 +618,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt32:
                 {
-                    var iter = Subject.AsIterator<uint>();
+                    var iter = Subject.AsElements<uint>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -620,7 +638,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int64:
                 {
-                    var iter = Subject.AsIterator<long>();
+                    var iter = Subject.AsElements<long>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -640,7 +658,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt64:
                 {
-                    var iter = Subject.AsIterator<ulong>();
+                    var iter = Subject.AsElements<ulong>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -660,7 +678,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Char:
                 {
-                    var iter = Subject.AsIterator<char>();
+                    var iter = Subject.AsElements<char>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -680,7 +698,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Double:
                 {
-                    var iter = Subject.AsIterator<double>();
+                    var iter = Subject.AsElements<double>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -700,7 +718,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Single:
                 {
-                    var iter = Subject.AsIterator<float>();
+                    var iter = Subject.AsElements<float>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -720,7 +738,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Decimal:
                 {
-                    var iter = Subject.AsIterator<decimal>();
+                    var iter = Subject.AsElements<decimal>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -742,7 +760,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);
@@ -750,40 +767,38 @@ namespace NumSharp.UnitTest.Utilities
 
         public AndConstraint<NDArrayAssertions> AllValuesBe(object val)
         {
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsIterator<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    var expected = Convert.To#1(val);
-                    for (int i = 0; hasnext(); i++)
-                    {
-                        var nextval = next();
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // var expected = Convert.To#1(val);
+                    // for (int i = 0; hasnext(); i++)
+                    // {
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(expected == nextval)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(expected == nextval)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{val}", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
 		    {
 			    case NPTypeCode.Boolean:
                 {
-                    var iter = Subject.AsIterator<bool>();
+                    var iter = Subject.AsElements<bool>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToBoolean(val);
@@ -799,7 +814,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Byte:
                 {
-                    var iter = Subject.AsIterator<byte>();
+                    var iter = Subject.AsElements<byte>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToByte(val);
@@ -815,7 +830,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int16:
                 {
-                    var iter = Subject.AsIterator<short>();
+                    var iter = Subject.AsElements<short>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToInt16(val);
@@ -831,7 +846,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt16:
                 {
-                    var iter = Subject.AsIterator<ushort>();
+                    var iter = Subject.AsElements<ushort>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToUInt16(val);
@@ -847,7 +862,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int32:
                 {
-                    var iter = Subject.AsIterator<int>();
+                    var iter = Subject.AsElements<int>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToInt32(val);
@@ -863,7 +878,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt32:
                 {
-                    var iter = Subject.AsIterator<uint>();
+                    var iter = Subject.AsElements<uint>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToUInt32(val);
@@ -879,7 +894,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int64:
                 {
-                    var iter = Subject.AsIterator<long>();
+                    var iter = Subject.AsElements<long>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToInt64(val);
@@ -895,7 +910,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt64:
                 {
-                    var iter = Subject.AsIterator<ulong>();
+                    var iter = Subject.AsElements<ulong>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToUInt64(val);
@@ -911,7 +926,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Char:
                 {
-                    var iter = Subject.AsIterator<char>();
+                    var iter = Subject.AsElements<char>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToChar(val);
@@ -927,7 +942,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Double:
                 {
-                    var iter = Subject.AsIterator<double>();
+                    var iter = Subject.AsElements<double>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToDouble(val);
@@ -943,7 +958,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Single:
                 {
-                    var iter = Subject.AsIterator<float>();
+                    var iter = Subject.AsElements<float>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToSingle(val);
@@ -959,7 +974,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Decimal:
                 {
-                    var iter = Subject.AsIterator<decimal>();
+                    var iter = Subject.AsElements<decimal>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     var expected = Convert.ToDecimal(val);
@@ -977,7 +992,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);
@@ -990,44 +1004,42 @@ namespace NumSharp.UnitTest.Utilities
 
             Subject.size.Should().Be(values.Length, "the method BeOfValuesApproximately also confirms the sizes are matching with given values.");
 
-#if _REGEN
-            #region Compute
-		    switch (Subject.typecode)
-		    {
-			    %foreach supported_dtypes,supported_dtypes_lowercase%
-			    case NPTypeCode.#1:
-                {
-                    var iter = Subject.AsIterator<#2>();
-                    var next = iter.MoveNext;
-                    var hasnext = iter.HasNext;
-                    for (int i = 0; i < values.Length; i++)
-                    {
-                        _chain
-                            .ForCondition(hasnext())
-                            .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
+            // #region Compute
+		    // switch (Subject.typecode)
+		    // {
+			    // %foreach supported_dtypes,supported_dtypes_lowercase%
+			    // case NPTypeCode.#1:
+                // {
+                    // var iter = Subject.AsElements<#2>();
+                    // var next = iter.MoveNext;
+                    // var hasnext = iter.HasNext;
+                    // for (int i = 0; i < values.Length; i++)
+                    // {
+                        // _chain
+                            // .ForCondition(hasnext())
+                            // .FailWith($"Expected the NDArray to have atleast {values.Length} but in fact it has size of {i}.");
 
-                        var expected = Convert.To#1(values[i]);
-                        var nextval = next();
+                        // var expected = Convert.To#1(values[i]);
+                        // var nextval = next();
 
-                        _chain
-                            .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
-                            .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
-                    }
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
+                        // _chain
+                            // .ForCondition(Math.Abs(expected - nextval) <= sensitivity)
+                            // .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: #1).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
+                    // }
+                    // break;
+                // }
+			    // %
+			    // default:
+				    // throw new NotSupportedException();
+		    // }
+            // #endregion
 
             #region Compute
 		    switch (Subject.typecode)
 		    {
 			    case NPTypeCode.Boolean:
                 {
-                    var iter = Subject.AsIterator<bool>();
+                    var iter = Subject.AsElements<bool>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1047,7 +1059,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Byte:
                 {
-                    var iter = Subject.AsIterator<byte>();
+                    var iter = Subject.AsElements<byte>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1067,7 +1079,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int16:
                 {
-                    var iter = Subject.AsIterator<short>();
+                    var iter = Subject.AsElements<short>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1087,7 +1099,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt16:
                 {
-                    var iter = Subject.AsIterator<ushort>();
+                    var iter = Subject.AsElements<ushort>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1107,7 +1119,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int32:
                 {
-                    var iter = Subject.AsIterator<int>();
+                    var iter = Subject.AsElements<int>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1127,7 +1139,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt32:
                 {
-                    var iter = Subject.AsIterator<uint>();
+                    var iter = Subject.AsElements<uint>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1147,7 +1159,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Int64:
                 {
-                    var iter = Subject.AsIterator<long>();
+                    var iter = Subject.AsElements<long>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1167,7 +1179,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.UInt64:
                 {
-                    var iter = Subject.AsIterator<ulong>();
+                    var iter = Subject.AsElements<ulong>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1187,7 +1199,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Char:
                 {
-                    var iter = Subject.AsIterator<char>();
+                    var iter = Subject.AsElements<char>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1207,7 +1219,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Double:
                 {
-                    var iter = Subject.AsIterator<double>();
+                    var iter = Subject.AsElements<double>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1227,7 +1239,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Single:
                 {
-                    var iter = Subject.AsIterator<float>();
+                    var iter = Subject.AsElements<float>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1247,7 +1259,7 @@ namespace NumSharp.UnitTest.Utilities
                 }
 			    case NPTypeCode.Decimal:
                 {
-                    var iter = Subject.AsIterator<decimal>();
+                    var iter = Subject.AsElements<decimal>();
                     var next = iter.MoveNext;
                     var hasnext = iter.HasNext;
                     for (int i = 0; i < values.Length; i++)
@@ -1269,7 +1281,6 @@ namespace NumSharp.UnitTest.Utilities
 				    throw new NotSupportedException();
 		    }
             #endregion
-#endif
 
 
             return new AndConstraint<NDArrayAssertions>(this);

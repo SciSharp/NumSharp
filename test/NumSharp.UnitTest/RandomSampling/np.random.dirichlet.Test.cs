@@ -75,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var alpha = new double[] { 1, 2, 3 };
             var samples = rng.dirichlet(alpha, 1000);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 Assert.IsTrue(val >= 0.0 && val <= 1.0, $"Value should be in [0,1], got {val}");
             }

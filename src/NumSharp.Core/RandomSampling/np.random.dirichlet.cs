@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Generic;
 
@@ -85,14 +87,12 @@ namespace NumSharp
         {
             long k = alpha.size;
 
-            // Copy alpha to unmanaged storage
+            // Copy alpha (any layout, any numeric dtype) into a flat double buffer
+            // via NDIter.Copy — handles strided/broadcast alpha + any->double cast.
             var alphaBlock = new UnmanagedMemoryBlock<double>(k);
             var alphaSlice = new ArraySlice<double>(alphaBlock);
-            long idx = 0;
-            foreach (var val in alpha.AsIterator<double>())
-            {
-                alphaSlice[idx++] = val;
-            }
+            var alphaStorage = new UnmanagedStorage(alphaSlice, new Shape(k));
+            NDIter.Copy(alphaStorage, alpha.Storage);
 
             // Validate
             for (long i = 0; i < k; i++)
@@ -165,7 +165,7 @@ namespace NumSharp
         /// <remarks>
         ///     Algorithm from NumPy: Y_i ~ Gamma(alpha_i, 1), X = Y / sum(Y)
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private void SampleDirichletUnmanaged(ArraySlice<double> alpha, long k, ArraySlice<double> data, long offset)
         {
             double sum = 0.0;

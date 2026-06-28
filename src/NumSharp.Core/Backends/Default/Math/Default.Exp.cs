@@ -10,9 +10,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise exponential using IL-generated kernels.
         /// </summary>
-        public override NDArray Exp(NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Exp(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null)
         {
-            return ExecuteUnaryOp(nd, UnaryOp.Exp, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Exp, ResolveUnaryFloatReturnType(nd, typeCode, "exp"), @out, where);
         }
     }
 }

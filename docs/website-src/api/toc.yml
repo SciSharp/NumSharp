@@ -1,240 +1,864 @@
 ### YamlMime:TableOfContent
 items:
-- name: API Reference
-  href: index.md
-
-# Core Types - the essentials
-- name: Core Types
+- uid: NumSharp
+  name: NumSharp
+  type: Namespace
   items:
-  - uid: NumSharp.NDArray
-    name: NDArray
-  - uid: NumSharp.np
-    name: np (Static API)
-  - uid: NumSharp.Shape
-    name: Shape
-  - uid: NumSharp.Slice
-    name: Slice
-  - uid: NumSharp.SliceDef
-    name: SliceDef
-  - uid: NumSharp.Generic.NDArray`1
-    name: NDArray<T>
-
-# Random sampling via np.random
-- name: Random Sampling
-  items:
-  - uid: NumSharp.NumPyRandom
-    name: NumPyRandom (np.random)
-  - uid: NumSharp.Randomizer
-    name: Randomizer
-  - uid: NumSharp.NativeRandomState
-    name: NativeRandomState
-
-# Linear algebra via np.linalg
-- name: Linear Algebra
-  items:
-  - uid: NumSharp.np.linalg
-    name: np.linalg
-
-# Broadcasting
-- name: Broadcasting
-  items:
-  - uid: NumSharp.np.Broadcast
-    name: np.Broadcast
-  - uid: NumSharp.BroadcastInfo
-    name: BroadcastInfo
-  - uid: NumSharp.ViewInfo
-    name: ViewInfo
-
-# Type Information
-- name: Type System
-  items:
-  - uid: NumSharp.NPTypeCode
-    name: NPTypeCode
-  - uid: NumSharp.NPTypeCodeExtensions
-    name: NPTypeCodeExtensions
-  - uid: NumSharp.DType
-    name: DType
-
-# File I/O
-- name: File I/O
-  items:
-  - uid: NumSharp.NpzDictionary
-    name: NpzDictionary
-  - uid: NumSharp.NpzDictionary`1
-    name: NpzDictionary<T>
-
-# Iteration
-- name: Iterators
-  items:
-  - uid: NumSharp.NDIterator
-    name: NDIterator
-  - uid: NumSharp.NDIterator`1
-    name: NDIterator<T>
-  - uid: NumSharp.NDIteratorExtensions
-    name: NDIteratorExtensions
-  - uid: NumSharp.MultiIterator
-    name: MultiIterator
-  - uid: NumSharp.IteratorType
-    name: IteratorType
-  - uid: NumSharp.MoveNextReferencedDelegate`1
-    name: MoveNextReferencedDelegate<T>
-
-# Exceptions
-- name: Exceptions
-  items:
-  - uid: NumSharp.INumSharpException
-    name: INumSharpException
-  - uid: NumSharp.NumSharpException
-    name: NumSharpException
+  - uid: NumSharp.ArrayFlags
+    name: ArrayFlags
+    type: Enum
+  - uid: NumSharp.AxisError
+    name: AxisError
+    type: Class
   - uid: NumSharp.AxisOutOfRangeException
     name: AxisOutOfRangeException
+    type: Class
+  - uid: NumSharp.BackendType
+    name: BackendType
+    type: Enum
+  - uid: NumSharp.Char8
+    name: Char8
+    type: Struct
+  - uid: NumSharp.Char8SpanExtensions
+    name: Char8SpanExtensions
+    type: Class
+  - uid: NumSharp.DType
+    name: DType
+    type: Class
+  - uid: NumSharp.DateTime64
+    name: DateTime64
+    type: Struct
+  - uid: NumSharp.IIndex
+    name: IIndex
+    type: Interface
+  - uid: NumSharp.INumSharpException
+    name: INumSharpException
+    type: Interface
   - uid: NumSharp.IncorrectShapeException
     name: IncorrectShapeException
+    type: Class
   - uid: NumSharp.IncorrectSizeException
     name: IncorrectSizeException
+    type: Class
   - uid: NumSharp.IncorrectTypeException
     name: IncorrectTypeException
-
-# Internals section - Storage & Backends
-- name: Internals
+    type: Class
+  - uid: NumSharp.IndexError
+    name: IndexError
+    type: Class
+  - uid: NumSharp.Kwargs
+    name: Kwargs
+    type: Class
+  - uid: NumSharp.MT19937
+    name: MT19937
+    type: Class
+  - uid: NumSharp.MethodImplOptionsConstants
+    name: MethodImplOptionsConstants
+    type: Class
+  - uid: NumSharp.NDArray
+    name: NDArray
+    type: Class
+  - uid: NumSharp.NDArray._Unsafe
+    name: NDArray._Unsafe
+    type: Struct
+  - uid: NumSharp.NDArray._Unsafe._Pinning
+    name: NDArray._Unsafe._Pinning
+    type: Struct
+  - uid: NumSharp.NPTypeCode
+    name: NPTypeCode
+    type: Enum
+  - uid: NumSharp.NPTypeCodeExtensions
+    name: NPTypeCodeExtensions
+    type: Class
+  - uid: NumSharp.NPTypeKind
+    name: NPTypeKind
+    type: Enum
+  - uid: NumSharp.NativeRandomState
+    name: NativeRandomState
+    type: Struct
+  - uid: NumSharp.NpzDictionary
+    name: NpzDictionary
+    type: Class
+  - uid: NumSharp.NpzDictionary`1
+    name: NpzDictionary<T>
+    type: Class
+  - uid: NumSharp.NumPyRandom
+    name: NumPyRandom
+    type: Class
+  - uid: NumSharp.NumSharpException
+    name: NumSharpException
+    type: Class
+  - uid: NumSharp.Shape
+    name: Shape
+    type: Struct
+  - uid: NumSharp.Slice
+    name: Slice
+    type: Class
+  - uid: NumSharp.SliceDef
+    name: SliceDef
+    type: Struct
+  - uid: NumSharp.TensorEngine
+    name: TensorEngine
+    type: Class
+  - uid: NumSharp.TypeError
+    name: TypeError
+    type: Class
+  - uid: NumSharp.ValueError
+    name: ValueError
+    type: Class
+  - uid: NumSharp.finfo
+    name: finfo
+    type: Class
+  - uid: NumSharp.iinfo
+    name: iinfo
+    type: Class
+  - uid: NumSharp.np
+    name: np
+    type: Class
+  - uid: NumSharp.np.Broadcast
+    name: np.Broadcast
+    type: Class
+  - uid: NumSharp.np.PadFunc
+    name: np.PadFunc
+    type: Delegate
+- uid: NumSharp.Backends
+  name: NumSharp.Backends
+  type: Namespace
   items:
-  - name: Backends
-    items:
-    - uid: NumSharp.TensorEngine
-      name: TensorEngine
-    - uid: NumSharp.Backends.DefaultEngine
-      name: DefaultEngine
-    - uid: NumSharp.Backends.UnmanagedStorage
-      name: UnmanagedStorage
-    - uid: NumSharp.Backends.BackendFactory
-      name: BackendFactory
-    - uid: NumSharp.BackendType
-      name: BackendType
-    - uid: NumSharp.StorageType
-      name: StorageType
-  - name: Unmanaged Memory
-    items:
-    - uid: NumSharp.Backends.Unmanaged.ArraySlice
-      name: ArraySlice
-    - uid: NumSharp.Backends.Unmanaged.ArraySlice`1
-      name: ArraySlice<T>
-    - uid: NumSharp.Backends.Unmanaged.IArraySlice
-      name: IArraySlice
-    - uid: NumSharp.Backends.Unmanaged.IMemoryBlock
-      name: IMemoryBlock
-    - uid: NumSharp.Backends.Unmanaged.IMemoryBlock`1
-      name: IMemoryBlock<T>
-    - uid: NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock
-      name: IUnmanagedMemoryBlock
-    - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock
-      name: UnmanagedMemoryBlock
-    - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock`1
-      name: UnmanagedMemoryBlock<T>
-    - uid: NumSharp.Backends.Unmanaged.UnmanagedHelper
-      name: UnmanagedHelper
-  - name: Memory Pools
-    items:
-    - uid: NumSharp.Unmanaged.Memory.ScalarMemoryPool
-      name: ScalarMemoryPool
-    - uid: NumSharp.Unmanaged.Memory.StackedMemoryPool
-      name: StackedMemoryPool
-  - name: NDArray Internals
-    items:
-    - uid: NumSharp.NDArray._Unsafe
-      name: NDArray._Unsafe
-    - uid: NumSharp.NDArray._Unsafe._Pinning
-      name: NDArray._Unsafe._Pinning
-    - uid: NumSharp.IIndex
-      name: IIndex
-    - uid: NumSharp.Kwargs
-      name: Kwargs
-
-# Utilities
-- name: Utilities
+  - uid: NumSharp.Backends.BackendFactory
+    name: BackendFactory
+    type: Class
+  - uid: NumSharp.Backends.DefaultEngine
+    name: DefaultEngine
+    type: Class
+  - uid: NumSharp.Backends.MultiThread
+    name: MultiThread
+    type: Class
+  - uid: NumSharp.Backends.UnmanagedStorage
+    name: UnmanagedStorage
+    type: Class
+- uid: NumSharp.Backends.Iteration
+  name: NumSharp.Backends.Iteration
+  type: Namespace
   items:
-  - name: Type Conversion
-    items:
-    - uid: NumSharp.Utilities.Converts
-      name: Converts
-    - uid: NumSharp.Utilities.Converts`1
-      name: Converts<T>
-    - uid: NumSharp.Utilities.NonGenericConvert
-      name: NonGenericConvert
-    - uid: NumSharp.Utilities.TypelessConvert
-      name: TypelessConvert
-    - uid: NumSharp.Utilities.TypelessConvertDelegate
-      name: TypelessConvertDelegate
-    - uid: NumSharp.Utilities.ArrayConvert
-      name: ArrayConvert
-  - name: Type Info
-    items:
-    - uid: NumSharp.Utilities.InfoOf`1
-      name: InfoOf<T>
-    - uid: NumSharp.Utilities.NumberInfo
-      name: NumberInfo
-  - name: Arrays
-    items:
-    - uid: NumSharp.Utilities.Arrays
-      name: Arrays
-    - uid: NumSharp.Utilities.ArraysExtensions
-      name: ArraysExtensions
-  - name: Coordinate Incrementors
-    items:
-    - uid: NumSharp.Utilities.NDCoordinatesIncrementor
-      name: NDCoordinatesIncrementor
-    - uid: NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting
-      name: NDCoordinatesIncrementorAutoResetting
-    - uid: NumSharp.Utilities.NDCoordinatesAxisIncrementor
-      name: NDCoordinatesAxisIncrementor
-    - uid: NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor
-      name: NDCoordinatesLeftToAxisIncrementor
-    - uid: NumSharp.Utilities.NDExtendedCoordinatesIncrementor
-      name: NDExtendedCoordinatesIncrementor
-    - uid: NumSharp.Utilities.NDOffsetIncrementor
-      name: NDOffsetIncrementor
-    - uid: NumSharp.Utilities.NDOffsetIncrementorAutoresetting
-      name: NDOffsetIncrementorAutoresetting
-    - uid: NumSharp.Utilities.ValueCoordinatesIncrementor
-      name: ValueCoordinatesIncrementor
-    - uid: NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler
-      name: ValueCoordinatesIncrementor.EndCallbackHandler
-    - uid: NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting
-      name: ValueCoordinatesIncrementorAutoResetting
-    - uid: NumSharp.Utilities.ValueOffsetIncrementor
-      name: ValueOffsetIncrementor
-    - uid: NumSharp.Utilities.ValueOffsetIncrementorAutoresetting
-      name: ValueOffsetIncrementorAutoresetting
-  - name: Collections
-    items:
-    - uid: NumSharp.Utilities.Hashset`1
-      name: Hashset<T>
-    - uid: NumSharp.Utilities.Hashset`1.Enumerator
-      name: Hashset<T>.Enumerator
-    - uid: NumSharp.Utilities.ConcurrentHashset`1
-      name: ConcurrentHashset<T>
-  - name: LINQ Extensions
-    items:
-    - uid: NumSharp.Utilities.Linq.IEnumeratorExtensions
-      name: IEnumeratorExtensions
-    - uid: NumSharp.Utilities.Linq.IExtremaEnumerable`1
-      name: IExtremaEnumerable<T>
-  - name: Other
-    items:
-    - uid: NumSharp.Utilities.SteppingExtension
-      name: SteppingExtension
-    - uid: NumSharp.Utilities.py
-      name: py
-
-# Extensions
-- name: Extensions
+  - uid: NumSharp.Backends.Iteration.ArrayNode
+    name: ArrayNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.BinaryNode
+    name: BinaryNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.CallNode
+    name: CallNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.ComparisonNode
+    name: ComparisonNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.ComplexAllKernel
+    name: ComplexAllKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexAnyKernel
+    name: ComplexAnyKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexArgAccumulator
+    name: ComplexArgAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexArgMaxKernel
+    name: ComplexArgMaxKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexArgMinKernel
+    name: ComplexArgMinKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexMaxKernel
+    name: ComplexMaxKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexMinKernel
+    name: ComplexMinKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexMinMaxAccumulator
+    name: ComplexMinMaxAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexProdKernel
+    name: ComplexProdKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ComplexSumKernel
+    name: ComplexSumKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ConstNode
+    name: ConstNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.CountNonZeroKernel`1
+    name: CountNonZeroKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.CumProdAxisKernel`1
+    name: CumProdAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.CumSumAxisKernel`1
+    name: CumSumAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.DelegateSlots
+    name: DelegateSlots
+    type: Class
+  - uid: NumSharp.Backends.Iteration.HalfAllKernel
+    name: HalfAllKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfAnyKernel
+    name: HalfAnyKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfArgAccumulator
+    name: HalfArgAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfArgMaxKernel
+    name: HalfArgMaxKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfArgMinKernel
+    name: HalfArgMinKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfMaxKernel
+    name: HalfMaxKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfMinKernel
+    name: HalfMinKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfMinMaxAccumulator
+    name: HalfMinMaxAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfProdKernel
+    name: HalfProdKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.HalfSumKernel
+    name: HalfSumKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.INDAxisDoubleReductionKernel
+    name: INDAxisDoubleReductionKernel
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDAxisNumericReductionKernel`1
+    name: INDAxisNumericReductionKernel<T>
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDAxisSameTypeKernel`1
+    name: INDAxisSameTypeKernel<T>
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDBooleanReductionKernel`1
+    name: INDBooleanReductionKernel<T>
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDInnerLoop
+    name: INDInnerLoop
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDIterKernel
+    name: INDIterKernel
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.INDReducingInnerLoop`1
+    name: INDReducingInnerLoop<TAccum>
+    type: Interface
+  - uid: NumSharp.Backends.Iteration.InputNode
+    name: InputNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.MemOverlap
+    name: MemOverlap
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.MinMaxNode
+    name: MinMaxNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDAllKernel`1
+    name: NDAllKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDAnyKernel`1
+    name: NDAnyKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDArrayMethodFlags
+    name: NDArrayMethodFlags
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDAxisIter
+    name: NDAxisIter
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDAxisState
+    name: NDAxisState
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDExpr
+    name: NDExpr
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDExprCompileContext
+    name: NDExprCompileContext
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDExprReduceKind
+    name: NDExprReduceKind
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDFlatIterator
+    name: NDFlatIterator
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDInnerLoopFunc
+    name: NDInnerLoopFunc
+    type: Delegate
+  - uid: NumSharp.Backends.Iteration.NDIter
+    name: NDIter
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterBufferManager
+    name: NDIterBufferManager
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterCasting
+    name: NDIterCasting
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterCoalescing
+    name: NDIterCoalescing
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterConstants
+    name: NDIterConstants
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterExecution
+    name: NDIterExecution
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterExecutionPath
+    name: NDIterExecutionPath
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDIterFlagMasks
+    name: NDIterFlagMasks
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterFlags
+    name: NDIterFlags
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDIterGetMultiIndexFunc
+    name: NDIterGetMultiIndexFunc
+    type: Delegate
+  - uid: NumSharp.Backends.Iteration.NDIterGlobalFlags
+    name: NDIterGlobalFlags
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDIterInnerLoopFunc
+    name: NDIterInnerLoopFunc
+    type: Delegate
+  - uid: NumSharp.Backends.Iteration.NDIterNextFunc
+    name: NDIterNextFunc
+    type: Delegate
+  - uid: NumSharp.Backends.Iteration.NDIterOpFlags
+    name: NDIterOpFlags
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDIterPathSelector
+    name: NDIterPathSelector
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDIterPerOpFlags
+    name: NDIterPerOpFlags
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NDIterRef
+    name: NDIterRef
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDIterState
+    name: NDIterState
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDIterUtils
+    name: NDIterUtils
+    type: Class
+  - uid: NumSharp.Backends.Iteration.NDMaxAxisKernel`1
+    name: NDMaxAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDMinAxisKernel`1
+    name: NDMinAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDProdAxisKernel`1
+    name: NDProdAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NDSumAxisKernel`1
+    name: NDSumAxisKernel<T>
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NPY_CASTING
+    name: NPY_CASTING
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NPY_ORDER
+    name: NPY_ORDER
+    type: Enum
+  - uid: NumSharp.Backends.Iteration.NanMaxDoubleKernel
+    name: NanMaxDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMaxFloatKernel
+    name: NanMaxFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMaxHalfKernel
+    name: NanMaxHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanAccumulator
+    name: NanMeanAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanComplexAccumulator
+    name: NanMeanComplexAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanComplexKernel
+    name: NanMeanComplexKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanDoubleKernel
+    name: NanMeanDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanFloatKernel
+    name: NanMeanFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMeanHalfKernel
+    name: NanMeanHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMinDoubleKernel
+    name: NanMinDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMinFloatKernel
+    name: NanMinFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMinHalfKernel
+    name: NanMinHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMinMaxDoubleAccumulator
+    name: NanMinMaxDoubleAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanMinMaxFloatAccumulator
+    name: NanMinMaxFloatAccumulator
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanProdDoubleKernel
+    name: NanProdDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanProdFloatKernel
+    name: NanProdFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanProdHalfKernel
+    name: NanProdHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSquaredDeviationComplexKernel
+    name: NanSquaredDeviationComplexKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSquaredDeviationDoubleKernel
+    name: NanSquaredDeviationDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSquaredDeviationFloatKernel
+    name: NanSquaredDeviationFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSquaredDeviationHalfKernel
+    name: NanSquaredDeviationHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSumComplexKernel
+    name: NanSumComplexKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSumDoubleKernel
+    name: NanSumDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSumFloatKernel
+    name: NanSumFloatKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.NanSumHalfKernel
+    name: NanSumHalfKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.ReduceNode
+    name: ReduceNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.StdAxisDoubleKernel
+    name: StdAxisDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.UnaryNode
+    name: UnaryNode
+    type: Class
+  - uid: NumSharp.Backends.Iteration.VarAxisDoubleKernel
+    name: VarAxisDoubleKernel
+    type: Struct
+  - uid: NumSharp.Backends.Iteration.WhereNode
+    name: WhereNode
+    type: Class
+- uid: NumSharp.Backends.Kernels
+  name: NumSharp.Backends.Kernels
+  type: Namespace
+  items:
+  - uid: NumSharp.Backends.Kernels.ArgwhereCountKernel
+    name: ArgwhereCountKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ArgwhereExpandKernel
+    name: ArgwhereExpandKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ArgwhereFlatKernel
+    name: ArgwhereFlatKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.AxisReductionKernel
+    name: AxisReductionKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.AxisReductionKernelKey
+    name: AxisReductionKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.BinaryOp
+    name: BinaryOp
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.BinaryScalarKernelKey
+    name: BinaryScalarKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ComparisonKernel
+    name: ComparisonKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ComparisonKernelKey
+    name: ComparisonKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ComparisonOp
+    name: ComparisonOp
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.ComparisonScalarKernelKey
+    name: ComparisonScalarKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ContiguousKernel`1
+    name: ContiguousKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.CopyExecutionPath
+    name: CopyExecutionPath
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.CopyKernel
+    name: CopyKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.CopyKernelKey
+    name: CopyKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.CumulativeAxisKernel
+    name: CumulativeAxisKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.CumulativeAxisKernelKey
+    name: CumulativeAxisKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.CumulativeKernel
+    name: CumulativeKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.CumulativeKernelKey
+    name: CumulativeKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator
+    name: DirectILKernelGenerator
+    type: Class
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.CastKernel
+    name: DirectILKernelGenerator.CastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ClipBoundsKind
+    name: DirectILKernelGenerator.ClipBoundsKind
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ClipKernel
+    name: DirectILKernelGenerator.ClipKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ClipMode
+    name: DirectILKernelGenerator.ClipMode
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.InnerCastLoop
+    name: DirectILKernelGenerator.InnerCastLoop
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.MaskedCastKernel
+    name: DirectILKernelGenerator.MaskedCastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.QuantileKernel
+    name: DirectILKernelGenerator.QuantileKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.RepeatBroadcastKernel
+    name: DirectILKernelGenerator.RepeatBroadcastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.RepeatPerJKernel
+    name: DirectILKernelGenerator.RepeatPerJKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.SearchSortedKernel
+    name: DirectILKernelGenerator.SearchSortedKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ShiftArrayKernel`1
+    name: DirectILKernelGenerator.ShiftArrayKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.ShiftScalarKernel`1
+    name: DirectILKernelGenerator.ShiftScalarKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.StridedCastKernel
+    name: DirectILKernelGenerator.StridedCastKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.DirectILKernelGenerator.WeightedSumKernelKey
+    name: DirectILKernelGenerator.WeightedSumKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ElementReductionKernel
+    name: ElementReductionKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ElementReductionKernelKey
+    name: ElementReductionKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ExecutionPath
+    name: ExecutionPath
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.FilterAxisKernel
+    name: FilterAxisKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.GeneratedDelegates
+    name: GeneratedDelegates
+    type: Class
+  - uid: NumSharp.Backends.Kernels.ILKernelGenerator
+    name: ILKernelGenerator
+    type: Class
+  - uid: NumSharp.Backends.Kernels.ILKernelGenerator.ReduceKernelKey
+    name: ILKernelGenerator.ReduceKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.ILKernelGenerator.ScanAxisAux
+    name: ILKernelGenerator.ScanAxisAux
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.IndexCollector
+    name: IndexCollector
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.IndicesKernel
+    name: IndicesKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.MatMul2DKernel`1
+    name: MatMul2DKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.MixedTypeKernel
+    name: MixedTypeKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.MixedTypeKernelKey
+    name: MixedTypeKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.NonZeroPerDimKernel
+    name: NonZeroPerDimKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.PlaceKernel
+    name: PlaceKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.PutKernel
+    name: PutKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.RavelMultiIndexKernel
+    name: RavelMultiIndexKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.ReductionOp
+    name: ReductionOp
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.ReductionOpExtensions
+    name: ReductionOpExtensions
+    type: Class
+  - uid: NumSharp.Backends.Kernels.ReductionTypeExtensions
+    name: ReductionTypeExtensions
+    type: Class
+  - uid: NumSharp.Backends.Kernels.SimdDot
+    name: SimdDot
+    type: Class
+  - uid: NumSharp.Backends.Kernels.SimdMatMul
+    name: SimdMatMul
+    type: Class
+  - uid: NumSharp.Backends.Kernels.StrideDetector
+    name: StrideDetector
+    type: Class
+  - uid: NumSharp.Backends.Kernels.StridedUnaryKernel
+    name: StridedUnaryKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.TakeKernel
+    name: TakeKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.TraceKernel
+    name: TraceKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.TypedElementReductionKernel`1
+    name: TypedElementReductionKernel<TResult>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.UnaryKernel
+    name: UnaryKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.UnaryKernelKey
+    name: UnaryKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.UnaryOp
+    name: UnaryOp
+    type: Enum
+  - uid: NumSharp.Backends.Kernels.UnaryScalarKernelKey
+    name: UnaryScalarKernelKey
+    type: Struct
+  - uid: NumSharp.Backends.Kernels.UnravelIndexKernel
+    name: UnravelIndexKernel
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.WhereKernel`1
+    name: WhereKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.WhereScalarXKernel`1
+    name: WhereScalarXKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.WhereScalarXYKernel`1
+    name: WhereScalarXYKernel<T>
+    type: Delegate
+  - uid: NumSharp.Backends.Kernels.WhereScalarYKernel`1
+    name: WhereScalarYKernel<T>
+    type: Delegate
+- uid: NumSharp.Backends.Printing
+  name: NumSharp.Backends.Printing
+  type: Namespace
+  items:
+  - uid: NumSharp.Backends.Printing.PrintOptions
+    name: PrintOptions
+    type: Class
+- uid: NumSharp.Backends.Unmanaged
+  name: NumSharp.Backends.Unmanaged
+  type: Namespace
+  items:
+  - uid: NumSharp.Backends.Unmanaged.ArraySlice
+    name: ArraySlice
+    type: Class
+  - uid: NumSharp.Backends.Unmanaged.ArraySlice`1
+    name: ArraySlice<T>
+    type: Struct
+  - uid: NumSharp.Backends.Unmanaged.IArraySlice
+    name: IArraySlice
+    type: Interface
+  - uid: NumSharp.Backends.Unmanaged.IMemoryBlock
+    name: IMemoryBlock
+    type: Interface
+  - uid: NumSharp.Backends.Unmanaged.IMemoryBlock`1
+    name: IMemoryBlock<T>
+    type: Interface
+  - uid: NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock
+    name: IUnmanagedMemoryBlock
+    type: Interface
+  - uid: NumSharp.Backends.Unmanaged.UnmanagedHelper
+    name: UnmanagedHelper
+    type: Class
+  - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock
+    name: UnmanagedMemoryBlock
+    type: Class
+  - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock`1
+    name: UnmanagedMemoryBlock<T>
+    type: Struct
+- uid: NumSharp.Backends.Unmanaged.Pooling
+  name: NumSharp.Backends.Unmanaged.Pooling
+  type: Namespace
+  items:
+  - uid: NumSharp.Backends.Unmanaged.Pooling.SizeBucketedBufferPool
+    name: SizeBucketedBufferPool
+    type: Class
+- uid: NumSharp.Extensions
+  name: NumSharp.Extensions
+  type: Namespace
   items:
   - uid: NumSharp.Extensions.LinqExtensions
     name: LinqExtensions
-
-# External Dependencies
-- name: External
+    type: Class
+- uid: NumSharp.Generic
+  name: NumSharp.Generic
+  type: Namespace
   items:
-  - uid: DecimalMath.DecimalEx
-    name: DecimalEx (DecimalMath)
-
+  - uid: NumSharp.Generic.NDArray`1
+    name: NDArray<TDType>
+    type: Class
+- uid: NumSharp.Statistics
+  name: NumSharp.Statistics
+  type: Namespace
+  items:
+  - uid: NumSharp.Statistics.QuantileMethod
+    name: QuantileMethod
+    type: Enum
+- uid: NumSharp.Unmanaged.Memory
+  name: NumSharp.Unmanaged.Memory
+  type: Namespace
+  items:
+  - uid: NumSharp.Unmanaged.Memory.ScalarMemoryPool
+    name: ScalarMemoryPool
+    type: Class
+  - uid: NumSharp.Unmanaged.Memory.StackedMemoryPool
+    name: StackedMemoryPool
+    type: Class
+- uid: NumSharp.Utilities
+  name: NumSharp.Utilities
+  type: Namespace
+  items:
+  - uid: NumSharp.Utilities.ArrayConvert
+    name: ArrayConvert
+    type: Class
+  - uid: NumSharp.Utilities.Arrays
+    name: Arrays
+    type: Class
+  - uid: NumSharp.Utilities.ArraysExtensions
+    name: ArraysExtensions
+    type: Class
+  - uid: NumSharp.Utilities.ConcurrentHashset`1
+    name: ConcurrentHashset<T>
+    type: Class
+  - uid: NumSharp.Utilities.Converts
+    name: Converts
+    type: Class
+  - uid: NumSharp.Utilities.Converts`1
+    name: Converts<T>
+    type: Class
+  - uid: NumSharp.Utilities.Hashset`1
+    name: Hashset<T>
+    type: Class
+  - uid: NumSharp.Utilities.Hashset`1.Enumerator
+    name: Hashset<T>.Enumerator
+    type: Struct
+  - uid: NumSharp.Utilities.InfoOf
+    name: InfoOf
+    type: Class
+  - uid: NumSharp.Utilities.InfoOf`1
+    name: InfoOf<T>
+    type: Class
+  - uid: NumSharp.Utilities.NDComplexMath
+    name: NDComplexMath
+    type: Class
+  - uid: NumSharp.Utilities.NDCoordinatesAxisIncrementor
+    name: NDCoordinatesAxisIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDCoordinatesIncrementor
+    name: NDCoordinatesIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting
+    name: NDCoordinatesIncrementorAutoResetting
+    type: Class
+  - uid: NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor
+    name: NDCoordinatesLeftToAxisIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDDivision
+    name: NDDivision
+    type: Class
+  - uid: NumSharp.Utilities.NDExtendedCoordinatesIncrementor
+    name: NDExtendedCoordinatesIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDIntegerPower
+    name: NDIntegerPower
+    type: Class
+  - uid: NumSharp.Utilities.NDOffsetIncrementor
+    name: NDOffsetIncrementor
+    type: Class
+  - uid: NumSharp.Utilities.NDOffsetIncrementorAutoresetting
+    name: NDOffsetIncrementorAutoresetting
+    type: Class
+  - uid: NumSharp.Utilities.NonGenericConvert
+    name: NonGenericConvert
+    type: Class
+  - uid: NumSharp.Utilities.NpFunc
+    name: NpFunc
+    type: Class
+  - uid: NumSharp.Utilities.NumberInfo
+    name: NumberInfo
+    type: Class
+  - uid: NumSharp.Utilities.ReadOnlyUnmanagedSpan`1
+    name: ReadOnlyUnmanagedSpan<T>
+    type: Struct
+  - uid: NumSharp.Utilities.ReadOnlyUnmanagedSpan`1.Enumerator
+    name: ReadOnlyUnmanagedSpan<T>.Enumerator
+    type: Struct
+  - uid: NumSharp.Utilities.SteppingExtension
+    name: SteppingExtension
+    type: Class
+  - uid: NumSharp.Utilities.TypelessConvert
+    name: TypelessConvert
+    type: Class
+  - uid: NumSharp.Utilities.TypelessConvertDelegate
+    name: TypelessConvertDelegate
+    type: Delegate
+  - uid: NumSharp.Utilities.UnmanagedBuffer
+    name: UnmanagedBuffer
+    type: Class
+  - uid: NumSharp.Utilities.UnmanagedSpanExtensions
+    name: UnmanagedSpanExtensions
+    type: Class
+  - uid: NumSharp.Utilities.UnmanagedSpan`1
+    name: UnmanagedSpan<T>
+    type: Struct
+  - uid: NumSharp.Utilities.UnmanagedSpan`1.Enumerator
+    name: UnmanagedSpan<T>.Enumerator
+    type: Struct
+  - uid: NumSharp.Utilities.ValueCoordinatesIncrementor
+    name: ValueCoordinatesIncrementor
+    type: Struct
+  - uid: NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler
+    name: ValueCoordinatesIncrementor.EndCallbackHandler
+    type: Delegate
+  - uid: NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting
+    name: ValueCoordinatesIncrementorAutoResetting
+    type: Struct
+  - uid: NumSharp.Utilities.ValueOffsetIncrementor
+    name: ValueOffsetIncrementor
+    type: Struct
+  - uid: NumSharp.Utilities.ValueOffsetIncrementorAutoresetting
+    name: ValueOffsetIncrementorAutoresetting
+    type: Struct
+  - uid: NumSharp.Utilities.py
+    name: py
+    type: Class
 memberLayout: SamePage

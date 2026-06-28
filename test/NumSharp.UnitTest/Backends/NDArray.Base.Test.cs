@@ -531,7 +531,7 @@ namespace NumSharp.UnitTest.Backends
 
             scalar.@base.Should().BeNull(); // Owns its data
 
-            var view = scalar[":"];
+            var view = scalar["..."];   // NumPy-valid 0-d view (scalar[:] raises "too many indices")
             view.@base.Should().NotBeNull();
             view.@base!.Storage.Should().BeSameAs(scalar.Storage);
         }

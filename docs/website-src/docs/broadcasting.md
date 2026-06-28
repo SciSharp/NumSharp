@@ -89,6 +89,40 @@ Also available as:
 NDArray[] results = np.broadcast_arrays(arr1, arr2, arr3);
 ```
 
+### `np.broadcast(array1, array2, ...)`
+
+Returns an object that *encapsulates* the broadcast of its operands — NumSharp's port of NumPy's `numpy.broadcast`. It resolves the common shape without materializing data and exposes a flat iterator per operand.
+
+```csharp
+var a = np.array(new long[] { 1, 2, 3 });        // (3,)
+var b = np.array(new long[,] { { 10 }, { 20 } });  // (2, 1)
+var bc = np.broadcast(a, b);
+
+bc.shape;     // (2, 3)
+bc.ndim;      // 2   (also bc.nd)
+bc.size;      // 6
+bc.numiter;   // 2   (operand count == bc.iters.Length)
+```
+
+**Per-operand iterators (`.iters`).** Each entry is a `NDFlatIterator` (NumSharp's analog of NumPy's `flatiter`) that yields its operand stretched to the result shape, in C-order:
+
+```csharp
+bc.iters[0];  // yields 1, 2, 3, 1, 2, 3
+bc.iters[1];  // yields 10, 10, 10, 20, 20, 20
+```
+
+**Iterating the object** yields one tuple of per-operand values per element, advancing a live `.index` cursor (0 → `size`); `.reset()` rewinds it:
+
+```csharp
+foreach (object[] vals in bc)        // (1,10) (2,10) (3,10) (1,20) (2,20) (3,20)
+    Console.WriteLine($"{vals[0]} + {vals[1]}");
+
+bc.index;     // 6  (== size, exhausted)
+bc.reset();   // bc.index == 0 again
+```
+
+`np.broadcast` accepts **any number of operands** — NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp imposes no cap, matching its `NDIter`. With zero operands it is a 0-d broadcast (`size` 1, `numiter` 0). Unlike NumPy's one-shot flatiters, the `.iters` are re-enumerable.
+
 ### Implicit Broadcasting
 
 All arithmetic operators broadcast automatically:
@@ -231,6 +265,7 @@ var col = vec[np.newaxis].T;          // (3, 1)
 | `np.broadcast_to(arr, shape)` | Broadcast array to specific shape (returns view) |
 | `np.broadcast_arrays(a, b)` | Broadcast two arrays to common shape (returns tuple) |
 | `np.broadcast_arrays(params NDArray[])` | Broadcast multiple arrays (returns array) |
+| `np.broadcast(a, b, …)` | Broadcast object — common shape + per-operand `.iters`, iterable with `.index`/`.reset()` (NumPy's `numpy.broadcast`) |
 
 | Property | Description |
 |----------|-------------|

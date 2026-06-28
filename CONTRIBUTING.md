@@ -137,7 +137,7 @@ public partial class DefaultEngine
 {
     public override NDArray NewOperation(in NDArray nd, int? axis = null)
     {
-        // Type switch using Regen pattern
+        // Type switch
         switch (nd.GetTypeCode)
         {
             case NPTypeCode.Double: return NewOperation_Double(nd, axis);
@@ -165,21 +165,11 @@ public static partial class np
 }
 ```
 
-### Pattern 3: Type Switch (Regen Style)
+### Pattern 3: Type Switch
 
-For operations that need type-specific code:
+For operations that need type-specific code, switch over `typecode` and dispatch to a generic helper:
 
 ```csharp
-#if _REGEN
-    switch (arr.typecode)
-    {
-        %foreach supported_dtypes,supported_dtypes_lowercase%
-        case NPTypeCode.#1: return Process<#2>(arr);
-        %
-        default:
-            throw new NotSupportedException();
-    }
-#else
     switch (arr.typecode)
     {
         case NPTypeCode.Boolean: return Process<bool>(arr);
@@ -197,7 +187,6 @@ For operations that need type-specific code:
         default:
             throw new NotSupportedException();
     }
-#endif
 ```
 
 ---

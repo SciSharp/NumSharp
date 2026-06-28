@@ -153,14 +153,14 @@ namespace NumSharp
         /// <summary>The raw 100-ns tick count (full int64; <c>long.MinValue</c> for NaT).</summary>
         public long Ticks
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             get => _ticks;
         }
 
         /// <summary><see langword="true"/> iff this instance is Not-a-Time (<c>Ticks == long.MinValue</c>).</summary>
         public bool IsNaT
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             get => _ticks == NaTTicks;
         }
 
@@ -170,7 +170,7 @@ namespace NumSharp
         /// </summary>
         public bool IsValidDateTime
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             get => (ulong)_ticks <= (ulong)DotNetMaxTicks;
         }
 
@@ -179,27 +179,27 @@ namespace NumSharp
         // ---------------------------------------------------------------------
 
         /// <summary>Implicit widening from <see cref="System.DateTime"/> (drops Kind).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static implicit operator DateTime64(DateTime value) => new DateTime64(value.Ticks);
 
         /// <summary>Implicit widening from <see cref="System.DateTimeOffset"/> (via UtcTicks).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static implicit operator DateTime64(DateTimeOffset value) => new DateTime64(value.UtcTicks);
 
         /// <summary>Implicit widening from <see cref="long"/> (raw tick count).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static implicit operator DateTime64(long ticks) => new DateTime64(ticks);
 
         /// <summary>Explicit narrowing to <see cref="System.DateTime"/>. Throws for NaT / out-of-range.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static explicit operator DateTime(DateTime64 value) => value.ToDateTime();
 
         /// <summary>Explicit narrowing to <see cref="System.DateTimeOffset"/> (UTC). Throws for NaT / out-of-range.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static explicit operator DateTimeOffset(DateTime64 value) => value.ToDateTimeOffset();
 
         /// <summary>Explicit extraction of the raw int64 tick count.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static explicit operator long(DateTime64 value) => value._ticks;
 
         /// <summary>Convert to <see cref="System.DateTime"/>. Throws <see cref="InvalidOperationException"/> for NaT / out-of-range.</summary>
@@ -282,11 +282,11 @@ namespace NumSharp
         }
 
         /// <summary>Add a <see cref="TimeSpan"/>. NaT propagates; overflow saturates to NaT.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public DateTime64 Add(TimeSpan value) => AddTicks(value.Ticks);
 
         /// <summary>Subtract a <see cref="TimeSpan"/>. NaT propagates; overflow saturates to NaT.</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public DateTime64 Subtract(TimeSpan value) => AddTicks(unchecked(-value.Ticks));
 
         /// <summary>
@@ -300,13 +300,13 @@ namespace NumSharp
             return new TimeSpan(unchecked(_ticks - other._ticks));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static DateTime64 operator +(DateTime64 d, TimeSpan t) => d.Add(t);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static DateTime64 operator -(DateTime64 d, TimeSpan t) => d.Subtract(t);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static TimeSpan operator -(DateTime64 d1, DateTime64 d2) => d1.Subtract(d2);
 
         // ---------------------------------------------------------------------
@@ -323,7 +323,7 @@ namespace NumSharp
         // ---------------------------------------------------------------------
 
         /// <summary>Bitwise tick equality (<c>NaT.Equals(NaT)</c> returns <see langword="true"/>).</summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public bool Equals(DateTime64 other) => _ticks == other._ticks;
 
         public override bool Equals([NotNullWhen(true)] object? value)
@@ -342,7 +342,7 @@ namespace NumSharp
             return 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public int CompareTo(DateTime64 value) => Compare(this, value);
 
         public int CompareTo(object? value)
@@ -425,7 +425,7 @@ namespace NumSharp
                                                    provider ?? CultureInfo.InvariantCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static bool TryCopy(string source, Span<char> destination, out int charsWritten)
         {
             if (destination.Length < source.Length)

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -16,16 +17,25 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
-        public static NDArray asanyarray(in object a, Type dtype = null) //todo support order
+        public static NDArray asanyarray(in object a, Type dtype = null)
+            => asanyarray(in a, dtype, 'K');
+
+        /// <summary>
+        ///     Convert the input to an ndarray with a specified memory layout.
+        /// </summary>
+        /// <param name="a">Input data.</param>
+        /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
+        /// <param name="order">'C', 'F', 'A' or 'K' (default — resolved against a).</param>
+        /// <returns>Array interpretation of a in the requested layout.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
+        public static NDArray asanyarray(in object a, Type dtype, char order)
         {
             NDArray ret;
             switch (a) {
                 case null:
                     throw new ArgumentNullException(nameof(a));
                 case NDArray nd:
-                    if (dtype == null || Equals(nd.dtype, dtype))
-                        return nd;
-                    return nd.astype(dtype, true);
+                    return asarray(nd, dtype, order);
                 case object[] objArr:
                     // object[] has no fixed dtype — route through type-promotion path.
                     // new NDArray(object[]) throws NotSupportedException since object isn't a
@@ -43,6 +53,7 @@ namespace NumSharp
 
                 case IEnumerable<bool> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<byte> e: ret = np.array(ToArrayFast(e)); break;
+                case IEnumerable<sbyte> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<short> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<ushort> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<int> e: ret = np.array(ToArrayFast(e)); break;
@@ -50,9 +61,11 @@ namespace NumSharp
                 case IEnumerable<long> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<ulong> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<char> e: ret = np.array(ToArrayFast(e)); break;
+                case IEnumerable<Half> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<float> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<double> e: ret = np.array(ToArrayFast(e)); break;
                 case IEnumerable<decimal> e: ret = np.array(ToArrayFast(e)); break;
+                case IEnumerable<Complex> e: ret = np.array(ToArrayFast(e)); break;
 
                 default:
                     var type = a.GetType();
@@ -100,8 +113,16 @@ namespace NumSharp
             }
 
             if (dtype != null && !Equals(ret.dtype, dtype))
-                return ret.astype(dtype, true);
+                ret = ret.astype(dtype, true);
 
+            // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
+            char physical = OrderResolver.Resolve(order, ret.Shape);
+            if (ret.Shape.NDim > 1 && ret.size > 1)
+            {
+                bool layoutMatches = physical == 'C' ? ret.Shape.IsContiguous : ret.Shape.IsFContiguous;
+                if (!layoutMatches)
+                    ret = ret.copy(physical);
+            }
             return ret;
         }
 
@@ -110,7 +131,7 @@ namespace NumSharp
         ///     Specialised for List&lt;T&gt; and ICollection&lt;T&gt; to skip the enumerator and to
         ///     use <see cref="GC.AllocateUninitializedArray{T}(int, bool)"/> since we overwrite every slot.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T[] ToArrayFast<T>(IEnumerable<T> source)
         {
             if (source is List<T> list)
@@ -142,6 +163,7 @@ namespace NumSharp
 
             if (elementType == typeof(bool)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<bool>)a).Span : ((Memory<bool>)a).Span));
             if (elementType == typeof(byte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<byte>)a).Span : ((Memory<byte>)a).Span));
+            if (elementType == typeof(sbyte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<sbyte>)a).Span : ((Memory<sbyte>)a).Span));
             if (elementType == typeof(short)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<short>)a).Span : ((Memory<short>)a).Span));
             if (elementType == typeof(ushort)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ushort>)a).Span : ((Memory<ushort>)a).Span));
             if (elementType == typeof(int)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<int>)a).Span : ((Memory<int>)a).Span));
@@ -149,9 +171,11 @@ namespace NumSharp
             if (elementType == typeof(long)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<long>)a).Span : ((Memory<long>)a).Span));
             if (elementType == typeof(ulong)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ulong>)a).Span : ((Memory<ulong>)a).Span));
             if (elementType == typeof(char)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<char>)a).Span : ((Memory<char>)a).Span));
+            if (elementType == typeof(Half)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Half>)a).Span : ((Memory<Half>)a).Span));
             if (elementType == typeof(float)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<float>)a).Span : ((Memory<float>)a).Span));
             if (elementType == typeof(double)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<double>)a).Span : ((Memory<double>)a).Span));
             if (elementType == typeof(decimal)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<decimal>)a).Span : ((Memory<decimal>)a).Span));
+            if (elementType == typeof(Complex)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<Complex>)a).Span : ((Memory<Complex>)a).Span));
 
             return null;
         }
@@ -159,7 +183,7 @@ namespace NumSharp
         /// <summary>
         ///     Optimized Span to Array conversion using GC.AllocateUninitializedArray.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static T[] SpanToArrayFast<T>(ReadOnlySpan<T> span)
         {
             var arr = GC.AllocateUninitializedArray<T>(span.Length);
@@ -209,9 +233,11 @@ namespace NumSharp
 
             Type firstType = null;
 
-            // At most 12 unique NPTypeCode values exist; bound the stackalloc accordingly
-            // (otherwise large user lists could blow the stack).
-            Span<NPTypeCode> typeCodes = stackalloc NPTypeCode[12];
+            // 15 NPTypeCode dtypes (the +String slot is unused for numeric promotion).
+            // Bounded stackalloc keeps the worst-case stack size predictable for large
+            // user lists. SeenMask uses (int)code & 31 to avoid out-of-range shifts;
+            // NPTypeCode.Complex == 128 would otherwise alias bit 0.
+            Span<NPTypeCode> typeCodes = stackalloc NPTypeCode[15];
             int uniqueCount = 0;
             uint seenMask = 0;
 
@@ -225,11 +251,12 @@ namespace NumSharp
                     return typeof(decimal);
 
                 var code = t.GetTypeCode();
-                var bit = 1u << (int)code;
+                var bit = 1u << ((int)code & 31);
                 if ((seenMask & bit) == 0)
                 {
                     seenMask |= bit;
-                    typeCodes[uniqueCount++] = code;
+                    if (uniqueCount < typeCodes.Length)
+                        typeCodes[uniqueCount++] = code;
                 }
             }
 
@@ -355,6 +382,27 @@ namespace NumSharp
                 var arr = GC.AllocateUninitializedArray<decimal>(span.Length);
                 for (int i = 0; i < span.Length; i++)
                     arr[i] = span[i] is decimal v ? v : Convert.ToDecimal(span[i]);
+                return np.array(arr);
+            }
+            if (elementType == typeof(sbyte))
+            {
+                var arr = GC.AllocateUninitializedArray<sbyte>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is sbyte v ? v : Convert.ToSByte(span[i]);
+                return np.array(arr);
+            }
+            if (elementType == typeof(Half))
+            {
+                var arr = GC.AllocateUninitializedArray<Half>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is Half v ? v : (Half)Convert.ToDouble(span[i]);
+                return np.array(arr);
+            }
+            if (elementType == typeof(Complex))
+            {
+                var arr = GC.AllocateUninitializedArray<Complex>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is Complex v ? v : new Complex(Convert.ToDouble(span[i]), 0.0);
                 return np.array(arr);
             }
 

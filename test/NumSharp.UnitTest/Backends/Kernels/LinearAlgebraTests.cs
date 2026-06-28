@@ -234,7 +234,6 @@ public class LinearAlgebraTests
     }
 
     [TestMethod]
-    [OpenBugs]  // 3D matmul broadcasting fails
     public void Matmul_3D_2D_Broadcasting()
     {
         // NumPy: (2, 3, 4) @ (4, 5) = (2, 3, 5)

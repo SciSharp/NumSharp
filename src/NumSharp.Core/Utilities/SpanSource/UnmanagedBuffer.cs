@@ -16,7 +16,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Copies bytes from source to destination using unmanaged memory copy.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [CLSCompliant(false)]
         public static unsafe void MemoryCopy(void* source, void* destination, long destinationSizeInBytes, long sourceBytesToCopy)
         {
@@ -31,7 +31,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Copies bytes from source to destination using unmanaged memory copy.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         [CLSCompliant(false)]
         public static unsafe void MemoryCopy(void* source, void* destination, ulong destinationSizeInBytes, ulong sourceBytesToCopy)
         {
@@ -47,7 +47,7 @@ namespace NumSharp.Utilities
         /// Copies elements from source to destination.
         /// For unmanaged types only - does not handle reference types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static unsafe void Memmove<T>(ref T destination, ref T source, nuint elementCount) where T : unmanaged
         {
             UnmanagedSpanHelpers.Memmove(
@@ -60,7 +60,7 @@ namespace NumSharp.Utilities
         /// Copies elements from source to destination with ulong element count.
         /// For unmanaged types only - does not handle reference types.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static unsafe void Memmove<T>(ref T destination, ref T source, ulong elementCount) where T : unmanaged
         {
             UnmanagedSpanHelpers.Memmove(

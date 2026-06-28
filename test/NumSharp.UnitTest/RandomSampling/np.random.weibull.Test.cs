@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             var result = np.random.weibull(0, 5);
 
-            foreach (var val in result.AsIterator<double>())
+            foreach (var val in result.AsElements<double>())
                 Assert.AreEqual(0.0, val);
         }
 
@@ -91,7 +91,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             var samples = np.random.weibull(0.5, 1000);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
                 Assert.IsTrue(val >= 0, $"Value {val} should be non-negative");
         }
 

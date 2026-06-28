@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -34,6 +35,22 @@ namespace NumSharp.Backends
             if (shape[axis] == 1)
                 return HandleTrivialAxisReduction(arr, axis, keepdims, outputType, @out);
 
+            // Half AXIS sum: NumPy accumulates float16 sums in float32 (NOT float16 — e.g.
+            // np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator saturates to).
+            // The legacy Direct axis kernel accumulated in Half (a real ~3.5% error). Accumulate
+            // in the wider Double (>= NumPy's float32, so the float16 result rounds identically)
+            // and cast back — the same accumulate-wide-then-cast policy Half MEAN uses. The flat
+            // (axis=None) path already accumulates in Double (SumElementwiseHalfFallback); an
+            // explicit dtype request is honored verbatim by the normal path below.
+            if (arr.typecode == NPTypeCode.Half && typeCode == null)
+            {
+                var wide = ExecuteAxisReduction(arr, axis, keepdims, NPTypeCode.Double, null, ReductionOp.Sum);
+                var halfResult = wide.astype(NPTypeCode.Half);
+                if (@out is null) return halfResult;
+                for (long i = 0; i < halfResult.size; i++) @out.SetAtIndex(halfResult.GetAtIndex(i), i);
+                return @out;
+            }
+
             return ExecuteAxisReduction(arr, axis, keepdims, outputType, @out, ReductionOp.Sum);
         }
 
@@ -51,8 +68,31 @@ namespace NumSharp.Backends
         {
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
+
+            // NDIter-driven per-chunk path (the migration target). Currently serves the
+            // (dtype, op) combinations that the legacy DirectILKernelGenerator path covers
+            // only with a slow scalar kernel — Complex sum/prod/min/max. Returns null when
+            // no per-chunk kernel exists yet, so we fall through to the Direct path below.
+            bool useNDIter = UseNDIterReduce(inputType, outputType, op);
+            // f64/f32 Min/Max only WIN on the stride-ordered NDIter reduce path where the
+            // Direct whole-array kernel collapses to a cache-hostile coordinate walk — i.e.
+            // broadcast (stride 0) or negative strides. For C/F-contiguous and positive-strided
+            // inputs the Direct kernel's per-array (not per-stripe) traversal is faster, so keep
+            // it there. (Sum/Mean always prefer NDIter — their pairwise/streaming kernels beat
+            // Direct on every layout. Complex/Decimal Min/Max are NOT gated: their NDIter path
+            // is a strict win over the legacy scalar Direct kernel on all layouts.)
+            if (useNDIter && (op == ReductionOp.Min || op == ReductionOp.Max)
+                && (inputType == NPTypeCode.Double || inputType == NPTypeCode.Single)
+                && !MinMaxLayoutFavorsNDIter(shape))
+                useNDIter = false;
+            if (useNDIter)
+            {
+                var npyIterResult = ExecuteAxisReductionNDIter(arr, axis, keepdims, outputType, @out, op);
+                if (npyIterResult is not null) return npyIterResult;
+            }
+
             var key = new AxisReductionKernelKey(inputType, outputType, op, shape.IsContiguous && axis == arr.ndim - 1);
-            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+            var kernel = DirectILKernelGenerator.TryGetAxisReductionKernel(key);
             if (kernel == null)
                 throw new NotSupportedException($"Axis reduction kernel not available for {op}({inputType}) -> {outputType}.");
 
@@ -74,6 +114,132 @@ namespace NumSharp.Backends
             {
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
+
+            if (keepdims)
+            {
+                var ks = new long[arr.ndim];
+                for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : result.shape[sd++];
+                result.Storage.Reshape(new Shape(ks));
+            }
+            return result;
+        }
+
+        /// <summary>
+        ///     Gate for the NDIter-driven per-chunk reduction path. Returns true only for
+        ///     (dtype, op) combinations that have a kernel in
+        ///     <see cref="Kernels.ILKernelGenerator.GetReduceInnerLoop"/>; everything else
+        ///     stays on the legacy <see cref="Kernels.DirectILKernelGenerator"/> path.
+        ///     Acts as the per-dtype rollback switch (Plan §6).
+        /// </summary>
+        private static bool UseNDIterReduce(NPTypeCode inputType, NPTypeCode outputType, ReductionOp op)
+        {
+            // Complex same-type sum/prod/min/max/mean. The legacy complex axis paths were:
+            // a scalar axis kernel (sum/prod/min/max — already ~parity under -c Release) and,
+            // for the DEFAULT complex mean, the per-output-row-allocating MeanAxisComplex
+            // (15–45× slower than NumPy — the genuine bottleneck). The NDIter double-pair
+            // path puts all five on the migration-target architecture at parity-or-better and
+            // collapses mean to a one-pass sum kernel + scalar divide.
+            if (inputType == NPTypeCode.Complex && outputType == NPTypeCode.Complex)
+                return op == ReductionOp.Sum || op == ReductionOp.Prod ||
+                       op == ReductionOp.Min || op == ReductionOp.Max ||
+                       op == ReductionOp.Mean;
+
+            // Half SUM and MEAN accumulate in Double then cast back to Half (ReduceAdd's axis
+            // branch / ReduceMean do the cast). NumPy accumulates float16 reductions in float32,
+            // NOT float16 — np.sum(ones(4096,f16)) == 4096, not the ~2048 an f16 accumulator
+            // saturates to; the wider Double matches NumPy's float16 result. outputType==Double
+            // is the in-flight accumulator dtype here (the Direct axis kernel for Half accumulated
+            // in Half — a real ~3.5% error this routes around). Half PROD/MIN/MAX stay on Direct.
+            if (inputType == NPTypeCode.Half)
+                return (op == ReductionOp.Mean || op == ReductionOp.Sum) && outputType == NPTypeCode.Double;
+
+            // Decimal: the legacy path is both cache-hostile AND lossy (it accumulates through
+            // a double bridge). The NDIter kernels are full-precision Decimal on contiguous
+            // stripes — 7–12× faster everywhere AND more accurate. No NumPy reference type.
+            if (inputType == NPTypeCode.Decimal && outputType == NPTypeCode.Decimal)
+                return op == ReductionOp.Sum || op == ReductionOp.Prod ||
+                       op == ReductionOp.Min || op == ReductionOp.Max ||
+                       op == ReductionOp.Mean;
+
+            // Phase 6 — numeric migration onto the per-chunk target architecture.
+            // Double AND float32 SUM, MEAN (mean = Sum kernel + MeanDivideByCount), and
+            // MIN/MAX. SUM's PINNED path uses PairwiseFold (ported 1:1 from NumPy's
+            // pairwise_sum) so it is BIT-FOR-BIT identical to NumPy for both dtypes — which
+            // is what makes float32 safe to route (its earlier exclusion was a flat-
+            // accumulator divergence the pairwise leaf removes); SLAB stays the streaming
+            // Vector256 add. MIN/MAX route to SimdMinMaxSameType (NaN-propagating, dual-mode)
+            // so f64/f32 min/max are SIMD on every layout instead of collapsing on the
+            // C-contiguity-gated Direct kernel for negcol/broadcast/strided inputs.
+            // Integer Sum (NEP50 widening), integer Min/Max, and Prod stay on the Direct
+            // path (GetReduceInnerLoop returns null for those → caller falls back).
+            if ((inputType == NPTypeCode.Double || inputType == NPTypeCode.Single) && outputType == inputType)
+                return op == ReductionOp.Sum || op == ReductionOp.Mean ||
+                       op == ReductionOp.Min || op == ReductionOp.Max;
+
+            return false;
+        }
+
+        /// <summary>
+        ///     Layout gate for the f64/f32 Min/Max NDIter routing (see ExecuteAxisReduction).
+        ///     Returns true only where the Direct whole-array axis kernel collapses to a
+        ///     cache-hostile coordinate walk — broadcast (stride 0, repeated reads) or any
+        ///     negative stride (backward traversal). Contiguous and positive-strided inputs
+        ///     stay on the faster Direct kernel.
+        /// </summary>
+        private static bool MinMaxLayoutFavorsNDIter(Shape shape)
+        {
+            if (shape.IsBroadcasted) return true;
+            var strides = shape.strides;
+            for (int i = 0; i < strides.Length; i++)
+                if (strides[i] < 0) return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Axis reduction via the 2-operand REDUCE iterator + a per-chunk
+        ///     <see cref="Kernels.ILKernelGenerator"/> kernel. Mirrors
+        ///     <see cref="ExecuteAxisReduction"/>'s output-shape / keepdims / out= handling,
+        ///     but seeds the reduction identity and lets the iterator drive the inner loop.
+        ///     Returns null when no per-chunk kernel exists for the key (caller falls back).
+        /// </summary>
+        private unsafe NDArray ExecuteAxisReductionNDIter(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
+        {
+            // Mean is computed as a one-pass Sum kernel followed by a scalar divide by the
+            // reduced-axis length — there is no separate "mean" inner loop.
+            var kernelOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+            var key = new ILKernelGenerator.ReduceKernelKey(kernelOp, arr.GetTypeCode, outputType);
+            var kernel = ILKernelGenerator.GetReduceInnerLoop(key);
+            if (kernel is null) return null;
+
+            var shape = arr.Shape;
+            var outputDims = new long[arr.ndim - 1];
+            for (int d = 0, od = 0; d < arr.ndim; d++) if (d != axis) outputDims[od++] = shape.dimensions[d];
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+
+            NDArray result;
+            if (@out is not null)
+            {
+                if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch");
+                result = @out;
+            }
+            else
+            {
+                result = new NDArray(outputType, outputShape, false);
+            }
+
+            // The per-chunk kernel folds into the existing output slot(s), so the output
+            // must carry the reduction identity (0/1/±inf) before the iterator runs.
+            ILKernelGenerator.SeedReduceIdentity(result, kernelOp);
+
+            // COPY_IF_OVERLAP only matters when a user-supplied out= may alias the input; a
+            // fresh allocation can never overlap, so the hot path skips the overlap probe.
+            var extraFlags = @out is not null ? NDIterGlobalFlags.COPY_IF_OVERLAP : NDIterGlobalFlags.None;
+            using (var iter = NDIterRef.NewReduce(arr, result, axis, extraFlags))
+                iter.ForEach(kernel);
+
+            // Mean: divide the accumulated sums by the reduced-axis length (NumPy parity).
+            if (op == ReductionOp.Mean)
+                ILKernelGenerator.MeanDivideByCount(result, shape.dimensions[axis]);
 
             if (keepdims)
             {

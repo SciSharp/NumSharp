@@ -17,12 +17,10 @@ namespace NumSharp.Utilities
                     return new Complex(double.MaxValue, double.MaxValue);
                 case NPTypeCode.Boolean:
                     return true;
-#if _REGEN
-	            %foreach except(supported_primitives, "Boolean", "String")%
-                case NPTypeCode.#1:
-                    return #1.MaxValue;
-                %
-#else
+	            // %foreach except(supported_primitives, "Boolean", "String")%
+                // case NPTypeCode.#1:
+                    // return #1.MaxValue;
+                // %
                 case NPTypeCode.SByte:
                     return SByte.MaxValue;
                 case NPTypeCode.Byte:
@@ -49,7 +47,6 @@ namespace NumSharp.Utilities
                     return Single.MaxValue;
                 case NPTypeCode.Decimal:
                     return Decimal.MaxValue;
-#endif
                 default:
                     throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
             }
@@ -66,12 +63,10 @@ namespace NumSharp.Utilities
                     return new Complex(double.MinValue, double.MinValue);
                 case NPTypeCode.Boolean:
                     return false;
-#if _REGEN
-	            %foreach except(supported_primitives, "Boolean", "String")%
-                case NPTypeCode.#1:
-                    return #1.MinValue;
-                %
-#else
+	            // %foreach except(supported_primitives, "Boolean", "String")%
+                // case NPTypeCode.#1:
+                    // return #1.MinValue;
+                // %
                 case NPTypeCode.SByte:
                     return SByte.MinValue;
                 case NPTypeCode.Byte:
@@ -98,7 +93,6 @@ namespace NumSharp.Utilities
                     return Single.MinValue;
                 case NPTypeCode.Decimal:
                     return Decimal.MinValue;
-#endif
                 default:
                     throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
             }

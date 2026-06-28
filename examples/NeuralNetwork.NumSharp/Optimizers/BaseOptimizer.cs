@@ -70,6 +70,7 @@ namespace NeuralNetwork.NumSharp.Optimizers
             switch (name)
             {
                 case "sgd":
+                    opt = new SGD();
                     break;
                 case "adam":
                     opt = new Adam();

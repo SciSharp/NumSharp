@@ -69,7 +69,6 @@ public class EdgeCaseTests
     #region Absolute Value Edge Cases
 
     [TestMethod]
-    [OpenBugs]  // Int8 abs overflow is a known edge case
     public void Abs_Int8_MinValue_Overflow()
     {
         // NumPy: np.abs(np.int8(-128)) = -128 (overflow, returns same value!)
@@ -78,8 +77,9 @@ public class EdgeCaseTests
 
         var result = np.abs(a);
 
-        // NumPy actually returns -128 due to overflow
-        Assert.AreEqual(-128, (sbyte)result.GetByte(0), "abs(MIN_VALUE) overflows to MIN_VALUE");
+        // NumPy actually returns -128 due to overflow. Read via GetSByte: the result
+        // dtype is int8, and GetByte mis-converts the negative value.
+        Assert.AreEqual((sbyte)-128, result.GetSByte(0), "abs(MIN_VALUE) overflows to MIN_VALUE");
     }
 
     [TestMethod]
@@ -179,7 +179,6 @@ public class EdgeCaseTests
     #region Negative Edge Cases
 
     [TestMethod]
-    [OpenBugs]  // NumSharp throws NotSupportedException for unsigned types
     public void Negative_UInt8_Wraps()
     {
         // NumPy: np.negative(np.uint8(1)) = 255 (wraps)
@@ -232,7 +231,6 @@ public class EdgeCaseTests
     #region Integer Overflow Edge Cases
 
     [TestMethod]
-    [OpenBugs]  // sbyte array operations may not work correctly
     public void Add_Int8_Overflow_Wraps()
     {
         // NumPy: np.int8(127) + np.int8(1) = -128
@@ -241,11 +239,10 @@ public class EdgeCaseTests
 
         var result = a + b;
 
-        Assert.AreEqual(-128, (sbyte)result.GetByte(0));
+        Assert.AreEqual((sbyte)-128, result.GetSByte(0));
     }
 
     [TestMethod]
-    [OpenBugs]  // sbyte array operations may not work correctly
     public void Subtract_Int8_Underflow_Wraps()
     {
         // NumPy: np.int8(-128) - np.int8(1) = 127
@@ -254,7 +251,7 @@ public class EdgeCaseTests
 
         var result = a - b;
 
-        Assert.AreEqual(127, (sbyte)result.GetByte(0));
+        Assert.AreEqual((sbyte)127, result.GetSByte(0));
     }
 
     [TestMethod]
@@ -282,7 +279,6 @@ public class EdgeCaseTests
     }
 
     [TestMethod]
-    [OpenBugs]  // sbyte array operations may not work correctly
     public void Multiply_Int8_Overflow_Wraps()
     {
         // NumPy: np.int8(100) * np.int8(2) = -56
@@ -291,7 +287,7 @@ public class EdgeCaseTests
 
         var result = a * b;
 
-        Assert.AreEqual(-56, (sbyte)result.GetByte(0));
+        Assert.AreEqual((sbyte)-56, result.GetSByte(0));
     }
 
     #endregion
@@ -633,7 +629,6 @@ public class EdgeCaseTests
     #region Rounding Edge Cases (Banker's Rounding)
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_HalfToEven_BankersRounding()
     {
         // NumPy uses banker's rounding: round half to even
@@ -650,7 +645,6 @@ public class EdgeCaseTests
     }
 
     [TestMethod]
-    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_NegativeHalf()
     {
         // NumPy: np.round(-0.5) = -0.0, np.round(-1.5) = -2.0

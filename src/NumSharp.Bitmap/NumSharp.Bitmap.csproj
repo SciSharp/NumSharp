@@ -10,8 +10,8 @@
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
     <PackageReleaseNotes>Added complicated shape and bbp inference mechanism. Added argument 'discardAlpha' to all methods.</PackageReleaseNotes>
-    <AssemblyVersion>0.40.0.0</AssemblyVersion>
-    <FileVersion>0.40.0.0</FileVersion>
+    <AssemblyVersion>0.60.0.0</AssemblyVersion>
+    <FileVersion>0.60.0.0</FileVersion>
     <RepositoryType>git</RepositoryType>
     <PackageTags>Numpy, NumSharp, MachineLearning, Math, Scientific, Numeric, Mathlab, SciSharp</PackageTags>
     <PackageLicenseUrl></PackageLicenseUrl>
@@ -21,7 +21,7 @@
     <Product>NumSharp.Bitmap</Product>
     <Company>SciSharp STACK</Company>
     <RootNamespace>NumSharp.Bitmap</RootNamespace>
-    <Version>0.40.0.0</Version>
+    <Version>0.60.0.0</Version>
     <Version Condition=" '$(VersionSuffix)' != '' ">$(Version)-$(VersionSuffix)</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
@@ -29,7 +29,7 @@
     <Platforms>AnyCPU;x64</Platforms>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <Configurations>Debug;Release;Publish</Configurations>
-    <PackageVersion>0.40.0</PackageVersion>
+    <PackageVersion>0.60.0</PackageVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
@@ -39,27 +39,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="NewFolder\**" />
-    <EmbeddedResource Remove="NewFolder\**" />
-    <None Remove="NewFolder\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
-    <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Operations\NdArray.ElementsWise.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Remove="NumSharp.Bitmap.csproj.DotSettings" />
-    <None Remove="NumSharp.Image.csproj.DotSettings" />
     <None Remove="Open.snk" />
   </ItemGroup>
 

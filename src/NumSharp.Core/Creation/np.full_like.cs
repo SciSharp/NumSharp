@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
@@ -16,9 +16,22 @@ namespace NumSharp
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
         public static NDArray full_like(NDArray a, object fill_value, Type dtype = null)
+            => full_like(a, fill_value, dtype, 'K');
+
+        /// <summary>
+        ///     Return a full array with the same shape and type as a given array.
+        /// </summary>
+        /// <param name="a">The shape and data-type of a define these same attributes of the returned array.</param>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="dtype">Overrides the data type of the result.</param>
+        /// <param name="order">Memory layout: 'C', 'F', 'A' or 'K' (default, preserves source layout).</param>
+        /// <returns>Array of fill_value with the same shape and type as a.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
+        public static NDArray full_like(NDArray a, object fill_value, Type dtype, char order)
         {
             var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();
-            var shape = new Shape((long[])a.shape.Clone());
+            char physical = OrderResolver.Resolve(order, a.Shape);
+            var shape = new Shape((long[])a.shape.Clone(), physical);
             return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, typeCode)), shape));
         }
     }

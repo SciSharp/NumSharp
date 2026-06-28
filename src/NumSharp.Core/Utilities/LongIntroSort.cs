@@ -23,7 +23,7 @@ namespace NumSharp.Utilities
         /// <typeparam name="T">Element type (must be unmanaged and comparable)</typeparam>
         /// <param name="ptr">Pointer to first element</param>
         /// <param name="length">Number of elements to sort</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void Sort<T>(T* ptr, long length) where T : unmanaged, IComparable<T>
         {
             if (length > 1)
@@ -39,7 +39,7 @@ namespace NumSharp.Utilities
         /// <param name="ptr">Pointer to first element</param>
         /// <param name="length">Number of elements to sort</param>
         /// <param name="comparer">Comparison delegate</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public static unsafe void Sort<T>(T* ptr, long length, Comparison<T> comparer) where T : unmanaged
         {
             if (length > 1)
@@ -51,7 +51,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Log base 2 for ulong values.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long Log2(ulong value)
         {
             return BitOperations.Log2(value);
@@ -187,7 +187,7 @@ namespace NumSharp.Utilities
             ptr[lo + i - 1] = d;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SwapIfGreater<T>(T* ptr, long i, long j) where T : unmanaged, IComparable<T>
         {
             if (ptr[i].CompareTo(ptr[j]) > 0)
@@ -330,7 +330,7 @@ namespace NumSharp.Utilities
             ptr[lo + i - 1] = d;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SwapIfGreater<T>(T* ptr, long i, long j, Comparison<T> comparer) where T : unmanaged
         {
             if (comparer(ptr[i], ptr[j]) > 0)
@@ -345,7 +345,7 @@ namespace NumSharp.Utilities
 
         #region Shared helpers
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe void Swap<T>(T* ptr, long i, long j) where T : unmanaged
         {
             T temp = ptr[i];

@@ -131,32 +131,30 @@ namespace NumSharp
 
             switch (ret.GetTypeCode)
             {
-#if _REGEN
-	            case NPTypeCode.Boolean:
-	            {
-                    unsafe
-                    {
-                        var addr = (bool*)ret.Address;
-                        for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
-                    }
+	            // case NPTypeCode.Boolean:
+	            // {
+                    // unsafe
+                    // {
+                        // var addr = (bool*)ret.Address;
+                        // for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
+                    // }
 
-                    return ret;
-	            }
-	            %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
-	            case NPTypeCode.#1:
-	            {
-                    unsafe
-                    {
-                        var addr = (#2*)ret.Address;
-                         for (long i = 0; i < num; i++) addr[i] = Converts.To#1(start + i * step);
-                    }
+                    // return ret;
+	            // }
+	            // %foreach except(supported_dtypes, "Boolean"),except(supported_dtypes_lowercase, "bool")%
+	            // case NPTypeCode.#1:
+	            // {
+                    // unsafe
+                    // {
+                        // var addr = (#2*)ret.Address;
+                         // for (long i = 0; i < num; i++) addr[i] = Converts.To#1(start + i * step);
+                    // }
 
-                    return ret;
-	            }
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+                    // return ret;
+	            // }
+	            // %
+	            // default:
+		            // throw new NotSupportedException();
 	            case NPTypeCode.Boolean:
 	            {
                     unsafe
@@ -309,7 +307,6 @@ namespace NumSharp
 	            }
 	            default:
 		            throw new NotSupportedException();
-#endif
             }
         }
 

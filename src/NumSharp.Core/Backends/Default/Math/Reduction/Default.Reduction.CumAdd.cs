@@ -1,5 +1,7 @@
 using System;
+using System.Numerics;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -21,127 +23,169 @@ namespace NumSharp.Backends
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
-            if (shape.IsEmpty || shape.size == 0)
-                return arr;
+            var retTypeCode = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
 
-            if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
-                return typeCode.HasValue ? Cast(arr, typeCode.Value, copy: true) : arr.Clone();
+            // Validate the axis UP FRONT, before any trivial shortcut — NumPy raises AxisError first:
+            // cumsum([5], axis=-3) and cumsum(0d, axis=1) are errors, not no-ops. A 0-d array is
+            // treated as 1-D for cumsum, so the valid range is [-nd, nd) with nd = max(ndim, 1).
+            int axis = 0;
+            if (axis_ != null)
+            {
+                int nd = Math.Max(arr.ndim, 1);
+                axis = axis_.Value;
+                if (axis < 0) axis += nd;
+                if (axis < 0 || axis >= nd)
+                    throw new ArgumentOutOfRangeException(nameof(axis_),
+                        $"axis {axis_.Value} is out of bounds for array of dimension {nd}");
+            }
+
+            // Empty: cumsum returns a FRESH array of the accumulator dtype — NEP50 widening applies
+            // even when empty (cumsum(empty int32) is int64). axis=None ravels to 1-D (NumPy shape
+            // (0,)); with an axis the shape is preserved.
+            if (shape.IsEmpty || shape.size == 0)
+                return new NDArray(retTypeCode,
+                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+
+            // 0-d scalar or single-element 1-D: cumsum is the value itself, promoted to the
+            // accumulator dtype and shaped 1-D — cumsum NEVER returns 0-d (NumPy: cumsum(0-d) -> (1,),
+            // cumsum([x]) -> [x] int64). Previously these returned the input dtype (NEP50 skip bug).
+            if (shape.IsScalar || (shape.size == 1 && shape.dimensions.Length == 1))
+            {
+                var single = Cast(arr, retTypeCode, copy: true);
+                if (single.ndim != 1)
+                    single.Storage.Reshape(Shape.Vector(1));   // 0-d -> (1,)
+                return single;
+            }
 
             if (axis_ == null)
             {
-                var r = cumsum_elementwise(arr, typeCode);
-                if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
-                    r.Storage.Reshape(Shape.Scalar);
-                return r;
+                // axis=None ravels in C-order to a 1-D result; cumsum never collapses to 0-d.
+                return cumsum_elementwise(arr, typeCode);
             }
-
-            var axis = axis_.Value;
-            while (axis < 0)
-                axis = arr.ndim + axis; //handle negative axis
-
-            if (axis >= arr.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis));
 
             if (shape[axis] == 1)
+                // axis of length 1: values unchanged, but promoted to the accumulator dtype + copied
+                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip).
+                return Cast(arr, retTypeCode, copy: true);
+
+            // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
+            // output through the iterator with KEEPORDER, so its memory layout follows the
+            // source (C-contig source -> C output, F-contig -> F). NumSharp models two physical
+            // layouts, so 'K' resolves to C or F via OrderResolver. This is what fixes the
+            // long-standing C-only output (the old post-hoc copy('F') in np.cumsum) and removes
+            // the per-dtype AxisCumSum* tree in favor of one NDIter-driven generic kernel.
+            char order = OrderResolver.Resolve('K', shape);
+            try
             {
-                //if the given div axis is 1 - cumsum is just the value itself
-                //Return a copy to avoid sharing memory with the original (NumPy behavior)
-                return arr.copy();
+                return AccumulateAxis(arr, axis, retTypeCode, order);
             }
-
-            // For broadcast arrays, we iterate over the input (which has stride=0 for broadcast dims)
-            // but write to a contiguous output array. Key insight:
-            // - Input: may have stride=0 (broadcast) - read same value multiple times
-            // - Output: must be contiguous - write unique values to distinct memory locations
-            NDArray inputArr = arr;
-
-            // Create output with CONTIGUOUS strides even if input is broadcast.
-            // Use dimensions only, not the input shape's strides.
-            var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
-            var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
-            var ret = new NDArray(retTypeCode, outputShape, false);
-
-            // Fast path: use IL-generated axis kernel when available
-            // This avoids the overhead of iterator-based slicing and provides direct pointer access.
-            // B6: Half and Complex aren't handled by the internal AxisCumSumSameType/General helpers
-            // (they throw NotSupportedException at execution time, not creation time, so the kernel
-            // cache returns a non-null delegate that then throws on first call). Skip the fast path
-            // for these types and go straight to the iterator-based fallback.
-            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted
-                && inputArr.GetTypeCode != NPTypeCode.Half
-                && inputArr.GetTypeCode != NPTypeCode.Complex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
-                var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
-                var kernel = ILKernelGenerator.TryGetCumulativeAxisKernel(key);
-                if (kernel != null)
+                // Defensive fallback to the legacy whole-array axis path. Only reachable if the
+                // NDIter accumulate construction fails for an exotic view; the legacy path
+                // allocates a C-contiguous output, so relay it to F when the source asked for it.
+                System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
+                var ret = new NDArray(retTypeCode, new Shape(shape.dimensions), false);
+                if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
                 {
-                    fixed (long* inputStrides = arr.strides)
-                    fixed (long* shapePtr = arr.shape)
+                    bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                    var key = new CumulativeAxisKernelKey(arr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
+                    var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
+                    if (kernel != null)
                     {
-                        kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                        fixed (long* inputStrides = arr.strides)
+                        fixed (long* shapePtr = arr.shape)
+                            kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                        return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
                     }
-                    return ret;
                 }
+                var fb = ExecuteAxisCumSumFallback(arr, ret, axis);
+                return order == 'F' && fb.Shape.NDim > 1 ? fb.copy('F') : fb;
             }
-
-            // Fallback: iterator-based axis cumsum (handles broadcast, non-contiguous, edge cases)
-            return ExecuteAxisCumSumFallback(inputArr, ret, shape, axis);
         }
 
         /// <summary>
-        /// Fallback axis cumsum using iterators. Used when IL kernel not available.
-        /// Handles broadcast arrays and type conversions safely.
+        /// NumPy-aligned axis cumulative sum — the np.add.accumulate structure
+        /// (numpy/_core/src/umath/ufunc_object.c : PyUFunc_Accumulate). Builds a 2-operand
+        /// [input, output] iterator (KEEPORDER, MULTI_INDEX), removes the scan axis
+        /// (<see cref="NDIterRef.RemoveAxis"/>) so the iterator walks every OTHER axis, then
+        /// drives a single generic running-sum kernel along the removed axis per outer position.
+        /// Handles every layout (contiguous / strided / transposed / broadcast / reversed) through
+        /// the iterator and honors the chosen <paramref name="order"/> output layout exactly (the
+        /// kernel reads the output's own scan-axis stride), replacing the legacy per-dtype tree.
         /// </summary>
-        private unsafe NDArray ExecuteAxisCumSumFallback(NDArray inputArr, NDArray ret, Shape shape, int axis)
+        private unsafe NDArray AccumulateAxis(NDArray input, int axis, NPTypeCode retType, char order)
         {
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var slices = iterAxis.Slices;
-            var retType = ret.GetTypeCode;
+            var shape = input.Shape;
+            int ndim = input.ndim;
 
-            // B6: Complex cumsum must preserve imaginary part (AsIterator<double> would drop it).
-            if (retType == NPTypeCode.Complex)
+            long[] dims = new long[ndim];
+            for (int i = 0; i < ndim; i++) dims[i] = shape.dimensions[i];
+            var ret = new NDArray(retType, new Shape(dims, order), false);
+
+            // Scan-axis geometry (bytes). Negative for reversed views — the iterator base points
+            // at scan-axis index 0 and the kernel walks forward in logical order regardless.
+            var aux = new ILKernelGenerator.ScanAxisAux
             {
-                do
-                {
-                    var inputSlice = inputArr[slices];
-                    var outputSlice = ret[slices];
-                    var inputIter = inputSlice.AsIterator<System.Numerics.Complex>();
-                    var sum = System.Numerics.Complex.Zero;
-                    long idx = 0;
-                    while (inputIter.HasNext())
-                    {
-                        sum += inputIter.MoveNext();
-                        outputSlice.SetAtIndex(sum, idx++);
-                    }
-                } while (iterAxis.Next() != null);
-                return ret;
+                InByteStride = input.strides[axis] * input.dtypesize,
+                OutByteStride = ret.strides[axis] * ret.dtypesize,
+                AxisLen = shape[axis],
+            };
+
+            var kernel = ILKernelGenerator.GetCumSumInnerLoop(input.GetTypeCode, retType);
+
+            // Construct in C-order (a FORCED order → identity axis permutation, no negative-stride
+            // flip): NumSharp's RemoveAxis is index-based (unlike NumPy's perm-mapped one), so the
+            // iterator's internal axes MUST match logical axes for RemoveAxis(axis) to drop the
+            // scan axis. A KEEPORDER construction would permute axes for F-dominant strides and
+            // remove the wrong one. RemoveMultiIndex below re-applies KEEPORDER to the REMAINING
+            // axes for cache-friendly traversal; iteration order over kept axes can't affect the
+            // result (each scan line is independent), and the scan axis is walked explicitly.
+            var opFlags = new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READWRITE };
+            using (var iter = NDIterRef.AdvancedNew(
+                2,
+                new[] { input, ret },
+                NDIterGlobalFlags.MULTI_INDEX,
+                NPY_ORDER.NPY_CORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                opFlags))
+            {
+                iter.RemoveAxis(axis);        // iterator now walks every axis except the scan axis
+                iter.RemoveMultiIndex();      // reorder remaining axes by stride (KEEPORDER) + coalesce
+                iter.EnableExternalLoop();    // deliver the innermost remaining axis as a stripe
+                iter.ForEach(kernel, &aux);
             }
 
-            // Use type-specific iteration based on return type
-            // This handles type promotion correctly (e.g., int32 input -> int64 output)
-            do
-            {
-                var inputSlice = inputArr[slices];
-                var outputSlice = ret[slices];
+            return ret;
+        }
 
-                // Get input as double for uniform accumulation
-                var inputIter = inputSlice.AsIterator<double>();
-                var moveNext = inputIter.MoveNext;
-                var hasNext = inputIter.HasNext;
+        /// <summary>
+        /// Fallback axis cumsum on the new axis iterator path.
+        /// </summary>
+        private unsafe NDArray ExecuteAxisCumSumFallback(NDArray inputArr, NDArray ret, int axis)
+        {
+            var retType = ret.GetTypeCode;
 
-                // Write to output with proper type handling
-                double sum = 0;
-                long idx = 0;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    // Use SetAtIndex with coordinate calculation for proper slice handling
-                    outputSlice.SetAtIndex(Converts.ChangeType(sum, retType), idx++);
-                }
-            } while (iterAxis.Next() != null);
+            if (inputArr.GetTypeCode != retType)
+                inputArr = Cast(inputArr, retType, copy: true);
+
+            NpFunc.Invoke(retType, CumSumAxisDispatch<int>, inputArr.Storage, ret.Storage, axis);
 
             return ret;
+        }
+
+        private static void CumSumAxisDispatch<T>(UnmanagedStorage input, UnmanagedStorage output, int axis) where T : unmanaged, IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>
+            => NDAxisIter.ExecuteSameType<T, CumSumAxisKernel<T>>(input, output, axis);
+
+        private static unsafe void CumSumInPlace<T>(nint addr, long size) where T : unmanaged, IAdditionOperators<T, T, T>
+        {
+            var p = (T*)addr;
+            T sum = default;
+            for (long i = 0; i < size; i++)
+            {
+                sum += p[i];
+                p[i] = sum;
+            }
         }
 
         public NDArray CumSumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
@@ -151,208 +195,80 @@ namespace NumSharp.Backends
         }
 
         protected unsafe NDArray cumsum_elementwise(NDArray arr, NPTypeCode? typeCode)
+            => ScanElementwiseFlat(arr, typeCode, ReductionOp.CumSum);
+
+        /// <summary>
+        /// Flat (axis=None) cumulative scan shared by cumsum and cumprod.
+        /// </summary>
+        /// <remarks>
+        /// The IL scan kernel walks the input in C-order via coordinate decode
+        /// (<c>EmitScanStridedLoop</c>), so it consumes strided / transposed / sliced /
+        /// reversed views directly — there is no need to materialize a contiguous copy first
+        /// (the rejected anti-pattern). The combine emits <c>il Add/Mul</c>, which is invalid
+        /// for Half/Complex struct arithmetic; those have a valid IL path only when
+        /// same-type-contiguous (a C# helper). So for a non-contiguous Half/Complex (or when IL
+        /// is disabled, or decimal-cumprod which the kernel does not emit) we materialize a
+        /// single C-order copy — the very ravel NumPy itself performs — and run the scalar scan.
+        /// </remarks>
+        private unsafe NDArray ScanElementwiseFlat(NDArray arr, NPTypeCode? typeCode, ReductionOp op)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
 
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
-            var ret = new NDArray(retType, Shape.Vector(arr.size));
 
-            // Fast path: use IL-generated kernel for contiguous arrays
-            if (arr.Shape.IsContiguous && ILKernelGenerator.Enabled)
+            if (DirectILKernelGenerator.Enabled)
             {
-                var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumSum, IsContiguous: true);
-                var kernel = ILKernelGenerator.TryGetCumulativeKernel(key);
-                if (kernel != null)
+                // Half/Complex accumulators cannot be combined with il Add/Mul except via the
+                // same-type-contiguous C# helper, so only let them reach the kernel contiguous.
+                bool combineEmittable = retType != NPTypeCode.Half && retType != NPTypeCode.Complex;
+                if (arr.Shape.IsContiguous || combineEmittable)
                 {
-                    fixed (long* strides = arr.strides)
-                    fixed (long* shape = arr.shape)
+                    var key = new CumulativeKernelKey(arr.GetTypeCode, retType, op, IsContiguous: arr.Shape.IsContiguous);
+                    var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
+                    if (kernel != null)
                     {
-                        kernel((void*)arr.Address, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
+                        var ret = new NDArray(retType, Shape.Vector(arr.size));
+                        // Strided / reversed / 2-D-sliced views keep their base in Shape.offset
+                        // (simple contiguous slices bake it into Address, leaving offset==0); the
+                        // kernel reads from a raw base, so fold the offset in here — same base
+                        // math as DefaultEngine.ReductionOp.cs.
+                        byte* baseAddr = (byte*)arr.Address + arr.Shape.offset * arr.dtypesize;
+                        fixed (long* strides = arr.strides)
+                        fixed (long* shape = arr.shape)
+                        {
+                            kernel((void*)baseAddr, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
+                        }
+                        return ret;
                     }
-                    return ret;
                 }
             }
 
-            // Fallback: iterator-based element-wise cumsum
-            return cumsum_elementwise_fallback(arr, ret, retType);
+            // Fallback: IL disabled, or non-contiguous Half/Complex/decimal-cumprod — materialize
+            // a C-order copy (NumPy's ravel) then run the contiguous scalar scan.
+            if (!arr.Shape.IsContiguous)
+                arr = arr.copy();
+            return op == ReductionOp.CumSum
+                ? cumsum_elementwise_fallback(arr, retType)
+                : cumprod_elementwise_fallback(arr, retType);
         }
 
         /// <summary>
-        /// Fallback element-wise cumsum using iterators.
+        /// Fallback element-wise cumsum for contiguous input.
         /// </summary>
-        private unsafe NDArray cumsum_elementwise_fallback(NDArray arr, NDArray ret, NPTypeCode retType)
+        private unsafe NDArray cumsum_elementwise_fallback(NDArray arr, NPTypeCode retType)
         {
-            // Handle Decimal separately for precision
-            if (arr.GetTypeCode == NPTypeCode.Decimal && retType == NPTypeCode.Decimal)
-            {
-                var iter = arr.AsIterator<decimal>();
-                var addr = (decimal*)ret.Address;
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                int i = 0;
-                decimal sum = 0;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    addr[i++] = sum;
-                }
-                return ret;
-            }
+            if (!arr.Shape.IsContiguous)
+                throw new InvalidOperationException("cumsum_elementwise_fallback requires contiguous input.");
 
-            // Handle Complex separately - requires Complex accumulator
-            if (arr.GetTypeCode == NPTypeCode.Complex && retType == NPTypeCode.Complex)
-            {
-                var iter = arr.AsIterator<System.Numerics.Complex>();
-                var addr = (System.Numerics.Complex*)ret.Address;
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                int i = 0;
-                var sum = System.Numerics.Complex.Zero;
-                while (hasNext())
-                {
-                    sum += moveNext();
-                    addr[i++] = sum;
-                }
-                return ret;
-            }
+            var linearInput = arr.reshape(Shape.Vector(arr.size));
+            var converted = linearInput.typecode == retType
+                ? linearInput.Clone()
+                : Cast(linearInput, retType, copy: true);
 
-            // All other types: use double for accumulation, convert at output
-            {
-                var iter = arr.AsIterator<double>();
-                var moveNext = iter.MoveNext;
-                var hasNext = iter.HasNext;
-                double sum = 0;
-                int i = 0;
+            NpFunc.Invoke(retType, CumSumInPlace<int>, (nint)converted.Address, converted.size);
 
-                // Write to output based on return type
-                switch (retType)
-                {
-                    case NPTypeCode.Byte:
-                    {
-                        var addr = (byte*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (byte)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.SByte:
-                    {
-                        var addr = (sbyte*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (sbyte)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int16:
-                    {
-                        var addr = (short*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (short)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt16:
-                    {
-                        var addr = (ushort*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (ushort)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int32:
-                    {
-                        var addr = (int*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (int)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt32:
-                    {
-                        var addr = (uint*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (uint)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Int64:
-                    {
-                        var addr = (long*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (long)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.UInt64:
-                    {
-                        var addr = (ulong*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (ulong)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Single:
-                    {
-                        var addr = (float*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (float)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Half:
-                    {
-                        var addr = (Half*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (Half)sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Double:
-                    {
-                        var addr = (double*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = sum;
-                        }
-                        break;
-                    }
-                    case NPTypeCode.Decimal:
-                    {
-                        var addr = (decimal*)ret.Address;
-                        while (hasNext())
-                        {
-                            sum += moveNext();
-                            addr[i++] = (decimal)sum;
-                        }
-                        break;
-                    }
-                    default:
-                        throw new NotSupportedException($"CumSum output type {retType} not supported");
-                }
-                return ret;
-            }
+            return converted;
         }
     }
 }

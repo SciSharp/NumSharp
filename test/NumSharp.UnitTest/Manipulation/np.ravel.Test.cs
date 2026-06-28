@@ -631,5 +631,212 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt64(0).Should().Be(0);
             r.GetInt64(999).Should().Be(999);
         }
+
+        // ================================================================
+        // ORDER='F' — F-contiguous source returns a view (no copy)
+        // ================================================================
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig2D_IsView()
+        {
+            // NumPy: ravel(aF,'F') of F-contig source shares memory.
+            //   aF = np.arange(12).reshape(3,4).copy('F')
+            //   np.shares_memory(np.ravel(aF,'F'), aF) == True
+            var aF = np.arange(12).reshape(3, 4).copy('F');
+            aF.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(aF, 'F');
+
+            r.Should().BeShaped(12);
+            r.ndim.Should().Be(1);
+
+            r.SetAtIndex(999L, 0L);
+            aF.GetAtIndex(0).Should().Be(999L,
+                "ravel('F') of F-contig source must return a view sharing memory.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig2D_ValuesMatchColumnMajor()
+        {
+            // F-contig memory layout for arange(12).reshape(3,4) is
+            //   columns: [0,4,8 | 1,5,9 | 2,6,10 | 3,7,11].
+            // ravel('F') must read column-major and reproduce that sequence.
+            var aF = np.arange(12).reshape(3, 4).copy('F');
+            var r = np.ravel(aF, 'F');
+
+            r.Should().BeOfValues(0L, 4L, 8L, 1L, 5L, 9L, 2L, 6L, 10L, 3L, 7L, 11L);
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig3D_IsView()
+        {
+            // 3D F-contig source: strides[0]==1 guarantees the linear memory walk
+            // matches F-order traversal — ravel must return a view.
+            var aF = np.arange(24).reshape(2, 3, 4).copy('F');
+            aF.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(aF, 'F');
+
+            r.Should().BeShaped(24);
+            r.SetAtIndex(777L, 5L);
+            // The 5th element in F-order corresponds to memory[5] in F-contig storage.
+            // Decompose F-flat-index 5 with dims (2,3,4) factors (1, 2, 6):
+            //   5 / 6 = 0 (k=axis2), 5 - 0*6 = 5 → 5 / 2 = 2 (j=axis1), 5 - 2*2 = 1 (i=axis0)
+            // So aF[1,2,0] should now be 777.
+            aF.GetInt64(1, 2, 0).Should().Be(777L,
+                "ravel('F') of F-contig 3D source must return a view sharing memory.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_CContig_IsCopy()
+        {
+            // ravel('F') of a C-contig (NOT F-contig) source must copy:
+            // memory walk gives C-order values, which differ from F-order.
+            var aC = np.arange(12).reshape(3, 4);
+            aC.Shape.IsContiguous.Should().BeTrue("test precondition");
+            aC.Shape.IsFContiguous.Should().BeFalse("test precondition");
+
+            var r = np.ravel(aC, 'F');
+
+            // Values should be column-major read-out of the C-contig logical array:
+            //   [0,4,8, 1,5,9, 2,6,10, 3,7,11]
+            r.Should().BeOfValues(0L, 4L, 8L, 1L, 5L, 9L, 2L, 6L, 10L, 3L, 7L, 11L);
+
+            // Writing to r must not propagate back to the C-contig source.
+            r.SetAtIndex(999L, 0L);
+            aC.GetInt64(0, 0).Should().Be(0L,
+                "ravel('F') of C-contig source must materialize a fresh column-major copy.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_Transpose2D_IsView()
+        {
+            // Transpose of C-contig 2D shares memory with swapped strides, yielding an
+            // F-contig view. ravel('F') of that view should also be a view.
+            var a = np.arange(12).reshape(3, 4);
+            var aT = a.T; // (4,3), strides [1,4] — F-contig
+
+            aT.Shape.IsFContiguous.Should().BeTrue("transpose of C-contig 2D should be F-contig");
+
+            var r = np.ravel(aT, 'F');
+
+            // F-order ravel of aT walks memory linearly. aT's underlying memory is still
+            // the original C-contig buffer [0..11], so r values are [0..11].
+            r.Should().BeOfValues(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
+
+            // And it's a view back to the original storage.
+            r.SetAtIndex(888L, 0L);
+            a.GetInt64(0, 0).Should().Be(888L,
+                "ravel('F') of an F-contig transpose-view should share memory with the underlying buffer.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_KOrder_FContigSource_IsView()
+        {
+            // order='K' on an F-contig source resolves to 'F'; should hit the view path.
+            var aF = np.arange(8).reshape(2, 4).copy('F');
+            aF.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(aF, 'K');
+
+            r.Should().BeShaped(8);
+            r.SetAtIndex(123L, 0L);
+            aF.GetAtIndex(0).Should().Be(123L,
+                "ravel('K') on an F-contig source must resolve to 'F' and return a view.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_AOrder_FContigSource_IsView()
+        {
+            // order='A' on a strictly-F-contig source resolves to 'F'; should view.
+            var aF = np.arange(6).reshape(2, 3).copy('F');
+            aF.Shape.IsFContiguous.Should().BeTrue("test precondition");
+            aF.Shape.IsContiguous.Should().BeFalse("strictly F-contig (not also C-contig)");
+
+            var r = np.ravel(aF, 'A');
+
+            r.Should().BeShaped(6);
+            r.SetAtIndex(321L, 0L);
+            aF.GetAtIndex(0).Should().Be(321L,
+                "ravel('A') on strictly-F-contig source must resolve to 'F' and return a view.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig_DtypeFloat()
+        {
+            var aF = np.arange(6.0).reshape(2, 3).copy('F');
+            aF.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(aF, 'F');
+
+            r.dtype.Should().Be(typeof(double));
+            r.Should().BeShaped(6);
+            // Memory layout F-contig: columns [0.0,3.0 | 1.0,4.0 | 2.0,5.0]
+            r.Should().BeOfValues(0.0, 3.0, 1.0, 4.0, 2.0, 5.0);
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig_EquivalentToFlattenF_Values()
+        {
+            // ravel('F') and flatten('F') must produce the same values for any source.
+            var aF = np.arange(12).reshape(3, 4).copy('F');
+
+            var r = np.ravel(aF, 'F');
+            var f = aF.flatten('F');
+
+            np.array_equal(r, f).Should().BeTrue(
+                "ravel('F') and flatten('F') must produce equal values regardless of copy/view choice.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig_PreservesSize()
+        {
+            np.ravel(np.arange(6).reshape(2, 3).copy('F'), 'F').size.Should().Be(6);
+            np.ravel(np.arange(24).reshape(2, 3, 4).copy('F'), 'F').size.Should().Be(24);
+            np.ravel(np.arange(120).reshape(2, 3, 4, 5).copy('F'), 'F').size.Should().Be(120);
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContigColumnSlice_PreservesOffset_IsView()
+        {
+            // F-contig column slice has offset != 0 but remains F-contig:
+            //   stride[1] == dim[0] * stride[0] still holds when slicing the second axis.
+            // ravel('F') must preserve the offset and bufferSize so the view continues to
+            // read from the correct buffer range.
+            var aF = np.arange(20).reshape(4, 5).copy('F');
+            var s = aF[":", "1:3"]; // (4,2), F-contig, offset=4
+            s.Shape.IsFContiguous.Should().BeTrue("column slice of F-contig preserves F-contiguity");
+            s.Shape.offset.Should().Be(4, "column 1 starts at memory offset 4 in F-contig (4,5)");
+
+            var r = np.ravel(s, 'F');
+
+            r.Should().BeShaped(8);
+            // F-order traversal of s:
+            //   s[0,0]=1, s[1,0]=6, s[2,0]=11, s[3,0]=16, s[0,1]=2, s[1,1]=7, s[2,1]=12, s[3,1]=17
+            r.Should().BeOfValues(1L, 6L, 11L, 16L, 2L, 7L, 12L, 17L);
+
+            // Write through r[0] and observe s[0,0] / aF[0,1] (all share memory[4]).
+            r.SetInt64(999L, 0);
+            s.GetInt64(0, 0).Should().Be(999L, "ravel('F') of F-contig column slice should be a view of the slice.");
+            aF.GetInt64(0, 1).Should().Be(999L, "and therefore also a view back to the parent buffer.");
+        }
+
+        [TestMethod]
+        public void Ravel_FOrder_FContig_BothCAndFContig_IsView()
+        {
+            // A (1, N) shape is both C-contig and F-contig. ravel('F') should still take
+            // the view path; the 1-D Alias is also both C- and F-contig.
+            var both = np.array(new long[,] { { 10, 20, 30, 40 } });
+            both.Shape.IsContiguous.Should().BeTrue("test precondition");
+            both.Shape.IsFContiguous.Should().BeTrue("test precondition");
+
+            var r = np.ravel(both, 'F');
+
+            r.Should().BeShaped(4);
+            r.Should().BeOfValues(10L, 20L, 30L, 40L);
+            r.SetInt64(777L, 0);
+            both.GetInt64(0, 0).Should().Be(777L,
+                "ravel('F') on shape (1,N) (both C & F contig) should return a view sharing memory.");
+        }
     }
 }

@@ -103,7 +103,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var samples = rng.standard_gamma(0.5, 10000L);
 
             // All should be positive
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThan(0.0);
             }
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.standard_gamma(0, 5L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().Be(0.0);
             }
@@ -172,7 +172,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var rng = np.random.RandomState(42);
             var samples = rng.standard_gamma(0.1, 1000L);
 
-            foreach (var val in samples.AsIterator<double>())
+            foreach (var val in samples.AsElements<double>())
             {
                 val.Should().BeGreaterThanOrEqualTo(0.0);
             }

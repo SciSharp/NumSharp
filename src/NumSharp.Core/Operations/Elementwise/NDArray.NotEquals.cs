@@ -20,7 +20,7 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty || lhs.size == 0)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            return lhs.TensorEngine.NotEqual(lhs, rhs);
+            return lhs.TensorEngine.NotEqual(lhs, rhs).AsGeneric<bool>();
         }
 
         /// <summary>

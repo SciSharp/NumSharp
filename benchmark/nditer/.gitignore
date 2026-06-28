@@ -1,0 +1,6 @@
+# Transient run artifacts. The committed results are nditer_results.{md,tsv}
+# and cards/*.png (written by nditer_sheet.py / nditer_cards.py).
+run.log
+run.*.log
+__pycache__/
+*.pyc

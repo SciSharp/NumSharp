@@ -156,6 +156,11 @@ namespace NumSharp.Generic
         public NDArray(Shape shape, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros) { }
 
         /// <summary>
+        /// Clone the array while preserving the typed NDArray wrapper.
+        /// </summary>
+        public override NDArray Clone() => new NDArray<TDType>(Storage.Clone()) { TensorEngine = TensorEngine };
+
+        /// <summary>
         /// Array access to storage data - overridden on purpose
         /// </summary>
         /// <value></value>

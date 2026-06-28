@@ -316,6 +316,32 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
+        public void Half_Power_HalfExponent_ScalarBroadcast()
+        {
+            // Regression: a Half *exponent* (scalar-broadcast rhs) used to throw InvalidCastException —
+            // the scalar-exponent fast path read the value via Convert.ToDouble(object), which fails for
+            // System.Half (not IConvertible). NumPy 2.4.2 keeps float16: power(f16, f16) -> f16.
+            void Check(Half[] baseVals, Half exp, params double[] expected)
+            {
+                var r = np.power(np.array(baseVals), np.array(new[] { exp }));
+                r.typecode.Should().Be(NPTypeCode.Half);
+                for (int i = 0; i < expected.Length; i++)
+                    ((double)r.GetAtIndex<Half>(i)).Should().BeApproximately(expected[i], 1e-2,
+                        $"power(f16, f16 {(double)exp}) element {i}");
+            }
+            Check(new[] { (Half)2, (Half)3 }, (Half)2, 4.0, 9.0);     // exp=2 fast path (the throwing cell)
+            Check(new[] { (Half)2, (Half)3 }, (Half)3, 8.0, 27.0);    // exp=3 general path
+            Check(new[] { (Half)4, (Half)9 }, (Half)0.5, 2.0, 3.0);   // exp=0.5 sqrt fast path
+            Check(new[] { (Half)2, (Half)4 }, (Half)(-1), 0.5, 0.25); // exp=-1 reciprocal fast path
+
+            // Scalar-broadcast on the BASE side: power(f16 scalar, f16 array) -> f16.
+            var rb = np.power(np.array(new[] { (Half)2 }), np.array(new[] { (Half)2, (Half)3, (Half)4 }));
+            rb.typecode.Should().Be(NPTypeCode.Half);
+            ((double)rb.GetAtIndex<Half>(0)).Should().Be(4.0);
+            ((double)rb.GetAtIndex<Half>(2)).Should().Be(16.0);
+        }
+
+        [TestMethod]
         public void Complex_Power()
         {
             // NumPy: np.power([1+0j, 0+1j, 1+1j], 2)

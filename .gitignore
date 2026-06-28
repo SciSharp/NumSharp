@@ -361,3 +361,18 @@ docs/DESIGN.md
 # Claude Code worktrees (local only)
 .claude/worktrees/
 !docs/releases/
+
+# Benchmark run artifacts (regenerable; only *-report.md / README.md are tracked docs)
+benchmark/results/
+benchmark/numpy-results.json
+benchmark/benchmark-report.json
+benchmark/benchmark-report.csv
+benchmark/.claude_*.log
+/.claude/scripts
+
+# Windows/MSYS crash dumps
+*.stackdump
+
+# DocFX build OUTPUT — regenerated in CI from docs/website-src/ and deployed via the Pages artifact.
+# (docs/website-src/ is the tracked source; this is just its stale generated output.)
+docs/website/

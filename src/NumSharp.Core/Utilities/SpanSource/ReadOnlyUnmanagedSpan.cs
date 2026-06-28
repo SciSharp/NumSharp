@@ -36,7 +36,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="array">The target array.</param>
         /// <remarks>Returns default when <paramref name="array"/> is null.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ReadOnlyUnmanagedSpan(T[]? array)
         {
             if (array == null)
@@ -60,7 +60,7 @@ namespace NumSharp.Utilities
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;Length).
         /// </exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ReadOnlyUnmanagedSpan(T[]? array, int start, int length)
         {
             if (array == null)
@@ -98,7 +98,7 @@ namespace NumSharp.Utilities
         /// Thrown when the specified <paramref name="length"/> is negative.
         /// </exception>
         [CLSCompliant(false)]
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public unsafe ReadOnlyUnmanagedSpan(void* pointer, long length)
         {
             if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
@@ -112,7 +112,7 @@ namespace NumSharp.Utilities
 
         /// <summary>Creates a new <see cref="ReadOnlyUnmanagedSpan{T}"/> of length 1 around the specified reference.</summary>
         /// <param name="reference">A reference to data.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ReadOnlyUnmanagedSpan(ref readonly T reference)
         {
             _reference = ref Unsafe.AsRef(in reference);
@@ -120,7 +120,7 @@ namespace NumSharp.Utilities
         }
 
         // Constructor for internal use only. It is not safe to expose publicly, and is instead exposed via the unsafe MemoryMarshal.CreateReadOnlyUnmanagedSpan.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal ReadOnlyUnmanagedSpan(ref T reference, long length)
         {
             Debug.Assert(length >= 0);
@@ -139,7 +139,7 @@ namespace NumSharp.Utilities
         /// </exception>
         public ref readonly T this[long index]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             get
             {
                 if ((ulong)index >= (ulong)_length)
@@ -224,7 +224,7 @@ namespace NumSharp.Utilities
 
             /// <summary>Initialize the enumerator.</summary>
             /// <param name="span">The span to enumerate.</param>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             internal Enumerator(ReadOnlyUnmanagedSpan<T> span)
             {
                 _span = span;
@@ -232,7 +232,7 @@ namespace NumSharp.Utilities
             }
 
             /// <summary>Advances the enumerator to the next element of the span.</summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool MoveNext()
             {
                 long index = _index + 1;
@@ -248,7 +248,7 @@ namespace NumSharp.Utilities
             /// <summary>Gets the element at the current position of the enumerator.</summary>
             public ref readonly T Current
             {
-                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
                 get => ref _span[_index];
             }
 
@@ -287,7 +287,7 @@ namespace NumSharp.Utilities
         /// <exception cref="ArgumentException">
         /// Thrown when the destination UnmanagedSpan is shorter than the source UnmanagedSpan.
         /// </exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void CopyTo(UnmanagedSpan<T> destination)
         {
             if ((ulong)_length <= (ulong)destination.Length)
@@ -350,7 +350,7 @@ namespace NumSharp.Utilities
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> index is not in range (&lt;0 or &gt;Length).
         /// </exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ReadOnlyUnmanagedSpan<T> Slice(long start)
         {
             if ((ulong)start > (ulong)_length)
@@ -367,7 +367,7 @@ namespace NumSharp.Utilities
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in range (&lt;0 or &gt;Length).
         /// </exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public ReadOnlyUnmanagedSpan<T> Slice(long start, long length)
         {
             // For 64-bit lengths, we need to check that start + length doesn't overflow

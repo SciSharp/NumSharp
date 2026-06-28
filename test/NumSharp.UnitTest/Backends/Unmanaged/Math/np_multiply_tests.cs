@@ -23,11 +23,9 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(ret.GetAtIndex(i));
             }
         }
-#if _REGEN
-        %a = except(supported_dtypes, "NDArray", "Boolean")
-        %foreach a
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
-#else
+        // %a = except(supported_dtypes, "NDArray", "Boolean")
+        // %foreach a
+        // [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Boolean)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
@@ -40,7 +38,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
         [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
-#endif
         [TestMethod]
         public void MultiplyAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
         {
@@ -251,26 +248,24 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         }
 
 
-#if _REGEN
-        %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
-        %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
-        %foreach forevery(a,a,true), forevery(b,b,true)%
-        [TestMethod]
-        public void Multiply_#1_To_#2()
-        {
-            var left = np.zeros(new Shape(5, 5), NPTypeCode.#1) + 3;
-            var right = np.ones(new Shape(5, 5), NPTypeCode.#2) + 1;
-            var ret = left * right;
+        // %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
+        // %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
+        // %foreach forevery(a,a,true), forevery(b,b,true)%
+        // [TestMethod]
+        // public void Multiply_#1_To_#2()
+        // {
+            // var left = np.zeros(new Shape(5, 5), NPTypeCode.#1) + 3;
+            // var right = np.ones(new Shape(5, 5), NPTypeCode.#2) + 1;
+            // var ret = left * right;
             
-            for (int i = 0; i < ret.size; i++)
-            {
-                var val = ret.GetAtIndex(i);
-                Convert.ToInt32(val).Should().Be(6);
-                Console.WriteLine(val);
-            }
-        }
-        %
-#else
+            // for (int i = 0; i < ret.size; i++)
+            // {
+                // var val = ret.GetAtIndex(i);
+                // Convert.ToInt32(val).Should().Be(6);
+                // Console.WriteLine(val);
+            // }
+        // }
+        // %
 
         [TestMethod]
         public void Multiply_Boolean_To_Byte()
@@ -1644,6 +1639,5 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-#endif
     }
 }

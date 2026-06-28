@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -7,107 +8,62 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Repeat elements of an array.
+        ///     Repeat each element of an array after themselves.
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="repeats">The number of repetitions for each element.</param>
-        /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-        public static NDArray repeat(NDArray a, int repeats) => repeat(a, (long)repeats);
+        /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input and returns a flat array.</param>
+        /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        public static NDArray repeat(NDArray a, int repeats, int? axis = null)
+            => repeat(a, (long)repeats, axis);
 
         /// <summary>
-        ///     Repeat elements of an array.
+        ///     Repeat each element of an array after themselves.
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="repeats">The number of repetitions for each element.</param>
-        /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-        public static NDArray repeat(NDArray a, long repeats)
+        /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input.</param>
+        /// <returns>Output array.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        public static NDArray repeat(NDArray a, long repeats, int? axis = null)
         {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
 
-            // Handle empty input or zero repeats
-            if (a.size == 0 || repeats == 0)
-                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+            if (axis is null)
+                return RepeatScalarFlat(a, repeats);
 
-            long totalSize = a.size * repeats;
-            a = a.ravel(); // After ravel(), array is guaranteed contiguous
-
-            return a.GetTypeCode switch
-            {
-                NPTypeCode.Boolean => RepeatScalarTyped<bool>(a, repeats, totalSize),
-                NPTypeCode.Byte => RepeatScalarTyped<byte>(a, repeats, totalSize),
-                NPTypeCode.SByte => RepeatScalarTyped<sbyte>(a, repeats, totalSize),
-                NPTypeCode.Int16 => RepeatScalarTyped<short>(a, repeats, totalSize),
-                NPTypeCode.UInt16 => RepeatScalarTyped<ushort>(a, repeats, totalSize),
-                NPTypeCode.Int32 => RepeatScalarTyped<int>(a, repeats, totalSize),
-                NPTypeCode.UInt32 => RepeatScalarTyped<uint>(a, repeats, totalSize),
-                NPTypeCode.Int64 => RepeatScalarTyped<long>(a, repeats, totalSize),
-                NPTypeCode.UInt64 => RepeatScalarTyped<ulong>(a, repeats, totalSize),
-                NPTypeCode.Char => RepeatScalarTyped<char>(a, repeats, totalSize),
-                NPTypeCode.Half => RepeatScalarTyped<Half>(a, repeats, totalSize),
-                NPTypeCode.Single => RepeatScalarTyped<float>(a, repeats, totalSize),
-                NPTypeCode.Double => RepeatScalarTyped<double>(a, repeats, totalSize),
-                NPTypeCode.Decimal => RepeatScalarTyped<decimal>(a, repeats, totalSize),
-                NPTypeCode.Complex => RepeatScalarTyped<System.Numerics.Complex>(a, repeats, totalSize),
-                _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
-            };
+            return RepeatScalarAlongAxis(a, repeats, axis.Value);
         }
 
         /// <summary>
-        ///     Repeat elements of an array with per-element repeat counts.
+        ///     Repeat elements of an array with per-element repeat counts. Mirrors NumPy
+        ///     <c>np.repeat(a, repeats, axis)</c>: scalar / size-1 <paramref name="repeats"/> broadcasts to
+        ///     every element along the (flattened or selected) axis; otherwise the length must match.
         /// </summary>
         /// <param name="a">Input array.</param>
-        /// <param name="repeats">Array of repeat counts for each element. Must have the same size as the flattened input array.</param>
-        /// <returns>A new array with each element repeated according to the corresponding count in repeats.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-        public static NDArray repeat(NDArray a, NDArray repeats)
+        /// <param name="repeats">Repeat counts. Either a 0-d/size-1 array (broadcast) or a 1-D array of length equal to <c>a.size</c> (axis=None) or <c>a.shape[axis]</c>.</param>
+        /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
+        /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
+        public static NDArray repeat(NDArray a, NDArray repeats, int? axis = null)
         {
+            if (a is null)
+                throw new ArgumentNullException(nameof(a));
+            if (repeats is null)
+                throw new ArgumentNullException(nameof(repeats));
+
             // NumPy parity: repeats must be safely castable to int64 — reject float/complex/uint64.
             if (!IsSafeToInt64(repeats.GetTypeCode))
                 throw new TypeError($"Cannot cast array data from dtype('{repeats.GetTypeCode.AsNumpyDtypeName()}') to dtype('int64') according to the rule 'safe'");
 
-            a = a.ravel();
-            var repeatsFlat = repeats.ravel();
+            if (axis is null)
+                return RepeatPerElementFlat(a, repeats);
 
-            if (a.size != repeatsFlat.size)
-                throw new ArgumentException($"repeats array size ({repeatsFlat.size}) must match input array size ({a.size})");
-
-            // Calculate total output size and validate repeat counts
-            long totalSize = 0;
-            for (long i = 0; i < repeatsFlat.size; i++)
-            {
-                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
-                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
-                if (count < 0)
-                    throw new ArgumentException("repeats may not contain negative values");
-                totalSize += count;
-            }
-
-            // Handle empty result
-            if (totalSize == 0)
-                return new NDArray(a.GetTypeCode, Shape.Vector(0));
-
-            return a.GetTypeCode switch
-            {
-                NPTypeCode.Boolean => RepeatArrayTyped<bool>(a, repeatsFlat, totalSize),
-                NPTypeCode.Byte => RepeatArrayTyped<byte>(a, repeatsFlat, totalSize),
-                NPTypeCode.SByte => RepeatArrayTyped<sbyte>(a, repeatsFlat, totalSize),
-                NPTypeCode.Int16 => RepeatArrayTyped<short>(a, repeatsFlat, totalSize),
-                NPTypeCode.UInt16 => RepeatArrayTyped<ushort>(a, repeatsFlat, totalSize),
-                NPTypeCode.Int32 => RepeatArrayTyped<int>(a, repeatsFlat, totalSize),
-                NPTypeCode.UInt32 => RepeatArrayTyped<uint>(a, repeatsFlat, totalSize),
-                NPTypeCode.Int64 => RepeatArrayTyped<long>(a, repeatsFlat, totalSize),
-                NPTypeCode.UInt64 => RepeatArrayTyped<ulong>(a, repeatsFlat, totalSize),
-                NPTypeCode.Char => RepeatArrayTyped<char>(a, repeatsFlat, totalSize),
-                NPTypeCode.Half => RepeatArrayTyped<Half>(a, repeatsFlat, totalSize),
-                NPTypeCode.Single => RepeatArrayTyped<float>(a, repeatsFlat, totalSize),
-                NPTypeCode.Double => RepeatArrayTyped<double>(a, repeatsFlat, totalSize),
-                NPTypeCode.Decimal => RepeatArrayTyped<decimal>(a, repeatsFlat, totalSize),
-                NPTypeCode.Complex => RepeatArrayTyped<System.Numerics.Complex>(a, repeatsFlat, totalSize),
-                _ => throw new NotSupportedException($"Type {a.GetTypeCode} is not supported.")
-            };
+            return RepeatPerElementAlongAxis(a, repeats, axis.Value);
         }
 
         /// <summary>
@@ -116,7 +72,7 @@ namespace NumSharp
         /// <param name="a">Input scalar.</param>
         /// <param name="repeats">The number of repetitions.</param>
         /// <returns>A 1-D array with the scalar repeated.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         public static unsafe NDArray repeat<T>(T a, int repeats) where T : unmanaged
             => repeat(a, (long)repeats);
 
@@ -126,7 +82,7 @@ namespace NumSharp
         /// <param name="a">Input scalar.</param>
         /// <param name="repeats">The number of repetitions.</param>
         /// <returns>A 1-D array with the scalar repeated.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         public static unsafe NDArray repeat<T>(T a, long repeats) where T : unmanaged
         {
             if (repeats < 0)
@@ -142,26 +98,238 @@ namespace NumSharp
             return ret;
         }
 
-        /// <summary>
-        ///     Generic implementation for repeating with scalar repeat count.
-        ///     Uses direct pointer access for performance (no allocations per element).
-        /// </summary>
-        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, long repeats, long totalSize) where T : unmanaged
-        {
-            var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
-            var src = (T*)a.Address;
-            var dst = (T*)ret.Address;
-            long srcSize = a.size;
+        // ============== axis=None (flatten) paths ==============
 
-            long outIdx = 0;
-            for (long i = 0; i < srcSize; i++)
+        private static unsafe NDArray RepeatScalarFlat(NDArray a, long repeats)
+        {
+            if (a.size == 0 || repeats == 0)
+                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+
+            // ravel() returns a C-contig view (no copy when already contig) or a fresh contig copy.
+            NDArray src = a.ravel();
+            long total = src.size * repeats;
+            var ret = new NDArray(a.GetTypeCode, Shape.Vector(total));
+
+            // Degenerate 3-loop: n_outer=1, n=size, chunk=elsize.
+            var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
+            kernel(
+                src: (byte*)src.Address,
+                dst: (byte*)ret.Address,
+                n_outer: 1,
+                n: src.size,
+                count: repeats);
+
+            return ret;
+        }
+
+        private static unsafe NDArray RepeatPerElementFlat(NDArray a, NDArray repeats)
+        {
+            NDArray src = a.ravel();
+            NDArray repFlat = repeats.ravel();
+
+            // NumPy: scalar (0-d) or size-1 repeats broadcasts to a.size; anything else must match exactly.
+            bool broadcast = repFlat.size == 1 || repeats.ndim == 0;
+            if (!broadcast && src.size != repFlat.size)
+                throw new ArgumentException(
+                    $"operands could not be broadcast together with shape ({src.size},) ({repFlat.size},)");
+
+            if (src.size == 0)
+                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+
+            long[] counts;
+            long broadcastVal;
+            long total = ComputeCounts(repFlat, broadcast, src.size, out counts, out broadcastVal);
+
+            if (total == 0)
+                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+
+            var ret = new NDArray(a.GetTypeCode, Shape.Vector(total));
+
+            if (broadcast)
             {
-                T val = src[i];
-                for (long j = 0; j < repeats; j++)
-                    dst[outIdx++] = val;
+                var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(a.dtypesize);
+                kernel(
+                    src: (byte*)src.Address,
+                    dst: (byte*)ret.Address,
+                    n_outer: 1,
+                    n: src.size,
+                    count: broadcastVal);
+            }
+            else
+            {
+                var kernel = DirectILKernelGenerator.GetRepeatPerJKernel(a.dtypesize);
+                fixed (long* pCounts = counts)
+                {
+                    kernel(
+                        src: (byte*)src.Address,
+                        dst: (byte*)ret.Address,
+                        n_outer: 1,
+                        n: src.size,
+                        counts: pCounts);
+                }
             }
 
             return ret;
+        }
+
+        // ============== axis-aware paths ==============
+
+        private static unsafe NDArray RepeatScalarAlongAxis(NDArray a, long repeats, int axis)
+        {
+            int ndim = a.ndim;
+
+            // NumPy: 0-d input with axis=0/-1 is silently promoted to a 1-d, size-1 array.
+            if (ndim == 0)
+            {
+                if (axis != 0 && axis != -1)
+                    throw new AxisError(axis, ndim);
+                a = a.reshape(1);
+                ndim = 1;
+            }
+
+            int normalizedAxis = NormalizeAxis(axis, ndim);
+
+            // NumPy's PyArray_CheckAxis(... CARRAY) makes the operand C-contig — the
+            // chunked memcpy reads a logically-rectangular slab of inner dims.
+            NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
+
+            long[] inDims = src.shape;
+            long n = inDims[normalizedAxis];
+            long total = n * repeats;
+
+            long[] outDims = (long[])inDims.Clone();
+            outDims[normalizedAxis] = total;
+            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+
+            if (src.size == 0 || total == 0)
+                return ret;
+
+            ComputeAxisGeometry(inDims, normalizedAxis, out long n_outer, out long nel);
+            int chunkBytes = checked((int)(nel * a.dtypesize));
+
+            var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
+            kernel(
+                src: (byte*)src.Address,
+                dst: (byte*)ret.Address,
+                n_outer: n_outer,
+                n: n,
+                count: repeats);
+
+            return ret;
+        }
+
+        private static unsafe NDArray RepeatPerElementAlongAxis(NDArray a, NDArray repeats, int axis)
+        {
+            int ndim = a.ndim;
+            if (ndim == 0)
+            {
+                if (axis != 0 && axis != -1)
+                    throw new AxisError(axis, ndim);
+                a = a.reshape(1);
+                ndim = 1;
+            }
+
+            int normalizedAxis = NormalizeAxis(axis, ndim);
+
+            NDArray src = a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
+            NDArray repFlat = repeats.ravel();
+
+            long[] inDims = src.shape;
+            long n = inDims[normalizedAxis];
+
+            // NumPy parity: scalar (0-d) or size-1 repeats broadcasts along the axis; otherwise the
+            // size must match the axis length exactly.
+            bool broadcast = repFlat.size == 1 || repeats.ndim == 0;
+            if (!broadcast && repFlat.size != n)
+                throw new ArgumentException(
+                    $"operands could not be broadcast together with shape ({n},) ({repFlat.size},)");
+
+            long[] counts;
+            long broadcastVal;
+            long total = ComputeCounts(repFlat, broadcast, n, out counts, out broadcastVal);
+
+            long[] outDims = (long[])inDims.Clone();
+            outDims[normalizedAxis] = total;
+            var ret = new NDArray(a.GetTypeCode, new Shape(outDims));
+
+            if (src.size == 0 || total == 0)
+                return ret;
+
+            ComputeAxisGeometry(inDims, normalizedAxis, out long n_outer, out long nel);
+            int chunkBytes = checked((int)(nel * a.dtypesize));
+
+            if (broadcast)
+            {
+                var kernel = DirectILKernelGenerator.GetRepeatBroadcastKernel(chunkBytes);
+                kernel(
+                    src: (byte*)src.Address,
+                    dst: (byte*)ret.Address,
+                    n_outer: n_outer,
+                    n: n,
+                    count: broadcastVal);
+            }
+            else
+            {
+                var kernel = DirectILKernelGenerator.GetRepeatPerJKernel(chunkBytes);
+                fixed (long* pCounts = counts)
+                {
+                    kernel(
+                        src: (byte*)src.Address,
+                        dst: (byte*)ret.Address,
+                        n_outer: n_outer,
+                        n: n,
+                        counts: pCounts);
+                }
+            }
+
+            return ret;
+        }
+
+        // ============== helpers ==============
+
+        private static int NormalizeAxis(int axis, int ndim)
+        {
+            int original = axis;
+            if (axis < 0)
+                axis += ndim;
+            if (axis < 0 || axis >= ndim)
+                throw new AxisError(original, ndim);
+            return axis;
+        }
+
+        private static void ComputeAxisGeometry(long[] dims, int axis, out long n_outer, out long nel)
+        {
+            n_outer = 1;
+            for (int i = 0; i < axis; i++) n_outer *= dims[i];
+            nel = 1;
+            for (int i = axis + 1; i < dims.Length; i++) nel *= dims[i];
+        }
+
+        // Materializes the per-j repeat counts as a long[] and validates non-negative.
+        // Returns the total output size along the axis.
+        private static long ComputeCounts(NDArray repFlat, bool broadcast, long n, out long[] counts, out long broadcastVal)
+        {
+            if (broadcast)
+            {
+                broadcastVal = Converts.ToInt64(repFlat.GetAtIndex(0));
+                if (broadcastVal < 0)
+                    throw new ArgumentException("repeats may not contain negative values");
+                counts = null;
+                return broadcastVal * n;
+            }
+
+            broadcastVal = 0;
+            counts = new long[n];
+            long total = 0;
+            for (long j = 0; j < n; j++)
+            {
+                long c = Converts.ToInt64(repFlat.GetAtIndex(j));
+                if (c < 0)
+                    throw new ArgumentException("repeats may not contain negative values");
+                counts[j] = c;
+                total += c;
+            }
+            return total;
         }
 
         /// <summary>
@@ -185,30 +353,6 @@ namespace NumSharp
                 default:
                     return false;
             }
-        }
-
-        /// <summary>
-        ///     Generic implementation for repeating with per-element repeat counts.
-        ///     Uses direct pointer access for performance (no allocations per element).
-        /// </summary>
-        private static unsafe NDArray RepeatArrayTyped<T>(NDArray a, NDArray repeatsFlat, long totalSize) where T : unmanaged
-        {
-            var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
-            var src = (T*)a.Address;
-            var dst = (T*)ret.Address;
-            long srcSize = a.size;
-
-            long outIdx = 0;
-            for (long i = 0; i < srcSize; i++)
-            {
-                // Converts.ToInt64 handles all 15 dtypes including Half/Complex (System.Convert throws on those).
-                long count = Converts.ToInt64(repeatsFlat.GetAtIndex(i));
-                T val = src[i];
-                for (long j = 0; j < count; j++)
-                    dst[outIdx++] = val;
-            }
-
-            return ret;
         }
     }
 }

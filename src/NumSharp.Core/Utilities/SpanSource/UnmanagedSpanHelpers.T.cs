@@ -1431,7 +1431,7 @@ namespace NumSharp.Utilities
         // These use INumber<T> constraint for == operator and SIMD acceleration
         // ==================================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static bool ContainsValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedContainsValueType(ref searchSpace, value, length);
@@ -1586,7 +1586,7 @@ namespace NumSharp.Utilities
             return false;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static long IndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfValueType(ref searchSpace, value, length);
@@ -1739,7 +1739,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static long LastIndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedLastIndexOfValueType(ref searchSpace, value, length);
@@ -1889,7 +1889,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static long IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfAnyValueType(ref searchSpace, value0, value1, length);
@@ -2035,7 +2035,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         internal static long IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, T value2, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfAnyValueType(ref searchSpace, value0, value1, value2, length);
@@ -2342,7 +2342,7 @@ namespace NumSharp.Utilities
         // Helper methods for computing indices from SIMD match results
         // ==================================================================================
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector128<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2350,7 +2350,7 @@ namespace NumSharp.Utilities
             return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector256<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2358,7 +2358,7 @@ namespace NumSharp.Utilities
             return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector512<T> equals) where T : struct
         {
             ulong notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2366,7 +2366,7 @@ namespace NumSharp.Utilities
             return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeLastIndex<T>(long offset, Vector128<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2374,7 +2374,7 @@ namespace NumSharp.Utilities
             return offset + index / sizeof(T);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeLastIndex<T>(long offset, Vector256<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2382,7 +2382,7 @@ namespace NumSharp.Utilities
             return offset + index / sizeof(T);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe long ComputeLastIndex<T>(long offset, Vector512<T> equals) where T : struct
         {
             ulong notEqualsElements = IsAllNegativeOnes(equals.AsByte());
@@ -2390,7 +2390,7 @@ namespace NumSharp.Utilities
             return offset + index / sizeof(T);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static uint IsAllNegativeOnes(Vector128<byte> vector)
         {
             if (Sse2.IsSupported)
@@ -2410,7 +2410,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static uint IsAllNegativeOnes(Vector256<byte> vector)
         {
             if (Avx2.IsSupported)
@@ -2430,7 +2430,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static ulong IsAllNegativeOnes(Vector512<byte> vector)
         {
 #if NET9_0_OR_GREATER

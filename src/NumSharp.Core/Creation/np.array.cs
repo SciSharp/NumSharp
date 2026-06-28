@@ -16,12 +16,17 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Wraps given <paramref name="nd"/> in an alias. If <paramref name="copy"/> is true then returns a clone.
+        ///     Create an array from an existing <see cref="NDArray"/>. Matches NumPy's default
+        ///     <c>np.array(a)</c> which always copies (NumPy 2.x: <c>copy=True</c> by default).
         /// </summary>
-        /// <param name="nd"></param>
-        /// <param name="copy">If <paramref name="copy"/> is true then returns a clone.</param>
+        /// <param name="nd">Source array.</param>
+        /// <param name="copy">When <c>true</c> (default) the source storage is cloned; when <c>false</c> the storage is shared (alias). For "copy only if needed" semantics use <see cref="asarray(NDArray, Type, char, bool?, NDArray, string)"/>.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array(NDArray nd, bool copy = false) => copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
+        public static NDArray array(NDArray nd, bool copy = true) =>
+            copy
+                ? new NDArray(nd.Storage.Clone()) { TensorEngine = nd.TensorEngine }
+                : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
 
         /// <summary>
         ///     Creates a scalar (0-dimensional) <see cref="NDArray"/> from a single value.
@@ -41,7 +46,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="ndmin">Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.</param>
         /// <param name="copy">Always copies if the array is larger than 1-d.</param>
-        /// <param name="order">Not used.</param>
+        /// <param name="order">Memory layout: 'C' (row-major, default), 'F' (column-major), 'A'/'K' (resolved from source).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
@@ -79,7 +84,14 @@ namespace NumSharp
                 copy = false;
             }
 
-            return new NDArray(copy ? (Array)array.Clone() : array, shape, order);
+            // C-contiguous materialization from the managed array.
+            var result = new NDArray(copy ? (Array)array.Clone() : array, shape, 'C');
+
+            // Honor F-order request: relay out into F-contig layout.
+            char physical = OrderResolver.Resolve(order, result.Shape);
+            if (physical == 'F' && result.Shape.NDim > 1 && !result.Shape.IsFContiguous)
+                result = result.copy('F');
+            return result;
         }
 
         /// <summary>
@@ -405,31 +417,29 @@ namespace NumSharp
             }
         }
 
-#if _REGEN
-        %l = "data.GetLength("
-        %r = ")"
-        %foreach range(1,16)%
+        // %l = "data.GetLength("
+        // %r = ")"
+        // %foreach range(1,16)%
 
-        /// <summary>
-        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
-        /// </summary>
-        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
-        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
-        /// <param name="copy">
-        ///     If true then the array will be copied to a newly allocated memory.<br></br>
-        ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
-        /// </param>
-        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
-        public static NDArray array<T>(T[#(repeat(",", i))] data, bool copy = true) where T : unmanaged
-        {
-            if (data == null)
-                throw new ArgumentNullException(nameof(data));
+        // /// <summary>
+        // ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
+        // /// </summary>
+        // /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        // /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
+        // /// <param name="copy">
+        // ///     If true then the array will be copied to a newly allocated memory.<br></br>
+        // ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
+        // /// </param>
+        // /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        // /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        // public static NDArray array<T>(T[#(repeat(",", i))] data, bool copy = true) where T : unmanaged
+        // {
+            // if (data == null)
+                // throw new ArgumentNullException(nameof(data));
 
-            return new NDArray(ArraySlice.FromArray(data, copy), new Shape(#(repeat("^l+str(n.ToString())+r", i+1, ", "))));
-        }
-        %
-#else
+            // return new NDArray(ArraySlice.FromArray(data, copy), new Shape(#(repeat("^l+str(n.ToString())+r", i+1, ", "))));
+        // }
+        // %
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/>.
@@ -772,6 +782,5 @@ namespace NumSharp
 
             return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1), data.GetLength(2), data.GetLength(3), data.GetLength(4), data.GetLength(5), data.GetLength(6), data.GetLength(7), data.GetLength(8), data.GetLength(9), data.GetLength(10), data.GetLength(11), data.GetLength(12), data.GetLength(13), data.GetLength(14), data.GetLength(15)));
         }
-#endif
     }
 }
