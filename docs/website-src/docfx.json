@@ -24,11 +24,21 @@
       {
         "files": ["**/*.{md,yml}"],
         "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**"]
+      },
+      {
+        "src": "../../benchmark/history/latest",
+        "files": ["*.md"],
+        "dest": "docs/reports"
       }
     ],
     "resource": [
       {
         "files": ["images/**"]
+      },
+      {
+        "src": "../../benchmark/history/latest",
+        "files": ["benchmark-report.json"],
+        "dest": "docs/data"
       }
     ],
     "output": "../website",
