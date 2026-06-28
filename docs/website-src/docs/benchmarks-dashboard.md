@@ -675,6 +675,445 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
 .ns-bench-dashboard .heat-bad { --heat: #c92f3a; }
 .ns-bench-dashboard .heat-empty { --heat: #8b949e; }
 
+.ns-bench-dashboard .function-explorer-shell {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
+  min-height: 34rem;
+  overflow: hidden;
+}
+
+.ns-bench-dashboard .function-sidebar {
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+}
+
+.ns-bench-dashboard .function-controls {
+  background: color-mix(in srgb, var(--panel) 94%, var(--ink) 6%);
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.72rem;
+}
+
+.ns-bench-dashboard .function-search,
+.ns-bench-dashboard .function-select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  min-width: 0;
+  padding: 0.48rem 0.55rem;
+  width: 100%;
+}
+
+.ns-bench-dashboard .function-search:focus,
+.ns-bench-dashboard .function-select:focus {
+  border-color: color-mix(in srgb, var(--ink) 36%, var(--line));
+  outline: 2px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  outline-offset: 2px;
+}
+
+.ns-bench-dashboard .function-filter-row {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ns-bench-dashboard .function-list-meta {
+  color: var(--quiet);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ns-bench-dashboard .function-list {
+  max-height: 38rem;
+  overflow: auto;
+}
+
+.ns-bench-dashboard .function-list-item {
+  --func-tone: var(--quiet);
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+  border-left: 4px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 0.18rem 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.55rem 0.68rem;
+  text-align: left;
+  width: 100%;
+}
+
+.ns-bench-dashboard .function-list-item:hover,
+.ns-bench-dashboard .function-list-item:focus-visible,
+.ns-bench-dashboard .function-list-item.is-active {
+  background: color-mix(in srgb, var(--func-tone) 10%, var(--panel));
+  border-left-color: var(--func-tone);
+  outline: 0;
+}
+
+.ns-bench-dashboard .function-list-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.84rem;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-list-score {
+  color: var(--func-tone);
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ns-bench-dashboard .function-list-detail {
+  color: var(--quiet);
+  font-size: 0.74rem;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-sparkline {
+  align-items: end;
+  display: flex;
+  gap: 2px;
+  grid-column: 1 / -1;
+  height: 1rem;
+  margin-top: 0.1rem;
+}
+
+.ns-bench-dashboard .function-spark-bar {
+  background: var(--spark-color, var(--quiet));
+  border-radius: 2px 2px 0 0;
+  flex: 1 1 0;
+  height: var(--spark-height, 30%);
+  min-width: 3px;
+  opacity: 0.95;
+}
+
+.ns-bench-dashboard .function-detail {
+  align-content: start;
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.ns-bench-dashboard .function-empty {
+  align-self: start;
+  color: var(--quiet);
+  padding: 0.6rem 0;
+}
+
+.ns-bench-dashboard .function-detail-head {
+  align-items: start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.ns-bench-dashboard .function-title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 1.15rem;
+  margin: 0 0 0.22rem;
+}
+
+.ns-bench-dashboard .function-subtitle {
+  color: var(--quiet);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.ns-bench-dashboard .function-ratio-pill {
+  --func-tone: var(--quiet);
+  background: color-mix(in srgb, var(--func-tone) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--func-tone) 42%, var(--line));
+  border-radius: 999px;
+  color: var(--func-tone);
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  padding: 0.32rem 0.58rem;
+}
+
+.ns-bench-dashboard .function-stat-strip {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ns-bench-dashboard .function-stat {
+  border-left: 3px solid color-mix(in srgb, var(--line) 72%, var(--quiet) 28%);
+  min-width: 0;
+  padding-left: 0.58rem;
+}
+
+.ns-bench-dashboard .function-stat span {
+  color: var(--quiet);
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.ns-bench-dashboard .function-stat strong {
+  display: block;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  margin-top: 0.18rem;
+  overflow-wrap: anywhere;
+}
+
+.ns-bench-dashboard .function-detail-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(14rem, 0.6fr);
+}
+
+.ns-bench-dashboard .function-block {
+  min-width: 0;
+}
+
+.ns-bench-dashboard .function-block-title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 750;
+  margin: 0 0 0.42rem;
+}
+
+.ns-bench-dashboard .function-heatmap-scroll,
+.ns-bench-dashboard .function-table-scroll {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.ns-bench-dashboard .function-heat-table,
+.ns-bench-dashboard .function-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.ns-bench-dashboard .function-heat-table th,
+.ns-bench-dashboard .function-heat-table td,
+.ns-bench-dashboard .function-table th,
+.ns-bench-dashboard .function-table td {
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  padding: 0.34rem 0.42rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ns-bench-dashboard .function-heat-table thead th,
+.ns-bench-dashboard .function-table thead th {
+  background: color-mix(in srgb, var(--panel) 92%, var(--ink) 8%);
+  color: var(--quiet);
+  font-size: 0.68rem;
+  font-weight: 750;
+  position: sticky;
+  text-transform: uppercase;
+  top: 0;
+  z-index: 1;
+}
+
+.ns-bench-dashboard .function-heat-table tbody th {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+  min-width: 5.3rem;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-heat-cell {
+  --func-tone: var(--quiet);
+  background: color-mix(in srgb, var(--func-tone) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--func-tone) 34%, var(--line));
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.05rem;
+  min-width: 4.7rem;
+  padding: 0.36rem 0.42rem;
+  text-align: left;
+  width: 100%;
+}
+
+.ns-bench-dashboard .function-heat-cell:hover,
+.ns-bench-dashboard .function-heat-cell:focus-visible,
+.ns-bench-dashboard .function-heat-cell.is-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--func-tone) 48%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--func-tone) 24%, transparent);
+  outline-offset: 1px;
+}
+
+.ns-bench-dashboard .function-heat-cell.is-empty {
+  background: color-mix(in srgb, var(--quiet) 7%, var(--panel));
+  cursor: default;
+  opacity: 0.7;
+}
+
+.ns-bench-dashboard .function-heat-cell.is-empty:hover,
+.ns-bench-dashboard .function-heat-cell.is-empty:focus-visible {
+  box-shadow: none;
+  outline: 0;
+}
+
+.ns-bench-dashboard .function-heat-ratio {
+  color: var(--func-tone);
+  font-size: 0.82rem;
+  font-weight: 820;
+  font-variant-numeric: tabular-nums;
+}
+
+.ns-bench-dashboard .function-heat-count {
+  color: var(--quiet);
+  font-size: 0.68rem;
+}
+
+.ns-bench-dashboard .function-scenarios {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.ns-bench-dashboard .function-scenario-row {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(5.8rem, 8rem) minmax(0, 1fr) 4.4rem 3.6rem;
+}
+
+.ns-bench-dashboard .function-scenario-label {
+  font-size: 0.78rem;
+  font-weight: 720;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-scenario-track {
+  background: var(--muted-bg);
+  border-radius: 999px;
+  height: 0.52rem;
+  overflow: hidden;
+}
+
+.ns-bench-dashboard .function-scenario-fill {
+  background: var(--func-tone, var(--quiet));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  width: var(--w);
+}
+
+.ns-bench-dashboard .function-scenario-score {
+  color: var(--func-tone, var(--quiet));
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ns-bench-dashboard .function-scenario-count {
+  color: var(--quiet);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.ns-bench-dashboard .function-table-head {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.85rem;
+}
+
+.ns-bench-dashboard .function-table-title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.ns-bench-dashboard .function-table-note {
+  color: var(--quiet);
+  font-size: 0.76rem;
+  margin: 0.15rem 0 0;
+}
+
+.ns-bench-dashboard .function-tabs {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.ns-bench-dashboard .function-tab {
+  appearance: none;
+  background: var(--panel);
+  border: 0;
+  border-left: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 0.42rem 0.56rem;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-tab:first-child {
+  border-left: 0;
+}
+
+.ns-bench-dashboard .function-tab.is-active {
+  background: var(--ink);
+  color: var(--panel);
+}
+
+.ns-bench-dashboard .function-table-scroll {
+  max-height: 22rem;
+}
+
+.ns-bench-dashboard .function-table {
+  font-size: 0.78rem;
+}
+
+.ns-bench-dashboard .function-table .num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ns-bench-dashboard .function-table .op {
+  min-width: 14rem;
+}
+
+.ns-bench-dashboard .func-tone-extreme { --func-tone: #0e7490; }
+.ns-bench-dashboard .func-tone-good { --func-tone: var(--good); }
+.ns-bench-dashboard .func-tone-near { --func-tone: var(--near); }
+.ns-bench-dashboard .func-tone-slow { --func-tone: var(--slow); }
+.ns-bench-dashboard .func-tone-bad { --func-tone: var(--bad); }
+.ns-bench-dashboard .func-tone-empty { --func-tone: #87909a; }
+
 .ns-bench-dashboard .story-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -965,6 +1404,14 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .ns-bench-dashboard .function-explorer-shell {
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  }
+
+  .ns-bench-dashboard .function-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .ns-bench-dashboard .guide-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -982,6 +1429,39 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     align-items: flex-start;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  .ns-bench-dashboard .function-explorer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-bench-dashboard .function-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ns-bench-dashboard .function-filter-row,
+  .ns-bench-dashboard .function-stat-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-bench-dashboard .function-list {
+    max-height: 18rem;
+  }
+
+  .ns-bench-dashboard .function-detail-head,
+  .ns-bench-dashboard .function-table-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ns-bench-dashboard .function-scenario-row {
+    grid-template-columns: minmax(5.8rem, 1fr) 4rem 3.2rem;
+  }
+
+  .ns-bench-dashboard .function-scenario-track {
+    grid-column: 1 / -1;
+    order: 4;
   }
 
   .ns-bench-dashboard .read-guide-head {
@@ -1346,6 +1826,36 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     </div>
   </section>
 
+  <section class="function-explorer" data-function-explorer aria-labelledby="function-explorer-title">
+    <div class="section-head">
+      <h2 id="function-explorer-title">Function Explorer</h2>
+      <p class="section-note">Search every named np.* API in the latest matrix, then inspect dtype, size, scenario, and raw timing rows</p>
+    </div>
+    <div class="function-explorer-shell">
+      <aside class="function-sidebar" aria-label="np function list">
+        <div class="function-controls">
+          <input class="function-search" type="search" placeholder="Search np.*" aria-label="Search np functions" data-function-search>
+          <div class="function-filter-row">
+            <select class="function-select" aria-label="Filter functions by suite" data-function-suite-filter>
+              <option value="">All suites</option>
+            </select>
+            <select class="function-select" aria-label="Sort functions" data-function-sort>
+              <option value="worst">Worst first</option>
+              <option value="best">Best first</option>
+              <option value="name">Name</option>
+              <option value="rows">Most rows</option>
+            </select>
+          </div>
+          <div class="function-list-meta" data-function-list-meta>Loading benchmark functions...</div>
+        </div>
+        <div class="function-list" role="listbox" aria-label="np function benchmark rows" data-function-list></div>
+      </aside>
+      <article class="function-detail" aria-live="polite" data-function-detail>
+        <div class="function-empty">Loading np.* function performance surface...</div>
+      </article>
+    </div>
+  </section>
+
   <section>
     <div class="section-head">
       <h2>Optimization Priorities</h2>
@@ -1514,6 +2024,11 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
   const numberOrNull = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
+  };
+
+  const functionNameFromOperation = (operation) => {
+    const match = String(operation || "").match(/\bnp\.[A-Za-z_][A-Za-z0-9_]*/);
+    return match ? match[0] : null;
   };
 
   const formatRatio = (value) => Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 2 : 3)}x` : "n/a";
@@ -1686,6 +2201,390 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     return true;
   };
 
+  const dtypeOrder = [
+    "bool", "uint8", "int8", "int16", "uint16", "int32", "uint32",
+    "int64", "uint64", "float16", "float32", "float64", "complex128"
+  ];
+
+  const ratioToneClass = (ratio) => {
+    if (!Number.isFinite(ratio)) return "func-tone-empty";
+    if (ratio >= 100) return "func-tone-extreme";
+    if (ratio >= 1) return "func-tone-good";
+    if (ratio >= 0.5) return "func-tone-near";
+    if (ratio >= 0.2) return "func-tone-slow";
+    return "func-tone-bad";
+  };
+
+  const ratioColor = (ratio) => {
+    if (!Number.isFinite(ratio)) return "#87909a";
+    if (ratio >= 100) return "#0e7490";
+    if (ratio >= 1) return "var(--good)";
+    if (ratio >= 0.5) return "var(--near)";
+    if (ratio >= 0.2) return "var(--slow)";
+    return "var(--bad)";
+  };
+
+  const geomeanRows = (rows) => {
+    const ratios = rows
+      .map((row) => row.ratio)
+      .filter((ratio) => Number.isFinite(ratio) && ratio > 0);
+
+    if (ratios.length === 0) return null;
+
+    const sumLogs = ratios.reduce((sum, ratio) => sum + Math.log(Math.max(ratio, 1e-12)), 0);
+    return Math.exp(sumLogs / ratios.length);
+  };
+
+  const uniqueSorted = (values) => Array.from(new Set(values.filter((value) => value !== null && value !== undefined && value !== "")))
+    .sort((a, b) => String(a).localeCompare(String(b)));
+
+  const sortedDtypes = (values) => uniqueSorted(values).sort((a, b) => {
+    const left = dtypeOrder.indexOf(a);
+    const right = dtypeOrder.indexOf(b);
+    if (left !== -1 || right !== -1) return (left === -1 ? 999 : left) - (right === -1 ? 999 : right);
+    return String(a).localeCompare(String(b));
+  });
+
+  const sortedSizes = (values) => Array.from(new Set(values.filter((value) => Number.isFinite(value))))
+    .sort((a, b) => a - b);
+
+  const scenarioForRow = (row) => {
+    const operation = row.operation.toLowerCase();
+    if (operation.includes("axis=")) return "Axis";
+    if (operation.includes("broadcast") || operation.includes("row_vector") || operation.includes("col_vector") || operation.includes("matrix +")) return "Broadcast";
+    if (operation.includes("scalar") || operation.includes("literal")) return "Scalar";
+    if (operation.includes("strided") || operation.includes("reversed") || operation.includes("transpose") || operation.includes("[::")) return "Layout";
+    if (row.suite === "Reduction" || row.suite === "Statistics") return "Reduction";
+    return row.suite || "General";
+  };
+
+  const summarizeGroups = (rows, keySelector) => {
+    const groups = new Map();
+    rows.forEach((row) => {
+      const key = keySelector(row);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    });
+
+    return Array.from(groups.entries()).map(([name, groupRows]) => ({
+      name,
+      rows: groupRows,
+      measuredRows: groupRows.filter((row) => row.ratio !== null),
+      score: geomeanRows(groupRows)
+    }));
+  };
+
+  const buildFunctionTable = (rows) => {
+    const body = rows.map((row, index) => `
+      <tr>
+        <td class="num">${index + 1}</td>
+        <td class="op">${escapeHtml(row.operation)}</td>
+        <td>${escapeHtml(row.suite)}</td>
+        <td>${escapeHtml(row.dtype)}</td>
+        <td class="num">${formatN(row.n)}</td>
+        <td class="num">${renderRatio(row)}</td>
+        <td class="num">${formatMs(row.numpyMs)}</td>
+        <td class="num">${formatMs(row.numSharpMs)}</td>
+      </tr>`).join("");
+
+    return `
+      <div class="function-table-scroll">
+        <table class="function-table">
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>Operation</th>
+              <th>Suite</th>
+              <th>Dtype</th>
+              <th class="num">N</th>
+              <th class="num">Ratio</th>
+              <th class="num">NumPy ms</th>
+              <th class="num">NumSharp ms</th>
+            </tr>
+          </thead>
+          <tbody>${body || `<tr><td colspan="8">No matching benchmark rows.</td></tr>`}</tbody>
+        </table>
+      </div>`;
+  };
+
+  const buildSparkline = (group) => {
+    const bars = group.sizeStats.map((sizeStat) => {
+      const height = Number.isFinite(sizeStat.score)
+        ? Math.max(16, Math.min(100, Math.log2(sizeStat.score + 1) * 34))
+        : 16;
+
+      return `<span class="function-spark-bar" title="${formatN(sizeStat.n)}: ${formatRatio(sizeStat.score)}" style="--spark-height:${height.toFixed(0)}%; --spark-color:${ratioColor(sizeStat.score)}"></span>`;
+    }).join("");
+
+    return `<span class="function-sparkline" aria-hidden="true">${bars}</span>`;
+  };
+
+  const buildFunctionGroups = (rows) => {
+    const groups = new Map();
+    rows.filter((row) => row.functionName).forEach((row) => {
+      if (!groups.has(row.functionName)) {
+        groups.set(row.functionName, {
+          name: row.functionName,
+          rows: []
+        });
+      }
+
+      groups.get(row.functionName).rows.push(row);
+    });
+
+    return Array.from(groups.values()).map((group) => {
+      const measuredRows = group.rows.filter((row) => row.ratio !== null);
+      const ratios = measuredRows.map((row) => row.ratio);
+      const sizes = sortedSizes(group.rows.map((row) => row.n));
+      const sizeStats = sizes.map((size) => {
+        const sizeRows = measuredRows.filter((row) => row.n === size);
+        return { n: size, rows: sizeRows, score: geomeanRows(sizeRows) };
+      });
+
+      return {
+        ...group,
+        measuredRows,
+        score: geomeanRows(measuredRows),
+        min: ratios.length ? Math.min(...ratios) : null,
+        max: ratios.length ? Math.max(...ratios) : null,
+        suites: uniqueSorted(group.rows.map((row) => row.suite)),
+        dtypes: sortedDtypes(group.rows.map((row) => row.dtype)),
+        sizes,
+        sizeStats,
+        scenarios: summarizeGroups(measuredRows, scenarioForRow)
+      };
+    });
+  };
+
+  const initializeFunctionExplorer = (rows) => {
+    const root = document.querySelector("[data-function-explorer]");
+    if (!root) return;
+
+    const searchInput = root.querySelector("[data-function-search]");
+    const suiteFilter = root.querySelector("[data-function-suite-filter]");
+    const sortSelect = root.querySelector("[data-function-sort]");
+    const list = root.querySelector("[data-function-list]");
+    const listMeta = root.querySelector("[data-function-list-meta]");
+    const detail = root.querySelector("[data-function-detail]");
+    const groups = buildFunctionGroups(rows);
+    const suites = uniqueSorted(groups.flatMap((group) => group.suites));
+    let activeName = null;
+
+    suiteFilter.insertAdjacentHTML("beforeend", suites.map((suite) => `<option value="${escapeHtml(suite)}">${escapeHtml(suite)}</option>`).join(""));
+
+    const scoreForSort = (group, fallback) => Number.isFinite(group.score) ? group.score : fallback;
+
+    const filteredGroups = () => {
+      const query = searchInput.value.trim().toLowerCase();
+      const suite = suiteFilter.value;
+      const sort = sortSelect.value;
+
+      const filtered = groups.filter((group) => {
+        if (suite && !group.suites.includes(suite)) return false;
+        if (query && !group.name.toLowerCase().includes(query)) return false;
+        return true;
+      });
+
+      return filtered.sort((a, b) => {
+        if (sort === "name") return a.name.localeCompare(b.name);
+        if (sort === "rows") return b.rows.length - a.rows.length || a.name.localeCompare(b.name);
+        if (sort === "best") return scoreForSort(b, -1) - scoreForSort(a, -1) || a.name.localeCompare(b.name);
+        return scoreForSort(a, Number.POSITIVE_INFINITY) - scoreForSort(b, Number.POSITIVE_INFINITY) || a.name.localeCompare(b.name);
+      });
+    };
+
+    const setActiveTab = (container, mode) => {
+      container.querySelectorAll("[data-function-tab]").forEach((button) => {
+        const isActive = button.dataset.functionTab === mode;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+      });
+    };
+
+    const renderTable = (group, mode, customRows = null, note = null) => {
+      const tableRoot = detail.querySelector("[data-function-table]");
+      const noteRoot = detail.querySelector("[data-function-table-note]");
+      if (!tableRoot || !noteRoot) return;
+
+      let tableRows = customRows;
+      let tableNote = note;
+      if (!tableRows) {
+        if (mode === "worst") {
+          tableRows = sortRows(group.measuredRows, "asc").slice(0, topCount);
+          tableNote = `${Math.min(topCount, group.measuredRows.length)} slowest measured rows for ${group.name}`;
+        } else if (mode === "raw") {
+          tableRows = group.rows.slice().sort((a, b) =>
+            String(a.operation).localeCompare(String(b.operation)) || String(a.dtype).localeCompare(String(b.dtype)) || (a.n ?? 0) - (b.n ?? 0));
+          tableNote = `${tableRows.length} raw benchmark rows for ${group.name}`;
+        } else {
+          tableRows = sortRows(group.measuredRows, "desc").slice(0, topCount);
+          tableNote = `${Math.min(topCount, group.measuredRows.length)} fastest measured rows for ${group.name}`;
+        }
+      }
+
+      noteRoot.textContent = tableNote;
+      tableRoot.innerHTML = buildFunctionTable(tableRows);
+    };
+
+    const renderHeatmap = (group) => {
+      if (group.dtypes.length === 0 || group.sizes.length === 0) {
+        return `<div class="function-empty">No dtype x size benchmark cells for this function.</div>`;
+      }
+
+      const header = group.sizes.map((size) => `<th>${formatN(size)}</th>`).join("");
+      const body = group.dtypes.map((dtype) => {
+        const cells = group.sizes.map((size) => {
+          const cellRows = group.rows.filter((row) => row.dtype === dtype && row.n === size);
+          const measuredCellRows = cellRows.filter((row) => row.ratio !== null);
+          const score = geomeanRows(measuredCellRows);
+          const isEmpty = cellRows.length === 0;
+          const classes = `function-heat-cell ${ratioToneClass(score)}${isEmpty ? " is-empty" : ""}`;
+          return `<td>
+            <button class="${classes}" type="button" data-heat-dtype="${escapeHtml(dtype)}" data-heat-n="${size}" ${isEmpty ? "disabled" : ""}>
+              <span class="function-heat-ratio">${formatRatio(score)}</span>
+              <span class="function-heat-count">${cellRows.length} rows</span>
+            </button>
+          </td>`;
+        }).join("");
+
+        return `<tr><th>${escapeHtml(dtype)}</th>${cells}</tr>`;
+      }).join("");
+
+      return `
+        <div class="function-heatmap-scroll">
+          <table class="function-heat-table">
+            <thead><tr><th>Dtype</th>${header}</tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    };
+
+    const renderScenarios = (group) => {
+      const scenarios = group.scenarios
+        .filter((scenario) => scenario.measuredRows.length > 0)
+        .sort((a, b) => scoreForSort(a, Number.POSITIVE_INFINITY) - scoreForSort(b, Number.POSITIVE_INFINITY));
+
+      if (scenarios.length === 0) {
+        return `<div class="function-empty">No measured scenario rows.</div>`;
+      }
+
+      const maxScore = Math.max(...scenarios.map((scenario) => scenario.score || 0), 1);
+      return `<div class="function-scenarios">${scenarios.map((scenario) => {
+        const width = Math.max(5, Math.min(100, ((scenario.score || 0) / maxScore) * 100));
+        const tone = ratioToneClass(scenario.score);
+        return `<div class="function-scenario-row ${tone}">
+          <span class="function-scenario-label">${escapeHtml(scenario.name)}</span>
+          <span class="function-scenario-track"><span class="function-scenario-fill" style="--w:${width.toFixed(1)}%"></span></span>
+          <span class="function-scenario-score">${formatRatio(scenario.score)}</span>
+          <span class="function-scenario-count">${scenario.measuredRows.length}</span>
+        </div>`;
+      }).join("")}</div>`;
+    };
+
+    const renderDetail = (group) => {
+      activeName = group.name;
+      const tone = ratioToneClass(group.score);
+      const suiteText = group.suites.join(", ");
+      const best = sortRows(group.measuredRows, "desc")[0];
+      const worst = sortRows(group.measuredRows, "asc")[0];
+
+      detail.innerHTML = `
+        <div class="function-detail-head">
+          <div>
+            <div class="function-title" role="heading" aria-level="3">${escapeHtml(group.name)}</div>
+            <p class="function-subtitle">${escapeHtml(suiteText)} · ${group.measuredRows.length} measured / ${group.rows.length} rows · ${group.dtypes.length} dtypes · ${group.sizes.length} size tiers</p>
+          </div>
+          <span class="function-ratio-pill ${tone}">${formatRatio(group.score)}</span>
+        </div>
+        <div class="function-stat-strip">
+          <div class="function-stat"><span>Min</span><strong>${formatRatio(group.min)}</strong></div>
+          <div class="function-stat"><span>Max</span><strong>${formatRatio(group.max)}</strong></div>
+          <div class="function-stat"><span>Best Row</span><strong>${best ? formatRatio(best.ratio) : "n/a"}</strong></div>
+          <div class="function-stat"><span>Worst Row</span><strong>${worst ? formatRatio(worst.ratio) : "n/a"}</strong></div>
+        </div>
+        <div class="function-detail-grid">
+          <div class="function-block">
+            <div class="function-block-title">Dtype x Size Heatmap</div>
+            ${renderHeatmap(group)}
+          </div>
+          <div class="function-block">
+            <div class="function-block-title">Scenario Breakdown</div>
+            ${renderScenarios(group)}
+          </div>
+        </div>
+        <div>
+          <div class="function-table-head">
+            <div>
+              <div class="function-table-title">Benchmark Rows</div>
+              <p class="function-table-note" data-function-table-note></p>
+            </div>
+            <div class="function-tabs" role="tablist" aria-label="${escapeHtml(group.name)} benchmark rows">
+              <button class="function-tab is-active" type="button" role="tab" aria-selected="true" data-function-tab="best">Best 25</button>
+              <button class="function-tab" type="button" role="tab" aria-selected="false" data-function-tab="worst">Worst 25</button>
+              <button class="function-tab" type="button" role="tab" aria-selected="false" data-function-tab="raw">Raw</button>
+            </div>
+          </div>
+          <div data-function-table></div>
+        </div>`;
+
+      detail.querySelectorAll("[data-function-tab]").forEach((button) => {
+        button.addEventListener("click", () => {
+          detail.querySelectorAll(".function-heat-cell.is-active").forEach((cell) => cell.classList.remove("is-active"));
+          setActiveTab(detail, button.dataset.functionTab);
+          renderTable(group, button.dataset.functionTab);
+        });
+      });
+
+      detail.querySelectorAll(".function-heat-cell:not(.is-empty)").forEach((button) => {
+        button.addEventListener("click", () => {
+          const dtype = button.dataset.heatDtype;
+          const n = numberOrNull(button.dataset.heatN);
+          const cellRows = group.rows.filter((row) => row.dtype === dtype && row.n === n);
+          detail.querySelectorAll(".function-heat-cell.is-active").forEach((cell) => cell.classList.remove("is-active"));
+          button.classList.add("is-active");
+          setActiveTab(detail, "raw");
+          renderTable(group, "raw", cellRows, `${group.name} · ${dtype} · ${formatN(n)} · ${cellRows.length} rows`);
+        });
+      });
+
+      renderTable(group, "best");
+    };
+
+    const renderList = () => {
+      const filtered = filteredGroups();
+      if (!activeName || !filtered.some((group) => group.name === activeName)) {
+        activeName = filtered[0]?.name || null;
+      }
+
+      listMeta.textContent = `${filtered.length} of ${groups.length} np.* functions`;
+      list.innerHTML = filtered.map((group) => {
+        const isActive = group.name === activeName;
+        const tone = ratioToneClass(group.score);
+        return `<button class="function-list-item ${tone}${isActive ? " is-active" : ""}" type="button" role="option" aria-selected="${String(isActive)}" data-function-name="${escapeHtml(group.name)}">
+          <span class="function-list-name">${escapeHtml(group.name)}</span>
+          <span class="function-list-score">${formatRatio(group.score)}</span>
+          <span class="function-list-detail">${group.measuredRows.length}/${group.rows.length} rows · ${escapeHtml(group.suites.join(", "))}</span>
+          ${buildSparkline(group)}
+        </button>`;
+      }).join("") || `<div class="function-empty">No matching np.* functions.</div>`;
+
+      const activeGroup = groups.find((group) => group.name === activeName);
+      if (activeGroup) renderDetail(activeGroup);
+    };
+
+    list.addEventListener("click", (event) => {
+      const button = event.target instanceof Element ? event.target.closest("[data-function-name]") : null;
+      if (!button) return;
+      activeName = button.dataset.functionName;
+      renderList();
+    });
+
+    searchInput.addEventListener("input", renderList);
+    suiteFilter.addEventListener("change", renderList);
+    sortSelect.addEventListener("change", renderList);
+    renderList();
+  };
+
   const initializeBenchmarkTooltips = async () => {
     let rawRows;
     try {
@@ -1711,10 +2610,12 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       pctNumPy: numberOrNull(row.pct_numpy),
       numpyMs: numberOrNull(row.numpy_ms),
       numSharpMs: numberOrNull(row.numsharp_ms),
-      status: row.status || ""
+      status: row.status || "",
+      functionName: functionNameFromOperation(row.operation || "")
     }));
 
     const measuredRows = rows.filter((row) => row.ratio !== null);
+    initializeFunctionExplorer(rows);
 
     document.querySelectorAll(".status-segment").forEach((element) => {
       const band = bandForElement(element);
