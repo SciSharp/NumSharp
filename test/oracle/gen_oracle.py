@@ -254,7 +254,7 @@ NAN_REDUCE_OPS = {
     "nanvar": lambda a, ax, kd: np.nanvar(a, axis=ax, keepdims=kd),
     "nanmedian": lambda a, ax, kd: np.nanmedian(a, axis=ax, keepdims=kd),
 }
-NAN_REDUCE_DTYPES = ["float16", "float32", "float64", "int32", "complex128"]
+NAN_REDUCE_DTYPES = list(ALL_DTYPES)   # widened: every dtype (NaN-erroring combos skipped by the gen)
 
 
 def gen_binary(ops, dt_pairs, pair_layout_names):
@@ -298,11 +298,15 @@ STAT_REDUCE_OPS = {
     "average": lambda a, ax, kd: np.average(a, axis=ax, keepdims=kd),
     "ptp": lambda a, ax, kd: np.ptp(a, axis=ax, keepdims=kd),
 }
-STAT_DTYPES = ["int16", "int32", "int64", "uint8", "float16", "float32", "float64"]
+STAT_DTYPES = list(ALL_DTYPES)         # widened: median/ptp/average across every dtype (skips on NumPy error)
 STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d"]
-CNZ_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
-CLIP_DTYPES = ["int8", "uint8", "int16", "int32", "int64", "float16", "float32", "float64"]
+CNZ_DTYPES = list(ALL_DTYPES)          # widened: count_nonzero is dtype-agnostic
+# clip needs an ORDERED dtype — complex128 has no ordering (NumPy raises). bool is CARVED OUT:
+# NumSharp's general (strided/transposed/F-contig) clip kernel throws "clip not supported for
+# Boolean" (only the contiguous path handles bool) — reproduced under [OpenBugs] (Clip_Bool_Strided_*).
+CLIP_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
+               "float16", "float32", "float64"]
 QUANTILE_SPECS = [
     ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
     ("quantile", lambda a, q, ax: np.quantile(a, q, axis=ax), [0.0, 0.25, 0.5, 0.75, 1.0]),
@@ -426,7 +430,7 @@ SCAN_OPS = {
     "cumsum": lambda a, ax: np.cumsum(a, axis=ax),
     "cumprod": lambda a, ax: np.cumprod(a, axis=ax),
 }
-SCAN_DTYPES = ["int16", "int32", "int64", "uint8", "uint16", "float32", "float64", "complex128"]
+SCAN_DTYPES = list(ALL_DTYPES)         # widened: cumsum/cumprod/diff are dtype-general (bool->int upcast)
 SCAN_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d", "negstride_1d"]
 
@@ -530,7 +534,7 @@ def gen_where(dt_pairs, layout_names):
 # T13 — logic & element-wise extrema. isnan/isinf/isfinite (unary -> bool); maximum/minimum
 # (NaN-propagating), fmax/fmin (NaN-ignoring), isclose (binary -> bool). NumPy is the oracle.
 LOGIC_UNARY_OPS = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite}
-LOGIC_UNARY_DTYPES = ["int32", "uint8", "float16", "float32", "float64", "complex128"]
+LOGIC_UNARY_DTYPES = list(ALL_DTYPES)  # widened: isnan/isinf/isfinite defined on every dtype
 LOGIC_BIN_OPS = {
     "maximum": np.maximum, "minimum": np.minimum,
     "fmax": np.fmax, "fmin": np.fmin, "isclose": np.isclose,
@@ -723,7 +727,7 @@ def gen_shift(ops, dtypes):
 
 # T7 — shape manipulation. These ops only move bytes, so dtype coverage is light but stride/shape
 # coverage is heavy. NumPy is the oracle for the output shape, dtype, and C-contiguous bytes.
-MANIP_DTYPES = ["int32", "float64", "uint8", "complex128"]
+MANIP_DTYPES = list(ALL_DTYPES)        # widened: reshape/transpose/concat/stack/pad are dtype-agnostic
 
 
 def gen_manip(dtypes, layout_names):
@@ -899,7 +903,7 @@ def gen_modf(dtypes, layout_names):
 
 # T14 — sorting / searching. Distinct values avoid tie-break ambiguity (quicksort is unstable),
 # so argsort is deterministic both sides. NumPy is the oracle for the int64 index results.
-SORT_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+SORT_DTYPES = list(ALL_DTYPES)         # widened: argsort/searchsorted/nonzero (complex sorts lexicographically)
 
 
 def _distinct(n, dt):
@@ -977,7 +981,8 @@ def gen_nonzero(dtypes):
 # W13 — SIMD-tail boundary sizes. 1-D arrays straddling the V128/V256/V512 lane counts so the
 # unrolled-SIMD body, 1-vector remainder, and scalar tail are all exercised at their seams.
 TAIL_SIZES = [1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129]
-TAIL_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+# widened: SIMD-seam sizes across every dtype EXCEPT bool (gen_tail subtracts; NumPy bans bool `-`).
+TAIL_DTYPES = [d for d in ALL_DTYPES if d != "bool"]
 
 
 def gen_tail(dtypes):
@@ -1028,7 +1033,7 @@ def gen_tail(dtypes):
 
 # W12 — parameter sweep. The reduce tier only covered axis in {None, 0, last}; here we exercise
 # the MIDDLE axis and NEGATIVE axes (-1/-2/-3), ddof=1 (sample std/var), and order='F' ravel.
-PARAM_DTYPES = ["int32", "float32", "float64"]
+PARAM_DTYPES = list(ALL_DTYPES)        # widened: axis/ddof/keepdims params across every dtype
 
 
 def gen_params(dtypes):
@@ -1086,7 +1091,11 @@ def gen_params(dtypes):
 
 # W11 — operand-relationship flags (section C): input aliasing (a op a, SAME buffer both sides)
 # and in-place out= (the output buffer IS an input). Exercises read-before-write within the kernel.
-ALIAS_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+# widened: out=/overlap aliasing across every dtype EXCEPT bool (gen_aliasing subtracts; NumPy bans
+# bool `-`) and complex128 (the a*a self-multiply of a large _cbase value hits catastrophic
+# cancellation in a^2-b^2, where NumPy's ARRAY ufunc and the naive ac-bd formula round differently;
+# NumSharp matches NumPy's SCALAR multiply exactly, so this is a ULP/ill-conditioned artifact, NOT a bug).
+ALIAS_DTYPES = [d for d in ALL_DTYPES if d not in ("bool", "complex128")]
 
 
 def gen_aliasing(dtypes):
@@ -1210,7 +1219,7 @@ def gen_errors():
 # buffer) which NumPy makes safe via COPY_IF_OVERLAP, and (2) cross-dtype copyto INTO a strided
 # destination view + scalar-broadcast source (the cast-into-non-contiguous-dst path astype never
 # exercises, plus the scalar-broadcast cross-dtype fast fill).
-COPYTO_OVERLAP_DTYPES = ["int32", "int64", "uint8", "float32", "float64"]
+COPYTO_OVERLAP_DTYPES = list(ALL_DTYPES)   # widened: same-dtype copyto overlap across every dtype
 COPYTO_CROSS = [
     ("float64", "int32"), ("float32", "uint8"), ("float64", "int16"), ("int32", "float64"),
     ("int64", "int16"), ("float64", "float16"), ("int32", "uint8"), ("float64", "int64"),
@@ -1287,6 +1296,102 @@ def gen_copyto(overlap_dtypes, cross_pairs):
     return cases
 
 
+def _relabel_dtype(cases, frm, to):
+    """Re-label a NumPy proxy dtype to a NumSharp-only dtype across a case's operand /
+    expected / params descriptors (+ id). The RAW BYTES are untouched — this only rewrites
+    the dtype STRING. Used for Char: NumSharp's Char is bit-identical to uint16 (2-byte
+    unsigned), but NumPy has no char dtype, so every Char op is generated with uint16 as the
+    proxy and then relabelled uint16->char. NumPy's uint16 result is therefore a bytes-exact
+    oracle for Char, and the gate asserts NumSharp's Char ≡ uint16 across every op."""
+    out = []
+    for c in cases:
+        c = json.loads(json.dumps(c))   # deep copy (cases are JSON-serializable)
+        for o in c.get("operands", []):
+            if o.get("dtype") == frm:
+                o["dtype"] = to
+        exp = c.get("expected")
+        if isinstance(exp, dict) and exp.get("dtype") == frm:
+            exp["dtype"] = to
+        for k, v in list(c.get("params", {}).items()):
+            if v == frm:
+                c["params"][k] = to
+        c["id"] = c["id"].replace(frm, to)
+        out.append(c)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Char masquerade — WOVEN into every tier (not a separate corpus file).
+# ---------------------------------------------------------------------------
+# NumSharp's Char is a 2-byte UNSIGNED value, bit-identical to uint16. NumPy has no
+# char dtype, so each Char op is generated through uint16 as the NumPy proxy and the
+# uint16 STRING is relabelled to "char" (raw bytes untouched, see _relabel_dtype).
+# The Char cases are appended into the SAME tier file as their NumPy-native kin
+# (binary_arith / unary / reduce / ...), so the existing per-tier FuzzMatrix test
+# replays Char alongside int32/float64/etc. — Char is a first-class grid axis member.
+#
+# CARVE-OUTS (kept OUT of the green corpus; each reproduced under [OpenBugs] in
+# OpenBugs.Char.cs / class OpenBugsCharTests): the combos that hit verified NumSharp Char bugs —
+#   * any Char × {uint8,bool} pair   -> promote(Char,Byte)->Byte truncation (arith,
+#     comparison, bitwise) + (Boolean,Char) missing kernel  [BUG: char-promote]
+#   * reciprocal(char)               -> result dtype Double, should be uint16/char
+#   * power with a char operand       -> Convert(char) crash / Double result
+#   * invert(char)                    -> NotSupportedException on the N>=16 SIMD path
+# Everything else (Char × {char,int32,int64,uint64,float64}, all other unary/reduce/
+# scan/stat/manip/sort/tail/astype) is bit-identical to uint16 and ships GREEN.
+_C = "uint16"   # the NumPy proxy for Char
+
+# Char-bearing operand pairs. The uint16 slot IS the Char. uint8/bool deliberately
+# absent (promotion/kernel bugs). Both operand orders covered; partners are all wider
+# than Char so the kernel casts Char UP (no narrowing trap).
+CHAR_ARITH_PAIRS = [(_C, _C), (_C, "int32"), ("int32", _C), (_C, "int64"),
+                    (_C, "uint64"), (_C, "float64"), ("float64", _C)]
+CHAR_CMP_PAIRS   = [(_C, _C), (_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
+CHAR_BIT_PAIRS   = [(_C, _C), (_C, "int32"), (_C, "uint64")]
+
+# Power crashes on any char operand; reciprocal mis-types char -> excluded per-op.
+_CHAR_DIVMOD_OPS = {k: v for k, v in DIVMOD_POWER_OPS.items() if k != "power"}
+_CHAR_UNARY_OPS  = {k: v for k, v in UNARY_OPS.items() if k != "reciprocal"}
+
+
+def char_tier(mode):
+    """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
+    L = list(LAYOUTS.keys())
+    PL = list(PAIR_LAYOUTS.keys())
+    raw = []
+    if mode == "binary":
+        raw = gen_binary(BINARY_OPS, CHAR_ARITH_PAIRS, PL)
+    elif mode == "divmod_power":
+        raw = gen_binary(_CHAR_DIVMOD_OPS, CHAR_ARITH_PAIRS, PL)   # floor_divide, mod (power carved)
+    elif mode == "comparison":
+        raw = gen_binary(COMPARISON_OPS, CHAR_CMP_PAIRS, PL)
+    elif mode == "unary":
+        raw = gen_unary(_CHAR_UNARY_OPS, [_C], L)                  # reciprocal carved
+    elif mode == "unary_extra":
+        raw = gen_unary(UNARY_EXTRA_OPS, [_C], L)
+    elif mode == "bitwise":
+        raw = gen_binary(BITWISE_BIN_OPS, CHAR_BIT_PAIRS, PL)
+        raw += gen_shift(SHIFT_OPS, [_C])                          # invert(char) carved (SIMD gap)
+    elif mode == "reduce":
+        raw = gen_reduce(REDUCE_OPS, [_C], REDUCE_LAYOUTS)
+    elif mode == "scan":
+        raw = gen_scan(SCAN_OPS, [_C], SCAN_LAYOUTS) + gen_diff([_C], SCAN_LAYOUTS)
+    elif mode == "stat":
+        raw = gen_reduce(STAT_REDUCE_OPS, [_C], STAT_LAYOUTS)
+        raw += gen_count_nonzero([_C], STAT_LAYOUTS)
+        raw += gen_quantile(QUANTILE_SPECS, [_C], STAT_LAYOUTS)
+        raw += gen_clip([_C], STAT_LAYOUTS)
+    elif mode == "manip":
+        raw = gen_manip([_C], L) + gen_concat_stack([_C]) + gen_pad([_C])
+    elif mode == "sort":
+        raw = gen_argsort([_C]) + gen_searchsorted([_C]) + gen_nonzero([_C])
+    elif mode == "tail":
+        raw = gen_tail([_C])
+    elif mode == "astype_full":
+        raw = gen_astype([_C], ALL_DTYPES, L) + gen_astype(ALL_DTYPES, [_C], L)
+    return _relabel_dtype(raw, _C, "char")
+
+
 def write_jsonl(path, cases):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="\n") as f:
@@ -1308,21 +1413,27 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "astype_smoke.jsonl"), cases)
     elif mode == "astype_full":
         cases = gen_astype(ALL_DTYPES, ALL_DTYPES, list(LAYOUTS.keys()))
+        cases += char_tier("astype_full")
         write_jsonl(os.path.join(corpus_dir, "astype_full.jsonl"), cases)
     elif mode == "binary":
         cases = gen_binary(BINARY_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += char_tier("binary")
         write_jsonl(os.path.join(corpus_dir, "binary_arith.jsonl"), cases)
     elif mode == "divmod_power":
         cases = gen_binary(DIVMOD_POWER_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += char_tier("divmod_power")
         write_jsonl(os.path.join(corpus_dir, "binary_divmod_power.jsonl"), cases)
     elif mode == "comparison":
         cases = gen_binary(COMPARISON_OPS, DT_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += char_tier("comparison")
         write_jsonl(os.path.join(corpus_dir, "comparison.jsonl"), cases)
     elif mode == "unary":
         cases = gen_unary(UNARY_OPS, UNARY_DTYPES, list(LAYOUTS.keys()))
+        cases += char_tier("unary")
         write_jsonl(os.path.join(corpus_dir, "unary.jsonl"), cases)
     elif mode == "reduce":
         cases = gen_reduce(REDUCE_OPS, REDUCE_DTYPES, REDUCE_LAYOUTS)
+        cases += char_tier("reduce")
         write_jsonl(os.path.join(corpus_dir, "reduce.jsonl"), cases)
     elif mode == "where":
         cases = gen_where(WHERE_DT_PAIRS, list(WHERE_LAYOUTS.keys()))
@@ -1337,9 +1448,11 @@ def main():
         cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
         cases += gen_shift(SHIFT_OPS, SHIFT_DTYPES)
+        cases += char_tier("bitwise")
         write_jsonl(os.path.join(corpus_dir, "bitwise.jsonl"), cases)
     elif mode == "unary_extra":
         cases = gen_unary(UNARY_EXTRA_OPS, ALL_DTYPES, list(LAYOUTS.keys()))
+        cases += char_tier("unary_extra")
         write_jsonl(os.path.join(corpus_dir, "unary_extra.jsonl"), cases)
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
@@ -1347,12 +1460,14 @@ def main():
     elif mode == "scan":
         cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)
+        cases += char_tier("scan")
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
     elif mode == "stat":
         cases = gen_reduce(STAT_REDUCE_OPS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_count_nonzero(CNZ_DTYPES, STAT_LAYOUTS)
         cases += gen_quantile(QUANTILE_SPECS, STAT_DTYPES, STAT_LAYOUTS)
         cases += gen_clip(CLIP_DTYPES, STAT_LAYOUTS)
+        cases += char_tier("stat")
         write_jsonl(os.path.join(corpus_dir, "stat.jsonl"), cases)
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
@@ -1365,14 +1480,17 @@ def main():
         cases = gen_manip(MANIP_DTYPES, list(LAYOUTS.keys()))
         cases += gen_concat_stack(MANIP_DTYPES)
         cases += gen_pad(MANIP_DTYPES)
+        cases += char_tier("manip")
         write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
     elif mode == "sort":
         cases = gen_argsort(SORT_DTYPES)
         cases += gen_searchsorted(SORT_DTYPES)
         cases += gen_nonzero(SORT_DTYPES)
+        cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":
         cases = gen_tail(TAIL_DTYPES)
+        cases += char_tier("tail")
         write_jsonl(os.path.join(corpus_dir, "tail.jsonl"), cases)
     elif mode == "params":
         cases = gen_params(PARAM_DTYPES)
@@ -1387,7 +1505,7 @@ def main():
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors)")
         sys.exit(2)
 
 

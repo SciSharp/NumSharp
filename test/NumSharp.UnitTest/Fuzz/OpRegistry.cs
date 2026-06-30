@@ -196,9 +196,13 @@ namespace NumSharp.UnitTest.Fuzz
             NPTypeCode.UInt32 => np.argsort<uint>(a, axis),
             NPTypeCode.Int64 => np.argsort<long>(a, axis),
             NPTypeCode.UInt64 => np.argsort<ulong>(a, axis),
+            NPTypeCode.Char => np.argsort<char>(a, axis),
             NPTypeCode.Single => np.argsort<float>(a, axis),
             NPTypeCode.Double => np.argsort<double>(a, axis),
             NPTypeCode.Half => np.argsort<Half>(a, axis),
+            NPTypeCode.Boolean => np.argsort<bool>(a, axis),
+            NPTypeCode.Decimal => np.argsort<decimal>(a, axis),
+            NPTypeCode.Complex => np.argsort<System.Numerics.Complex>(a, axis),
             _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
         };
 

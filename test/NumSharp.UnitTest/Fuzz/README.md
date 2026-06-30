@@ -12,11 +12,16 @@ NumPy is the oracle. Python (`test/oracle/`) generates a **committed, bytes-exac
 ```
 test/oracle/                         corpus generators (NumPy 2.4.2)
   layout_catalog.py                  the layout builders (single-array, pairwise, where-triple)
-  gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place)
+  gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place);
+                                     per-mode dtype axes widened to ALL_DTYPES; Char WOVEN into every tier
+                                     via the uint16 proxy (char_tier) — relabelled uint16->char, bytes intact
+  gen_decimal_oracle.cs              INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
+                                     System.Decimal math -> decimal_{unary,binary,reduce,scan}.jsonl
   fuzz_random.py                     seeded random fuzzer (NumSharp-producible layouts)
 test/NumSharp.UnitTest/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)
-  BitDiff.cs                         bit-exact compare; NaN tokenized; ULP helpers (for documented near-misses)
+  BitDiff.cs                         bit-exact compare; NaN tokenized; Decimal tokenized by canonical VALUE
+                                     (scale-insensitive: 1.0m == 1.00m); ULP helpers (documented near-misses)
   OpRegistry.cs                      op-name -> NumSharp call
   MisalignedRegistry.cs              the explicit, documented set of intended/known divergences
   Shrinker.cs                        minimizes a failing element-wise case to a 1-element repro
@@ -40,7 +45,12 @@ python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
+dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
 ```
+
+Char rides every NumPy mode automatically (`char_tier` appends uint16-proxy cases relabelled to
+`char`); there is no separate `char` mode. Decimal is the one dtype with no NumPy analog, so it has
+its own C# generator (the last line above) rather than a `gen_oracle.py` mode.
 
 Then `dotnet build` (copies the corpus to output) and run:
 
@@ -72,5 +82,24 @@ for fix (remove the classifier branch + corpus tag when fixed).
 | bool arithmetic (`True+True -> 2`), size-1 result collapse | known bug | #12 |
 | ops vs raw NumPy stride/offset representation (offset!=0, junk size-1 strides) | unreachable via API | #11 |
 
-**Scope:** `Char` and `Decimal` have no NumPy analog and are excluded from the differential corpus
-(covered by the `Converts`-oracle cast tests).
+### Char & Decimal dtype coverage (the two NumPy-orphan dtypes)
+
+Both are now exercised across the grids (previously excluded). Verified bugs are NOT excused in
+`MisalignedRegistry` — each is carved out of the green corpus and reproduced under `[OpenBugs]`
+(remove the carve + test when fixed):
+
+| dtype | op / combo | NumSharp | NumPy/value truth | Repro |
+|-------|-----------|----------|-------------------|-------|
+| Char | `promote(Char, Byte)` → Byte (truncates high byte) — corrupts arithmetic AND comparisons | Byte / wrong bool | uint16 (Char≡uint16) | `OpenBugsCharTests.Char_Add_Byte_*`, `Char_Compare_Byte_*` |
+| Char | `reciprocal(char)` | Double | uint16 | `Char_Reciprocal_ReturnsDouble` |
+| Char | `power(char, float32)` | Double | float32 | `Char_Power_Single_ReturnsDouble` |
+| Char | `power(char, …)` scalar path | InvalidCastException (`Convert.To*(char)`) | computes | `Char_Power_ScalarChar_Crashes` |
+| Char | `bitwise_*(bool, char)` | KeyNotFoundException `(Boolean,Char)` | uint16 | `Char_BitwiseAnd_Bool_KeyNotFound` |
+| Char | `invert(char)` N≥16 (SIMD path) | NotSupportedException | uint16 | `Char_Invert_LargeN_NotSupported` |
+| bool | `clip(bool)` non-contiguous (strided/transposed/F) | NotSupportedException | bool (contiguous works) | `OpenBugsDtypeCoverageTests.Clip_Bool_*` |
+
+`Decimal` rides an **independent C# oracle** (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`)
+across unary/binary/reduce/scan × 13 single + 7 pair layouts — **all green** (no decimal kernel bug
+found). Two non-bugs were classified and carved (not OpenBugs): the complex self-multiply ULP
+(NumSharp matches NumPy *scalar*; NumPy's own array ufunc disagrees on a catastrophic-cancellation
+input) and `argsort<bool>/<Complex>` "not supported" (a harness `OpRegistry` gap, now wired → green).

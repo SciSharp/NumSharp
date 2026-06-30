@@ -553,24 +553,29 @@ Proves every NDIter-backed op is **bit-identical** to NumPy 2.4.2 across the inp
 ```
 test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
   layout_catalog.py                   memory-layout builders (the "44 variations": 26 single + 9 pair + 5 where)
-  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~90 ops)
+  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~90 ops);
+                                      per-mode dtype axes widened to ALL_DTYPES; Char woven into every tier
+                                      via the uint16 proxy (char_tier, relabelled uint16->char)
+  gen_decimal_oracle.cs               INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
+                                      System.Decimal math -> decimal_{unary,binary,reduce,scan}.jsonl
   gen_index_oracle.py                 getter/setter index oracle (token index over 15 base recipes)
   fuzz_random.py                      seeded random fuzzer (imports the other two)
 test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   FuzzCorpus.cs                       rebuilds EXACT NDArray views from (dtype,shape,strides,offset,bytes)
   OpRegistry.cs                       op-name → NumSharp call (pairs 1:1 with gen_oracle.py)
-  BitDiff.cs / Shrinker.cs            bit-exact compare (NaN tokenized) / shrink a failure to 1 element
+  BitDiff.cs / Shrinker.cs            bit-exact compare (NaN tokenized; Decimal by canonical VALUE so 1.0m≡1.00m) / shrink a failure to 1 element
   MisalignedRegistry.cs               the documented, excused divergences (intended differences and excused cases)
   FuzzCorpusTests.cs                  one [FuzzMatrix] test per op-corpus file (checks dtype + shape + bytes + error parity)
   IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
-  corpus/*.jsonl                      committed corpus (~51K cases / 28 tiers), copied to test output via the csproj glob
+  corpus/*.jsonl                      committed corpus (~68K cases / 32 tiers; op corpus ~53K incl. 3.7K Char woven + 234 Decimal), copied to test output via the csproj glob
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
-- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~40K cases / 25 tiers, checking dtype + shape + bytes + error parity), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
-- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl`, then `dotnet build` (copies the corpus to test output).
+- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~53K cases across the tiers, checking dtype + shape + bytes + error parity; Char woven into every tier, 4 `Decimal*` tiers), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
+- **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into every tier via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`). Verified Char/clip-bool bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`) — NOT excused in `MisalignedRegistry`.
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
 
 ## CI Pipeline
