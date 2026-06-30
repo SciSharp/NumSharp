@@ -308,11 +308,35 @@ namespace NumSharp.Backends
             return sq / (n - ddof);
         }
 
+        /// <summary>
+        /// Two-pass variance over a strided bool buffer. A boolean's numeric value is 0 or 1, never
+        /// its raw storage byte, so each element is normalized via '!= 0' before accumulation —
+        /// matching NumPy, where var/std of a bool array operate on the {0,1} values even when the
+        /// underlying buffer (np.frombuffer view / interop) holds non-0/1 bytes.
+        /// </summary>
+        private static unsafe double VarMomentsBool(byte* p, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
+        {
+            double sum = 0;
+            for (long i = 0; i < n; i++)
+                sum += p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)] != 0 ? 1.0 : 0.0;
+            double mean = sum / n;
+            double sq = 0;
+            for (long i = 0; i < n; i++)
+            {
+                double v = (p[contig ? i : FlatStrideOffset(i, dims, strides, ndim)] != 0 ? 1.0 : 0.0) - mean;
+                sq += v * v;
+            }
+            return sq / (n - ddof);
+        }
+
         /// <summary>Dispatch the real-typed strided two-pass on the input dtype (bool→byte, char→ushort).</summary>
         private static unsafe double VarMomentsRealDispatch(NPTypeCode tc, byte* basePtr, long[] dims, long[] strides, int ndim, bool contig, long n, int ddof)
             => tc switch
             {
-                NPTypeCode.Boolean => VarMomentsReal((byte*)basePtr, dims, strides, ndim, contig, n, ddof),
+                // bool is NOT byte here: its numeric value is 0/1, not the raw storage byte. A bool
+                // buffer may hold non-0/1 bytes (np.frombuffer view / interop); normalize via '!= 0'
+                // so var/std count True as 1 (NumPy parity). See VarMomentsBool.
+                NPTypeCode.Boolean => VarMomentsBool((byte*)basePtr, dims, strides, ndim, contig, n, ddof),
                 NPTypeCode.Byte    => VarMomentsReal((byte*)basePtr, dims, strides, ndim, contig, n, ddof),
                 NPTypeCode.SByte   => VarMomentsReal((sbyte*)basePtr, dims, strides, ndim, contig, n, ddof),
                 NPTypeCode.Int16   => VarMomentsReal((short*)basePtr, dims, strides, ndim, contig, n, ddof),
