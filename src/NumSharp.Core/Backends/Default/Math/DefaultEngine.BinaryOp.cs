@@ -64,35 +64,17 @@ namespace NumSharp.Backends
                 resultType = NPTypeCode.Double;
             }
 
-            // NumPy Power promotion (NEP50). Most cases are already handled by
-            // _FindCommonType (which applies weak/strict scalar rules correctly):
-            //   - i32_arr ** i32_arr  → int32
-            //   - i32_arr ** i64_arr  → int64
-            //   - f32_arr ** f64_arr  → float64
+            // NumPy Power promotion (NEP50) is exactly result_type(base, exp) — which
+            // _FindCommonType already computes, including the int-base/float-exp cases:
+            //   - i32_arr ** i32_arr  → int32         - f32_arr ** f64_arr → float64
+            //   - i32_arr ** f32_arr  → float64       - i16_arr ** f32_arr → float32
+            //   - u16_arr ** f32_arr  → float32 (uint16 fits in float32, probed 2.4.2)
             //   - f32_arr ** i32_arr  → float64 (NEP50 strict)
-            //   - f32_arr ** Python int (0-D weak) → float32 (NEP50 weak)
-            //   - i32_arr ** f32_scalar (cross-array)  → float64 (handled below)
-            //
-            // The one rule _FindCommonType doesn't cover is `int_scalar ** float_arr`:
-            // a 0-D int scalar is treated as "weak", which preserves the float's dtype,
-            // but NumPy's int-base + float-exp rule promotes unconditionally to float64.
-            // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
-            //
-            // Known limitation: explicit 0-D integer arrays (`np.array(2, int32)`)
-            // are indistinguishable from C# `int 2` after `np.asanyarray`. NumPy would
-            // strict-promote `f32_arr ** np.int32(2)` to float64; NumSharp preserves
-            // float32 for both `f32_arr ** 2` (correct) and `f32_arr ** np.array(2, int32)`
-            // (misaligned with NumPy but rare in idiomatic C# code).
-            if (op == BinaryOp.Power)
-            {
-                var lhsGroup = lhsType.GetGroup();
-                var rhsGroup = rhsType.GetGroup();
-
-                if (lhsGroup <= 2 && rhsGroup == 3)
-                {
-                    resultType = NPTypeCode.Double;
-                }
-            }
+            //   - 2 (weak int) ** f32_arr → float32   - 2 ** f64_arr → float64
+            // A prior override forced `lhsGroup<=2 && rhsGroup==3 → float64` for EVERY
+            // int-base ** float-exp, which wrongly upcast {bool,int8,int16,uint8,uint16,
+            // char} ** float32 to float64 (NumPy keeps float32) — a NumPy-1.x rule NEP50
+            // removed. Removed: result_type (above) is the single source of truth.
 
             // ufunc dtype= (NumPy loop-signature override): the loop runs IN the
             // requested dtype — inputs are cast (same_kind-validated, NumPy's

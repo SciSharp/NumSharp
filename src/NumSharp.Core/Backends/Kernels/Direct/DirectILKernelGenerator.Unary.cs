@@ -198,12 +198,17 @@ namespace NumSharp.Backends.Kernels
             if (!key.IsSameType)
                 return false;
 
-            // BitwiseNot works for integer types only (and bool)
+            // BitwiseNot works for integer types only (and bool). Char is excluded:
+            // there is no Vector<char> in the BCL (CanUseSimd(Char) is false for the same
+            // reason), so a Char invert with N>=vector-width crashed at kernel-compile time
+            // ("Specified type is not supported"). The scalar path handles Char bit-exactly
+            // (~x as 16-bit unsigned). Bug 6.
             if (key.Op == UnaryOp.BitwiseNot)
             {
                 return key.InputType != NPTypeCode.Single &&
                        key.InputType != NPTypeCode.Double &&
-                       key.InputType != NPTypeCode.Decimal;
+                       key.InputType != NPTypeCode.Decimal &&
+                       key.InputType != NPTypeCode.Char;
             }
 
             // LogicalNot is boolean-only, no SIMD (uses scalar comparison)
