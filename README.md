@@ -1,121 +1,257 @@
-[![NumSharp](docs/website/images/numsharp.logo.png)](docs/website/images/numsharp.logo.png)
+<p align="center">
+  <a href="https://github.com/SciSharp/NumSharp">
+    <img src="docs/website-src/images/numsharp.icon.svg" alt="NumSharp" width="96" height="96">
+  </a>
+</p>
 
-[![NuGet](https://img.shields.io/nuget/dt/NumSharp.svg)](https://www.nuget.org/packages/NumSharp)
-[![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sci-sharp/community)
-[![AppVeyor](https://ci.appveyor.com/api/projects/status/bmaauxd9rx5lsq9i?svg=true)](https://ci.appveyor.com/project/Haiping-Chen/numsharp)
-[![codecov](https://codecov.io/gh/SciSharp/NumSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SciSharp/NumSharp)
-[![Badge](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu/#/en_US)
+<h1 align="center">NumSharp</h1>
 
-**NumSharp** (NS) is a [NumPy](https://github.com/numpy/numpy) port to C# targetting .NET Standard.<a href="http://scisharpstack.org"><img src="https://github.com/SciSharp/SciSharp/blob/master/art/scisharp_badge.png" width="200" height="200" align="right" /></a><br>
-NumSharp is the fundamental package needed for scientific computing with C# and F#.<br>
+<p align="center">
+  <strong>NumPy for .NET</strong>
+</p>
 
-Is it difficult to translate python machine learning code into .NET? Because too many functions can’t be found in the corresponding code in the .NET SDK. 
-NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# or F# code.
-Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
+<p align="center">
+  <a href="https://www.nuget.org/packages/NumSharp"><img alt="NuGet" src="https://img.shields.io/nuget/v/NumSharp.svg"></a>
+  <a href="https://www.nuget.org/packages/NumSharp"><img alt="NuGet downloads" src="https://img.shields.io/nuget/dt/NumSharp.svg"></a>
+  <a href="https://github.com/SciSharp/NumSharp/actions/workflows/build-and-release.yml"><img alt="Build" src="https://github.com/SciSharp/NumSharp/actions/workflows/build-and-release.yml/badge.svg"></a>
+  <a href="https://github.com/SciSharp/NumSharp/actions/workflows/docs.yml"><img alt="Docs" src="https://github.com/SciSharp/NumSharp/actions/workflows/docs.yml/badge.svg"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="Benchmarks" src="https://img.shields.io/badge/benchmarks-dashboard-0e7490.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/SciSharp/NumSharp.svg"></a>
+</p>
 
-[![comparision](docs/website/images/python-csharp-comparision.png)](https://raw.githubusercontent.com/SciSharp/NumSharp/master/docs/website/images/python-csharp-comparision.png)
+<p align="center">
+  NumSharp is a native .NET array library with a NumPy-shaped API: <code>NDArray</code>,
+  broadcasting, slicing views, dtype-aware <code>np.*</code> functions, unmanaged storage,
+  and runtime-generated kernels for performance-sensitive numerical code.
+</p>
 
-### Bold Features
-* Use of Unmanaged Memory and fast unsafe algorithms.
-* [Broadcasting](https://numpy.org/doc/stable/user/basics.broadcasting.html) n-d shapes against each other. ([intro](https://machinelearningmastery.com/broadcasting-with-numpy-arrays/))
-* [NDArray Slicing](https://numpy.org/doc/stable/user/basics.indexing.html) and nested/recusive slicing (`nd["-1, ::2"]["1::3, :, 0"]`)
-* Axis iteration and support in all of our implemented functions.
-* Full and precise (to numpy) automatic type resolving and conversion (upcasting, downcasting and other cases)
-* Non-copy - most cases, similarly to numpy, does not perform copying but returns a view instead.
-* Almost non-effort copy-pasting numpy code from python to C#.
-* Wide support for `System.Drawing.Bitmap`. ([read more](https://github.com/SciSharp/NumSharp/wiki/Bitmap-Extensions))
+<p align="center">
+  The compatibility target is <strong>NumPy 2.x</strong>. When NumSharp behavior and
+  NumPy behavior differ, NumPy is treated as the source of truth.
+</p>
 
-### Performance vs NumPy
-NumSharp's NumPy-aligned iterator (`NDIter`) benchmarked against NumPy 2.x. The **left card** is the head-to-head comparison — geomean speedup by array-size tier and by operation class. The **right card** is the IL-generation *dividend*: iterator machinery NumPy has no equivalent for — cheaper construction than `np.nditer`, one-pass expression fusion, kernel reuse, and a parallel inner loop. Bars are **NumPy ÷ NumSharp on the same machine** (>1× = NumSharp is faster), and each also shows **%NumPy🕐** — the share of NumPy's time NumSharp uses (56% = takes just over half as long; <100% = faster). Absolute timings vary by hardware, so only the same-runner ratio is meaningful.
+## What Is NumSharp?
 
-[<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/ops.png" width="400" height="300" />](benchmark/nditer/nditer_results.md) [<img src="https://raw.githubusercontent.com/SciSharp/NumSharp/master/benchmark/nditer/cards/cat.png" width="400" height="300" />](benchmark/nditer/nditer_results.md)
+NumSharp lets C# and F# code use a NumPy-like programming model without embedding
+CPython. It is intended for scientific computing, numerical utilities, machine
+learning infrastructure, and projects that want NumPy-style array operations in
+ordinary .NET code.
 
-Refreshed automatically after each release. **[Full report →](benchmark/nditer/nditer_results.md)**
+NumSharp focuses on:
 
-### Implemented APIs
-The NumPy class is a high-level abstraction of NDArray that allows NumSharp to be used in the same way as Python's NumPy, minimizing API differences caused by programming language features, allowing .NET developers to maximize Utilize a wide range of NumPy code resources to seamlessly translate python code into .NET code.
+- NumPy-shaped API names and behavior.
+- N-dimensional arrays with shape, stride, offset, and view metadata.
+- Broadcasting without materializing repeated values.
+- Dtype-aware math, comparisons, reductions, random sampling, and formatting.
+- Runtime IL generation and SIMD fast paths where layout and dtype allow it.
 
-### Install NumSharp in NuGet
-```sh
-PM> Install-Package NumSharp
+## Features
+
+- **NumPy-style `NDArray`** - N-dimensional arrays with shape, strides, offsets,
+  slicing, and view semantics. Start with [NDArray fundamentals](docs/website-src/docs/intro.md)
+  and [NDArray](docs/website-src/docs/NDArray.md).
+- **Broadcasting** - NumPy-style shape expansion without materializing repeated
+  values. See [Broadcasting](docs/website-src/docs/broadcasting.md).
+- **Dtype-aware operations** - 15 core dtypes with NumPy-oriented promotion and
+  conversion behavior. See [Dtypes](docs/website-src/docs/dtypes.md) and
+  [NumPy compliance](docs/website-src/docs/compliance.md).
+- **Broad `np.*` API surface** - Creation, manipulation, math, reductions,
+  comparisons, logic, random sampling, I/O, and formatting. Browse the
+  [API reference](docs/website-src/api/index.md).
+- **Generated IL and SIMD kernels** - Runtime-specialized kernels for supported
+  dtype and layout combinations. See [IL generation](docs/website-src/docs/il-generation.md).
+- **Iterator and fusion infrastructure** - NDIter-style execution and fused
+  `np.evaluate` expressions for reducing intermediate allocations. See
+  [NDIter](docs/website-src/docs/NDIter.md).
+- **Tracked performance reports** - Release snapshots with dashboard summaries,
+  raw reports, and subsystem matrices. See the
+  [benchmark dashboard](docs/website-src/docs/benchmarks-dashboard.md).
+
+## Start Here
+
+Install the core package:
+
+```bash
+dotnet add package NumSharp
 ```
 
-### How to use
-```cs
+Use familiar NumPy-style calls:
+
+```csharp
 using NumSharp;
 
-var nd = np.full(5, 12); //[5, 5, 5 .. 5]
-nd = np.zeros(12); //[0, 0, 0 .. 0]
-nd = np.arange(12); //[0, 1, 2 .. 11]
+var a = np.arange(12).reshape(3, 4);
+var window = a[":, 1::2"];
 
-// create a matrix
-nd = np.zeros((3, 4)); //[0, 0, 0 .. 0]
-nd = np.arange(12).reshape(3, 4);
-
-// access data by index
-var data = nd[1, 1];
-
-// create a tensor
-nd = np.arange(12);
-
-// reshaping
-data = nd.reshape(2, -1); //returning ndarray shaped (2, 6)
-
-Shape shape = (2, 3, 2);
-data = nd.reshape(shape); //Tuple implicitly casted to Shape
-    //or:
-nd =   nd.reshape(2, 3, 2);
-
-// slicing tensor
-data = nd[":, 0, :"]; //returning ndarray shaped (2, 1, 2)
-data = nd[Slice.All, 0, Slice.All]; //equivalent to the line above.
-
-// nd is currently shaped (2, 3, 2)
-// get the 2nd vector in the 1st dimension
-data = nd[1]; //returning ndarray shaped (3, 2)
-
-// get the 3rd vector in the (axis 1, axis 2) dimension
-data = nd[1, 2]; //returning ndarray shaped (2, )
-
-// get flat representation of nd
-data = nd.flat; //or nd.flatten() for a copy
-
-// interate ndarray
-foreach (object val in nd)
-{
-    // val can be either boxed value-type or a NDArray.
-}
-
-var iter = nd.AsIterator<int>(); //a different T can be used to automatically perform cast behind the scenes.
-while (iter.HasNext())
-{
-    //read
-    int val = iter.MoveNext();
-
-    //write
-    iter.MoveNextReference() = 123; //set value to the next val
-    //note that setting is not supported when calling AsIterator<T>() where T is not the dtype of the ndarray.
-}
+Console.WriteLine(window);
+Console.WriteLine(np.sum(window, axis: 0));
 ```
 
-### How to run benchmark
+For Python readers, the intended shape is deliberately close:
+
+```python
+import numpy as np
+
+a = np.arange(12).reshape(3, 4)
+window = a[:, 1::2]
+print(window.sum(axis=0))
 ```
-C: \> dotnet NumSharp.Benchmark.dll nparange
+
+## Documentation Map
+
+This README is the project front door. The docs site is the source for detailed
+usage, compatibility, internals, and benchmark reports.
+
+| Need | Start with |
+| --- | --- |
+| Learn the array model | [NDArray fundamentals](docs/website-src/docs/intro.md) |
+| Work with array objects | [NDArray](docs/website-src/docs/NDArray.md) |
+| Understand dtype behavior | [Dtypes](docs/website-src/docs/dtypes.md) |
+| Use broadcasting | [Broadcasting](docs/website-src/docs/broadcasting.md) |
+| Check NumPy parity status | [NumPy compliance](docs/website-src/docs/compliance.md) |
+| Inspect current performance | [Benchmark dashboard](docs/website-src/docs/benchmarks-dashboard.md) |
+| Read raw benchmark output | [Latest benchmark report](benchmark/history/latest/benchmark-report.md) |
+| Understand generated kernels | [IL generation](docs/website-src/docs/il-generation.md) |
+| Browse API reference | [API reference](docs/website-src/api/index.md) |
+
+## API Surface
+
+NumSharp implements a broad `np.*` surface modeled after NumPy:
+
+| Area | Examples |
+| --- | --- |
+| Creation | `array`, `asarray`, `arange`, `linspace`, `zeros`, `ones`, `full`, `eye` |
+| Shape manipulation | `reshape`, `ravel`, `transpose`, `concatenate`, `stack`, `squeeze`, `repeat`, `tile` |
+| Broadcasting | `broadcast`, `broadcast_to`, `broadcast_arrays` |
+| Math | `add`, `subtract`, `multiply`, `divide`, `power`, `sqrt`, `exp`, `log`, trigonometric functions |
+| Reductions | `sum`, `prod`, `mean`, `std`, `var`, `min`, `max`, `argmin`, `argmax`, NaN-aware variants |
+| Logic and comparison | `equal`, `less`, `greater`, `isclose`, `isnan`, `isfinite`, `logical_and`, `logical_or` |
+| Selection and indexing | `where`, `take`, `put`, `nonzero`, `argwhere`, `searchsorted` |
+| Linear algebra | `dot`, `matmul`, `outer`, `trace`, `diagonal` |
+| Random | `np.random` distributions and NumPy-compatible seed/state behavior |
+| I/O and formatting | `load`, `save`, `fromfile`, `tofile`, `array2string`, print options |
+
+For the authoritative list and signatures, use the [API reference](docs/website-src/api/index.md)
+and the compatibility documentation.
+
+## NumPy vs NumSharp, Key Differences
+
+NumSharp follows NumPy's model where it can, but it is still a native .NET
+implementation. These are the differences that matter most when reading docs,
+porting code, or interpreting benchmark results.
+
+| Topic | NumPy | NumSharp | Practical impact |
+| --- | --- | --- | --- |
+| Runtime | CPython package backed by C/Fortran/native extensions | Native .NET library | No embedded Python runtime; Python extension modules do not automatically work. |
+| Main array type | `numpy.ndarray` | `NumSharp.NDArray` | Same mental model: shape, dtype, strides, indexing, views. C# syntax differs. |
+| API entry point | `import numpy as np` | `using NumSharp;` then `np.*` | Function names are intentionally familiar; C# overloads can differ where the language requires it. |
+| Compatibility target | NumPy 2.x | NumPy 2.x behavior target | NumPy is the source of truth for edge cases and tests. |
+| View semantics | Slices usually return views | Slices usually return views | Mutating a writeable view can mutate the base array. |
+| Broadcasting | Broadcasted dimensions use stride-zero views | Broadcasted dimensions use stride-zero views | Avoids materializing repeated data; broadcast views are protected from unsafe writes. |
+| Core dtype set | Large dtype universe, including platform-specific and Python-object-oriented dtypes | 15 core dtypes: bool, signed/unsigned ints, `char`, `Half`, `float`, `double`, `decimal`, `Complex` | Most numeric code maps directly; dtype-specialized NumPy code may need review. |
+| Integer names | `int8`, `uint8`, `int16`, ... | `SByte`, `Byte`, `Int16`, `UInt16`, ... | Same storage widths, .NET-oriented names. See [Dtypes](docs/website-src/docs/dtypes.md). |
+| `float16` | `float16` | `System.Half` | Supported, but some arithmetic paths are scalar because .NET has limited `Half` vector arithmetic. |
+| Complex | `complex64`, `complex128` | `System.Numerics.Complex` | Complex support is closer to `complex128`; no separate `complex64` dtype. |
+| Decimal | Usually object/extension territory | Native `Decimal` dtype | Useful for .NET decimal precision, but not a direct NumPy built-in dtype match. |
+| Text/object dtypes | String, unicode, object, and newer string dtype paths | No broad object/string dtype parity; `Char` is .NET-specific | Port text/object-heavy ndarray code deliberately. |
+| Type promotion | NumPy 2.x promotion rules | NumPy 2.x promotion target | Promotion-sensitive code should be checked against [NumPy compliance](docs/website-src/docs/compliance.md). |
+| Memory layout | C/F order and rich stride combinations | C-order default with stride/view/order-aware APIs | Layout-sensitive performance depends on contiguity, slicing, broadcasting, and dtype. |
+| Execution engine | NumPy ufuncs and native kernels | C# engine with generated IL/SIMD kernels | Performance differs by dtype, size, and layout. See [IL generation](docs/website-src/docs/il-generation.md). |
+| Benchmarks | NumPy is the comparison baseline | Ratios are reported as `NumPy_ms / NumSharp_ms` | `>1.0x` means NumSharp is faster. See the [benchmark dashboard](docs/website-src/docs/benchmarks-dashboard.md). |
+| Missing surface | Full NumPy package | Broad but not complete `np.*` surface | Some APIs remain unimplemented or intentionally different; use docs/API reference as the current source. |
+
+## Performance
+
+NumSharp benchmarks are published as tracked release snapshots, not ad hoc
+numbers. The latest checked-in snapshot compares NumSharp with NumPy 2.4.2
+across the operation matrix, supported dtypes, three size tiers, and the NDIter,
+layout, operand, cast, and fusion subsystems.
+
+[![NumSharp benchmark dashboard](docs/website-src/images/benchmark-dashboard.png)](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html)
+
+Benchmark convention:
+
+```text
+ratio = NumPy_ms / NumSharp_ms
+> 1.0x means NumSharp is faster
+< 1.0x means NumPy is faster
 ```
 
-### NumSharp is referenced by
-* [dotnet/ML.NET](https://github.com/dotnet/machinelearning)
-* [ScipSharp/TensorFlow.NET](https://github.com/SciSharp/TensorFlow.NET)
-* [ScipSharp/Gym.NET](https://github.com/SciSharp/Gym.NET)
-* [ScipSharp/Pandas.NET](https://github.com/SciSharp/Pandas.NET)
-* [Oceania2018/Bigtree.MachineLearning](https://github.com/Oceania2018/Bigtree.MachineLearning)
-* [Oceania2018/CherubNLP](https://github.com/Oceania2018/CherubNLP)
-* [SciSharp/BotSharp](https://github.com/SciSharp/BotSharp)
+Latest checked-in headlines:
 
-You might also be interested in NumSharp's sister project [Numpy.NET](https://github.com/SciSharp/Numpy.NET) which provides a more whole implementation of numpy by using [pythonnet](https://github.com/pythonnet/pythonnet) and [behind-the-scenes deployment of python](https://github.com/henon/Python.Included) ([read more](https://henon.wordpress.com/2019/06/05/using-python-libraries-in-net-without-a-python-installation/)).
+| Scope | Result |
+| --- | ---: |
+| 1K operation matrix geomean | 1.14x |
+| 100K operation matrix geomean | 0.90x |
+| 10M operation matrix geomean | 1.26x |
+| NDIter operation matrix geomean | 1.18x |
+| Cast subsystem wins | 1,439 / 1,568 comparable cells |
 
-NumSharp is a member project of [SciSharp.org](https://github.com/SciSharp) which is the .NET based ecosystem of open-source software for mathematics, science, and engineering.
+Use the [benchmark dashboard](docs/website-src/docs/benchmarks-dashboard.md) for
+visual drilldowns and [latest raw report](benchmark/history/latest/benchmark-report.md)
+for the full tables.
 
-### Code Generation
-Type-specific kernels are emitted at runtime via `ILKernelGenerator` / `DirectILKernelGenerator` (`System.Reflection.Emit`), with SIMD (V128/V256/V512) selected at startup.<br>
-This superseded the original [Regen](https://github.com/Nucs/Regen) template engine: the old `#if _REGEN` template blocks have been removed, surviving only as `//`-commented reference next to the code they once generated.
+Run the official benchmark suite:
+
+```bash
+cd benchmark
+python run_benchmark.py
+```
+
+Useful development variants:
+
+```bash
+python run_benchmark.py --quick
+python run_benchmark.py --suites arithmetic unary
+python run_benchmark.py --skip-build
+```
+
+Benchmark runs write tracked history snapshots under
+`benchmark/history/<date>_<sha>/` and update `benchmark/history/latest`.
+Run C# benchmark scripts in Release; Debug builds materially distort generated
+kernel timings.
+
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/NumSharp.Core/` | Core `NDArray`, `np.*`, storage, dtype, iterator, and kernel implementation. |
+| `src/NumSharp.Bitmap/` | Bitmap interop extension package. |
+| `test/NumSharp.UnitTest/` | MSTest suite, including NumPy-derived behavior tests and fuzz corpora. |
+| `docs/website-src/` | DocFX documentation source. |
+| `benchmark/` | NumSharp-vs-NumPy benchmark orchestration and subsystem scans. |
+| `benchmark/history/latest/` | Latest tracked benchmark snapshot. |
+
+## Build and Test
+
+Build:
+
+```bash
+dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
+```
+
+Run the normal CI-style unit test filter:
+
+```bash
+dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+  --configuration Release \
+  --no-build \
+  --framework net8.0 \
+  --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
+```
+
+CI runs on Windows, Linux, and macOS for `net8.0` and `net10.0`.
+
+## Related Projects
+
+If you need to call the full CPython NumPy runtime from .NET, including Python
+extension modules NumSharp does not implement, see
+[Numpy.NET](https://github.com/SciSharp/Numpy.NET). NumSharp is a native .NET
+implementation with a NumPy-shaped API; Numpy.NET bridges into Python.
+
+## License
+
+NumSharp is released under the [Apache License 2.0](LICENSE).
+
+NumSharp is part of the [SciSharp](https://github.com/SciSharp) ecosystem for
+machine learning, mathematics, science, and engineering on .NET.
