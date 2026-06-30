@@ -141,6 +141,19 @@ namespace NumSharp.UnitTest.Fuzz
                 case "fmin": return np.fmin(ops[0], ops[1]);
                 case "isclose": return np.isclose(ops[0], ops[1]);
 
+                // Group A Batch 1: boolean logic + binary arctan2.
+                case "logical_and": return np.logical_and(ops[0], ops[1]);
+                case "logical_or": return np.logical_or(ops[0], ops[1]);
+                case "logical_xor": return np.logical_xor(ops[0], ops[1]);
+                case "logical_not": return np.logical_not(ops[0]);
+                case "arctan2": return np.arctan2(ops[0], ops[1]);
+
+                // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
+                case "iscomplex": return np.iscomplex(ops[0]);
+                case "isreal": return np.isreal(ops[0]);
+                case "allclose": return NDArray.Scalar(np.allclose(ops[0], ops[1]));
+                case "array_equal": return NDArray.Scalar(np.array_equal(ops[0], ops[1]));
+
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
@@ -165,13 +178,25 @@ namespace NumSharp.UnitTest.Fuzz
 
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
+                case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
                 case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
+                case "flatnonzero": return np.flatnonzero(ops[0]);                  // Group A B3
+                case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
+                case "unique": return np.unique(ops[0]);                            // Group A B3
 
                 // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
+                case "trace": return np.trace(ops[0]);                              // Group A
+                case "diagonal": return np.diagonal(ops[0]);                        // Group A
+
+                // Group A: rounding + flattened diff + nan order-statistics.
+                case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
+                case "ediff1d": return np.ediff1d(ops[0]);
+                case "nanpercentile": return np.nanpercentile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "nanquantile": return np.nanquantile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
 
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":

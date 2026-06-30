@@ -115,6 +115,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Sort() => RunCorpus("sort.jsonl");
 
+        // Group A: np.round_/around with decimals in {0,1,2,-1} over every layout (banker's rounding;
+        // int + negative-decimals genuinely rounds to tens).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Rounding() => RunCorpus("rounding.jsonl");
+
         // W13 SIMD-tail boundaries: add/sub/mul/negative/abs/sqrt/sum/prod/max/min over 1-D arrays
         // sized 1..129 straddling the V128/V256/V512 lane counts (7/8/9, 15/16/17, 31/32/33, ...).
         [TestMethod]

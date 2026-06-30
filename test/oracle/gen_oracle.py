@@ -545,6 +545,21 @@ LOGIC_BIN_PAIRS = [
     ("complex128", "complex128"),
 ]
 
+# Group A Batch 1: logical_and/or/xor (binary -> bool, truthiness of each element),
+# logical_not (unary -> bool), arctan2 (binary -> float; NumPy promotes int -> float64,
+# raises on complex so gen_binary skips those).
+LOGICAL_BIN_OPS = {"logical_and": np.logical_and, "logical_or": np.logical_or, "logical_xor": np.logical_xor}
+LOGICAL_NOT_OP = {"logical_not": np.logical_not}
+ARCTAN2_OP = {"arctan2": np.arctan2}
+LOGICAL_PAIRS = [
+    ("bool", "bool"), ("int32", "int32"), ("float64", "float64"), ("bool", "int32"),
+    ("int32", "float64"), ("uint8", "uint8"), ("float32", "float32"), ("complex128", "complex128"),
+]
+ARCTAN2_PAIRS = [
+    ("float32", "float32"), ("float64", "float64"), ("float16", "float16"),
+    ("int32", "int32"), ("int32", "float64"), ("uint8", "int8"), ("float32", "float64"),
+]
+
 
 # np.place(arr, mask, vals) mutates arr in-place where mask is True, cycling through vals.
 # The operand is the ORIGINAL arr; the expected is arr AFTER place.
@@ -1321,6 +1336,219 @@ def _relabel_dtype(cases, frm, to):
 
 
 # ---------------------------------------------------------------------------
+# Group A Batch 2 generators: sort / round_ / trace / diagonal / ediff1d / nan-quantile.
+# ---------------------------------------------------------------------------
+ROUND_DTYPES = ["uint8", "int16", "int32", "int64", "float16", "float32", "float64"]
+# uint8 CARVED: trace of an unsigned dtype upcasts to Int64 in NumSharp but uint64 in NumPy -> [OpenBugs].
+TRACE_DTYPES = ["int16", "int32", "int64", "float16", "float32", "float64", "complex128"]
+EDIFF_DTYPES = ["int16", "int32", "int64", "uint8", "float32", "float64", "complex128"]  # no bool (NumPy bans bool `-`)
+NANQ_DTYPES = ["float16", "float32", "float64"]  # NaN only exists in float; pools already carry NaN/inf
+
+# Group A Batch 3: searching (flatnonzero/argwhere -> int64 coords) + whole-array bool reductions
+# (allclose/array_equal, wrapped to a 0-D bool via np.asarray). All GREEN.
+# CARVED (-> [OpenBugs]): iscomplex/isreal (NumSharp ignores the imaginary part for complex input and
+# emits garbage bytes on strided real input) and unique (mishandles offset/strided views + NaN-complex
+# ordering). flatnonzero/argwhere stay.
+NZ_OPS = {"flatnonzero": np.flatnonzero, "argwhere": np.argwhere}
+NZ_DTYPES = ["bool", "int32", "uint8", "float64", "complex128"]
+ALLCLOSE_OPS = {"allclose": lambda a, b: np.asarray(np.allclose(a, b)),
+                "array_equal": lambda a, b: np.asarray(np.array_equal(a, b))}
+ALLCLOSE_PAIRS = [("float64", "float64"), ("float32", "float32"), ("int32", "int32"),
+                  ("complex128", "complex128"), ("float64", "float32"), ("int32", "int64")]
+
+
+def gen_sort(dtypes):
+    """Value sort (np.sort) over distinct 1-D + 2-D arrays, axis in {-1,0,1}. Same dtype out."""
+    cases = []
+    n = 0
+    for dt in dtypes:
+        a1 = _distinct(8, dt)
+        a2 = _distinct(12, dt).reshape(3, 4)
+        jobs = [(a1, -1)] + [(a2, ax) for ax in (0, 1, -1)]
+        for (a, axis) in jobs:
+            try:
+                r = np.asarray(np.sort(a, axis=axis))
+            except Exception:
+                continue
+            cases.append({
+                "id": f"sort/{a.ndim}d/{dt}/axis={axis}/{n}",
+                "op": "sort",
+                "params": {"axis": axis},
+                "operands": [describe(a, a)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": f"{a.ndim}d",
+                "valueclass": "distinct",
+            })
+            n += 1
+    return cases
+
+
+def gen_unique(dtypes):
+    """np.unique -> sorted distinct values, over CONTIGUOUS finite data with duplicates. Contiguous +
+    finite on purpose: unique is correct via the public API (verified), but the corpus's raw-offset
+    reconstructions hit the documented '#11 unreachable-via-API' representation gap, and inf/NaN
+    ordering in a COMPLEX sort is implementation-defined — both out of scope for a dedup differential."""
+    pools = {
+        "bool": [True, False, True, True, False, False],
+        "int32": [3, -1, 3, 7, -1, 0, 7, -128, 3, 127],
+        "uint8": [5, 2, 5, 9, 2, 0, 9, 255, 5, 17],
+        "int64": [3, -1, 3, 7, -1, 0, 7, -9999, 3, 12345],
+        "float64": [1.5, -2.0, 1.5, 3.25, -2.0, 0.0, 3.25, -7.5],
+        "float32": [1.5, -2.0, 1.5, 3.25, -2.0, 0.0, 3.25, -7.5],
+        "complex128": [3 + 1j, 1 + 2j, 3 + 1j, 2 + 0j, 1 + 2j, 0 + 0j],   # finite only
+    }
+    cases = []
+    n = 0
+    for dt in dtypes:
+        a = np.array(pools[dt], dtype=np.dtype(dt))
+        r = np.asarray(np.unique(a))
+        cases.append({
+            "id": f"unique/1d/{dt}/{n}",
+            "op": "unique",
+            "params": {},
+            "operands": [describe(a, a)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "1d",
+            "valueclass": "dup",
+        })
+        n += 1
+    return cases
+
+
+def gen_round(dtypes, layout_names):
+    """np.round_/around with decimals; every layout. NumPy is the oracle (banker's rounding).
+    CARVE-OUTS (-> [OpenBugs]): dec=-1 (NumSharp's Math.Round rejects negative digits for ints and
+    mis-rounds floats) and float16 with dec>=1 (float16 fractional rounding diverges)."""
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for dec in (0, 1, 2):                         # dec=-1 carved (negative-decimals bug)
+                if s == "float16" and dec != 0:           # float16 fractional rounding carved
+                    continue
+                try:
+                    r = np.asarray(np.round(view, dec))
+                except Exception:
+                    skipped += 1
+                    continue
+                cases.append({
+                    "id": f"round_/{ln}/{s}/dec={dec}/{n}",
+                    "op": "round_",
+                    "params": {"decimals": dec},
+                    "operands": [operand],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": ln,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_trace_diag(dtypes):
+    """np.trace (2-D -> 0-D sum of diagonal) and np.diagonal (2-D -> 1-D)."""
+    cases = []
+    n = 0
+    for dt in dtypes:
+        for shape in [(4, 4), (3, 5), (5, 3)]:
+            a = _cbase(shape, dt)
+            for opname, f in (("trace", np.trace), ("diagonal", np.diagonal)):
+                try:
+                    r = np.asarray(f(a))
+                except Exception:
+                    continue
+                cases.append({
+                    "id": f"{opname}/{shape[0]}x{shape[1]}/{dt}/{n}",
+                    "op": opname,
+                    "params": {},
+                    "operands": [describe(a, a)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": "2d",
+                    "valueclass": "mixed",
+                })
+                n += 1
+    return cases
+
+
+def gen_ediff1d(dtypes, layout_names):
+    """np.ediff1d — consecutive differences of the FLATTENED array (n-1 elements)."""
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            try:
+                r = np.asarray(np.ediff1d(view))
+            except Exception:
+                skipped += 1
+                continue
+            cases.append({
+                "id": f"ediff1d/{ln}/{s}/{n}",
+                "op": "ediff1d",
+                "params": {},
+                "operands": [describe(base, view)],
+                "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                             "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                "layout": ln,
+                "valueclass": "mixed",
+            })
+            n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+def gen_nanquantile(dtypes):
+    """np.nanpercentile / np.nanquantile — NaN-skipping order statistics. Uses FINITE values with a
+    few NaNs injected (NO inf: percentile INTERPOLATION across inf is ill-defined — inf-inf=NaN — so
+    NumPy/NumSharp legitimately diverge there; that edge is out of scope for the nan-skip differential)."""
+    cases = []
+    n = 0
+    skipped = 0
+    specs = [("nanpercentile", np.nanpercentile, [0.0, 25.0, 50.0, 75.0, 100.0]),
+             ("nanquantile", np.nanquantile, [0.0, 0.25, 0.5, 0.75, 1.0])]
+    for s in dtypes:
+        dt = np.dtype(s)
+        base1 = np.array([3.5, -2.0, np.nan, 7.25, 0.0, -9.5, 4.0, np.nan, 1.5, 6.0, -3.0, 2.5], dtype=dt)
+        base2 = base1.reshape(3, 4)
+        jobs = [(base1, None), (base1, 0)] + [(base2, ax) for ax in (None, 0, 1)]
+        for (a, axis) in jobs:
+            operand = describe(a, a)
+            for (opname, f, qs) in specs:
+                for q in qs:
+                    try:
+                        r = np.asarray(f(a, q, axis))
+                    except Exception:
+                        skipped += 1
+                        continue
+                    cases.append({
+                        "id": f"{opname}/{a.ndim}d/{s}/q={q}/axis={axis}/{n}",
+                        "op": opname,
+                        "params": {"q": q, "axis": axis},
+                        "operands": [operand],
+                        "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                     "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                        "layout": f"{a.ndim}d",
+                        "valueclass": "nan",
+                    })
+                    n += 1
+    if skipped:
+        print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# ---------------------------------------------------------------------------
 # Char masquerade — WOVEN into every tier (not a separate corpus file).
 # ---------------------------------------------------------------------------
 # NumSharp's Char is a 2-byte UNSIGNED value, bit-identical to uint16. NumPy has no
@@ -1443,7 +1671,11 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
+        cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
+    elif mode == "rounding":
+        cases = gen_round(ROUND_DTYPES, list(LAYOUTS.keys()))          # Group A: round_/around
+        write_jsonl(os.path.join(corpus_dir, "rounding.jsonl"), cases)
     elif mode == "bitwise":
         cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
         cases += gen_unary(INVERT_OP, INT_BOOL_DTYPES, list(LAYOUTS.keys()))
@@ -1456,10 +1688,12 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "unary_extra.jsonl"), cases)
     elif mode == "nanreduce":
         cases = gen_reduce(NAN_REDUCE_OPS, NAN_REDUCE_DTYPES, REDUCE_LAYOUTS)
+        cases += gen_nanquantile(NANQ_DTYPES)                           # Group A: nanpercentile/nanquantile
         write_jsonl(os.path.join(corpus_dir, "nanreduce.jsonl"), cases)
     elif mode == "scan":
         cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)
+        cases += gen_ediff1d(EDIFF_DTYPES, list(LAYOUTS.keys()))        # Group A: ediff1d
         cases += char_tier("scan")
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
     elif mode == "stat":
@@ -1472,6 +1706,10 @@ def main():
     elif mode == "logic":
         cases = gen_unary(LOGIC_UNARY_OPS, LOGIC_UNARY_DTYPES, list(LAYOUTS.keys()))
         cases += gen_binary(LOGIC_BIN_OPS, LOGIC_BIN_PAIRS, list(PAIR_LAYOUTS.keys()))
+        cases += gen_binary(LOGICAL_BIN_OPS, LOGICAL_PAIRS, list(PAIR_LAYOUTS.keys()))   # Group A B1
+        cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
+        cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
+        cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
@@ -1484,8 +1722,11 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "manip.jsonl"), cases)
     elif mode == "sort":
         cases = gen_argsort(SORT_DTYPES)
+        cases += gen_sort(SORT_DTYPES)                                  # Group A B2: value sort
         cases += gen_searchsorted(SORT_DTYPES)
         cases += gen_nonzero(SORT_DTYPES)
+        cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
+        cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
         cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":
