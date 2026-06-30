@@ -195,6 +195,24 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void DecimalScan() => RunCorpus("decimal_scan.jsonl");
 
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalPower() => RunCorpus("decimal_power.jsonl");
+
+        // var = mean((x-mean)^2) is exact decimal arithmetic; std = sqrt(var) is oracled by an
+        // INDEPENDENT Newton decimal sqrt (gen_decimal_oracle.DecSqrt), not NumSharp's DecimalMath.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalVarStd() => RunCorpus("decimal_varstd.jsonl");
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalMatmul() => RunCorpus("decimal_matmul.jsonl");
+
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalAstype() => RunCorpus("decimal_astype.jsonl");
+
         private static void RunCorpus(string file)
         {
             var cases = FuzzCorpus.Load(file);

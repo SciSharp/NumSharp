@@ -16,7 +16,8 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      per-mode dtype axes widened to ALL_DTYPES; Char WOVEN into every tier
                                      via the uint16 proxy (char_tier) — relabelled uint16->char, bytes intact
   gen_decimal_oracle.cs              INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
-                                     System.Decimal math -> decimal_{unary,binary,reduce,scan}.jsonl
+                                     System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
+                                     varstd,matmul,astype}.jsonl
   fuzz_random.py                     seeded random fuzzer (NumSharp-producible layouts)
 test/NumSharp.UnitTest/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)
@@ -98,8 +99,9 @@ Both are now exercised across the grids (previously excluded). Verified bugs are
 | Char | `invert(char)` N≥16 (SIMD path) | NotSupportedException | uint16 | `Char_Invert_LargeN_NotSupported` |
 | bool | `clip(bool)` non-contiguous (strided/transposed/F) | NotSupportedException | bool (contiguous works) | `OpenBugsDtypeCoverageTests.Clip_Bool_*` |
 
-`Decimal` rides an **independent C# oracle** (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`)
-across unary/binary/reduce/scan × 13 single + 7 pair layouts — **all green** (no decimal kernel bug
-found). Two non-bugs were classified and carved (not OpenBugs): the complex self-multiply ULP
+`Decimal` rides an **independent C# oracle** (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`;
+`std` is oracled by an independent Newton decimal sqrt, NOT NumSharp's `DecimalMath`) across
+unary / binary / reduce / scan / power(int-exp) / var / std / matmul / astype(decimal↔int·float) ×
+13 single + 7 pair layouts — **302 cases, all green** (no decimal kernel bug found). Two non-bugs were classified and carved (not OpenBugs): the complex self-multiply ULP
 (NumSharp matches NumPy *scalar*; NumPy's own array ufunc disagrees on a catastrophic-cancellation
 input) and `argsort<bool>/<Complex>` "not supported" (a harness `OpRegistry` gap, now wired → green).

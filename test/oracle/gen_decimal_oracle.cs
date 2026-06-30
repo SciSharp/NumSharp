@@ -269,11 +269,131 @@ static class Gen
             scan.Add(Case($"cumprod/decimal/{ln}/{n++}", "cumprod", "{\"axis\":null}", new[]{o.Describe()}, "decimal", new[]{log.Length}, HexOf(cp)));
         }
 
+        var power = new List<string>();
+        var varstd = new List<string>();
+        var matmul = new List<string>();
+        var astype = new List<string>();
+
+        // ----- POWER decimal^int (exact: repeated multiply / reciprocal). Exponent is a 0-D
+        // decimal whose value is a whole number — DecimalMath.Pow must be exact for integer powers. -----
+        foreach (var ln in new[] { "c_contiguous_1d", "c_contiguous_2d", "strided_step2_1d", "negstride_1d", "broadcast_1d_to_2d" })
+        {
+            foreach (int e in new[] { 0, 1, 2, 3 })
+            {
+                var a = SingleLayout(ln, 0, e < 0);                 // nonzero base only when exponent<0
+                var b = new Operand { Base = new[] { (decimal)e }, Shape = new int[0], Strides = new long[0], Offset = 0 };
+                var la = a.Logical();
+                var exp = la.Select(x => IntPow(x, e)).ToArray();
+                power.Add(Case($"power/decimal/{ln}^{e}/{n++}", "power", "{}", new[]{a.Describe(), b.Describe()}, "decimal", a.Shape, HexOf(exp)));
+            }
+        }
+
+        // ----- VAR / STD (axis=None, ddof=0). var = mean((x-mean)^2) is EXACT decimal arithmetic
+        // (no sqrt). std = sqrt(var) uses an INDEPENDENT Newton decimal sqrt as the oracle. -----
+        foreach (var ln in SINGLE_LAYOUTS)
+        {
+            if (ln == "scalar_0d" || ln == "one_element_1d") continue; // var of 1 elem = 0 (degenerate)
+            var o = SingleLayout(ln, 4, false);
+            var log = o.Logical();
+            if (log.Length == 0) continue;
+            decimal mean = log.Aggregate(0m,(x,y)=>x+y) / log.Length;
+            decimal v = log.Aggregate(0m,(acc,x)=>acc + (x-mean)*(x-mean)) / log.Length;
+            varstd.Add(Case($"var/decimal/{ln}/{n++}", "var", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{v})));
+            varstd.Add(Case($"std/decimal/{ln}/{n++}", "std", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{DecSqrt(v)})));
+        }
+
+        // ----- MATMUL 2D@2D (exact: decimal + is exact, so accumulation order is irrelevant). -----
+        foreach (var (m, k, p2, fortranB) in new[] { (3,4,2,false), (2,3,3,false), (4,2,5,true), (1,4,1,false) })
+        {
+            var A = new Operand { Base = Fill(m*k, false, 0), Shape = new[]{m,k}, Strides = CStrides(new[]{m,k}), Offset = 0 };
+            Operand B = fortranB
+                ? new Operand { Base = Fill(k*p2, false, 5), Shape = new[]{k,p2}, Strides = new long[]{1,k}, Offset = 0 } // (p2,k).T
+                : new Operand { Base = Fill(k*p2, false, 5), Shape = new[]{k,p2}, Strides = CStrides(new[]{k,p2}), Offset = 0 };
+            var la = A.Logical(); var lb = B.Logical();
+            var exp = new decimal[m*p2];
+            for (int i = 0; i < m; i++) for (int j = 0; j < p2; j++) { decimal acc = 0m; for (int t = 0; t < k; t++) acc += la[i*k+t]*lb[t*p2+j]; exp[i*p2+j] = acc; }
+            matmul.Add(Case($"matmul/decimal/{m}x{k}@{k}x{p2}{(fortranB?"F":"")}/{n++}", "matmul", "{}", new[]{A.Describe(), B.Describe()}, "decimal", new[]{m,p2}, HexOf(exp)));
+        }
+
+        // ----- ASTYPE decimal->X and X->decimal (the cast kernel). Values kept in-range. -----
+        // decimal -> wider numeric (no overflow for the small-value pool).
+        foreach (var ln in new[] { "c_contiguous_1d", "c_contiguous_2d", "strided_step2_1d", "negstride_1d" })
+        {
+            var o = SmallSingle(ln);
+            var log = o.Logical();
+            void Dto(string dt, string dtype, byte[] buf) => astype.Add(Case($"astype/decimal->{dt}/{ln}/{n++}", "astype", $"{{\"dtype\":\"{dtype}\"}}", new[]{o.Describe()}, dtype, o.Shape, HexOf(buf)));
+            Dto("int64", "int64", Bytes(log.Select(x => (long)x).ToArray()));
+            Dto("int32", "int32", Bytes(log.Select(x => (int)x).ToArray()));
+            Dto("float64", "float64", Bytes(log.Select(x => (double)x).ToArray()));
+            Dto("float32", "float32", Bytes(log.Select(x => (float)x).ToArray()));
+        }
+        // X -> decimal (always representable).
+        foreach (var ln in new[] { "c_contiguous_1d", "c_contiguous_2d" })
+        {
+            int n0 = ln == "c_contiguous_1d" ? 6 : 12; int[] sh = ln == "c_contiguous_1d" ? new[]{6} : new[]{3,4};
+            long[] iv = Enumerable.Range(0, n0).Select(i => (long)(i % 2 == 0 ? i : -i)).ToArray();
+            double[] dv = Enumerable.Range(0, n0).Select(i => (i - 2) * 1.25).ToArray();
+            astype.Add(AstypeTo("int64", sh, Bytes(iv), HexOf(iv.Select(x => (decimal)x).ToArray()), ref n));
+            astype.Add(AstypeTo("int32", sh, Bytes(iv.Select(x=>(int)x).ToArray()), HexOf(iv.Select(x => (decimal)x).ToArray()), ref n));
+            astype.Add(AstypeTo("float64", sh, Bytes(dv), HexOf(dv.Select(x => (decimal)x).ToArray()), ref n));
+        }
+
         Write(Path.Combine(corpus, "decimal_unary.jsonl"), unary);
         Write(Path.Combine(corpus, "decimal_binary.jsonl"), binary);
         Write(Path.Combine(corpus, "decimal_reduce.jsonl"), reduce);
         Write(Path.Combine(corpus, "decimal_scan.jsonl"), scan);
+        Write(Path.Combine(corpus, "decimal_power.jsonl"), power);
+        Write(Path.Combine(corpus, "decimal_varstd.jsonl"), varstd);
+        Write(Path.Combine(corpus, "decimal_matmul.jsonl"), matmul);
+        Write(Path.Combine(corpus, "decimal_astype.jsonl"), astype);
     }
+
+    // small in-range decimal source for decimal->narrow casts (truncation toward zero).
+    static Operand SmallSingle(string ln)
+    {
+        decimal[] sp = { 0m, 1m, -1m, 2.75m, -2.75m, 7.9m, -7.9m, 42.5m, -3.2m, 100m, -100m, 5m, 9.99m, -9.99m, 3m, 8m };
+        decimal[] B(int n) { var a = new decimal[n]; for (int i=0;i<n;i++) a[i]=sp[i%sp.Length]; return a; }
+        switch (ln)
+        {
+            case "c_contiguous_1d": return new Operand { Base = B(8), Shape = new[]{8}, Strides = new long[]{1}, Offset = 0 };
+            case "c_contiguous_2d": return new Operand { Base = B(20), Shape = new[]{4,5}, Strides = new long[]{5,1}, Offset = 0 };
+            case "strided_step2_1d": return new Operand { Base = B(16), Shape = new[]{8}, Strides = new long[]{2}, Offset = 0 };
+            case "negstride_1d": return new Operand { Base = B(8), Shape = new[]{8}, Strides = new long[]{-1}, Offset = 7 };
+            default: throw new Exception("small layout " + ln);
+        }
+    }
+
+    static string AstypeTo(string dtype, int[] shape, byte[] srcBuf, string expDecHex, ref int n)
+    {
+        // operand is the SOURCE dtype; expected is decimal.
+        long bufN = shape.Aggregate(1,(a,b)=>a*b);
+        string op = $"{{\"dtype\":\"decimal\"}}";
+        string operand = $"{{\"dtype\":\"{dtype}\",\"shape\":[{string.Join(",",shape)}],\"strides\":[{string.Join(",",CStrides(shape))}],\"offset\":0,\"bufferSize\":{bufN},\"buffer\":\"{HexOf(srcBuf)}\"}}";
+        return $"{{\"id\":\"astype/{dtype}->decimal/{n++}\",\"op\":\"astype\",\"params\":{op},\"operands\":[{operand}],\"expected\":{{\"dtype\":\"decimal\",\"shape\":[{string.Join(",",shape)}],\"buffer\":\"{expDecHex}\"}},\"layout\":\"decimal\",\"valueclass\":\"decimal\"}}";
+    }
+
+    static decimal IntPow(decimal a, int e)
+    {
+        if (e == 0) return 1m;
+        bool neg = e < 0; int n = Math.Abs(e);
+        decimal r = 1m; for (int i = 0; i < n; i++) r *= a;
+        return neg ? 1m / r : r;
+    }
+
+    // Independent decimal sqrt (Newton-Raphson) — the oracle for std (NOT NumSharp's DecimalMath.Sqrt).
+    static decimal DecSqrt(decimal x)
+    {
+        if (x <= 0m) return 0m;
+        decimal g = (decimal)Math.Sqrt((double)x);   // seed from double
+        if (g <= 0m) g = 1m;
+        for (int i = 0; i < 40; i++) { decimal ng = (g + x / g) / 2m; if (ng == g) break; g = ng; }
+        return g;
+    }
+
+    static byte[] Bytes(long[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
+    static byte[] Bytes(int[] v) { var b = new byte[v.Length*4]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
+    static byte[] Bytes(double[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
+    static byte[] Bytes(float[] v) { var b = new byte[v.Length*4]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
 
     static decimal ProdSafe(decimal[] v) { decimal p = 1m; foreach (var x in v) p *= x; return p; }
 
