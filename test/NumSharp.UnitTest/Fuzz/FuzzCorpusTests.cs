@@ -121,6 +121,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Rounding() => RunCorpus("rounding.jsonl");
 
+        // Group A Batches 4-6: shape (flatten/rollaxis/append/insert), selection (take/compress/
+        // extract), math (convolve), multi-output split (one case per output piece).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void GroupA() => RunCorpus("groupa.jsonl");
+
         // W13 SIMD-tail boundaries: add/sub/mul/negative/abs/sqrt/sum/prod/max/min over 1-D arrays
         // sized 1..129 straddling the V128/V256/V512 lane counts (7/8/9, 15/16/17, 31/32/33, ...).
         [TestMethod]

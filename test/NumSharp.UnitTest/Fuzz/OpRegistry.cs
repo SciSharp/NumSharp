@@ -185,6 +185,25 @@ namespace NumSharp.UnitTest.Fuzz
                 case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
                 case "unique": return np.unique(ops[0]);                            // Group A B3
 
+                // Group A Batches 4-6: shape / selection / convolve / split.
+                case "flatten": return ops[0].flatten();
+                case "rollaxis": return np.rollaxis(ops[0], p["axis"].GetInt32(), p["start"].GetInt32());
+                case "take": return np.take(ops[0], ops[1], p["axis"].GetInt32());
+                case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
+                case "extract": return np.extract(ops[0], ops[1]);
+                case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());
+                case "append": return p.ContainsKey("axis")
+                    ? np.append(ops[0], ops[1], p["axis"].GetInt32())
+                    : np.append(ops[0], ops[1]);
+                case "insert": return np.insert(ops[0], p["obj"].GetInt32(), ops[1], p["axis"].GetInt32());
+                case "split": return np.split(ops[0], p["sections"].GetInt32(), p["axis"].GetInt32())[p["piece"].GetInt32()];
+                case "hsplit": return np.hsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "vsplit": return np.vsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "dsplit": return np.dsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "put": np.put(ops[0], ops[1], ops[2]); return ops[0]; // mutates ops[0], IS the result
+                case "ravel_multi_index": return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]));
+                case "unravel_index": return np.unravel_index(ops[0], ParseIntArray(p["shape"]))[p["piece"].GetInt32()];
+
                 // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);

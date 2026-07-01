@@ -1549,6 +1549,108 @@ def gen_nanquantile(dtypes):
 
 
 # ---------------------------------------------------------------------------
+# Group A Batches 4-6: shape (flatten/rollaxis/append/insert), selection (take/compress/extract),
+# math (convolve), multi-output split (one case per output piece). NumPy is the oracle.
+# ---------------------------------------------------------------------------
+def gen_groupa():
+    cases = []
+    n = 0
+
+    def emit(opname, params, operands, r):
+        nonlocal n
+        r = np.asarray(r)
+        cases.append({
+            "id": f"{opname}/{n}", "op": opname, "params": params, "operands": operands,
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "groupa", "valueclass": "mixed",
+        })
+        n += 1
+
+    for dt in ["int32", "float64", "uint8", "complex128"]:
+        d = np.dtype(dt)
+        a2 = _cbase((3, 4), d)
+        a3 = _cbase((2, 3, 4), d)
+
+        # flatten — C-order copy (contiguous + a transposed, non-contiguous source).
+        emit("flatten", {}, [describe(a2, a2)], a2.flatten())
+        t3 = a3.transpose(2, 0, 1)
+        emit("flatten", {}, [describe(a3, t3)], t3.flatten())
+
+        # rollaxis — move `axis` to `start`.
+        for (axis, start) in [(2, 0), (1, 0), (0, 2)]:
+            emit("rollaxis", {"axis": axis, "start": start}, [describe(a3, a3)], np.rollaxis(a3, axis, start))
+
+        # take — int64 indices, along an axis.
+        base1 = _cbase((6,), d)
+        idx1 = np.array([0, 3, 1, 3, 2], dtype=np.int64)
+        emit("take", {"axis": 0}, [describe(base1, base1), describe(idx1, idx1)], np.take(base1, idx1, 0))
+        idx2 = np.array([0, 2, 1], dtype=np.int64)
+        emit("take", {"axis": 1}, [describe(a2, a2), describe(idx2, idx2)], np.take(a2, idx2, 1))
+
+        # compress — bool condition selects along an axis.
+        cond = np.array([True, False, True], dtype=bool)
+        emit("compress", {"axis": 0}, [describe(cond, cond), describe(a2, a2)], np.compress(cond, a2, 0))
+
+        # extract — bool mask (same shape) -> 1-D.
+        mask = (_cbase((3, 4), np.dtype("int32")) % 2 == 0)
+        emit("extract", {}, [describe(mask, mask), describe(a2, a2)], np.extract(mask, a2))
+
+        # convolve — 1-D, all three modes.
+        av = _cbase((7,), d)
+        vv = _cbase((3,), d)
+        for mode in ["full", "same", "valid"]:
+            try:
+                r = np.convolve(av, vv, mode)
+            except Exception:
+                continue
+            emit("convolve", {"mode": mode}, [describe(av, av), describe(vv, vv)], r)
+
+        # append — flatten form (axis=None) + along axis 0.
+        vals1 = _cbase((4,), d)
+        emit("append", {}, [describe(a2, a2), describe(vals1, vals1)], np.append(a2, vals1))
+        row = _cbase((1, 4), d)
+        emit("append", {"axis": 0}, [describe(a2, a2), describe(row, row)], np.append(a2, row, 0))
+
+        # insert — insert a row at obj=1 along axis 0.
+        insvals = _cbase((4,), d)
+        emit("insert", {"obj": 1, "axis": 0}, [describe(a2, a2), describe(insvals, insvals)], np.insert(a2, 1, insvals, 0))
+
+        # split / hsplit / vsplit / dsplit — one case per output piece.
+        s = _cbase((6,), d)
+        for pi, part in enumerate(np.split(s, 3)):
+            emit("split", {"sections": 3, "axis": 0, "piece": pi}, [describe(s, s)], part)
+        h = _cbase((3, 4), d)
+        for pi, part in enumerate(np.hsplit(h, 2)):
+            emit("hsplit", {"sections": 2, "piece": pi}, [describe(h, h)], part)
+        v = _cbase((4, 4), d)
+        for pi, part in enumerate(np.vsplit(v, 2)):
+            emit("vsplit", {"sections": 2, "piece": pi}, [describe(v, v)], part)
+        dd = _cbase((2, 2, 4), d)
+        for pi, part in enumerate(np.dsplit(dd, 2)):
+            emit("dsplit", {"sections": 2, "piece": pi}, [describe(dd, dd)], part)
+
+        # put — mutate a copy at flat indices with values (returns the mutated array).
+        pa = _cbase((6,), d)
+        pidx = np.array([0, 2, 4], dtype=np.int64)
+        pvals = _cbase((3,), d)
+        pc = pa.copy()
+        np.put(pc, pidx, pvals)
+        emit("put", {}, [describe(pa, pa), describe(pidx, pidx), describe(pvals, pvals)], pc)
+
+    # ravel_multi_index / unravel_index — index<->coord transforms (int64, dtype-independent).
+    row = np.array([0, 1, 2, 0], dtype=np.int64)
+    col = np.array([1, 3, 0, 2], dtype=np.int64)
+    emit("ravel_multi_index", {"dims": [3, 4]}, [describe(row, row), describe(col, col)],
+         np.ravel_multi_index((row, col), (3, 4)))
+    flat = np.array([0, 5, 11, 7], dtype=np.int64)
+    for pi, part in enumerate(np.unravel_index(flat, (3, 4))):
+        emit("unravel_index", {"shape": [3, 4], "piece": pi}, [describe(flat, flat)], part)
+
+    return cases
+
+
+# ---------------------------------------------------------------------------
 # Char masquerade — WOVEN into every tier (not a separate corpus file).
 # ---------------------------------------------------------------------------
 # NumSharp's Char is a 2-byte UNSIGNED value, bit-identical to uint16. NumPy has no
@@ -1745,6 +1847,9 @@ def main():
     elif mode == "errors":
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)
+    elif mode == "groupa":
+        cases = gen_groupa()                                            # Group A B4-6
+        write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
     else:
         print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors)")
         sys.exit(2)

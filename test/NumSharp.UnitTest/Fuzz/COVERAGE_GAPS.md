@@ -44,21 +44,25 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` wired (green or carved+[OpenBug
 - [x] `unique` — green on contiguous+finite (raw-offset views = #11 unreachable-via-API; inf/NaN complex ordering out of scope)
 - [x] `allclose` `array_equal` — whole-array → 0-D bool · green
 - [x] `iscomplex` `isreal` — **BUG**: ignore the imaginary part (complex → all-real) + garbage on strided → carved, `IsComplex_IgnoresImaginaryPart` / `IsReal_IgnoresImaginaryPart`
-- [ ] `take` `put` `compress` `extract` — named selection ufuncs (REMAINING)
-- [ ] `ravel_multi_index` `unravel_index` `indices` — index↔coord transforms (REMAINING)
-- [ ] `convolve` — 1-D convolution (REMAINING)
+- [x] `take` `put` `compress` `extract` — green (groupa tier)
+- [x] `ravel_multi_index` `unravel_index` — green (groupa tier). `indices` = creation-shaped (no operand) → Group C
+- [x] `convolve` — 1-D convolution (full/same/valid) · green
 
-### Batch 4 — shape (single-array)
-- [ ] `flatten` — ≈ ravel copy
-- [ ] `rollaxis` — ≈ moveaxis
-- [ ] `append` `insert` — concatenate/delete covered; these not
+### Batch 4 — shape (single-array)  ✅ DONE (all green, groupa tier)
+- [x] `flatten` — C-order copy (contiguous + non-contiguous source) · green
+- [x] `rollaxis` — green
+- [x] `append` `insert` — green
 
-### Batch 5 — multi-output (needs a list-return harness shape, like modf's `_frac`/`_int`)
-- [ ] `split` `array_split` `hsplit` `vsplit` `dsplit` — return a LIST of arrays
+### Batch 5 — multi-output (per-output-piece op, like modf's `_frac`/`_int`)  ✅ DONE (all green, groupa tier)
+- [x] `split` `hsplit` `vsplit` `dsplit` — one case per output piece · green (`array_split` == split mechanism)
 
-### Batch 6 — whole-array predicates (→ scalar/elementwise bool)
-- [ ] `allclose` `array_equal` — whole-array → bool
-- [ ] `iscomplex` `isreal` — elementwise → bool (`iscomplexobj`/`isrealobj` are object-level → group C)
+### Batch 6 — whole-array predicates (→ scalar/elementwise bool)  ✅ DONE
+- [x] `allclose` `array_equal` — whole-array → 0-D bool · green
+- [x] `iscomplex` `isreal` — **BUG** (see Batch 3): carved → [OpenBugs]
+
+> **np.\* Group A is complete** (33 ops wired: 7 bugs → [OpenBugs], the rest green). Only remaining
+> item is the **decimal-specific ops** (extend `gen_decimal_oracle.cs`: floor/ceil/trunc/clip/where/
+> sort/median/ptp/percentile/quantile/diff/manip/nan*).
 
 > `flip` is intentionally NOT here: NumSharp exposes no `np.flip` (use `[::-1]` slicing). Skipped.
 
