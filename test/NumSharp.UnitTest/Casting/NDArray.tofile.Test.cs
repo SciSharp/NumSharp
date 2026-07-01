@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Casting
         public void Binary_NonContiguous_WritesLogicalCOrder_AllDtypes()
         {
             // Before the fix, a non-contiguous view leaked its raw parent buffer. tofile must write the
-            // logical C-order bytes — identical to ToByteArray('C') — for every layout and dtype.
+            // logical C-order bytes — identical to tobytes('C') — for every layout and dtype.
             foreach (var tc in AllDtypes)
             {
                 foreach (var (name, nd) in new (string, NDArray)[]
@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.Casting
                     ("offset",    np.arange(10).astype(tc)["3:8"]),
                 })
                 {
-                    CollectionAssert.AreEqual(nd.ToByteArray('C'), Bin(nd), $"{tc}/{name}");
+                    CollectionAssert.AreEqual(nd.tobytes('C'), Bin(nd), $"{tc}/{name}");
                 }
             }
         }
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest.Casting
                     a.tofile(path);
                     var b = np.fromfile(path, tc);
                     Assert.AreEqual(a.size, b.size, $"{tc} size");
-                    CollectionAssert.AreEqual(a.ToByteArray('C'), b.ToByteArray('C'), $"{tc} bytes");
+                    CollectionAssert.AreEqual(a.tobytes('C'), b.tobytes('C'), $"{tc} bytes");
                 }
                 finally { if (File.Exists(path)) File.Delete(path); }
             }
@@ -248,11 +248,11 @@ namespace NumSharp.UnitTest.Casting
         }
 
         [TestMethod]
-        public void Binary_Equals_ToByteArray_ForContiguous()
+        public void Binary_Equals_Tobytes_ForContiguous()
         {
             // sep="" default is the binary path; equals tobytes('C').
             var a = np.arange(24).astype(NPTypeCode.Double).reshape(2, 3, 4);
-            CollectionAssert.AreEqual(a.ToByteArray('C'), Bin(a));
+            CollectionAssert.AreEqual(a.tobytes('C'), Bin(a));
         }
     }
 }

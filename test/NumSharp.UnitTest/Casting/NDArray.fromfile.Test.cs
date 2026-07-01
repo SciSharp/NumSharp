@@ -228,7 +228,7 @@ namespace NumSharp.UnitTest.Casting
                     a.tofile(p);
                     var b = np.fromfile(p, tc);
                     Assert.AreEqual(a.size, b.size, $"{tc} size");
-                    CollectionAssert.AreEqual(a.ToByteArray('C'), b.ToByteArray('C'), $"{tc} bytes");
+                    CollectionAssert.AreEqual(a.tobytes('C'), b.tobytes('C'), $"{tc} bytes");
                 }
                 finally { File.Delete(p); }
             }
@@ -248,7 +248,7 @@ namespace NumSharp.UnitTest.Casting
                 {
                     a.tofile(p, ",");
                     var b = np.fromfile(p, tc, sep: ",");
-                    CollectionAssert.AreEqual(a.ToByteArray('C'), b.ToByteArray('C'), $"{tc} text round-trip");
+                    CollectionAssert.AreEqual(a.tobytes('C'), b.tobytes('C'), $"{tc} text round-trip");
                 }
                 finally { File.Delete(p); }
             }

@@ -8,16 +8,16 @@ using NumSharp;
 namespace NumSharp.UnitTest.Casting
 {
     /// <summary>
-    ///     Regression + contract tests for <see cref="NDArray.ToByteArray"/>.
+    ///     Regression + contract tests for <see cref="NDArray.tobytes"/>.
     ///
     ///     NumPy parity: <c>ndarray.tobytes()</c> returns the LOGICAL array in C (row-major) order,
     ///     honoring strides / offset / broadcasting — NOT the raw underlying buffer. Before the C6 fix,
-    ///     <c>ToByteArray()</c> blindly copied <c>Storage.InternalArray.BytesLength</c> from
+    ///     the byte export blindly copied <c>Storage.InternalArray.BytesLength</c> from
     ///     <c>Storage.Address</c>, so a non-contiguous view leaked the whole parent buffer
     ///     (e.g. a 5-element <c>[::2]</c> view of a 10-element array returned 40 bytes of the wrong data).
     /// </summary>
     [TestClass]
-    public class ToByteArrayTests
+    public class TobytesContractTests
     {
         private static readonly NPTypeCode[] AllDtypes =
         {
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Casting
 
         private static void AssertLogical(string name, NDArray nd)
         {
-            byte[] actual = nd.ToByteArray();
+            byte[] actual = nd.tobytes();
             Assert.AreEqual((int)(nd.size * nd.dtypesize), actual.Length, $"{name}: length must equal size*dtypesize");
             CollectionAssert.AreEqual(LogicalBytes(nd), actual, $"{name}: bytes must be the logical C-order array");
         }
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Casting
         public void Empty_ReturnsEmptyArray()
         {
             foreach (var tc in AllDtypes)
-                Assert.AreEqual(0, np.arange(0).astype(tc).ToByteArray().Length, $"empty_{tc}");
+                Assert.AreEqual(0, np.arange(0).astype(tc).tobytes().Length, $"empty_{tc}");
         }
 
         // ---- Views: the C6 regressions ----------------------------------------------
@@ -148,10 +148,10 @@ namespace NumSharp.UnitTest.Casting
         {
             // np.arange(10, dtype=np.int32)[::2].tobytes() -> [0,2,4,6,8]
             var v = np.arange(10).astype(NPTypeCode.Int32)["::2"];
-            Assert.AreEqual(20, v.ToByteArray().Length, "5 elements * 4 bytes, NOT the 40-byte parent buffer");
+            Assert.AreEqual(20, v.tobytes().Length, "5 elements * 4 bytes, NOT the 40-byte parent buffer");
             CollectionAssert.AreEqual(
                 new byte[] { 0,0,0,0, 2,0,0,0, 4,0,0,0, 6,0,0,0, 8,0,0,0 },
-                v.ToByteArray());
+                v.tobytes());
         }
 
         [TestMethod]
@@ -161,7 +161,7 @@ namespace NumSharp.UnitTest.Casting
             var t = np.arange(6).astype(NPTypeCode.Int32).reshape(2, 3).T;
             CollectionAssert.AreEqual(
                 new byte[] { 0,0,0,0, 3,0,0,0, 1,0,0,0, 4,0,0,0, 2,0,0,0, 5,0,0,0 },
-                t.ToByteArray());
+                t.tobytes());
         }
 
         [TestMethod]
@@ -171,7 +171,7 @@ namespace NumSharp.UnitTest.Casting
             var r = np.arange(5).astype(NPTypeCode.Int32)["::-1"];
             CollectionAssert.AreEqual(
                 new byte[] { 4,0,0,0, 3,0,0,0, 2,0,0,0, 1,0,0,0, 0,0,0,0 },
-                r.ToByteArray());
+                r.tobytes());
         }
 
         /// <summary>The original contract (a pristine contiguous array) must be unchanged.</summary>
@@ -181,13 +181,13 @@ namespace NumSharp.UnitTest.Casting
             var nd = np.array(new int[][] { new[] { 3, 1 }, new[] { 2, 1 } });
             CollectionAssert.AreEqual(
                 new byte[] { 3,0,0,0, 1,0,0,0, 2,0,0,0, 1,0,0,0 },
-                nd.ToByteArray());
+                nd.tobytes());
         }
 
         // ---- Round-trip via frombuffer ----------------------------------------------
 
         [TestMethod]
-        public void RoundTrip_ToByteArray_FromBuffer_AllDtypes_AllViews()
+        public void RoundTrip_tobytes_FromBuffer_AllDtypes_AllViews()
         {
             foreach (var tc in AllDtypes)
             {
@@ -203,21 +203,21 @@ namespace NumSharp.UnitTest.Casting
                 };
                 foreach (var (name, nd) in views)
                 {
-                    byte[] bytes = nd.ToByteArray();
+                    byte[] bytes = nd.tobytes();
                     var rebuilt = np.frombuffer(bytes, tc);
                     // A freshly built pristine array re-emits identical bytes -> the view's logical content survived.
-                    CollectionAssert.AreEqual(bytes, rebuilt.ToByteArray(), $"{tc}/{name} round-trip");
+                    CollectionAssert.AreEqual(bytes, rebuilt.tobytes(), $"{tc}/{name} round-trip");
                     Assert.AreEqual(nd.size, rebuilt.size, $"{tc}/{name} size");
                 }
             }
         }
 
-        /// <summary>Mutating a ToByteArray() result must never touch the source (it is a fresh copy).</summary>
+        /// <summary>Mutating a tobytes() result must never touch the source (it is a fresh copy).</summary>
         [TestMethod]
-        public void ToByteArray_IsDetachedCopy()
+        public void Tobytes_IsDetachedCopy()
         {
             var nd = np.arange(4).astype(NPTypeCode.Int32);
-            byte[] bytes = nd.ToByteArray();
+            byte[] bytes = nd.tobytes();
             bytes[0] = 0xFF;
             Assert.AreEqual(0, nd.ToArray<int>()[0], "mutating the byte[] must not affect the source array");
         }

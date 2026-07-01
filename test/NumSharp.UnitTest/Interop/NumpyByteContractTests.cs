@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Interop
             // float16 bits: nan=0x7e00, inf=0x7c00, -inf=0xfc00, -0=0x8000, min-subnormal=0x0001, max=0x7bff
             byte[] bits = { 0x00,0x7e,  0x00,0x7c,  0x00,0xfc,  0x00,0x80,  0x01,0x00,  0xff,0x7b };
             var h = np.frombuffer(bits, NPTypeCode.Half);
-            CollectionAssert.AreEqual(bits, h.ToByteArray(), "half bit pattern (incl. NaN payload/subnormal) must survive");
+            CollectionAssert.AreEqual(bits, h.tobytes(), "half bit pattern (incl. NaN payload/subnormal) must survive");
             var a = h.ToArray<Half>();
             Assert.IsTrue(Half.IsNaN(a[0]));
             Assert.IsTrue(Half.IsPositiveInfinity(a[1]));
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Interop
             byte[] sbits = { 0x01, 0x00, 0x80, 0x7f };
             var s = np.frombuffer(sbits, NPTypeCode.Single);
             Assert.IsTrue(float.IsNaN(s.ToArray<float>()[0]));
-            CollectionAssert.AreEqual(sbits, s.ToByteArray(), "signaling-NaN bits preserved");
+            CollectionAssert.AreEqual(sbits, s.tobytes(), "signaling-NaN bits preserved");
         }
 
         [TestMethod]
@@ -86,14 +86,14 @@ namespace NumSharp.UnitTest.Interop
             byte[] bits = { 0x01, 0, 0, 0, 0, 0, 0, 0 }; // 0x...0001 == double.Epsilon == 5e-324
             var d = np.frombuffer(bits, NPTypeCode.Double);
             Assert.AreEqual(double.Epsilon, d.ToArray<double>()[0]);
-            CollectionAssert.AreEqual(bits, d.ToByteArray());
+            CollectionAssert.AreEqual(bits, d.tobytes());
         }
 
         [TestMethod]
         public void NegativeZero_SignBit_Preserved()
         {
             var nd = np.array(new[] { -0.0, 0.0 });
-            byte[] b = nd.ToByteArray();
+            byte[] b = nd.tobytes();
             Assert.IsTrue(double.IsNegative(nd.ToArray<double>()[0]));
             Assert.IsFalse(double.IsNegative(nd.ToArray<double>()[1]));
             Assert.AreEqual(0x80, b[7], "-0.0 sign bit in the high byte (little-endian)");
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest.Interop
             Buffer.BlockCopy(u, 0, bytes, 0, bytes.Length);
             var nd = np.frombuffer(bytes, NPTypeCode.UInt64);
             CollectionAssert.AreEqual(u, nd.ToArray<ulong>());
-            CollectionAssert.AreEqual(bytes, nd.ToByteArray());
+            CollectionAssert.AreEqual(bytes, nd.tobytes());
         }
 
         // ---- Complex layout ----------------------------------------------------------
@@ -125,8 +125,8 @@ namespace NumSharp.UnitTest.Interop
                 new Complex(-0.0, 0.0)
             });
             Assert.AreEqual(16, c.dtypesize, "complex128 == 2 doubles");
-            var rt = np.frombuffer(c.ToByteArray(), NPTypeCode.Complex);
-            CollectionAssert.AreEqual(c.ToByteArray(), rt.ToByteArray());
+            var rt = np.frombuffer(c.tobytes(), NPTypeCode.Complex);
+            CollectionAssert.AreEqual(c.tobytes(), rt.tobytes());
             var a = rt.ToArray<Complex>();
             Assert.IsTrue(double.IsNaN(a[0].Real) && a[0].Imaginary == 1.0);
             Assert.IsTrue(double.IsPositiveInfinity(a[1].Real) && double.IsNegativeInfinity(a[1].Imaginary));
@@ -156,10 +156,10 @@ namespace NumSharp.UnitTest.Interop
             var dec = np.array(new[] { 1.5m, -2.5m });
             Assert.AreEqual(NPTypeCode.Decimal, dec.typecode);
             Assert.AreEqual(16, dec.dtypesize, "C# decimal is 16 bytes (flags/hi/mid/lo) — NOT IEEE-754");
-            Assert.AreEqual(32, dec.ToByteArray().Length);
+            Assert.AreEqual(32, dec.tobytes().Length);
 
             // Reinterpreting the 16-byte decimal as IEEE float64 (numpy has no decimal dtype) yields garbage.
-            var asDouble = np.frombuffer(dec.ToByteArray(), NPTypeCode.Double);
+            var asDouble = np.frombuffer(dec.tobytes(), NPTypeCode.Double);
             Assert.AreNotEqual(1.5, asDouble.ToArray<double>()[0], 1e-6,
                 "decimal bytes are not IEEE — a raw reinterpret is meaningless; values must be converted");
 
@@ -174,7 +174,7 @@ namespace NumSharp.UnitTest.Interop
         {
             // numpy preserves the raw bytes: np.frombuffer(bytes([0,1,2,3,255]), bool).tobytes() == those bytes.
             var b = np.frombuffer(new byte[] { 0, 1, 2, 3, 255 }, NPTypeCode.Boolean);
-            CollectionAssert.AreEqual(new byte[] { 0, 1, 2, 3, 255 }, b.ToByteArray());
+            CollectionAssert.AreEqual(new byte[] { 0, 1, 2, 3, 255 }, b.tobytes());
         }
 
         [TestMethod]

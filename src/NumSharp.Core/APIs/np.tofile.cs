@@ -17,7 +17,7 @@ namespace NumSharp
         /// <param name="fid">A filename. The file is created (truncated if it exists).</param>
         /// <param name="sep">
         ///     Separator between items for text output. If "" (empty, the default) a binary file is
-        ///     written, equivalent to <c>stream.Write(a.ToByteArray('C'))</c>.
+        ///     written, equivalent to <c>stream.Write(a.tobytes('C'))</c>.
         /// </param>
         /// <param name="format">
         ///     Python-style <c>%</c> format string for text output (ignored in binary mode). Each entry

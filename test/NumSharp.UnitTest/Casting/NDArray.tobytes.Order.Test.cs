@@ -5,8 +5,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Casting
 {
     /// <summary>
-    ///     NumPy-parity tests for the <c>order</c> parameter of <see cref="NDArray.ToByteArray(char)"/>
-    ///     and its NumPy-named alias <see cref="NDArray.tobytes(char)"/>.
+    ///     NumPy-parity tests for the <c>order</c> parameter of <see cref="NDArray.tobytes(char)"/>.
     ///
     ///     Oracle: NumPy 2.4.2 <c>ndarray.tobytes(order)</c>. Exact byte vectors below were captured from
     ///     <c>np.arange(...).astype(...).tobytes(order).hex()</c>. The whole (15 dtype x 18 layout x 4 order)
@@ -138,14 +137,12 @@ namespace NumSharp.UnitTest.Casting
         // ---- API surface -----------------------------------------------------------------
 
         [TestMethod]
-        public void DefaultOrder_IsC_AndAliasMatches()
+        public void DefaultOrder_IsC()
         {
             foreach (var tc in AllDtypes)
             {
                 var a = np.arange(6).astype(tc).reshape(2, 3);
-                CollectionAssert.AreEqual(a.tobytes('C'), a.ToByteArray(),   $"ToByteArray()==C {tc}");
-                CollectionAssert.AreEqual(a.tobytes('C'), a.tobytes(),        $"tobytes()==C {tc}");
-                CollectionAssert.AreEqual(a.ToByteArray('F'), a.tobytes('F'), $"alias F {tc}");
+                CollectionAssert.AreEqual(a.tobytes('C'), a.tobytes(), $"tobytes()==C {tc}");
             }
         }
 

@@ -5,9 +5,9 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Copy the array's elements into a newly allocated byte array, honoring the requested
-        ///     memory <paramref name="order"/>. Mirrors NumPy's <c>ndarray.tobytes(order='C')</c>: the
-        ///     result is the <em>logical</em> array (strides, offset and broadcasting resolved), NOT the
+        ///     Construct a byte array containing the raw data bytes of the array in the requested memory
+        ///     <paramref name="order"/> (default C-order). Mirrors NumPy's <c>ndarray.tobytes(order='C')</c>:
+        ///     the result is the <em>logical</em> array (strides, offset and broadcasting resolved), NOT the
         ///     raw underlying buffer. A view whose memory does not already lay its logical elements out
         ///     in the requested order (sliced/strided/transposed/broadcast, or C-order requested on an
         ///     F-contiguous view and vice-versa) is materialized into a fresh contiguous buffer first,
@@ -26,7 +26,7 @@ namespace NumSharp
         /// <returns>A fresh, detached <see cref="byte"/> array of length <c>size * dtypesize</c>.</returns>
         /// <exception cref="ArgumentException">Thrown when <paramref name="order"/> is not one of C/F/A/K.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tobytes.html</remarks>
-        public byte[] ToByteArray(char order = 'C')
+        public byte[] tobytes(char order = 'C')
         {
             if (size == 0)
                 return System.Array.Empty<byte>();
@@ -72,14 +72,5 @@ namespace NumSharp
                 return bytes;
             }
         }
-
-        /// <summary>
-        ///     NumPy-named alias of <see cref="ToByteArray(char)"/>: construct a byte array containing the
-        ///     raw data bytes of the array in the requested <paramref name="order"/> (default C-order).
-        /// </summary>
-        /// <param name="order">'C' (default), 'F', 'A', or 'K' — see <see cref="ToByteArray(char)"/>.</param>
-        /// <returns>A fresh, detached <see cref="byte"/> array of length <c>size * dtypesize</c>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tobytes.html</remarks>
-        public byte[] tobytes(char order = 'C') => ToByteArray(order);
     }
 }
