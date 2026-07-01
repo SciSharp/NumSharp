@@ -343,13 +343,17 @@ namespace NumSharp.Backends.Printing
         // str() of a 0d complex array, matching Python's complex repr "(a+bj)".
         private static string PythonComplexRepr(Complex c)
         {
+            // Pure-imaginary form when the real part is +0.0: just "<imag>j" carrying the imaginary's
+            // OWN sign (no forced '+'). Python: str(0j)='0j', str(1j)='1j', str(-1j)='-1j', str(0-0j)='-0j'.
+            // A negative-zero real (-0.0) is NOT this case — it falls through to the parenthesized form
+            // ("(-0+0j)"), matching CPython's complex_repr.
+            if (c.Real == 0.0 && !double.IsNegative(c.Real))
+                return PythonFloatPart(c.Imaginary) + "j";
+
+            // Parenthesized "(a±bj)": the imaginary part always carries an explicit sign.
             string im = PythonFloatPart(c.Imaginary);
-            // imaginary always carries an explicit sign
             if (!(im.StartsWith("-") || im.StartsWith("+")))
                 im = "+" + im;
-
-            if (c.Real == 0.0 && !double.IsNegative(c.Real))
-                return im + "j";
 
             return "(" + PythonFloatPart(c.Real) + im + "j)";
         }
