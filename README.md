@@ -167,7 +167,10 @@ numbers. The latest checked-in snapshot compares NumSharp with NumPy 2.4.2
 across the operation matrix, supported dtypes, three size tiers, and the NDIter,
 layout, operand, cast, and fusion subsystems.
 
-[![NumSharp benchmark dashboard](docs/website-src/images/benchmark-dashboard.png)](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html)
+<p align="center">
+  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark dashboard" src="docs/website-src/images/benchmark-dashboard.png" height="320"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark function explorer" src="docs/website-src/images/benchmark-function-explorer.png" height="320"></a>
+</p>
 
 Benchmark convention:
 
