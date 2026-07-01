@@ -175,6 +175,10 @@ namespace NumSharp.Backends
             var resultType = np._FindCommonType(lhs, rhs);
             if (lhs.GetTypeCode.GetGroup() <= 2 && rhs.GetTypeCode.GetGroup() == 3)
                 resultType = NPTypeCode.Double;
+            // power has no bool loop: bool ** bool -> int8 (probed 2.4.2). Keeps the
+            // scalar-exponent fast paths consistent with the general ExecuteBinaryOp path.
+            if (resultType == NPTypeCode.Boolean)
+                resultType = NPTypeCode.SByte;
             return resultType;
         }
 

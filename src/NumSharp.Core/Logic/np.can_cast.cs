@@ -257,14 +257,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Check if casting is allowed within the same kind (integers to integers, floats to floats).
+        /// Check if casting is allowed under NumPy's <c>same_kind</c> rule.
         /// </summary>
         /// <remarks>
-        /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
-        /// same_kind allows downcasting within:
-        /// - integers (both signed and unsigned, e.g., int64 -> int32, uint32 -> int16)
-        /// - floating point (e.g., float64 -> float32)
-        /// - complex (e.g., complex128 -> complex64, if we had it)
+        /// NumPy's same_kind is DIRECTIONAL, driven by a kind ordering
+        /// (bool &lt; unsigned &lt; signed &lt; float &lt; complex), NOT a symmetric "same category":
+        /// a cast is allowed iff it is already safe OR the source kind orders at or below the
+        /// destination kind (<see cref="NPTypeHierarchy.CanCastSameKindOrder"/>). Consequences,
+        /// all matching NumPy 2.4.2:
+        /// - int16 -> int8 allowed (signed -> signed), but int16 -> uint8 NOT allowed (signed -> unsigned);
+        /// - uint64 -> int8 allowed (unsigned -> signed);
+        /// - int/uint -> float allowed, but float -> int NOT allowed;
+        /// - float64 -> float16 allowed (float -> float); complex -> float NOT allowed.
         /// </remarks>
         private static bool CanCastSameKind(NPTypeCode from, NPTypeCode to)
         {
@@ -272,8 +276,8 @@ namespace NumSharp
             if (CanCastSafe(from, to))
                 return true;
 
-            // Allow downcasting within the same kind
-            return NPTypeHierarchy.IsSameKind(from, to);
+            // Otherwise allow casts that do not move DOWN NumPy's kind ordering.
+            return NPTypeHierarchy.CanCastSameKindOrder(from, to);
         }
 
         /// <summary>

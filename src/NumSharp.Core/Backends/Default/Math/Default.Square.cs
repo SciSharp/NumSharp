@@ -18,8 +18,9 @@ namespace NumSharp.Backends
             if (typeCode.HasValue)
                 ValidateUnaryInputCast(nd.GetTypeCode, typeCode.Value, "square");
 
-            // np.square preserves input dtype (unlike sin/cos which promote to float)
-            var outputType = typeCode ?? nd.GetTypeCode;
+            // np.square preserves input dtype (unlike sin/cos which promote to float), EXCEPT
+            // bool: square has no bool loop, so square(bool) -> int8 (probed 2.4.2).
+            var outputType = typeCode ?? (nd.GetTypeCode == NPTypeCode.Boolean ? NPTypeCode.SByte : nd.GetTypeCode);
             return ExecuteUnaryOp(nd, UnaryOp.Square, outputType, @out, where);
         }
     }
