@@ -39,6 +39,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "floor": return np.floor(ops[0]);
                 case "ceil": return np.ceil(ops[0]);
                 case "trunc": return np.trunc(ops[0]);
+                case "rint": return np.rint(ops[0]);
                 case "sin": return np.sin(ops[0]);
                 case "cos": return np.cos(ops[0]);
                 case "tan": return np.tan(ops[0]);

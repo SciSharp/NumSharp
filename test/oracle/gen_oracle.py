@@ -136,6 +136,7 @@ UNARY_EXTRA_OPS = {
     "arcsin": np.arcsin, "arccos": np.arccos, "arctan": np.arctan,
     "deg2rad": np.deg2rad, "rad2deg": np.rad2deg,
     "positive": np.positive,
+    "rint": np.rint,   # round-half-to-even; float-tier dtype like the others in this group
 }
 
 

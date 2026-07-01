@@ -364,6 +364,23 @@ namespace NumSharp.Backends.Kernels
                 // Note: UnaryOp.Cbrt is deliberately NOT handled for Complex — NumPy's np.cbrt raises
                 // TypeError for complex inputs, so falling through to the default throw keeps parity.
 
+                case UnaryOp.Round:
+                    // NumPy rint(complex) / around(complex) rounds the real and imaginary parts
+                    // SEPARATELY, half-to-even (Math.Round default). floor/ceil/trunc have no complex
+                    // loop in NumPy (TypeError), so Round is the only rounding op handled here.
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        il.Emit(OpCodes.Stloc, locZ);                                             // [] (z saved)
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetReal, null);            // [re]
+                        il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(typeof(double), "Round"), null); // [rint(re)]
+                        il.Emit(OpCodes.Ldloca, locZ);
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexGetImaginary, null);       // [rint(re), im]
+                        il.EmitCall(OpCodes.Call, ScalarMethodCache.MathFn1(typeof(double), "Round"), null); // [rint(re), rint(im)]
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);                       // [Complex(rint(re), rint(im))]
+                    }
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unary operation {op} not supported for Complex");
             }
