@@ -292,8 +292,8 @@ public class NpTypingTests
     [TestMethod]
     public void MinScalarType_SmallNegative()
     {
-        // No Int8 in NumSharp, so smallest signed is Int16
-        np.min_scalar_type(-10).Should().Be(NPTypeCode.Int16);
+        // NumPy 2.4.2: small negatives demote to int8 (SByte). NumSharp HAS int8.
+        np.min_scalar_type(-10).Should().Be(NPTypeCode.SByte);
     }
 
     [TestMethod]
