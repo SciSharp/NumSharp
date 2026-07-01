@@ -309,7 +309,12 @@ namespace NumSharp.Backends.Printing
             }
         }
 
-        // Python's float repr: shortest digits, scientific iff decExp < -4 or decExp >= 16.
+        // NumPy scalar float repr (scalartypes.c.src @name@type_@kind@_either): shortest digits, and
+        // positional iff 1e-4 <= |value| < max_positional, else scientific. max_positional is per dtype —
+        // float16 -> 1e3, float32 -> 1e6, float64 -> 1e16 — and the cutoff is tested on the VALUE, not on
+        // the shortest-repr exponent: e.g. float32(1e-4) rounds to 9.999999e-5 < 1e-4 so it prints "1e-04".
+        // For float64 this is exactly equivalent to the old decExp in [-4, 16) test (no behavior change);
+        // it only tightens float32/float16 to their true (narrower) positional windows.
         private static string PythonFloatRepr(object v, FloatKind kind)
         {
             double d = kind switch
@@ -328,7 +333,15 @@ namespace NumSharp.Backends.Printing
             if (digits == "0")
                 return sign + "0.0";
 
-            if (decExp >= -4 && decExp < 16)
+            double maxPositional = kind switch
+            {
+                FloatKind.Half => 1e3,
+                FloatKind.Single => 1e6,
+                _ => 1e16
+            };
+            double absval = Math.Abs(d);
+
+            if (absval >= 1e-4 && absval < maxPositional)
             {
                 var (intStr, fracStr) = Dragon4.SplitPositional(digits, decExp);
                 return fracStr.Length == 0 ? sign + intStr + ".0" : sign + intStr + "." + fracStr;

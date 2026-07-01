@@ -17,6 +17,13 @@ namespace NumSharp.Backends.Printing
     ///     <c>f F</c> (fixed, default precision 6), <c>e E</c> (scientific, 2-digit-min exponent),
     ///     <c>g G</c> (general), <c>s</c> (<see cref="ArrayFormatter.ScalarStr"/>), <c>c</c> (char),
     ///     <c>%%</c> (literal). Flags <c>- + space 0 #</c>, field width and <c>.precision</c> are honored.
+    ///
+    ///     Lenient by design where CPython/NumPy would RAISE: a conversion that does not match the value
+    ///     type (e.g. <c>%x</c>/<c>%o</c> on a bool/float, <c>%c</c> on a float, <c>%d</c> on inf/nan) yields
+    ///     a best-effort rendering (base of the truncated integer, the char, or "inf"/"nan") instead of a
+    ///     TypeError/OverflowError, and a format whose conversion count != 1 is applied leniently rather than
+    ///     rejected — a file writer must not abort mid-stream on a per-element formatting quirk. <c>%r</c>
+    ///     maps to the scalar string rather than NumPy 2.x's typed scalar repr ("np.float64(1.5)").
     /// </summary>
     internal static class PrintfFormatter
     {
@@ -124,11 +131,11 @@ namespace NumSharp.Backends.Printing
                 case 'f':
                 case 'F':
                     return FormatFixed(ToReal(value), conv == 'F', precision < 0 ? 6 : precision,
-                        left, plus, space, zero, width);
+                        alt, left, plus, space, zero, width);
                 case 'e':
                 case 'E':
                     return FormatScientific(ToReal(value), conv == 'E', precision < 0 ? 6 : precision,
-                        left, plus, space, zero, width);
+                        alt, left, plus, space, zero, width);
                 case 'g':
                 case 'G':
                     return FormatGeneral(ToReal(value), conv == 'G', precision, alt,
@@ -233,7 +240,7 @@ namespace NumSharp.Backends.Printing
             return sb.ToString();
         }
 
-        private static string FormatFixed(double d, bool upper, int precision,
+        private static string FormatFixed(double d, bool upper, int precision, bool alt,
             bool left, bool plus, bool space, bool zero, int width)
         {
             if (!double.IsFinite(d))
@@ -241,10 +248,12 @@ namespace NumSharp.Backends.Printing
 
             string sign = (d < 0 || IsNegZero(d)) ? "-" : Sign(false, plus, space);
             string digits = Math.Abs(d).ToString("F" + precision, CI);
+            // '#' forces a trailing decimal point even when no fractional digits are emitted ("%#.0f"%3=="3.").
+            if (alt && digits.IndexOf('.') < 0) digits += ".";
             return Pad(digits, sign, width, left, zero);
         }
 
-        private static string FormatScientific(double d, bool upper, int precision,
+        private static string FormatScientific(double d, bool upper, int precision, bool alt,
             bool left, bool plus, bool space, bool zero, int width)
         {
             if (!double.IsFinite(d))
@@ -252,7 +261,11 @@ namespace NumSharp.Backends.Printing
 
             string sign = (d < 0 || IsNegZero(d)) ? "-" : Sign(false, plus, space);
             string body = Math.Abs(d).ToString("E" + precision, CI); // e.g. "1.500000E+000"
-            string digits = FixupExponent(body, upper);
+            int ei = body.IndexOf('E');
+            string mant = body.Substring(0, ei);
+            // '#' keeps the mantissa's decimal point even at precision 0 ("%#.0e"%3=="3.e+00").
+            if (alt && mant.IndexOf('.') < 0) mant += ".";
+            string digits = mant + ExponentSuffix(body.Substring(ei + 1), upper);
             return Pad(digits, sign, width, left, zero);
         }
 
@@ -274,7 +287,10 @@ namespace NumSharp.Backends.Printing
             if (X >= -4 && X < P)
             {
                 digits = abs.ToString("F" + Math.Max(0, P - 1 - X), CI);
+                // '#' keeps trailing zeros AND forces a decimal point ("%#g"%100000=="100000.");
+                // the default form strips both.
                 if (!alt) digits = StripTrailingZeros(digits);
+                else if (digits.IndexOf('.') < 0) digits += ".";
             }
             else
             {
@@ -282,6 +298,7 @@ namespace NumSharp.Backends.Printing
                 int ei = body.IndexOf('E');
                 string mant = body.Substring(0, ei);
                 if (!alt) mant = StripTrailingZeros(mant);
+                else if (mant.IndexOf('.') < 0) mant += ".";
                 digits = mant + ExponentSuffix(body.Substring(ei + 1), upper);
             }
 
@@ -303,14 +320,7 @@ namespace NumSharp.Backends.Printing
         // ---- shared formatting primitives -------------------------------------------
 
         // .NET "E{p}" emits a 3-digit exponent with an uppercase 'E'; Python uses a 2-digit-minimum
-        // exponent and matches the conversion's case. Rebuild the "<mant>e±NN" tail.
-        private static string FixupExponent(string netExp, bool upper)
-        {
-            int ei = netExp.IndexOf('E');
-            string mant = netExp.Substring(0, ei);
-            return mant + ExponentSuffix(netExp.Substring(ei + 1), upper);
-        }
-
+        // exponent and matches the conversion's case. Rebuild the "±NN" tail.
         private static string ExponentSuffix(string netExpDigits, bool upper)
         {
             int exp = int.Parse(netExpDigits, CI);

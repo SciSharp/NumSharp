@@ -179,6 +179,33 @@ namespace NumSharp.UnitTest.Casting
             Assert.AreEqual("3,-3,0", Text(a, ",", "%d"));
         }
 
+        [TestMethod]
+        public void Text_Format_AltFlag_ForcesDecimalPoint()
+        {
+            // Fuzz regression: '#' must keep a decimal point on f/e/g even with no fractional digits.
+            var d = np.array(new double[] { 3.0, 100000.0 });
+            Assert.AreEqual("3.,100000.", Text(d, ",", "%#.0f"));
+            Assert.AreEqual("3.e+00,1.e+05", Text(d, ",", "%#.0e"));
+            Assert.AreEqual("3.00000,100000.", Text(d, ",", "%#g"));
+            Assert.AreEqual("3.00,1.00e+05", Text(d, ",", "%#.3g"));
+        }
+
+        [TestMethod]
+        public void Text_Float32_Float16_ScalarStr_ScientificThreshold()
+        {
+            // Fuzz regression: scalar str switches to scientific per the dtype's max_positional
+            // (float32 -> 1e6, float16 -> 1e3), tested on the VALUE — float32(1e-4) rounds below 1e-4.
+            var f32 = np.array(new double[] { 1e15, 1e-4, 1e5, 1e6 }).astype(NPTypeCode.Single);
+            Assert.AreEqual("1e+15,1e-04,100000.0,1e+06", Text(f32, ","));
+
+            var f16 = np.array(new double[] { 65500, 1000, 100, 0.0001 }).astype(NPTypeCode.Half);
+            Assert.AreEqual("6.55e+04,1e+03,100.0,0.0001", Text(f16, ","));
+
+            // Same fix at the 0-d array str surface (ArrayFormatter.PythonFloatRepr powers both).
+            Assert.AreEqual("1e+15", np.array(new double[] { 1e15 }).astype(NPTypeCode.Single).reshape(new int[0]).ToString());
+            Assert.AreEqual("6.55e+04", np.array(new double[] { 65500 }).astype(NPTypeCode.Half).reshape(new int[0]).ToString());
+        }
+
         // ---- API surface + edges ----------------------------------------------------
 
         [TestMethod]
