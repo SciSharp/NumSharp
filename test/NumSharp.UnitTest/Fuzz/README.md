@@ -17,7 +17,7 @@ test/oracle/                         corpus generators (NumPy 2.4.2)
                                      via the uint16 proxy (char_tier) — relabelled uint16->char, bytes intact
   gen_decimal_oracle.cs              INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
                                      System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
-                                     varstd,matmul,astype}.jsonl
+                                     varstd,matmul,astype,stat,where,sort,manip}.jsonl (12 tiers, 579 cases)
   fuzz_random.py                     seeded random fuzzer (NumSharp-producible layouts)
 test/NumSharp.UnitTest/Fuzz/
   FuzzCorpus.cs                      reconstructs EXACT NDArray views from (dtype,shape,strides,offset,bytes)

@@ -185,6 +185,8 @@ static class Gen
     };
     static readonly (string, Func<decimal,decimal>)[] UNARY = {
         ("negative", a=>-a), ("abs", Math.Abs), ("sign", Sign), ("square", a=>a*a),
+        // rounding-toward family — exact in base-10 decimal (no NumPy analog to mirror).
+        ("floor", decimal.Floor), ("ceil", decimal.Ceiling), ("trunc", decimal.Truncate),
     };
 
     static string Case(string id, string op, string paramsJson, IEnumerable<string> operandJsons, string expDtype, int[] expShape, string expBufHex)
@@ -267,12 +269,29 @@ static class Gen
             for (int i = 0; i < log.Length; i++) { s += log[i]; cs[i] = s; p *= log[i]; cp[i] = p; }
             scan.Add(Case($"cumsum/decimal/{ln}/{n++}", "cumsum", "{\"axis\":null}", new[]{o.Describe()}, "decimal", new[]{log.Length}, HexOf(cs)));
             scan.Add(Case($"cumprod/decimal/{ln}/{n++}", "cumprod", "{\"axis\":null}", new[]{o.Describe()}, "decimal", new[]{log.Length}, HexOf(cp)));
+
+            // diff n=1,2 along the LAST axis (a[1:]-a[:-1]); output shrinks by n on that axis.
+            if (o.Shape.Length >= 1)
+            {
+                int last = o.Shape[o.Shape.Length - 1];
+                foreach (int nd in new[] { 1, 2 })
+                {
+                    if (last < nd + 1) continue;                       // need ≥2 for n=1, ≥3 for n=2
+                    var dres = DiffAxis(log, o.Shape, nd, -1);
+                    var dsh = (int[])o.Shape.Clone(); dsh[dsh.Length - 1] -= nd;
+                    scan.Add(Case($"diff/decimal/{ln}/n{nd}/{n++}", "diff", $"{{\"n\":{nd},\"axis\":-1}}", new[]{o.Describe()}, "decimal", dsh, HexOf(dres)));
+                }
+            }
         }
 
         var power = new List<string>();
         var varstd = new List<string>();
         var matmul = new List<string>();
         var astype = new List<string>();
+        var stat = new List<string>();
+        var where = new List<string>();
+        var sort = new List<string>();
+        var manip = new List<string>();
 
         // ----- POWER decimal^int (exact: repeated multiply / reciprocal). Exponent is a 0-D
         // decimal whose value is a whole number — DecimalMath.Pow must be exact for integer powers. -----
@@ -338,6 +357,83 @@ static class Gen
             astype.Add(AstypeTo("float64", sh, Bytes(dv), HexOf(dv.Select(x => (decimal)x).ToArray()), ref n));
         }
 
+        // ----- STAT (axis=None -> scalar): clip / median / ptp / percentile / quantile.
+        // clip is elementwise (Max(lo,Min(hi,x))); the order stats flatten the logical view. -----
+        foreach (var ln in SINGLE_LAYOUTS)
+        {
+            var o = SingleLayout(ln, 1, false);
+            var log = o.Logical();
+            if (log.Length == 0) continue;
+
+            // clip against two scalar (lo,hi) windows — 0-D decimal bound operands.
+            foreach (var (lo, hi) in new[] { (-5m, 10m), (0m, 100m) })
+            {
+                var loOp = new Operand { Base = new[]{ lo }, Shape = new int[0], Strides = new long[0], Offset = 0 };
+                var hiOp = new Operand { Base = new[]{ hi }, Shape = new int[0], Strides = new long[0], Offset = 0 };
+                var cexp = log.Select(x => Math.Max(lo, Math.Min(hi, x))).ToArray();
+                stat.Add(Case($"clip/decimal/{ln}/[{lo},{hi}]/{n++}", "clip", "{}", new[]{o.Describe(), loOp.Describe(), hiOp.Describe()}, "decimal", o.Shape, HexOf(cexp)));
+            }
+
+            if (ln == "scalar_0d") continue; // order stats over 0-D are identity; skip the degenerate
+            var flat = (decimal[])log.Clone(); Array.Sort(flat);
+            stat.Add(Case($"median/decimal/{ln}/{n++}", "median", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{ Median(flat) })));
+            stat.Add(Case($"ptp/decimal/{ln}/{n++}", "ptp", "{}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{ flat[flat.Length-1] - flat[0] })));
+            // percentile q in {0,25,50,75,100}; quantile q in {0,.25,.5,.75,1} — same order statistic.
+            foreach (var (pq, frac) in new[] { ("0.0", 0.0), ("25.0", 0.25), ("50.0", 0.5), ("75.0", 0.75), ("100.0", 1.0) })
+                stat.Add(Case($"percentile/decimal/{ln}/p{pq}/{n++}", "percentile", $"{{\"q\":{pq}}}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{ Quantile(flat, frac) })));
+            foreach (var (qq, frac) in new[] { ("0.0", 0.0), ("0.25", 0.25), ("0.5", 0.5), ("0.75", 0.75), ("1.0", 1.0) })
+                stat.Add(Case($"quantile/decimal/{ln}/q{qq}/{n++}", "quantile", $"{{\"q\":{qq}}}", new[]{o.Describe()}, "decimal", new int[0], HexOf(new[]{ Quantile(flat, frac) })));
+        }
+
+        // ----- WHERE (cond ? a : b): cond is a bool mask, a/b are decimal. Exercises the 16-byte
+        // conditional-copy kernel over contiguous AND strided decimal operands. -----
+        foreach (var (ln, aRot, bRot) in new[] { ("c_contiguous_1d", 0, 4), ("c_contiguous_2d", 0, 7), ("strided_step2_1d", 0, 4), ("negstride_1d", 0, 3) })
+        {
+            var a = SingleLayout(ln, aRot, false);
+            // b: a fresh CONTIGUOUS decimal of the same shape (different values via rotation).
+            var bBase = Fill(a.Shape.Aggregate(1,(x,y)=>x*y), false, bRot);
+            var b = new Operand { Base = bBase, Shape = a.Shape, Strides = CStrides(a.Shape), Offset = 0 };
+            var la = a.Logical(); var lb = b.Logical();
+            var mask = la.Select(x => (byte)(x > 0m ? 1 : 0)).ToArray();   // cond = a>0
+            var wexp = new decimal[la.Length];
+            for (int i = 0; i < la.Length; i++) wexp[i] = la[i] > 0m ? la[i] : lb[i];
+            where.Add(Case($"where/decimal/{ln}/{n++}", "where", "{}", new[]{ BoolOperandDesc(mask, a.Shape), a.Describe(), b.Describe() }, "decimal", a.Shape, HexOf(wexp)));
+        }
+
+        // ----- SORT along an axis (1-D and 2-D, contiguous + strided) -----
+        foreach (var (ln, axes) in new (string, int[])[] {
+            ("c_contiguous_1d", new[]{0}), ("c_contiguous_2d", new[]{0,1}),
+            ("strided_step2_1d", new[]{0}), ("negstride_1d", new[]{0}), ("strided_2d_cols", new[]{0,1}) })
+        {
+            var o = SingleLayout(ln, 3, false);
+            var log = o.Logical();
+            foreach (int ax in axes)
+            {
+                var sres = SortAxis(log, o.Shape, ax);
+                sort.Add(Case($"sort/decimal/{ln}/ax{ax}/{n++}", "sort", $"{{\"axis\":{ax}}}", new[]{o.Describe()}, "decimal", o.Shape, HexOf(sres)));
+            }
+        }
+
+        // ----- MANIP (value-preserving reindex): ravel / transpose / reshape. Forces the strided
+        // decimal materialize/copy path (result is compared C-contiguous via ascontiguousarray). -----
+        foreach (var ln in SINGLE_LAYOUTS)
+        {
+            var o = SingleLayout(ln, 2, false);
+            var log = o.Logical();
+            int cnt = log.Length;
+            // ravel -> flat C-order
+            manip.Add(Case($"ravel/decimal/{ln}/{n++}", "ravel", "{}", new[]{o.Describe()}, "decimal", new[]{cnt}, HexOf(log)));
+            // transpose -> reversed axes
+            manip.Add(Case($"transpose/decimal/{ln}/{n++}", "transpose", "{}", new[]{o.Describe()}, "decimal", RevShape(o.Shape), HexOf(TransposeReverse(log, o.Shape))));
+            // reshape -> a distinct 2-D factorization (skip when trivial: <2-D result or prime)
+            if (cnt >= 2)
+            {
+                int rows = LargestFactorLeqSqrt(cnt);
+                if (rows > 1) { var rsh = new[]{ rows, cnt / rows };
+                    manip.Add(Case($"reshape/decimal/{ln}/[{rows},{cnt/rows}]/{n++}", "reshape", $"{{\"shape\":[{rows},{cnt/rows}]}}", new[]{o.Describe()}, "decimal", rsh, HexOf(log))); }
+            }
+        }
+
         Write(Path.Combine(corpus, "decimal_unary.jsonl"), unary);
         Write(Path.Combine(corpus, "decimal_binary.jsonl"), binary);
         Write(Path.Combine(corpus, "decimal_reduce.jsonl"), reduce);
@@ -346,6 +442,10 @@ static class Gen
         Write(Path.Combine(corpus, "decimal_varstd.jsonl"), varstd);
         Write(Path.Combine(corpus, "decimal_matmul.jsonl"), matmul);
         Write(Path.Combine(corpus, "decimal_astype.jsonl"), astype);
+        Write(Path.Combine(corpus, "decimal_stat.jsonl"), stat);
+        Write(Path.Combine(corpus, "decimal_where.jsonl"), where);
+        Write(Path.Combine(corpus, "decimal_sort.jsonl"), sort);
+        Write(Path.Combine(corpus, "decimal_manip.jsonl"), manip);
     }
 
     // small in-range decimal source for decimal->narrow casts (truncation toward zero).
@@ -388,6 +488,108 @@ static class Gen
         if (g <= 0m) g = 1m;
         for (int i = 0; i < 40; i++) { decimal ng = (g + x / g) / 2m; if (ng == g) break; g = ng; }
         return g;
+    }
+
+    // median of an ALREADY-SORTED decimal[] (even n -> exact average of the two middles).
+    static decimal Median(decimal[] sorted)
+    {
+        int n = sorted.Length;
+        return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2m;
+    }
+
+    // NumPy 'linear' quantile of an ALREADY-SORTED decimal[]: index = frac*(n-1), interpolate.
+    static decimal Quantile(decimal[] sorted, double frac)
+    {
+        int n = sorted.Length;
+        if (n == 1) return sorted[0];
+        double idx = frac * (n - 1);
+        int lo = (int)Math.Floor(idx), hi = (int)Math.Ceiling(idx);
+        if (lo == hi) return sorted[lo];
+        decimal w = (decimal)(idx - lo);
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * w;
+    }
+
+    // sort each 1-D slice along `axis` (negative axis normalized) — independent Array.Sort oracle.
+    static decimal[] SortAxis(decimal[] flat, int[] shape, int axis)
+    {
+        if (axis < 0) axis += shape.Length;
+        var outv = (decimal[])flat.Clone();
+        var strides = CStrides(shape);
+        long axLen = shape[axis], axStride = strides[axis];
+        int[] outer = (int[])shape.Clone(); outer[axis] = 1;
+        int outerN = outer.Aggregate(1, (a, b) => a * b);
+        var coord = new int[shape.Length];
+        for (int o = 0; o < outerN; o++)
+        {
+            long baseF = 0; for (int d = 0; d < shape.Length; d++) baseF += coord[d] * strides[d];
+            var slice = new decimal[axLen];
+            for (long k = 0; k < axLen; k++) slice[k] = outv[baseF + k * axStride];
+            Array.Sort(slice);
+            for (long k = 0; k < axLen; k++) outv[baseF + k * axStride] = slice[k];
+            for (int d = shape.Length - 1; d >= 0; d--) { if (d == axis) continue; if (++coord[d] < shape[d]) break; coord[d] = 0; }
+        }
+        return outv;
+    }
+
+    // repeated consecutive difference along `axis`, applied nDiff times (a[1:]-a[:-1]).
+    static decimal[] DiffAxis(decimal[] flat, int[] shape, int nDiff, int axis)
+    {
+        if (axis < 0) axis += shape.Length;
+        var cur = flat; var curShape = (int[])shape.Clone();
+        for (int it = 0; it < nDiff; it++)
+        {
+            var strides = CStrides(curShape);
+            var newShape = (int[])curShape.Clone(); newShape[axis] -= 1;
+            int newN = newShape.Aggregate(1, (a, b) => a * b);
+            var res = new decimal[newN];
+            var coord = new int[newShape.Length];
+            for (int i = 0; i < newN; i++)
+            {
+                long srcLo = 0, srcHi = 0;
+                for (int d = 0; d < curShape.Length; d++) { int c = coord[d]; srcLo += c * strides[d]; srcHi += (d == axis ? c + 1 : c) * strides[d]; }
+                res[i] = cur[srcHi] - cur[srcLo];
+                Inc(coord, newShape);
+            }
+            cur = res; curShape = newShape;
+        }
+        return cur;
+    }
+
+    // np.transpose with no axes = reverse all axes; return the result's C-order values.
+    static decimal[] TransposeReverse(decimal[] flat, int[] shape)
+    {
+        int nd = shape.Length;
+        var newShape = RevShape(shape);
+        var strides = CStrides(shape);
+        var outv = new decimal[flat.Length];
+        var coord = new int[nd];
+        for (int i = 0; i < flat.Length; i++)
+        {
+            long srcF = 0;
+            for (int d = 0; d < nd; d++) srcF += coord[d] * strides[nd - 1 - d];
+            outv[i] = flat[srcF];
+            Inc(coord, newShape);
+        }
+        return outv;
+    }
+
+    static int[] RevShape(int[] shape) { var r = new int[shape.Length]; for (int i = 0; i < shape.Length; i++) r[i] = shape[shape.Length - 1 - i]; return r; }
+
+    // largest factor of n that is <= sqrt(n) (for a non-trivial 2-D reshape target).
+    static int LargestFactorLeqSqrt(int n)
+    {
+        int best = 1;
+        for (int f = 2; f * f <= n; f++) if (n % f == 0) best = f;
+        return best;
+    }
+
+    // bool operand descriptor (C-contiguous mask) — the where() condition.
+    static string BoolOperandDesc(byte[] mask, int[] shape)
+    {
+        var sb = new StringBuilder(mask.Length * 2); foreach (var b in mask) sb.Append(b.ToString("x2"));
+        return $"{{\"dtype\":\"bool\",\"shape\":[{string.Join(",", shape)}],"
+             + $"\"strides\":[{string.Join(",", CStrides(shape))}],\"offset\":0,"
+             + $"\"bufferSize\":{mask.Length},\"buffer\":\"{sb}\"}}";
     }
 
     static byte[] Bytes(long[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }

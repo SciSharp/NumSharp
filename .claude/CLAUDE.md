@@ -557,7 +557,8 @@ test/oracle/                          corpus generators (NumPy 2.4.2 — run by 
                                       per-mode dtype axes widened to ALL_DTYPES; Char woven into every tier
                                       via the uint16 proxy (char_tier, relabelled uint16->char)
   gen_decimal_oracle.cs               INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
-                                      System.Decimal math -> decimal_{unary,binary,reduce,scan}.jsonl
+                                      System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
+                                      varstd,matmul,astype,stat,where,sort,manip}.jsonl
   gen_index_oracle.py                 getter/setter index oracle (token index over 15 base recipes)
   fuzz_random.py                      seeded random fuzzer (imports the other two)
 test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
@@ -569,11 +570,11 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
-  corpus/*.jsonl                      committed corpus (~68K cases / 36 tiers; op corpus ~53K incl. 3.7K Char woven + 302 Decimal), copied to test output via the csproj glob
+  corpus/*.jsonl                      committed corpus (~68K cases / 40 tiers; op corpus ~53K incl. 3.7K Char woven + 579 Decimal), copied to test output via the csproj glob
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
-- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~53K cases across the tiers, checking dtype + shape + bytes + error parity; Char woven into every tier, 8 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
+- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~53K cases across the tiers, checking dtype + shape + bytes + error parity; Char woven into every tier, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
 - **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into every tier via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`). Verified Char/clip-bool bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`) — NOT excused in `MisalignedRegistry`.
 - **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.

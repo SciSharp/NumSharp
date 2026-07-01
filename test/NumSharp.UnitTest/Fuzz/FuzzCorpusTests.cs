@@ -225,6 +225,29 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void DecimalAstype() => RunCorpus("decimal_astype.jsonl");
 
+        // clip (elementwise Max(lo,Min(hi,x))) + the order statistics median/ptp/percentile/quantile
+        // (axis=None -> scalar) over the strided/broadcast decimal layouts. Oracle: naive sort +
+        // NumPy 'linear' interpolation in exact decimal (gen_decimal_oracle.Quantile/Median).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalStat() => RunCorpus("decimal_stat.jsonl");
+
+        // where(cond, a, b) — the 16-byte conditional-copy kernel over contiguous AND strided decimal.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalWhere() => RunCorpus("decimal_where.jsonl");
+
+        // sort along an axis (1-D/2-D, contiguous + strided) — independent Array.Sort oracle.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalSort() => RunCorpus("decimal_sort.jsonl");
+
+        // ravel/transpose/reshape — value-preserving reindex; forces the strided decimal
+        // materialize/copy path (result compared C-contiguous via ascontiguousarray).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void DecimalManip() => RunCorpus("decimal_manip.jsonl");
+
         private static void RunCorpus(string file)
         {
             var cases = FuzzCorpus.Load(file);

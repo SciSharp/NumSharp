@@ -17,8 +17,9 @@ min max mean std var argmax argmin all any median average ptp percentile quantil
 cumsum cumprod diff · nansum nanprod nanmax nanmin nanmean nanstd nanvar nanmedian · isnan isinf
 isfinite · maximum minimum fmax fmin isclose · where place clip copyto · argsort searchsorted nonzero ·
 matmul dot outer · astype modf · ravel transpose reshape squeeze expand_dims roll repeat tile swapaxes
-moveaxis delete atleast_1d/2d/3d concatenate stack hstack vstack dstack pad. Decimal oracle adds:
-power var std matmul astype (+ the arith/compare/reduce/scan/unary already shared).
+moveaxis delete atleast_1d/2d/3d concatenate stack hstack vstack dstack pad. Decimal oracle (12 tiers)
+adds: power var std matmul astype · floor ceil trunc · diff · clip median ptp percentile quantile ·
+where · sort · ravel transpose reshape (+ the arith/compare/reduce/scan/unary already shared).
 
 ---
 
@@ -60,15 +61,26 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` wired (green or carved+[OpenBug
 - [x] `allclose` `array_equal` — whole-array → 0-D bool · green
 - [x] `iscomplex` `isreal` — **BUG** (see Batch 3): carved → [OpenBugs]
 
-> **np.\* Group A is complete** (33 ops wired: 7 bugs → [OpenBugs], the rest green). Only remaining
-> item is the **decimal-specific ops** (extend `gen_decimal_oracle.cs`: floor/ceil/trunc/clip/where/
-> sort/median/ptp/percentile/quantile/diff/manip/nan*).
+> **np.\* Group A is complete** (33 ops wired: 7 bugs → [OpenBugs], the rest green), **including the
+> decimal-specific ops** (below). Group A is fully closed.
 
 > `flip` is intentionally NOT here: NumSharp exposes no `np.flip` (use `[::-1]` slicing). Skipped.
 
-### Decimal-specific A-gaps (decimal rides its own C# oracle, currently 8 tiers)
-- [ ] decimal `floor`/`ceil`/`trunc`, `clip`, `where`, `sort`, `median`/`ptp`/`percentile`/`quantile`,
-      `diff`, the manip ops, `nan*` reductions — not in `gen_decimal_oracle.cs` yet.
+### Decimal-specific A-gaps (decimal rides its own C# oracle) — ✅ DONE (all green, 12 tiers)
+- [x] `floor`/`ceil`/`trunc` — added to the `decimal_unary` tier (`decimal.Floor/Ceiling/Truncate`,
+      exact in base-10). `DecimalUnary` gate.
+- [x] `diff` (n=1,2 along last axis) — added to the `decimal_scan` tier (`DiffAxis` oracle). `DecimalScan` gate.
+- [x] `clip` + order stats `median`/`ptp`/`percentile`/`quantile` — new `decimal_stat.jsonl`
+      (170 cases). Oracle: `Max(lo,Min(hi,x))` + naive-sort + NumPy 'linear' interpolation in EXACT
+      decimal (`Quantile`/`Median`). Validated bit-identical to NumSharp (even & odd n, q∈{0,.25,.5,.75,1}). `DecimalStat` gate.
+- [x] `where(cond,a,b)` — new `decimal_where.jsonl`; the 16-byte conditional-copy kernel over
+      contiguous + strided decimal. `DecimalWhere` gate.
+- [x] `sort` (axis, 1-D/2-D, contiguous + strided) — new `decimal_sort.jsonl` (`SortAxis` oracle). `DecimalSort` gate.
+- [x] manip `ravel`/`transpose`/`reshape` — new `decimal_manip.jsonl`; value-preserving reindex forces
+      the strided decimal materialize/copy path (compared C-contiguous via `ascontiguousarray`). `DecimalManip` gate.
+- [x] `nan*` reductions — **intentionally skipped**: `System.Decimal` cannot represent NaN, so
+      `nansum`/`nanmax`/… are byte-identical to plain `sum`/`max`/… (already covered by `decimal_reduce`).
+      Verified `np.nansum(decimal)` == `np.sum(decimal)`.
 
 ---
 
