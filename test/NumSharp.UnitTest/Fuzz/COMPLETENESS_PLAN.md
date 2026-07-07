@@ -358,7 +358,7 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 
 | # | Cell | Symptom | Root cause | Disposition | By |
 |---|------|---------|-----------|-------------|----|
-| L1 | invert × float/complex/decimal | illegal CPU instruction (ExecutionEngineException), kills test host; NumPy raises TypeError | invert/BitwiseNot kernel emits IL for non-integer input without a dtype guard (locate exact site) | OPEN → B8 | review |
+| L1 | invert × float/complex/decimal | illegal CPU instruction (ExecutionEngineException), kills test host; NumPy raises TypeError | invert/BitwiseNot kernel emits IL for non-integer input without a dtype guard (locate exact site) | **already fixed on branch** — loop-resolution guard `Default.Invert.cs:27-39` (landed with the ufunc out=/where= work) throws NumPy's verbatim TypeError for float/complex/decimal/Half input AND the `~` operator (7 paths probed clean 2026-07-07); pinned@`FuzzGateRegressionTests.Invert_*_ThrowsCleanly` (OpenBugs.FuzzGate.cs, 5 normal tests, green). gen_oracle.py:≈1210 crash comment is STALE — G13 may add the invert errors spec | fuzz-bugs |
 
 (Draft GH-issue bodies below the table if a fix is deferred — do NOT create issues.)
 
@@ -376,7 +376,7 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 | B5 | todo | |
 | B6 | todo | |
 | B7 | todo | |
-| B8 | todo | **G13 waits on this** |
+| B8 | **DONE** | crash already fixed on branch (guard @ `Default.Invert.cs:27-39`); NumPy-verbatim TypeError verified vs 2.4.2 (f16/f32/f64/c128; +decimal/Half/`~` op probed clean); 5 regression tests pinned in `OpenBugs.FuzzGate.cs` (non-OpenBugs, green). **G13 UNBLOCKED** |
 | B9 | todo | |
 | B10 | todo | excuse-class handoff for DOCS goes here |
 
@@ -404,8 +404,8 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 ### Status — WS-DOCS (owner: fuzz-docs — edit ONLY this subsection)
 | Task | State | Result note |
 |------|-------|-------------|
-| D7 | todo | Phase 1 |
-| D3a | todo | Phase 1 |
+| D7 | done | README "Gate semantics" section added (error-parity = throw-anything, grounded in FuzzCorpusTests.cs:274-287; index oracle = which-side-raised only, IndexOracleTests.cs:175-191; excused-and-logged contract restated). Bonus same-class doc-rot fix: README regenerate block gained `gen_index_oracle.py` + the FULL gen_oracle mode list incl. `rounding`/`groupa` |
+| D3a | done | worktree `.claude/CLAUDE.md:579` mode list += `rounding` (after matmul) + `groupa` (after errors) — now matches §0.5 |
 | D1 | todo | Phase 2 |
 | D2 | todo | Phase 2 |
 | D3b | todo | Phase 2 |
@@ -429,3 +429,37 @@ _(pending)_
 5. Every Bug Ledger row has a disposition (fixed@sha / pinned@test / excused@branch / drafted-issue).
 6. All corpus regenerations committed together with their generator changes; counts documented.
 7. No commit touches files outside the committer's ownership row; no pushes; no footers.
+
+---
+
+## 9. SCRATCH — WS-DOCS: README divergence-ledger rewrite skeleton (D5 working draft)
+
+> Owner: fuzz-docs. Filled from B10's verbatim excuse-class handoff (WS-BUGS Status) + WS-GAPS'
+> carve/pin list. This section is DELETED when D5/D8 land the final README.
+
+Target structure replacing README § "Documented divergence ledger (Misaligned / known bugs)":
+
+**Table 1 — live `MisalignedRegistry` excuse branches** (one row per branch, post-B1–B7 scope):
+
+| Excuse class (registry reason string) | Scope (op set × dtype/kind, as tightened) | Why excused (intended / known bug) | Task/issue |
+|---|---|---|---|
+| _(from B10 handoff: every `documented Misaligned divergences excused:` class actually hit, verbatim)_ | | | |
+
+**Table 2 — corpus carves** (cells deliberately absent from the green corpus, each pinned):
+
+| Carve site (generator + comment) | Cell (op × dtype × layout) | Pin (`[OpenBugs]` test) |
+|---|---|---|
+| _(existing: char power/reciprocal/invert/bool-partner carves, clip-bool noncontig, round dec=-1 + f16-fractional, trace-unsigned, iscomplex/isreal complex+strided, unique raw-offset)_ | | |
+| _(new from G1-G14: fill from WS-GAPS Status/commits)_ | | |
+
+**Rules the rewrite must satisfy:**
+- every LIVE MisalignedRegistry branch appears exactly once, wording matched to the registry
+  comment text (no drift); scope column shows the post-tightening (op, dtype, kind) bounds;
+- rows whose branch was DELETED (bug fixed) are removed, or kept once as **FIXED** with the
+  fixing commit sha;
+- every carve in gen_oracle.py / gen_decimal_oracle.cs / char_tier / layout exclusions appears
+  in Table 2 with its `[OpenBugs]` pin name;
+- the existing "Char & Decimal dtype coverage" README subsection merges into Table 2 (single
+  source for carves) — decimal count fixed by D2 at the same time;
+- cross-check: no excuse class printed by the final full-gate run (B10) is missing from Table 1,
+  and no Table 1 row corresponds to a class that can no longer fire.
