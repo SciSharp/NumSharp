@@ -33,6 +33,26 @@ test/NumSharp.UnitTest/Fuzz/
 A divergence is one of: **bit-exact** (passes), a **documented difference** in `MisalignedRegistry`
 (excused + logged, never silent), or a **failure** (any unknown divergence — the gate is red).
 
+### Gate semantics — what is (and is not) asserted
+
+- **Value / dtype / shape parity** (the ordinary case): the replay checks result **dtype**
+  (NEP50 promotion), then result **shape** (broadcasting), then the raw result **bytes**
+  (bit-exact; NaN tokenized, Decimal compared by canonical value). Any divergence not classified
+  by `MisalignedRegistry` fails the tier.
+- **Error parity** (`errors.jsonl` and any corpus case flagged `expects_throw`): NumPy raised at
+  generation time, so NumSharp must throw **something** — a throw of ANY exception type passes;
+  a normal return is the divergence. **Exception type/message parity is NOT asserted** (NumSharp
+  does not mirror Python's exception taxonomy). The reverse direction is gated on every ordinary
+  case: NumSharp throwing where NumPy returned a result is a `Threw` divergence — a failure
+  unless a registry branch excuses it.
+- **Index oracle** (`IndexOracleTests`): compares result shape, values, and **which side raised**
+  — if both NumPy and NumSharp raise, the case passes regardless of exception type. NumPy's
+  exception name is carried in the corpus (`err`) for failure messages only, never for parity.
+- **Excused divergences are logged, never silent**: every case a `MisalignedRegistry` branch
+  classifies is counted and printed per tier even when the test passes —
+  `[<file>] documented Misaligned divergences excused: <n>x <reason>; …` — so growth in an
+  excused class stays visible in the test output. Anything unclassified is red.
+
 ## Regenerating the corpus
 
 ```bash
@@ -45,9 +65,15 @@ python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/va
 python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
 python test/oracle/gen_oracle.py place            # np.place(arr,mask,vals)
 python test/oracle/gen_oracle.py matmul           # T8 linalg: matmul/dot/outer (gufunc shapes, C/F layouts)
+python test/oracle/gen_index_oracle.py            # the three index_* corpora (seed pinned 20240626)
 python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl
 dotnet run test/oracle/gen_decimal_oracle.cs      # Decimal tiers (independent C# System.Decimal oracle)
 ```
+
+The block shows the most-used modes; the full `gen_oracle.py` mode list (one tier file per mode) is
+`smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise
+unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa`.
+Regeneration is deterministic: rerunning an untouched mode must produce a zero corpus diff.
 
 Char rides every NumPy mode automatically (`char_tier` appends uint16-proxy cases relabelled to
 `char`); there is no separate `char` mode. Decimal is the one dtype with no NumPy analog, so it has
