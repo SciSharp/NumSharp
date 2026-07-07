@@ -28,8 +28,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from layout_catalog import _cbase, _fill, describe  # noqa: E402
 import gen_oracle as G  # noqa: E402
 
-DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128"]
+# G10 (F18): widened from 7 dtypes to all 13 — float16 + the narrow integers were exactly the
+# dtypes where the W1 widening found real bugs, yet the nightly soak never explored them.
+DTYPES = ["bool", "int32", "int64", "uint8", "float32", "float64", "complex128",
+          "float16", "int8", "int16", "uint16", "uint32", "uint64"]
 NP_BIN = {**G.BINARY_OPS, **G.COMPARISON_OPS}     # add/sub/mul/divide + comparisons (bit-exact tier)
+# G10: flat reductions (axis=None) drawn into the random space; argmax/argmin/std/var stay out
+# (no flatten-argmax overload in the harness; std/var ride the documented precision excuse).
+REDUCE_FLAT = {k: G.REDUCE_OPS[k] for k in ("sum", "prod", "min", "max", "mean")}
 
 
 def random_view(rng, dtype, max_ndim=4):
@@ -97,13 +103,27 @@ def gen_random(seed, count):
     attempts = 0
     while len(cases) < count and attempts < count * 20:
         attempts += 1
-        kind = rng.choice(["unary", "binary", "comparison", "where"])
+        kind = rng.choice(["unary", "binary", "comparison", "where", "reduce", "astype"])
         try:
             if kind == "unary":
                 dt = rng.choice(DTYPES)
                 b, v = random_view(rng, np.dtype(dt))
                 opn = rng.choice(list(G.UNARY_OPS))
                 cases.append(_case(opn, [describe(b, v)], G.UNARY_OPS[opn](v), len(cases)))
+            elif kind == "reduce":                       # G10: flat reductions over random views
+                dt = rng.choice(DTYPES)
+                b, v = random_view(rng, np.dtype(dt))
+                opn = rng.choice(list(REDUCE_FLAT))
+                case = _case(opn, [describe(b, v)], np.asarray(REDUCE_FLAT[opn](v, None, False)), len(cases))
+                case["params"] = {"axis": None, "keepdims": False}
+                cases.append(case)
+            elif kind == "astype":                       # G10: random src->dst casts over random views
+                src = rng.choice(DTYPES)
+                dst = rng.choice(G.ALL_DTYPES)
+                b, v = random_view(rng, np.dtype(src))
+                case = _case("astype", [describe(b, v)], v.astype(np.dtype(dst)), len(cases))
+                case["params"] = {"dtype": np.dtype(dst).name}
+                cases.append(case)
             elif kind in ("binary", "comparison"):
                 pool = list(G.BINARY_OPS) if kind == "binary" else list(G.COMPARISON_OPS)
                 ba, va = random_view(rng, np.dtype(rng.choice(DTYPES)))
