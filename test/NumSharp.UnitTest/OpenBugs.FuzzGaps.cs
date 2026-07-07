@@ -58,5 +58,32 @@ namespace NumSharp.UnitTest
             v.Real.Should().Be(1.6, "NumPy rounds the real part: 1.55*10=15.500000000000002 -> rint 16 -> 1.6");
             v.Imaginary.Should().Be(2.4, "NumPy rounds the imaginary part: 2.45*10=24.499999999999996 -> rint 24 -> 2.4");
         }
+
+        // ============================================================================
+        //  BUG: np.dot on two 1-D Char vectors throws instead of the uint16-modular
+        //  inner product.
+        //
+        //  Char is bit-identical to uint16; the NumPy proxy says dot(uint16, uint16)
+        //  -> 0-D uint16 (modular). NumSharp's vector-dot path reduces through
+        //  DefaultEngine.sum_elementwise_il with an EXPLICIT Char result typecode,
+        //  and that switch has no Char arm:
+        //      NotSupportedException: Sum not supported for type Char
+        //  np.matmul on the same 1-D Char vectors works (different path), as do all
+        //  2-D+ Char matmul/dot/outer cases and flat np.sum(char) (which accumulates
+        //  to UInt64 via GetAccumulatingType, hitting an existing arm).
+        //  Carved from the char matmul weave (gen_oracle.char_tier "matmul").
+        // ============================================================================
+        [TestMethod, OpenBugs]
+        public void Dot_Char_1D_Throws()
+        {
+            var a = np.array(new char[] { (char)1, (char)2, (char)3, (char)4 });
+            var b = np.array(new char[] { (char)5, (char)6, (char)7, (char)8 });
+            NDArray r = null;
+            Action act = () => r = np.dot(a, b);
+            act.Should().NotThrow("NumPy dot(uint16, uint16) is the modular uint16 inner product; " +
+                                  "Char is bit-identical to uint16");
+            r.typecode.Should().Be(NPTypeCode.Char);
+            ((int)(char)r.GetValue(0)).Should().Be(70, "1*5 + 2*6 + 3*7 + 4*8 = 70");
+        }
     }
 }

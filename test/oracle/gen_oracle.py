@@ -1882,6 +1882,14 @@ CHAR_BIT_PAIRS   = [(_C, _C), (_C, "int32"), (_C, "uint64")]
 _CHAR_DIVMOD_OPS = {k: v for k, v in DIVMOD_POWER_OPS.items() if k != "power"}
 _CHAR_UNARY_OPS  = {k: v for k, v in UNARY_OPS.items() if k != "reciprocal"}
 
+# G9 (F8) — pairs/op-sets for the additionally woven modes. The uint16 slot IS the Char;
+# uint8/bool partners stay carved (char-promote bug), power/reciprocal/invert stay carved.
+CHAR_WHERE_PAIRS = [(_C, _C), (_C, "int32"), ("float64", _C)]   # cond stays bool
+CHAR_EXTREMA_OPS = {"maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin}
+CHAR_LOGIC_UNARY = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
+                    "logical_not": np.logical_not}
+CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
+
 
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
@@ -1918,6 +1926,22 @@ def char_tier(mode):
         raw = gen_tail([_C])
     elif mode == "astype_full":
         raw = gen_astype([_C], ALL_DTYPES, L) + gen_astype(ALL_DTYPES, [_C], L)
+    elif mode == "where":                                          # G9: char select values
+        raw = gen_where(CHAR_WHERE_PAIRS, list(WHERE_LAYOUTS.keys()))
+    elif mode == "logic":                                          # G9: extrema + predicates
+        raw = gen_binary(CHAR_EXTREMA_OPS, CHAR_CMP_PAIRS, PL)
+        raw += gen_unary(CHAR_LOGIC_UNARY, [_C], L)
+    elif mode == "matmul":                                         # G9: uint16@uint16 modular GEMM
+        # dot 1-D.1-D CARVED: NumSharp's vector-dot reduces through sum_elementwise_il with an
+        # explicit Char result typecode, and that switch has no Char arm -> NotSupportedException
+        # ("Sum not supported for type Char"). matmul 1-D.1-D and every 2-D+ char case work.
+        # Pinned at OpenBugsFuzzGapsTests.Dot_Char_1D_Throws.
+        shape_cases = [c for c in MATMUL_SHAPE_CASES if not (c[0] == "dot" and c[1] == (4,))]
+        raw = gen_matmul(shape_cases, [_C], MATMUL_LAYOUTS)
+    elif mode == "rounding":                                       # G9: char identity, dec 0/1/2
+        raw = gen_round([_C], L)
+    elif mode == "copyto":                                         # G9: overlap + int32/float64 cross
+        raw = gen_copyto([_C], CHAR_COPYTO_CROSS)
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -1967,6 +1991,7 @@ def main():
     elif mode == "where":
         cases = gen_where(WHERE_DT_PAIRS, list(WHERE_LAYOUTS.keys()))
         cases += gen_where_cond(WHERE_COND_DTYPES, WHERE_COND_XY_PAIRS)   # G4: non-bool cond
+        cases += char_tier("where")                                        # G9
         write_jsonl(os.path.join(corpus_dir, "where.jsonl"), cases)
     elif mode == "place":
         cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
@@ -1975,9 +2000,11 @@ def main():
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
         cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
+        cases += char_tier("matmul")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     elif mode == "rounding":
         cases = gen_round(ROUND_DTYPES, list(LAYOUTS.keys()))          # Group A: round_/around
+        cases += char_tier("rounding")                                 # G9
         write_jsonl(os.path.join(corpus_dir, "rounding.jsonl"), cases)
     elif mode == "bitwise":
         cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
@@ -2014,6 +2041,7 @@ def main():
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
         cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
+        cases += char_tier("logic")                                                       # G9
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
@@ -2046,6 +2074,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "aliasing.jsonl"), cases)
     elif mode == "copyto":
         cases = gen_copyto(COPYTO_OVERLAP_DTYPES, COPYTO_CROSS)
+        cases += char_tier("copyto")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "copyto.jsonl"), cases)
     elif mode == "errors":
         cases = gen_errors()
