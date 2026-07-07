@@ -1285,6 +1285,16 @@ def _numpy_raises(opname, arrs, params):
             _ = np.stack(list(arrs), axis=params["axis"])
         elif opname == "subtract":
             _ = arrs[0] - arrs[1]
+        elif opname == "min":
+            _ = np.min(arrs[0], axis=params.get("axis"))
+        elif opname == "max":
+            _ = np.max(arrs[0], axis=params.get("axis"))
+        elif opname == "argmax":
+            _ = np.argmax(arrs[0], axis=params.get("axis"))
+        elif opname == "floor":
+            _ = np.floor(arrs[0])
+        elif opname == "searchsorted":
+            _ = np.searchsorted(arrs[0], arrs[1], side=params.get("side", "left"))
         return False
     except Exception:
         return True
@@ -1306,11 +1316,19 @@ def gen_errors():
         ("concatenate", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                   # dim mismatch
         ("reshape", [_cbase((6,), i32)], {"shape": [4]}),                                           # incompatible size
         ("sum", [_cbase((3,), i32)], {"axis": 5, "keepdims": False}),                               # axis out of range
-        # NOTE: ("invert", [float]) is DELIBERATELY EXCLUDED — it does not raise a catchable
-        # exception, it executes an ILLEGAL CPU INSTRUCTION (ExecutionEngineException) and crashes
-        # the whole test host (a 🔴 crash bug) and
-        # cannot be gated here until the kernel is fixed to reject float input cleanly.
         ("stack", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                          # mismatched shapes
+        # G13 (F17) additions — each probed to raise in NumPy 2.4.2 AND throw cleanly in NumSharp.
+        # less(complex) was in the plan but NumPy 2.4.2 does NOT raise (comparisons on complex
+        # return bool, lexicographic) — dropped.
+        ("min", [np.array([], dtype=f64)], {"axis": None, "keepdims": False}),                      # zero-size reduce
+        ("max", [np.array([], dtype=f64)], {"axis": None, "keepdims": False}),                      # zero-size reduce
+        ("argmax", [np.array([], dtype=f64)], {"axis": 0, "keepdims": False}),                      # argmax of empty
+        ("floor", [np.array([1.5 + 2.0j, -0.5 + 1.0j])], {}),                                       # floor(complex)
+        ("searchsorted", [_cbase((2, 3), i32), np.array([1, 2], dtype=i32)], {"side": "left"}),     # 2-D a
+        # invert(float): NumPy raises TypeError. Historically this was an ILLEGAL-INSTRUCTION
+        # host crash in NumSharp; the B8 loop-resolution guard (Default.Invert.cs) now throws
+        # NumPy's verbatim TypeError, so the spec is safe to gate (see COMPLETENESS_PLAN L1).
+        ("invert", [_cbase((4,), f64)], {}),
     ]
     for (opname, arrs, params) in specs:
         if not _numpy_raises(opname, arrs, params):
