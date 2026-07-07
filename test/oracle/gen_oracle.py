@@ -1492,6 +1492,70 @@ def gen_sort(dtypes):
     return cases
 
 
+# G11 (F20) — NaN sorting IS contractual in NumPy (NaN to the end; complex extended order
+# [R+Rj, R+nanj, nan+Rj, nan+nanj] — probed 2.4.2 and matching in NumSharp) + strided/negstride
+# operands (the NumPy-oracle sort tier was contiguous-only; only the decimal tier covered strided).
+# Determinism guards: argsort operands keep ALL values distinct with at most ONE NaN per
+# axis-slice (default quicksort is UNSTABLE — duplicate keys would make the index permutation
+# implementation-defined on both sides); sort-only operands may carry duplicate NaNs (identical
+# bit pattern -> identical result bytes). bool is sort-only in the strided family for the same
+# tie reason.
+def gen_sort_special():
+    cases = []
+    n = 0
+
+    def emit(op, a_base, a_view, axis, tag):
+        nonlocal n
+        try:
+            r = np.asarray(np.sort(a_view, axis=axis) if op == "sort" else np.argsort(a_view, axis=axis))
+        except Exception:
+            return
+        cases.append({
+            "id": f"{op}/{tag}/{a_view.dtype.name}/axis={axis}/{n}",
+            "op": op,
+            "params": {"axis": axis},
+            "operands": [describe(a_base, a_view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan" if "nan" in tag else "distinct",
+        })
+        n += 1
+
+    nan = float("nan")
+    for dt in ["float16", "float32", "float64"]:
+        d = np.dtype(dt)
+        a1 = np.array([3.5, nan, -2.0, np.inf, 0.25, -np.inf, 7.0, 1.5], dtype=d)   # distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            emit(op, a1, a1, -1, "nan_1d")
+        a2 = np.array([nan, 4.0, -1.0, nan, 2.5, 0.5, -3.0, 6.0], dtype=d)          # 2 NaNs -> sort only
+        emit("sort", a2, a2, -1, "nan_1d_multi")
+        m = np.array([5.0, -3.5, 12.25, 0.5, nan, 8.0, -7.25, 3.0, 1.5, -0.25, 9.75, -12.5],
+                     dtype=d).reshape(3, 4)                                          # distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            for ax in (0, 1, -1):
+                emit(op, m, m, ax, "nan_2d")
+        sb = np.array([nan, 9.0, 3.5, 1.0, -2.0, 8.0, 0.5, 2.0, 7.0, 4.0, -np.inf, 5.0,
+                       12.0, 6.0, np.inf, 0.0], dtype=d)                             # [::2] -> distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            emit(op, sb, sb[::2], -1, "nan_strided")
+
+    # complex: exactly ONE entry per NaN group (R+nanj, nan+Rj, nan+nanj) -> no within-group ties.
+    cx = np.array([3 + 1j, complex(nan, 1), 1 + 2j, complex(1, nan), 2 + 0j,
+                   complex(nan, nan), -1j, 5 + 3j], dtype=np.complex128)
+    for op in ("sort", "argsort"):
+        emit(op, cx, cx, -1, "nan_1d")
+
+    # strided + negstride views over the distinct permutation pool, every sortable dtype.
+    for dt in SORT_DTYPES:
+        b = _distinct(16, dt)
+        ops = ("sort",) if dt == "bool" else ("sort", "argsort")   # bool: 15 dup keys -> unstable ties
+        for op in ops:
+            emit(op, b, b[::2], -1, "strided")
+            emit(op, b, b[::-1], -1, "negstride")
+    return cases
+
+
 def gen_unique(dtypes):
     """np.unique -> sorted distinct values, over CONTIGUOUS finite data with duplicates. Contiguous +
     finite on purpose: unique is correct via the public API (verified), but the corpus's raw-offset
@@ -1967,6 +2031,7 @@ def main():
         cases += gen_nonzero(SORT_DTYPES)
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
+        cases += gen_sort_special()                                     # G11: NaN + strided/negstride
         cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":
