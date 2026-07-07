@@ -20,8 +20,12 @@ namespace NumSharp.UnitTest.Fuzz
     ///          operand's dtype drives promotion). NumPy makes 0-D arrays full participants; only
     ///          Python scalar literals are weak. NumSharp cannot distinguish the two (both are 0-D
     ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
-    ///       2. Complex true-division differs from NumPy's npy_cdivide by ~1 ULP
-    ///          (System.Numerics.Complex uses a different scaling). Add/sub/mul are bit-exact.
+    ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
+    ///          measured, and bounded — see the B2 branch): divide within 2 ULP (npy_cdivide
+    ///          scaling); add/subtract within 2 ULP (FMA contraction); multiply within 16 ULP of
+    ///          the ELEMENT magnitude (catastrophic-cancellation regime); power within 512
+    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow,
+    ///          Bug Ledger L6). Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
