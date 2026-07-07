@@ -608,8 +608,10 @@ def gen_place(dtypes, layout_names):
 # W1: added float16 + the narrow integers (int8/int16/uint16/uint32/uint64) — exercises the
 # stride-aware GEMM accumulator at every width (NumPy matmul preserves the input dtype, so e.g.
 # int8@int8 -> int8 with modular overflow; float16@float16 -> float16).
+# G3: added bool — NumPy matmul/dot/outer on bool run the AND/OR semiring with a bool result
+# (probed 2.4.2: matmul(bool,bool) -> dtype bool, OR-of-ANDs).
 MATMUL_DTYPES = ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
-                 "float16", "float32", "float64", "complex128"]
+                 "float16", "float32", "float64", "complex128", "bool"]
 
 # (op, shapeA, shapeB) — spans the matmul gufunc shape space + dot/outer specifics.
 MATMUL_SHAPE_CASES = [
@@ -641,6 +643,8 @@ def _mm_fill(shape, dt):
     dtype = np.dtype(dt)
     if dtype.kind == "c":
         a = (((np.arange(n) % 7) - 3) + 1j * ((np.arange(n) % 5) - 2)).astype(dtype)
+    elif dtype.kind == "b":
+        a = (np.arange(n) % 3 != 1)                          # 2/3 True — AND/OR semiring gets a mix
     elif dtype.kind in "iu":
         a = ((np.arange(n) % 7) + 1).astype(dtype)          # 1..7 (uint-safe, positive)
     else:
@@ -693,6 +697,42 @@ def gen_matmul(shape_cases, dtypes, layouts):
                     n += 1
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# G14 — matmul edge layouts the C/F matrix misses: a NEGATIVE-STRIDE operand (B row-reversed
+# via [::-1], nonzero offset) and the k=0 empty inner dimension ((2,0)@(0,3) -> (2,3) zeros;
+# both probed against NumPy 2.4.2 and matching in NumSharp).
+MATMUL_EDGE_DTYPES = ["int32", "float64", "complex128", "bool"]
+
+
+def gen_matmul_edges(dtypes):
+    cases = []
+    n = 0
+    for dt in dtypes:
+        A = _mm_fill((2, 3), dt)
+        Bbase = _mm_fill((3, 2), dt)
+        Bneg = Bbase[::-1]                                    # negative row stride, offset != 0
+        r = np.asarray(np.matmul(A, Bneg))
+        cases.append({
+            "id": f"matmul/negstride/{dt}/{n}", "op": "matmul", "params": {},
+            "operands": [describe(A, A), describe(Bbase, Bneg)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "negstride", "valueclass": "mixed",
+        })
+        n += 1
+        A0 = np.zeros((2, 0), dtype=np.dtype(dt))             # k=0: empty inner dim
+        B0 = np.zeros((0, 3), dtype=np.dtype(dt))
+        r0 = np.asarray(np.matmul(A0, B0))
+        cases.append({
+            "id": f"matmul/k0/{dt}/{n}", "op": "matmul", "params": {},
+            "operands": [describe(A0, A0), describe(B0, B0)],
+            "expected": {"dtype": r0.dtype.name, "shape": [int(d) for d in r0.shape],
+                         "buffer": np.ascontiguousarray(r0).tobytes().hex()},
+            "layout": "k0", "valueclass": "mixed",
+        })
+        n += 1
     return cases
 
 
@@ -1469,7 +1509,9 @@ def gen_round(dtypes, layout_names):
 
 
 def gen_trace_diag(dtypes):
-    """np.trace (2-D -> 0-D sum of diagonal) and np.diagonal (2-D -> 1-D)."""
+    """np.trace (2-D -> 0-D sum of diagonal) and np.diagonal (2-D -> 1-D).
+    G14: contiguous bases PLUS strided/offset views (a[1:5].T, a[:, ::2]) — the diagonal
+    walk must honor a nonzero offset and non-contiguous strides."""
     cases = []
     n = 0
     for dt in dtypes:
@@ -1488,6 +1530,27 @@ def gen_trace_diag(dtypes):
                     "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
                                  "buffer": np.ascontiguousarray(r).tobytes().hex()},
                     "layout": "2d",
+                    "valueclass": "mixed",
+                })
+                n += 1
+    # G14 — strided/offset views (appended so the contiguous case ids above stay stable).
+    for dt in dtypes:
+        b1 = _cbase((6, 4), dt)
+        b2 = _cbase((4, 6), dt)
+        for (tag, base, view) in [("sliced_T", b1, b1[1:5].T), ("strided_cols", b2, b2[:, ::2])]:
+            for opname, f in (("trace", np.trace), ("diagonal", np.diagonal)):
+                try:
+                    r = np.asarray(f(view))
+                except Exception:
+                    continue
+                cases.append({
+                    "id": f"{opname}/{tag}/{dt}/{n}",
+                    "op": opname,
+                    "params": {},
+                    "operands": [describe(base, view)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": tag,
                     "valueclass": "mixed",
                 })
                 n += 1
@@ -1788,6 +1851,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
+        cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     elif mode == "rounding":
