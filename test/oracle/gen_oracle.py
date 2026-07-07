@@ -427,6 +427,46 @@ WHERE_DT_PAIRS = [
 ]
 
 
+# G4 (F4) — NON-bool where cond: NumPy selects by TRUTHINESS of any dtype cond (probed 2.4.2:
+# NaN is truthy, -0.0 is falsy, complex is truthy iff re!=0 or im!=0). NumSharp matches
+# (probed on all four cond dtypes). The float/complex pools front-load NaN/inf/-0.0, so the
+# truthiness edges are exercised in every case.
+WHERE_COND_DTYPES = ["int32", "float64", "uint8", "complex128"]
+WHERE_COND_XY_PAIRS = [("int32", "int32"), ("float64", "int32"), ("float32", "float64")]
+
+
+def gen_where_cond(cond_dtypes, xy_pairs):
+    cases = []
+    n = 0
+    for cdt in cond_dtypes:
+        for (sx, sy) in xy_pairs:
+            # contiguous: cond/x/y all (4,5) C-contiguous
+            cb = _cbase((4, 5), np.dtype(cdt))
+            xb = _cbase((4, 5), np.dtype(sx))
+            yb = _cbase((4, 5), np.dtype(sy))
+            # strided: all three are [:, ::2] views of (4,10) bases
+            cb2 = _cbase((4, 10), np.dtype(cdt))
+            xb2 = _cbase((4, 10), np.dtype(sx))
+            yb2 = _cbase((4, 10), np.dtype(sy))
+            for (tag, c_pair, x_pair, y_pair) in [
+                ("wh_cond_contig", (cb, cb), (xb, xb), (yb, yb)),
+                ("wh_cond_strided", (cb2, cb2[:, ::2]), (xb2, xb2[:, ::2]), (yb2, yb2[:, ::2])),
+            ]:
+                r = np.where(c_pair[1], x_pair[1], y_pair[1])
+                cases.append({
+                    "id": f"where/{tag}/{cdt}-cond/{sx},{sy}/{n}",
+                    "op": "where",
+                    "params": {},
+                    "operands": [describe(*c_pair), describe(*x_pair), describe(*y_pair)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": tag,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    return cases
+
+
 # T11 — cumulative scans (cumsum/cumprod) and finite differences (diff). NumPy is the oracle for
 # value, NEP50 accumulator dtype (cumsum(int32)->int64), and the diff output shape (shrinks by n).
 SCAN_OPS = {
@@ -547,6 +587,18 @@ LOGIC_BIN_PAIRS = [
     ("int32", "int32"), ("int32", "float64"), ("uint8", "int8"), ("int32", "int64"),
     ("complex128", "complex128"),
 ]
+
+# G5 (F5) — iscomplex/isreal: REAL dtypes × CONTIGUOUS layouts ONLY (this is the verified-green
+# envelope). CARVED (both documented bugs already pinned in OpenBugs.DtypeCoverage.cs —
+# IsComplex_IgnoresImaginaryPart / IsReal_IgnoresImaginaryPart, ≈:119/:130):
+#   * complex128 input — NumSharp never inspects the imaginary part (iscomplex -> all False,
+#     isreal -> all True, both wrong for nonzero-imag values);
+#   * strided/F-contiguous/transposed REAL input — same op emits garbage bytes on the
+#     non-contiguous path.
+ISCOMPLEX_OPS = {"iscomplex": np.iscomplex, "isreal": np.isreal}
+ISCOMPLEX_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
+ISCOMPLEX_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d",
+                     "one_element_1d", "scalar_0d"]
 
 # Group A Batch 1: logical_and/or/xor (binary -> bool, truthiness of each element),
 # logical_not (unary -> bool), arctan2 (binary -> float; NumPy promotes int -> float64,
@@ -1845,6 +1897,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "reduce.jsonl"), cases)
     elif mode == "where":
         cases = gen_where(WHERE_DT_PAIRS, list(WHERE_LAYOUTS.keys()))
+        cases += gen_where_cond(WHERE_COND_DTYPES, WHERE_COND_XY_PAIRS)   # G4: non-bool cond
         write_jsonl(os.path.join(corpus_dir, "where.jsonl"), cases)
     elif mode == "place":
         cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
@@ -1891,6 +1944,7 @@ def main():
         cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
+        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
