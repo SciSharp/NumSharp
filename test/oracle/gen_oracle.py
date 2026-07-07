@@ -196,7 +196,12 @@ REDUCE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_co
                   # (and, for f64/f32 min/max, the stride-ordered NDIter routing gated by
                   # DefaultEngine.MinMaxLayoutFavorsNDIter; the Direct kernel walks these
                   # cache-hostile, so they were a measured 6–10× cliff before the routing).
-                  "negstride_1d", "negstride_2d_offset"]
+                  "negstride_1d", "negstride_2d_offset",
+                  # G12 (F19): positive-offset slices + composed/0-d/reshape views — offset
+                  # handling in reductions was previously reached only via negstride_2d_offset
+                  # (and the W9-B repeat bug was precisely an offset bug).
+                  "simple_slice_offset_1d", "sliced_composed", "zerod_from_index",
+                  "reshape_view_2d"]
 
 
 def _axes(ndim):

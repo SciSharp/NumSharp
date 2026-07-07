@@ -54,7 +54,10 @@ namespace NumSharp.Backends
             var shape = nd.Shape;
             if (shape.IsContiguous)
             {
-                var addr = (Half*)nd.Address;
+                // + shape.offset: a raw view Shape (e.g. b[2:7] reconstructed with the offset
+                // kept in the Shape rather than rebased into Storage.Address) is still
+                // C-contiguous, so this fast path must honor the element offset.
+                var addr = (Half*)nd.Address + shape.offset;
                 long len = nd.size;
                 for (long i = 0; i < len; i++)
                 {
@@ -81,7 +84,7 @@ namespace NumSharp.Backends
             var shape = nd.Shape;
             if (shape.IsContiguous)
             {
-                var addr = (System.Numerics.Complex*)nd.Address;
+                var addr = (System.Numerics.Complex*)nd.Address + shape.offset;
                 long len = nd.size;
                 for (long i = 0; i < len; i++)
                 {
