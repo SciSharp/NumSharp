@@ -303,11 +303,13 @@ STAT_DTYPES = list(ALL_DTYPES)         # widened: median/ptp/average across ever
 STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d"]
 CNZ_DTYPES = list(ALL_DTYPES)          # widened: count_nonzero is dtype-agnostic
-# clip needs an ORDERED dtype — complex128 has no ordering (NumPy raises). bool is CARVED OUT:
-# NumSharp's general (strided/transposed/F-contig) clip kernel throws "clip not supported for
+# clip dtypes. complex128 IS supported by NumPy's clip (probed 2.4.2: lexicographic
+# real-then-imag ordering, NaN-poisoning comparisons — np.clip([1+2j,5+1j,-3+0j],0,2) ->
+# [1+2j, 2+0j, 0+0j]); included below. bool is CARVED OUT: NumSharp's general
+# (strided/transposed/F-contig) clip kernel throws "clip not supported for
 # Boolean" (only the contiguous path handles bool) — reproduced under [OpenBugs] (Clip_Bool_Strided_*).
 CLIP_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
-               "float16", "float32", "float64"]
+               "float16", "float32", "float64", "complex128"]
 QUANTILE_SPECS = [
     ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
     ("quantile", lambda a, q, ax: np.quantile(a, q, axis=ax), [0.0, 0.25, 0.5, 0.75, 1.0]),
@@ -1339,7 +1341,15 @@ def _relabel_dtype(cases, frm, to):
 # ---------------------------------------------------------------------------
 # Group A Batch 2 generators: sort / round_ / trace / diagonal / ediff1d / nan-quantile.
 # ---------------------------------------------------------------------------
-ROUND_DTYPES = ["uint8", "int16", "int32", "int64", "float16", "float32", "float64"]
+# bool is CARVED OUT: np.round(bool, 0) -> float16 [0,1] in NumPy (rint float-tier), while
+# NumSharp's round_ resolves bool -> Double — dtype divergence pinned under [OpenBugs]
+# (OpenBugs.FuzzGaps.cs: Round_Bool_Dtype_Diverges). (bool with decimals!=0 raises in NumPy.)
+# complex128 is included at decimals=0 ONLY: NumSharp's round_ with decimals!=0 is a NO-OP
+# identity for Complex (NumPy rounds re+im via multiply->rint->divide: round(1.55+2.45j, 1)
+# -> 1.6+2.4j) — pinned under [OpenBugs] (OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp);
+# the dec!=0 complex carve lives in gen_round.
+ROUND_DTYPES = ["int8", "uint8", "int16", "int32", "int64", "uint16", "uint32", "uint64",
+                "float16", "float32", "float64", "complex128"]
 # uint8 CARVED: trace of an unsigned dtype upcasts to Int64 in NumSharp but uint64 in NumPy -> [OpenBugs].
 TRACE_DTYPES = ["int16", "int32", "int64", "float16", "float32", "float64", "complex128"]
 EDIFF_DTYPES = ["int16", "int32", "int64", "uint8", "float32", "float64", "complex128"]  # no bool (NumPy bans bool `-`)
@@ -1421,7 +1431,9 @@ def gen_unique(dtypes):
 def gen_round(dtypes, layout_names):
     """np.round_/around with decimals; every layout. NumPy is the oracle (banker's rounding).
     CARVE-OUTS (-> [OpenBugs]): dec=-1 (NumSharp's Math.Round rejects negative digits for ints and
-    mis-rounds floats) and float16 with dec>=1 (float16 fractional rounding diverges)."""
+    mis-rounds floats), float16 with dec>=1 (float16 fractional rounding diverges), and
+    complex128 with dec>=1 (NumSharp round_ is a no-op identity for Complex when decimals!=0;
+    OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp)."""
     cases = []
     n = 0
     skipped = 0
@@ -1432,6 +1444,8 @@ def gen_round(dtypes, layout_names):
             operand = describe(base, view)
             for dec in (0, 1, 2):                         # dec=-1 carved (negative-decimals bug)
                 if s == "float16" and dec != 0:           # float16 fractional rounding carved
+                    continue
+                if s == "complex128" and dec != 0:        # complex dec!=0 carved (NumSharp no-op bug)
                     continue
                 try:
                     r = np.asarray(np.round(view, dec))
@@ -1852,7 +1866,7 @@ def main():
         cases = gen_groupa()                                            # Group A B4-6
         write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa)")
         sys.exit(2)
 
 
