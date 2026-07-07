@@ -360,6 +360,13 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 |---|------|---------|-----------|-------------|----|
 | L1 | invert × float/complex/decimal | illegal CPU instruction (ExecutionEngineException), kills test host; NumPy raises TypeError | invert/BitwiseNot kernel emits IL for non-integer input without a dtype guard (locate exact site) | **already fixed on branch** — loop-resolution guard `Default.Invert.cs:27-39` (landed with the ufunc out=/where= work) throws NumPy's verbatim TypeError for float/complex/decimal/Half input AND the `~` operator (7 paths probed clean 2026-07-07); pinned@`FuzzGateRegressionTests.Invert_*_ThrowsCleanly` (OpenBugs.FuzzGate.cs, 5 normal tests, green). gen_oracle.py:≈1210 crash comment is STALE — G13 may add the invert errors spec | fuzz-bugs |
 
+| L2 | round_ × bool | `np.round(bool, 0)` → float16 `[0,1]` in NumPy (rint float-tier) but **Double** in NumSharp — result-dtype divergence | `DefaultEngine.Round` decimals==0 path (`Default.Round.cs:25-38`): Boolean fails `IsInteger()` so it skips the int identity-copy, and `ResolveUnaryReturnType` maps bool→Double while the rint tier maps bool→Half | carved from `ROUND_DTYPES` (gen_oracle.py) + pinned@`OpenBugsFuzzGapsTests.Round_Bool_Dtype_Diverges` @ff4b46b3 | fuzz-gaps |
+| L3 | round_ × complex128 × decimals≠0 | NumPy rounds re+im via multiply→rint→divide (`round(1.55+2.45j, 1)` → `1.6+2.4j`); NumSharp returns the input **unchanged** (no-op). decimals==0 is correct (banker's, probed) | `RoundDecimalsCore` (Default.Round.cs) never processes Complex components for decimals≠0 | carved to dec=0 in `gen_round` + pinned@`OpenBugsFuzzGapsTests.Round_Complex_NonzeroDecimals_NoOp` @ff4b46b3 | fuzz-gaps |
+| L4 | all/any × Half,Complex × offset view | `np.all(b[2:7])`-style raw-offset view: contiguous fast path reads `(T*)nd.Address` for `nd.size` elements WITHOUT `+ shape.offset` → scans the wrong window (all→True where NumPy False); any() identical latent bug (masked by pool). Other dtypes use NDIter (correct) | `Default.All.cs` AllImplHalf/AllImplComplex + `Default.Any.cs` AnyImplHalf/AnyImplComplex — missing the `+ shape.offset` idiom (cf. NonZero.cs:258) | **fixed@7804b2ad** (4 sites); regression proof = the 4 reduce.jsonl simple_slice_offset_1d cells now green; fix REVIEWED-OK by fuzz-bugs (src owner) — independently reproduced pre-fix behavior and confirmed API slices rebase storage (offset stays 0) so no double-count | fuzz-gaps |
+| L5 | convolve × complex128 (headline); + latent int64/uint64/decimal/bool & view inputs | `np.convolve(complex)` DISCARDED the whole imaginary dimension (accumulated via `Converts.ToDouble(boxed)` into a double, cast back with imag=0). Hidden because corpus complex pools have imag=0 + the old B2 blanket excused any complex-binary value diff; exposed by the NaN cells (NumPy `NaN*(x+0j)`→NaN+NaNj, NumSharp NaN+0j — groupa convolve/84-86). Latent in the same code: int64/uint64/decimal accumulated through double (rounds >2^53 / loses decimal precision instead of NumPy modular wrap); bool threw NotSupportedException (NumPy: BOOL_dot OR-of-ANDs, probed); raw `Address` walk ignored `Shape.offset`/strides for view inputs (corpus contiguous → ungated) | `NdArray.Convolve.cs` — single generic `ConvolveFullTyped<T>` double accumulator for ALL dtypes | **fixed@737c59d6** — rewritten per NumPy correlate `*_dot` contract (complex: double component sums; ints+Char: one `IBinaryInteger<T>` modular ulong kernel — bit-identical to native-width wrap at any width; Half: float acc; Single: f32 acc; Boolean: OR-of-ANDs w/ early exit; Decimal: decimal acc; sliced/strided/broadcast inputs materialized first). Proof: GroupA convolve cells (i32/f64/u8/c128 × full/same/valid) green incl. the 3 previously-hidden NaN cells | fuzz-bugs |
+| L6 | power × complex128 (finite interior) | Complex.Pow (polar exp(w·log z)) vs npy_cpow (repeated-squaring fast path for small integer exponents): finite divergence measured up to ~350 ULP of the affected component (divmod_power corpus), far beyond the "~1 ULP" previously documented; plus the known F5 gross inf/NaN edges (NaN↔0, inf↔NaN both directions) | algorithmic — System.Numerics.Complex.Pow has no integer-exponent fast path; candidate future fix: port npy_cpow's squaring path | excused@registry `complex power ~ULP / gross inf-NaN edge` — scoped to power × Complex × Value, every diff ≤512 ULP of the ELEMENT magnitude or non-finite-involved (sign flips / wrong magnitudes still fail) | fuzz-bugs |
+| L7 | std × decimal | Last-significant-digit (28/29-digit) disagreement, e.g. `…4468786` vs `…4468787` (4 decimal_varstd cells). Surfaced by B1 scoping the reduction-precision excuse to float-family — the unscoped branch had been silently absorbing tc==Decimal. var is bit-exact ⇒ divergence is purely sqrt(var) | Two independent, NOT-correctly-rounded decimal sqrts: oracle `gen_decimal_oracle.DecSqrt` (Newton) vs product `DecimalMath.Sqrt`. Probed vs 60-digit truth 2026-07-07: oracle 1 low on cases 325/331, NumSharp 1 high on 335, both fine at their own scale on 327 — NEITHER side systematically correct | excused@registry `decimal std last digit` — scoped to std × Decimal × Value, every diff ≤1 unit in the 28th significant digit (relative 1e-27, `DecimalLastDigitDiff`); self-retiring if either sqrt becomes correctly rounded (optional GAPS improvement: correctly-rounded oracle DecSqrt) | fuzz-bugs |
+
 (Draft GH-issue bodies below the table if a fix is deferred — do NOT create issues.)
 
 ---
@@ -369,35 +376,35 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 ### Status — WS-BUGS (owner: fuzz-bugs — edit ONLY this subsection)
 | Task | State | Result note |
 |------|-------|-------------|
-| B1 | todo | |
-| B2 | todo | |
-| B3 | todo | |
-| B4 | todo | |
-| B5 | todo | |
-| B6 | todo | |
-| B7 | todo | |
+| B1 | **DONE** @3976b565 | scoped to float-family result tc {Half,Single,Double,Complex}. Surfaced L7 (decimal std last-digit → new tight excuse); Reduce/Params/Tail/NanReduce otherwise green — no integer-reduction bug existed |
+| B2 | **DONE** @3976b565 | blanket dismantled → per-op: add/sub ≤2 ULP; multiply ≤16 element-magnitude ULP (cancellation anchor); power ≤512 element-magnitude ULP or non-finite (L6, measured ~350); divide keeps its 2-ULP branch; ALL other complex-binary (matmul/dot/outer/copyto/extrema/concat…) hard-gated bit-exact. Surfaced L5 convolve(complex) imag-drop → FIXED @737c59d6 |
+| B3 | **DONE** @3976b565 | cumprod dtype excuse scoped to operand element-count ≤ 1; Scan green (no full-size widening miss existed) |
+| B4 | **DONE** @3976b565 | modf threw excuse scoped to dtype ∉ {float32,float64}; Modf green |
+| B5 | **DONE** @3976b565 | hyperbolic/inv-trig/angle threw excuse scoped to {bool,int8,uint8,float16} + (deg2rad\|rad2deg)×complex128 (both probed vs NumPy); UnaryExtra green |
+| B6 | **DONE** @3976b565 | isclose value excuse scoped to complex128-operand-present; Logic green |
+| B7 | **DONE** @3976b565 | complex reduce/scan excuse now additionally requires a NaN token in the diffs; Reduce/Scan green |
 | B8 | **DONE** | crash already fixed on branch (guard @ `Default.Invert.cs:27-39`); NumPy-verbatim TypeError verified vs 2.4.2 (f16/f32/f64/c128; +decimal/Half/`~` op probed clean); 5 regression tests pinned in `OpenBugs.FuzzGate.cs` (non-OpenBugs, green). **G13 UNBLOCKED** |
-| B9 | todo | |
-| B10 | todo | excuse-class handoff for DOCS goes here |
+| B9 | **DONE** @e91f7b5a | `MinCases` file→floor map in RunCorpus (~80 % of committed counts 2026-07-07, 39 files; unknown files → 1). DOCS re-checks floors at D8 after GAPS finishes expanding |
+| B10 | in progress | interim net10.0 sweep: my state green (38/40 FuzzCorpusTests; the 2 reds are GAPS G9 mid-flight char cells — theirs). Final both-framework sweep + the verbatim excuse-class list lands here once WS-GAPS non-stretch tasks are done |
 
 ### Status — WS-GAPS (owner: fuzz-gaps — edit ONLY this subsection)
 | Task | State | Result note |
 |------|-------|-------------|
-| G1 | todo | |
-| G2 | todo | |
-| G3 | todo | |
-| G4 | todo | |
-| G5 | todo | |
+| G1 | **DONE** @ff4b46b3 | clip complex128 in: false comment corrected, `stat.jsonl` 4258→4265 (+7). NumSharp bit-exact incl. NaN-poisoned cells — Stat gate green |
+| G2 | **DONE** @ff4b46b3 | `ROUND_DTYPES` 7→12 dtypes (+i8/u16/u32/u64 identity, +c128 @dec=0). `rounding.jsonl` 494→832 (+338), gate green. 2 REAL bugs carved+pinned (Ledger L2 bool-dtype, L3 complex-dec≠0-noop) in NEW `OpenBugs.FuzzGaps.cs` |
+| G3 | **DONE** @809b35d1 | `MATMUL_DTYPES` += bool (AND/OR semiring, dedicated `_mm_fill` bool branch). +68 cases, bit-exact, Matmul gate green |
+| G4 | **DONE** @5e1f0c8e | `gen_where_cond`: cond {i4,f8,u8,c128} × 3 xy pairs × {contig, strided} = +24 into `where.jsonl` (70→94). NumSharp truthiness matches bit-exact (NaN truthy, -0.0 falsy). Gate green |
+| G5 | **DONE** @5e1f0c8e | 12 real dtypes × 5 contiguous layouts × 2 ops = +120 into `logic.jsonl` (2099→2219), green. Carves point at existing pins `OpenBugs.DtypeCoverage.cs` (complex input + strided real) |
 | G6 | todo | |
 | G7 | todo | |
 | G8 | todo | |
 | G9 | todo | |
 | G10 | todo | |
-| G11 | todo | |
-| G12 | todo | |
-| G13 | todo | waits on B8 |
-| G14 | todo | |
-| G16 | todo | |
+| G11 | **DONE** @4d194cab | `gen_sort_special` +85 into `sort.jsonl` (417→502): float NaN 1-D/2-D/strided, complex full extended order incl. nan+nanj, strided+negstride × 13 dtypes (bool sort-only, tie guard). Zero carves — gate green |
+| G12 | **DONE** @7804b2ad | +4 layouts: `reduce.jsonl` 8708→11256, `nanreduce.jsonl` 6494→8366. Caught REAL bug L4 (all/any Half+Complex ignore shape.offset on the contiguous fast path) — FIXED in src (4 sites, Default.All/Any.cs; note to fuzz-bugs: crossed into src per policy 0.8(a), green cells are the regression proof). Gates green |
+| G13 | todo | B8 DONE → invert(f64) spec IN scope; probed: `less(complex)` does NOT raise in NumPy 2.4.2 (returns bool) → dropped from spec; min/max/argmax(empty), floor(complex), searchsorted(2-D) raise on BOTH sides |
+| G14 | **DONE** @809b35d1 | `gen_matmul_edges` (negstride B + k=0, 4 dtypes, +8) + `gen_trace_diag` strided/offset views (`a[1:5].T`, `a[:, ::2]`, +28). `matmul.jsonl` 858→962, gate green |
+| G16 | **DONE** @ff4b46b3 | usage string lists rounding + groupa |
 | G15 | stretch | |
 | G17 | stretch | |
 
