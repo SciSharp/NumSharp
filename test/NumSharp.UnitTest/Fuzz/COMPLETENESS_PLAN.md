@@ -398,17 +398,26 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 | G4 | **DONE** @5e1f0c8e | `gen_where_cond`: cond {i4,f8,u8,c128} × 3 xy pairs × {contig, strided} = +24 into `where.jsonl` (70→94). NumSharp truthiness matches bit-exact (NaN truthy, -0.0 falsy). Gate green |
 | G5 | **DONE** @5e1f0c8e | 12 real dtypes × 5 contiguous layouts × 2 ops = +120 into `logic.jsonl` (2099→2219), green. Carves point at existing pins `OpenBugs.DtypeCoverage.cs` (complex input + strided real) |
 | G6 | **DONE** @797ac671 | curated +8 E03 get/set (`index_curated.jsonl` 2265→2273), gpool += E03+V0, spool += E03, ND map fixed (V0/E03 were missing). Index_Curated + Index_Dtype gates GREEN. Index_Random host-crash verified PRE-EXISTING (old committed corpus crashes identically — R3), not from the regen |
-| G7 | todo | |
-| G8 | todo | |
+| G7 | **DONE** @e1e0a0e7 | exponents {-2,-1,0,1,2,3}; `decimal_power.jsonl` 20→30. DecimalMath.Pow matches the exact reciprocal-of-product oracle by VALUE — zero divergence, no carve |
+| G8 | **DONE** @e1e0a0e7 | full bounded list green first-run: axis walker (48), empty sum/prod (2), pp_contig_strided+pp_broadcast_col (+28 binary), astype ↔{bool,int16,uint64} (+8), flat argmax/argmin/count_nonzero/all/any (+20). `decimal_reduce` 60→130, `decimal_binary` 98→126, `decimal_astype` 22→30. All 12 Decimal* gates green |
 | G9 | **DONE** @1a9cfa9f | char woven into 5 more modes: where +15, logic +284, matmul +64, rounding +78, copyto +18 (=+459). FIX L5 round_(char)→identity (Default.Round.cs); CARVE+PIN L6 dot(char) 1-D (`Dot_Char_1D_Throws`). Gates green |
-| G10 | todo | |
+| G10 | **DONE** @a7be5098 | DTYPES 7→13 (+f16 & narrow ints); kinds += flat reduce (sum/prod/min/max/mean) + astype (src∈DTYPES→dst∈ALL). `random_smoke.jsonl` regenerated @seed 1234/2000. Soak workflow unchanged (calls this script). FuzzRandom gate green |
 | G11 | **DONE** @4d194cab | `gen_sort_special` +85 into `sort.jsonl` (417→502): float NaN 1-D/2-D/strided, complex full extended order incl. nan+nanj, strided+negstride × 13 dtypes (bool sort-only, tie guard). Zero carves — gate green |
 | G12 | **DONE** @7804b2ad | +4 layouts: `reduce.jsonl` 8708→11256, `nanreduce.jsonl` 6494→8366. Caught REAL bug L4 (all/any Half+Complex ignore shape.offset on the contiguous fast path) — FIXED in src (4 sites, Default.All/Any.cs; note to fuzz-bugs: crossed into src per policy 0.8(a), green cells are the regression proof). Gates green |
-| G13 | todo | B8 DONE → invert(f64) spec IN scope; probed: `less(complex)` does NOT raise in NumPy 2.4.2 (returns bool) → dropped from spec; min/max/argmax(empty), floor(complex), searchsorted(2-D) raise on BOTH sides |
+| G13 | **DONE** @96af067c | `errors.jsonl` 10→16: +min/max/argmax(empty), floor(complex), searchsorted(2-D), invert(f64) (B8 guard live; stale crash comment removed). less(complex) dropped — NumPy 2.4.2 doesn't raise. Errors gate green |
 | G14 | **DONE** @809b35d1 | `gen_matmul_edges` (negstride B + k=0, 4 dtypes, +8) + `gen_trace_diag` strided/offset views (`a[1:5].T`, `a[:, ::2]`, +28). `matmul.jsonl` 858→962, gate green |
 | G16 | **DONE** @ff4b46b3 | usage string lists rounding + groupa |
-| G15 | stretch | |
-| G17 | stretch | |
+| G15 | **DONE** | cross-dtype setters: 10-case `index_setter_dtype.jsonl` (float→int trunc-toward-zero, int→bool coercion, uint8 np-scalar modular wrap — all probed) + `Index_SetterDtype` gate. NumSharp matches NumPy 10/10 first-run, zero carves. (fuzz-gaps' in-flight work, completed by orchestrator after session-limit cutoff) |
+| G17 | **DONE** @99a6fab3 | metamorphic invariants widened to Half/Complex/Decimal/bool/char + strided views (status row reconciled post-cutoff; commit had landed) |
+
+#### WS-GAPS final handoff (for WS-DOCS D2/D3b) — counts measured post-G15 (orchestrator-updated)
+- **Full gate: 82/82 FuzzMatrix tests green on net10.0 AND net8.0** (`TestCategory=FuzzMatrix&TestCategory!=OpenBugs`) measured post-G13; +1 test (Index_SetterDtype) green post-G15 → 83 expected in B10's final sweep.
+- **Grand total (wc -l over Fuzz/corpus/*.jsonl): 76,139 cases / 43 files** (baseline 70,442 → +5,697).
+- Index: 12,387 (curated 2,273 + dtype 104 + setter_dtype 10 + random 10,000). Decimal: 695 across 12 tiers. Op corpus (non-index, non-decimal): 63,057.
+- Char woven (grep `"dtype":"char"`): **4,393 lines across 18 files** (was 3,752/13) — new: where 15, logic 284, matmul 64, rounding 78, copyto 18; reduce grew to 804 via the G12 layouts.
+- Per-tier deltas: stat 4258→4265 · rounding 494→910 · matmul 858→1026 · where 70→109 · logic 2099→2503 · reduce 8708→11256 · nanreduce 6494→8366 · sort 417→502 · copyto 114→132 · errors 10→16 · index_curated 2265→2273 · decimal_power 20→30 · decimal_reduce 60→130 · decimal_binary 98→126 · decimal_astype 22→30 · random_smoke 2000 (rewritten: 13 dtypes × 6 kinds) · index_random 10,000 (rewritten: E03/V0 pools).
+- New carves (for the D5/D6 ledger): round_ bool (L2) · round_ complex dec≠0 (L3) · dot char 1-D·1-D (L6) — all pinned in `OpenBugs.FuzzGaps.cs`; iscomplex/isreal complex+strided carve points at the pre-existing `OpenBugs.DtypeCoverage.cs` pins.
+- Product fixes landed by WS-GAPS (src crossover per §0.8(a), green cells as proof): L4 all/any Half+Complex offset (@7804b2ad) · L5 round_(char) identity (@1a9cfa9f).
 
 ### Status — WS-DOCS (owner: fuzz-docs — edit ONLY this subsection)
 | Task | State | Result note |

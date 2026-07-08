@@ -1,0 +1,10 @@
+{"op":"set","dtype":"int32","tokens":[["int",0]],"value":["fscalar",2.75],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[2,2,2,2,4,5,6,7,8,9,10,11]},"id":"set/int32/xdtype/0"}
+{"op":"set","dtype":"int32","tokens":[["int",1]],"value":["fscalar",-3.9],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[0,1,2,3,-3,-3,-3,-3,8,9,10,11]},"id":"set/int32/xdtype/1"}
+{"op":"set","dtype":"int32","tokens":[["int",0]],"value":["farr",[1.5,-2.5,3.9,-0.1],[4]],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[1,-2,3,0,4,5,6,7,8,9,10,11]},"id":"set/int32/xdtype/2"}
+{"op":"set","dtype":"int32","tokens":[["slice",null,null,null]],"value":["fscalar",7.5],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[7,7,7,7,7,7,7,7,7,7,7,7]},"id":"set/int32/xdtype/3"}
+{"op":"set","dtype":"bool","tokens":[["int",0]],"value":["scalar",5],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[1,1,1,1,0,1,0,1,0,1,0,1]},"id":"set/bool/xdtype/4"}
+{"op":"set","dtype":"bool","tokens":[["int",1]],"value":["scalar",0],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[0,1,0,1,0,0,0,0,0,1,0,1]},"id":"set/bool/xdtype/5"}
+{"op":"set","dtype":"bool","tokens":[["slice",null,null,null]],"value":["scalar",3],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[1,1,1,1,1,1,1,1,1,1,1,1]},"id":"set/bool/xdtype/6"}
+{"op":"set","dtype":"uint8","tokens":[["int",0]],"value":["scalar",-1],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[255,255,255,255,4,5,6,7,8,9,10,11]},"id":"set/uint8/xdtype/7"}
+{"op":"set","dtype":"uint8","tokens":[["slice",null,null,null]],"value":["scalar",-2],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[254,254,254,254,254,254,254,254,254,254,254,254]},"id":"set/uint8/xdtype/8"}
+{"op":"set","dtype":"uint8","tokens":[["int",2]],"value":["scalar",300],"tag":"xdtype","np":{"ok":true,"shape":[3,4],"vals":[0,1,2,3,4,5,6,7,44,44,44,44]},"id":"set/uint8/xdtype/9"}

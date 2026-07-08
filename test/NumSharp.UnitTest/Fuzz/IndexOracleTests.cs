@@ -36,6 +36,12 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Index_Dtype() => RunDtypeCorpus("index_dtype.jsonl");
 
+        // G15: CROSS-DTYPE setters — the assigned value's dtype differs from the base's
+        // (float->int truncation, int->bool coercion, unsigned modular wrap of np-scalar values).
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Index_SetterDtype() => RunSetterDtypeCorpus("index_setter_dtype.jsonl");
+
         // Seeded random fuzz over the whole index space. As of commit 7e968f5e it is **0 divergences**
         // across every measurable window (all five mapping.c-parity buckets fixed; the now-passing
         // forms are pinned independently by Indexing.CombinatorialParity, a CI [FuzzMatrix] gate).
@@ -116,6 +122,21 @@ namespace NumSharp.UnitTest.Fuzz
             if (v[0].GetString() == "scalar") return (NDArray)v[1].GetInt64();
             return np.array(v[1].EnumerateArray().Select(x => x.GetInt64()).ToArray())
                      .reshape(v[2].EnumerateArray().Select(x => (int)x.GetInt64()).ToArray());
+        }
+
+        // G15 value forms: ["scalar",n] int64 | ["fscalar",x] float64 | ["farr",flat,shape] float64
+        // (mirrors gen_index_oracle.setter_val_to_np — np-typed scalars, so uint8 = -1 WRAPS).
+        private static NDArray BuildTypedValue(JsonElement v)
+        {
+            switch (v[0].GetString())
+            {
+                case "scalar":  return (NDArray)v[1].GetInt64();
+                case "fscalar": return (NDArray)v[1].GetDouble();
+                case "farr":
+                    return np.array(v[1].EnumerateArray().Select(x => x.GetDouble()).ToArray())
+                             .reshape(v[2].EnumerateArray().Select(x => (int)x.GetInt64()).ToArray());
+                default: throw new ArgumentException("val? " + v[0].GetString());
+            }
         }
 
         private static long[] Ravel(NDArray a) => a.size == 0 ? Array.Empty<long>() : a.ravel().ToArray<long>();
@@ -247,6 +268,61 @@ namespace NumSharp.UnitTest.Fuzz
 
             if (failures.Count > 0)
                 Assert.Fail($"{failures.Count}/{cases.Count} dtype-index cases diverged (pass={pass}):\n  " +
+                            string.Join("\n  ", failures.Take(60)));
+        }
+
+        // G15: replay a cross-dtype SET on the dtype base and compare the mutated array
+        // (shape + values re-encoded per the base dtype) against NumPy's record.
+        private static void RunSetterDtypeCorpus(string file)
+        {
+            var cases = LoadLines(file).ToList();
+            Assert.IsTrue(cases.Count > 0, $"setter-dtype corpus '{file}' has no cases");
+
+            var failures = new List<string>();
+            int pass = 0;
+
+            foreach (var c in cases)
+            {
+                string dt = c.GetProperty("dtype").GetString();
+                var npEl = c.GetProperty("np");
+                bool npOk = npEl.GetProperty("ok").GetBoolean();
+                string id = c.GetProperty("id").GetString();
+
+                bool nsOk;
+                long[] nsShape = null;
+                List<long> nsVals = null;
+                string nsErr = null;
+                try
+                {
+                    var b = DtypeBase(dt).copy();
+                    b[BuildIndex(c.GetProperty("tokens"))] = BuildTypedValue(c.GetProperty("value"));
+                    nsShape = b.shape.Select(x => (long)x).ToArray();
+                    nsVals = new List<long>();
+                    var f = b.ravel();
+                    for (long i = 0; i < b.size; i++)
+                    {
+                        object v = f.GetValue(i);
+                        if (dt == "bool") nsVals.Add(((bool)v) ? 1 : 0);
+                        else nsVals.Add((long)Convert.ToDouble(v));
+                    }
+                    nsOk = true;
+                }
+                catch (Exception e) { nsOk = false; nsErr = e.GetType().Name; }
+
+                if (npOk && nsOk)
+                {
+                    var es = NpShape(npEl);
+                    var ev = NpVals(npEl);
+                    if (es.SequenceEqual(nsShape) && ev.SequenceEqual(nsVals.ToArray())) pass++;
+                    else failures.Add($"{id}: np shape=[{string.Join(",", es)}] vals=[{Trunc(ev)}] | " +
+                                      $"ns shape=[{string.Join(",", nsShape)}] vals=[{Trunc(nsVals.ToArray())}]");
+                }
+                else if (!npOk && !nsOk) pass++;
+                else failures.Add($"{id}: npOk={npOk} nsOk={nsOk} {nsErr}");
+            }
+
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count}/{cases.Count} setter-dtype cases diverged (pass={pass}):\n  " +
                             string.Join("\n  ", failures.Take(60)));
         }
 

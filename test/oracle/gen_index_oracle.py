@@ -273,6 +273,45 @@ for dt in DT:
     for fnm,toks in dtype_forms.items():
         dtype_cases.append({"dtype":dt,"tokens":toks,"tag":fnm,"np":eval_get_dtype(dt,toks)})
 
+# 5b) G15 — CROSS-DTYPE setters: the assigned value's dtype differs from the base's, exercising
+# cast-on-set (float->int truncation toward zero, int->bool coercion, unsigned modular wrap for
+# np-SCALAR values — all probed NumPy 2.4.2; python-int scalars would range-check instead, so the
+# oracle assigns np.int64/np.float64). value spec: ["scalar",n] int64 | ["fscalar",x] float64 |
+# ["farr",flat,shape] float64. Replayed by IndexOracleTests.Index_SetterDtype.
+def setter_val_to_np(v):
+    if v[0] == "scalar":  return np.int64(v[1])
+    if v[0] == "fscalar": return np.float64(v[1])
+    return np.array(v[1], dtype=np.float64).reshape(v[2])
+
+def eval_set_dtype(dt, tokens, value):
+    try:
+        b = make_dtype_base(dt).copy()
+        b[np_index(tokens)] = setter_val_to_np(value)
+        if dt == "bool":
+            vals = [1 if x else 0 for x in b.ravel(order="C").tolist()]
+        else:
+            vals = [int(x) for x in np.real(b).ravel(order="C").tolist()]
+        return {"ok": True, "shape": list(b.shape), "vals": vals}
+    except Exception as e:
+        return {"ok": False, "err": type(e).__name__}
+
+SETTER_DTYPE_CASES = [
+    ("int32", [["int",0]], ["fscalar", 2.75]),                    # trunc -> 2
+    ("int32", [["int",1]], ["fscalar", -3.9]),                    # trunc toward zero -> -3
+    ("int32", [["int",0]], ["farr", [1.5, -2.5, 3.9, -0.1], [4]]),
+    ("int32", [S([None,None,None])], ["fscalar", 7.5]),
+    ("bool",  [["int",0]], ["scalar", 5]),                        # nonzero -> True
+    ("bool",  [["int",1]], ["scalar", 0]),                        # zero -> False
+    ("bool",  [S([None,None,None])], ["scalar", 3]),
+    ("uint8", [["int",0]], ["scalar", -1]),                       # np.int64 wrap -> 255
+    ("uint8", [S([None,None,None])], ["scalar", -2]),             # wrap -> 254
+    ("uint8", [["int",2]], ["scalar", 300]),                      # wrap -> 44
+]
+setter_dtype_cases = []
+for (dt, toks, val) in SETTER_DTYPE_CASES:
+    setter_dtype_cases.append({"op": "set", "dtype": dt, "tokens": toks, "value": val,
+                               "tag": "xdtype", "np": eval_set_dtype(dt, toks, val)})
+
 # 6) RANDOM FUZZ — seeded, explores the space far beyond the curated forms
 ND = {"V6":1,"V1":1,"V0":1,"S":0,"A":2,"AT":2,"ARS":2,"ACS":2,"ANR":2,"ANC":2,"ASO":2,"ABC":2,
       "B":3,"BT":3,"E03":2}
@@ -338,11 +377,13 @@ here = os.path.dirname(os.path.abspath(__file__))
 corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
 write_jsonl(os.path.join(corpus_dir, "index_curated.jsonl"), curated)
 write_jsonl(os.path.join(corpus_dir, "index_dtype.jsonl"),   dtype_cases)
+write_jsonl(os.path.join(corpus_dir, "index_setter_dtype.jsonl"), setter_dtype_cases)
 write_jsonl(os.path.join(corpus_dir, f"index_random_{RANDOM_SEED}.jsonl"), random_get + random_set)
 
 def nok(cs): return sum(1 for c in cs if c["np"]["ok"])
 print(f"curated={len(curated)} (np_ok={nok(curated)} np_err={len(curated)-nok(curated)})")
 print(f"dtype={len(dtype_cases)} (np_ok={nok(dtype_cases)})")
+print(f"setter_dtype={len(setter_dtype_cases)} (np_ok={nok(setter_dtype_cases)})")
 rnd = random_get + random_set
 print(f"random[seed={RANDOM_SEED}]={len(rnd)} (get={len(random_get)} set={len(random_set)} np_ok={nok(rnd)} np_err={len(rnd)-nok(rnd)})")
 print(f"-> {corpus_dir}")
