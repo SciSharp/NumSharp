@@ -58,16 +58,17 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Bitwise() => RunCorpus("bitwise.jsonl");
 
-        // Char dtype (NumSharp-only, bit-identical to uint16) is WOVEN into every tier above:
+        // Char dtype (NumSharp-only, bit-identical to uint16) is WOVEN into the applicable tiers:
         // each Char op is generated through the uint16 NumPy proxy and relabelled uint16->char
-        // (gen_oracle.char_tier), appended into its native tier file (binary_arith/unary/bitwise/
-        // comparison/reduce/scan/stat/manip/sort/tail/astype_full). So the existing per-tier gates
+        // (gen_oracle.char_tier), appended into its native tier file (binary_arith/divmod_power/
+        // comparison/unary/unary_extra/bitwise/reduce/scan/stat/manip/sort/tail/astype_full/
+        // where/logic/matmul/rounding/copyto — 18 tier files). So the existing per-tier gates
         // assert NumSharp's Char ≡ uint16. The verified Char bugs (promote(Char,Byte)->Byte,
-        // reciprocal/power/invert) are carved out of the green corpus and reproduced in
-        // OpenBugs.Char.cs (class OpenBugsCharTests) under [OpenBugs].
+        // reciprocal/power/invert, dot 1-D) are carved out of the green corpus and reproduced in
+        // OpenBugs.Char.cs (OpenBugsCharTests) / OpenBugs.FuzzGaps.cs under [OpenBugs].
 
         // W3 unary stragglers: exp2/expm1/log2/log10/log1p/sinh/cosh/tanh/arcsin/arccos/arctan/
-        // deg2rad/rad2deg/positive across all 13 dtypes and all 25 single-array layouts.
+        // deg2rad/rad2deg/positive across all 13 dtypes and all 26 single-array layouts.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void UnaryExtra() => RunCorpus("unary_extra.jsonl");
