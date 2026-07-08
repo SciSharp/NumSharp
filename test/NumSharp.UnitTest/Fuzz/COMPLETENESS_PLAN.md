@@ -145,6 +145,41 @@ neighbouring cell still fails". These branches break that promise (all in
 | F29 🔵 | CLAUDE.md corpus counts stale: "~68K cases / 40 tiers … op corpus ~53K" — actual at branch point: 70,442 / 41 files / ~57.5K op. Also its regenerate-mode list omits `rounding` + `groupa` | worktree `.claude/CLAUDE.md` |
 | F30 🔵 | Comment says "all 25 single-array layouts" — there are 26 | `FuzzCorpusTests.cs:70` |
 
+### Resolution map (D8 — every finding's final disposition)
+
+| Finding | Disposition |
+|---|---|
+| F1 clip-complex false premise | ✅ G1 @ff4b46b3 — complex clip green (+7 cells incl. NaN-poisoned) |
+| F2 round_ dtype holes | ✅ G2 @ff4b46b3 — 12 dtypes; 2 REAL bugs carved+pinned (L2 bool→Double, L3 complex dec≠0 no-op) |
+| F3 matmul bool | ✅ G3 @809b35d1 — AND/OR semiring green (+68) |
+| F4 where non-bool cond | ✅ G4 @5e1f0c8e — i4/f8/u8/c128 truthiness conds green (NaN truthy, −0.0 falsy) |
+| F5 iscomplex/isreal zero cases | ✅ G5 @5e1f0c8e — 120 green cells; complex+strided carved to the pre-existing pins |
+| F6 E03/V0 dead index recipes | ✅ G6 @797ac671 — +8 curated E03, pools fixed; Index gates green |
+| F7 decimal negative power dead | ✅ G7 @e1e0a0e7 — exponents −2…3; zero divergence |
+| F8 char weave overstated | ✅ G9 @1a9cfa9f — +5 modes/+459 cells (18 tier files); round_(char) FIXED (L8), dot(char) 1-D pinned (L9). Residual by design: place/nanreduce/modf/params/aliasing/errors/groupa (inapplicable or curated-dtype tiers) — docs now say "18 tier files", not "every" |
+| F9 int reductions excused as precision | ✅ B1 @3976b565 — float-family scope; no int bug existed; surfaced L7 |
+| F10 complex-binary blanket | ✅ B2 @3976b565 — per-op ULP/cancellation scopes; surfaced+FIXED L5 convolve; tightness self-tests @39f07a3e |
+| F11 cumprod dtype unscoped | ✅ B3 @3976b565 — size≤1 scope; no full-size bug existed |
+| F12 modf threw unscoped | ✅ B4 @3976b565 |
+| F13 hyperbolic threw unscoped | ✅ B5 @3976b565 — Half-tier + deg2rad/rad2deg×c128 scope |
+| F14 isclose unscoped | ✅ B6 @3976b565 — complex-operand scope |
+| F15 complex reduce/scan no NaN check | ✅ B7 @3976b565 — NaN-token required |
+| F16 invert(float) crash untracked | ✅ B8 @058ca3d0 — guard verified pre-existing on branch (`Default.Invert.cs`), NumPy-verbatim TypeError probed, 5 always-run pins; errors-tier spec added in G13 |
+| F17 errors tier thin | ✅ G13 @96af067c — 10→16 specs; exception-TYPE parity remains out of scope BY DESIGN (documented, D7) |
+| F18 soak envelope narrow | ✅ G10 @a7be5098 — 13 dtypes × 6 kinds; workflow unchanged |
+| F19 reduce offset layouts | ✅ G12 @7804b2ad — +4 layouts; caught+FIXED L4 (all/any Half/Complex offset) |
+| F20 sort NaN/strided | ✅ G11 @4d194cab — +85 cells, zero carves |
+| F21/F22 trace-diag/matmul layouts | ✅ G14 @809b35d1 — strided/offset views, negstride B, k=0 |
+| F23 decimal tiers narrow | ✅ G8 @e1e0a0e7 — bounded list all green first-run |
+| F24 index setters int64-only | ✅ G15 @ae4d9c0d — 10 cross-dtype setter cases green. Residual by design: dtype GET sweep stays getter-only beyond these; err-type parity documented |
+| F25 metamorphic narrow | ✅ G17 @99a6fab3 — Half/Complex/Decimal/bool/char + strided views |
+| F26 no count floors | ✅ B9 @e91f7b5a — MinCases map (floors are minima; all post-G counts grew, verified at D8) |
+| F27 "44 variations" | ✅ D1 @9f690e80 — 40 everywhere |
+| F28 README 579-vs-302 | ✅ D2 @9f690e80 — 695 both mentions |
+| F29 CLAUDE.md count drift + modes | ✅ D3a @fe3081db + D3b @9f690e80 — 76,139/43; modes list complete |
+| F30 "25 layouts" comment | ✅ D4 @9f690e80 — 26 |
+| F31 usage string modes | ✅ G16 @ff4b46b3 |
+
 ---
 
 ## 2. WS-BUGS — gate tightening, crash fix, harness robustness (agent: `fuzz-bugs`)
@@ -387,7 +422,35 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 | B7 | **DONE** @3976b565 | complex reduce/scan excuse now additionally requires a NaN token in the diffs; Reduce/Scan green |
 | B8 | **DONE** | crash already fixed on branch (guard @ `Default.Invert.cs:27-39`); NumPy-verbatim TypeError verified vs 2.4.2 (f16/f32/f64/c128; +decimal/Half/`~` op probed clean); 5 regression tests pinned in `OpenBugs.FuzzGate.cs` (non-OpenBugs, green). **G13 UNBLOCKED** |
 | B9 | **DONE** @e91f7b5a | `MinCases` file→floor map in RunCorpus (~80 % of committed counts 2026-07-07, 39 files; unknown files → 1). DOCS re-checks floors at D8 after GAPS finishes expanding |
-| B10 | in progress | interim net10.0 sweep: my state green (38/40 FuzzCorpusTests; the 2 reds are GAPS G9 mid-flight char cells — theirs). Final both-framework sweep + the verbatim excuse-class list lands here once WS-GAPS non-stretch tasks are done |
+| B10 | **DONE** | Final sweep post-G15 (orchestrator-run after session-limit cutoff): **83/83 FuzzMatrix green on net10.0 AND net8.0** (`TestCategory=FuzzMatrix&TestCategory!=OpenBugs`). Verbatim excuse-class handoff below |
+
+#### WS-BUGS B10 handoff — excuse classes that actually FIRED in the final sweep (net10.0, detailed logger)
+Deduped across the 20 tier lines that printed `documented Misaligned divergences excused:`; counts summed per class.
+1. `NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)` — 261x (binary_arith 92, divmod_power 79, random 35, bitwise 27, logic 20, where 8) — **intended**
+2. `unary ~ULP (transcendental/magnitude algorithm difference)` — 563x (unary 258, unary_extra 249, tail 24, random 15, rounding 12, params 5) — intended (≤2 ULP gate)
+3. `complex unary within 3 ULP (full NumPy-algorithm port)` — 11x (unary_extra) — intended
+4. `complex division ~1 ULP (npy_cdivide vs System.Numerics.Complex)` — 17x — intended (#12)
+5. `complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]` — 16x (binary_arith 4, tail 12) — post-B2 scope
+6. `complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]` — 30x — L6, ≤512 elem-mag ULP or non-finite
+7. `reduction summation/two-pass precision (algorithm order)` — 401x (reduce 320, params 74, random 6, tail 1) — post-B1 float-family scope
+8. `reduction result dtype differs (NEP50 accumulator / complex->real) [known bug]` — 239x (reduce 202, tail 14, random 12, decimal_reduce 11)
+9. `axis-reduction NaN propagation: axis SIMD min/max skips NaN [known bug; flat fixed]` — 8x
+10. `complex reduction/scan NaN ordering/propagation differs [documented]` — 35x (scan 17, reduce 16, random 2) — post-B7 NaN-token-gated
+11. `cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]` — 14x — post-B3 size≤1 scope
+12. nan-reduction family [known bugs]: shape 885x · value 526x · nanmedian-propagates-NaN 176x · dtype 184x · complex-1D-axis-throws 8x · empty-throws 4x (all nanreduce)
+13. `average: summation-order precision divergence (pairwise vs naive) [known bug]` — 30x
+14. `median/percentile/quantile: ±inf/NaN slice partition+interpolation NaN mismatch [known bug]` — 72x
+15. `median/percentile/quantile: float interpolation order/precision divergence [known bug]` — 40x (stat 36, decimal_stat 4)
+16. `percentile/quantile(int): gross interpolation value error on the axis path [known bug]` — 28x
+17. `isclose: F-contiguous/complex strided pairing divergence [known bug]` — 1x — post-B6 complex scope
+18. `modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]` — 32x — post-B4 scope
+19. `unary preserve-dtype pending: square/floor/ceil/trunc widen int->float64 [F3b]` — 78x
+20. `repeat: ignores Shape.offset (reads base start) on offset / 0-D views [known bug]` — 28x
+21. `expand_dims/atleast_3d(empty): inserted/appended axis dropped on a zero-size array [known bug]` — 56x
+22. `floor_divide/mod(float16): NDDivision has no Half path (wrong value/NaN) [known bug]` — 38x
+23. `power(uint64,int64): NEP50 uint64+int64->float64 not applied; integer-power path throws/corrupts [known bug]` — 8x
+24. `decimal std: independent 28-digit sqrt implementations differ in the last digit [documented]` — 4x — L7
+Registry branches that did NOT fire in the sweep (live code, zero hits — candidates for future removal once confirmed dead): hyperbolic/inv-trig/angle no-Half-kernel throw (B5-scoped), where(narrow-int) zero-push, dot(int8) Sum-kernel-missing, nan-reduction axis-NaN branches subsumed above. A non-firing branch is harmless (excuses nothing) but D5 marks them distinctly.
 
 ### Status — WS-GAPS (owner: fuzz-gaps — edit ONLY this subsection)
 | Task | State | Result note |
@@ -424,16 +487,40 @@ Format per row: `| L<n> | <op/dtype/layout> | <symptom> | <root cause if known, 
 |------|-------|-------------|
 | D7 | done | README "Gate semantics" section added (error-parity = throw-anything, grounded in FuzzCorpusTests.cs:274-287; index oracle = which-side-raised only, IndexOracleTests.cs:175-191; excused-and-logged contract restated). Bonus same-class doc-rot fix: README regenerate block gained `gen_index_oracle.py` + the FULL gen_oracle mode list incl. `rounding`/`groupa` |
 | D3a | done | worktree `.claude/CLAUDE.md:579` mode list += `rounding` (after matmul) + `groupa` (after errors) — now matches §0.5 |
-| D1 | todo | Phase 2 |
-| D2 | todo | Phase 2 |
-| D3b | todo | Phase 2 |
-| D4 | todo | Phase 2 |
-| D5 | todo | Phase 2 — needs B10 handoff |
-| D6 | todo | Phase 2 |
-| D8 | todo | Phase 2 — last |
+| D1 | **done** @9f690e80 | 40 variations in layout_catalog docstring + CLAUDE.md (Phase 2 executed by orchestrator post-cutoff) |
+| D2 | **done** @9f690e80 | decimal 695 at both README mentions; section rewritten w/ G7/G8 scope |
+| D3b | **done** @9f690e80 | 76,139/43 files, op ~63K (~159 ops), char 4,393/18 files, index 12,387 (+setter tier) — all counts refreshed in CLAUDE.md + README |
+| D4 | **done** @9f690e80 | "26 single-array layouts"; char-weave comment lists the real 18 tier files |
+| D5 | **done** @9f690e80 | ledger rewritten: Table 1 = 30 live registry branches w/ post-tightening scope + B10 hit counts (0-hit branches marked removal candidates); Table 2 = 14 carve rows w/ pins; FIXED list consolidated |
+| D6 | **done** @9f690e80 | covered-set rebuilt (+iscomplex/isreal/rint/ediff1d/nan-quantiles/sort/trace/round_/convolve/groupa batch); Group D split open vs closed-by-remediation |
+| D8 | **done** | resolution map added to §1 (31/31 findings dispositioned); B9 floors verified against post-G counts (all grew; new index_setter tier is IndexOracleTests-gated, floors N/A); scratch §9 deleted; Final Summary below |
 
 ### Final Summary (WS-DOCS writes at D8)
-_(pending)_
+
+**Shipped on `worktree-fuzz-completeness` (base `nditer` @68298eaf), 22 commits.**
+
+- **Gate**: 83/83 FuzzMatrix tests green on net10.0 AND net8.0
+  (`TestCategory=FuzzMatrix&TestCategory!=OpenBugs`); broad sanity
+  (`TestCategory!=OpenBugs&TestCategory!=HighMemory`) green — see below.
+- **Corpus**: 70,442 → **76,139 cases** (+5,697), 41 → 43 files (new: `index_setter_dtype.jsonl`,
+  regenerated: 17 tiers). Char 3,752/13 → **4,393 cells / 18 tier files**. Decimal 579 → **695**.
+- **Gate integrity (WS-BUGS)**: all 7 over-broad registry excuses scoped to their documented
+  (op × dtype × kind) cell, each with paired not-excused/still-excused tightness self-tests;
+  per-file minimum-count floors; invert(non-integer) crash guard verified + pinned with 5
+  always-run tests.
+- **Product bugs — 4 FIXED in src** (each with green corpus cells as regression proof):
+  L4 all/any Half+Complex ignored `Shape.offset` (@7804b2ad) · L5 convolve dropped the complex
+  imaginary dimension + int64/decimal/bool accumulator defects (@737c59d6) · L8 round_(char)
+  → Double instead of identity (@1a9cfa9f) · L1 invert crash (pre-fixed on branch, now guarded by
+  tests). **3 carved+pinned**: L2 round_(bool) dtype, L3 round_(complex, dec≠0) no-op,
+  L9 dot(char) 1-D. **2 tightly excused**: L6 complex power ≤512 elem-ULP, L7 decimal std
+  last-digit (both self-retiring).
+- **Docs**: README ledger now mirrors the registry 1:1 (30 branches + hit counts + 14 carves);
+  COVERAGE_GAPS records what closed; every count in README/CLAUDE.md re-measured.
+- **Deferred (by design, documented)**: exception-TYPE parity (throw-anything contract);
+  char in place/nanreduce/modf/params/aliasing/errors/groupa (inapplicable or curated tiers);
+  index dtype GET sweep beyond the 10 setter cases; Group D still-open list (ufunc where=/dtype=
+  matrix, tuple-axis reductions, clip array bounds, searchsorted sorter=, pad modes).
 
 ---
 
@@ -447,37 +534,3 @@ _(pending)_
 5. Every Bug Ledger row has a disposition (fixed@sha / pinned@test / excused@branch / drafted-issue).
 6. All corpus regenerations committed together with their generator changes; counts documented.
 7. No commit touches files outside the committer's ownership row; no pushes; no footers.
-
----
-
-## 9. SCRATCH — WS-DOCS: README divergence-ledger rewrite skeleton (D5 working draft)
-
-> Owner: fuzz-docs. Filled from B10's verbatim excuse-class handoff (WS-BUGS Status) + WS-GAPS'
-> carve/pin list. This section is DELETED when D5/D8 land the final README.
-
-Target structure replacing README § "Documented divergence ledger (Misaligned / known bugs)":
-
-**Table 1 — live `MisalignedRegistry` excuse branches** (one row per branch, post-B1–B7 scope):
-
-| Excuse class (registry reason string) | Scope (op set × dtype/kind, as tightened) | Why excused (intended / known bug) | Task/issue |
-|---|---|---|---|
-| _(from B10 handoff: every `documented Misaligned divergences excused:` class actually hit, verbatim)_ | | | |
-
-**Table 2 — corpus carves** (cells deliberately absent from the green corpus, each pinned):
-
-| Carve site (generator + comment) | Cell (op × dtype × layout) | Pin (`[OpenBugs]` test) |
-|---|---|---|
-| _(existing: char power/reciprocal/invert/bool-partner carves, clip-bool noncontig, round dec=-1 + f16-fractional, trace-unsigned, iscomplex/isreal complex+strided, unique raw-offset)_ | | |
-| _(new from G1-G14: fill from WS-GAPS Status/commits)_ | | |
-
-**Rules the rewrite must satisfy:**
-- every LIVE MisalignedRegistry branch appears exactly once, wording matched to the registry
-  comment text (no drift); scope column shows the post-tightening (op, dtype, kind) bounds;
-- rows whose branch was DELETED (bug fixed) are removed, or kept once as **FIXED** with the
-  fixing commit sha;
-- every carve in gen_oracle.py / gen_decimal_oracle.cs / char_tier / layout exclusions appears
-  in Table 2 with its `[OpenBugs]` pin name;
-- the existing "Char & Decimal dtype coverage" README subsection merges into Table 2 (single
-  source for carves) — decimal count fixed by D2 at the same time;
-- cross-check: no excuse class printed by the final full-gate run (B10) is missing from Table 1,
-  and no Table 1 row corresponds to a class that can no longer fire.
