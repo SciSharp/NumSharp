@@ -1066,8 +1066,16 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, true));
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype ?? DType, shape.size, true));
         }
+
+        // This overload allocates BRAND-NEW owned memory, so its result is always writeable — even when
+        // the shape was borrowed from a read-only source (e.g. an elementwise result whose shape is the
+        // read-only operand's shape, `mmap_r + 1`). Without this the fresh array would inherit the stale
+        // read-only flag and diverge from NumPy. (Views never allocate — they Alias, which correctly
+        // inherits read-only.)
+        private static Shape FreshWriteable(Shape shape)
+            => shape.IsWriteable ? shape : shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
 
         /// <summary>
         ///     Allocates a new <see cref="Array"/> into memory.
@@ -1079,7 +1087,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
         }
 
         /// <summary>
@@ -1095,7 +1103,7 @@ namespace NumSharp.Backends
             if (dtype == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(dtype));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype, shape.size, fillZeros));
+            _Allocate(FreshWriteable(shape), ArraySlice.Allocate(dtype, shape.size, fillZeros));
         }
 
         /// <summary>

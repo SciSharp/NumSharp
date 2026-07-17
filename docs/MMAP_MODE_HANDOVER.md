@@ -8,6 +8,18 @@
 > existing `UnmanagedStorage.SetShapeUnsafe` (no new infra was needed — §5's "one infra gap" was
 > already covered), and `w+` raises the same `TypeError` **without** reproducing NumPy's file
 > truncation (a destructive bug we decline to copy).
+>
+> **Follow-up fix (view writeability — memory safety).** A read-only 'r' memmap surfaced a
+> pre-existing gap: NumSharp did not propagate `WRITEABLE=false` to **views** (slice/reshape/
+> ravel/transpose/swapaxes/expand_dims/squeeze), so writing through such a view hit the read-only
+> mapped pages and **segfaulted** (`AccessViolationException`). NumPy keeps every view of a
+> read-only array read-only (only `.copy()` and computed results are writeable). Aligned by
+> carrying the flag through the view builders (`Shape.Slice` already did; added `Shape.Reshape`,
+> `UnmanagedStorage.Alias(Shape)`, and the contiguous-slice fast path) while fresh allocations
+> (`UnmanagedStorage.Allocate(Shape,…)`) reset it to writeable so op results (`m+1`, `sqrt(m)`, …)
+> stay writeable. This also fixed the same latent divergence for **broadcast** views. Tests:
+> `NpyMemmapTests.Mmap_ReadOnly_Views_StayReadOnly` / `_WriteThroughView_ThrowsNotSegfaults` /
+> `_OperationResults_AreWriteable`.
 
 Status date: 2026-07-17 · Branch: `worktree-npsave` · Scope: `np.load` / `NpyFormat`
 (`APIs/np.load.cs`, `IO/NpyFormat.cs`).

@@ -59,12 +59,20 @@ namespace NumSharp
             var newDims = newShape.dimensions ?? Array.Empty<long>();
             var newStrides = newShape.strides ?? Array.Empty<long>();
 
-            return new Shape(
+            var result = new Shape(
                 newDims.Length > 0 ? (long[])newDims.Clone() : newDims,
                 newStrides.Length > 0 ? (long[])newStrides.Clone() : newStrides,
                 offset,
                 bufSize
             );
+
+            // A contiguous reshape is a VIEW over the same memory, so it inherits writeability:
+            // reshaping a read-only array (a broadcast, or an 'r' memmap) must stay read-only. The
+            // fresh Shape above defaults WRITEABLE back to true. (The copy-forcing non-contiguous
+            // path clones to fresh owned memory via Shape.Clean(), which correctly resets it.)
+            if (!IsWriteable)
+                result = result.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+            return result;
         }
 
         /// <summary>

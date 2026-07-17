@@ -413,19 +413,20 @@ namespace NumSharp.UnitTest
         }
 
         [TestMethod]
-        public void Load_MmapMode_ValidatesThenReportsNotImplemented()
+        public void Load_MmapMode_OnInMemoryImage_RejectedNoPath()
         {
+            // mmap needs a real file to map. An in-memory image (byte[] / stream) has none, so NumSharp
+            // raises the same error NumPy raises for a file object — validated on the .npy branch, so an
+            // .npz still ignores mmap_mode (covered by NpyMemmapTests). Full mode/behaviour parity lives
+            // in NpyMemmapTests; here we only pin the byte[] overload.
             byte[] data = np.save(np.arange(3));
 
-            foreach (string mode in new[] { "r", "r+", "w+", "c" })
+            foreach (string mode in new[] { "r", "r+", "c", "readonly" })
             {
-                Action valid = () => np.load(data, mmap_mode: mode);
-                valid.Should().Throw<NotImplementedException>()
-                     .WithMessage("*not implemented yet*", $"'{mode}' is a real NumPy mode, just unsupported here");
+                Action act = () => np.load(data, mmap_mode: mode);
+                act.Should().Throw<ValueError>()
+                   .WithMessage("*Memmap cannot use existing file handles*", $"'{mode}' needs a path to map");
             }
-
-            Action bad = () => np.load(data, mmap_mode: "z");
-            bad.Should().Throw<ArgumentException>().WithMessage("*mode must be one of*");
         }
 
         [TestMethod]

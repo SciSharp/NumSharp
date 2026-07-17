@@ -147,6 +147,90 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(ex.CanWrite);
         }
 
+        // ---- view writeability propagation (memory safety) --------------------------
+
+        [TestMethod]
+        public void Mmap_ReadOnly_Views_StayReadOnly()
+        {
+            // Every VIEW of a read-only memmap is read-only in NumPy. If a view leaked WRITEABLE, a write
+            // through it would hit read-only mapped pages — a hard AccessViolation, not a catchable error.
+            string p = Write("a.npy", Arange(12).reshape(3, 4));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+
+            Assert.IsFalse(m["1:3"].Shape.IsWriteable, "slice");
+            Assert.IsFalse(m[":, 1"].Shape.IsWriteable, "column");
+            Assert.IsFalse(m["::-1"].Shape.IsWriteable, "reversed");
+            Assert.IsFalse(m.reshape(4, 3).Shape.IsWriteable, "reshape");
+            Assert.IsFalse(m.ravel().Shape.IsWriteable, "ravel");
+            Assert.IsFalse(m.T.Shape.IsWriteable, "transpose");
+            Assert.IsFalse(np.swapaxes(m, 0, 1).Shape.IsWriteable, "swapaxes");
+            Assert.IsFalse(np.expand_dims(m, 0).Shape.IsWriteable, "expand_dims");
+            Assert.IsFalse(np.squeeze(np.expand_dims(m, 0)).Shape.IsWriteable, "squeeze");
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_ReadOnly_WriteThroughView_ThrowsNotSegfaults()
+        {
+            string p = Write("a.npy", Arange(6));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            var view = m["1:4"];
+            // Guard: assert read-only FIRST so the write below can't reach the read-only pages.
+            Assert.IsFalse(view.Shape.IsWriteable, "a slice of an 'r' memmap must be read-only");
+            Assert.ThrowsException<NumSharpException>(() => view[0] = 99);
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_ReadOnly_OperationResults_AreWriteable()
+        {
+            // A computed result owns fresh memory, so it is writeable even though the operand is read-only
+            // (NumPy: only .copy()/views inherit; arithmetic makes a new writeable array).
+            string p = Write("a.npy", Arange(6));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+
+            Assert.IsTrue((m + 1).Shape.IsWriteable, "m + 1");
+            Assert.IsTrue((-m).Shape.IsWriteable, "-m");
+            Assert.IsTrue(np.sqrt(m).Shape.IsWriteable, "sqrt");
+            Assert.IsTrue(m.copy().Shape.IsWriteable, "copy");
+            Assert.IsTrue(m.astype(NPTypeCode.Double).Shape.IsWriteable, "astype");
+
+            var r = m + 1;
+            r[0] = 123; // writing a computed result is allowed
+            Assert.AreEqual(123, r.GetInt32(0));
+            m.Dispose();
+        }
+
+        // ---- 0-d / empty shapes -----------------------------------------------------
+
+        [TestMethod]
+        public void Mmap_ZeroD_Scalar()
+        {
+            string p = Write("z.npy", NDArray.Scalar(7).astype(NPTypeCode.Int32));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            Assert.AreEqual(0, m.ndim);
+            Assert.AreEqual(1, m.size);
+            Assert.IsFalse(m.Shape.IsWriteable);
+            Assert.AreEqual(7, m.GetInt32(0));
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_Empty_ShapesPreserved()
+        {
+            foreach (var (name, shape) in new[] { ("e1", new Shape(0)), ("e03", new Shape(0, 3)), ("e30", new Shape(3, 0)) })
+            {
+                string p = Path.Combine(_dir, name + ".npy");
+                np.save(p, np.zeros(shape, NPTypeCode.Int32));
+                var m = (NDArray)np.load(p, mmap_mode: "r");
+                CollectionAssert.AreEqual(shape.Dimensions, m.shape, name);
+                Assert.AreEqual(0, m.size, name);
+                Assert.IsFalse(m.Shape.IsWriteable, name);
+                m.Dispose();
+                FullGc();
+            }
+        }
+
         // ---- npz ignores mmap_mode (NumPy parity) -----------------------------------
 
         [TestMethod]

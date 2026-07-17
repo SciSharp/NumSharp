@@ -192,7 +192,8 @@ namespace NumSharp.Backends
             long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
             var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
 
-            // Return an alias (view) with the permuted shape
+            // Return an alias (view) with the permuted shape. Alias() inherits writeability from the
+            // source, so transposing a read-only array (broadcast / 'r' memmap) stays read-only.
             return new NDArray(nd.Storage.Alias(newShape)) { TensorEngine = nd.TensorEngine };
         }
     }

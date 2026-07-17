@@ -136,6 +136,13 @@ namespace NumSharp.Backends
             {
                 // Create a fresh contiguous shape (no offset)
                 var freshShape = new Shape(slicedShape.dimensions);
+                // A view of a non-writeable array (broadcast, or a read-only 'r' memmap) must stay
+                // non-writeable — the fresh shape above defaults WRITEABLE back to true, which would let
+                // a write reach read-only memory (a hard segfault on memory-mapped read-only pages, and
+                // a silent NumPy-divergence for broadcasts). Shape.Slice already cleared it on
+                // slicedShape; carry that through.
+                if (!slicedShape.IsWriteable)
+                    freshShape = freshShape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;

@@ -88,6 +88,13 @@ namespace NumSharp.Backends
                 DirectILKernelGenerator.GetStorageAliasFieldCopier(_typecode)(r, this);
             }
 
+            // A view inherits writeability from what it aliases: any view of a read-only array (a
+            // broadcast, or an 'r' memmap) must stay read-only — otherwise a write would reach read-only
+            // memory (a hard segfault on memory-mapped read-only pages). The externally-built `shape` may
+            // have defaulted WRITEABLE back to true (transpose, expand_dims, newaxis all pass one here).
+            if (!_shape.IsWriteable && shape.IsWriteable)
+                shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
             r._baseStorage = _baseStorage ?? this;
@@ -122,7 +129,10 @@ namespace NumSharp.Backends
         public UnmanagedStorage Alias(ref Shape shape)
         {
             var r = new UnmanagedStorage();
-            r._shape = shape;
+            // A view inherits writeability from what it aliases (see Alias(Shape)).
+            r._shape = (!_shape.IsWriteable && shape.IsWriteable)
+                ? shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE)
+                : shape;
             r._typecode = _typecode;
             r._dtype = _dtype;
             if (InternalArray != null)
