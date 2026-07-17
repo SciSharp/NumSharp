@@ -11,7 +11,6 @@ NumSharp arrays are raw, unmanaged, densely-typed buffers — exactly the shape 
 Guides — every sample maps 1:1 to a test in `NumSharp.Interop.UnitTests`:
 
 - [Numpy.NET — coexistence & migration](numpy-net.md): zero-copy interop with SciSharp's `Numpy`/`Numpy.Bare` packages — wrap NumSharp buffers in their `NDarray`, lease their arrays into NumSharp, one shared engine, and the GIL rule their library needs.
-- [Python.NET — unit-test-proven patterns](python-net.md): a cookbook of idiomatic Python.NET embedding (scopes, dynamic modules, runtime classes, generators, threads) with NumSharp flowing through it.
 
 ## The Interop Contract
 

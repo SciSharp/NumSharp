@@ -4,7 +4,7 @@ The **NumSharp.Interop.pythonnet** package bridges `NDArray` to the Python ecosy
 
 Both directions are **zero-copy by default**: Python mutates NumSharp's memory and NumSharp mutates Python's, with lifetimes coupled so neither side can free the buffer while the other can still see it.
 
-> Looking for working recipes rather than the reference? See [Python.NET — unit-test-proven patterns](python-net.md), and [Numpy.NET — coexistence & migration](numpy-net.md) for zero-copy interop with SciSharp's Numpy.NET packages. Every sample on both pages maps 1:1 to a test in `NumSharp.Interop.UnitTests`.
+> Migrating from or coexisting with SciSharp's Numpy.NET packages? See [Numpy.NET — coexistence & migration](numpy-net.md); every sample there maps 1:1 to a test in `NumSharp.Interop.UnitTests`.
 
 ---
 
