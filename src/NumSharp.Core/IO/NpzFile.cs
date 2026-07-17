@@ -35,10 +35,21 @@ namespace NumSharp.IO
         private readonly bool _ownStream;
         private readonly string _name;
 
-        /// <summary>Maps every accepted key — stripped AND suffixed — to its zip entry name.</summary>
-        private readonly Dictionary<string, string> _keyToEntry;
+        /// <summary>
+        ///     Maps every accepted key — stripped AND suffixed — to its zip entry.
+        /// </summary>
+        /// <remarks>
+        ///     Holds the <see cref="ZipArchiveEntry"/> rather than its name because a zip may contain
+        ///     duplicate names, and the two runtimes disagree on which one wins:
+        ///     <see cref="ZipArchive.GetEntry"/> returns the FIRST match, while Python's zipfile builds a
+        ///     name→info dict as it scans, so the LAST wins. Building this map the same way — later
+        ///     entries overwrite earlier ones — reproduces NumPy's choice.
+        /// </remarks>
+        private readonly Dictionary<string, ZipArchiveEntry> _keyToEntry;
 
-        private readonly Dictionary<string, NDArray> _cache;
+        /// <summary>Cache keyed by entry identity, so duplicate names cannot alias each other.</summary>
+        private readonly Dictionary<ZipArchiveEntry, NDArray> _cache;
+
         private readonly List<string> _files;
 
         private Stream _stream;
@@ -71,8 +82,8 @@ namespace NumSharp.IO
                 throw;
             }
 
-            _keyToEntry = new Dictionary<string, string>(StringComparer.Ordinal);
-            _cache = new Dictionary<string, NDArray>(StringComparer.Ordinal);
+            _keyToEntry = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+            _cache = new Dictionary<ZipArchiveEntry, NDArray>();
             _files = new List<string>(_archive.Entries.Count);
 
             foreach (ZipArchiveEntry entry in _archive.Entries)
@@ -82,9 +93,12 @@ namespace NumSharp.IO
                     ? entryName.Substring(0, entryName.Length - 4)
                     : entryName;
 
+                // Files keeps every entry, duplicates included — NumPy's .files is a plain list built
+                // from namelist(), so a duplicated name appears twice there while the lookup keeps only
+                // the last. Assigning (not adding) below reproduces that asymmetry.
                 _files.Add(key);
-                _keyToEntry[key] = entryName;
-                _keyToEntry[entryName] = entryName; // both 'weights' and 'weights.npy' resolve
+                _keyToEntry[key] = entry;
+                _keyToEntry[entryName] = entry; // both 'weights' and 'weights.npy' resolve
             }
 
             F = new BagObj(this);
@@ -149,24 +163,24 @@ namespace NumSharp.IO
             {
                 ThrowIfDisposed();
 
-                if (!_keyToEntry.TryGetValue(key, out string entryName))
+                if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
                     throw new KeyNotFoundException($"{key} is not a file in the archive");
 
-                if (_cache.TryGetValue(entryName, out NDArray cached))
+                if (_cache.TryGetValue(entry, out NDArray cached))
                     return cached;
 
-                using (MemoryStream member = OpenMember(entryName))
+                using (MemoryStream member = OpenMember(entry))
                 {
                     // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
                     // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening
                     // every access to object.
                     if (!NpyFormat.IsNpyFile(member))
                         throw new FormatException(
-                            $"'{entryName}' is not a .npy member (its magic string is missing), so it has no array " +
-                            $"to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
+                            $"'{entry.FullName}' is not a .npy member (its magic string is missing), so it has no " +
+                            $"array to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
 
                     NDArray array = NpyFormat.ReadArray(member, AllowPickle, MaxHeaderSize);
-                    _cache[entryName] = array;
+                    _cache[entry] = array;
                     return array;
                 }
             }
@@ -181,10 +195,10 @@ namespace NumSharp.IO
         {
             ThrowIfDisposed();
 
-            if (!_keyToEntry.TryGetValue(key, out string entryName))
+            if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
                 throw new KeyNotFoundException($"{key} is not a file in the archive");
 
-            using (MemoryStream member = OpenMember(entryName))
+            using (MemoryStream member = OpenMember(entry))
                 return member.ToArray();
         }
 
@@ -193,22 +207,19 @@ namespace NumSharp.IO
         {
             ThrowIfDisposed();
 
-            if (!_keyToEntry.TryGetValue(key, out string entryName))
+            if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
                 return false;
-            if (_cache.ContainsKey(entryName))
+            if (_cache.ContainsKey(entry))
                 return true;
 
-            using (MemoryStream member = OpenMember(entryName))
+            using (MemoryStream member = OpenMember(entry))
                 return NpyFormat.IsNpyFile(member);
         }
 
         // A zip entry stream cannot seek, and both the magic sniff and the reader need to. Members are
         // one array each, so buffering the whole entry is bounded by the array we are about to build.
-        private MemoryStream OpenMember(string entryName)
+        private static MemoryStream OpenMember(ZipArchiveEntry entry)
         {
-            ZipArchiveEntry entry = _archive.GetEntry(entryName)
-                                    ?? throw new KeyNotFoundException($"{entryName} is not a file in the archive");
-
             var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
             using (Stream member = entry.Open())
                 member.CopyTo(buffer);

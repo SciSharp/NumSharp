@@ -93,9 +93,16 @@ def _ns_bytes(arr):
     """
     if arr.dtype.kind == "U":
         # NumSharp's Char is a 2-byte UTF-16 code unit; NumPy's '<U1' is 4-byte UCS-4.
-        return "".join(arr.ravel(order="C").tolist()).encode("utf-16-le").hex()
+        #
+        # Deliberately NOT "".join(arr.tolist()): NumPy's '<U' dtype treats NUL as string padding,
+        # so an element holding U+0000 reads back as '' and joining silently drops it — the
+        # expectation would then be one element short of what the file actually holds. Read the raw
+        # code points instead.
+        buf = np.ascontiguousarray(arr.astype("<U1")).tobytes()
+        cps = struct.unpack(f"<{len(buf) // 4}I", buf)
+        return b"".join(struct.pack("<H", c) for c in cps).hex()
     native = arr.dtype.newbyteorder("=")
-    if arr.dtype == np.dtype("complex64"):
+    if native == np.dtype("complex64"):
         native = np.dtype("complex128")  # NumSharp widens c8 -> System.Numerics.Complex
     return np.ascontiguousarray(arr.astype(native)).tobytes("C").hex()
 
@@ -103,9 +110,10 @@ def _ns_bytes(arr):
 def _ns_dtype_of(arr):
     if arr.dtype.kind == "U":
         return "Char"
-    if arr.dtype == np.dtype("complex64"):
-        return "Complex"
-    return NS_DTYPE[arr.dtype.newbyteorder("=").name]
+    native = arr.dtype.newbyteorder("=")
+    if native == np.dtype("complex64"):
+        return "Complex"  # NumSharp has no 64-bit complex; c8 widens on read
+    return NS_DTYPE[native.name]
 
 
 def add_npy(name, arr, *, version=None, write_exact=True, note=""):
@@ -469,6 +477,20 @@ add_raw("header_unparsable", _hdr("{'descr': "),
         load_error="Cannot parse header",
         note="truncated python literal")
 
+# A tiny file whose header-length field claims a huge header. The message must name the CLAIMED
+# size, and — the real point — reading it must not reserve that claim: NumPy shrugs these off in
+# ~2 KB because Python's fp.read(n) only allocates what it returns, so allocating up front would
+# turn a 28-byte file into a multi-gigabyte spike. NumSharp's ReadBytes grows as it reads.
+add_raw("hostile_header_len_4gb", fmt.magic(2, 0) + struct.pack("<I", 0xFFFFFFF0) + b"{'descr': '|i1'}",
+        load_via="load_npy", load_error="EOF: reading array header, expected 4294967280 bytes got 16",
+        note="28-byte file claiming a ~4 GB header (v2.0's 4-byte length field)")
+add_raw("hostile_header_len_1gb", fmt.magic(2, 0) + struct.pack("<I", 1_000_000_000) + b"{'descr': '|i1'}",
+        load_via="load_npy", load_error="EOF: reading array header, expected 1000000000 bytes got 16",
+        note="same trick just under int.MaxValue, where a naive size guard would not fire")
+add_raw("hostile_header_len_64k_v1", fmt.magic(1, 0) + struct.pack("<H", 0xFFFF) + b"{'descr': '|i1'}",
+        load_via="load_npy", load_error="EOF: reading array header, expected 65535 bytes got 16",
+        note="v1.0's 2-byte length field claiming the maximum 65535")
+
 # max_header_size: this file is legal but its header exceeds the 10000-byte default.
 _pad_body = "{'descr': '|i1', 'fortran_order': False, 'shape': (1,), }" + " " * 11000
 add_raw("header_over_max_size", _hdr(_pad_body) + b"\x01",
@@ -506,6 +528,178 @@ add_raw("empty_file", b"",
         note="np.load on an empty file raises EOFError")
 
 # ---------------------------------------------------------------------------------------------
+# 9b. Value fidelity — exotic bit patterns that a naive conversion would round or normalize away
+# ---------------------------------------------------------------------------------------------
+def _f8(bits):
+    return struct.unpack("<d", struct.pack("<Q", bits))[0]
+
+
+def _f4(bits):
+    return struct.unpack("<f", struct.pack("<I", bits))[0]
+
+
+# NaN is not one value: the payload and sign bits must survive verbatim, and a signaling NaN must
+# not be quieted. A raw byte copy gets this right; anything that routes through arithmetic will not.
+_f8_nans = np.array([_f8(0x7FF8000000000000), _f8(0xFFF8000000000000),
+                     _f8(0x7FF0000000000001), _f8(0x7FFDEADBEEFCAFE)], dtype="<f8")
+add_npy("value_f8_nan_payloads", _f8_nans, note="float64 NaN payloads: quiet, negative, signaling, custom")
+add_npy("value_f4_nan_payloads",
+        np.array([_f4(0x7FC00000), _f4(0xFFC00000), _f4(0x7F800001), _f4(0x7FDEADBE)], dtype="<f4"),
+        note="float32 NaN payloads incl. sNaN")
+add_npy("value_f2_nan_payloads",
+        np.frombuffer(struct.pack("<4H", 0x7E00, 0xFE00, 0x7C01, 0x7DAD), dtype="<f2"),
+        note="float16 NaN payloads incl. sNaN")
+
+add_npy("value_f8_subnormal",
+        np.array([5e-324, -5e-324, 2.2250738585072014e-308, 1.1125369292536007e-308,
+                  0.0, -0.0, np.finfo(np.float64).max, np.finfo(np.float64).min], dtype="<f8"),
+        note="float64 smallest subnormal, tiny, +/-0.0 (the sign bit must survive), extremes")
+add_npy("value_f4_subnormal",
+        np.array([1.4e-45, -1.4e-45, 1.1754944e-38, 0.0, -0.0,
+                  np.finfo(np.float32).max, np.finfo(np.float32).min], dtype="<f4"),
+        note="float32 subnormals and signed zero")
+add_npy("value_f2_subnormal", np.array([6e-8, -6e-8, 6.104e-5, 0.0, -0.0, 65504.0, -65504.0], dtype="<f2"),
+        note="float16 subnormals, signed zero, max finite")
+
+for _dt in ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]:
+    _i = np.iinfo(_dt)
+    add_npy(f"value_{_dt}_extremes",
+            np.array([_i.min, _i.min + 1, -1 if _i.min < 0 else 0, 0, 1, _i.max - 1, _i.max], dtype=_dt),
+            note=f"{_dt} min/max boundaries")
+
+_cvals = [complex(0.0, -0.0), complex(-0.0, 0.0), complex(np.nan, 1), complex(1, np.nan),
+          complex(np.inf, -np.inf), complex(np.nan, np.nan), complex(5e-324, 1e308)]
+add_npy("value_c16_exotic", np.array(_cvals, dtype="<c16"),
+        note="complex128 NaN/inf per component, signed zero, subnormal")
+add_npy("value_c8_exotic", np.array(_cvals, dtype="<c8"), write_exact=False,
+        note="complex64 -> Complex is a real WIDENING conversion, not a copy: NaN/inf must survive it")
+
+# Big-endian + the conversion paths together: the swap unit is a COMPONENT, not an element.
+add_npy("value_be_c16_exotic", np.array(_cvals, dtype=">c16"), write_exact=False,
+        note="'>c16' swaps in 8s (per component), NOT in 16s — swapping the whole element corrupts it")
+add_npy("value_be_c8_exotic", np.array(_cvals, dtype=">c8"), write_exact=False,
+        note="'>c8' must byte-swap in 4s AND widen to complex128")
+add_npy("value_be_f2_nan",
+        np.frombuffer(struct.pack("<4H", 0x7E00, 0xFE00, 0x7C01, 0x7DAD), dtype="<f2").astype(">f2"),
+        write_exact=False, note="'>f2' half NaN payloads survive the swap")
+add_npy("value_be_f8_nan", _f8_nans.astype(">f8"), write_exact=False,
+        note="'>f8' NaN payload survives the swap")
+add_npy("value_be_bool", np.array([True, False, True], dtype=">b1"), write_exact=False,
+        note="'>b1' is 1 byte: the swap must be a no-op, not a reversal")
+add_npy("value_be_i1", np.array([-128, 0, 127], dtype=">i1"), write_exact=False,
+        note="'>i1' is 1 byte: no-op swap")
+add_npy("value_be_U1", np.array(["a", chr(0xFFFF), chr(0xE9), "Z"], dtype=">U1"), write_exact=False,
+        note="'>U1': 4-byte code points swapped, then narrowed to UTF-16")
+
+# Char/UCS-4 seams. U+0000 is the interesting one: NumPy's '<U' treats NUL as string padding, so
+# NumPy itself reports this element as '' — the bytes are there, its Python-level view just hides it.
+add_npy("value_U1_bmp_edges",
+        np.array([chr(c) for c in [0x20, 0x00, 0x01, 0x7F, 0x80, 0xFF, 0x7FF, 0x800,
+                                   0xD7FF, 0xE000, 0xFFFD, 0xFFFF]], dtype="<U1"),
+        note="BMP seams: U+0000 (which NumPy's <U reports as ''), the latin-1/UTF-8 boundaries, "
+             "U+D7FF/U+E000 either side of the surrogate block, and U+FFFF")
+
+# Non-BMP fits NumPy's 4-byte <U1 but needs a surrogate PAIR in UTF-16, so it cannot fit one Char.
+_astral = io.BytesIO()
+fmt.write_array(_astral, np.array([chr(0x1F600)], dtype="<U1"))
+add_raw("value_U1_astral_rejected", _astral.getvalue(), load_via="load_npy",
+        load_error="outside the Basic Multilingual Plane",
+        note="U+1F600 fits a 4-byte '<U1' but not a 2-byte Char — must be refused, never truncated")
+add_raw("value_U1_lone_surrogate_rejected",
+        _hdr("{'descr': '<U1', 'fortran_order': False, 'shape': (2,), }") + struct.pack("<2I", 0xD83D, 0x61),
+        load_via="load_npy", load_error="unpaired surrogate",
+        note="a lone surrogate is not a valid code point, even though the 4 bytes decode to one")
+
+# ---------------------------------------------------------------------------------------------
+# 9c. Python-grammar traps in the header (the parser stands in for ast.literal_eval)
+# ---------------------------------------------------------------------------------------------
+add_raw("header_tuple_no_comma", _hdr("{'descr': '|i1', 'fortran_order': False, 'shape': (1), }", data=b"\x07"),
+        load_error="shape is not valid: 1",
+        note="(1) is the INT 1 in grouping parens, not a 1-tuple — only a comma makes a tuple in "
+             "Python, so NumPy sees an int here and rejects it")
+add_raw("header_shape_bool", _hdr("{'descr': '|i1', 'fortran_order': False, 'shape': (True,), }", data=b"\x07"),
+        load_error="shape is not valid",
+        note="bool is a subclass of int in Python so NumPy's isinstance check passes, but building the "
+             "array then fails; NumSharp rejects it up front — both refuse, the text differs")
+
+# Zero-width dtypes: real NumPy dtypes with itemsize 0 that NumSharp has no analog for. They must be
+# reported as unsupported, NOT as malformed descriptors.
+for _name, _d, _msg in [
+    ("dtype_U0_zero_width", "<U0", "only '<U1' maps to NumSharp's Char"),
+    ("dtype_S0_zero_width", "|S0", "Byte-string dtypes"),
+    ("dtype_V0_zero_width", "|V0", "Void dtypes"),
+]:
+    add_raw(_name, _hdr("{'descr': '%s', 'fortran_order': False, 'shape': (0,), }" % _d),
+            load_via="load_npy", load_error=_msg,
+            note=f"'{_d}' is a VALID zero-width NumPy dtype with no NumSharp analog — 'unsupported', not 'invalid'")
+
+# ---------------------------------------------------------------------------------------------
+# 9d. Header-only cases — writer logic no real array can reach
+#
+# These drive _write_array_header with a dict directly, because the shapes involved would need
+# 10**17 elements to allocate. Two branches live here and nowhere else:
+#
+#   * The growth padding (21 - len(repr(growth_axis_dim)); first axis in C-order, LAST in F-order)
+#     is normally INVISIBLE: shrink the body by 5 chars and the alignment padding grows by 5, so the
+#     file is unchanged. It only shows when it tips the header across a 64-byte bucket. Using the
+#     wrong axis would therefore pass every ordinary test — these are the shapes that catch it.
+#   * The v1.0 -> v2.0 auto-selection boundary: NumSharp must switch at the same byte NumPy does.
+# ---------------------------------------------------------------------------------------------
+def add_header(name, d, note=""):
+    buf = io.BytesIO()
+    fmt._write_array_header(buf, d, None)  # None => auto-select the oldest version that fits
+    raw = buf.getvalue()
+    CASES.append({
+        "name": name, "file": f"cases/{name}.hdr", "kind": "header", "bytes": raw,
+        "descr": d["descr"], "np_dtype": None, "ns_dtype": None,
+        "shape": [int(x) for x in d["shape"]], "fortran_order": d["fortran_order"],
+        "version": [raw[6], raw[7]], "data_offset": None, "ns_bytes": None,
+        "write_exact": True, "load_error": None, "note": note,
+    })
+
+
+def _hlen(shape, fortran):
+    b = io.BytesIO()
+    fmt._write_array_header(b, {"descr": "|i1", "fortran_order": fortran, "shape": shape}, None)
+    return int.from_bytes(b.getvalue()[8:10], "little")
+
+
+_observable = []
+for _ndim in range(1, 12):
+    for _df in range(1, 20):
+        for _dl in range(1, 20):
+            if _ndim == 1 and _df != _dl:
+                continue
+            _s = tuple(([10 ** (_df - 1)] + [1] * (_ndim - 2) + ([10 ** (_dl - 1)] if _ndim > 1 else []))[:_ndim])
+            if _hlen(_s, False) != _hlen(_s, True):
+                _observable.append(_s)
+
+assert _observable, "expected shapes where the growth axis tips the header across a 64-byte bucket"
+for _i, _s in enumerate(_observable[:12]):
+    for _fo in (False, True):
+        add_header(f"header_growth_axis_{_i}_{'F' if _fo else 'C'}",
+                   {"descr": "|i1", "fortran_order": _fo, "shape": _s},
+                   note=f"growth axis is OBSERVABLE here: shape {_s} in {'F' if _fo else 'C'}-order tips the "
+                        f"header across a 64-byte bucket (C hlen={_hlen(_s, False)} vs F hlen={_hlen(_s, True)}), "
+                        f"so using the wrong axis changes the file")
+
+# The exact v1.0 -> v2.0 auto-selection boundary (found by bisection: 21817 dims is the last v1.0).
+_lo, _hi = 1, 60000
+while _lo + 1 < _hi:
+    _mid = (_lo + _hi) // 2
+    b = io.BytesIO()
+    fmt._write_array_header(b, {"descr": "|u1", "fortran_order": False, "shape": (1,) * _mid}, None)
+    if b.getvalue()[6] == 1:
+        _lo = _mid
+    else:
+        _hi = _mid
+for _nd, _tag in [(1, "tiny"), (_lo - 1, "just_under"), (_lo, "last_v1_0"), (_hi, "first_v2_0"), (_hi + 500, "well_into_v2_0")]:
+    add_header(f"header_version_boundary_{_tag}",
+               {"descr": "|u1", "fortran_order": False, "shape": (1,) * _nd},
+               note=f"{_nd} dims: NumSharp's version auto-selection must flip to 2.0 at exactly the byte "
+                    f"NumPy does (the last v1.0 header is {_lo} dims)")
+
+# ---------------------------------------------------------------------------------------------
 # 10. NPZ archives
 # ---------------------------------------------------------------------------------------------
 add_npz("npz_single", {"arr_0": np.arange(6, dtype=np.int32).reshape(2, 3)},
@@ -527,6 +721,31 @@ add_npz("npz_scalar_and_empty", {"s": np.array(42, dtype=np.int32), "e": np.arra
         note="0-d and 0-element arrays inside an npz")
 add_npz("npz_large", {"big": np.arange(100_000, dtype=np.float64)},
         note="800 KB entry: the ZipExtFile short-read path _read_bytes exists for")
+
+# Duplicate member names. A zip may legally hold two entries with the same name, and the two
+# runtimes disagree about which one a lookup finds: .NET's ZipArchive.GetEntry returns the FIRST,
+# while Python's zipfile builds a name->info dict as it scans, so the LAST wins. NumPy's .files
+# still lists BOTH. Verified against zipfile: z['dup'] -> [2].
+_dup = io.BytesIO()
+with zipfile.ZipFile(_dup, "w") as zf:
+    for _v in (1, 2):
+        _m = io.BytesIO()
+        fmt.write_array(_m, np.array([_v], dtype=np.int8))
+        zf.writestr("dup.npy", _m.getvalue())
+_dup.seek(0)
+with np.load(_dup) as _z:
+    assert list(_z.files) == ["dup", "dup"] and _z["dup"].tolist() == [2], "zipfile: last duplicate wins"
+CASES.append({
+    "name": "npz_duplicate_names", "file": "cases/npz_duplicate_names.npz", "kind": "npz",
+    "bytes": _dup.getvalue(), "compressed": False,
+    "descr": None, "np_dtype": None, "ns_dtype": None, "shape": None,
+    "fortran_order": None, "version": None, "data_offset": None, "ns_bytes": None,
+    "write_exact": False, "load_error": None,
+    "entries": {"dup": {"ns_dtype": "SByte", "shape": [1], "ns_bytes": np.array([2], dtype=np.int8).tobytes().hex()}},
+    "files": ["dup", "dup"],
+    "note": "duplicate zip member names: .files lists both, but a lookup must resolve to the LAST — "
+            "Python's zipfile keeps the last in its name map, while .NET's GetEntry returns the first",
+})
 
 # An npz holding a non-.npy member: NumPy returns its raw bytes.
 _mixed = io.BytesIO()

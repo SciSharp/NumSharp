@@ -118,6 +118,13 @@ namespace NumSharp.UnitTest.IO
         /// <summary>For npz cases: member name → expected raw bytes (non-.npy members).</summary>
         public Dictionary<string, byte[]> RawEntries { get; private init; }
 
+        /// <summary>
+        ///     For npz cases: the exact expected <c>.files</c>, when it cannot be derived from
+        ///     <see cref="Entries"/> — duplicate member names appear twice in <c>.files</c> but resolve
+        ///     to a single entry.
+        /// </summary>
+        public string[] FilesOverride { get; private init; }
+
         /// <summary>For the multi-array stream case: the arrays in the order they were appended.</summary>
         public NpyMember[] Sequence { get; private init; }
 
@@ -154,6 +161,9 @@ namespace NumSharp.UnitTest.IO
                 Compressed = Bool(e, "compressed") ?? false,
                 Entries = Members(e, "entries"),
                 RawEntries = RawMembers(e, "raw_entries"),
+                FilesOverride = e.TryGetProperty("files", out JsonElement fo) && fo.ValueKind == JsonValueKind.Array
+                    ? fo.EnumerateArray().Select(x => x.GetString()).ToArray()
+                    : null,
                 Sequence = e.TryGetProperty("sequence", out JsonElement s) && s.ValueKind == JsonValueKind.Array
                     ? s.EnumerateArray().Select(NpyMember.Parse).ToArray()
                     : null,

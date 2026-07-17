@@ -301,7 +301,9 @@ namespace NumSharp.IO
 
             if (kind == 'U')
             {
-                if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int chars) || chars < 1)
+                // '<U0' is a real (zero-width) NumPy dtype, so rejecting it as malformed would be a lie —
+                // it is unrepresentable here, which is a different thing.
+                if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int chars))
                     throw new FormatException($"descr is not a valid dtype descriptor: {PyLiteral.Repr(descr)}");
                 if (chars != 1)
                     throw new NotSupportedException(
@@ -664,10 +666,7 @@ namespace NumSharp.IO
                 ? BinaryPrimitives.ReadUInt16LittleEndian(lenBytes)
                 : BinaryPrimitives.ReadUInt32LittleEndian(lenBytes);
 
-            if (headerLength > int.MaxValue)
-                throw new FormatException($"Header length {headerLength} exceeds the maximum readable size.");
-
-            byte[] headerBytes = ReadBytes(stream, (int)headerLength, "array header");
+            byte[] headerBytes = ReadBytes(stream, headerLength, "array header");
             string header = version.HeaderEncoding.GetString(headerBytes);
 
             if (header.Length > maxHeaderSize)
@@ -956,14 +955,48 @@ namespace NumSharp.IO
         /// <summary>
         ///     Read exactly <paramref name="count"/> bytes — NumPy's <c>_read_bytes()</c>.
         /// </summary>
+        /// <remarks>
+        ///     Grows the buffer as it reads instead of allocating <paramref name="count"/> up front,
+        ///     because <paramref name="count"/> is attacker-controlled: it comes from the file's own
+        ///     header-length field, so a 28-byte file can claim a 4 GB header. Python's <c>fp.read(n)</c>
+        ///     only ever allocates what it actually returns, so NumPy shrugs such a file off in
+        ///     microseconds — allocating the claim up front would turn it into a multi-gigabyte spike for
+        ///     the same rejection. The message still reports the CLAIMED size, exactly as NumPy's does.
+        /// </remarks>
         /// <exception cref="FormatException">The stream ended early.</exception>
-        private static byte[] ReadBytes(Stream stream, int count, string what)
+        private static byte[] ReadBytes(Stream stream, long count, string what)
         {
-            var buffer = new byte[count];
-            int got = ReadInto(stream, buffer, count);
-            if (got != count)
-                throw new FormatException($"EOF: reading {what}, expected {count} bytes got {got}");
-            return buffer;
+            if (count == 0)
+                return Array.Empty<byte>();
+
+            // Every real header, and both fixed-size fields, land in the fast path.
+            if (count <= BufferSize)
+            {
+                var buffer = new byte[count];
+                int got = ReadInto(stream, buffer, (int)count);
+                if (got != count)
+                    throw new FormatException($"EOF: reading {what}, expected {count} bytes got {got}");
+                return buffer;
+            }
+
+            var chunk = new byte[BufferSize];
+            using (var acc = new MemoryStream())
+            {
+                long total = 0;
+                while (total < count)
+                {
+                    int toRead = (int)Math.Min(count - total, chunk.Length);
+                    int got = ReadInto(stream, chunk, toRead);
+                    acc.Write(chunk, 0, got);
+                    total += got;
+                    if (got < toRead)
+                        break; // EOF: stop here rather than reserving the rest of a bogus claim
+                }
+
+                if (total != count)
+                    throw new FormatException($"EOF: reading {what}, expected {count} bytes got {total}");
+                return acc.ToArray();
+            }
         }
 
         // Loop until the buffer is full or the stream ends: Stream.Read may legally return fewer bytes

@@ -96,6 +96,53 @@ namespace NumSharp.UnitTest.IO
         }
 
         /// <summary>
+        ///     Header-only cases: writer logic that no real array can reach.
+        /// </summary>
+        /// <remarks>
+        ///     Two branches are only observable here. The growth padding
+        ///     (<c>21 - len(repr(shape[0 or -1]))</c>) is normally invisible — shrink the body and the
+        ///     alignment padding grows to compensate — so a wrong growth axis passes every ordinary
+        ///     test; it only shows on shapes that tip the header across a 64-byte bucket, and those need
+        ///     10^17 elements to allocate. Likewise the v1.0→v2.0 auto-selection boundary sits at ~21817
+        ///     dimensions. Both are driven through the header dict directly, exactly as NumPy's
+        ///     <c>_write_array_header</c> was to produce the expected bytes.
+        /// </remarks>
+        [TestMethod]
+        [TestCategory("NpyOracle")]
+        public void WriteHeader_MatchesNumPy()
+        {
+            var f = new Failures("header");
+
+            foreach (NpyCase c in NpyOracleCorpus.OfKind("header"))
+            {
+                try
+                {
+                    var d = new Dictionary<string, object>
+                    {
+                        ["descr"] = c.Descr,
+                        ["fortran_order"] = c.FortranOrder,
+                        ["shape"] = c.Shape,
+                    };
+
+                    using var ms = new MemoryStream();
+                    NpyFormat.WriteArrayHeader(ms, d); // no version => auto-select, as NumPy did
+
+                    byte[] got = ms.ToArray();
+                    if (!got.SequenceEqual(c.Bytes))
+                        f.Add(c, Diff(c.Bytes, got));
+                    else if (got[6] != c.Version[0])
+                        f.Add(c, $"version: expected {c.Version[0]}.{c.Version[1]}, got {got[6]}.{got[7]}");
+                }
+                catch (Exception e)
+                {
+                    f.Add(c, $"threw {e.GetType().Name}: {First(e.Message)}");
+                }
+            }
+
+            f.Assert();
+        }
+
+        /// <summary>
         ///     Saving a LIVE view — strided, reversed, offset, broadcast, transposed — produces NumPy's
         ///     bytes.
         /// </summary>
@@ -236,8 +283,11 @@ namespace NumSharp.UnitTest.IO
                 {
                     using NpzFile npz = np.load_npz(c.Bytes);
 
-                    var expected = new List<string>((c.Entries?.Keys ?? Enumerable.Empty<string>())
-                        .Concat(c.RawEntries?.Keys ?? Enumerable.Empty<string>()));
+                    // .files normally follows from the members, except where the corpus pins it
+                    // explicitly — a duplicated member name is listed twice but resolves once.
+                    var expected = c.FilesOverride?.ToList()
+                                   ?? new List<string>((c.Entries?.Keys ?? Enumerable.Empty<string>())
+                                       .Concat(c.RawEntries?.Keys ?? Enumerable.Empty<string>()));
                     if (npz.Files.Count != expected.Count || expected.Any(k => !npz.Files.Contains(k)))
                         f.Add(c, $".files: expected [{string.Join(", ", expected)}], got [{string.Join(", ", npz.Files)}]");
 
@@ -315,6 +365,39 @@ namespace NumSharp.UnitTest.IO
             }
 
             f.Assert();
+        }
+
+        /// <summary>
+        ///     A hostile header-length field must not be trusted with the allocator: rejecting a 28-byte
+        ///     file must not reserve the gigabytes it claims.
+        /// </summary>
+        /// <remarks>
+        ///     The error-message cases in <see cref="Errors_MatchNumPy"/> pass either way — they would go
+        ///     green even while allocating 1 GB per file — so the resource behaviour needs its own test.
+        ///     NumPy handles this in ~2 KB because Python's <c>fp.read(n)</c> only allocates what it
+        ///     returns. NumSharp's <c>ReadBytes</c> grows as it reads, so the cost is bounded by
+        ///     <c>BUFFER_SIZE</c> rather than by the attacker's number. The bound below is deliberately
+        ///     loose (100 MB against a 1 GB claim): it is there to catch a regression to
+        ///     <c>new byte[claimedLength]</c>, not to police allocation to the byte.
+        /// </remarks>
+        [TestMethod]
+        [TestCategory("NpyOracle")]
+        [DoNotParallelize]
+        public void HostileHeaderLength_DoesNotAllocateTheClaim()
+        {
+            NpyCase c = NpyOracleCorpus.Cases.Single(x => x.Name == "hostile_header_len_1gb");
+            Assert.AreEqual(28, c.Bytes.Length, "the whole file is 28 bytes but claims a 1 GB header");
+
+            np.load_npy(NpyOracleCorpus.Cases.Single(x => x.Name == "int32_1d").Bytes); // warm the JIT
+
+            long before = GC.GetTotalAllocatedBytes(precise: true);
+            Assert.ThrowsException<FormatException>(() => np.load_npy(c.Bytes));
+            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+
+            Assert.IsTrue(allocated < 100L * 1024 * 1024,
+                $"rejecting a 28-byte file that claims a 1,000,000,000-byte header allocated {allocated:N0} bytes. " +
+                "The header length comes straight from the file and must never be handed to the allocator " +
+                "up front — read incrementally, as NumPy does.");
         }
 
         /// <summary>The corpus is present and non-vacuous — a silent zero-case run would prove nothing.</summary>

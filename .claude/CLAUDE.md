@@ -323,14 +323,30 @@ content-dependent return; **`np.load_npy` / `np.load_npz` are the typed forms** 
 | Decimal | — | `NotSupportedException`: no NumPy dtype (cast to Double) |
 
 Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `\|S`/`<U`n>1/`\|V`, `<f16`
-and `<c32` are parsed then rejected with a precise message. `mmap_mode` validates its value and
-throws `NotImplementedException` (implementation sketch in `np.load.cs`'s `CheckMmapMode`).
+and `<c32` are parsed then rejected with a precise message — including the zero-width `<U0`/`\|S0`/`\|V0`,
+which are *valid* NumPy dtypes and so report "unsupported", never "invalid descriptor". `mmap_mode`
+validates its value and throws `NotImplementedException` (sketch in `np.load.cs`'s `CheckMmapMode`).
 
-**Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (217 committed cases of real
+**Known intentional divergences** (differential-verified, everything else agrees): the 5 unsupported
+dtypes above are the *only* files NumPy loads that NumSharp refuses. NumPy reports `shape: (True,)`
+and overflowing dims via a later TypeError/OverflowError while NumSharp rejects them up front — both
+refuse, the text differs. Big-endian files byte-swap to native (NumPy keeps a byte-swapped dtype),
+and `Char` round-trips U+0000 as a NUL where NumPy's `<U` reports `''` (the bytes are identical —
+`<U` treats NUL as string padding).
+
+**Two traps this port has already fallen into — do not re-break:**
+- **`(1)` is not a tuple.** Only a comma makes one in Python, so `'shape': (1)` is the *int* 1 and
+  NumPy rejects it. `PyLiteral.ParseTuple` tracks `sawComma` for exactly this.
+- **A header-length field is attacker-controlled.** `ReadBytes` grows as it reads rather than
+  allocating the claim: a 28-byte file can claim a 4 GB header, and `new byte[claim]` turns that
+  into a gigabyte spike (NumPy shrugs it off in ~2 KB — `fp.read(n)` allocates only what it returns).
+  Pinned by `HostileHeaderLength_DoesNotAllocateTheClaim`.
+
+**Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (281 committed cases of real
 NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category — read / byte-exact
-write / verbatim error / round-trip / npz / live-view write. Reverse interop (NumPy reading NumSharp,
-the direction byte-equality can't cover for `.npz`) is the manual gate
-`python test/oracle/verify_npy_interop.py`.
+write / header-only write / verbatim error / round-trip / npz / live-view write / hostile-allocation.
+Reverse interop (NumPy reading NumSharp, the direction byte-equality can't cover for `.npz`) is the
+manual gate `python test/oracle/verify_npy_interop.py`.
 
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`
@@ -628,10 +644,17 @@ Same shape as above — NumPy is the oracle, the corpus is committed, no Python 
 claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, not merely readable.
 
 - **Regenerate**: `python test/oracle/gen_npy_oracle.py` (deterministic; needs `numpy==2.4.2`), then `dotnet build`.
-- **Run the gate**: `dotnet test --filter "TestCategory=NpyOracle"` — 217 cases across every dtype ×
+- **Run the gate**: `dotnet test --filter "TestCategory=NpyOracle"` — 281 cases across every dtype ×
   {0-d, empty, 1-D, 2-D, 3-D, unit, empty-2d/3d} × {C, F, strided, reversed, offset, broadcast,
-  transposed} × versions {1.0, 2.0, 3.0} × {little, big, native} endian, plus 32 malformed/unsupported
-  files whose messages must match NumPy verbatim.
+  transposed} × versions {1.0, 2.0, 3.0} × {little, big, native} endian, plus value fidelity (NaN
+  payloads incl. sNaN, subnormals, signed zero, integer extremes, BMP seams) and 42
+  malformed / unsupported / hostile files whose messages must match NumPy verbatim.
+- **`kind: "header"` cases exist because two writer branches are unreachable from a real array.** The
+  growth padding is normally INVISIBLE — shrink the body by 5 chars and the alignment padding grows by
+  5, leaving the file identical — so a wrong growth axis (`shape[0]` vs `shape[-1]`) passes every
+  ordinary test; it only shows on shapes that tip the header across a 64-byte bucket, and those need
+  10¹⁷ elements to allocate. The v1.0→v2.0 auto-selection boundary likewise sits at 21,817 dimensions.
+  Both are driven through the header dict, exactly as NumPy's `_write_array_header` was.
 - **Reverse interop** (manual; needs Python + the SDK): `python test/oracle/verify_npy_interop.py` has
   NumSharp write 28 files and real NumPy read them. This is the only way to prove `.npz` output,
   whose ZIP framing legitimately differs from Python's `zipfile` and so cannot be byte-compared.

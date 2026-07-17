@@ -277,20 +277,29 @@ namespace NumSharp.IO
             private object ParseList()
             {
                 Expect('[');
-                var items = ParseSequence(']');
-                return items;
+                return ParseSequence(']', out _); // brackets always build a list, comma or not
             }
 
             private object ParseTuple()
             {
                 Expect('(');
-                var items = ParseSequence(')');
+                List<object> items = ParseSequence(')', out bool sawComma);
+
+                // It is the COMMA that makes a tuple in Python, not the parentheses: `(1)` is just the
+                // int 1 in grouping parens, while `(1,)` is a 1-tuple and `()` is the empty tuple. The
+                // .npy header validator leans on the difference — NumPy rejects `'shape': (1)` with
+                // "shape is not valid: 1" because it never saw a tuple.
+                if (items.Count == 1 && !sawComma)
+                    return items[0];
+
                 return new PyTuple(items);
             }
 
-            private List<object> ParseSequence(char close)
+            private List<object> ParseSequence(char close, out bool sawComma)
             {
                 var items = new List<object>();
+                sawComma = false;
+
                 SkipWhitespace();
                 if (Peek() == close) { _i++; return items; }
 
@@ -302,6 +311,7 @@ namespace NumSharp.IO
                     if (c == ',')
                     {
                         _i++;
+                        sawComma = true;
                         SkipWhitespace();
                         if (Peek() == close) { _i++; return items; } // trailing comma: (3,) / [1, 2,]
                         continue;
