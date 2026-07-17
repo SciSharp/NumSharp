@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU</Platforms>
+    <AssemblyOriginatorKeyFile>..\NumSharp.UnitTest\Open.snk</AssemblyOriginatorKeyFile>
+    <Configurations>Debug;Release;Publish</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+    <SignAssembly>true</SignAssembly>
+    <DefineConstants>SIGNING</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="Codecov" Version="1.13.0" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <PackageReference Include="OpenCover" Version="4.7.922" />
+    <!-- Addition over NumSharp.UnitTest: the embedded Python engine. The library's floor is
+         pythonnet 3.0.1; the tests pin 3.0.5 because Python 3.12/3.13 hosts require >= 3.0.4
+         (NuGet unifies the library's 3.0.1 upward). Tests self-skip when no Python+numpy is found. -->
+    <PackageReference Include="pythonnet" Version="3.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj" />
+  </ItemGroup>
+
+</Project>

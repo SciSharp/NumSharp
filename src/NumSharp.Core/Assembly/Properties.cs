@@ -5,4 +5,5 @@
 [assembly: InternalsVisibleTo("TensorFlowNET.UnitTest")]
 [assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]
 [assembly: InternalsVisibleTo("NumSharp.Interop.pythonnet")]
+[assembly: InternalsVisibleTo("NumSharp.Interop.UnitTests")]
 #endif
