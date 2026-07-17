@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.OpenBLAS", "src\NumSharp.Interop.OpenBLAS\NumSharp.Interop.OpenBLAS.csproj", "{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NumSharp.Interop.pythonnet", "src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj", "{AE525A8B-833C-4DC7-A537-3EC45C9B553E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,24 @@ Global
 		{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}.Release|x64.Build.0 = Release|Any CPU
 		{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}.Release|x86.ActiveCfg = Release|Any CPU
 		{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33}.Release|x86.Build.0 = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|x64.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Debug|x86.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|Any CPU.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|x64.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|x64.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|x86.ActiveCfg = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Publish|x86.Build.0 = Debug|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|x64.ActiveCfg = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|x64.Build.0 = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|x86.ActiveCfg = Release|Any CPU
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -146,6 +166,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{B9253A77-0652-4091-A7F5-14E9FE2630FF} = {FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}
 		{3DF52F3C-1B78-46CF-9B82-BA2B876CCA33} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{AE525A8B-833C-4DC7-A537-3EC45C9B553E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4E76C21C-C7A8-4A7B-B408-D5F551E83BDD}

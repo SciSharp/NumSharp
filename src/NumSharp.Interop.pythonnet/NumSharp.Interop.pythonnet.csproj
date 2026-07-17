@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NumSharp.Interop.pythonnet</AssemblyName>
+    <RootNamespace>NumSharp.Interop</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- NuGet package (co-versioned with NumSharp) -->
+    <PackageId>NumSharp.Interop.pythonnet</PackageId>
+    <Version>0.60.0</Version>
+    <Authors>SciSharp STACK</Authors>
+    <Product>NumSharp</Product>
+    <Description>Zero-copy interop between NumSharp NDArray and the Python ecosystem via Python.NET (pythonnet). Converts NumSharp arrays to/from numpy — and ANY object implementing the PEP 3118 buffer protocol (memoryview, array.array, PIL, torch, ...) — without a Numpy.NET dependency, so it works with any numpy / any Python.</Description>
+    <PackageTags>NumSharp;NumPy;pythonnet;Python.NET;interop;buffer-protocol;scientific-computing;PEP3118</PackageTags>
+    <PackageProjectUrl>https://github.com/SciSharp/NumSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
+    <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
+    <!-- The ONLY external dependency: pythonnet. NO Numpy / Numpy.Bare (avoids the CS0433 flavor clash
+         and the Python-version-coupled wheel pinning). Minimum 3.0.1; unifies upward with whatever
+         Python provider the consumer brings (Python.Included, system Python, etc.). -->
+    <PackageReference Include="pythonnet" Version="3.0.1" />
+  </ItemGroup>
+
+</Project>

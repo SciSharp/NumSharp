@@ -19,6 +19,10 @@ using System.Runtime.CompilerServices;
 // Shape (strides/offset) and the promotion helpers that the built-in kernels have.
 [assembly: InternalsVisibleTo("NumSharp.Interop.OpenBLAS, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The Python.NET interop bridge reads the same internal view of Shape (strides/offset) to convert
+// NDArray <-> numpy (and any PEP 3118 buffer exporter) zero-copy, both ways.
+[assembly: InternalsVisibleTo("NumSharp.Interop.pythonnet, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using
