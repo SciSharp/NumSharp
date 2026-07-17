@@ -323,11 +323,34 @@ namespace NumSharp.UnitTest.IO
             Assert.ThrowsException<FormatException>(() => np.load(ms));
         }
 
+        /// <summary>
+        ///     A file that starts correctly but stops short is a FORMAT error, not an EOF.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy draws this line deliberately and we follow it: a truncated-but-present file raises
+        ///     ValueError ("EOF: reading magic string, expected 8 bytes got 6" for these exact bytes),
+        ///     while EOFError is reserved for "No data left in file" — a wholly empty read at the
+        ///     dispatch level. Mapping both onto EndOfStreamException, as this test used to expect,
+        ///     throws that distinction away: "this file is corrupt" and "there is nothing here" are
+        ///     different answers, and only the second is a normal end-of-input.
+        /// </remarks>
         [TestMethod]
-        public void Load_TruncatedFile_ThrowsEndOfStreamException()
+        public void Load_TruncatedFile_ThrowsFormatException()
         {
             using var ms = new MemoryStream(new byte[] { 0x93, (byte)'N', (byte)'U', (byte)'M', (byte)'P', (byte)'Y' });
-            Assert.ThrowsException<EndOfStreamException>(() => np.load(ms));
+
+            var e = Assert.ThrowsException<FormatException>(() => np.load(ms));
+            StringAssert.Contains(e.Message, "EOF: reading magic string, expected 8 bytes got 6");
+        }
+
+        /// <summary>An EMPTY file is the one case that really is an end-of-stream.</summary>
+        [TestMethod]
+        public void Load_EmptyFile_ThrowsEndOfStreamException()
+        {
+            using var ms = new MemoryStream(Array.Empty<byte>());
+
+            var e = Assert.ThrowsException<EndOfStreamException>(() => np.load(ms));
+            StringAssert.Contains(e.Message, "No data left in file");
         }
 
         [TestMethod]
