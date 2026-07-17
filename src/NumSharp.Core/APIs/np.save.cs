@@ -8,299 +8,278 @@ namespace NumSharp
 {
     public static partial class np
     {
-        #region np.save
+        #region save (.npy)
 
         /// <summary>
-        /// Save an array to a binary file in NumPy .npy format.
+        ///     Save an array to a <c>.npy</c> binary file.
         /// </summary>
-        /// <param name="file">File path. If it doesn't end with .npy, the extension is added.</param>
-        /// <param name="arr">Array data to be saved.</param>
+        /// <param name="file">
+        ///     Target path. <c>.npy</c> is appended if the name does not already end with it, matching
+        ///     NumPy.
+        /// </param>
+        /// <param name="arr">The array to save. Any layout; a Fortran-contiguous array is stored as such.</param>
+        /// <param name="allow_pickle">
+        ///     Present for NumPy parity. NumSharp has no object dtype, so nothing can reach the pickle
+        ///     path and this never changes the outcome.
+        /// </param>
+        /// <exception cref="NotSupportedException">
+        ///     The dtype has no NumPy equivalent — <see cref="NPTypeCode.Decimal"/>.
+        /// </exception>
         /// <remarks>
-        /// The .npy format is the standard binary file format in NumPy for persisting
-        /// a single arbitrary NumPy array on disk. The format stores all of the shape
-        /// and dtype information necessary to reconstruct the array correctly.
-        ///
-        /// For saving multiple arrays, use <see cref="savez"/> or <see cref="savez_compressed"/>.
+        ///     The file is byte-for-byte what NumPy 2.4.2's own <c>np.save</c> writes for the same array.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.save.html
         /// </remarks>
-        /// <example>
-        /// <code>
-        /// var arr = np.arange(10);
-        /// np.save("data.npy", arr);
-        ///
-        /// // .npy extension is added automatically
-        /// np.save("data", arr);  // saves as data.npy
-        /// </code>
-        /// </example>
-        public static void save(string file, NDArray arr)
+        public static void save(string file, NDArray arr, bool allow_pickle = true)
         {
-            if (file == null)
-                throw new ArgumentNullException(nameof(file));
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
 
-            // Add .npy extension if not present
-            if (!file.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
+            if (!file.EndsWith(".npy", StringComparison.Ordinal))
                 file += ".npy";
 
-            using var stream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
-            save(stream, arr);
+            using (var stream = new FileStream(file, FileMode.Create, FileAccess.Write))
+                NpyFormat.WriteArray(stream, arr, null, allow_pickle);
         }
 
         /// <summary>
-        /// Save an array to a stream in NumPy .npy format.
+        ///     Save an array to a <c>.npy</c> file, converting <paramref name="arr"/> with
+        ///     <see cref="np.asanyarray(in object, Type)"/> first.
         /// </summary>
-        /// <param name="stream">Stream to write to.</param>
-        /// <param name="arr">Array data to be saved.</param>
-        /// <remarks>
-        /// Data is appended to the stream. Multiple arrays can be written to the same
-        /// file by calling save multiple times on the same stream.
-        /// </remarks>
-        public static void save(Stream stream, NDArray arr)
-        {
-            if (stream == null)
-                throw new ArgumentNullException(nameof(stream));
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-
-            NpyFormat.WriteArray(stream, arr);
-        }
-
-        #endregion
-
-        #region np.savez
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.save.html</remarks>
+        public static void save(string file, Array arr, bool allow_pickle = true)
+            => save(file, asanyarray(arr), allow_pickle);
 
         /// <summary>
-        /// Save several arrays into a single file in uncompressed .npz format.
+        ///     Write an array in <c>.npy</c> format to an open stream.
         /// </summary>
-        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
-        /// <param name="arrays">Arrays to save. Will be named arr_0, arr_1, etc.</param>
-        /// <remarks>
-        /// The .npz file format is a zipped archive of .npy files. Each file in the archive
-        /// contains one array in .npy format.
-        ///
-        /// For compression, use <see cref="savez_compressed"/>.
-        /// </remarks>
-        /// <example>
-        /// <code>
-        /// var x = np.arange(10);
-        /// var y = np.sin(x);
-        /// np.savez("data.npz", x, y);
-        ///
-        /// // Load back
-        /// using var npz = np.load("data.npz") as NpzFile;
-        /// var x_loaded = npz["arr_0"];
-        /// var y_loaded = npz["arr_1"];
-        /// </code>
-        /// </example>
-        public static void savez(string file, params NDArray[] arrays)
+        /// <param name="file">
+        ///     An open, writable stream. Written from its current position and left open, so successive
+        ///     calls append — several arrays can share one file and be read back in order by
+        ///     <see cref="load_npy(Stream, bool, long)"/>.
+        /// </param>
+        /// <param name="arr">The array to save.</param>
+        /// <param name="allow_pickle">Present for NumPy parity; see <see cref="save(string, NDArray, bool)"/>.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.save.html</remarks>
+        public static void save(Stream file, NDArray arr, bool allow_pickle = true)
         {
-            var dict = new Dictionary<string, NDArray>();
-            for (int i = 0; i < arrays.Length; i++)
-                dict[$"arr_{i}"] = arrays[i];
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
 
-            SaveNpzInternal(file, dict, compress: false);
+            NpyFormat.WriteArray(file, arr, null, allow_pickle);
         }
 
         /// <summary>
-        /// Save several arrays into a single file in uncompressed .npz format with named keys.
+        ///     Encode an array as <c>.npy</c> and return the bytes.
         /// </summary>
-        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
-        /// <param name="arrays">Dictionary mapping names to arrays.</param>
-        /// <remarks>
-        /// Keys should be valid filenames (avoid / or . characters).
-        /// </remarks>
-        /// <example>
-        /// <code>
-        /// var weights = np.random.randn(100, 50);
-        /// var biases = np.zeros(50);
-        /// np.savez("model.npz", new Dictionary&lt;string, NDArray&gt; {
-        ///     ["weights"] = weights,
-        ///     ["biases"] = biases
-        /// });
-        ///
-        /// // Load back
-        /// using var npz = np.load("model.npz") as NpzFile;
-        /// var w = npz["weights"];
-        /// var b = npz["biases"];
-        /// </code>
-        /// </example>
-        public static void savez(string file, Dictionary<string, NDArray> arrays)
+        /// <remarks>A NumSharp convenience; NumPy has no in-memory equivalent.</remarks>
+        public static byte[] save(NDArray arr, bool allow_pickle = true)
         {
-            SaveNpzInternal(file, arrays, compress: false);
-        }
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
 
-        /// <summary>
-        /// Save several arrays into a single file in uncompressed .npz format.
-        /// Combines positional and named arrays.
-        /// </summary>
-        /// <param name="file">File path.</param>
-        /// <param name="positionalArrays">Arrays named arr_0, arr_1, etc.</param>
-        /// <param name="namedArrays">Arrays with explicit names.</param>
-        public static void savez(string file, NDArray[] positionalArrays, Dictionary<string, NDArray> namedArrays)
-        {
-            var combined = new Dictionary<string, NDArray>(namedArrays);
-            for (int i = 0; i < positionalArrays.Length; i++)
+            using (var stream = new MemoryStream())
             {
-                string key = $"arr_{i}";
-                if (combined.ContainsKey(key))
-                    throw new ArgumentException($"Cannot use positional array and keyword '{key}'");
-                combined[key] = positionalArrays[i];
+                NpyFormat.WriteArray(stream, arr, null, allow_pickle);
+                return stream.ToArray();
             }
+        }
 
-            SaveNpzInternal(file, combined, compress: false);
+        /// <summary>
+        ///     Write an array in <c>.npy</c> format using an explicit format version — NumPy's
+        ///     <c>numpy.lib.format.write_array</c>.
+        /// </summary>
+        /// <param name="file">An open, writable stream.</param>
+        /// <param name="arr">The array to save.</param>
+        /// <param name="version">
+        ///     (1,0), (2,0), (3,0), or null to use the oldest that can hold the header. Version 2.0
+        ///     widens the header-length field to 4 bytes; 3.0 also switches the header to UTF-8.
+        /// </param>
+        /// <param name="allow_pickle">Present for NumPy parity; see <see cref="save(string, NDArray, bool)"/>.</param>
+        /// <exception cref="FormatException">The version is not one of (1,0), (2,0) or (3,0).</exception>
+        public static void save_version(Stream file, NDArray arr, NpyFormat.FormatVersion? version, bool allow_pickle = true)
+        {
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            if (arr is null) throw new ArgumentNullException(nameof(arr));
+
+            NpyFormat.WriteArray(file, arr, version, allow_pickle);
         }
 
         #endregion
 
-        #region np.savez_compressed
+        #region savez (.npz)
 
         /// <summary>
-        /// Save several arrays into a single file in compressed .npz format.
+        ///     Save several arrays into an uncompressed <c>.npz</c> archive, named <c>arr_0</c>,
+        ///     <c>arr_1</c>, … in order.
         /// </summary>
-        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
-        /// <param name="arrays">Arrays to save. Will be named arr_0, arr_1, etc.</param>
-        /// <remarks>
-        /// Uses ZIP_DEFLATED compression. For uncompressed archives, use <see cref="savez"/>.
-        /// </remarks>
-        public static void savez_compressed(string file, params NDArray[] arrays)
-        {
-            var dict = new Dictionary<string, NDArray>();
-            for (int i = 0; i < arrays.Length; i++)
-                dict[$"arr_{i}"] = arrays[i];
-
-            SaveNpzInternal(file, dict, compress: true);
-        }
+        /// <param name="file">Target path. <c>.npz</c> is appended if not already present.</param>
+        /// <param name="args">The arrays, in order.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(string file, params NDArray[] args)
+            => savez(file, args, null);
 
         /// <summary>
-        /// Save several arrays into a single file in compressed .npz format with named keys.
+        ///     Save named arrays into an uncompressed <c>.npz</c> archive — NumPy's keyword form,
+        ///     <c>np.savez(file, weights=w, biases=b)</c>.
         /// </summary>
-        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
-        /// <param name="arrays">Dictionary mapping names to arrays.</param>
-        public static void savez_compressed(string file, Dictionary<string, NDArray> arrays)
-        {
-            SaveNpzInternal(file, arrays, compress: true);
-        }
+        /// <param name="file">Target path. <c>.npz</c> is appended if not already present.</param>
+        /// <param name="kwds">Name/array pairs. Each becomes <c>&lt;name&gt;.npy</c> in the archive.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(string file, IDictionary<string, NDArray> kwds)
+            => savez(file, null, kwds);
 
         /// <summary>
-        /// Save several arrays into a single file in compressed .npz format.
-        /// Combines positional and named arrays.
+        ///     Save positional and named arrays into an uncompressed <c>.npz</c> archive.
         /// </summary>
-        public static void savez_compressed(string file, NDArray[] positionalArrays, Dictionary<string, NDArray> namedArrays)
-        {
-            var combined = new Dictionary<string, NDArray>(namedArrays);
-            for (int i = 0; i < positionalArrays.Length; i++)
-            {
-                string key = $"arr_{i}";
-                if (combined.ContainsKey(key))
-                    throw new ArgumentException($"Cannot use positional array and keyword '{key}'");
-                combined[key] = positionalArrays[i];
-            }
+        /// <param name="file">Target path. <c>.npz</c> is appended if not already present.</param>
+        /// <param name="args">Positional arrays, stored as <c>arr_0</c>, <c>arr_1</c>, …</param>
+        /// <param name="kwds">Named arrays.</param>
+        /// <exception cref="ArgumentException">A name in <paramref name="kwds"/> collides with a generated <c>arr_N</c>.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(string file, NDArray[] args, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, args, kwds, CompressionLevel.NoCompression);
 
-            SaveNpzInternal(file, combined, compress: true);
-        }
+        /// <summary>Write an uncompressed <c>.npz</c> archive to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(Stream file, params NDArray[] args)
+            => SaveZip(file, args, null, CompressionLevel.NoCompression);
+
+        /// <summary>Write an uncompressed <c>.npz</c> archive of named arrays to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(Stream file, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, null, kwds, CompressionLevel.NoCompression);
+
+        /// <summary>Write an uncompressed <c>.npz</c> archive of positional and named arrays to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
+        public static void savez(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, args, kwds, CompressionLevel.NoCompression);
+
+        /// <summary>Encode an uncompressed <c>.npz</c> archive of <c>arr_0</c>… arrays and return the bytes.</summary>
+        /// <remarks>A NumSharp convenience; NumPy has no in-memory equivalent.</remarks>
+        public static byte[] savez(params NDArray[] args)
+            => SaveZipBytes(args, null, CompressionLevel.NoCompression);
+
+        /// <summary>Encode an uncompressed <c>.npz</c> archive of named arrays and return the bytes.</summary>
+        /// <remarks>A NumSharp convenience; NumPy has no in-memory equivalent.</remarks>
+        public static byte[] savez(IDictionary<string, NDArray> kwds)
+            => SaveZipBytes(null, kwds, CompressionLevel.NoCompression);
 
         #endregion
 
-        #region Internal
+        #region savez_compressed (.npz, deflated)
 
         /// <summary>
-        /// Internal implementation for saving .npz files.
+        ///     Save several arrays into a compressed <c>.npz</c> archive, named <c>arr_0</c>,
+        ///     <c>arr_1</c>, … in order.
         /// </summary>
-        private static void SaveNpzInternal(string file, Dictionary<string, NDArray> arrays, bool compress)
-        {
-            if (file == null)
-                throw new ArgumentNullException(nameof(file));
-            if (arrays == null)
-                throw new ArgumentNullException(nameof(arrays));
+        /// <param name="file">Target path. <c>.npz</c> is appended if not already present.</param>
+        /// <param name="args">The arrays, in order.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(string file, params NDArray[] args)
+            => savez_compressed(file, args, null);
 
-            // Add .npz extension if not present
-            if (!file.EndsWith(".npz", StringComparison.OrdinalIgnoreCase))
+        /// <summary>Save named arrays into a compressed <c>.npz</c> archive.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(string file, IDictionary<string, NDArray> kwds)
+            => savez_compressed(file, null, kwds);
+
+        /// <summary>Save positional and named arrays into a compressed <c>.npz</c> archive.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(string file, NDArray[] args, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, args, kwds, CompressionLevel.Optimal);
+
+        /// <summary>Write a compressed <c>.npz</c> archive to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(Stream file, params NDArray[] args)
+            => SaveZip(file, args, null, CompressionLevel.Optimal);
+
+        /// <summary>Write a compressed <c>.npz</c> archive of named arrays to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(Stream file, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, null, kwds, CompressionLevel.Optimal);
+
+        /// <summary>Write a compressed <c>.npz</c> archive of positional and named arrays to an open stream.</summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
+        public static void savez_compressed(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds)
+            => SaveZip(file, args, kwds, CompressionLevel.Optimal);
+
+        /// <summary>Encode a compressed <c>.npz</c> archive of <c>arr_0</c>… arrays and return the bytes.</summary>
+        /// <remarks>A NumSharp convenience; NumPy has no in-memory equivalent.</remarks>
+        public static byte[] savez_compressed(params NDArray[] args)
+            => SaveZipBytes(args, null, CompressionLevel.Optimal);
+
+        /// <summary>Encode a compressed <c>.npz</c> archive of named arrays and return the bytes.</summary>
+        /// <remarks>A NumSharp convenience; NumPy has no in-memory equivalent.</remarks>
+        public static byte[] savez_compressed(IDictionary<string, NDArray> kwds)
+            => SaveZipBytes(null, kwds, CompressionLevel.Optimal);
+
+        #endregion
+
+        #region npz internals
+
+        private static void SaveZip(string file, NDArray[] args, IDictionary<string, NDArray> kwds, CompressionLevel level)
+        {
+            if (file == null) throw new ArgumentNullException(nameof(file));
+
+            if (!file.EndsWith(".npz", StringComparison.Ordinal))
                 file += ".npz";
 
-            var compression = compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression;
+            using (var stream = new FileStream(file, FileMode.Create, FileAccess.Write))
+                SaveZip(stream, args, kwds, level);
+        }
 
-            using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
-            using var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false);
-
-            foreach (var kvp in arrays)
+        private static byte[] SaveZipBytes(NDArray[] args, IDictionary<string, NDArray> kwds, CompressionLevel level)
+        {
+            using (var stream = new MemoryStream())
             {
-                string entryName = kvp.Key;
-                if (!entryName.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
-                    entryName += ".npy";
-
-                var entry = archive.CreateEntry(entryName, compression);
-                using var entryStream = entry.Open();
-                NpyFormat.WriteArray(entryStream, kvp.Value);
+                SaveZip(stream, args, kwds, level);
+                return stream.ToArray();
             }
         }
 
-        /// <summary>
-        /// Save .npz to stream.
-        /// </summary>
-        internal static void SaveNpzToStream(Stream stream, Dictionary<string, NDArray> arrays, bool compress, bool leaveOpen = false)
+        private static void SaveZip(Stream stream, NDArray[] args, IDictionary<string, NDArray> kwds, CompressionLevel level)
         {
-            var compression = compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression;
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
 
-            using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen);
+            // NumPy's _savez: keyword arrays keep their names and come first, then positional arrays
+            // take arr_0, arr_1, …; a positional name that collides with a keyword is an error rather
+            // than a silent overwrite.
+            var namedict = new List<KeyValuePair<string, NDArray>>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (var kvp in arrays)
+            if (kwds != null)
             {
-                string entryName = kvp.Key;
-                if (!entryName.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
-                    entryName += ".npy";
-
-                var entry = archive.CreateEntry(entryName, compression);
-                using var entryStream = entry.Open();
-                NpyFormat.WriteArray(entryStream, kvp.Value);
+                foreach (KeyValuePair<string, NDArray> kv in kwds)
+                {
+                    if (kv.Value is null) throw new ArgumentNullException(nameof(kwds), $"Array '{kv.Key}' is null.");
+                    namedict.Add(kv);
+                    seen.Add(kv.Key);
+                }
             }
-        }
 
-        #endregion
+            if (args != null)
+            {
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string key = $"arr_{i}";
+                    if (seen.Contains(key))
+                        throw new ArgumentException($"Cannot use un-named variables and keyword {key}", nameof(kwds));
+                    if (args[i] is null) throw new ArgumentNullException(nameof(args), $"Array at index {i} is null.");
+                    namedict.Add(new KeyValuePair<string, NDArray>(key, args[i]));
+                    seen.Add(key);
+                }
+            }
 
-        #region Convenience Overloads
-
-        /// <summary>
-        /// Save NDArray to .npy file (NumPy-compatible binary format).
-        /// </summary>
-        public static void save(string file, Array arr)
-        {
-            save(file, np.array(arr));
-        }
-
-        /// <summary>
-        /// Save to byte array in .npy format.
-        /// </summary>
-        public static byte[] save(NDArray arr)
-        {
-            using var stream = new MemoryStream();
-            save(stream, arr);
-            return stream.ToArray();
-        }
-
-        /// <summary>
-        /// Save multiple arrays to byte array in .npz format.
-        /// </summary>
-        public static byte[] savez(params NDArray[] arrays)
-        {
-            using var stream = new MemoryStream();
-            var dict = new Dictionary<string, NDArray>();
-            for (int i = 0; i < arrays.Length; i++)
-                dict[$"arr_{i}"] = arrays[i];
-            SaveNpzToStream(stream, dict, compress: false, leaveOpen: true);
-            return stream.ToArray();
-        }
-
-        /// <summary>
-        /// Save multiple arrays to byte array in compressed .npz format.
-        /// </summary>
-        public static byte[] savez_compressed(params NDArray[] arrays)
-        {
-            using var stream = new MemoryStream();
-            var dict = new Dictionary<string, NDArray>();
-            for (int i = 0; i < arrays.Length; i++)
-                dict[$"arr_{i}"] = arrays[i];
-            SaveNpzToStream(stream, dict, compress: true, leaveOpen: true);
-            return stream.ToArray();
+            // ZipArchive writes Zip64 records as needed, so archives above 4 GB work — NumPy passes
+            // force_zip64=True for the same reason (numpy gh-10776).
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (KeyValuePair<string, NDArray> kv in namedict)
+                {
+                    ZipArchiveEntry entry = zip.CreateEntry(kv.Key + ".npy", level);
+                    using (Stream s = entry.Open())
+                        NpyFormat.WriteArray(s, kv.Value);
+                }
+            }
         }
 
         #endregion

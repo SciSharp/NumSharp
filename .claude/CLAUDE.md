@@ -297,7 +297,40 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
 ### File I/O
-`fromfile`, `load`, `save`, `tofile`
+`fromfile`, `load`, `load_npy`, `load_npz`, `save`, `savez`, `savez_compressed`, `tofile`
+
+The `.npy`/`.npz` stack is a **port of NumPy 2.4.2's `numpy/lib/_format_impl.py`** (NEP-01) in
+`IO/{NpyFormat,NpzFile,PyLiteral}.cs`, and the writer is **byte-for-byte identical to NumPy's own
+`np.save`** — not merely readable by it. Format versions **1.0 / 2.0 / 3.0** (2- vs 4-byte header
+length; latin-1 vs UTF-8), **64-byte `ARRAY_ALIGN`** data alignment (so the data is mmap-ready),
+**`fortran_order`** both ways (write via the transpose; read via reshape-reversed + transpose), and
+**big-endian** files byte-swapped to native on read (per-component: `>c16` swaps in 8s, `>U1` in 4s).
+Headers parse through a real Python-literal parser (`PyLiteral`, standing in for `ast.literal_eval`)
+rather than `IndexOf`/regex, so key order, whitespace, quoting, trailing commas and the Python 2 `3L`
+suffix all work; `max_header_size` (default 10000) bounds hostile input and `allow_pickle` lifts it.
+
+`np.load` returns `object` — `NDArray` for `.npy`, `NpzFile` for `.npz` — mirroring NumPy's
+content-dependent return; **`np.load_npy` / `np.load_npz` are the typed forms** and need no cast.
+`NpzFile` is lazy + cached, takes `"w"` or `"w.npy"` as keys, exposes `.Files` stripped, supports
+`npz.f.weights` dot access (NumPy's `BagObj`) and **must be disposed**.
+
+| Dtype | Maps to | Notes |
+|-------|---------|-------|
+| Boolean/SByte/Byte | `\|b1` / `\|i1` / `\|u1` | single-byte types take the `\|` prefix, never `<` |
+| Int16…UInt64, Half, Single, Double | `<i2`…`<u8`, `<f2`, `<f4`, `<f8` | direct |
+| Complex | `<c16` | `<c8` widens to `Complex` on read |
+| Char | `<U1` | 2-byte UTF-16 ↔ 4-byte UCS-4; non-BMP rejected (needs a surrogate pair) |
+| Decimal | — | `NotSupportedException`: no NumPy dtype (cast to Double) |
+
+Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `\|S`/`<U`n>1/`\|V`, `<f16`
+and `<c32` are parsed then rejected with a precise message. `mmap_mode` validates its value and
+throws `NotImplementedException` (implementation sketch in `np.load.cs`'s `CheckMmapMode`).
+
+**Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (217 committed cases of real
+NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category — read / byte-exact
+write / verbatim error / round-trip / npz / live-view write. Reverse interop (NumPy reading NumSharp,
+the direction byte-equality can't cover for `.npz`) is the manual gate
+`python test/oracle/verify_npy_interop.py`.
 
 ### Printing / Formatting
 `array2string`, `array_repr`, `array_str`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `printoptions` (IDisposable context), `set_printoptions`
@@ -342,6 +375,7 @@ Semantics (all probed against NumPy 2.4.2, pinned in `NDEvaluateTests.cs`):
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NDIter-driven) |
 | DirectILKernelGenerator | `Backends/Kernels/Direct/DirectILKernelGenerator.*.cs` (whole-array, 63 partials) |
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
+| .npy/.npz format (NEP-01) | `IO/NpyFormat.cs` (port of NumPy's `_format_impl.py`), `IO/NpzFile.cs` (lazy archive), `IO/PyLiteral.cs` (header parser ≙ `ast.literal_eval`), `APIs/np.{save,load}.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |
 
@@ -561,6 +595,10 @@ test/oracle/                          corpus generators (NumPy 2.4.2 — run by 
                                       varstd,matmul,astype,stat,where,sort,manip}.jsonl
   gen_index_oracle.py                 getter/setter index oracle (token index over 15 base recipes)
   fuzz_random.py                      seeded random fuzzer (imports the other two)
+  gen_npy_oracle.py                   .npy/.npz format oracle: REAL np.save/savez output + a manifest ->
+                                      NumSharp.UnitTest/IO/corpus/npy_oracle.zip (217 cases)
+  interop_write.cs                    the reverse direction: NumSharp writes, verify_npy_interop.py reads
+  verify_npy_interop.py               manual gate — real NumPy reads NumSharp's output (needs Python + SDK)
 test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   FuzzCorpus.cs                       rebuilds EXACT NDArray views from (dtype,shape,strides,offset,bytes)
   OpRegistry.cs                       op-name → NumSharp call (pairs 1:1 with gen_oracle.py)
@@ -571,6 +609,11 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
   corpus/*.jsonl                      committed corpus (~68K cases / 40 tiers; op corpus ~53K incl. 3.7K Char woven + 579 Decimal), copied to test output via the csproj glob
+test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
+  NpyOracleCorpus.cs                  opens npy_oracle.zip, rebuilds arrays from the manifest
+  NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / verbatim
+                                      error / round-trip / npz / live-view write / corpus non-vacuity
+  corpus/npy_oracle.zip               committed real-NumPy output (217 cases), copied via the csproj glob
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
@@ -578,6 +621,20 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
 - **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into every tier via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`). Verified Char/clip-bool bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`) — NOT excused in `MisalignedRegistry`.
 - **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
+
+### The `.npy`/`.npz` format oracle (same philosophy, separate corpus)
+
+Same shape as above — NumPy is the oracle, the corpus is committed, no Python at test time — but the
+claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, not merely readable.
+
+- **Regenerate**: `python test/oracle/gen_npy_oracle.py` (deterministic; needs `numpy==2.4.2`), then `dotnet build`.
+- **Run the gate**: `dotnet test --filter "TestCategory=NpyOracle"` — 217 cases across every dtype ×
+  {0-d, empty, 1-D, 2-D, 3-D, unit, empty-2d/3d} × {C, F, strided, reversed, offset, broadcast,
+  transposed} × versions {1.0, 2.0, 3.0} × {little, big, native} endian, plus 32 malformed/unsupported
+  files whose messages must match NumPy verbatim.
+- **Reverse interop** (manual; needs Python + the SDK): `python test/oracle/verify_npy_interop.py` has
+  NumSharp write 28 files and real NumPy read them. This is the only way to prove `.npz` output,
+  whose ZIP framing legitimately differs from Python's `zipfile` and so cannot be byte-compared.
 
 ## CI Pipeline
 
@@ -759,7 +816,10 @@ A: No external runtime dependencies. `System.Memory` and `System.Runtime.Compile
 A: TensorFlow.NET, ML.NET integrations, Gym.NET, Pandas.NET, and various scientific computing projects.
 
 **Q: Can I save/load NumPy files?**
-A: Yes. `np.save()` writes `.npy` files, `np.load()` reads both `.npy` and `.npz` archives. Compatible with Python NumPy files.
+A: Yes, and byte-exactly. `np.save` writes `.npy`, `np.savez`/`np.savez_compressed` write `.npz`, and `np.load` reads both (returning `object`; `np.load_npy`/`np.load_npz` are the typed forms). `IO/NpyFormat.cs` is a port of NumPy 2.4.2's `_format_impl.py`, so a saved file is byte-for-byte what NumPy's own `np.save` would produce — versions 1.0/2.0/3.0, 64-byte alignment, `fortran_order`, and big-endian reads included. See the File I/O section above for the dtype map and the gates.
+
+**Q: Why does `np.load` return `object` instead of `NDArray`?**
+A: Because NumPy's does: `np.load` yields an `ndarray` for a `.npy` and an `NpzFile` for a `.npz`, dispatching on the file's magic bytes rather than its extension, and C# has no union type to express that. `np.load_npy` and `np.load_npz` are the typed escapes — prefer them when the kind is known; each also reports a directed error if handed the other kind.
 
 **Q: What random distributions are supported?**
 A: An extensive NumPy-matching set (40+ distributions and samplers — see the Supported np.* APIs → Random list), all on the `NumPyRandom` class in `RandomSampling/`, with 1-to-1 seed/state parity to NumPy.

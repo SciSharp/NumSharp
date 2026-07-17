@@ -2474,20 +2474,15 @@ namespace NumSharp.UnitTest.View
         //   save(F-contig) writes header 'fortran_order': True and F-strided bytes.
         //   load(fortran_order=True .npy) returns an F-contig NDArray.
         //   Round-trip through np.save + np.load preserves both values AND layout.
-        // NumSharp (current state, all documented gaps):
-        //   1. np.save.cs:172 hardcodes "'fortran_order': False" in header.
-        //   2. np.save writes C-order bytes (via (Array)nd → ToMuliDimArray<T>()).
-        //   3. np.load.cs:322 throws if header says 'fortran_order': True.
-        //   4. np.load always returns C-contig (matches #1/#2 but not NumPy).
+        // NumSharp: all four gaps closed by the NEP-01 rewrite (NpyFormat/NpzFile). The header now
+        //   reports the real layout, F-order bytes are written via the transpose, fortran_order: True
+        //   loads as reshape-reversed + transpose, and the layout survives the round-trip. The full
+        //   matrix lives in NpyOracleTests; these stay as the layout-focused regression.
         // ============================================================================
 
         [TestMethod]
         public void NpSave_FContig_RoundTrip_Values_Preserved()
         {
-            // Values must match after round-trip, regardless of layout.
-            // NumSharp: save walks an F-contig view in C-order, so it writes
-            // C-order bytes + "fortran_order: False" header. The values survive;
-            // only the layout flag diverges from NumPy.
             var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
             using var stream = new System.IO.MemoryStream();
             np.save(stream, f);
@@ -2501,10 +2496,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        [OpenBugs] // NumPy: save(F-contig) writes 'fortran_order': True in header.
-                   // NumSharp: NpyFormat.HeaderDataFromArray hardcodes fortranOrder=false —
-                   // the header is a lie when the caller passes an F-contig NDArray, and
-                   // also loses round-trip layout info.
         public void NpSave_FContig_Header_ContainsFortranOrderTrue()
         {
             var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));
@@ -2521,14 +2512,13 @@ namespace NumSharp.UnitTest.View
         }
 
         [TestMethod]
-        public void NpLoad_NumPyFortranOrderTrue_DoesNotThrow()
+        public void NpLoad_NumPyFortranOrderTrue_LoadsAsFContig()
         {
-            // Synthesize a minimal .npy header with 'fortran_order': True.
-            // dtype '<f8' (little-endian float64), shape (4,3), then 96 bytes of payload.
+            // Synthesize a .npy with 'fortran_order': True the way NumPy writes it: dtype '<f8',
+            // shape (4,3), header padded so the data starts on a 64-byte boundary.
             var header = "{'descr': '<f8', 'fortran_order': True, 'shape': (4, 3), }";
-            int preamble = 10;
-            int pad = 16 - ((header.Length + 1 + preamble) % 16);
-            header = header.PadRight(header.Length + pad) + "\n";
+            int pad = 64 - ((10 + header.Length + 1) % 64);
+            int headerLen = header.Length + pad + 1;
 
             using var stream = new System.IO.MemoryStream();
             using (var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.ASCII, leaveOpen: true))
@@ -2537,23 +2527,30 @@ namespace NumSharp.UnitTest.View
                 writer.Write(new[] { 'N', 'U', 'M', 'P', 'Y' });
                 writer.Write((byte)1);
                 writer.Write((byte)0);
-                writer.Write((ushort)header.Length);
-                for (int i = 0; i < header.Length; i++)
-                    writer.Write((byte)header[i]);
+                writer.Write((ushort)headerLen);
+                foreach (char ch in header)
+                    writer.Write((byte)ch);
+                for (int i = 0; i < pad; i++)
+                    writer.Write((byte)' ');
+                writer.Write((byte)'\n');
                 for (int i = 0; i < 12; i++)
-                    writer.Write((double)i);  // 12 doubles of payload
+                    writer.Write((double)i);  // 12 doubles of payload, in F-order
             }
 
             stream.Position = 0;
-            Action act = () => np.load(stream);
-            act.Should().NotThrow(
-                "NumPy saves F-contig arrays with fortran_order:True — NumSharp must accept them");
+            var loaded = np.load_npy(stream);
+
+            loaded.shape.Should().Equal(new long[] { 4, 3 });
+            loaded.Shape.IsFContiguous.Should().BeTrue(
+                "NumPy saves F-contig arrays with fortran_order:True — NumSharp must load them as F-contig");
+
+            // F-order means the first axis varies fastest: element (i,j) is payload[j*4 + i].
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++)
+                    ((double)loaded[i, j]).Should().Be(j * 4 + i);
         }
 
         [TestMethod]
-        [OpenBugs] // NumPy: round-trip of F-contig preserves layout flag.
-                   // NumSharp: load always returns C-contig (even if bytes/layout could
-                   // be preserved, the loader discards that info).
         public void NpSave_FContig_RoundTrip_PreservesFContigFlag()
         {
             var f = np.arange(12).reshape(3, 4).T.astype(typeof(double));

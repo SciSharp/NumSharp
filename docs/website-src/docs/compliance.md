@@ -251,24 +251,42 @@ NumSharp can read and write NumPy's `.npy` file format. This means you can:
 3. Share data files between Python and C# applications
 
 ```csharp
-// Save
+// Save — the bytes are identical to what NumPy's own np.save would write
 var arr = np.arange(100).reshape(10, 10);
 np.save("mydata.npy", arr);
 
 // Load
-var loaded = np.load("mydata.npy");
+NDArray loaded = np.load_npy("mydata.npy");
 ```
+
+Format versions 1.0, 2.0 and 3.0 all load, in either byte order and in either C or Fortran order.
+Object arrays, structured dtypes and `datetime64`/`timedelta64` are not supported — those files are
+rejected with a message naming the reason rather than loading incorrectly.
 
 ### .npz Archives
 
-NumPy's `.npz` format stores multiple arrays in a ZIP archive. NumSharp can **read** `.npz` files but not write them yet.
+NumPy's `.npz` format stores multiple arrays in a ZIP archive. NumSharp reads **and** writes them,
+compressed or not.
 
 ```csharp
-// Load multiple arrays from .npz
-var archive = np.load("data.npz") as NpzDictionary;
-var weights = archive["weights"];
-var biases = archive["biases"];
+// Write multiple arrays
+np.savez("data.npz", new Dictionary<string, NDArray> {
+    ["weights"] = weights,
+    ["biases"] = biases,
+});
+np.savez_compressed("data.npz", ...);   // same, deflated
+
+// Read them back. Arrays load lazily and are cached; the archive holds a
+// file handle, so dispose it.
+using var archive = np.load_npz("data.npz");
+var weights = archive["weights"];       // "weights.npy" works too
+var biases  = archive.f.biases;         // dot access, like NumPy's npz.f
+archive.Files;                          // ["weights", "biases"] — ".npy" stripped
 ```
+
+`np.load` also opens `.npz` archives — it detects the format from the file's magic bytes and returns
+either an `NDArray` or an `NpzFile`, mirroring NumPy. Prefer the typed `np.load_npy` / `np.load_npz`
+when you know which one you have.
 
 ---
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -8,195 +9,228 @@ using System.Linq;
 namespace NumSharp.IO
 {
     /// <summary>
-    /// A dictionary-like object with lazy-loading of arrays from a .npz archive.
+    ///     A lazily-loaded <c>.npz</c> archive — NumPy's <c>NpzFile</c>.
     /// </summary>
     /// <remarks>
-    /// NpzFile provides read-only access to arrays stored in a .npz file.
-    /// Arrays are loaded lazily when first accessed.
+    ///     A <c>.npz</c> is a ZIP archive of <c>.npy</c> members. Nothing is decoded until a key is
+    ///     accessed, and each array is cached from then on, so a huge archive costs only what is read
+    ///     out of it.
     ///
-    /// Usage:
-    /// <code>
-    /// using (var npz = np.load("data.npz") as NpzFile)
-    /// {
-    ///     var arr1 = npz["arr_0"];
-    ///     var arr2 = npz["weights"];
-    /// }
-    /// </code>
+    ///     Keys work with or without the <c>.npy</c> suffix — <c>npz["weights"]</c> and
+    ///     <c>npz["weights.npy"]</c> are the same member — while <see cref="Files"/> reports the stripped
+    ///     names, matching NumPy.
     ///
-    /// Both stripped and unstripped names work:
-    /// - npz["arr_0"] and npz["arr_0.npy"] refer to the same array
+    ///     The archive holds an open file handle, so dispose it:
+    ///     <code>
+    ///     using var npz = np.load_npz("model.npz");
+    ///     NDArray w = npz["weights"];
+    ///     NDArray b = npz.f.biases;   // dot access, NumPy's BagObj
+    ///     </code>
     /// </remarks>
     public sealed class NpzFile : IReadOnlyDictionary<string, NDArray>, IDisposable
     {
-        #region Fields
+        /// <summary>How many keys <see cref="ToString"/> lists before eliding — NumPy's <c>_MAX_REPR_ARRAY_COUNT</c>.</summary>
+        private const int MaxReprArrayCount = 5;
 
-        private Stream? _stream;
-        private ZipArchive? _archive;
         private readonly bool _ownStream;
-        private readonly int _maxHeaderSize;
+        private readonly string _name;
 
-        /// <summary>Maps user-facing keys (without .npy) to entry names</summary>
+        /// <summary>Maps every accepted key — stripped AND suffixed — to its zip entry name.</summary>
         private readonly Dictionary<string, string> _keyToEntry;
 
-        /// <summary>Maps entry names to user-facing keys</summary>
-        private readonly Dictionary<string, string> _entryToKey;
-
-        /// <summary>Cache of loaded arrays</summary>
         private readonly Dictionary<string, NDArray> _cache;
-
-        /// <summary>List of user-facing keys (without .npy extension)</summary>
         private readonly List<string> _files;
 
+        private Stream _stream;
+        private ZipArchive _archive;
         private bool _disposed;
 
-        #endregion
-
-        #region Properties
-
         /// <summary>
-        /// List of all array names in the archive (without .npy extension).
+        ///     Open an archive over a stream.
         /// </summary>
-        public IReadOnlyList<string> Files => _files;
-
-        /// <summary>
-        /// The underlying ZipArchive (for advanced access).
-        /// </summary>
-        public ZipArchive? Zip => _archive;
-
-        /// <summary>
-        /// Number of arrays in the archive.
-        /// </summary>
-        public int Count => _files.Count;
-
-        /// <summary>
-        /// All keys (array names) in the archive.
-        /// </summary>
-        public IEnumerable<string> Keys => _files;
-
-        /// <summary>
-        /// All arrays in the archive (triggers loading all arrays).
-        /// </summary>
-        public IEnumerable<NDArray> Values
-        {
-            get
-            {
-                foreach (var key in _files)
-                    yield return this[key];
-            }
-        }
-
-        #endregion
-
-        #region Constructor
-
-        /// <summary>
-        /// Create NpzFile from a stream.
-        /// </summary>
-        /// <param name="stream">Stream containing the .npz archive</param>
-        /// <param name="ownStream">If true, the stream will be closed when NpzFile is disposed</param>
-        /// <param name="maxHeaderSize">Maximum allowed header size for security</param>
-        public NpzFile(Stream stream, bool ownStream = false, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        /// <param name="stream">A readable, seekable stream holding the ZIP archive.</param>
+        /// <param name="ownStream">When true, disposing this also disposes <paramref name="stream"/>.</param>
+        /// <param name="allowPickle">Whether members are trusted; see <see cref="NpyFormat.ReadArray"/>.</param>
+        /// <param name="maxHeaderSize">Per-member header size cap.</param>
+        public NpzFile(Stream stream, bool ownStream = false, bool allowPickle = false,
+                       long maxHeaderSize = NpyFormat.MaxHeaderSize)
         {
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             _ownStream = ownStream;
-            _maxHeaderSize = maxHeaderSize;
-            _archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            AllowPickle = allowPickle;
+            MaxHeaderSize = maxHeaderSize;
+            _name = (stream as FileStream)?.Name ?? "object";
+
+            try
+            {
+                _archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            }
+            catch
+            {
+                if (ownStream) stream.Dispose();
+                throw;
+            }
 
             _keyToEntry = new Dictionary<string, string>(StringComparer.Ordinal);
-            _entryToKey = new Dictionary<string, string>(StringComparer.Ordinal);
             _cache = new Dictionary<string, NDArray>(StringComparer.Ordinal);
-            _files = new List<string>();
+            _files = new List<string>(_archive.Entries.Count);
 
-            // Build key mappings
-            foreach (var entry in _archive.Entries)
+            foreach (ZipArchiveEntry entry in _archive.Entries)
             {
                 string entryName = entry.FullName;
-                string key = entryName.EndsWith(".npy", StringComparison.OrdinalIgnoreCase)
+                string key = entryName.EndsWith(".npy", StringComparison.Ordinal)
                     ? entryName.Substring(0, entryName.Length - 4)
                     : entryName;
 
                 _files.Add(key);
                 _keyToEntry[key] = entryName;
-                _keyToEntry[entryName] = entryName; // Also allow full name
-                _entryToKey[entryName] = key;
+                _keyToEntry[entryName] = entryName; // both 'weights' and 'weights.npy' resolve
+            }
+
+            F = new BagObj(this);
+        }
+
+        /// <summary>Open an archive from a file path. The file handle is owned and closed on dispose.</summary>
+        public NpzFile(string path, bool allowPickle = false, long maxHeaderSize = NpyFormat.MaxHeaderSize)
+            : this(new FileStream(path, FileMode.Open, FileAccess.Read), ownStream: true, allowPickle, maxHeaderSize)
+        {
+            _name = path;
+        }
+
+        /// <summary>The array names in the archive, with <c>.npy</c> stripped — NumPy's <c>.files</c>.</summary>
+        public IReadOnlyList<string> Files => _files;
+
+        /// <summary>Whether members are loaded as trusted input.</summary>
+        public bool AllowPickle { get; }
+
+        /// <summary>The per-member header size cap.</summary>
+        public long MaxHeaderSize { get; }
+
+        /// <summary>
+        ///     Dot-notation access to members — NumPy's <c>npz.f.weights</c>. Requires a <c>dynamic</c>
+        ///     receiver: <c>NDArray w = npz.f.weights;</c>.
+        /// </summary>
+        public dynamic F { get; private set; }
+
+        /// <summary>Lower-case alias of <see cref="F"/>, spelled as NumPy spells it.</summary>
+        public dynamic f => F;
+
+        /// <summary>The underlying archive, for callers that need entry metadata.</summary>
+        public ZipArchive Zip
+        {
+            get { ThrowIfDisposed(); return _archive; }
+        }
+
+        /// <summary>Number of members.</summary>
+        public int Count => _files.Count;
+
+        /// <summary>The member names — same as <see cref="Files"/>.</summary>
+        public IEnumerable<string> Keys => _files;
+
+        /// <summary>Every member's array. Enumerating this loads and caches all of them.</summary>
+        public IEnumerable<NDArray> Values
+        {
+            get
+            {
+                foreach (string key in _files)
+                    yield return this[key];
             }
         }
 
-        #endregion
-
-        #region Indexer
-
         /// <summary>
-        /// Get array by name. Both "arr_0" and "arr_0.npy" work.
+        ///     The array stored under <paramref name="key"/>, with or without the <c>.npy</c> suffix.
+        ///     Loaded on first access and cached.
         /// </summary>
+        /// <exception cref="KeyNotFoundException">No such member.</exception>
+        /// <exception cref="FormatException">The member is not a .npy file — use <see cref="GetRawBytes"/>.</exception>
         public NDArray this[string key]
         {
             get
             {
                 ThrowIfDisposed();
 
-                if (!_keyToEntry.TryGetValue(key, out var entryName))
-                    throw new KeyNotFoundException($"'{key}' is not a file in the archive");
+                if (!_keyToEntry.TryGetValue(key, out string entryName))
+                    throw new KeyNotFoundException($"{key} is not a file in the archive");
 
-                // Check cache first
-                if (_cache.TryGetValue(entryName, out var cached))
+                if (_cache.TryGetValue(entryName, out NDArray cached))
                     return cached;
 
-                // Load from archive
-                var entry = _archive!.GetEntry(entryName);
-                if (entry == null)
-                    throw new KeyNotFoundException($"Entry '{entryName}' not found in archive");
-
-                using var entryStream = entry.Open();
-                using var memStream = new MemoryStream();
-
-                // Copy to memory stream (ZipArchiveEntry streams don't support seeking)
-                entryStream.CopyTo(memStream);
-                memStream.Position = 0;
-
-                // Check if it's a .npy file
-                if (NpyFormat.IsNpyFile(memStream))
+                using (MemoryStream member = OpenMember(entryName))
                 {
-                    memStream.Position = 0;
-                    var array = NpyFormat.ReadArray(memStream, _maxHeaderSize);
-                    _cache[entryName] = array;
-                    return array;
-                }
-                else
-                {
-                    // Non-.npy file - return as byte array
-                    memStream.Position = 0;
-                    var bytes = memStream.ToArray();
-                    var array = np.array(bytes);
+                    // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
+                    // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening
+                    // every access to object.
+                    if (!NpyFormat.IsNpyFile(member))
+                        throw new FormatException(
+                            $"'{entryName}' is not a .npy member (its magic string is missing), so it has no array " +
+                            $"to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
+
+                    NDArray array = NpyFormat.ReadArray(member, AllowPickle, MaxHeaderSize);
                     _cache[entryName] = array;
                     return array;
                 }
             }
         }
 
-        #endregion
-
-        #region IReadOnlyDictionary Implementation
-
         /// <summary>
-        /// Check if key exists in archive.
+        ///     A member's raw bytes, whatever it holds. NumPy returns these from its indexer for
+        ///     non-<c>.npy</c> members; for a <c>.npy</c> member this is the encoded file itself.
         /// </summary>
+        /// <exception cref="KeyNotFoundException">No such member.</exception>
+        public byte[] GetRawBytes(string key)
+        {
+            ThrowIfDisposed();
+
+            if (!_keyToEntry.TryGetValue(key, out string entryName))
+                throw new KeyNotFoundException($"{key} is not a file in the archive");
+
+            using (MemoryStream member = OpenMember(entryName))
+                return member.ToArray();
+        }
+
+        /// <summary>Whether <paramref name="key"/> names a member that holds a .npy array.</summary>
+        public bool IsArray(string key)
+        {
+            ThrowIfDisposed();
+
+            if (!_keyToEntry.TryGetValue(key, out string entryName))
+                return false;
+            if (_cache.ContainsKey(entryName))
+                return true;
+
+            using (MemoryStream member = OpenMember(entryName))
+                return NpyFormat.IsNpyFile(member);
+        }
+
+        // A zip entry stream cannot seek, and both the magic sniff and the reader need to. Members are
+        // one array each, so buffering the whole entry is bounded by the array we are about to build.
+        private MemoryStream OpenMember(string entryName)
+        {
+            ZipArchiveEntry entry = _archive.GetEntry(entryName)
+                                    ?? throw new KeyNotFoundException($"{entryName} is not a file in the archive");
+
+            var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
+            using (Stream member = entry.Open())
+                member.CopyTo(buffer);
+            buffer.Position = 0;
+            return buffer;
+        }
+
+        /// <summary>Whether the archive has this member (with or without the <c>.npy</c> suffix).</summary>
         public bool ContainsKey(string key)
         {
             ThrowIfDisposed();
             return _keyToEntry.ContainsKey(key);
         }
 
-        /// <summary>
-        /// Try to get array by name.
-        /// </summary>
+        /// <summary>The array under <paramref name="key"/>, or false if there is no such member.</summary>
         public bool TryGetValue(string key, out NDArray value)
         {
             ThrowIfDisposed();
 
             if (!_keyToEntry.ContainsKey(key))
             {
-                value = default!;
+                value = null;
                 return false;
             }
 
@@ -204,22 +238,38 @@ namespace NumSharp.IO
             return true;
         }
 
-        /// <summary>
-        /// Enumerate all key-value pairs.
-        /// </summary>
+        /// <summary>Enumerate every member as a name/array pair, loading each in turn.</summary>
         public IEnumerator<KeyValuePair<string, NDArray>> GetEnumerator()
         {
             ThrowIfDisposed();
 
-            foreach (var key in _files)
+            foreach (string key in _files)
                 yield return new KeyValuePair<string, NDArray>(key, this[key]);
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        #endregion
+        /// <summary>Close the archive and release the file handle — NumPy's <c>close()</c>.</summary>
+        public void Close() => Dispose();
 
-        #region IDisposable
+        /// <inheritdoc cref="Close"/>
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            F = null;
+
+            _archive?.Dispose();
+            _archive = null;
+
+            if (_ownStream)
+                _stream?.Dispose();
+            _stream = null;
+
+            _cache.Clear();
+        }
 
         private void ThrowIfDisposed()
         {
@@ -227,59 +277,39 @@ namespace NumSharp.IO
                 throw new ObjectDisposedException(nameof(NpzFile));
         }
 
-        /// <summary>
-        /// Close the archive and release resources.
-        /// </summary>
-        public void Close()
-        {
-            Dispose();
-        }
-
-        /// <summary>
-        /// Dispose the NpzFile.
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            _archive?.Dispose();
-            _archive = null;
-
-            if (_ownStream)
-            {
-                _stream?.Dispose();
-            }
-            _stream = null;
-
-            _cache.Clear();
-        }
-
-        #endregion
-
-        #region Object Overrides
-
-        /// <summary>
-        /// String representation showing filename and keys.
-        /// </summary>
+        /// <summary>Formatted as NumPy's repr: <c>NpzFile 'model.npz' with keys: a, b, c</c>.</summary>
         public override string ToString()
         {
-            string name = _stream switch
-            {
-                FileStream fs => fs.Name,
-                _ => "stream"
-            };
-
-            const int maxKeys = 5;
-            string keys = string.Join(", ", _files.Take(maxKeys));
-            if (_files.Count > maxKeys)
+            string keys = string.Join(", ", _files.Take(MaxReprArrayCount));
+            if (_files.Count > MaxReprArrayCount)
                 keys += "...";
-
-            return $"NpzFile '{name}' with keys: {keys}";
+            return $"NpzFile '{_name}' with keys: {keys}";
         }
 
-        #endregion
+        /// <summary>
+        ///     Turns member lookups into property reads — NumPy's <c>BagObj</c>, reached via
+        ///     <see cref="NpzFile.F"/>.
+        /// </summary>
+        private sealed class BagObj : DynamicObject
+        {
+            // NumPy uses a weakref here so the NpzFile stays collectable despite the cycle. .NET's GC
+            // collects cycles, so a direct reference is fine.
+            private readonly NpzFile _owner;
+
+            public BagObj(NpzFile owner) => _owner = owner;
+
+            public override bool TryGetMember(GetMemberBinder binder, out object result)
+            {
+                if (!_owner.ContainsKey(binder.Name))
+                    throw new KeyNotFoundException($"{binder.Name} is not a file in the archive");
+
+                result = _owner[binder.Name];
+                return true;
+            }
+
+            public override IEnumerable<string> GetDynamicMemberNames() => _owner.Files;
+
+            public override string ToString() => _owner.ToString();
+        }
     }
 }

@@ -51,6 +51,13 @@
     </None>
   </ItemGroup>
 
+  <!-- .npy/.npz format oracle: real NumPy 2.4.2 output, replayed by NpyOracleTests (no Python in CI). -->
+  <ItemGroup>
+    <None Update="IO\corpus\npy_oracle.zip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 
   <ItemGroup>
     <None Remove="NumSharp.Bitmap\resources\captcha-a.png" />
