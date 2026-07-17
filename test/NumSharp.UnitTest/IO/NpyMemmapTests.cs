@@ -231,6 +231,53 @@ namespace NumSharp.UnitTest.IO
             }
         }
 
+        [TestMethod]
+        public void Mmap_FancyAndMask_ReturnWriteableCopies()
+        {
+            // Advanced indexing always copies, so the result is writeable even off a read-only memmap.
+            string p = Write("a.npy", Arange(6));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            Assert.IsTrue(m[m > 2].Shape.IsWriteable, "boolean mask copies");
+            Assert.IsTrue(m[np.array(new[] { 0, 2, 4 })].Shape.IsWriteable, "fancy index copies");
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_CopyToReadOnly_Throws()
+        {
+            string p = Write("a.npy", Arange(6));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            Assert.ThrowsException<ArgumentException>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_MaxHeaderSize_EnforcedOnNpyBranch()
+        {
+            string p = Write("a.npy", Arange(6));
+
+            // The header guard applies to the mmap path, matching NumPy.
+            Assert.ThrowsException<FormatException>(() => np.load(p, mmap_mode: "r", max_header_size: 10));
+            FullGc();
+
+            // …and allow_pickle lifts it (declares the file trusted), also matching NumPy.
+            var m = (NDArray)np.load(p, mmap_mode: "r", max_header_size: 10, allow_pickle: true);
+            Assert.AreEqual(0, m.GetInt32(0));
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_Save_RoundTrips()
+        {
+            string p = Write("src.npy", Arange(6).reshape(2, 3));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            string dst = Path.Combine(_dir, "dst.npy");
+            np.save(dst, m); // saving a mapped (read-only) array is a plain read
+            m.Dispose();
+            FullGc();
+            Assert.IsTrue(np.array_equal(np.load_npy(dst), Arange(6).reshape(2, 3)));
+        }
+
         // ---- npz ignores mmap_mode (NumPy parity) -----------------------------------
 
         [TestMethod]
