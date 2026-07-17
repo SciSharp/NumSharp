@@ -177,6 +177,11 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(indices);
+                // A sub-array is a VIEW, so it inherits writeability: indexing a row/element out of a
+                // read-only array (broadcast, or a contiguous 'r' memmap) must stay read-only —
+                // GetSubshape rebuilds the shape with fresh (writeable) flags, so carry it through.
+                if (!this_shape.IsWriteable)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
@@ -225,6 +230,11 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(indices);
+                // A sub-array is a VIEW, so it inherits writeability: indexing a row/element out of a
+                // read-only array (broadcast, or a contiguous 'r' memmap) must stay read-only —
+                // GetSubshape rebuilds the shape with fresh (writeable) flags, so carry it through.
+                if (!this_shape.IsWriteable)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
@@ -304,6 +314,9 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(longDims, ndims);
+                // A sub-array view inherits writeability (see the int[] overload).
+                if (!this_shape.IsWriteable)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
@@ -355,6 +368,9 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
+                // A sub-array view inherits writeability (see the int[] overload).
+                if (!this_shape.IsWriteable)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;

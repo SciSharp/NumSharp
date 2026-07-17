@@ -170,6 +170,36 @@ namespace NumSharp.UnitTest.IO
         }
 
         [TestMethod]
+        public void Mmap_IntegerIndex_Views_StayReadOnly()
+        {
+            // Contiguous integer indexing takes the GetData fast path (NOT the slice path), which must
+            // ALSO inherit read-only — else m[0] / m[0,0] on an 'r' memmap would be writeable and a
+            // write would hit the read-only mapped pages (segfault). NumPy keeps both False.
+            string p = Write("a.npy", Arange(12).reshape(3, 4));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            var row = m["0"];      // row sub-array view (GetData, contiguous)
+            Assert.IsFalse(row.Shape.IsWriteable, "m[0] row view");
+            Assert.IsFalse(m["1, 2"].Shape.IsWriteable, "m[1,2] element view");
+            Assert.ThrowsException<NumSharpException>(() => row[0] = 9);
+            m.Dispose();
+        }
+
+        [TestMethod]
+        public void Mmap_ReadOnly_DeepViewChains_StayReadOnly()
+        {
+            string p = Write("a.npy", Arange(24).reshape(4, 6));
+            var m = (NDArray)np.load(p, mmap_mode: "r");
+            Assert.IsFalse(m["1:3"]["0:1"].Shape.IsWriteable, "slice.slice");
+            Assert.IsFalse(m["1:3"].reshape(12).Shape.IsWriteable, "slice.reshape");
+            Assert.IsFalse(m.T["1:3"].Shape.IsWriteable, "T.slice");
+            Assert.IsFalse(m["0"]["1:3"].Shape.IsWriteable, "index.slice");
+            Assert.IsFalse(np.expand_dims(m, 0)["0:1"].Shape.IsWriteable, "expand.slice");
+            // …but a copy-forcing reshape of a non-contiguous view is a fresh writeable copy, like NumPy.
+            Assert.IsTrue(m.T.reshape(24).Shape.IsWriteable, "T.reshape copies -> writeable");
+            m.Dispose();
+        }
+
+        [TestMethod]
         public void Mmap_ReadOnly_WriteThroughView_ThrowsNotSegfaults()
         {
             string p = Write("a.npy", Arange(6));
