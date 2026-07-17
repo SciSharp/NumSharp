@@ -302,8 +302,10 @@ namespace NumSharp.UnitTest.IO
                         else if (!NpyOracleCorpus.RawBytes(arr).SequenceEqual(kv.Value.NsBytes))
                             f.Add(c, $"['{kv.Key}'] data: " + Diff(kv.Value.NsBytes, NpyOracleCorpus.RawBytes(arr)));
 
-                        // NumPy accepts the member's full name too, and caches: the same instance comes back.
-                        if (!ReferenceEquals(npz[kv.Key + ".npy"], arr))
+                        // NumPy accepts the member's full name too, and caches: the same instance comes
+                        // back. Archives with ambiguous names opt out — there '<key>' and '<key>.npy'
+                        // deliberately resolve to DIFFERENT entries, which is the whole point of them.
+                        if (c.SuffixAlias && !ReferenceEquals(npz[kv.Key + ".npy"], arr))
                             f.Add(c, $"['{kv.Key}.npy'] did not resolve to the same cached array as ['{kv.Key}']");
                     }
 
@@ -375,29 +377,36 @@ namespace NumSharp.UnitTest.IO
         ///     The error-message cases in <see cref="Errors_MatchNumPy"/> pass either way — they would go
         ///     green even while allocating 1 GB per file — so the resource behaviour needs its own test.
         ///     NumPy handles this in ~2 KB because Python's <c>fp.read(n)</c> only allocates what it
-        ///     returns. NumSharp's <c>ReadBytes</c> grows as it reads, so the cost is bounded by
-        ///     <c>BUFFER_SIZE</c> rather than by the attacker's number. The bound below is deliberately
-        ///     loose (100 MB against a 1 GB claim): it is there to catch a regression to
-        ///     <c>new byte[claimedLength]</c>, not to police allocation to the byte.
+        ///     returns. NumSharp gets the same property from the seekable stream's remaining length,
+        ///     which is a hard bound on what any claim can deliver, and measures ~1.2 KB. The 64 KB
+        ///     bound below leaves room for allocation noise while still being thousands of times below
+        ///     any claim — enough to catch a regression to <c>new byte[claimedLength]</c>.
         /// </remarks>
         [TestMethod]
         [TestCategory("NpyOracle")]
         [DoNotParallelize]
         public void HostileHeaderLength_DoesNotAllocateTheClaim()
         {
-            NpyCase c = NpyOracleCorpus.Cases.Single(x => x.Name == "hostile_header_len_1gb");
-            Assert.AreEqual(28, c.Bytes.Length, "the whole file is 28 bytes but claims a 1 GB header");
-
             np.load_npy(NpyOracleCorpus.Cases.Single(x => x.Name == "int32_1d").Bytes); // warm the JIT
 
-            long before = GC.GetTotalAllocatedBytes(precise: true);
-            Assert.ThrowsException<FormatException>(() => np.load_npy(c.Bytes));
-            long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+            foreach ((string name, long claim) in new[]
+            {
+                ("hostile_header_len_1gb", 1_000_000_000L),
+                ("hostile_header_len_4gb", 4_294_967_280L),
+                ("hostile_header_len_64k_v1", 65_535L),
+            })
+            {
+                NpyCase c = NpyOracleCorpus.Cases.Single(x => x.Name == name);
 
-            Assert.IsTrue(allocated < 100L * 1024 * 1024,
-                $"rejecting a 28-byte file that claims a 1,000,000,000-byte header allocated {allocated:N0} bytes. " +
-                "The header length comes straight from the file and must never be handed to the allocator " +
-                "up front — read incrementally, as NumPy does.");
+                long before = GC.GetTotalAllocatedBytes(precise: true);
+                Assert.ThrowsException<FormatException>(() => np.load_npy(c.Bytes), name);
+                long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+
+                Assert.IsTrue(allocated < 64 * 1024,
+                    $"rejecting '{name}' — a {c.Bytes.Length}-byte file claiming a {claim:N0}-byte header — " +
+                    $"allocated {allocated:N0} bytes. The header length comes straight from the file and must " +
+                    "never size an allocation: read incrementally, bounded by what the stream actually holds.");
+            }
         }
 
         /// <summary>The corpus is present and non-vacuous — a silent zero-case run would prove nothing.</summary>

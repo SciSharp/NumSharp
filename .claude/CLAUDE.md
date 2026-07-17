@@ -334,13 +334,19 @@ refuse, the text differs. Big-endian files byte-swap to native (NumPy keeps a by
 and `Char` round-trips U+0000 as a NUL where NumPy's `<U` reports `''` (the bytes are identical —
 `<U` treats NUL as string padding).
 
-**Two traps this port has already fallen into — do not re-break:**
+**Three traps this port has already fallen into — do not re-break:**
 - **`(1)` is not a tuple.** Only a comma makes one in Python, so `'shape': (1)` is the *int* 1 and
   NumPy rejects it. `PyLiteral.ParseTuple` tracks `sawComma` for exactly this.
-- **A header-length field is attacker-controlled.** `ReadBytes` grows as it reads rather than
-  allocating the claim: a 28-byte file can claim a 4 GB header, and `new byte[claim]` turns that
-  into a gigabyte spike (NumPy shrugs it off in ~2 KB — `fp.read(n)` allocates only what it returns).
-  Pinned by `HostileHeaderLength_DoesNotAllocateTheClaim`.
+- **A header-length field is attacker-controlled.** `ReadBytes` sizes its buffer from what the stream
+  actually holds (seekable ⇒ exact) and grows as bytes arrive — never from `count`. A 28-byte file
+  can claim a 4 GB header, and `new byte[claim]` turns that into a gigabyte spike; NumPy shrugs it
+  off in ~2 KB because `fp.read(n)` allocates only what it returns. Pinned by
+  `HostileHeaderLength_DoesNotAllocateTheClaim` (measures ~1.2 KB).
+- **`NpzFile`'s name map needs NumPy's TWO passes**, not one interleaved loop: `dict(zip(stripped,
+  full))` then `.update(zip(full, full))`. For an archive holding both `a` and `a.npy` — which both
+  strip to key `a` — pass 2 re-points `a` at the entry literally *named* `a`; one loop resolves it to
+  whichever came last. Within a pass, later entries win (a zip may repeat a name, and Python's dict
+  keeps the last; .NET's `GetEntry` would return the first). Pinned by the `npz_*_names` cases.
 
 **Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (281 committed cases of real
 NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category — read / byte-exact

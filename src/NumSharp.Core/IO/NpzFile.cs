@@ -86,20 +86,29 @@ namespace NumSharp.IO
             _cache = new Dictionary<ZipArchiveEntry, NDArray>();
             _files = new List<string>(_archive.Entries.Count);
 
+            // Mirrors NumPy's NpzFile.__init__ exactly:
+            //     self.files  = [name.removesuffix(".npy") for name in _files]
+            //     self._files = dict(zip(self.files, _files))   # pass 1: stripped -> entry
+            //     self._files.update(zip(_files, _files))       # pass 2: full -> entry
+            //
+            // The TWO passes are load-bearing, not a stylistic detail. A zip may hold both 'a' and
+            // 'a.npy', and both strip to the key 'a'; pass 2 then re-points 'a' at the entry literally
+            // NAMED 'a'. A single interleaved loop resolves 'a' to whichever came last instead —
+            // for entries ['a', 'a.npy'] NumPy answers with the first, one loop answers with the second.
+            // Within each pass later entries overwrite earlier ones, because a zip may legally repeat a
+            // name and Python's dict keeps the last.
             foreach (ZipArchiveEntry entry in _archive.Entries)
             {
-                string entryName = entry.FullName;
-                string key = entryName.EndsWith(".npy", StringComparison.Ordinal)
-                    ? entryName.Substring(0, entryName.Length - 4)
-                    : entryName;
+                string key = StripNpy(entry.FullName);
 
-                // Files keeps every entry, duplicates included — NumPy's .files is a plain list built
-                // from namelist(), so a duplicated name appears twice there while the lookup keeps only
-                // the last. Assigning (not adding) below reproduces that asymmetry.
+                // Files lists every entry, duplicates included — it is a plain list built from
+                // namelist(), so a repeated name appears twice here while the lookup keeps only one.
                 _files.Add(key);
                 _keyToEntry[key] = entry;
-                _keyToEntry[entryName] = entry; // both 'weights' and 'weights.npy' resolve
             }
+
+            foreach (ZipArchiveEntry entry in _archive.Entries)
+                _keyToEntry[entry.FullName] = entry;
 
             F = new BagObj(this);
         }
@@ -215,6 +224,12 @@ namespace NumSharp.IO
             using (MemoryStream member = OpenMember(entry))
                 return NpyFormat.IsNpyFile(member);
         }
+
+        /// <summary>NumPy's <c>name.removesuffix(".npy")</c>.</summary>
+        private static string StripNpy(string entryName) =>
+            entryName.EndsWith(".npy", StringComparison.Ordinal)
+                ? entryName.Substring(0, entryName.Length - 4)
+                : entryName;
 
         // A zip entry stream cannot seek, and both the magic sniff and the reader need to. Members are
         // one array each, so buffering the whole entry is bounded by the array we are about to build.

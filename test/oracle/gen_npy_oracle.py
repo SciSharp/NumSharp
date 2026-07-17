@@ -722,30 +722,59 @@ add_npz("npz_scalar_and_empty", {"s": np.array(42, dtype=np.int32), "e": np.arra
 add_npz("npz_large", {"big": np.arange(100_000, dtype=np.float64)},
         note="800 KB entry: the ZipExtFile short-read path _read_bytes exists for")
 
-# Duplicate member names. A zip may legally hold two entries with the same name, and the two
-# runtimes disagree about which one a lookup finds: .NET's ZipArchive.GetEntry returns the FIRST,
-# while Python's zipfile builds a name->info dict as it scans, so the LAST wins. NumPy's .files
-# still lists BOTH. Verified against zipfile: z['dup'] -> [2].
-_dup = io.BytesIO()
-with zipfile.ZipFile(_dup, "w") as zf:
-    for _v in (1, 2):
-        _m = io.BytesIO()
-        fmt.write_array(_m, np.array([_v], dtype=np.int8))
-        zf.writestr("dup.npy", _m.getvalue())
-_dup.seek(0)
-with np.load(_dup) as _z:
-    assert list(_z.files) == ["dup", "dup"] and _z["dup"].tolist() == [2], "zipfile: last duplicate wins"
-CASES.append({
-    "name": "npz_duplicate_names", "file": "cases/npz_duplicate_names.npz", "kind": "npz",
-    "bytes": _dup.getvalue(), "compressed": False,
-    "descr": None, "np_dtype": None, "ns_dtype": None, "shape": None,
-    "fortran_order": None, "version": None, "data_offset": None, "ns_bytes": None,
-    "write_exact": False, "load_error": None,
-    "entries": {"dup": {"ns_dtype": "SByte", "shape": [1], "ns_bytes": np.array([2], dtype=np.int8).tobytes().hex()}},
-    "files": ["dup", "dup"],
-    "note": "duplicate zip member names: .files lists both, but a lookup must resolve to the LAST — "
-            "Python's zipfile keeps the last in its name map, while .NET's GetEntry returns the first",
-})
+# Ambiguous member names. Two mechanisms collide here and both are easy to get wrong:
+#
+#   * A zip may legally repeat a name. Python's zipfile builds a name->info dict as it scans, so the
+#     LAST wins; .NET's ZipArchive.GetEntry returns the FIRST. NumPy's .files still lists both.
+#   * NumPy maps names in TWO passes -- dict(zip(stripped, full)) then .update(zip(full, full)) --
+#     so when an archive holds both 'a' and 'a.npy', pass 2 re-points the key 'a' at the entry
+#     literally NAMED 'a'. A single interleaved loop resolves 'a' to whichever came last instead.
+#
+# Each entry stores its own index, so the expected value IS the entry a key must resolve to.
+def add_npz_names(name, member_names, note=""):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i, n in enumerate(member_names):
+            m = io.BytesIO()
+            fmt.write_array(m, np.array([i], dtype=np.int8))
+            zf.writestr(n, m.getvalue())
+    raw = buf.getvalue()
+
+    with np.load(io.BytesIO(raw)) as z:  # real NumPy decides the expectations
+        files = list(z.files)
+        entries = {}
+        for key in dict.fromkeys(list(member_names) + [n.removesuffix(".npy") for n in member_names]):
+            try:
+                entries[key] = {"ns_dtype": "SByte", "shape": [1],
+                                "ns_bytes": np.asarray(z[key], dtype=np.int8).tobytes().hex()}
+            except KeyError:
+                pass  # NumPy has no such key; the absent-key path is covered by npz_missing_key tests
+
+    CASES.append({
+        "name": name, "file": f"cases/{name}.npz", "kind": "npz", "bytes": raw, "compressed": False,
+        "descr": None, "np_dtype": None, "ns_dtype": None, "shape": None,
+        "fortran_order": None, "version": None, "data_offset": None, "ns_bytes": None,
+        "write_exact": False, "load_error": None,
+        "entries": entries, "files": files, "suffix_alias": False,
+        "note": note,
+    })
+
+
+add_npz_names("npz_duplicate_names", ["dup.npy", "dup.npy"],
+              note="a zip may repeat a name: .files lists both, but the lookup takes the LAST "
+                   "(zipfile's name->info dict), where .NET's GetEntry would take the first")
+add_npz_names("npz_stripped_and_full", ["a", "a.npy"],
+              note="both members strip to the key 'a'. NumPy's SECOND mapping pass (full->entry) then "
+                   "re-points 'a' at the entry literally named 'a' -> entry 0, not the later 'a.npy'. "
+                   "A single interleaved loop gets entry 1 here")
+add_npz_names("npz_full_and_stripped", ["a.npy", "a"],
+              note="the reverse order: 'a' resolves to entry 1 and 'a.npy' to entry 0")
+add_npz_names("npz_names_interleaved", ["b.npy", "a", "a.npy", "b"],
+              note="both collisions at once, proving the passes are over ALL entries, not per entry")
+add_npz_names("npz_names_triple", ["x.npy", "x.npy", "x"],
+              note="a duplicate AND a stripped/full collision together")
+add_npz_names("npz_name_empty_and_dotnpy", ["", ".npy"],
+              note="'' and '.npy' both strip to the empty key")
 
 # An npz holding a non-.npy member: NumPy returns its raw bytes.
 _mixed = io.BytesIO()

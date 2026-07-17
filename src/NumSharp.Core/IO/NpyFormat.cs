@@ -956,12 +956,13 @@ namespace NumSharp.IO
         ///     Read exactly <paramref name="count"/> bytes — NumPy's <c>_read_bytes()</c>.
         /// </summary>
         /// <remarks>
-        ///     Grows the buffer as it reads instead of allocating <paramref name="count"/> up front,
-        ///     because <paramref name="count"/> is attacker-controlled: it comes from the file's own
-        ///     header-length field, so a 28-byte file can claim a 4 GB header. Python's <c>fp.read(n)</c>
-        ///     only ever allocates what it actually returns, so NumPy shrugs such a file off in
-        ///     microseconds — allocating the claim up front would turn it into a multi-gigabyte spike for
-        ///     the same rejection. The message still reports the CLAIMED size, exactly as NumPy's does.
+        ///     <paramref name="count"/> is attacker-controlled — it is the length field straight out of
+        ///     the file, so a 28-byte file can claim a 4 GB header — and is therefore never handed to the
+        ///     allocator. A seekable stream states exactly how many bytes remain, which is a hard upper
+        ///     bound on what any claim can deliver; otherwise the buffer starts small and doubles as the
+        ///     bytes actually arrive. Python's <c>fp.read(n)</c> has the same property, which is why
+        ///     NumPy rejects such a file in ~2 KB instead of reserving the claim. The message still
+        ///     reports the CLAIMED size, exactly as NumPy's does.
         /// </remarks>
         /// <exception cref="FormatException">The stream ended early.</exception>
         private static byte[] ReadBytes(Stream stream, long count, string what)
@@ -969,34 +970,38 @@ namespace NumSharp.IO
             if (count == 0)
                 return Array.Empty<byte>();
 
-            // Every real header, and both fixed-size fields, land in the fast path.
-            if (count <= BufferSize)
-            {
-                var buffer = new byte[count];
-                int got = ReadInto(stream, buffer, (int)count);
-                if (got != count)
-                    throw new FormatException($"EOF: reading {what}, expected {count} bytes got {got}");
-                return buffer;
-            }
+            // What could plausibly be delivered — never more than what is really left.
+            long plausible = count;
+            if (stream.CanSeek)
+                plausible = Math.Min(plausible, Math.Max(0L, stream.Length - stream.Position));
 
-            var chunk = new byte[BufferSize];
-            using (var acc = new MemoryStream())
+            // A well-formed header (~118 bytes) lands here exactly sized, in one allocation.
+            var buffer = new byte[Math.Clamp(plausible, 1, BufferSize)];
+            long total = 0;
+
+            while (total < count)
             {
-                long total = 0;
-                while (total < count)
+                if (total == buffer.Length)
                 {
-                    int toRead = (int)Math.Min(count - total, chunk.Length);
-                    int got = ReadInto(stream, chunk, toRead);
-                    acc.Write(chunk, 0, got);
-                    total += got;
-                    if (got < toRead)
-                        break; // EOF: stop here rather than reserving the rest of a bogus claim
+                    // Only grow once the bytes we already hold prove the claim is being honored.
+                    long next = Math.Min(count, Math.Min(buffer.Length * 2L, int.MaxValue));
+                    if (next == buffer.Length)
+                        break;
+                    Array.Resize(ref buffer, (int)next);
                 }
 
-                if (total != count)
-                    throw new FormatException($"EOF: reading {what}, expected {count} bytes got {total}");
-                return acc.ToArray();
+                int got = stream.Read(buffer, (int)total, (int)Math.Min(count - total, buffer.Length - total));
+                if (got == 0)
+                    break; // EOF — Stream.Read only returns 0 at the end
+                total += got;
             }
+
+            if (total != count)
+                throw new FormatException($"EOF: reading {what}, expected {count} bytes got {total}");
+
+            if (buffer.Length != total)
+                Array.Resize(ref buffer, (int)total);
+            return buffer;
         }
 
         // Loop until the buffer is full or the stream ends: Stream.Read may legally return fewer bytes

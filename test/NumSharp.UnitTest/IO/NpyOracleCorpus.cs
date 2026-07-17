@@ -125,6 +125,12 @@ namespace NumSharp.UnitTest.IO
         /// </summary>
         public string[] FilesOverride { get; private init; }
 
+        /// <summary>
+        ///     Whether <c>npz["k"]</c> and <c>npz["k.npy"]</c> must be the same array. False for archives
+        ///     with ambiguous names, where they intentionally resolve to different entries.
+        /// </summary>
+        public bool SuffixAlias { get; private init; }
+
         /// <summary>For the multi-array stream case: the arrays in the order they were appended.</summary>
         public NpyMember[] Sequence { get; private init; }
 
@@ -164,6 +170,7 @@ namespace NumSharp.UnitTest.IO
                 FilesOverride = e.TryGetProperty("files", out JsonElement fo) && fo.ValueKind == JsonValueKind.Array
                     ? fo.EnumerateArray().Select(x => x.GetString()).ToArray()
                     : null,
+                SuffixAlias = Bool(e, "suffix_alias") ?? true,
                 Sequence = e.TryGetProperty("sequence", out JsonElement s) && s.ValueKind == JsonValueKind.Array
                     ? s.EnumerateArray().Select(NpyMember.Parse).ToArray()
                     : null,
