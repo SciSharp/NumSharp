@@ -1,8 +1,16 @@
 # Handover — `np.load(mmap_mode=…)` for NumSharp
 
+> **✅ IMPLEMENTED (2026-07-17).** This design shipped: `NpyFormat.OpenMemmap` +
+> `ResolveMmapMode` in `IO/NpyFormat.cs`, dispatch rewired in `APIs/np.load.cs`, 16 tests in
+> `test/NumSharp.UnitTest/IO/NpyMemmapTests.cs` (green on net8.0 + net10.0), and every claim below
+> re-verified against NumPy 2.4.2. The document is kept as the design record and the parity
+> reference. Notable as-built refinements vs the plan: the read-only-shape install reuses the
+> existing `UnmanagedStorage.SetShapeUnsafe` (no new infra was needed — §5's "one infra gap" was
+> already covered), and `w+` raises the same `TypeError` **without** reproducing NumPy's file
+> truncation (a destructive bug we decline to copy).
+
 Status date: 2026-07-17 · Branch: `worktree-npsave` · Scope: `np.load` / `NpyFormat`
-(`APIs/np.load.cs`, `IO/NpyFormat.cs`) · Prereq reading: the `CheckMmapMode` XML sketch in
-`APIs/np.load.cs`.
+(`APIs/np.load.cs`, `IO/NpyFormat.cs`).
 
 This specifies the follow-up for the two `mmap_mode` divergences found while auditing the
 `np.load`/`save` family (the other five were fixed in `6b5dc184`; these were deliberately left

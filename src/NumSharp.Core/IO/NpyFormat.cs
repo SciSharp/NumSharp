@@ -3,9 +3,11 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.IO
 {
@@ -946,6 +948,215 @@ namespace NumSharp.IO
         {
             for (int i = 0; i + unit <= length; i += unit)
                 buffer.AsSpan(i, unit).Reverse();
+        }
+
+        #endregion
+
+        #region Memory mapping
+
+        /// <summary>
+        ///     Open a <c>.npy</c> file as a memory-mapped array — NumPy's <c>open_memmap</c>, reached via
+        ///     <c>np.load(path, mmap_mode=…)</c>. The array shares the file's bytes: nothing is copied, and
+        ///     for <c>r+</c> writes flush back to disk.
+        /// </summary>
+        /// <param name="path">Path to a <c>.npy</c> file — mmap needs a real file, not a stream.</param>
+        /// <param name="mode">
+        ///     A NumPy mmap mode. Through <c>np.load</c> only <c>r</c>/<c>readonly</c> (read-only),
+        ///     <c>r+</c> (read-write, persists) and <c>c</c> (copy-on-write, not persisted) actually work;
+        ///     <c>w+</c>/<c>write</c>/<c>copyonwrite</c>/<c>readwrite</c> validate but fail downstream in
+        ///     NumPy too, and <see cref="ResolveMmapMode"/> reproduces those exact errors.
+        /// </param>
+        /// <param name="maxHeaderSize">Reject headers larger than this.</param>
+        /// <returns>
+        ///     An <see cref="NDArray"/> viewing the mapped file. It holds the mapping alive; the map, view
+        ///     and file handle are released when the array (and every view of it) is disposed or collected —
+        ///     the same lifecycle a normally-owned array frees on.
+        /// </returns>
+        /// <exception cref="NotSupportedException">
+        ///     The dtype cannot be zero-copy mapped: NumSharp byte-swaps big-endian files and converts
+        ///     <c>&lt;U1</c>/<c>&lt;c8</c> on read, none of which a shared view allows.
+        /// </exception>
+        public static NDArray OpenMemmap(string path, string mode, long maxHeaderSize = MaxHeaderSize)
+        {
+            if (path == null) throw new ArgumentNullException(nameof(path));
+
+            string fileMode = ResolveMmapMode(mode);
+            (FileAccess fileAccess, MemoryMappedFileAccess mapAccess, bool writeable) = MmapAccess(fileMode);
+
+            var fs = new FileStream(path, FileMode.Open, fileAccess, FileShare.Read);
+            MemoryMappedFile mmf = null;
+            MemoryMappedViewAccessor view = null;
+            bool transferred = false;
+            try
+            {
+                FormatVersion version = ReadMagic(fs);
+                CheckVersion(version);
+                HeaderData header = ReadArrayHeader(fs, version, maxHeaderSize);
+                long dataOffset = fs.Position;
+
+                // A memmap is a zero-copy reinterpretation of the file bytes, so anything NumSharp
+                // transforms on a normal read cannot be mapped. NumPy maps these with a byte-swapped /
+                // wider dtype; NumSharp has no such dtype, so it says so plainly rather than silently
+                // handing back a non-shared copy.
+                if (header.Dtype.HasObject)
+                    throw new ValueError("Array can't be memory-mapped: Python objects in dtype.");
+                if (header.Dtype.NeedsSwap)
+                    throw new NotSupportedException(
+                        "Big-endian .npy files cannot be memory-mapped: NumSharp byte-swaps to native on read, " +
+                        "which a zero-copy view rules out. Load without mmap_mode.");
+                if (header.Dtype.Conversion != ElementConversion.None)
+                {
+                    string fileDtype = header.Dtype.Conversion == ElementConversion.Ucs4 ? "'<U1' (Unicode)" : "'<c8' (complex64)";
+                    throw new NotSupportedException(
+                        $"{fileDtype} is stored at a different width than its NumSharp type and is converted on read, " +
+                        "so it cannot be memory-mapped. Load without mmap_mode.");
+                }
+                foreach (long dim in header.Shape)
+                    if (dim < 0)
+                        throw new FormatException("negative dimensions are not allowed");
+
+                long count = header.Count;
+                if (count == 0)
+                {
+                    // No element bytes to point at — return a plain empty array and drop the handle.
+                    fs.Dispose();
+                    transferred = true;
+                    var empty = new NDArray(header.Dtype.TypeCode, new Shape(header.Shape));
+                    if (!writeable)
+                        empty.Storage.SetShapeUnsafe(empty.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+                    return empty;
+                }
+
+                // capacity 0 maps the whole file from 0 — CreateViewAccessor(0,0) then gives PointerOffset==0,
+                // and we index past the 64-byte-aligned header ourselves (see MapAndWrap).
+                mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, mapAccess, HandleInheritability.None, leaveOpen: false);
+                view = mmf.CreateViewAccessor(0, 0, mapAccess);
+
+                NDArray nd = MapAndWrap(header, view, mmf, dataOffset, count, writeable);
+                transferred = true; // the NDArray's block now owns view + mmf (+ fs, via leaveOpen:false)
+                return nd;
+            }
+            finally
+            {
+                if (!transferred)
+                {
+                    view?.Dispose();
+                    if (mmf != null) mmf.Dispose(); // disposes fs too (leaveOpen: false)
+                    else fs?.Dispose();
+                }
+            }
+        }
+
+        // Resolve NumPy's eight mmap spellings to a numpy.memmap file mode ("r"/"r+"/"c"), reproducing the
+        // errors np.load actually raises. open_memmap routes on `'w' in mode` BEFORE memmap's alias table,
+        // so every alias containing the letter 'w' (write, copyonwrite, readwrite) misroutes into the
+        // shape-less create branch and dies there; only the no-'w' spellings reach memmap and alias cleanly.
+        // We match the errors but — unlike NumPy's 'w+', which opens 'w+b' and TRUNCATES the file before
+        // failing — decline to reproduce that data loss: the exception is identical, the file is untouched.
+        internal static string ResolveMmapMode(string mode)
+        {
+            if (mode == null) throw new ArgumentNullException(nameof(mode));
+
+            if (mode.IndexOf('w') >= 0)
+            {
+                if (mode == "w+")
+                    throw new TypeError("object of type 'NoneType' has no len()");
+                throw new ValueError($"invalid mode: '{mode}b'");
+            }
+
+            switch (mode)
+            {
+                case "readonly": return "r";
+                case "r":
+                case "c":
+                case "r+": return mode;
+                default:
+                    throw new ValueError(
+                        "mode must be one of ['r', 'c', 'r+', 'w+', 'readonly', 'copyonwrite', 'readwrite', 'write'] " +
+                        $"(got '{mode}')");
+            }
+        }
+
+        private static (FileAccess fileAccess, MemoryMappedFileAccess mapAccess, bool writeable) MmapAccess(string fileMode)
+        {
+            switch (fileMode)
+            {
+                case "r":  return (FileAccess.Read,      MemoryMappedFileAccess.Read,        false);
+                case "r+": return (FileAccess.ReadWrite, MemoryMappedFileAccess.ReadWrite,   true);
+                case "c":  return (FileAccess.Read,      MemoryMappedFileAccess.CopyOnWrite, true);
+                default:   throw new InvalidOperationException($"unreachable mmap file mode '{fileMode}'");
+            }
+        }
+
+        // Acquire the view pointer, wrap it in an NDArray whose free-callback releases the whole mapping,
+        // and apply fortran-order / read-only exactly as ReadArray does.
+        private static unsafe NDArray MapAndWrap(HeaderData header, MemoryMappedViewAccessor view,
+                                                 MemoryMappedFile mmf, long dataOffset, long count, bool writeable)
+        {
+            byte* basePtr = null;
+            view.SafeMemoryMappedViewHandle.AcquirePointer(ref basePtr);
+            byte* dataPtr = basePtr + view.PointerOffset + dataOffset;
+
+            // The External-allocation block calls this back exactly once — when the last reference to the
+            // array is released (NDArray.Dispose or the finalizer) — the same point a normal owned block is
+            // freed. That is why the map, view and file outlive OpenMemmap and die with the array.
+            MemoryMappedViewAccessor capturedView = view;
+            MemoryMappedFile capturedMmf = mmf;
+            Action free = () =>
+            {
+                capturedView.SafeMemoryMappedViewHandle.ReleasePointer();
+                capturedView.Dispose();
+                capturedMmf.Dispose(); // disposes the FileStream too (leaveOpen: false)
+            };
+
+            NDArray nd = WrapMappedBlock(header.Dtype.TypeCode, (void*)dataPtr, count, free, new Shape(header.Shape));
+
+            // The file holds F-order data: interpret the flat bytes with the reversed shape, then transpose
+            // — NumPy's `array.reshape(shape[::-1]).transpose()`. The transpose is a zero-copy view, so the
+            // result still shares the mapped memory.
+            if (header.FortranOrder && header.Shape.Length > 1)
+            {
+                var reversed = new long[header.Shape.Length];
+                for (int i = 0; i < header.Shape.Length; i++)
+                    reversed[i] = header.Shape[header.Shape.Length - 1 - i];
+                nd = nd.reshape(reversed).T;
+            }
+
+            // 'r'/'readonly' → a non-writeable view, matching NumPy's read-only memmap.
+            if (!writeable)
+                nd.Storage.SetShapeUnsafe(nd.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
+
+            return nd;
+        }
+
+        // Type-dispatch to a typed block over the mapped pointer. Char (`<U1`) and complex64 (`<c8`) never
+        // reach here — they are rejected in OpenMemmap because their file width differs from NumSharp's.
+        private static unsafe NDArray WrapMappedBlock(NPTypeCode typeCode, void* dataPtr, long count, Action free, Shape shape)
+        {
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean: return WrapAs<bool>(dataPtr, count, free, shape);
+                case NPTypeCode.SByte:   return WrapAs<sbyte>(dataPtr, count, free, shape);
+                case NPTypeCode.Byte:    return WrapAs<byte>(dataPtr, count, free, shape);
+                case NPTypeCode.Int16:   return WrapAs<short>(dataPtr, count, free, shape);
+                case NPTypeCode.UInt16:  return WrapAs<ushort>(dataPtr, count, free, shape);
+                case NPTypeCode.Int32:   return WrapAs<int>(dataPtr, count, free, shape);
+                case NPTypeCode.UInt32:  return WrapAs<uint>(dataPtr, count, free, shape);
+                case NPTypeCode.Int64:   return WrapAs<long>(dataPtr, count, free, shape);
+                case NPTypeCode.UInt64:  return WrapAs<ulong>(dataPtr, count, free, shape);
+                case NPTypeCode.Half:    return WrapAs<Half>(dataPtr, count, free, shape);
+                case NPTypeCode.Single:  return WrapAs<float>(dataPtr, count, free, shape);
+                case NPTypeCode.Double:  return WrapAs<double>(dataPtr, count, free, shape);
+                case NPTypeCode.Complex: return WrapAs<System.Numerics.Complex>(dataPtr, count, free, shape);
+                default:
+                    throw new NotSupportedException($"{typeCode} cannot be memory-mapped.");
+            }
+        }
+
+        private static unsafe NDArray WrapAs<T>(void* dataPtr, long count, Action free, Shape shape) where T : unmanaged
+        {
+            var block = new UnmanagedMemoryBlock<T>((T*)dataPtr, count, free);
+            return new NDArray(new ArraySlice<T>(block), shape);
         }
 
         #endregion

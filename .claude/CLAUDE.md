@@ -324,8 +324,22 @@ content-dependent return; **`np.load_npy` / `np.load_npz` are the typed forms** 
 
 Object arrays, structured/subarray dtypes, `datetime64`/`timedelta64`, `\|S`/`<U`n>1/`\|V`, `<f16`
 and `<c32` are parsed then rejected with a precise message — including the zero-width `<U0`/`\|S0`/`\|V0`,
-which are *valid* NumPy dtypes and so report "unsupported", never "invalid descriptor". `mmap_mode`
-validates its value and throws `NotImplementedException` (sketch in `np.load.cs`'s `CheckMmapMode`).
+which are *valid* NumPy dtypes and so report "unsupported", never "invalid descriptor".
+
+**`mmap_mode` is implemented** (`NpyFormat.OpenMemmap`, port of NumPy's `open_memmap` + `numpy.memmap`):
+`np.load(path, mmap_mode=…)` returns an `NDArray` backed by a `MemoryMappedFile` view — zero-copy,
+the mapping released with the array (and its views) on dispose/GC. Modes match what NumPy actually
+does *through `np.load`*: **`r`/`readonly`** → read-only (non-writeable) view, **`r+`** → read-write
+(flushes to disk), **`c`** → copy-on-write (not flushed). The other four documented spellings validate
+but fail downstream in NumPy too, reproduced verbatim: **`w+`** → `TypeError "object of type 'NoneType'
+has no len()"`, **`write`/`copyonwrite`/`readwrite`** → `ValueError "invalid mode: '<mode>b'"` (they
+contain the letter *w*, so `open_memmap` misroutes them into its create branch — NumSharp does **not**
+truncate the file as NumPy's `w+` does). Validation happens **only on the `.npy` branch**: an `.npz`
+ignores `mmap_mode` entirely (even an invalid value → `NpzFile`), matching NumPy. mmap needs a real
+**path** — a stream/`byte[]` npy raises NumPy's `ValueError "…Memmap cannot use existing file handles"`.
+NumSharp-specific rejections (`NotSupportedException`): big-endian and `<U1`/`<c8` files, which NumSharp
+byte-swaps / widens on read and so cannot present as a zero-copy view. Design: `docs/MMAP_MODE_HANDOVER.md`;
+tests: `IO/NpyMemmapTests.cs` (16).
 
 **Known intentional divergences** (differential-verified, everything else agrees): the 5 unsupported
 dtypes above are the *only* files NumPy loads that NumSharp refuses. NumPy reports `shape: (True,)`

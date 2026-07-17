@@ -9,9 +9,6 @@ namespace NumSharp
         /// <summary>The encodings NumPy accepts; anything else can silently corrupt numeric data.</summary>
         private static readonly string[] ValidPickleEncodings = { "ASCII", "latin1", "bytes" };
 
-        /// <summary>The memory-map modes NumPy accepts.</summary>
-        private static readonly string[] ValidMmapModes = { "r", "r+", "w+", "c" };
-
         #region load
 
         /// <summary>
@@ -21,8 +18,11 @@ namespace NumSharp
         ///     Path to the file. The type is detected from its magic bytes, not its extension.
         /// </param>
         /// <param name="mmap_mode">
-        ///     Memory-map mode: <c>"r"</c>, <c>"r+"</c>, <c>"w+"</c> or <c>"c"</c>; null (default) reads
-        ///     normally. Not yet implemented — see <see cref="CheckMmapMode"/>.
+        ///     Memory-map mode for a <c>.npy</c> file: <c>"r"</c>/<c>"readonly"</c> (read-only),
+        ///     <c>"r+"</c> (read-write, flushed to disk) or <c>"c"</c> (copy-on-write, not flushed); null
+        ///     (default) reads the whole array into owned memory. Ignored for a <c>.npz</c> archive, as in
+        ///     NumPy. Requires a file <b>path</b> — a stream or byte[] cannot be mapped. See
+        ///     <see cref="NpyFormat.OpenMemmap"/>.
         /// </param>
         /// <param name="allow_pickle">
         ///     Whether to trust the file. Default false, as in NumPy since 1.16.3: an object array is a
@@ -66,15 +66,15 @@ namespace NumSharp
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
             CheckEncoding(encoding);
-            CheckMmapMode(mmap_mode);
 
             // The stream is handed to NpzFile on the .npz branch, which then owns it; otherwise it is
-            // closed here.
+            // closed here. mmap_mode is applied only on the .npy branch (LoadCore), where the path lets
+            // OpenMemmap reopen the file for mapping — npz and pickle ignore it entirely, matching NumPy.
             var stream = new FileStream(file, FileMode.Open, FileAccess.Read);
             bool transferred = false;
             try
             {
-                object result = LoadCore(stream, ownStream: true, allow_pickle, max_header_size);
+                object result = LoadCore(stream, ownStream: true, allow_pickle, max_header_size, mmap_mode, pathOrNull: file);
                 transferred = result is NpzFile;
                 return result;
             }
@@ -97,9 +97,10 @@ namespace NumSharp
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
             CheckEncoding(encoding);
-            CheckMmapMode(mmap_mode);
 
-            return LoadCore(file, ownStream: false, allow_pickle, max_header_size);
+            // A raw stream has no mappable path — an npy + mmap_mode is rejected inside LoadCore with
+            // NumPy's fileobj error; an npz still ignores mmap_mode.
+            return LoadCore(file, ownStream: false, allow_pickle, max_header_size, mmap_mode, pathOrNull: null);
         }
 
         /// <summary>Load an array or archive from an in-memory <c>.npy</c>/<c>.npz</c> image.</summary>
@@ -110,13 +111,14 @@ namespace NumSharp
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             CheckEncoding(encoding);
-            CheckMmapMode(mmap_mode);
 
+            // Like the stream overload: an in-memory image has no mappable path, so npy + mmap_mode is
+            // rejected inside LoadCore; npz ignores it.
             var stream = new MemoryStream(bytes, writable: false);
             bool transferred = false;
             try
             {
-                object result = LoadCore(stream, ownStream: true, allow_pickle, max_header_size);
+                object result = LoadCore(stream, ownStream: true, allow_pickle, max_header_size, mmap_mode, pathOrNull: null);
                 transferred = result is NpzFile;
                 return result;
             }
@@ -271,7 +273,10 @@ namespace NumSharp
         #region internals
 
         // File-type detection by magic, in NumPy's order: ZIP, then NPY, then "must be a pickle".
-        private static object LoadCore(Stream stream, bool ownStream, bool allowPickle, long maxHeaderSize)
+        // mmap_mode is consumed ONLY on the .npy branch (matching NumPy's np.load): npz and pickle ignore
+        // it entirely — even an invalid value passes for them.
+        private static object LoadCore(Stream stream, bool ownStream, bool allowPickle, long maxHeaderSize,
+                                       string mmapMode = null, string pathOrNull = null)
         {
             if (!stream.CanSeek)
                 throw new ArgumentException(
@@ -281,10 +286,29 @@ namespace NumSharp
                 throw new EndOfStreamException("No data left in file");
 
             if (NpyFormat.IsNpzFile(stream))
-                return new NpzFile(stream, ownStream, allowPickle, maxHeaderSize);
+                return new NpzFile(stream, ownStream, allowPickle, maxHeaderSize); // mmap_mode ignored (NumPy parity)
 
             if (NpyFormat.IsNpyFile(stream))
+            {
+                if (mmapMode != null)
+                {
+                    // mmap needs a real file to map. A stream/byte[] image has none — NumPy raises the same
+                    // "Memmap cannot use existing file handles" for a file object.
+                    if (pathOrNull == null)
+                        throw new ValueError(
+                            "Filename must be a string or a path-like object.  Memmap cannot use existing file handles.");
+
+                    // Release the detection handle before OpenMemmap reopens the file — r+ needs write
+                    // access this Read/FileShare.Read handle would deny. Dispose is idempotent, so the
+                    // caller's finally re-disposing it is harmless.
+                    if (ownStream)
+                        stream.Dispose();
+
+                    return NpyFormat.OpenMemmap(pathOrNull, mmapMode, allowPickle ? long.MaxValue : maxHeaderSize);
+                }
+
                 return NpyFormat.ReadArray(stream, allowPickle, maxHeaderSize);
+            }
 
             // Neither magic matched. NumPy assumes a bare pickle here and tries to unpickle it;
             // NumSharp has no pickle reader, so both branches end in an error — but the allow_pickle=False
@@ -303,48 +327,6 @@ namespace NumSharp
         {
             if (Array.IndexOf(ValidPickleEncodings, encoding) < 0)
                 throw new ArgumentException("encoding must be 'ASCII', 'latin1', or 'bytes'", nameof(encoding));
-        }
-
-        /// <summary>
-        ///     Validate <c>mmap_mode</c> and reject it as unimplemented.
-        /// </summary>
-        /// <remarks>
-        ///     Implementing this means backing an <c>NDArray</c> with a mapped view instead of owned
-        ///     unmanaged memory. Sketch, if someone picks it up:
-        ///     <list type="number">
-        ///       <item>Read the header via <see cref="NpyFormat.ReadArrayHeader"/> and keep the data
-        ///             offset — it is 64-byte aligned precisely so the view can start there.</item>
-        ///       <item>Map with <c>MemoryMappedFile.CreateFromFile</c> and take a
-        ///             <c>MemoryMappedViewAccessor</c> at that offset. Note the view offset must be a
-        ///             multiple of the system allocation granularity (64 KB on Windows), so map from 0
-        ///             and index past the header rather than mapping at the data offset.</item>
-        ///       <item>Wrap the view's pointer in an <c>UnmanagedMemoryBlock</c> whose free-callback
-        ///             releases the view and the map, so the NDArray keeps the mapping alive exactly as
-        ///             long as it lives. This is the load-bearing part: today
-        ///             <c>UnmanagedMemoryBlock</c> assumes it owns its allocation.</item>
-        ///       <item>Honor the mode: <c>"r"</c> must produce a non-writeable Shape; <c>"c"</c> needs
-        ///             <c>MemoryMappedFileAccess.CopyOnWrite</c>; <c>"r+"</c> and <c>"w+"</c> write
-        ///             through, and <c>"w+"</c> must pre-size the file and write a header first.</item>
-        ///       <item>Fortran-order files need the reshape-and-transpose from
-        ///             <see cref="NpyFormat.ReadArray"/> applied to the mapped buffer.</item>
-        ///       <item>Byte-swapped (big-endian) files cannot be mapped at all — NumSharp converts on
-        ///             read, which a zero-copy view rules out. Reject them explicitly.</item>
-        ///     </list>
-        /// </remarks>
-        /// <exception cref="ArgumentException">The mode is not one of NumPy's.</exception>
-        /// <exception cref="NotImplementedException">A valid mode was requested.</exception>
-        private static void CheckMmapMode(string mmap_mode)
-        {
-            if (mmap_mode == null)
-                return;
-
-            if (Array.IndexOf(ValidMmapModes, mmap_mode) < 0)
-                throw new ArgumentException(
-                    $"mode must be one of {{'r+', 'r', 'w+', 'c'}} (got '{mmap_mode}')", nameof(mmap_mode));
-
-            throw new NotImplementedException(
-                $"mmap_mode='{mmap_mode}' is not implemented yet — NumSharp arrays own their unmanaged memory and " +
-                "cannot yet be backed by a mapped file view. Load without mmap_mode to read the file normally.");
         }
 
         #endregion
