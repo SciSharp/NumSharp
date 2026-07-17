@@ -155,14 +155,14 @@ See the [Buffering & Memory](buffering.md) page for the full story: memory archi
 | `@base` | `NDArray?` | `ndarray.base` | Owner array if this is a view, else `null` |
 
 ```csharp
-var a = np.arange(12).reshape(3, 4);
+var a = np.arange(12).reshape(3, 4);   // arange defaults to int64 (NumPy 2.x)
 a.shape;       // [3, 4]
 a.ndim;        // 2
 a.size;        // 12
-a.dtype;       // typeof(int)
-a.typecode;    // NPTypeCode.Int32
+a.dtype;       // typeof(long)
+a.typecode;    // NPTypeCode.Int64
 a.T.shape;     // [4, 3]
-a.@base;       // null (arange owns its data)
+a.@base;       // the 1-D arange buffer — reshape returns a view (like NumPy)
 var b = a["1:, :2"];
 b.@base;       // wraps a's Storage (b is a view)
 ```
@@ -228,7 +228,7 @@ c[0] = 0;
 a[2];                        // still 999
 ```
 
-Detect views with `arr.@base != null`. Force a copy with `.copy()` or `np.copy(arr)`.
+Detect views with `arr.@base is not null` (use the C# `is` pattern, not `!= null` — NDArray's `==`/`!=` operators are element-wise and return an array, not a bool). Force a copy with `.copy()` or `np.copy(arr)`.
 
 Broadcasted arrays are a special case: they're views with stride=0 dimensions, and they're **read-only** (`Shape.IsWriteable == false`) to prevent cross-row corruption. See [Broadcasting](broadcasting.md#memory-behavior).
 
@@ -378,26 +378,26 @@ To unwrap a 0-d result to a raw C# scalar, cast: `(int)a[i]` or `a.item<int>(i)`
 Four ways to touch individual elements, picked based on how many indices you have and whether you already know the dtype:
 
 ```csharp
-var a = np.arange(12).reshape(3, 4);
+var a = np.arange(12).reshape(3, 4);    // int64 (NumPy 2.x default integer)
 
 // 1. Indexer — returns NDArray (0-d for a single element)
 NDArray elem = a[1, 2];
-int v = (int)elem;                      // explicit cast to scalar
+long v = (long)elem;                    // explicit cast to scalar (converts)
 
-// 2. .item<T>() — direct scalar extraction (NumPy parity)
-int v2 = a.item<int>(6);                // flat index 6 → row 1, col 2
-object box = a.item(6);                 // untyped form returns object
+// 2. .item<T>() — direct scalar extraction (NumPy parity; converts if T differs)
+long v2 = a.item<long>(6);              // flat index 6 → row 1, col 2
+object box = a.item(6);                 // untyped form returns object (boxed long)
 
-// 3. GetValue<T> — N-D coordinates, typed
-int v3 = a.GetValue<int>(1, 2);
+// 3. GetValue<T> — N-D coordinates, typed. T must match the dtype exactly.
+long v3 = a.GetValue<long>(1, 2);
 
-// 4. GetAtIndex<T> — flat index, typed, no Shape math (fastest)
-int v4 = a.GetAtIndex<int>(6);
+// 4. GetAtIndex<T> — flat index, typed, no Shape math (fastest). T must match the dtype.
+long v4 = a.GetAtIndex<long>(6);
 
 // Writes mirror the reads:
-a[1, 2] = 99;                           // indexer assignment
-a.SetValue(99, 1, 2);                   // N-D coordinates
-a.SetAtIndex(99, 6);                    // flat index
+a[1, 2] = 99;                           // indexer assignment (converts to the array dtype)
+a.SetValue(99L, 1, 2);                  // N-D coordinates (value must match the dtype)
+a.SetAtIndex(99L, 6);                   // flat index
 ```
 
 **Rule of thumb:** use `.item<T>()` when porting NumPy code, `GetAtIndex<T>` in a hot loop, and the indexer (`a[i, j]`) when you want NumPy-like ergonomics and don't mind the 0-d NDArray detour.
@@ -565,7 +565,7 @@ Views can be non-contiguous (sliced, transposed, broadcasted). Use `arr.Shape.Is
 | `np.array_equal(a, b)` | `bool` | same shape AND all elements equal |
 | `np.allclose(a, b)` | `bool` | same shape AND all elements within tolerance (good for floats) |
 | `ReferenceEquals(a, b)` | `bool` | same C# object (rarely what you want) |
-| `a.@base != null` | `bool` | `a` is a view (shares memory with some owner) |
+| `a.@base is not null` | `bool` | `a` is a view (shares memory with some owner); use `is`, not `!= null` |
 
 > Caveat: NumSharp does not expose a direct "do these two arrays share memory?" check from user code. `a.@base` returns a fresh wrapper on every call and the underlying `Storage` is `protected internal`, so strict memory-identity testing is only available inside the assembly.
 
@@ -591,7 +591,7 @@ C# requires the declaring type on the left of shift operators. Use `np.left_shif
 
 ### "a += 1 didn't update another reference"
 
-C# compound assignment reassigns the variable; it doesn't mutate. See [Compound assignment](#compound-assignment) above. For in-place modification, write directly: `a[...] = a + 1`.
+C# compound assignment reassigns the variable; it doesn't mutate. See [Compound assignment](#compound-assignment) above. For in-place modification, write directly: `a["..."] = a + 1` (or `a[":"] = a + 1`).
 
 ---
 
