@@ -23,6 +23,9 @@ using System.Runtime.CompilerServices;
 // NDArray <-> numpy (and any PEP 3118 buffer exporter) zero-copy, both ways.
 [assembly: InternalsVisibleTo("NumSharp.Interop.pythonnet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The Python.NET interop test assembly exercises the same internals.
+[assembly: InternalsVisibleTo("NumSharp.Interop.UnitTests, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // Cross-repo: TensorFlow.NET signs with the identical key, which is the reason NumSharp keeps using

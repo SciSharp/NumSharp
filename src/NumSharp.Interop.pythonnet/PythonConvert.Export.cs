@@ -209,18 +209,23 @@ namespace NumSharp.Interop
             dynamic flat = np.frombuffer(ctBuf, dtypeStr);
 
             dynamic arr;
-            if (shape.IsContiguous && offset == 0 && dims.Length == 1)
+            // The trivial paths require the view to cover its backing window EXACTLY: a contiguous
+            // offset-0 slice like ring["0:16"] keeps the full base block as its InternalArray
+            // (NumSharp only re-slices the array when offset > 0), so flat/reshape would leak the
+            // whole buffer into the export — the strided path below trims to the true extent.
+            bool wholeWindow = shape.IsContiguous && offset == 0 && shape.Size == slice.Count;
+            if (wholeWindow && dims.Length == 1)
             {
                 arr = flat;
             }
-            else if (shape.IsContiguous && offset == 0 && dims.Length > 1)
+            else if (wholeWindow && dims.Length > 1)
             {
                 using var dimsTuple = MakeTuple(dims);
                 arr = flat.reshape(dimsTuple);
             }
             else
             {
-                // Strided / offset / broadcast / scalar: express the exact NumSharp layout.
+                // Strided / offset / prefix-window / broadcast / scalar: express the exact layout.
                 var byteStrides = new long[elemStrides.Length];
                 for (int i = 0; i < elemStrides.Length; i++)
                     byteStrides[i] = elemStrides[i] * itemsize;
