@@ -14,20 +14,20 @@ the NDIter custom-operation bridge.
 | Measurement | Current source snapshot |
 | --- | ---: |
 | Kernel source files | 83 |
-| Kernel source lines | 42,773 |
-| Whole-array `DirectILKernelGenerator` partials | 64 files / 37,955 lines |
+| Kernel source lines | 42,822 |
+| Whole-array `DirectILKernelGenerator` partials | 64 files / 38,004 lines |
 | NDIter `ILKernelGenerator` partials | 5 files / 1,833 lines |
 | Shared kernel infrastructure files | 14 files / 2,985 lines |
 | `new DynamicMethod(...)` constructor sites | 57 |
 | `CreateDelegate(...)` sites | 56 |
-| Raw IL `Emit(...)` calls in the kernel tree | 7,006 |
-| `EmitCall(...)` sites | 386 |
-| Local slots declared by emitters | 483 |
+| Raw IL `Emit(...)` calls in the kernel tree | 7,012 |
+| `EmitCall(...)` sites | 390 |
+| Local slots declared by emitters | 484 |
 | Labels declared by emitters | 524 |
 | Kernel delegate type declarations | 40 |
 | `unsafe delegate` contracts | 39 |
 | Direct generator cache declarations | 43 `ConcurrentDictionary` fields |
-| Test files touching kernel, NDIter, or SIMD terminology | 127 |
+| Test files touching kernel, NDIter, or SIMD terminology | 136 |
 
 The kernel surface is broad:
 
@@ -134,7 +134,7 @@ about who drives the loop.
 
 | Area | Files | Lines | `new DynamicMethod` sites | `CreateDelegate` sites | Cache declarations | Role |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Direct whole-array generator | 64 | 37,955 | 52 | 52 | 43 | Primary high-performance kernel set |
+| Direct whole-array generator | 64 | 38,004 | 52 | 52 | 43 | Primary high-performance kernel set |
 | NDIter inner-loop generator | 5 | 1,833 | 5 | 4 | 4 | NumPy-style per-chunk kernels |
 | Shared root infrastructure | 14 | 2,985 | 0 | 0 | 6 | Kernel keys, delegates, SIMD reflection, stride detection |
 
@@ -142,15 +142,15 @@ about who drives the loop.
 
 | Category | Files | Lines | What lives there |
 | --- | ---: | ---: | --- |
-| Axis reductions | 7 | 6,576 | axis sum/prod/min/max/mean/std/var/arg/NaN/widening paths |
-| Casts | 15 | 6,418 | contiguous, strided, masked, half, complex, bool, float-to-int, subword kernels |
+| Axis reductions | 7 | 6,581 | axis sum/prod/min/max/mean/std/var/arg/NaN/widening paths |
+| Casts | 15 | 6,429 | contiguous, strided, masked, half, complex, bool, float-to-int, subword kernels |
 | Selection and indexing | 12 | 4,818 | `where`, `nonzero`, `argwhere`, `take`, `put`, `place`, ravel/unravel, search, indices, filter |
 | Specialized kernels | 9 | 4,380 | clip, modf, quantile, weighted sum, repeat, inner-loop factory, matmul, trace, scalar delegates |
 | Reductions | 4 | 3,102 | flat reductions, arg reductions, boolean reductions, NaN reductions |
 | Binary operations | 3 | 3,073 | same-type binary, mixed-type binary, shifts |
-| Unary operations | 6 | 2,513 | unary dispatch, math, decimal, predicate, vector, strided unary |
+| Unary operations | 6 | 2,534 | unary dispatch, math, decimal, predicate, vector, strided unary |
 | Scan | 1 | 2,308 | cumsum/cumprod and axis scans |
-| Core emit helpers | 1 | 1,874 | type mapping, vector width, scalar/vector emit primitives |
+| Core emit helpers | 1 | 1,886 | type mapping, vector width, scalar/vector emit primitives |
 | Masking | 3 | 1,462 | boolean masks, NaN masks, var/std mask helpers |
 | Comparison | 1 | 1,137 | comparison kernels and scalar comparison delegates |
 | Copy and aliasing | 2 | 294 | copy kernels and storage field alias helpers |
@@ -197,9 +197,27 @@ $shared = Get-ChildItem src\NumSharp.Core\Backends\Kernels -Filter '*.cs' |
 ```powershell
 $files = @($direct + $inner + $shared)
 $text = ($files | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
-[regex]::Matches($text, 'new\s+DynamicMethod\s*\(').Count
-[regex]::Matches($text, '\.Emit\(').Count
-[regex]::Matches($text, '\.EmitCall\(').Count
+[regex]::Matches($text, 'new\s+DynamicMethod\s*\(').Count   # DynamicMethod sites -> 57
+[regex]::Matches($text, 'CreateDelegate\s*(<|\()').Count    # CreateDelegate sites -> 56
+[regex]::Matches($text, '\.Emit\(').Count                   # raw Emit calls -> 7,012
+[regex]::Matches($text, '\.EmitCall\(').Count               # EmitCall sites -> 390
+[regex]::Matches($text, 'DeclareLocal').Count               # local slots -> 484
+[regex]::Matches($text, 'DefineLabel').Count                # labels -> 524
+[regex]::Matches($text, '(?m)^\s*(public |internal |private |protected |static |unsafe |sealed )*delegate\s').Count  # delegate types -> 40
+[regex]::Matches($text, '(?m)^\s*(public |internal |private |protected |static |sealed )*unsafe delegate\s').Count   # unsafe delegates -> 39
+```
+
+The Direct-generator cache-field count and the test-file tally use narrower
+scopes. The cache regex is anchored to declaration sites so the two
+`ConcurrentDictionary<...>` mentions that appear only in comments are not counted:
+
+```powershell
+# Direct-generator cache fields (declaration sites only) -> 43
+$directText = ($direct | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+[regex]::Matches($directText, '(?m)^\s*(private|internal|public|protected).*ConcurrentDictionary<').Count
+
+# Test files mentioning kernel / NDIter / SIMD terminology -> 136
+(Get-ChildItem test -Recurse -Filter *.cs | Select-String -Pattern 'kernel|NDIter|SIMD' -List).Count
 ```
 
 ## Kernel Lifecycle
@@ -310,8 +328,8 @@ stays hot while input rows stream through memory.
 The important property is not just lower error. The emitter reproduces NumPy's
 recursive split and accumulator order while mapping the eight accumulators onto
 SIMD lanes. The file documents a measured AVX2 case where emitted SIMD pairwise
-sum for `double` axis reduction improved 0.267 ms to 0.123 ms and beat NumPy
-2.4.2 on the same scenario.
+sum for a 1000x1000 `double` axis-1 reduction improved 0.267 ms to 0.123 ms
+(2.18x) and beat NumPy 2.4.2 (0.207 ms) by 1.69x on the same scenario.
 
 ### NaN And Predicate Semantics
 
@@ -332,7 +350,7 @@ blocked at the ndarray/view layer because broadcast views are read-only.
 ### Cast Kernels
 
 The cast subsystem is one of the densest parts of the generator: 15 files and
-6,418 lines. It covers contiguous casts, arbitrary strided casts, masked casts,
+6,429 lines. It covers contiguous casts, arbitrary strided casts, masked casts,
 scalar inner-cast loops, and dtype-specific fast paths.
 
 Notable techniques:
