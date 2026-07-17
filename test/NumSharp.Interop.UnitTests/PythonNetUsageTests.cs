@@ -10,12 +10,10 @@ using Python.Runtime;
 namespace NumSharp.Interop.UnitTests
 {
     /// <summary>
-    ///     The unit-test-proven Python.NET cookbook. Every section of the docs page
-    ///     "Interoperability → Python.NET" (docs/website-src/docs/interop/python-net.md) corresponds
-    ///     1:1 to a test here — if a documented pattern breaks, this suite fails. The patterns are
-    ///     idiomatic Python.NET (scopes, dynamic modules, runtime-defined functions and classes,
-    ///     iterators, exceptions, threads) with NumSharp arrays flowing through them; the base-class
-    ///     gate additionally proves every pattern leaks nothing.
+    ///     The Python.NET usage cookbook: idiomatic Python.NET (scopes, dynamic modules,
+    ///     runtime-defined functions and classes, iterators, exceptions, threads) with NumSharp
+    ///     arrays flowing through all of it — if any of these everyday embedding patterns breaks,
+    ///     this suite fails. The base-class gate additionally proves every pattern leaks nothing.
     /// </summary>
     [TestClass]
     public class PythonNetUsageTests : InteropTestBase
