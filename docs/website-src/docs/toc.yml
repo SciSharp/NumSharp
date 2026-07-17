@@ -49,3 +49,9 @@
   items:
   - name: NumSharp.Bitmap
     href: extensions/bitmap.md
+- name: Interoperability
+  href: interop/index.md
+  expanded: false
+  items:
+  - name: Pythonnet
+    href: interop/pythonnet.md
