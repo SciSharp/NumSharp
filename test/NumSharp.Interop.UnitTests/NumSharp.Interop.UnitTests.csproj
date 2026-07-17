@@ -27,6 +27,11 @@
          pythonnet 3.0.1; the tests pin 3.0.5 because Python 3.12/3.13 hosts require >= 3.0.4
          (NuGet unifies the library's 3.0.1 upward). Tests self-skip when no Python+numpy is found. -->
     <PackageReference Include="pythonnet" Version="3.0.5" />
+    <!-- Numpy.NET compatibility proof (NumpyNetInteropTests): the Bare flavor binds to whatever
+         engine is already initialized (no Python.Included download) and depends on pythonnet 3.0.1,
+         which NuGet unifies with the pin above. NEVER also reference "Numpy" here — both packages
+         ship the same types in different assemblies (CS0433). -->
+    <PackageReference Include="Numpy.Bare" Version="3.11.1.33" />
   </ItemGroup>
 
   <ItemGroup>
