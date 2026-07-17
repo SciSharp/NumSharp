@@ -178,16 +178,18 @@ namespace NumSharp.IO
                 if (_cache.TryGetValue(entry, out NDArray cached))
                     return cached;
 
-                using (MemoryStream member = OpenMember(entry))
-                {
-                    // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
-                    // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening
-                    // every access to object.
-                    if (!NpyFormat.IsNpyFile(member))
-                        throw new FormatException(
-                            $"'{entry.FullName}' is not a .npy member (its magic string is missing), so it has no " +
-                            $"array to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
+                // NumPy checks the magic and hands back raw bytes for anything that is not a .npy.
+                // NumSharp's indexer is typed, so route those to GetRawBytes instead of widening every
+                // access to object.
+                if (!StartsWithNpyMagic(entry))
+                    throw new FormatException(
+                        $"'{entry.FullName}' is not a .npy member (its magic string is missing), so it has no " +
+                        $"array to return. Use GetRawBytes(\"{key}\") to read it as bytes.");
 
+                // Stream the member straight into the reader. Buffering it first would cap members at
+                // 2 GB (MemoryStream's limit) and double the peak cost of every load — see OpenMember.
+                using (Stream member = entry.Open())
+                {
                     NDArray array = NpyFormat.ReadArray(member, AllowPickle, MaxHeaderSize);
                     _cache[entry] = array;
                     return array;
@@ -199,6 +201,10 @@ namespace NumSharp.IO
         ///     A member's raw bytes, whatever it holds. NumPy returns these from its indexer for
         ///     non-<c>.npy</c> members; for a <c>.npy</c> member this is the encoded file itself.
         /// </summary>
+        /// <remarks>
+        ///     Capped at ~2 GB by <see cref="Array"/> itself. A member larger than that can still be read
+        ///     as an array through the indexer, which streams instead of buffering.
+        /// </remarks>
         /// <exception cref="KeyNotFoundException">No such member.</exception>
         public byte[] GetRawBytes(string key)
         {
@@ -207,8 +213,10 @@ namespace NumSharp.IO
             if (!_keyToEntry.TryGetValue(key, out ZipArchiveEntry entry))
                 throw new KeyNotFoundException($"{key} is not a file in the archive");
 
-            using (MemoryStream member = OpenMember(entry))
-                return member.ToArray();
+            var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
+            using (Stream member = entry.Open())
+                member.CopyTo(buffer);
+            return buffer.ToArray();
         }
 
         /// <summary>Whether <paramref name="key"/> names a member that holds a .npy array.</summary>
@@ -221,8 +229,7 @@ namespace NumSharp.IO
             if (_cache.ContainsKey(entry))
                 return true;
 
-            using (MemoryStream member = OpenMember(entry))
-                return NpyFormat.IsNpyFile(member);
+            return StartsWithNpyMagic(entry);
         }
 
         /// <summary>NumPy's <c>name.removesuffix(".npy")</c>.</summary>
@@ -231,15 +238,36 @@ namespace NumSharp.IO
                 ? entryName.Substring(0, entryName.Length - 4)
                 : entryName;
 
-        // A zip entry stream cannot seek, and both the magic sniff and the reader need to. Members are
-        // one array each, so buffering the whole entry is bounded by the array we are about to build.
-        private static MemoryStream OpenMember(ZipArchiveEntry entry)
+        /// <summary>
+        ///     Peek at a member's magic string without consuming the stream the reader will use.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy sniffs the magic and then rewinds (<c>bytes.seek(0)</c>), which Python's ZipExtFile
+        ///     supports but .NET's entry stream does not — it is forward-only. So sniff on one stream and
+        ///     read on a fresh one; in Read mode an entry may be opened any number of times, and the
+        ///     sniff only ever pulls the 6 magic bytes.
+        ///
+        ///     The obvious alternative — buffer the member into a MemoryStream and seek within it — is
+        ///     what this code used to do, and it was wrong twice over: MemoryStream tops out at 2 GB, so
+        ///     a >2 GB member NumSharp had happily WRITTEN failed to load with "Stream was too long",
+        ///     and every ordinary load paid double (the buffer plus the array built from it).
+        /// </remarks>
+        private static bool StartsWithNpyMagic(ZipArchiveEntry entry)
         {
-            var buffer = new MemoryStream(entry.Length > 0 && entry.Length <= int.MaxValue ? (int)entry.Length : 0);
-            using (Stream member = entry.Open())
-                member.CopyTo(buffer);
-            buffer.Position = 0;
-            return buffer;
+            ReadOnlySpan<byte> magic = NpyFormat.MagicPrefix;
+            Span<byte> head = stackalloc byte[6];
+
+            using (Stream sniff = entry.Open())
+            {
+                int got = 0;
+                while (got < head.Length)
+                {
+                    int read = sniff.Read(head.Slice(got));
+                    if (read == 0) break;
+                    got += read;
+                }
+                return got == head.Length && head.SequenceEqual(magic);
+            }
         }
 
         /// <summary>Whether the archive has this member (with or without the <c>.npy</c> suffix).</summary>

@@ -387,8 +387,6 @@ namespace NumSharp.UnitTest.IO
         [DoNotParallelize]
         public void HostileHeaderLength_DoesNotAllocateTheClaim()
         {
-            np.load_npy(NpyOracleCorpus.Cases.Single(x => x.Name == "int32_1d").Bytes); // warm the JIT
-
             foreach ((string name, long claim) in new[]
             {
                 ("hostile_header_len_1gb", 1_000_000_000L),
@@ -398,9 +396,8 @@ namespace NumSharp.UnitTest.IO
             {
                 NpyCase c = NpyOracleCorpus.Cases.Single(x => x.Name == name);
 
-                long before = GC.GetTotalAllocatedBytes(precise: true);
-                Assert.ThrowsException<FormatException>(() => np.load_npy(c.Bytes), name);
-                long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+                long allocated = AllocationTests.MinAllocated(
+                    () => Assert.ThrowsException<FormatException>(() => np.load_npy(c.Bytes), name));
 
                 Assert.IsTrue(allocated < 64 * 1024,
                     $"rejecting '{name}' — a {c.Bytes.Length}-byte file claiming a {claim:N0}-byte header — " +

@@ -347,6 +347,21 @@ and `Char` round-trips U+0000 as a NUL where NumPy's `<U` reports `''` (the byte
   strip to key `a` — pass 2 re-points `a` at the entry literally *named* `a`; one loop resolves it to
   whichever came last. Within a pass, later entries win (a zip may repeat a name, and Python's dict
   keeps the last; .NET's `GetEntry` would return the first). Pinned by the `npz_*_names` cases.
+- **Never buffer an npz member to sniff its magic.** `MemoryStream`/`byte[]` cap at 2 GB, so buffering
+  made NumSharp *write* 5 GiB archives it then failed to *read* ("Stream was too long") while NumPy
+  read them fine — and it doubled the cost of every ordinary load. `NpyFormat.ReadArray` is strictly
+  forward-only, so `StartsWithNpyMagic` sniffs on one `entry.Open()` and the reader streams from a
+  fresh one. Pinned by `Npz_StreamsMembers_RatherThanBufferingThem`.
+
+**Size limits (measured, not assumed):** `.npy` and `.npz` both round-trip **> 4 GiB** — verified at
+5 GiB against every 32-bit boundary (`int.MaxValue`, `uint.MaxValue`) with NumPy reading the result,
+and the 5 GiB header is byte-identical to NumPy's. Array data lives in unmanaged memory and both IO
+paths stream in 256 KB chunks, so no managed buffer ever scales with the array. Zip64 comes from
+.NET's `ZipArchive` on demand (NumPy forces `force_zip64=True` for the same reason, gh-10776). The
+only 2 GB ceilings left are the inherently `byte[]`-returning conveniences — `np.save(arr)`,
+`np.savez(...)` → `byte[]`, and `NpzFile.GetRawBytes` — which is a `byte[]` limit, not a format one;
+use the path/stream overloads above 2 GB. Tests: `NpyLargeFileTests` (`[HighMemory][LongIndexing]`,
+excluded from CI; needs ~8 GB RAM + ~6 GB disk).
 
 **Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (281 committed cases of real
 NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category — read / byte-exact
