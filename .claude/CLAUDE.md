@@ -363,7 +363,7 @@ only 2 GB ceilings left are the inherently `byte[]`-returning conveniences — `
 use the path/stream overloads above 2 GB. Tests: `NpyLargeFileTests` (`[HighMemory][LongIndexing]`,
 excluded from CI; needs ~8 GB RAM + ~6 GB disk).
 
-**Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (281 committed cases of real
+**Gates:** `test/oracle/gen_npy_oracle.py` → `IO/corpus/npy_oracle.zip` (286 committed cases of real
 NumPy output) replayed by `NpyOracleTests` under the **`NpyOracle`** category — read / byte-exact
 write / header-only write / verbatim error / round-trip / npz / live-view write / hostile-allocation.
 Reverse interop (NumPy reading NumSharp, the direction byte-equality can't cover for `.npz`) is the
@@ -633,7 +633,7 @@ test/oracle/                          corpus generators (NumPy 2.4.2 — run by 
   gen_index_oracle.py                 getter/setter index oracle (token index over 15 base recipes)
   fuzz_random.py                      seeded random fuzzer (imports the other two)
   gen_npy_oracle.py                   .npy/.npz format oracle: REAL np.save/savez output + a manifest ->
-                                      NumSharp.UnitTest/IO/corpus/npy_oracle.zip (217 cases)
+                                      NumSharp.UnitTest/IO/corpus/npy_oracle.zip (286 cases)
   interop_write.cs                    the reverse direction: NumSharp writes, verify_npy_interop.py reads
   verify_npy_interop.py               manual gate — real NumPy reads NumSharp's output (needs Python + SDK)
 test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
@@ -648,9 +648,18 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   corpus/*.jsonl                      committed corpus (~68K cases / 40 tiers; op corpus ~53K incl. 3.7K Char woven + 579 Decimal), copied to test output via the csproj glob
 test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
   NpyOracleCorpus.cs                  opens npy_oracle.zip, rebuilds arrays from the manifest
-  NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / verbatim
-                                      error / round-trip / npz / live-view write / corpus non-vacuity
-  corpus/npy_oracle.zip               committed real-NumPy output (217 cases), copied via the csproj glob
+  NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / header-only
+                                      write / verbatim error / round-trip / npz / live-view write /
+                                      hostile-allocation / corpus non-vacuity
+  NpyLargeFileTests.cs                the 2 GB and 4 GB walls; the 5 GiB pair is [HighMemory] (not in CI)
+  AllocationTests.cs                  MinAllocated: best-of-N, since GetTotalAllocatedBytes is process-wide
+  corpus/npy_oracle.zip               committed real-NumPy output (286 cases), copied via the csproj glob
+  NumpyCompatibilityTests.cs          hand-made NumPy fixtures (test_compat/) — v2.0/v3.0/fortran/scalar/
+  NpyFormatVersionTests.cs            empty/bool/multi/compressed. They resolve test_compat RELATIVE to the
+                                      working dir and must fail loudly when it is absent: they used to
+                                      `return` silently, and nothing copied the fixtures, so on a clean
+                                      checkout all 13 passed while asserting NOTHING. The csproj now copies
+                                      test_compat\* — do not drop that rule.
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
@@ -665,7 +674,7 @@ Same shape as above — NumPy is the oracle, the corpus is committed, no Python 
 claim is stronger: NumSharp's writer must be **byte-identical** to `np.save`, not merely readable.
 
 - **Regenerate**: `python test/oracle/gen_npy_oracle.py` (deterministic; needs `numpy==2.4.2`), then `dotnet build`.
-- **Run the gate**: `dotnet test --filter "TestCategory=NpyOracle"` — 281 cases across every dtype ×
+- **Run the gate**: `dotnet test --filter "TestCategory=NpyOracle"` — 286 cases across every dtype ×
   {0-d, empty, 1-D, 2-D, 3-D, unit, empty-2d/3d} × {C, F, strided, reversed, offset, broadcast,
   transposed} × versions {1.0, 2.0, 3.0} × {little, big, native} endian, plus value fidelity (NaN
   payloads incl. sNaN, subnormals, signed zero, integer extremes, BMP seams) and 42

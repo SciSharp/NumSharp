@@ -58,6 +58,15 @@
     </None>
   </ItemGroup>
 
+  <!-- Hand-made NumPy fixtures for NumpyCompatibilityTests / NpyFormatVersionTests. Those tests
+       resolve "test_compat" relative to the working directory and SKIP (silently passing) when it is
+       absent, so without this rule they assert nothing on a clean checkout. -->
+  <ItemGroup>
+    <None Update="test_compat\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 
   <ItemGroup>
     <None Remove="NumSharp.Bitmap\resources\captcha-a.png" />

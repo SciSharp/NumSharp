@@ -17,11 +17,9 @@ namespace NumSharp.UnitTest.IO
         public void ParseVersion2_LargeHeader()
         {
             var path = Path.Combine(TestDir, "version2_large_header.npy");
-            if (!File.Exists(path))
-            {
-                Console.WriteLine("Skipping: version2_large_header.npy not found");
-                return;
-            }
+            // Fail loudly rather than skipping: without the fixture this test asserts nothing,
+            // and it used to pass silently on any checkout that lacked it.
+            Assert.IsTrue(File.Exists(path), $"the NumPy fixture 'version2_large_header.npy' is missing from {Path.GetFullPath(TestDir)}; this test asserts nothing without it.");
 
             // Read and verify the version
             using var stream = File.OpenRead(path);
@@ -58,11 +56,9 @@ namespace NumSharp.UnitTest.IO
         public void ParseVersion3_UnicodeFieldNames()
         {
             var path = Path.Combine(TestDir, "version3_unicode.npy");
-            if (!File.Exists(path))
-            {
-                Console.WriteLine("Skipping: version3_unicode.npy not found");
-                return;
-            }
+            // Fail loudly rather than skipping: without the fixture this test asserts nothing,
+            // and it used to pass silently on any checkout that lacked it.
+            Assert.IsTrue(File.Exists(path), $"the NumPy fixture 'version3_unicode.npy' is missing from {Path.GetFullPath(TestDir)}; this test asserts nothing without it.");
 
             // Read and verify the version
             using var stream = File.OpenRead(path);

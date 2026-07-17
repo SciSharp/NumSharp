@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.IO;
@@ -15,15 +16,28 @@ namespace NumSharp.UnitTest.IO
     {
         private const string TestDir = "test_compat";
 
-        private static bool TestFilesExist()
+        /// <summary>
+        ///     Fail loudly when the fixtures are missing, rather than skipping.
+        /// </summary>
+        /// <remarks>
+        ///     These used to `return` silently when test_compat/ was absent — and nothing copied it to
+        ///     the output directory, so on a clean checkout all of them passed while asserting NOTHING.
+        ///     A test that cannot fail is worse than no test: it reports coverage that does not exist.
+        ///     The csproj now copies the fixtures; this turns a regression in that copy rule into a red
+        ///     test instead of silent green.
+        /// </remarks>
+        private static void RequireTestFiles([CallerMemberName] string caller = null)
         {
-            return Directory.Exists(TestDir) && File.Exists(Path.Combine(TestDir, "int32_1d.npy"));
+            Assert.IsTrue(Directory.Exists(TestDir) && File.Exists(Path.Combine(TestDir, "int32_1d.npy")),
+                $"{caller}: the NumPy fixtures are missing from '{Path.GetFullPath(TestDir)}'. They are " +
+                "committed under test/NumSharp.UnitTest/test_compat/ and copied to the output by the " +
+                "csproj — this test asserts nothing without them.");
         }
 
         [TestMethod]
         public void Load_NumPy_Int32_1D()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "int32_1d.npy"));
 
@@ -36,7 +50,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_Float64_2D()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "float64_2d.npy"));
 
@@ -50,7 +64,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_Boolean()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "bool.npy"));
 
@@ -64,7 +78,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_Scalar()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "scalar.npy"));
 
@@ -85,7 +99,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_Empty()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "empty.npy"));
 
@@ -96,7 +110,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_FortranOrder()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             var arr = np.load_npy(Path.Combine(TestDir, "fortran.npy"));
 
@@ -120,7 +134,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_Npz()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             using var npz = np.load_npz(Path.Combine(TestDir, "multi.npz"));
 
@@ -138,7 +152,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void Load_NumPy_NpzCompressed()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             using var npz = np.load_npz(Path.Combine(TestDir, "compressed.npz"));
 
@@ -153,7 +167,7 @@ namespace NumSharp.UnitTest.IO
         [TestMethod]
         public void RoundTrip_NumSharpToNumPy()
         {
-            if (!TestFilesExist()) return;
+            RequireTestFiles();
 
             // Save from NumSharp
             var original = np.arange(12).reshape(3, 4);
