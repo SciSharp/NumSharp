@@ -92,13 +92,23 @@ namespace NumSharp
             // chunk instead of two per element keeps the writer overhead off the hot path while bounding
             // memory (matters for very large arrays; a per-element StreamWriter.Write is otherwise a
             // measurable tax on top of the per-element scalar formatting).
+            // NumPy's tofile pulls each element through getitem, which returns a Python float (double)
+            // for float16/float32 — so the emitted text is that widened double's, not the value rendered
+            // at the array's narrower native precision (e.g. float32 0.1 -> "0.10000000149011612", not
+            // "0.1"). Widen Half/Single to double here to match; every other dtype already renders at the
+            // width getitem hands back (int, bool, complex128, char).
+            bool widenToDouble = tc == NPTypeCode.Half || tc == NPTypeCode.Single;
+            NPTypeCode renderTc = widenToDouble ? NPTypeCode.Double : tc;
+
             var sb = new StringBuilder(1 << 16);
             for (long i = 0; i < n; i++)
             {
                 object v = GetAtIndex(i);
+                if (widenToDouble)
+                    v = tc == NPTypeCode.Half ? (double)(System.Half)v : (double)(float)v;
                 sb.Append(useScalarStr
-                    ? Backends.Printing.ArrayFormatter.ScalarStr(v, tc)
-                    : PrintfFormatter.Format(format, v, tc));
+                    ? Backends.Printing.ArrayFormatter.ScalarStr(v, renderTc)
+                    : PrintfFormatter.Format(format, v, renderTc));
 
                 if (i != n - 1)
                     sb.Append(sep);

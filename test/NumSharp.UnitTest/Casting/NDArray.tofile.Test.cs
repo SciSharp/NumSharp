@@ -115,7 +115,7 @@ namespace NumSharp.UnitTest.Casting
             Assert.AreEqual("0,2,4,1,3,5", Text(np.arange(6).astype(NPTypeCode.Int32).reshape(3, 2).T, ","));
             // reversed uint8
             Assert.AreEqual("5,4,3,2,1,0", Text(np.arange(6).astype(NPTypeCode.Byte)["::-1"], ","));
-            // float scalar str keeps the ".0"
+            // Single widens to a Python double (NumPy tofile semantics); integers render as "N.0"
             Assert.AreEqual("0.0,1.0,2.0,3.0,4.0,5.0", Text(np.arange(6).astype(NPTypeCode.Single), ","));
             Assert.AreEqual("0.0,1.0,2.0,3.0,4.0,5.0", Text(np.arange(6).astype(NPTypeCode.Double), ","));
         }
@@ -191,17 +191,22 @@ namespace NumSharp.UnitTest.Casting
         }
 
         [TestMethod]
-        public void Text_Float32_Float16_ScalarStr_ScientificThreshold()
+        public void Text_Float32_Float16_WidenToDouble_MatchesNumPy()
         {
-            // Fuzz regression: scalar str switches to scientific per the dtype's max_positional
-            // (float32 -> 1e6, float16 -> 1e3), tested on the VALUE — float32(1e-4) rounds below 1e-4.
+            // NumPy's tofile pulls each element through getitem, which returns a Python float (double)
+            // for float16/float32 — so the emitted text is the WIDENED double's shortest repr, NOT the
+            // value rendered at the dtype's own (narrower) precision. Verified against NumPy 2.4.2:
+            //   np.array([1e15,1e-4,1e5,1e6], np.float32).tofile(sep=',')
+            //     -> '999999986991104.0,9.999999747378752e-05,100000.0,1000000.0'
             var f32 = np.array(new double[] { 1e15, 1e-4, 1e5, 1e6 }).astype(NPTypeCode.Single);
-            Assert.AreEqual("1e+15,1e-04,100000.0,1e+06", Text(f32, ","));
+            Assert.AreEqual("999999986991104.0,9.999999747378752e-05,100000.0,1000000.0", Text(f32, ","));
 
             var f16 = np.array(new double[] { 65500, 1000, 100, 0.0001 }).astype(NPTypeCode.Half);
-            Assert.AreEqual("6.55e+04,1e+03,100.0,0.0001", Text(f16, ","));
+            Assert.AreEqual("65504.0,1000.0,100.0,0.00010001659393310547", Text(f16, ","));
 
-            // Same fix at the 0-d array str surface (ArrayFormatter.PythonFloatRepr powers both).
+            // Contrast: the ARRAY-PRINT surface (ToString / 0-d str) DOES use the native scalar str,
+            // which switches to scientific per the dtype's max_positional (float32 -> 1e6, float16 ->
+            // 1e3). tofile and str deliberately differ here, which is exactly what this test pins.
             Assert.AreEqual("1e+15", np.array(new double[] { 1e15 }).astype(NPTypeCode.Single).reshape(new int[0]).ToString());
             Assert.AreEqual("6.55e+04", np.array(new double[] { 65500 }).astype(NPTypeCode.Half).reshape(new int[0]).ToString());
         }

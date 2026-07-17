@@ -209,9 +209,30 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Text_OffsetNotPermitted_Throws()
         {
+            // NumPy raises TypeError verbatim: "'offset' argument only permitted for binary files".
             string p = TempWithText("1,2,3");
-            try { Assert.ThrowsException<ArgumentException>(() => np.fromfile(p, NPTypeCode.Int32, sep: ",", offset: 4)); }
+            try { Assert.ThrowsException<TypeError>(() => np.fromfile(p, NPTypeCode.Int32, sep: ",", offset: 4)); }
             finally { File.Delete(p); }
+        }
+
+        [TestMethod]
+        public void Text_EmptyField_Throws()
+        {
+            // NumPy tolerates exactly one optional TRAILING separator; every other missing item —
+            // leading, internal, or a second trailing one — is "unmatched data" (ValueError). Verified
+            // against NumPy 2.4.2. NumSharp previously dropped all empty tokens and silently returned
+            // fewer elements.
+            foreach (string bad in new[] { "1,2,3,,", ",1,2", "1,,2", "1, ,2" })
+            {
+                string p = TempWithText(bad);
+                try { Assert.ThrowsException<ValueError>(() => np.fromfile(p, NPTypeCode.Int32, sep: ","), $"expected ValueError for '{bad}'"); }
+                finally { File.Delete(p); }
+            }
+
+            // …but count stops before the offending field is ever examined, matching NumPy.
+            string q = TempWithText("1,2,,4");
+            try { CollectionAssert.AreEqual(new[] { 1, 2 }, np.fromfile(q, NPTypeCode.Int32, count: 2, sep: ",").ToArray<int>()); }
+            finally { File.Delete(q); }
         }
 
         // ---- round-trips ------------------------------------------------------------

@@ -133,9 +133,14 @@ namespace NumSharp
         /// <param name="file">Target path. <c>.npz</c> is appended if not already present.</param>
         /// <param name="args">Positional arrays, stored as <c>arr_0</c>, <c>arr_1</c>, …</param>
         /// <param name="kwds">Named arrays.</param>
+        /// <param name="allow_pickle">
+        ///     Present for NumPy parity (its signature is <c>savez(file, *args, allow_pickle=True, **kwds)</c>).
+        ///     NumSharp has no object dtype, so nothing can reach the pickle path and this never changes the
+        ///     outcome.
+        /// </param>
         /// <exception cref="ArgumentException">A name in <paramref name="kwds"/> collides with a generated <c>arr_N</c>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
-        public static void savez(string file, NDArray[] args, IDictionary<string, NDArray> kwds)
+        public static void savez(string file, NDArray[] args, IDictionary<string, NDArray> kwds, bool allow_pickle = true)
             => SaveZip(file, args, kwds, CompressionLevel.NoCompression);
 
         /// <summary>Write an uncompressed <c>.npz</c> archive to an open stream.</summary>
@@ -149,8 +154,9 @@ namespace NumSharp
             => SaveZip(file, null, kwds, CompressionLevel.NoCompression);
 
         /// <summary>Write an uncompressed <c>.npz</c> archive of positional and named arrays to an open stream.</summary>
+        /// <param name="allow_pickle">Present for NumPy parity; a no-op — see <see cref="savez(string, NDArray[], IDictionary{string, NDArray}, bool)"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez.html</remarks>
-        public static void savez(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds)
+        public static void savez(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds, bool allow_pickle = true)
             => SaveZip(file, args, kwds, CompressionLevel.NoCompression);
 
         /// <summary>Encode an uncompressed <c>.npz</c> archive of <c>arr_0</c>… arrays and return the bytes.</summary>
@@ -183,8 +189,9 @@ namespace NumSharp
             => savez_compressed(file, null, kwds);
 
         /// <summary>Save positional and named arrays into a compressed <c>.npz</c> archive.</summary>
+        /// <param name="allow_pickle">Present for NumPy parity; a no-op — see <see cref="savez(string, NDArray[], IDictionary{string, NDArray}, bool)"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
-        public static void savez_compressed(string file, NDArray[] args, IDictionary<string, NDArray> kwds)
+        public static void savez_compressed(string file, NDArray[] args, IDictionary<string, NDArray> kwds, bool allow_pickle = true)
             => SaveZip(file, args, kwds, CompressionLevel.Optimal);
 
         /// <summary>Write a compressed <c>.npz</c> archive to an open stream.</summary>
@@ -198,8 +205,9 @@ namespace NumSharp
             => SaveZip(file, null, kwds, CompressionLevel.Optimal);
 
         /// <summary>Write a compressed <c>.npz</c> archive of positional and named arrays to an open stream.</summary>
+        /// <param name="allow_pickle">Present for NumPy parity; a no-op — see <see cref="savez(string, NDArray[], IDictionary{string, NDArray}, bool)"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.savez_compressed.html</remarks>
-        public static void savez_compressed(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds)
+        public static void savez_compressed(Stream file, NDArray[] args, IDictionary<string, NDArray> kwds, bool allow_pickle = true)
             => SaveZip(file, args, kwds, CompressionLevel.Optimal);
 
         /// <summary>Encode a compressed <c>.npz</c> archive of <c>arr_0</c>… arrays and return the bytes.</summary>

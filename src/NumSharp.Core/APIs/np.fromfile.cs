@@ -54,9 +54,9 @@ namespace NumSharp
             if (string.IsNullOrEmpty(sep))
                 return FromFileBinary(stream, tc, count, offset);
 
-            // NumPy raises for offset with a text file ("The 'offset' keyword only permitted for binary files").
+            // NumPy raises TypeError verbatim when offset is combined with a text separator.
             if (offset != 0)
-                throw new ArgumentException("The 'offset' keyword only permitted for binary files.", nameof(offset));
+                throw new TypeError("'offset' argument only permitted for binary files");
 
             return FromFileText(stream, tc, count, sep);
         }
@@ -171,33 +171,63 @@ namespace NumSharp
             using (var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, leaveOpen: true))
                 text = reader.ReadToEnd();
 
-            string[] tokens = Tokenize(text, sep);
-            int take = count < 0 ? tokens.Length : Math.Min(count, tokens.Length);
-            return TokensToArray(tokens, take, tc);
+            string[] tokens = SplitTokens(text, sep, out bool nonWhitespaceSep);
+            string[] items = SelectTokens(tokens, count, nonWhitespaceSep);
+            return TokensToArray(items, items.Length, tc);
         }
 
-        // Split the text into item tokens. A whitespace-only separator splits on any whitespace run;
-        // otherwise we split on the separator's non-whitespace core and trim surrounding whitespace off
-        // each token (NumPy's swab_separator: whitespace around the separator is a wildcard). Empty tokens
-        // (a trailing separator, or whitespace-only gaps) are dropped.
-        private static string[] Tokenize(string text, string sep)
+        // Split the text into raw item tokens. A whitespace-only separator splits on any whitespace run,
+        // so no empty items are ever produced. Otherwise we split on the separator's non-whitespace core
+        // and trim surrounding whitespace off each token (NumPy's swab_separator: whitespace around the
+        // separator is a wildcard). Empty tokens are KEPT here — SelectTokens applies NumPy's rule that
+        // only a single trailing separator is tolerated.
+        private static string[] SplitTokens(string text, string sep, out bool nonWhitespaceSep)
         {
             var coreChars = new List<char>(sep.Length);
             foreach (char c in sep)
                 if (!char.IsWhiteSpace(c)) coreChars.Add(c);
 
             if (coreChars.Count == 0)
+            {
+                nonWhitespaceSep = false;
                 return text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            }
 
+            nonWhitespaceSep = true;
             string core = new string(coreChars.ToArray());
             string[] raw = text.Split(new[] { core }, StringSplitOptions.None);
-            var list = new List<string>(raw.Length);
-            foreach (string t in raw)
+            for (int i = 0; i < raw.Length; i++)
+                raw[i] = raw[i].Trim();
+            return raw;
+        }
+
+        // Select the items to parse, matching NumPy's text reader: read items until `count` is reached
+        // (count < 0 = all). NumPy consumes value/sep/value/sep… and tolerates exactly one optional
+        // trailing separator — a single empty item at the very end. Any OTHER empty item (leading,
+        // internal, or a second trailing one) means it hit a separator where it expected a value, which
+        // NumPy reports as unmatched data. A whitespace separator never yields empties, so this only
+        // constrains the non-whitespace path. `count` is applied first: a bad/empty item beyond the
+        // requested count is never examined, exactly as NumPy stops reading once it has `count` items.
+        private static string[] SelectTokens(string[] tokens, int count, bool nonWhitespaceSep)
+        {
+            int want = count < 0 ? int.MaxValue : count;
+            var items = new List<string>(count < 0 ? tokens.Length : Math.Min(count, tokens.Length));
+            for (int i = 0; i < tokens.Length; i++)
             {
-                string s = t.Trim();
-                if (s.Length > 0) list.Add(s);
+                if (items.Count >= want)
+                    break; // count items already read; NumPy does not look at what follows
+
+                string t = tokens[i];
+                if (t.Length == 0)
+                {
+                    if (nonWhitespaceSep && i == tokens.Length - 1)
+                        break; // a single trailing separator is allowed
+                    throw Unmatched();
+                }
+
+                items.Add(t);
             }
-            return list.ToArray();
+            return items.ToArray();
         }
 
         private static NDArray TokensToArray(string[] tokens, int take, NPTypeCode tc)
@@ -223,14 +253,15 @@ namespace NumSharp
             }
         }
 
-        private static ValueError Unmatched(string token)
-            => new ValueError($"string could not be read to its end: unmatched item '{token}'.");
+        // NumPy raises this verbatim both for a token it cannot parse and for a missing (empty) item.
+        private static ValueError Unmatched()
+            => new ValueError("string or file could not be read to its end due to unmatched data");
 
         private static long ParseLong(string t)
         {
             if (long.TryParse(t, NumberStyles.Integer | NumberStyles.AllowLeadingSign, CI, out long v))
                 return v;
-            throw Unmatched(t);
+            throw Unmatched();
         }
 
         private static ulong ParseULong(string t)
@@ -240,14 +271,14 @@ namespace NumSharp
             // negatives wrap two's-complement into the unsigned range (NumPy: uint64 "-1" -> 2^64-1).
             if (long.TryParse(t, NumberStyles.Integer | NumberStyles.AllowLeadingSign, CI, out long s))
                 return unchecked((ulong)s);
-            throw Unmatched(t);
+            throw Unmatched();
         }
 
         private static decimal ParseDecimal(string t)
         {
             if (decimal.TryParse(t, NumberStyles.Float, CI, out decimal d))
                 return d;
-            throw Unmatched(t);
+            throw Unmatched();
         }
 
         // NumPy/C parse "nan" to the POSITIVE quiet NaN (0x7FF8…). .NET's double.NaN is the NEGATIVE
@@ -266,7 +297,7 @@ namespace NumSharp
             }
             if (double.TryParse(t, NumberStyles.Float, CI, out double v))
                 return v;
-            throw Unmatched(t);
+            throw Unmatched();
         }
 
         // Parse a complex literal: "a+bj" / "a-bj" / "bj" / "a" (optionally wrapped in parentheses, so the
@@ -279,7 +310,7 @@ namespace NumSharp
                 s = s.Substring(1, s.Length - 2).Trim();
 
             if (s.Length == 0)
-                throw Unmatched(t);
+                throw Unmatched();
 
             char last = s[s.Length - 1];
             if (last != 'j' && last != 'J')
