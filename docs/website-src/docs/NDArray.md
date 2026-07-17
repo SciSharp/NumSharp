@@ -496,17 +496,32 @@ Three ways to get a typed wrapper:
 
 ## Saving, Loading, and Interop
 
-NumSharp reads and writes NumPy's `.npy` / `.npz` formats and raw binary — files saved in Python open in NumSharp, and vice versa. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers--npfrombuffer) above.
+NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.4.2's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes — data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers--npfrombuffer) above.
 
 ```csharp
-// .npy round-trip
+// .npy — a single array (byte-identical to NumPy's np.save)
 np.save("arr.npy", arr);
-var loaded = np.load("arr.npy");           // also handles .npz archives
+NDArray a = np.load_npy("arr.npy");                 // typed load
 
-// Raw binary
+// .npz — many arrays in one archive
+np.savez("bundle.npz", x, y);                       // positional → "arr_0", "arr_1"
+np.savez("bundle.npz", new Dictionary<string, NDArray> { ["w"] = w, ["b"] = b });
+np.savez_compressed("bundle.npz", w, b);            // same, Deflate-compressed
+
+using NpzFile npz = np.load_npz("bundle.npz");      // lazy + cached; dispose it (holds the file handle)
+NDArray w1 = npz["w"];                              // "w.npy" also works as a key
+NDArray w2 = npz.f.w;                               // dot access, like NumPy's npz.f
+foreach (string name in npz.Files) { }             // "w", "b" — the ".npy" is stripped
+
+// np.load dispatches on the file's magic bytes and returns `object`
+object any = np.load("bundle.npz");                 // NDArray for .npy, NpzFile for .npz
+
+// Raw binary — element bytes only, no header
 arr.tofile("data.bin");
 var raw = np.fromfile("data.bin", np.float64);
 ```
+
+Format versions 1.0 / 2.0 / 3.0, C- and Fortran-order, and big-endian files all load; the writer emits the byte-exact, 64-byte-aligned, mmap-ready layout NumPy produces. `np.load` returns `object` because — like NumPy — it yields an array for a `.npy` and an archive for a `.npz`, decided by the file's contents rather than its name; prefer the typed `np.load_npy` / `np.load_npz` when you know the kind. `allow_pickle` defaults to `false` (NumPy's security default), so object-array files are rejected with a clear message instead of executed. See [NumPy Compliance](compliance.md) for the full dtype map and the handful of unsupported types.
 
 Interop with standard .NET arrays:
 
@@ -647,8 +662,12 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 
 | Call | Format | View / copy | Notes |
 |------|--------|-------------|-------|
-| `np.save(path, arr)` | `.npy` | — | NumPy-compatible; writes header + data |
-| `np.load(path)` | `.npy` / `.npz` | — | Also accepts a `Stream` |
+| `np.save(path, arr)` | `.npy` | — | Byte-identical to NumPy's `np.save`; `Stream` / `byte[]` overloads |
+| `np.savez(path, …)` | `.npz` | — | Many arrays; positional (`arr_0`, `arr_1`, …) or `IDictionary<string, NDArray>` |
+| `np.savez_compressed(path, …)` | `.npz` | — | Same as `savez`, Deflate-compressed |
+| `np.load(path)` | `.npy` / `.npz` | — | Returns `object` (`NDArray` or `NpzFile`); `Stream` / `byte[]` overloads |
+| `np.load_npy(path)` | `.npy` | copy | Typed → `NDArray` |
+| `np.load_npz(path)` | `.npz` | lazy | Typed → `NpzFile` (`IDisposable`; `.Files`, `["w"]` / `.f.w` access) |
 | `arr.tofile(path)` | raw | — | Element bytes only, no header |
 | `np.fromfile(path, dtype)` | raw | copy | Pair with `tofile` |
 | `np.frombuffer(byte[], …)` | in-memory | view (pins array) | Endian-prefix dtype strings trigger a copy |
