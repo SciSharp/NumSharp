@@ -185,7 +185,7 @@ namespace NumSharp
             typemap_arr_arr.Add((np.uint8, np.float64), np.float64);
             typemap_arr_arr.Add((np.uint8, np.complex128), np.complex128);
             typemap_arr_arr.Add((np.uint8, np.@decimal), np.@decimal);
-            typemap_arr_arr.Add((np.uint8, np.@char), np.uint8);
+            typemap_arr_arr.Add((np.uint8, np.@char), np.@char);  // Char ranks as uint16: uint8+uint16 -> uint16 (label char)
             typemap_arr_arr.Add((np.uint8, np.int8), np.int16);
             typemap_arr_arr.Add((np.uint8, np.float16), np.float16);
 
@@ -204,12 +204,12 @@ namespace NumSharp
             typemap_arr_arr.Add((np.int8, np.float64), np.float64);
             typemap_arr_arr.Add((np.int8, np.complex128), np.complex128);
             typemap_arr_arr.Add((np.int8, np.@decimal), np.@decimal);
-            typemap_arr_arr.Add((np.int8, np.@char), np.int8);
+            typemap_arr_arr.Add((np.int8, np.@char), np.int32);  // Char ranks as uint16: int8+uint16 -> int32
 
             typemap_arr_arr.Add((np.@char, np.@char), np.@char);
             typemap_arr_arr.Add((np.@char, np.@bool), np.@char);
-            typemap_arr_arr.Add((np.@char, np.uint8), np.uint8);
-            typemap_arr_arr.Add((np.@char, np.int16), np.int16);
+            typemap_arr_arr.Add((np.@char, np.uint8), np.@char);   // Char ranks as uint16: uint16+uint8 -> uint16 (label char)
+            typemap_arr_arr.Add((np.@char, np.int16), np.int32);   // Char ranks as uint16: uint16+int16 -> int32
             typemap_arr_arr.Add((np.@char, np.uint16), np.uint16);
             typemap_arr_arr.Add((np.@char, np.int32), np.int32);
             typemap_arr_arr.Add((np.@char, np.uint32), np.uint32);
@@ -219,8 +219,8 @@ namespace NumSharp
             typemap_arr_arr.Add((np.@char, np.float64), np.float64);
             typemap_arr_arr.Add((np.@char, np.complex128), np.complex128);
             typemap_arr_arr.Add((np.@char, np.@decimal), np.@decimal);
-            typemap_arr_arr.Add((np.@char, np.int8), np.int8);
-            typemap_arr_arr.Add((np.@char, np.float16), np.float16);
+            typemap_arr_arr.Add((np.@char, np.int8), np.int32);     // Char ranks as uint16: uint16+int8 -> int32
+            typemap_arr_arr.Add((np.@char, np.float16), np.float32); // Char ranks as uint16: uint16+float16 -> float32
 
             typemap_arr_arr.Add((np.int16, np.@bool), np.int16);
             typemap_arr_arr.Add((np.int16, np.uint8), np.int16);
@@ -234,7 +234,7 @@ namespace NumSharp
             typemap_arr_arr.Add((np.int16, np.float64), np.float64);
             typemap_arr_arr.Add((np.int16, np.complex128), np.complex128);
             typemap_arr_arr.Add((np.int16, np.@decimal), np.@decimal);
-            typemap_arr_arr.Add((np.int16, np.@char), np.int16);
+            typemap_arr_arr.Add((np.int16, np.@char), np.int32);  // Char ranks as uint16: int16+uint16 -> int32
             typemap_arr_arr.Add((np.int16, np.int8), np.int16);
             typemap_arr_arr.Add((np.int16, np.float16), np.float32);
 
@@ -349,7 +349,7 @@ namespace NumSharp
             typemap_arr_arr.Add((np.float16, np.float64), np.float64);
             typemap_arr_arr.Add((np.float16, np.complex128), np.complex128);
             typemap_arr_arr.Add((np.float16, np.@decimal), np.@decimal);
-            typemap_arr_arr.Add((np.float16, np.@char), np.float16);
+            typemap_arr_arr.Add((np.float16, np.@char), np.float32);  // Char ranks as uint16: float16+uint16 -> float32
 
             typemap_arr_arr.Add((np.float64, np.@bool), np.float64);
             typemap_arr_arr.Add((np.float64, np.uint8), np.float64);
@@ -451,6 +451,7 @@ namespace NumSharp
             var typemap_arr_scalar = new Dictionary<(Type, Type), Type>();
             typemap_arr_scalar.Add((np.@bool, np.@bool), np.@bool);
             typemap_arr_scalar.Add((np.@bool, np.uint8), np.uint8);
+            typemap_arr_scalar.Add((np.@bool, np.@char), np.@char);  // bug 5: bool array + char scalar -> char (was missing -> KeyNotFoundException)
             typemap_arr_scalar.Add((np.@bool, np.int16), np.int16);
             typemap_arr_scalar.Add((np.@bool, np.uint16), np.uint16);
             typemap_arr_scalar.Add((np.@bool, np.int32), np.int32);
@@ -495,20 +496,22 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.int8, np.complex128), np.complex128);
             typemap_arr_scalar.Add((np.int8, np.@decimal), np.int8);
 
+            // Char array behaves as a uint16 array: NEP50 array-wins over every
+            // integer/bool scalar (-> char), float/complex scalar promotes by kind.
             typemap_arr_scalar.Add((np.@char, np.@char), np.@char);
             typemap_arr_scalar.Add((np.@char, np.@bool), np.@char);
             typemap_arr_scalar.Add((np.@char, np.uint8), np.@char);
-            typemap_arr_scalar.Add((np.@char, np.int16), np.int16);
-            typemap_arr_scalar.Add((np.@char, np.uint16), np.uint16);
-            typemap_arr_scalar.Add((np.@char, np.int32), np.int32);
-            typemap_arr_scalar.Add((np.@char, np.uint32), np.uint32);
-            typemap_arr_scalar.Add((np.@char, np.int64), np.int64);
-            typemap_arr_scalar.Add((np.@char, np.uint64), np.uint64);
+            typemap_arr_scalar.Add((np.@char, np.int16), np.@char);
+            typemap_arr_scalar.Add((np.@char, np.uint16), np.@char);
+            typemap_arr_scalar.Add((np.@char, np.int32), np.@char);
+            typemap_arr_scalar.Add((np.@char, np.uint32), np.@char);
+            typemap_arr_scalar.Add((np.@char, np.int64), np.@char);
+            typemap_arr_scalar.Add((np.@char, np.uint64), np.@char);
             typemap_arr_scalar.Add((np.@char, np.float32), np.float32);
             typemap_arr_scalar.Add((np.@char, np.float64), np.float64);
             typemap_arr_scalar.Add((np.@char, np.complex128), np.complex128);
             typemap_arr_scalar.Add((np.@char, np.int8), np.@char);
-            typemap_arr_scalar.Add((np.@char, np.float16), np.float16);
+            typemap_arr_scalar.Add((np.@char, np.float16), np.float32);  // uint16 array + float16 scalar -> float32
 
             typemap_arr_scalar.Add((np.int16, np.@bool), np.int16);
             typemap_arr_scalar.Add((np.int16, np.uint8), np.int16);

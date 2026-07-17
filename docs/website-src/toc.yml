@@ -3,3 +3,7 @@
   homepage: docs/intro.md
 - name: API
   href: api/
+- name: Benchmarks
+  href: docs/benchmarks-dashboard.md
+- name: Source Code
+  href: https://github.com/SciSharp/NumSharp

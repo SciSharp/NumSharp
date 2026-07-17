@@ -883,6 +883,19 @@ namespace NumSharp.Backends.Kernels
             if (from == to)
                 return; // No conversion needed
 
+            // A Boolean's numeric value is exactly 0 or 1 — never its raw storage byte. A bool buffer
+            // can legally hold non-0/1 bytes (np.frombuffer is a zero-copy VIEW, like NumPy; interop
+            // wraps a foreign buffer), so normalize nonzero->1 BEFORE widening to any numeric type.
+            // Without this, sum/mean/var/std over such a buffer accumulate the raw bytes (e.g. byte 255
+            // contributes 255) instead of counting True. Mirrors the to==Boolean '!= 0' below, applied
+            // to the source side. Idempotent for proper 0/1 bools (0->0, 1->1).
+            if (from == NPTypeCode.Boolean) // to != Boolean here (from == to already returned)
+            {
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Cgt_Un);    // value = (value != 0) ? 1 : 0
+                from = NPTypeCode.Byte;      // continue the conversion from a clean 0/1 byte
+            }
+
             // Special case: decimal conversions require method calls
             if (from == NPTypeCode.Decimal || to == NPTypeCode.Decimal)
             {

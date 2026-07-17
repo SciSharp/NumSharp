@@ -187,35 +187,6 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   text-transform: uppercase;
 }
 
-.ns-bench-dashboard .guide-formula {
-  background: var(--muted-bg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: grid;
-  gap: 0.08rem;
-  min-width: 0;
-  padding: 0.48rem 0.68rem;
-  white-space: nowrap;
-}
-
-.ns-bench-dashboard .guide-formula span {
-  color: var(--quiet);
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.ns-bench-dashboard .guide-formula strong {
-  font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.ns-bench-dashboard .guide-formula small {
-  color: var(--quiet);
-  font-size: 0.74rem;
-  font-variant-numeric: tabular-nums;
-}
-
 .ns-bench-dashboard .guide-primer {
   border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
   border-radius: 8px;
@@ -1208,6 +1179,55 @@ html[data-bs-theme="dark"] .ns-bench-dashboard .dtype-count {
   font-weight: 650;
 }
 
+.ns-bench-dashboard .is-coach-target {
+  outline: 2px solid color-mix(in srgb, #0ea5e9 70%, var(--panel));
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, #0ea5e9 18%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, #0ea5e9 36%, transparent);
+}
+
+.ns-breakdown-coach {
+  --coach-arrow-x: 50%;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 1rem 2.2rem rgba(2, 6, 23, 0.32);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 750;
+  left: 0;
+  line-height: 1.25;
+  max-width: min(16rem, calc(100vw - 1.5rem));
+  opacity: 0;
+  padding: 0.62rem 0.78rem;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transform: translateY(0.35rem);
+  transition: opacity 150ms ease, transform 150ms ease;
+  width: max-content;
+  z-index: 1085;
+}
+
+.ns-breakdown-coach::before {
+  background: #0f172a;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  content: "";
+  height: 0.7rem;
+  left: var(--coach-arrow-x);
+  position: absolute;
+  top: -0.39rem;
+  transform: translateX(-50%) rotate(45deg);
+  width: 0.7rem;
+}
+
+.ns-breakdown-coach.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .tippy-box[data-theme~="ns-bench"] {
   --ns-tip-bg: var(--bs-body-bg, #ffffff);
   --ns-tip-fg: var(--bs-body-color, #1f2933);
@@ -1470,11 +1490,6 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
     gap: 0.55rem;
   }
 
-  .ns-bench-dashboard .guide-formula {
-    align-self: stretch;
-    width: 100%;
-  }
-
   .ns-bench-dashboard .guide-grid {
     grid-template-columns: 1fr;
   }
@@ -1559,11 +1574,6 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <div class="guide-kicker">Operation cells</div>
         <h2 id="read-guide-title">Legend &amp; How To Read</h2>
       </div>
-      <div class="guide-formula" aria-label="Ratio formula">
-        <span>Ratio</span>
-        <strong>NumPy / NumSharp</strong>
-        <small>Example: x3 = NumSharp 10s, NumPy 30s</small>
-      </div>
     </div>
     <div class="guide-primer" aria-label="Technical reading guide">
       <div class="guide-primer-row">
@@ -1586,7 +1596,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       </div>
       <div class="guide-block">
         <h3>Reading Ratios</h3>
-        <p>Higher is better. 2.00x means NumSharp is twice as fast as NumPy; 0.50x means NumSharp takes about twice as long.</p>
+        <p>Ratio is NumPy / NumSharp. Higher is better: 3.00x means NumSharp took 10s while NumPy took 30s; 0.50x means NumSharp takes about twice as long.</p>
       </div>
     </div>
     <div class="guide-block guide-band-block">
@@ -1611,7 +1621,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       <span class="status-segment band-faster-20 tip-left" role="listitem" tabindex="0" style="--w:0.054%" aria-label="1 row at 20x to 100x faster" data-tip="1 faster row, 20-100x&#10;1. np.prod axis=1 (float64) | dtype=float64 | N=10M | 23.97x | NS 4.2% NP"></span>
       <span class="status-segment band-faster-10 tip-left" role="listitem" tabindex="0" style="--w:1.243%" aria-label="23 rows at 10x to 20x faster" data-tip="23 faster rows, 10-20x (top 10)&#10;1. np.dot(a, b) (float64) | dtype=float64 | N=100K | 14.17x | NS 7.1% NP&#10;2. np.prod (float64) | dtype=float64 | N=100K | 13.75x | NS 7.3% NP&#10;3. np.nanstd(a) (float64) | dtype=float64 | N=1K | 13.33x | NS 7.5% NP&#10;4. np.std (float32) | dtype=float32 | N=1K | 12.79x | NS 7.8% NP&#10;5. np.nanstd(a) (float16) | dtype=float16 | N=1K | 12.50x | NS 8.0% NP&#10;6. np.percentile(a, 50) (float64) | dtype=float64 | N=1K | 12.18x | NS 8.2% NP&#10;7. np.nanquantile(a, 0.5) (float32) | dtype=float32 | N=1K | 11.86x | NS 8.4% NP&#10;8. np.nanvar(a) (float16) | dtype=float16 | N=1K | 11.67x | NS 8.6% NP&#10;9. np.nanpercentile(a, 50) (float32) | dtype=float32 | N=1K | 11.51x | NS 8.7% NP&#10;10. np.nanpercentile(a, 50) (float64) | dtype=float64 | N=1K | 11.42x | NS 8.8% NP"></span>
       <span class="status-segment band-faster-5 tip-left" role="listitem" tabindex="0" style="--w:4.376%" aria-label="81 rows at 5x to 10x faster" data-tip="81 faster rows, 5-10x (top 10)&#10;1. np.nanprod(a) (float32) | dtype=float32 | N=10M | 9.91x | NS 10.1% NP&#10;2. np.sum axis=1 (int16) | dtype=int16 | N=100K | 9.75x | NS 10.3% NP&#10;3. np.sum axis=1 (int8) | dtype=int8 | N=100K | 9.66x | NS 10.3% NP&#10;4. np.nanquantile(a, 0.5) (float64) | dtype=float64 | N=1K | 9.59x | NS 10.4% NP&#10;5. np.std (float16) | dtype=float16 | N=1K | 9.46x | NS 10.6% NP&#10;6. np.quantile(a, 0.5) (float64) | dtype=float64 | N=1K | 9.44x | NS 10.6% NP&#10;7. np.count_nonzero(a) (float32) | dtype=float32 | N=1K | 9.41x | NS 10.6% NP&#10;8. np.sum axis=0 (uint8) | dtype=uint8 | N=100K | 9.40x | NS 10.6% NP&#10;9. np.nansum(a) (float32) | dtype=float32 | N=10M | 9.30x | NS 10.8% NP&#10;10. np.var (float16) | dtype=float16 | N=1K | 9.03x | NS 11.1% NP"></span>
-      <span class="status-segment band-faster-2 tip-left" role="listitem" tabindex="0" style="--w:16.694%" aria-label="309 rows at 2x to 5x faster" data-tip="309 faster rows, 2-5x (top 10)&#10;1. np.amin axis=0 (uint8) | dtype=uint8 | N=1K | 4.95x | NS 20.2% NP&#10;2. np.var (float32) | dtype=float32 | N=10M | 4.91x | NS 20.4% NP&#10;3. np.std axis=0 (float32) | dtype=float32 | N=1K | 4.90x | NS 20.4% NP&#10;4. np.std axis=0 (float64) | dtype=float64 | N=10M | 4.90x | NS 20.4% NP&#10;5. np.sum axis=1 (int16) | dtype=int16 | N=10M | 4.90x | NS 20.4% NP&#10;6. np.nanmin(a) (float16) | dtype=float16 | N=1K | 4.89x | NS 20.4% NP&#10;7. np.std (float16) | dtype=float16 | N=100K | 4.85x | NS 20.6% NP&#10;8. np.var (float16) | dtype=float16 | N=10M | 4.81x | NS 20.8% NP&#10;9. np.nansum(a) (float16) | dtype=float16 | N=1K | 4.79x | NS 20.9% NP&#10;10. np.average(a) (float64) | dtype=float64 | N=10M | 4.79x | NS 20.9% NP"></span>
+      <span class="status-segment band-faster-2 tip-left" role="listitem" tabindex="0" style="--w:16.694%" aria-label="309 rows at 2x to 5x faster" data-breakdown-coach="status-2x-5x" data-tip="309 faster rows, 2-5x (top 10)&#10;1. np.amin axis=0 (uint8) | dtype=uint8 | N=1K | 4.95x | NS 20.2% NP&#10;2. np.var (float32) | dtype=float32 | N=10M | 4.91x | NS 20.4% NP&#10;3. np.std axis=0 (float32) | dtype=float32 | N=1K | 4.90x | NS 20.4% NP&#10;4. np.std axis=0 (float64) | dtype=float64 | N=10M | 4.90x | NS 20.4% NP&#10;5. np.sum axis=1 (int16) | dtype=int16 | N=10M | 4.90x | NS 20.4% NP&#10;6. np.nanmin(a) (float16) | dtype=float16 | N=1K | 4.89x | NS 20.4% NP&#10;7. np.std (float16) | dtype=float16 | N=100K | 4.85x | NS 20.6% NP&#10;8. np.var (float16) | dtype=float16 | N=10M | 4.81x | NS 20.8% NP&#10;9. np.nansum(a) (float16) | dtype=float16 | N=1K | 4.79x | NS 20.9% NP&#10;10. np.average(a) (float64) | dtype=float64 | N=10M | 4.79x | NS 20.9% NP"></span>
       <span class="status-segment band-faster-125 tip-left" role="listitem" tabindex="0" style="--w:15.181%" aria-label="281 rows at 1.25x to 2x faster" data-tip="281 faster rows, 1.25-2x (top 10)&#10;1. np.amax axis=0 (int8) | dtype=int8 | N=100K | 2.00x | NS 50.1% NP&#10;2. np.mean (int32) | dtype=int32 | N=100K | 2.00x | NS 50.1% NP&#10;3. np.amax (int16) | dtype=int16 | N=100K | 1.99x | NS 50.2% NP&#10;4. a ^ b (uint16) | dtype=uint16 | N=10M | 1.99x | NS 50.2% NP&#10;5. np.argmax (float16) | dtype=float16 | N=100K | 1.98x | NS 50.4% NP&#10;6. a | b (uint16) | dtype=uint16 | N=100K | 1.98x | NS 50.4% NP&#10;7. a ^ b (int16) | dtype=int16 | N=100K | 1.98x | NS 50.5% NP&#10;8. np.prod axis=1 (int64) | dtype=int64 | N=1K | 1.98x | NS 50.5% NP&#10;9. np.amin axis=0 (int16) | dtype=int16 | N=100K | 1.98x | NS 50.5% NP&#10;10. a - b (element-wise) (uint16) | dtype=uint16 | N=100K | 1.98x | NS 50.6% NP"></span>
       <span class="status-segment band-faster-100" role="listitem" tabindex="0" style="--w:12.426%" aria-label="230 rows at 1x to 1.25x faster" data-tip="230 faster rows, 1.00-1.25x (top 10)&#10;1. np.add(a, b) (uint8) | dtype=uint8 | N=10M | 1.25x | NS 80.1% NP&#10;2. np.mean axis=1 (float32) | dtype=float32 | N=100K | 1.25x | NS 80.1% NP&#10;3. np.var axis=0 (float16) | dtype=float16 | N=10M | 1.25x | NS 80.3% NP&#10;4. np.nanmedian(a) (float16) | dtype=float16 | N=10M | 1.25x | NS 80.3% NP&#10;5. np.searchsorted(a, v) (int32) | dtype=int32 | N=100K | 1.25x | NS 80.2% NP&#10;6. np.log1p (float32) | dtype=float32 | N=100K | 1.25x | NS 80.3% NP&#10;7. np.amax axis=0 (uint64) | dtype=uint64 | N=10M | 1.25x | NS 80.3% NP&#10;8. np.sin (float32) | dtype=float32 | N=1K | 1.24x | NS 80.5% NP&#10;9. np.log1p (float32) | dtype=float32 | N=1K | 1.24x | NS 80.8% NP&#10;10. np.mean (complex128) | dtype=complex128 | N=10M | 1.24x | NS 80.9% NP"></span>
       <span class="status-segment band-close-090" role="listitem" tabindex="0" style="--w:5.781%" aria-label="107 close rows at 0.90x to 1.00x" data-tip="107 close rows, 0.90-1.00x (top 10)&#10;1. a != b (float64) | dtype=float64 | N=10M | 1.00x | NS 100.1% NP&#10;2. np.argmax (int8) | dtype=int8 | N=100K | 1.00x | NS 100.2% NP&#10;3. np.mean axis=1 (complex128) | dtype=complex128 | N=100K | 1.00x | NS 100.4% NP&#10;4. np.array_equal(a, b) (float32) | dtype=float32 | N=10M | 1.00x | NS 100.4% NP&#10;5. np.sin (float32) | dtype=float32 | N=100K | 1.00x | NS 100.4% NP&#10;6. a &lt; b (float32) | dtype=float32 | N=10M | 1.00x | NS 100.5% NP&#10;7. np.cos (float32) | dtype=float32 | N=100K | 1.00x | NS 100.5% NP&#10;8. np.cbrt(a) (float64) | dtype=float64 | N=100K | 0.99x | NS 100.6% NP&#10;9. a &lt; b (float64) | dtype=float64 | N=10M | 0.99x | NS 100.8% NP&#10;10. a &gt; b (float64) | dtype=float64 | N=10M | 0.99x | NS 101.0% NP"></span>
@@ -1647,7 +1657,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <span class="bar-score metric-good">2.24x</span>
         <span class="bar-count">39 / 10</span>
       </div>
-      <div class="bar-row">
+      <div class="bar-row" data-breakdown-coach="suite-reduction">
         <span class="bar-label">Reduction</span>
         <span class="bar-track"><span class="bar-fill" style="--w:72.4%; --tone:var(--good)"></span></span>
         <span class="bar-score metric-good">1.81x</span>
@@ -1747,7 +1757,7 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
         <div class="dtype-cell heat-near" style="--heat-width:41%"><span class="dtype-name">int32</span><span class="dtype-score">0.93x</span><span class="dtype-count">111 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:33%"><span class="dtype-name">int64</span><span class="dtype-score">0.75x</span><span class="dtype-count">118 rows</span><span class="dtype-meter"><span></span></span></div>
         <div class="dtype-cell heat-near" style="--heat-width:33%"><span class="dtype-name">uint64</span><span class="dtype-score">0.74x</span><span class="dtype-count">63 rows</span><span class="dtype-meter"><span></span></span></div>
-        <div class="dtype-cell heat-slow" style="--heat-width:13%"><span class="dtype-name">bool</span><span class="dtype-score">0.30x</span><span class="dtype-count">8 rows</span><span class="dtype-meter"><span></span></span></div>
+        <div class="dtype-cell heat-slow" style="--heat-width:13%" data-breakdown-coach="dtype-heatmap-last"><span class="dtype-name">bool</span><span class="dtype-score">0.30x</span><span class="dtype-count">8 rows</span><span class="dtype-meter"><span></span></span></div>
       </div>
       <div class="dtype-panel" id="dtype-panel-n1k" role="tabpanel" aria-labelledby="dtype-tab-n1k" hidden>
         <div class="dtype-cell heat-best" style="--heat-width:74%"><span class="dtype-name">float16</span><span class="dtype-score">1.67x</span><span class="dtype-count">70 rows</span><span class="dtype-meter"><span></span></span></div>
@@ -2875,6 +2885,154 @@ html[data-bs-theme="dark"] .tippy-box[data-theme~="ns-bench"] {
       instance.popper.addEventListener("keydown", handleTooltipTabKeydown);
       instance.popper.addEventListener("wheel", (event) => containTooltipWheel(event, instance.popper), { passive: false });
     });
+
+    const coachText = "Click Here to see breakdown";
+    const coachStoragePrefix = "numsharp.benchmarkDashboard.breakdownCoach.";
+    const coachDurationMs = 5600;
+    const seenCoachIds = new Set();
+    let activeCoach = null;
+    let showNextVisibleCoach = () => {};
+
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const coachStorageKey = (id) => `${coachStoragePrefix}${id}`;
+
+    const hasSeenCoach = (id) => {
+      if (seenCoachIds.has(id)) return true;
+
+      try {
+        return window.localStorage?.getItem(coachStorageKey(id)) === "1";
+      } catch {
+        return false;
+      }
+    };
+
+    const markCoachSeen = (id) => {
+      seenCoachIds.add(id);
+
+      try {
+        window.localStorage?.setItem(coachStorageKey(id), "1");
+      } catch {
+        // Storage can be disabled in privacy modes; the in-page Set still prevents repeats.
+      }
+    };
+
+    const isCoachReady = (element) => {
+      const rect = element.getBoundingClientRect();
+      const hasArea = rect.width > 0 && rect.height > 0;
+      const hasRoomBelow = rect.bottom <= window.innerHeight - 96;
+      return hasArea && rect.top >= 0 && hasRoomBelow;
+    };
+
+    const positionCoach = (bubble, element) => {
+      const rect = element.getBoundingClientRect();
+      const width = bubble.offsetWidth;
+      const left = clamp(rect.left + rect.width / 2 - width / 2, 12, window.innerWidth - width - 12);
+      const top = rect.bottom + 12;
+      const arrowX = clamp(rect.left + rect.width / 2 - left, 16, width - 16);
+
+      bubble.style.left = `${Math.round(left)}px`;
+      bubble.style.top = `${Math.round(top)}px`;
+      bubble.style.setProperty("--coach-arrow-x", `${Math.round(arrowX)}px`);
+    };
+
+    const hideActiveCoach = () => {
+      if (!activeCoach) return;
+
+      const coach = activeCoach;
+      activeCoach = null;
+      window.clearTimeout(coach.timer);
+      coach.element.classList.remove("is-coach-target");
+      coach.element.removeEventListener("click", coach.dismiss);
+      coach.element.removeEventListener("keydown", coach.dismissOnKey);
+      window.removeEventListener("resize", coach.update);
+      window.removeEventListener("scroll", coach.update);
+      coach.bubble.classList.remove("is-visible");
+      window.setTimeout(() => coach.bubble.remove(), 160);
+      window.setTimeout(showNextVisibleCoach, 240);
+    };
+
+    const showCoach = (element, id) => {
+      if (activeCoach || hasSeenCoach(id) || !isCoachReady(element)) return false;
+
+      markCoachSeen(id);
+      targetElements.forEach((target) => closeTooltip(target, true));
+
+      const bubble = document.createElement("div");
+      bubble.className = "ns-breakdown-coach";
+      bubble.setAttribute("role", "status");
+      bubble.setAttribute("aria-live", "polite");
+      bubble.textContent = coachText;
+      document.body.appendChild(bubble);
+
+      const update = () => {
+        if (!activeCoach) return;
+        positionCoach(bubble, element);
+      };
+
+      const dismiss = () => hideActiveCoach();
+      const dismissOnKey = (event) => {
+        if (event.key === "Enter" || event.key === " " || event.key === "Escape") {
+          hideActiveCoach();
+        }
+      };
+
+      activeCoach = {
+        bubble,
+        dismiss,
+        dismissOnKey,
+        element,
+        timer: window.setTimeout(dismiss, coachDurationMs),
+        update
+      };
+
+      element.classList.add("is-coach-target");
+      element.addEventListener("click", dismiss);
+      element.addEventListener("keydown", dismissOnKey);
+      window.addEventListener("resize", update);
+      window.addEventListener("scroll", update, { passive: true });
+      positionCoach(bubble, element);
+      window.requestAnimationFrame(() => bubble.classList.add("is-visible"));
+      return true;
+    };
+
+    const initializeBreakdownCoaches = () => {
+      const coachTargets = Array.from(document.querySelectorAll("[data-breakdown-coach]"))
+        .map((element) => ({ element, id: element.dataset.breakdownCoach }))
+        .filter((target) => target.id && targetElements.includes(target.element));
+
+      if (coachTargets.length === 0) return;
+
+      let observer = null;
+      showNextVisibleCoach = () => {
+        if (activeCoach) return;
+
+        for (const target of coachTargets) {
+          if (hasSeenCoach(target.id)) continue;
+          if (!showCoach(target.element, target.id)) continue;
+          observer?.unobserve(target.element);
+          break;
+        }
+      };
+
+      if ("IntersectionObserver" in window) {
+        observer = new IntersectionObserver(() => showNextVisibleCoach(), {
+          root: null,
+          threshold: [0.6, 0.8, 1]
+        });
+
+        coachTargets.forEach((target) => {
+          if (!hasSeenCoach(target.id)) {
+            observer.observe(target.element);
+          }
+        });
+      }
+
+      window.addEventListener("scroll", showNextVisibleCoach, { passive: true });
+      window.addEventListener("resize", showNextVisibleCoach);
+      window.setTimeout(showNextVisibleCoach, 250);
+    };
+
+    initializeBreakdownCoaches();
 
     document.addEventListener("click", (event) => {
       const clickedInsideTooltip = targetElements.some((element) =>

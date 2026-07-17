@@ -39,6 +39,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "floor": return np.floor(ops[0]);
                 case "ceil": return np.ceil(ops[0]);
                 case "trunc": return np.trunc(ops[0]);
+                case "rint": return np.rint(ops[0]);
                 case "sin": return np.sin(ops[0]);
                 case "cos": return np.cos(ops[0]);
                 case "tan": return np.tan(ops[0]);
@@ -141,6 +142,19 @@ namespace NumSharp.UnitTest.Fuzz
                 case "fmin": return np.fmin(ops[0], ops[1]);
                 case "isclose": return np.isclose(ops[0], ops[1]);
 
+                // Group A Batch 1: boolean logic + binary arctan2.
+                case "logical_and": return np.logical_and(ops[0], ops[1]);
+                case "logical_or": return np.logical_or(ops[0], ops[1]);
+                case "logical_xor": return np.logical_xor(ops[0], ops[1]);
+                case "logical_not": return np.logical_not(ops[0]);
+                case "arctan2": return np.arctan2(ops[0], ops[1]);
+
+                // Group A Batch 3: predicates + whole-array bool reductions (wrapped to 0-D bool).
+                case "iscomplex": return np.iscomplex(ops[0]);
+                case "isreal": return np.isreal(ops[0]);
+                case "allclose": return NDArray.Scalar(np.allclose(ops[0], ops[1]));
+                case "array_equal": return NDArray.Scalar(np.array_equal(ops[0], ops[1]));
+
                 // Selection.
                 case "where": return np.where(ops[0], ops[1], ops[2]);
                 case "place": np.place(ops[0], ops[1], ops[2]); return ops[0]; // mutates arr; result IS arr
@@ -165,13 +179,44 @@ namespace NumSharp.UnitTest.Fuzz
 
                 // Sorting / searching (T14).
                 case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
+                case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString());
                 case "nonzero": return np.nonzero(ops[0])[0]; // 1-D: single int64 index array
+                case "flatnonzero": return np.flatnonzero(ops[0]);                  // Group A B3
+                case "argwhere": return np.argwhere(ops[0]);                        // Group A B3
+                case "unique": return np.unique(ops[0]);                            // Group A B3
+
+                // Group A Batches 4-6: shape / selection / convolve / split.
+                case "flatten": return ops[0].flatten();
+                case "rollaxis": return np.rollaxis(ops[0], p["axis"].GetInt32(), p["start"].GetInt32());
+                case "take": return np.take(ops[0], ops[1], p["axis"].GetInt32());
+                case "compress": return np.compress(ops[0], ops[1], p["axis"].GetInt32());
+                case "extract": return np.extract(ops[0], ops[1]);
+                case "convolve": return np.convolve(ops[0], ops[1], p["mode"].GetString());
+                case "append": return p.ContainsKey("axis")
+                    ? np.append(ops[0], ops[1], p["axis"].GetInt32())
+                    : np.append(ops[0], ops[1]);
+                case "insert": return np.insert(ops[0], p["obj"].GetInt32(), ops[1], p["axis"].GetInt32());
+                case "split": return np.split(ops[0], p["sections"].GetInt32(), p["axis"].GetInt32())[p["piece"].GetInt32()];
+                case "hsplit": return np.hsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "vsplit": return np.vsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "dsplit": return np.dsplit(ops[0], p["sections"].GetInt32())[p["piece"].GetInt32()];
+                case "put": np.put(ops[0], ops[1], ops[2]); return ops[0]; // mutates ops[0], IS the result
+                case "ravel_multi_index": return np.ravel_multi_index(new[] { ops[0], ops[1] }, ParseIntArray(p["dims"]));
+                case "unravel_index": return np.unravel_index(ops[0], ParseIntArray(p["shape"]))[p["piece"].GetInt32()];
 
                 // Linear algebra (T8). NumPy is the oracle for value, result dtype, and broadcast shape.
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
+                case "trace": return np.trace(ops[0]);                              // Group A
+                case "diagonal": return np.diagonal(ops[0]);                        // Group A
+
+                // Group A: rounding + flattened diff + nan order-statistics.
+                case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
+                case "ediff1d": return np.ediff1d(ops[0]);
+                case "nanpercentile": return np.nanpercentile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
+                case "nanquantile": return np.nanquantile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
 
                 // Reductions (axis/keepdims params).
                 case "sum": case "prod": case "min": case "max": case "mean":
@@ -196,9 +241,13 @@ namespace NumSharp.UnitTest.Fuzz
             NPTypeCode.UInt32 => np.argsort<uint>(a, axis),
             NPTypeCode.Int64 => np.argsort<long>(a, axis),
             NPTypeCode.UInt64 => np.argsort<ulong>(a, axis),
+            NPTypeCode.Char => np.argsort<char>(a, axis),
             NPTypeCode.Single => np.argsort<float>(a, axis),
             NPTypeCode.Double => np.argsort<double>(a, axis),
             NPTypeCode.Half => np.argsort<Half>(a, axis),
+            NPTypeCode.Boolean => np.argsort<bool>(a, axis),
+            NPTypeCode.Decimal => np.argsort<decimal>(a, axis),
+            NPTypeCode.Complex => np.argsort<System.Numerics.Complex>(a, axis),
             _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
         };
 

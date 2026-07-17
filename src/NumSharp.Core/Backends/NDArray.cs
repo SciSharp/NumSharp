@@ -581,11 +581,18 @@ namespace NumSharp
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
         ///     'K' (default) - preserve the source layout.
         /// </param>
+        /// <param name="casting">
+        ///     NumPy's cast-rule gate ('no' / 'equiv' / 'safe' / 'same_kind' / 'unsafe').
+        ///     Default 'unsafe' (matches NumPy's astype default) — any conversion is permitted.
+        ///     A stricter rule raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue)
+        ///     when the source dtype cannot cast to <paramref name="dtype"/> under that rule.
+        /// </param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/> with the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        public NDArray astype(Type dtype, bool copy, char order)
+        public NDArray astype(Type dtype, bool copy, char order, string casting = "unsafe")
         {
+            ValidateAstypeCasting(dtype.GetTypeCode(), casting);
             char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, dtype, copy);
             if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
@@ -612,15 +619,44 @@ namespace NumSharp
         ///     'A' - 'F' if source is F-contiguous (and not C-contiguous) else 'C',
         ///     'K' (default) - preserve the source layout.
         /// </param>
+        /// <param name="casting">
+        ///     NumPy's cast-rule gate ('no' / 'equiv' / 'safe' / 'same_kind' / 'unsafe').
+        ///     Default 'unsafe' (matches NumPy's astype default) — any conversion is permitted.
+        ///     A stricter rule raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue)
+        ///     when the source dtype cannot cast to <paramref name="typeCode"/> under that rule.
+        /// </param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="typeCode"/> with the requested layout.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
-        public NDArray astype(NPTypeCode typeCode, bool copy, char order)
+        public NDArray astype(NPTypeCode typeCode, bool copy, char order, string casting = "unsafe")
         {
+            ValidateAstypeCasting(typeCode, casting);
             char physical = OrderResolver.Resolve(order, this.Shape);
             var casted = TensorEngine.Cast(this, typeCode, copy);
             if (physical == 'F' && casted.Shape.NDim > 1 && !casted.Shape.IsFContiguous)
                 return casted.copy('F');
             return casted;
+        }
+
+        /// <summary>
+        ///     NumPy astype casting gate: default 'unsafe' allows any conversion; a stricter rule
+        ///     raises <see cref="InvalidCastException"/> (NumPy's TypeError analogue) when the cast
+        ///     is not permitted. Same exception type and message shape as <see cref="np.copyto"/>.
+        /// </summary>
+        [SuppressMessage("ReSharper", "ParameterHidesMember")]
+        private void ValidateAstypeCasting(NPTypeCode toType, string casting)
+        {
+            // 'unsafe' (astype's default) short-circuits — every conversion is allowed, no work.
+            if (string.IsNullOrEmpty(casting) || casting == "unsafe")
+                return;
+            NPTypeCode fromType = this.GetTypeCode;
+            if (fromType == toType)
+                return;
+            // np.can_cast validates the rule name (ArgumentException on an unknown rule) and
+            // encodes NumPy's cast table (bit-exact vs 2.4.2, verified across all 15 dtypes).
+            if (!np.can_cast(fromType, toType, casting))
+                throw new InvalidCastException(
+                    $"Cannot cast array data from dtype('{fromType.AsNumpyDtypeName()}') " +
+                    $"to dtype('{toType.AsNumpyDtypeName()}') according to the rule '{casting}'");
         }
 
         /// <summary>

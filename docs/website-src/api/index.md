@@ -361,12 +361,13 @@ These types are for advanced users extending NumSharp or understanding its inter
 
 ## Supported Data Types
 
-NumSharp supports 12 numeric data types:
+NumSharp supports 15 public array dtypes:
 
 | NPTypeCode | C# Type | NumPy Equivalent |
 |------------|---------|------------------|
 | Boolean | `bool` | `np.bool_` |
 | Byte | `byte` | `np.uint8` |
+| SByte | `sbyte` | `np.int8` |
 | Int16 | `short` | `np.int16` |
 | UInt16 | `ushort` | `np.uint16` |
 | Int32 | `int` | `np.int32` |
@@ -374,9 +375,14 @@ NumSharp supports 12 numeric data types:
 | Int64 | `long` | `np.int64` |
 | UInt64 | `ulong` | `np.uint64` |
 | Char | `char` | (no equivalent) |
+| Half | `System.Half` | `np.float16` |
 | Single | `float` | `np.float32` |
 | Double | `double` | `np.float64` |
 | Decimal | `decimal` | (no equivalent) |
+| Complex | `System.Numerics.Complex` | `np.complex128` |
+
+`NPTypeCode.Empty`, `NPTypeCode.String`, and the `NPTypeCode.Float` alias are enum/compatibility
+values, not additional public array dtypes. `Float` resolves to `Single`.
 
 ---
 

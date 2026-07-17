@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using NumSharp;
 
@@ -64,6 +66,16 @@ namespace NumSharp.UnitTest.Fuzz
                     string r = double.IsNaN(re) ? "NaN" : Hex(b, off, 8);
                     string m = double.IsNaN(im) ? "NaN" : Hex(b, off + 8, 8);
                     return r + ":" + m;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    // Decimal has no NumPy analog, so SCALE is not part of the contract — 1.0m and
+                    // 1.00m are the same VALUE with different bytes. Tokenize by canonical value
+                    // (trailing zeros stripped) so the gate flags wrong VALUES, not benign scale.
+                    decimal d = MemoryMarshal.Read<decimal>(b.AsSpan(off, 16));
+                    string s = d.ToString(CultureInfo.InvariantCulture);
+                    if (s.IndexOf('.') >= 0) s = s.TrimEnd('0').TrimEnd('.');
+                    return s == "-0" ? "0" : s;
                 }
                 default:
                     return Hex(b, off, tc.SizeOf());

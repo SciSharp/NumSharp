@@ -98,6 +98,13 @@ namespace NumSharp.Backends.Kernels
         public static CastKernel TryGetCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            // Boolean SOURCE: a bool's numeric value is exactly 0 or 1, never its raw storage byte. The
+            // SIMD subword/widen/xToHalf paths below reinterpret the byte, which corrupts bool buffers
+            // holding non-0/1 bytes (np.frombuffer is a zero-copy VIEW; interop wraps foreign buffers) —
+            // e.g. bool[byte=255]->uint8 must be 1, not 255. Route every bool cast to the scalar
+            // NDIterCasting.ConvertValue path, which normalizes via '!= 0' (ReadAsInt64). bool->bool
+            // same-type copies never reach here (TryCopySameType handles them first).
+            if (srcType == NPTypeCode.Boolean) return null;
             // NumPy-faithful cvtt fast path for the common float->int32 downcast (beats NumPy).
             var floatToInt32 = TryGetFloatToInt32Kernel(srcType, dstType);
             if (floatToInt32 != null) return floatToInt32;
@@ -163,6 +170,10 @@ namespace NumSharp.Backends.Kernels
         public static StridedCastKernel TryGetStridedCastKernel(NPTypeCode srcType, NPTypeCode dstType)
         {
             if (!Enabled) return null;
+            // Boolean SOURCE: normalize via the scalar ConvertValue path (see TryGetCastKernel). The
+            // subword/widen strided kernels below reinterpret the raw byte and would corrupt non-0/1
+            // bool buffers. bool->bool same-type strided copy is handled by TryCopySameType first.
+            if (srcType == NPTypeCode.Boolean) return null;
             // Same-type 1B/2B strided copy (the sub-word strided/negcol cliff): SIMD deinterleave
             // (ss==2) / reverse (ss==-1) / per-row memcpy (ss==1). Gated to src==dst & size {1,2};
             // cross-type and 4/8/16-byte same-type fall through to the existing fast paths.

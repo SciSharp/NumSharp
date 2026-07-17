@@ -1,5 +1,7 @@
+using System;
 using AwesomeAssertions;
 using NumSharp;
+using NumSharp.Backends;
 
 namespace NumSharp.UnitTest;
 
@@ -436,6 +438,49 @@ public class np_array_BattleTests
     {
         var arr = np.array(new ulong[] { 1, 2, 3 });
         arr.dtype.Should().Be(typeof(ulong));
+    }
+
+    #endregion
+
+    #region C# type -> NumPy dtype name (int8/uint8 regression)
+
+    // Regression guard for the reported "np.array(byte[]) -> int8" audit item.
+    // C# `byte` is UNSIGNED (uint8); C# `sbyte` is signed (int8). NumSharp must map
+    // them exactly like NumPy, and must NOT collapse byte[] to int8.
+    [TestMethod]
+    public void Array_ByteArray_IsUInt8_NotInt8()
+    {
+        var arr = np.array(new byte[] { 1, 2, 3 });
+        arr.dtype.Should().Be(typeof(byte));
+        arr.typecode.Should().Be(NPTypeCode.Byte);
+        arr.typecode.AsNumpyDtypeName().Should().Be("uint8",
+            "C# byte is unsigned; np.array(byte[]) must be uint8, never int8");
+    }
+
+    [TestMethod]
+    public void Array_SByteArray_IsInt8()
+    {
+        var arr = np.array(new sbyte[] { -1, 0, 1 });
+        arr.dtype.Should().Be(typeof(sbyte));
+        arr.typecode.Should().Be(NPTypeCode.SByte);
+        arr.typecode.AsNumpyDtypeName().Should().Be("int8");
+    }
+
+    [TestMethod]
+    public void Array_CSharpTypes_MapToExpectedNumpyDtypeNames()
+    {
+        np.array(new byte[]    { 1 }).typecode.AsNumpyDtypeName().Should().Be("uint8");
+        np.array(new sbyte[]   { 1 }).typecode.AsNumpyDtypeName().Should().Be("int8");
+        np.array(new short[]   { 1 }).typecode.AsNumpyDtypeName().Should().Be("int16");
+        np.array(new ushort[]  { 1 }).typecode.AsNumpyDtypeName().Should().Be("uint16");
+        np.array(new int[]     { 1 }).typecode.AsNumpyDtypeName().Should().Be("int32");
+        np.array(new uint[]    { 1 }).typecode.AsNumpyDtypeName().Should().Be("uint32");
+        np.array(new long[]    { 1 }).typecode.AsNumpyDtypeName().Should().Be("int64");
+        np.array(new ulong[]   { 1 }).typecode.AsNumpyDtypeName().Should().Be("uint64");
+        np.array(new float[]   { 1 }).typecode.AsNumpyDtypeName().Should().Be("float32");
+        np.array(new double[]  { 1 }).typecode.AsNumpyDtypeName().Should().Be("float64");
+        np.array(new Half[]    { (Half)1 }).typecode.AsNumpyDtypeName().Should().Be("float16");
+        np.array(new bool[]    { true }).typecode.AsNumpyDtypeName().Should().Be("bool");
     }
 
     #endregion

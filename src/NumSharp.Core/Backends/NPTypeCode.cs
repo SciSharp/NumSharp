@@ -558,7 +558,9 @@ namespace NumSharp
                 case NPTypeCode.Boolean:
                     return "bool";
                 case NPTypeCode.Char:
-                    return "uint8";
+                    // Char is a 16-bit unsigned integer (System.Char / UTF-16 code unit).
+                    // NumSharp's closest NumPy analogue is uint16 — NOT uint8 (which is Byte).
+                    return "uint16";
                 case NPTypeCode.SByte:
                     return "int8";
                 case NPTypeCode.Byte:

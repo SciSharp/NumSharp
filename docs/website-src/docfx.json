@@ -23,12 +23,17 @@
     "content": [
       {
         "files": ["**/*.{md,yml}"],
-        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**"]
+        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**", "api/overwrites/**"]
       },
       {
         "src": "../../benchmark/history/latest",
         "files": ["*.md"],
         "dest": "docs/reports"
+      }
+    ],
+    "overwrite": [
+      {
+        "files": ["api/overwrites/*.md"]
       }
     ],
     "resource": [

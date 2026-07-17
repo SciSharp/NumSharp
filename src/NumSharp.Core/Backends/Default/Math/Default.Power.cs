@@ -159,6 +159,11 @@ namespace NumSharp.Backends
             // (the scalar-exponent fast paths support Half — see ScalarEqualsExact). Cast it directly.
             if (v is Half h)
                 return (double)h;
+            // char's IConvertible.ToDouble() throws InvalidCastException (bug 4: power with a
+            // char scalar exponent crashed here). Char is a 16-bit unsigned integer — read its
+            // code point directly.
+            if (v is char c)
+                return c;
             return Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture);
         }
 
@@ -170,6 +175,10 @@ namespace NumSharp.Backends
             var resultType = np._FindCommonType(lhs, rhs);
             if (lhs.GetTypeCode.GetGroup() <= 2 && rhs.GetTypeCode.GetGroup() == 3)
                 resultType = NPTypeCode.Double;
+            // power has no bool loop: bool ** bool -> int8 (probed 2.4.2). Keeps the
+            // scalar-exponent fast paths consistent with the general ExecuteBinaryOp path.
+            if (resultType == NPTypeCode.Boolean)
+                resultType = NPTypeCode.SByte;
             return resultType;
         }
 

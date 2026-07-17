@@ -49,7 +49,12 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="ptr"></param>
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <remarks>Does claim ownership.</remarks>
+        /// <remarks>
+        ///     Does NOT claim ownership: wraps <paramref name="ptr"/> with the non-owning
+        ///     <c>Disposer.Null</c> marker (<c>AllocationType.Wrap</c>), so disposing this block
+        ///     never frees <paramref name="ptr"/>. The caller remains responsible for the
+        ///     lifetime of the underlying memory.
+        /// </remarks>
         [MethodImpl(Optimize)]
         public UnmanagedMemoryBlock(T* ptr, long count)
         {

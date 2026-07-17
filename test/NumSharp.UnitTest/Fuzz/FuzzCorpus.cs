@@ -74,7 +74,10 @@ namespace NumSharp.UnitTest.Fuzz
             return list;
         }
 
-        // -- dtype token <-> NPTypeCode (13 NumPy-representable types; Char/Decimal have no NumPy analog) --
+        // -- dtype token <-> NPTypeCode. 13 NumPy-representable types + "char": NumSharp's Char
+        // is bit-identical to uint16, so the oracle emits Char cases as uint16-proxy bytes
+        // relabelled "uint16"->"char" (gen_oracle._relabel_dtype). Decimal still has no NumPy
+        // analog (it rides a separate C#-decimal oracle, not this NumPy differential corpus).
         public static NPTypeCode DtypeToTC(string name) => name switch
         {
             "bool" => NPTypeCode.Boolean,
@@ -86,10 +89,14 @@ namespace NumSharp.UnitTest.Fuzz
             "uint32" => NPTypeCode.UInt32,
             "int64" => NPTypeCode.Int64,
             "uint64" => NPTypeCode.UInt64,
+            "char" => NPTypeCode.Char,
             "float16" => NPTypeCode.Half,
             "float32" => NPTypeCode.Single,
             "float64" => NPTypeCode.Double,
             "complex128" => NPTypeCode.Complex,
+            // Decimal: no NumPy analog — its cases come from the independent C# oracle
+            // (gen_decimal_oracle.cs), not the NumPy corpus. SliceFromBytes already handles it.
+            "decimal" => NPTypeCode.Decimal,
             _ => throw new NotSupportedException($"dtype '{name}' has no NumSharp NPTypeCode mapping")
         };
 

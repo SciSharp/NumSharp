@@ -194,8 +194,11 @@ public class NpTypingTests
     [TestMethod]
     public void CanCast_Int32ToFloat32_SameKind()
     {
-        // Int to float is NOT same_kind - different type kinds
-        np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind").Should().BeFalse();
+        // NumPy 2.4.2: int -> float IS same_kind (kind ordering signed(2) <= float(4)).
+        // np.can_cast(np.int32, np.float32, 'same_kind') == True
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind").Should().BeTrue();
+        // ...but the reverse (float -> int) moves DOWN a kind and is rejected.
+        np.can_cast(NPTypeCode.Single, NPTypeCode.Int32, "same_kind").Should().BeFalse();
     }
 
     [TestMethod]
@@ -292,8 +295,8 @@ public class NpTypingTests
     [TestMethod]
     public void MinScalarType_SmallNegative()
     {
-        // No Int8 in NumSharp, so smallest signed is Int16
-        np.min_scalar_type(-10).Should().Be(NPTypeCode.Int16);
+        // NumPy 2.4.2: small negatives demote to int8 (SByte). NumSharp HAS int8.
+        np.min_scalar_type(-10).Should().Be(NPTypeCode.SByte);
     }
 
     [TestMethod]

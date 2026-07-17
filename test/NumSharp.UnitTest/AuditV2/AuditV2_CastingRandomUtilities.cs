@@ -155,8 +155,9 @@ public class AuditV2_CastingRandomUtilities
     //   Char (System.Char, 2-byte UTF-16 unit) is mapped to "uint8" — the same
     //   string Byte returns. Any consumer doing dtype-name interop will see
     //   an 8-bit announcement for what is actually a 16-bit storage.
+    //   FIXED: Char now maps to "uint16" (its 16-bit-unsigned masquerade).
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.33")]
+    [TestMethod]
     public void T1_33_AsNumpyDtypeName_Char_MisreportsSize()
     {
         var mi = typeof(NPTypeCodeExtensions).GetMethod(
@@ -174,6 +175,8 @@ public class AuditV2_CastingRandomUtilities
             "Char (2 bytes) and Byte (1 byte) must not share the same numpy dtype name");
         charName.Should().NotBe("uint8",
             "Char is 2 bytes; closest NumPy analogue is 'uint16' or 'U1' (unicode), never 'uint8'");
+        charName.Should().Be("uint16",
+            "Char is NumSharp's 16-bit-unsigned masquerade -> uint16");
     }
 
     // -----------------------------------------------------------------------

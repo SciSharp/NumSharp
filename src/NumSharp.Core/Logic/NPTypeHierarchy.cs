@@ -90,7 +90,8 @@ namespace NumSharp
         // Map concrete types to their immediate abstract parent
         private static readonly Dictionary<NPTypeCode, NPTypeKind> _concreteParent = new()
         {
-            // SignedInteger children
+            // SignedInteger children (int8 = SByte MUST be here — it is one of the 15 dtypes)
+            [NPTypeCode.SByte] = NPTypeKind.SignedInteger,
             [NPTypeCode.Int16] = NPTypeKind.SignedInteger,
             [NPTypeCode.Int32] = NPTypeKind.SignedInteger,
             [NPTypeCode.Int64] = NPTypeKind.SignedInteger,
@@ -104,7 +105,8 @@ namespace NumSharp
             // Char is treated as UnsignedInteger (like uint16)
             [NPTypeCode.Char] = NPTypeKind.UnsignedInteger,
 
-            // Floating children
+            // Floating children (float16 = Half MUST be here — it is one of the 15 dtypes)
+            [NPTypeCode.Half] = NPTypeKind.Floating,
             [NPTypeCode.Single] = NPTypeKind.Floating,
             [NPTypeCode.Double] = NPTypeKind.Floating,
             [NPTypeCode.Decimal] = NPTypeKind.Floating,  // NumSharp-specific
@@ -197,6 +199,35 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// NumPy's kind ordering for <c>NPY_SAME_KIND_CASTING</c> (dtype_kind_to_ordering in
+        /// convert_datatype.c): bool(0) &lt; unsigned(1) &lt; signed(2) &lt; float(4) &lt; complex(5).
+        /// Char rides with unsigned (uint16 masquerade); Decimal rides with floating.
+        /// </summary>
+        public static int KindOrder(NPTypeCode type)
+        {
+            return GetImmediateKind(type) switch
+            {
+                NPTypeKind.Boolean => 0,
+                NPTypeKind.UnsignedInteger => 1,
+                NPTypeKind.SignedInteger => 2,
+                NPTypeKind.Floating => 4,
+                NPTypeKind.ComplexFloating => 5,
+                _ => 6  // Generic/unknown: only identical-type casts pass (handled by from==to)
+            };
+        }
+
+        /// <summary>
+        /// NumPy <c>same_kind</c> cast rule for a concrete type pair: a cast is permitted when the
+        /// source kind orders at or below the destination kind (<see cref="KindOrder"/>). This is
+        /// NumPy's DIRECTIONAL model — e.g. unsigned→signed is allowed but signed→unsigned is not,
+        /// and int→float is allowed but float→int is not. Callers OR this with a safe-cast check.
+        /// </summary>
+        public static bool CanCastSameKindOrder(NPTypeCode from, NPTypeCode to)
+        {
+            return KindOrder(from) <= KindOrder(to);
+        }
+
+        /// <summary>
         /// Get the maximum precision type for a given kind.
         /// Used by maximum_sctype.
         /// </summary>
@@ -218,8 +249,8 @@ namespace NumSharp
                 // Boolean stays boolean
                 NPTypeCode.Boolean => NPTypeCode.Boolean,
 
-                // Signed integers -> int64
-                NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => NPTypeCode.Int64,
+                // Signed integers -> int64 (int8 = SByte included)
+                NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => NPTypeCode.Int64,
 
                 // Unsigned integers -> uint64
                 NPTypeCode.Byte or NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 => NPTypeCode.UInt64,
@@ -227,8 +258,8 @@ namespace NumSharp
                 // Char treated as unsigned integer
                 NPTypeCode.Char => NPTypeCode.UInt64,
 
-                // Float types: Single/Double -> Double, Decimal stays Decimal
-                NPTypeCode.Single or NPTypeCode.Double => NPTypeCode.Double,
+                // Float types: Half/Single/Double -> Double, Decimal stays Decimal
+                NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double => NPTypeCode.Double,
                 NPTypeCode.Decimal => NPTypeCode.Decimal,
 
                 // Complex stays complex (we only have one complex type)

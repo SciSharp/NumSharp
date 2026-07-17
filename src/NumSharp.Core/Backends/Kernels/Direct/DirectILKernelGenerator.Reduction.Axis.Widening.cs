@@ -85,8 +85,16 @@ namespace NumSharp.Backends.Kernels
             if (!Avx2.IsSupported) return null;
 
             // Pair table — single source of truth. Alias routes reinterpret
-            // bit-identical pointers (char==ushort, bool==byte storage, and
-            // Int64 accumulators for zero-extended unsigned inputs).
+            // bit-identical pointers (char==ushort, and Int64 accumulators for
+            // zero-extended unsigned inputs).
+            //
+            // NOTE: Boolean is deliberately ABSENT. bool==byte storage is bit-identical
+            // only over {0,1}, but a bool buffer may legally hold non-0/1 bytes (np.frombuffer
+            // is a zero-copy view / interop wraps a foreign buffer), and sum/prod/mean must
+            // count each True as exactly 1 — not its raw byte. Bool therefore falls through to
+            // the scalar reducer (CombineScalarsPromoted -> ConvertToInt64Bits/ConvertToDouble),
+            // which normalizes via '!= 0'. (Min/Max over bool stay same-type and are handled
+            // by the byte-reinterpret SIMD path in the caller, where {0,1} ordering is exact.)
             return (key.InputType, key.AccumulatorType) switch
             {
                 // ---- integer -> 64-bit integer accumulator ----
@@ -98,8 +106,6 @@ namespace NumSharp.Backends.Kernels
                 (NPTypeCode.SByte, NPTypeCode.Int64) => MakeWideningKernel<sbyte, long, WidenI8ToI64>(op),
                 (NPTypeCode.Byte, NPTypeCode.UInt64) => MakeWideningKernel<byte, ulong, WidenU8ToU64>(op),
                 (NPTypeCode.Byte, NPTypeCode.Int64) => MakeWideningKernel<byte, ulong, WidenU8ToU64>(op),
-                (NPTypeCode.Boolean, NPTypeCode.Int64) => MakeWideningKernel<byte, ulong, WidenU8ToU64>(op),
-                (NPTypeCode.Boolean, NPTypeCode.UInt64) => MakeWideningKernel<byte, ulong, WidenU8ToU64>(op),
                 (NPTypeCode.Int32, NPTypeCode.Int64) => MakeWideningKernel<int, long, WidenI32ToI64>(op),
                 (NPTypeCode.UInt32, NPTypeCode.UInt64) => MakeWideningKernel<uint, ulong, WidenU32ToU64>(op),
                 (NPTypeCode.UInt32, NPTypeCode.Int64) => MakeWideningKernel<uint, ulong, WidenU32ToU64>(op),
@@ -113,7 +119,6 @@ namespace NumSharp.Backends.Kernels
                 (NPTypeCode.Char, NPTypeCode.Double) => MakeWideningKernel<ushort, double, WidenU16ToF64>(op),
                 (NPTypeCode.SByte, NPTypeCode.Double) => MakeWideningKernel<sbyte, double, WidenI8ToF64>(op),
                 (NPTypeCode.Byte, NPTypeCode.Double) => MakeWideningKernel<byte, double, WidenU8ToF64>(op),
-                (NPTypeCode.Boolean, NPTypeCode.Double) => MakeWideningKernel<byte, double, WidenU8ToF64>(op),
 
                 _ => null
             };

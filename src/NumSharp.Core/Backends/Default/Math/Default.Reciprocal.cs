@@ -30,7 +30,10 @@ namespace NumSharp.Backends
             if (loopType == NPTypeCode.Boolean)
                 loopType = NPTypeCode.SByte;
 
-            if (loopType.IsInteger())
+            // Char is a 16-bit unsigned integer (NumSharp's uint16 masquerade): NumPy
+            // reciprocal(uint16) takes the integer loop (1//x, 0 for |x|>=2), NOT a float
+            // loop. IsInteger() deliberately excludes Char, so admit it explicitly here.
+            if (loopType.IsInteger() || loopType == NPTypeCode.Char)
             {
                 // Integer loop: C-truncating 1/x with the probed per-type 1/0 sentinel.
                 // The hand loop is the compute path; a provided out/where gets a masked
@@ -95,6 +98,14 @@ namespace NumSharp.Backends
                     var src = (ushort*)basePtr;
                     var dst = (ushort*)result.Address;
                     for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (ushort)0 : (ushort)(1 / x); }
+                    break;
+                }
+                case NPTypeCode.Char:
+                {
+                    // Char == 16-bit unsigned: same narrow-type 1/0 -> 0 sentinel as UInt16.
+                    var src = (char*)basePtr;
+                    var dst = (char*)result.Address;
+                    for (long i = 0; i < n; i++) { var x = src[contig ? i : FlatStrideOffset(i, dims, strides, ndim)]; dst[i] = x == 0 ? (char)0 : (char)(1 / x); }
                     break;
                 }
                 case NPTypeCode.Int32:

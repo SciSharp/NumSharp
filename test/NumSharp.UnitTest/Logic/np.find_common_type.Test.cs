@@ -178,8 +178,11 @@ namespace NumSharp.UnitTest.Logic
         [TestMethod]
         public void Case23()
         {
+            // Char is NumSharp's 16-bit-unsigned (uint16) masquerade: char + int16 promotes
+            // exactly like uint16 + int16 -> int32 (int16 cannot hold the uint16 range).
+            // Probed NumPy 2.4.2: np.result_type(np.uint16, np.int16) == int32.
             var r = np.find_common_type(new[] {np.@char, np.int16}, new NPTypeCode[0]);
-            r.Should().Be(NPTypeCode.Int16);
+            r.Should().Be(NPTypeCode.Int32);
         }
 
         /// <summary>

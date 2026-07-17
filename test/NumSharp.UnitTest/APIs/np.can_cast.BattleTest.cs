@@ -87,12 +87,27 @@ public class NpCanCastBattleTests
     {
         np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "same_kind").Should().BeTrue();
         np.can_cast(NPTypeCode.Double, NPTypeCode.Single, "same_kind").Should().BeTrue();
+        // int8 (SByte) participates: down/across signed and float16 both allowed.
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.SByte, "same_kind").Should().BeTrue();
+        np.can_cast(NPTypeCode.Single, NPTypeCode.Half, "same_kind").Should().BeTrue();
     }
 
     [TestMethod]
-    public void CanCast_SameKindMode_RejectsCrossKind()
+    public void CanCast_SameKindMode_DirectionalKindOrdering()
     {
-        np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind").Should().BeFalse();
+        // NumPy same_kind is a DIRECTIONAL kind ordering (bool < unsigned < signed < float < complex):
+        // moving to the same-or-higher kind is allowed; moving DOWN is not.
+        // int -> float is allowed (NOT rejected — the old test asserted the opposite).
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Single, "same_kind").Should().BeTrue();
+        np.can_cast(NPTypeCode.Int16, NPTypeCode.Half, "same_kind").Should().BeTrue();
+        // unsigned -> signed allowed; signed -> unsigned NOT (asymmetric).
+        np.can_cast(NPTypeCode.Byte, NPTypeCode.SByte, "same_kind").Should().BeTrue();
+        np.can_cast(NPTypeCode.SByte, NPTypeCode.Byte, "same_kind").Should().BeFalse();
+        // float -> int and complex -> float move DOWN a kind: rejected.
+        np.can_cast(NPTypeCode.Single, NPTypeCode.Int32, "same_kind").Should().BeFalse();
+        np.can_cast(NPTypeCode.Complex, NPTypeCode.Double, "same_kind").Should().BeFalse();
+        // anything (non-bool) -> bool moves down: rejected.
+        np.can_cast(NPTypeCode.Int32, NPTypeCode.Boolean, "same_kind").Should().BeFalse();
     }
 
     [TestMethod]

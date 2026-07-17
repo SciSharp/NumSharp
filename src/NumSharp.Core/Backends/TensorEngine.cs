@@ -114,6 +114,8 @@ namespace NumSharp
         public abstract NDArray Round(NDArray nd, int decimals, NPTypeCode? typeCode = null, NDArray @out = null);
         public abstract NDArray Truncate(NDArray nd, Type dtype);
         public abstract NDArray Truncate(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
+        public abstract NDArray Rint(NDArray nd, Type dtype);
+        public abstract NDArray Rint(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Reciprocal(NDArray nd, Type dtype);
         public abstract NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Square(NDArray nd, Type dtype);
