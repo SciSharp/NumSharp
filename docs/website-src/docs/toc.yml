@@ -55,5 +55,7 @@
   items:
   - name: Pythonnet
     href: interop/pythonnet.md
+  - name: Numpy.NET
+    href: interop/numpy-net.md
   - name: Python.NET
     href: interop/python-net.md
