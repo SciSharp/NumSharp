@@ -22,12 +22,12 @@
 <p align="center">
   NumSharp is a native .NET array library with a NumPy-shaped API: <code>NDArray</code>,
   broadcasting, slicing views, dtype-aware <code>np.*</code> functions, unmanaged storage,
-  and runtime-generated kernels for performance-sensitive numerical code.
+  and runtime-generated kernels with cpu-acceleration for performance-sensitive numerical code.
 </p>
 
 <p align="center">
   The compatibility target is <strong>NumPy 2.x</strong>. When NumSharp behavior and
-  NumPy behavior differ, NumPy is treated as the source of truth.
+  NumPy behavior differ, NumPy is treated as the source of truth and aligns.
 </p>
 
 ## What Is NumSharp?
@@ -37,6 +37,9 @@ CPython. It is intended for scientific computing, numerical utilities, machine
 learning infrastructure, and projects that want NumPy-style array operations in
 ordinary .NET code.
 
+NumSharp's edge is utilizing the power of [C#'s dynamic IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html) translating to assembly generation with [JIT optimizations](https://learn.microsoft.com/en-us/dotnet/standard/managed-execution-process#compilation-by-the-jit-compiler) and [CPU acceleration](https://en.wikipedia.org/wiki/Hardware_acceleration).
+This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](https://github.com/SciSharp/NumSharp/edit/master/README.md#performance).
+
 NumSharp focuses on:
 
 - NumPy-shaped API names and behavior.
@@ -44,6 +47,10 @@ NumSharp focuses on:
 - Broadcasting without materializing repeated values.
 - Dtype-aware math, comparisons, reductions, random sampling, and formatting.
 - Runtime IL generation and SIMD fast paths where layout and dtype allow it.
+
+<p align="left">
+  <a href="https://scisharp.github.io/NumSharp/docs/NDArray.html">Click here to see code <strong>Getting Started</strong></a>
+</p>
 
 ## Features
 
@@ -67,8 +74,19 @@ NumSharp focuses on:
   raw reports, and subsystem matrices. See the
   [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.md).
 
-## Getting Started
+## Performance
 
+[NumSharp benchmarks](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html) are published as tracked release snapshots, not ad hoc
+numbers. The latest checked-in snapshot compares NumSharp with NumPy 2.4.2
+across the operation matrix, supported dtypes, three size tiers, and the NDIter,
+layout, operand, cast, and fusion subsystems.
+
+<p align="center">
+  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark dashboard" src="docs/website-src/images/benchmark-dashboard.png" height="320"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark function explorer" src="docs/website-src/images/benchmark-function-explorer.png" height="320"></a>
+</p>
+
+## Build, Test and Install
 Install the core package:
 
 ```bash
@@ -97,6 +115,24 @@ window = a[:, 1::2]
 print(window.sum(axis=0))
 ```
 
+Build:
+
+```bash
+dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
+```
+
+Run the normal CI-style unit test filter:
+
+```bash
+dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+  --configuration Release \
+  --no-build \
+  --framework net8.0 \
+  --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
+```
+
+CI runs on Windows, Linux, and macOS for `net8.0` and `net10.0`.
+
 ## NumPy vs NumSharp, Key Differences
 
 NumSharp follows NumPy's model where it can, but it is still a native .NET
@@ -122,38 +158,6 @@ porting code, or interpreting benchmark results.
 | Execution engine | NumPy ufuncs and native kernels | C# engine with generated IL/SIMD kernels | Performance differs by dtype, size, and layout. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.md). |
 | Benchmarks | NumPy is the comparison baseline | Ratios are reported as `NumPy_ms / NumSharp_ms` | `>1.0x` means NumSharp is faster. See the [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.md). |
 | Missing surface | Full NumPy package | Broad but not complete `np.*` surface | Some APIs remain unimplemented or intentionally different; use docs/API reference as the current source. |
-
-## Performance
-
-[NumSharp benchmarks](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html) are published as tracked release snapshots, not ad hoc
-numbers. The latest checked-in snapshot compares NumSharp with NumPy 2.4.2
-across the operation matrix, supported dtypes, three size tiers, and the NDIter,
-layout, operand, cast, and fusion subsystems.
-
-<p align="center">
-  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark dashboard" src="docs/website-src/images/benchmark-dashboard.png" height="320"></a>
-  <a href="https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html"><img alt="NumSharp benchmark function explorer" src="docs/website-src/images/benchmark-function-explorer.png" height="320"></a>
-</p>
-
-## Build and Test
-
-Build:
-
-```bash
-dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
-```
-
-Run the normal CI-style unit test filter:
-
-```bash
-dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
-  --configuration Release \
-  --no-build \
-  --framework net8.0 \
-  --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"
-```
-
-CI runs on Windows, Linux, and macOS for `net8.0` and `net10.0`.
 
 ## Related Projects
 
