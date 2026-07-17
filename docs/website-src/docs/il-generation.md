@@ -93,10 +93,14 @@ unsafe delegate void NDInnerLoopFunc(
 ```
 
 The `strides` array uses byte strides, matching NumPy's ufunc convention. This
-model is the migration target for new iterator-driven ufunc work. It already
-backs chunked `np.where`, reductions, pairwise reductions, and cumsum kernels,
-and it is the foundation used by `np.evaluate` and custom NDIter kernels. See
-[NDIter](NDIter.md) for the iterator scheduling layer that feeds these kernels.
+model is the migration target for new iterator-driven ufunc work. `ILKernelGenerator`
+itself emits the chunked kernels behind `np.where`, the per-chunk reductions
+(including NumPy-faithful pairwise sum), and cumsum. The same `NDInnerLoopFunc`
+contract is also emitted by two `DirectILKernelGenerator` partials that own an
+inner chunk rather than a whole array: `InnerLoop.cs` (the factory behind
+`np.evaluate` and custom NDIter operations) and `WeightedSum.cs` (behind
+`np.average`). See [NDIter](NDIter.md) for the iterator scheduling layer that
+feeds them.
 
 ### Relationship
 
@@ -266,7 +270,8 @@ coordinate-derived offsets.
 
 ### NDIter Inner-Loop Paths
 
-The NDIter factory has a different split:
+The inner-loop factory (`DirectILKernelGenerator.InnerLoop.cs`) has a different
+split:
 
 | Tier | Entry point | Who emits what |
 | --- | --- | --- |
@@ -283,7 +288,8 @@ falls back to scalar-strided IL for that chunk.
 
 The SIMD layer is width-adaptive:
 
-- `DirectILKernelGenerator.VectorBits` detects 128, 256, or 512-bit support.
+- `DirectILKernelGenerator.VectorBits` detects 128, 256, or 512-bit support (or
+  0, which forces the scalar path, when no SIMD hardware is present).
 - `VectorMethodCache` resolves `Vector128`, `Vector256`, or `Vector512` methods.
 - On x86, the cache routes many operations to `Sse/Sse2`, `Avx/Avx2`, or
   `Avx512F` methods when available.
