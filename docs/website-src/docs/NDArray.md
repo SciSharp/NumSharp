@@ -209,7 +209,7 @@ a[a > 10] = -1;             // masked write
 > **View / copy summary for indexing:**
 > - Plain slices (`a["1:3"]`, `a[0]`, `a[..., -1]`): **writeable view** — shares memory with the parent.
 > - Fancy indexing (`a[indexArray]`): **writeable copy** — independent memory (matches NumPy).
-> - Boolean masking (`a[mask]`): **read-only copy** — independent memory; mutation via `a[mask] = value` still works as an *assignment* because it goes through the setter, not by writing into the returned array.
+> - Boolean masking (`a[mask]`): **writeable copy** — independent memory (matches NumPy). Writing into the returned array is allowed but does not touch the parent; to modify the parent use `a[mask] = value`, which goes through the setter.
 
 ---
 
@@ -484,11 +484,11 @@ a[0] = 3.14;
 
 Three ways to get a typed wrapper:
 
-| Method | Allocates? | When to use |
-|--------|------------|-------------|
-| `MakeGeneric<T>()` | never (same storage) | You know the dtype matches |
-| `AsGeneric<T>()` | never; throws if dtype mismatch | Defensive typing |
-| `AsOrMakeGeneric<T>()` | only if dtype differs (then `astype`) | Accept any dtype, convert if needed |
+| Method | Allocates? | On dtype mismatch | When to use |
+|--------|------------|-------------------|-------------|
+| `MakeGeneric<T>()` | never (same storage) | throws `ArgumentException` | You already know the dtype matches |
+| `AsGeneric<T>()` | never (same storage) | returns `null` (like C# `as`) | Defensive typing — check for `null` |
+| `AsOrMakeGeneric<T>()` | only if dtype differs (then `astype`) | converts via `astype` | Accept any dtype, convert if needed |
 
 `NDArray<T>` wraps the same storage; use the untyped `NDArray` when dtype is dynamic.
 
@@ -577,9 +577,9 @@ Views can be non-contiguous (sliced, transposed, broadcasted). Use `arr.Shape.Is
 
 That's views. `a["1:3"]` shares memory with `a`. Force a copy: `a["1:3"].copy()`.
 
-### "ReadOnlyArrayException writing to my slice"
+### "NumSharpException: assignment destination is read-only"
 
-You're writing to a broadcasted view (stride=0 dimension). Copy first: `b.copy()[...] = value`.
+You're writing to a broadcasted view (stride=0 dimension), which is read-only. Copy first: `b.copy()["..."] = value`.
 
 ### "ScalarConversionException on `(int)arr`"
 
@@ -632,8 +632,8 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | `SetAtIndex<T>(value, i)` | Write element at flat index |
 | `GetValue<T>(indices)` | Read at N-D coordinates |
 | `SetValue<T>(value, indices)` | Write at N-D coordinates |
-| `MakeGeneric<T>()` | Wrap as `NDArray<T>` (same storage) |
-| `AsGeneric<T>()` | Wrap as `NDArray<T>`; throws if dtype mismatch |
+| `MakeGeneric<T>()` | Wrap as `NDArray<T>` (same storage); throws if dtype differs |
+| `AsGeneric<T>()` | Wrap as `NDArray<T>`; returns `null` if dtype differs |
 | `AsOrMakeGeneric<T>()` | Wrap as `NDArray<T>`; `astype` if dtype differs |
 | `Data<T>()` | Get the underlying `ArraySlice<T>` handle |
 | `ToMuliDimArray<T>()` | Copy to a rank-N .NET array |

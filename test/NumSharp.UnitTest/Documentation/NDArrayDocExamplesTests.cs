@@ -492,7 +492,7 @@ namespace NumSharp.UnitTest.Documentation
             a[0] = 3.14;
             a[0].Should().Be(3.14);
 
-            np.zeros(3).AsGeneric<double>()[0].Should().Be(0.0);          // never allocates; throws on mismatch
+            np.zeros(3).AsGeneric<double>()[0].Should().Be(0.0);          // never allocates; returns null on mismatch
             np.array(new[] { 1, 2, 3 }).AsOrMakeGeneric<double>()[0].Should().Be(1.0); // astype when dtype differs
         }
 
@@ -638,6 +638,159 @@ namespace NumSharp.UnitTest.Documentation
             var c = np.array(new[] { 1, 2, 3 });
             c["..."] = c + 1;
             c.ToArray<int>().Should().Equal(2, 3, 4);
+
+            // "NumSharpException: assignment destination is read-only" → copy the broadcast view first
+            var bc = np.broadcast_to(np.arange(3), new Shape(2, 3));
+            Action write = () => bc[0, 0] = 9;
+            write.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+        }
+
+        // ── Second pass: the view / copy / read-only semantics the tables claim ─────────────────────
+
+        [TestMethod]
+        public void Frombuffer_ByteArray_IsAView_SeesSourceMutation()
+        {
+            byte[] buf = new byte[4];
+            BitConverter.TryWriteBytes(buf, 5);
+            var view = np.frombuffer(buf, typeof(int));
+            view.GetInt32(0).Should().Be(5);
+
+            BitConverter.TryWriteBytes(buf, 9);          // mutate the source after wrapping
+            view.GetInt32(0).Should().Be(9, "frombuffer(byte[]) is a view — it sees source mutations");
+        }
+
+        [TestMethod]
+        public void Frombuffer_BigEndian_IsACopy_IgnoresSourceMutation()
+        {
+            byte[] be = { 0, 0, 0, 5 };
+            var copy = np.frombuffer(be, ">i4");
+            copy.GetInt32(0).Should().Be(5);
+
+            be[3] = 9;                                   // mutate the source
+            copy.GetInt32(0).Should().Be(5, "big-endian frombuffer copies (byte-swapped), so source mutation is invisible");
+        }
+
+        [TestMethod]
+        public void Frombuffer_LengthNotMultipleOfElementSize_Throws()
+        {
+            Action act = () => np.frombuffer(new byte[6], typeof(int));   // 6 is not a multiple of 4
+            act.Should().Throw<ArgumentException>();
+        }
+
+        [TestMethod]
+        public void Indexing_PlainSlice_IsWriteableView()
+        {
+            var a = np.arange(10);
+            var slice = a["2:5"];
+            slice.Shape.IsWriteable.Should().BeTrue();
+            slice[0] = -1;
+            ((long)a[2]).Should().Be(-1L, "a plain slice is a writeable view of the parent");
+        }
+
+        [TestMethod]
+        public void Indexing_Fancy_IsWriteableIndependentCopy()
+        {
+            var arr = np.array(new[] { 10, 20, 30, 40, 50 });
+            var fancy = arr[np.array(new[] { 0, 2, 4 })];
+            fancy.Shape.IsWriteable.Should().BeTrue();
+            fancy[0] = 999;
+            ((int)arr[0]).Should().Be(10, "fancy indexing returns an independent copy");
+        }
+
+        [TestMethod]
+        public void Indexing_BooleanMask_IsWriteableIndependentCopy()
+        {
+            var arr = np.array(new[] { 10, 20, 30, 40, 50 });
+
+            var masked = arr[arr > 20];
+            masked.Shape.IsWriteable.Should().BeTrue("the boolean-mask result is a writeable copy (NumPy parity)");
+            masked[0] = 999;
+            ((int)masked[0]).Should().Be(999);
+            // the mask copy is independent of the parent
+            arr.ToArray<int>().Should().Equal(10, 20, 30, 40, 50);
+
+            // the setter form DOES reach the parent (goes through the indexer, not the returned copy)
+            arr[arr > 20] = -7;
+            arr.ToArray<int>().Should().Equal(10, 20, -7, -7, -7);
+        }
+
+        [TestMethod]
+        public void CopySemantics_ViewVsCopy_AtAGlance()
+        {
+            // views — share memory with the source
+            var m = np.arange(6).reshape(2, 3);
+            m.T[0, 0] = 100;
+            ((long)m[0, 0]).Should().Be(100L, "transpose is a view");
+
+            var contig = np.arange(4);
+            contig.ravel()[0] = 77;
+            ((long)contig[0]).Should().Be(77L, "ravel of a contiguous array is a view");
+
+            var reshaped = np.arange(6);
+            reshaped.reshape(2, 3)[0, 0] = 55;
+            ((long)reshaped[0]).Should().Be(55L, "reshape of a contiguous array is a view");
+
+            // copies — independent memory
+            var src = np.arange(4);
+            src.flatten()[0] = 88;
+            ((long)src[0]).Should().Be(0L, "flatten always copies");
+
+            var orig = np.arange(4);
+            orig.copy()[0] = 88;
+            ((long)orig[0]).Should().Be(0L, "copy() is independent");
+        }
+
+        [TestMethod]
+        public void Generic_MismatchBehaviour_AndStorageSharing()
+        {
+            // MakeGeneric shares storage with the source
+            var z = np.zeros(3);
+            NDArray<double> g = z.MakeGeneric<double>();
+            g[0] = 3.5;
+            ((double)z[0]).Should().Be(3.5, "MakeGeneric wraps the same storage");
+
+            // AsGeneric returns null on a dtype mismatch (like C# 'as'); MakeGeneric throws
+            (np.zeros(3).AsGeneric<int>() is null).Should().BeTrue("AsGeneric returns null when the dtype differs");
+            Action make = () => np.zeros(3).MakeGeneric<int>();
+            make.Should().Throw<ArgumentException>("MakeGeneric throws when the dtype differs");
+        }
+
+        [TestMethod]
+        public void Scalars_IntegerIndexReducesOneDimension()
+        {
+            np.arange(5)[2].ndim.Should().Be(0, "1-D a[i] → 0-d");
+            np.arange(20).reshape(4, 5)[1].shape.Should().Equal(new long[] { 5 }, "2-D a[i] → 1-D row");
+            np.arange(24).reshape(2, 3, 4)[0].shape.Should().Equal(new long[] { 3, 4 }, "3-D a[i] → 2-D slab");
+        }
+
+        [TestMethod]
+        public void Broadcast_IsReadOnly()
+        {
+            var b = np.broadcast_to(np.arange(3), new Shape(2, 3));
+            b.Shape.IsWriteable.Should().BeFalse("broadcast views are read-only");
+            Action act = () => b[0, 0] = 99;
+            act.Should().Throw<NumSharpException>().WithMessage("*read-only*");
+        }
+
+        [TestMethod]
+        public void Operators_AllCompoundAssignmentsWork()
+        {
+            var a = np.array(new[] { 12 });
+            a += 3; a.GetInt32(0).Should().Be(15);
+            a -= 5; a.GetInt32(0).Should().Be(10);
+            a *= 4; a.GetInt32(0).Should().Be(40);
+            a %= 7; a.GetInt32(0).Should().Be(5);
+            a &= np.array(new[] { 6 }); a.GetInt32(0).Should().Be(4);
+            a |= np.array(new[] { 1 }); a.GetInt32(0).Should().Be(5);
+            a ^= np.array(new[] { 3 }); a.GetInt32(0).Should().Be(6);
+            a <<= 2; a.GetInt32(0).Should().Be(24);
+            a >>= 1; a.GetInt32(0).Should().Be(12);
+
+            // /= promotes to double, exactly like the a / b operator
+            var d = np.array(new[] { 10 });
+            d /= 4;
+            d.typecode.Should().Be(NPTypeCode.Double);
+            ((double)d[0]).Should().Be(2.5);
         }
     }
 }
