@@ -8,6 +8,8 @@ NumSharp arrays are raw, unmanaged, densely-typed buffers — exactly the shape 
 |---------|--------|-----------|
 | [NumSharp.Interop.pythonnet](pythonnet.md) | `NDArray` ⇄ Python / numpy (and ANY PEP 3118 buffer exporter) | [Python.NET](https://github.com/pythonnet/pythonnet) + the buffer protocol |
 
+Guides: [Python.NET — unit-test-proven patterns](python-net.md) — a cookbook of idiomatic Python.NET embedding (scopes, dynamic modules, runtime classes, generators, threads) with NumSharp flowing through it, where every sample maps 1:1 to a test in `NumSharp.Interop.UnitTests`.
+
 ## The Interop Contract
 
 Every bridge builds on the same three NumSharp capabilities:
