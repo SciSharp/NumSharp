@@ -35,7 +35,7 @@ namespace NumSharp
         {
             if (file == null)
                 throw new ArgumentNullException(nameof(file));
-            if (arr == null)
+            if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
             // Add .npy extension if not present
@@ -59,7 +59,7 @@ namespace NumSharp
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
-            if (arr == null)
+            if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
             NpyFormat.WriteArray(stream, arr);

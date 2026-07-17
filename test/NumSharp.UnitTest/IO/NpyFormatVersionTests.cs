@@ -2,18 +2,18 @@ using System;
 using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.IO;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.IO
 {
     /// <summary>
     /// Tests for .npy format version handling (v1.0, v2.0, v3.0).
     /// </summary>
+    [TestClass]
     public class NpyFormatVersionTests
     {
         private const string TestDir = "test_compat";
 
-        [Test]
+        [TestMethod]
         public void ParseVersion2_LargeHeader()
         {
             var path = Path.Combine(TestDir, "version2_large_header.npy");
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.IO
             }
         }
 
-        [Test]
+        [TestMethod]
         public void ParseVersion3_UnicodeFieldNames()
         {
             var path = Path.Combine(TestDir, "version3_unicode.npy");
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.IO
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Version1_SimpleArray_RoundTrip()
         {
             // Verify we write version 1.0 by default for simple arrays
@@ -114,7 +114,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(np.array_equal(arr, loaded));
         }
 
-        [Test]
+        [TestMethod]
         public void HeaderAlignment_Is64Bytes()
         {
             var arr = np.arange(10);

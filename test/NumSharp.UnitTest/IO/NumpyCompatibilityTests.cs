@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.IO;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.IO
 {
@@ -11,6 +10,7 @@ namespace NumSharp.UnitTest.IO
     /// Tests loading files created by actual NumPy to verify cross-compatibility.
     /// Test files are in test_compat/ directory, created by Python/NumPy.
     /// </summary>
+    [TestClass]
     public class NumpyCompatibilityTests
     {
         private const string TestDir = "test_compat";
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.IO
             return Directory.Exists(TestDir) && File.Exists(Path.Combine(TestDir, "int32_1d.npy"));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Int32_1D()
         {
             if (!TestFilesExist()) return;
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(new int[] { 1, 2, 3, 4, 5 }.SequenceEqual(arr.Data<int>()));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Float64_2D()
         {
             if (!TestFilesExist()) return;
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(11.0, arr.GetDouble(2, 3));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Boolean()
         {
             if (!TestFilesExist()) return;
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(arr.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Scalar()
         {
             if (!TestFilesExist()) return;
@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(arr.Shape.IsScalar, "Should be marked as scalar");
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Empty()
         {
             if (!TestFilesExist()) return;
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(0, arr.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_FortranOrder()
         {
             if (!TestFilesExist()) return;
@@ -117,7 +117,7 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(5L, arr.GetInt64(1, 2));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_Npz()
         {
             if (!TestFilesExist()) return;
@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(np.allclose(np.array(new double[] { 4.0, 5.0 }), b));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_NumPy_NpzCompressed()
         {
             if (!TestFilesExist()) return;
@@ -150,7 +150,7 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(999, data.GetInt64(999));
         }
 
-        [Test]
+        [TestMethod]
         public void RoundTrip_NumSharpToNumPy()
         {
             if (!TestFilesExist()) return;

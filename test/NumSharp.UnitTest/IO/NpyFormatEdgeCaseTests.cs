@@ -3,18 +3,18 @@ using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.IO;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.IO
 {
     /// <summary>
     /// Battle-tested edge cases for .npy/.npz format handling.
     /// </summary>
+    [TestClass]
     public class NpyFormatEdgeCaseTests
     {
         #region Sliced and Non-Contiguous Arrays
 
-        [Test]
+        [TestMethod]
         public void Save_Load_SlicedArray_WithOffset()
         {
             // Regression test for Shape.offset bug
@@ -30,15 +30,15 @@ namespace NumSharp.UnitTest.IO
             var loaded = np.load_npy(ms);
 
             Assert.IsTrue(new long[] { 2, 3 }.SequenceEqual(loaded.shape));
-            // Verify via flatten to avoid GetInt32 indexing issues in longindexing branch
+            // np.arange yields Int64, so read the element back at that dtype.
             var slicedFlat = sliced.flatten();
             var loadedFlat = loaded.flatten();
-            Assert.AreEqual(6, slicedFlat.GetAtIndex<int>(0));
-            Assert.AreEqual(6, loadedFlat.GetAtIndex<int>(0));
+            Assert.AreEqual(6L, slicedFlat.GetAtIndex<long>(0));
+            Assert.AreEqual(6L, loadedFlat.GetAtIndex<long>(0));
             Assert.IsTrue(np.array_equal(sliced, loaded));
         }
 
-        [Test]
+        [TestMethod]
         public void Save_Load_ColumnSlice()
         {
             var arr = np.arange(20).reshape(4, 5);
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(np.array_equal(colSlice, loaded));
         }
 
-        [Test]
+        [TestMethod]
         public void Save_Load_StepSlice()
         {
             var arr = np.arange(10);
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(np.array_equal(stepped, loaded));
         }
 
-        [Test]
+        [TestMethod]
         public void Save_Load_TransposedArray()
         {
             var arr = np.arange(12).reshape(3, 4);
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(np.array_equal(transposed, loaded));
         }
 
-        [Test]
+        [TestMethod]
         public void Save_Load_BroadcastView()
         {
             var arr = np.arange(3);
@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.IO
 
         #region Special Float Values
 
-        [Test]
+        [TestMethod]
         public void Save_Load_SpecialFloatValues()
         {
             var arr = np.array(new double[] {
@@ -138,7 +138,7 @@ namespace NumSharp.UnitTest.IO
 
         #region Header Format Compliance
 
-        [Test]
+        [TestMethod]
         public void Header_KeysSortedAlphabetically()
         {
             var arr = np.arange(6).reshape(2, 3);
@@ -157,7 +157,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(fortranPos < shapePos);
         }
 
-        [Test]
+        [TestMethod]
         public void Header_HasTrailingComma()
         {
             var arr = np.arange(6).reshape(2, 3);
@@ -171,7 +171,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(header.EndsWith(", }"));
         }
 
-        [Test]
+        [TestMethod]
         public void Header_OneElementTupleHasTrailingComma()
         {
             var arr = np.arange(5); // 1D array
@@ -185,7 +185,7 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(header.Contains("(5,)"), $"1D shape should be (5,) not (5): {header}");
         }
 
-        [Test]
+        [TestMethod]
         public void Header_DataStartsAt64ByteBoundary()
         {
             var arr = np.arange(10);
@@ -203,7 +203,7 @@ namespace NumSharp.UnitTest.IO
 
         #region True Scalars
 
-        [Test]
+        [TestMethod]
         public void Save_Load_TrueScalar()
         {
             var scalar = new NDArray(NPTypeCode.Int32, Shape.NewScalar());
@@ -235,12 +235,12 @@ namespace NumSharp.UnitTest.IO
 
         #region Multi-dimensional Shapes
 
-        [Test]
-        [Arguments(new long[] { 1 })]
-        [Arguments(new long[] { 1, 1, 1 })]
-        [Arguments(new long[] { 10 })]
-        [Arguments(new long[] { 2, 3, 4 })]
-        [Arguments(new long[] { 2, 3, 4, 5 })]
+        [DataTestMethod]
+        [DataRow(new long[] { 1 })]
+        [DataRow(new long[] { 1, 1, 1 })]
+        [DataRow(new long[] { 10 })]
+        [DataRow(new long[] { 2, 3, 4 })]
+        [DataRow(new long[] { 2, 3, 4, 5 })]
         public void Save_Load_VariousShapes(long[] shape)
         {
             long size = shape.Aggregate(1L, (a, b) => a * b);
@@ -259,7 +259,7 @@ namespace NumSharp.UnitTest.IO
 
         #region Empty Arrays
 
-        [Test]
+        [TestMethod]
         public void Save_Load_Empty1D()
         {
             var empty = np.array(Array.Empty<double>());
@@ -272,7 +272,7 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(0, loaded.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Save_Load_EmptyMultiDimensional()
         {
             var empty = np.zeros(new long[] { 0, 3, 4 }, NPTypeCode.Double);
@@ -290,7 +290,7 @@ namespace NumSharp.UnitTest.IO
 
         #region Multiple Arrays in Stream
 
-        [Test]
+        [TestMethod]
         public void Save_Load_MultipleArraysInOneStream()
         {
             var arr1 = np.array(new long[] { 1, 2, 3 });
@@ -316,21 +316,21 @@ namespace NumSharp.UnitTest.IO
 
         #region Error Handling
 
-        [Test]
+        [TestMethod]
         public void Load_InvalidMagic_ThrowsFormatException()
         {
             using var ms = new MemoryStream(new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 });
             Assert.ThrowsException<FormatException>(() => np.load(ms));
         }
 
-        [Test]
+        [TestMethod]
         public void Load_TruncatedFile_ThrowsEndOfStreamException()
         {
             using var ms = new MemoryStream(new byte[] { 0x93, (byte)'N', (byte)'U', (byte)'M', (byte)'P', (byte)'Y' });
             Assert.ThrowsException<EndOfStreamException>(() => np.load(ms));
         }
 
-        [Test]
+        [TestMethod]
         public void Save_DecimalType_ThrowsNotSupportedException()
         {
             var arr = np.array(new decimal[] { 1.5m, 2.5m });
@@ -342,17 +342,17 @@ namespace NumSharp.UnitTest.IO
 
         #region All Supported dtypes
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
+        [DataTestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
         public void Save_Load_AllSupportedDtypes(NPTypeCode typeCode)
         {
             var arr = np.zeros(new long[] { 3 }, typeCode);
