@@ -241,7 +241,16 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `ascontiguousarray`, `asfortranarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
+
+`flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
+the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
+slice path for every layout incl. F-contiguous/transposed/stepped/broadcast (flip of a read-only broadcast
+stays read-only). `flip(m, axis: null)` flips ALL axes; `flip(m, int[])` is the tuple form (empty array
+= flip nothing; the axes are normalized NumPy-style: full `AxisError` pass — reporting the original
+negative axis — THEN `ValueError("repeated axis")`, so `(0,0,5)` raises AxisError). 0-d: `flip(m)` returns
+the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires ndim≥2 / `flipud` ndim≥1
+(`ValueError("Input must be >= 2-d." / ">= 1-d.")` verbatim). See `Manipulation/np.flip.cs`.
 
 `resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs`, `Manipulation/NDArray.resize.cs`.
 
