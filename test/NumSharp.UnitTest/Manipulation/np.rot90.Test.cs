@@ -270,5 +270,101 @@ namespace NumSharp.UnitTest.Manipulation
             ((Action)(() => np.rot90(m))).Should()
                 .Throw<ArgumentException>().WithMessage("*out of range for array of ndim=0*");
         }
+
+        // ----------------------------------------------------------------- second-pass edge cases
+
+        [TestMethod]
+        public void Rot90_NonDefaultAxes_OnTransposedInput()
+        {
+            // Non-contiguous (transposed) input rotated in a non-default plane.
+            var c = np.transpose(np.arange(24).reshape(2, 3, 4), new[] {1, 0, 2});   // (3,2,4), non-contig
+            np.rot90(c, 1, new[] {0, 2}).Should()
+                .BeOfValues(3, 7, 11, 15, 19, 23, 2, 6, 10, 14, 18, 22,
+                            1, 5, 9, 13, 17, 21, 0, 4, 8, 12, 16, 20)
+                .And.BeShaped(4, 2, 3);
+            np.rot90(c, 1, new[] {2, 0}).Should()
+                .BeOfValues(8, 4, 0, 20, 16, 12, 9, 5, 1, 21, 17, 13,
+                            10, 6, 2, 22, 18, 14, 11, 7, 3, 23, 19, 15)
+                .And.BeShaped(4, 2, 3);
+        }
+
+        [TestMethod]
+        public void Rot90_NewAxisInput()
+        {
+            var m = np.expand_dims(np.arange(6).reshape(2, 3), 0);   // (1,2,3), leading size-1 axis
+            np.rot90(m, 1, new[] {1, 2}).Should()
+                .BeOfValues(2, 5, 1, 4, 0, 3).And.BeShaped(1, 3, 2);
+        }
+
+        [TestMethod]
+        public void Rot90_6D_ShapeParity()
+        {
+            var a = np.arange(2 * 1 * 3 * 1 * 2 * 2).reshape(2, 1, 3, 1, 2, 2);
+            np.rot90(a, 1, new[] {0, 2}).Should().BeShaped(3, 1, 2, 1, 2, 2);
+            np.rot90(a, 3, new[] {2, 5}).Should().BeShaped(2, 1, 2, 1, 2, 3);
+        }
+
+        [TestMethod]
+        public void Rot90_ExtremeK_WrapsLikePython()
+        {
+            var m = np.arange(6).reshape(2, 3);
+            // int.MinValue % 4 == 0  ->  identity
+            np.rot90(m, int.MinValue).Should().BeOfValues(0, 1, 2, 3, 4, 5).And.BeShaped(2, 3);
+            // int.MaxValue % 4 == 3
+            np.rot90(m, int.MaxValue).Should().BeOfValues(3, 0, 4, 1, 5, 2).And.BeShaped(3, 2);
+        }
+
+        [TestMethod]
+        public void Rot90_Chained_ComposesToLargerRotation()
+        {
+            var m = np.arange(12).reshape(3, 4);
+            var twice = np.rot90(np.rot90(m));
+            var once2 = np.rot90(m, 2);
+            twice.shape.Should().BeEquivalentTo(once2.shape);
+            var a = twice.flatten().GetData<int>();
+            var b = once2.flatten().GetData<int>();
+            for (int i = 0; i < (int)a.Count; i++)
+                a[i].Should().Be(b[i]);
+        }
+
+        [TestMethod]
+        public void Rot90_EmptySlicedOffsetView_IsFlattenable()
+        {
+            // Regression: k=0 on an empty view with a non-zero offset must return a well-formed
+            // (flattenable) result — consistent with the k=1/2/3 empty paths.
+            var e = np.arange(24).reshape(4, 3, 2)["1:, 1:, 1:1"];   // (3,2,0), offset != 0
+            e.size.Should().Be(0);
+            foreach (var k in new[] {0, 1, 2, 3})
+            {
+                var r = np.rot90(e, k, new[] {2, 1});
+                r.size.Should().Be(0);
+                r.flatten().size.Should().Be(0);   // must not throw
+            }
+        }
+
+        [TestMethod]
+        public void Rot90_DoesNotMutateAxesArgument()
+        {
+            var m = np.arange(24).reshape(2, 3, 4);
+            var axes = new[] {2, 0};
+            np.rot90(m, 1, axes);
+            axes.Should().BeEquivalentTo(new[] {2, 0}, o => o.WithStrictOrdering());
+        }
+
+        [TestMethod]
+        public void Rot90_ResultUsableDownstream()
+        {
+            // A rotated view must behave correctly as an operand in a subsequent op.
+            var m = np.arange(6).reshape(2, 3).astype(NPTypeCode.Int32);
+            var r = np.rot90(m);                       // [[2,5],[1,4],[0,3]]
+            var plus = (r + 10).flatten().GetData<int>();
+            var exp = new[] {12, 15, 11, 14, 10, 13};
+            for (int i = 0; i < exp.Length; i++)
+                plus[i].Should().Be(exp[i]);
+            // .copy() materializes correct C-contiguous data
+            var copied = r.copy();
+            copied.Shape.IsContiguous.Should().BeTrue();
+            copied.flatten().GetData<int>()[0].Should().Be(2);
+        }
     }
 }

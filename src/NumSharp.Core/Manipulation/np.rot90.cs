@@ -50,8 +50,13 @@ namespace NumSharp
             k = ((k % 4) + 4) % 4;
 
             if (k == 0)
-                // NumPy returns m[:] — a full view that shares memory with m.
-                return new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
+                // NumPy returns m[:] — a full view that shares memory with m. For an empty array
+                // return a fresh same-shape array instead (consistent with how the k=1/2/3 paths and
+                // DefaultEngine.Transpose treat size==0): aliasing a zero-length offset view yields a
+                // shape that downstream buffer ops can't materialize, and there is no data to share.
+                return m.Shape.size == 0
+                    ? new NDArray(m.dtype, m.Shape.dimensions)
+                    : new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
 
             // Normalize the (validated) axes to [0, ndim) for the view ops below, matching
             // Python's negative indexing of both flip(m, axis) and axes_list[axis].
