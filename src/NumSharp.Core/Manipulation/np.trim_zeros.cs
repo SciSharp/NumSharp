@@ -6,18 +6,21 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Remove values along a dimension which are zero along all other dimensions.
-        ///     Convenience overload for a single <paramref name="axis"/>.
+        ///     Remove values along a dimension which are zero along all other dimensions. Mirrors NumPy's
+        ///     <c>numpy.trim_zeros(filt, trim='fb', axis=None)</c> exactly: <paramref name="axis"/> is a single
+        ///     axis, or <c>null</c> for the whole-array bounding box. Pass an <c>int[]</c> to trim several axes.
         /// </summary>
         /// <param name="filt">Input array.</param>
-        /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both.</param>
-        /// <param name="axis">The single dimension to trim.</param>
+        /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
+        /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
-        public static NDArray trim_zeros(NDArray filt, string trim, int axis)
-            => trim_zeros(filt, trim, new[] {axis});
+        public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
+            => trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
 
         /// <summary>
-        ///     Remove values along a dimension which are zero along all other dimensions.
+        ///     Remove values which are zero along all other dimensions, trimming the given sequence of axes.
+        ///     <paramref name="trim"/> is required on this overload so it does not collide with the single-axis
+        ///     primary above on calls like <c>trim_zeros(filt)</c> / <c>trim_zeros(filt, "f")</c>.
         /// </summary>
         /// <param name="filt">Input array.</param>
         /// <param name="trim">
@@ -37,7 +40,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated.</exception>
         /// <exception cref="AxisOutOfRangeException">If an axis is out of bounds for <paramref name="filt"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html</remarks>
-        public static NDArray trim_zeros(NDArray filt, string trim = "fb", int[] axis = null)
+        public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
         {
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.
             trim = (trim ?? string.Empty).ToLowerInvariant();
