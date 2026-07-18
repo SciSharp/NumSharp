@@ -22,6 +22,7 @@ namespace NumSharp
         ///     </list>
         /// </param>
         /// <returns>Array with the specified requirements and dtype if given. A copy is made only when needed.</returns>
+        /// <param name="like">Reference array for NumPy's array-function dispatch — accepted for signature parity but has no observable effect in NumSharp (no array-subclass dispatch).</param>
         /// <exception cref="ValueError">If both 'C' and 'F' order are requested, or a requirement string is not understood.</exception>
         /// <remarks>
         ///     Port of NumPy 2.x <c>numpy.require</c>. With no requirements this is exactly
@@ -34,10 +35,14 @@ namespace NumSharp
         ///     ndarray subclasses to demote.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.require.html
         /// </remarks>
-        public static NDArray require(NDArray a, Type dtype = null, string[] requirements = null)
+        public static NDArray require(NDArray a, Type dtype = null, string[] requirements = null, NDArray like = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
+
+            // `like` drives NumPy's __array_function__ protocol; NumSharp has no array-subclass
+            // dispatch, so it is accepted for signature parity but never read.
+            _ = like;
 
             // `not requirements` in NumPy is true for None AND an empty sequence.
             if (requirements == null || requirements.Length == 0)

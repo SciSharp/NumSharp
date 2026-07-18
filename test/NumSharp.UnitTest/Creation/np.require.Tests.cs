@@ -165,5 +165,51 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void NullInput_Throws() =>
             ((Action)(() => np.require(null))).Should().Throw<ArgumentNullException>();
+
+        // ─── second-pass edge cases (verified against NumPy) ────────────────
+
+        [TestMethod]
+        public void Like_IsAcceptedAndIgnored()
+        {
+            var x = np.arange(6).reshape(2, 3);
+            // `like` exists for NumPy's array-function dispatch; NumSharp accepts it as a no-op.
+            var r = np.require(x, typeof(float), new[] { "C" }, like: np.arange(3));
+            r.dtype.Should().Be(typeof(float));
+            r.Shape.IsContiguous.Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void FRequirement_OnCContig2D_CopiesToFContiguous()
+        {
+            var x = np.arange(6).astype(NPTypeCode.Int64).reshape(2, 3); // C-contig 2-D
+            var r = np.require(x, requirements: new[] { "F" });
+            r.Shape.IsFContiguous.Should().BeTrue();
+            r.Shape.IsContiguous.Should().BeFalse();
+            ReferenceEquals(r.Storage, x.Storage).Should().BeFalse(); // copied
+        }
+
+        [TestMethod]
+        public void OwndataRequirement_CopiesEvenWhenOrderAlreadySatisfied()
+        {
+            // 'C' is satisfied (view is C-contig) but 'O' is not (it's a view) → still copies.
+            var x = np.arange(6).reshape(2, 3);
+            ReferenceEquals(np.require(x, requirements: new[] { "C", "O" }).Storage, x.Storage).Should().BeFalse();
+        }
+
+        [TestMethod]
+        public void Aliases_LowercaseAndFullNames()
+        {
+            var x = np.arange(6).reshape(2, 3);
+            // 'contiguous'/'c' ⇒ C (no copy on a C-contig view); 'writeable'/'aligned' are already satisfied.
+            ReferenceEquals(np.require(x, requirements: new[] { "contiguous" }).Storage, x.Storage).Should().BeTrue();
+            ReferenceEquals(np.require(x, requirements: new[] { "c", "writeable", "aligned" }).Storage, x.Storage).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void EmptyArray_FRequirement_ProducesFContiguous()
+        {
+            var r = np.require(np.zeros(new Shape(0, 3), NPTypeCode.Double), requirements: new[] { "F" });
+            r.Shape.IsFContiguous.Should().BeTrue();
+        }
     }
 }

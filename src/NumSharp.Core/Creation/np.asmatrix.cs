@@ -170,7 +170,9 @@ namespace NumSharp
 
             int nrows = tokenRows.Count;
 
-            if (anyFloat)
+            // An element-free matrix (e.g. "" or "   ") has no tokens to infer an integer dtype from;
+            // NumPy's np.array([[]]) defaults such an empty array to float64, so match that.
+            if (anyFloat || (long)nrows * ncols == 0)
             {
                 var buf = new double[nrows, ncols];
                 for (int r = 0; r < nrows; r++)

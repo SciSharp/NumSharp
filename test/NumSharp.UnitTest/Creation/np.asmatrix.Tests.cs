@@ -190,5 +190,83 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void NullStringInput_Throws() =>
             ((Action)(() => np.asmatrix((string)null))).Should().Throw<ArgumentNullException>();
+
+        // ─── second-pass edge cases (verified against NumPy) ────────────────
+
+        [TestMethod]
+        public void String_Empty_InfersDouble()
+        {
+            // NumPy's np.array([[]]) defaults an element-free matrix to float64.
+            var m = np.asmatrix("");
+            m.shape.Should().Equal(new long[] { 1, 0 });
+            m.typecode.Should().Be(NPTypeCode.Double);
+        }
+
+        [TestMethod]
+        public void String_WhitespaceOnly_InfersDouble() =>
+            np.asmatrix("   ").typecode.Should().Be(NPTypeCode.Double);
+
+        [TestMethod]
+        public void String_ScientificAndSigns()
+        {
+            np.asmatrix("1e3 2").typecode.Should().Be(NPTypeCode.Double);       // exponent ⇒ float
+            np.asmatrix(".5 1").typecode.Should().Be(NPTypeCode.Double);        // leading dot ⇒ float
+            var signed = np.asmatrix("+5 -3");                                  // signed integers stay int
+            signed.typecode.Should().Be(NPTypeCode.Int64);
+            signed.GetValue<long>(0, 0).Should().Be(5L);
+            signed.GetValue<long>(0, 1).Should().Be(-3L);
+        }
+
+        [TestMethod]
+        public void String_MultiRow_ThreeByTwo()
+        {
+            np.asmatrix("1 2;3 4;5 6").shape.Should().Equal(new long[] { 3, 2 });
+        }
+
+        [TestMethod]
+        public void Degenerate_EmptyThreeD_Raises() =>
+            // (0,3,1) squeezes to (3,) but the element count (0) can't fill it — NumPy raises a reshape error.
+            ((Action)(() => np.asmatrix(np.zeros(new Shape(0, 3, 1), NPTypeCode.Double))))
+                .Should().Throw<ValueError>();
+
+        [TestMethod]
+        public void MultipleSingletonAxes_Squeeze()
+        {
+            np.asmatrix(np.zeros(new Shape(1, 3, 1, 4, 1), NPTypeCode.Double)).shape.Should().Equal(new long[] { 3, 4 });
+        }
+
+        [TestMethod]
+        public void OneElement1D_Becomes_1x1()
+        {
+            np.asmatrix(np.zeros(new Shape(1), NPTypeCode.Double)).shape.Should().Equal(new long[] { 1, 1 });
+        }
+
+        [TestMethod]
+        public void ZeroDFromIntegerIndex_PreservesOffset()
+        {
+            var baseA = np.array(new[,] { { 10.0, 20.0 }, { 30.0, 40.0 } });
+            var m = np.asmatrix(baseA[1, 1]); // 0-D view at offset pointing to 40
+            m.shape.Should().Equal(new long[] { 1, 1 });
+            m.GetValue<double>(0, 0).Should().Be(40.0);
+        }
+
+        [TestMethod]
+        public void NonContiguous2D_SharesMemory()
+        {
+            var a = np.arange(16).reshape(4, 4);
+            var m = np.asmatrix(a["::2, ::2"]); // strided in both axes, neither C nor F
+            m.shape.Should().Equal(new long[] { 2, 2 });
+            m[0, 0] = -99L;
+            a.GetValue<long>(0, 0).Should().Be(-99L);
+        }
+
+        [TestMethod]
+        public void Broadcast1D_MatrixIsNonWriteable()
+        {
+            var bc = np.broadcast_to(NDArray.Scalar(5.0), new Shape(4)); // non-writeable
+            var m = np.asmatrix(bc);
+            m.shape.Should().Equal(new long[] { 1, 4 });
+            m.Shape.IsWriteable.Should().BeFalse();
+        }
     }
 }

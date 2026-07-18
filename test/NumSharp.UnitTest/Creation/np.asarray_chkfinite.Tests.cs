@@ -195,5 +195,68 @@ namespace NumSharp.UnitTest.Creation
         [TestMethod]
         public void NullInput_Throws() =>
             ((Action)(() => np.asarray_chkfinite((NDArray)null))).Should().Throw<ArgumentNullException>();
+
+        // ─── second-pass edge cases (verified against NumPy) ────────────────
+
+        [TestMethod]
+        public void SignalingNaN_Double_Raises()
+        {
+            double sNaN = BitConverter.Int64BitsToDouble(unchecked((long)0x7ff0000000000001));
+            Chk(np.array(new[] { sNaN, 1.0 })).Should().Throw<ValueError>();
+        }
+
+        [TestMethod]
+        public void SignalingNaN_Half_Raises()
+        {
+            Half sNaN = BitConverter.UInt16BitsToHalf(0x7c01);
+            Chk(np.array(new[] { sNaN, (Half)1 })).Should().Throw<ValueError>();
+        }
+
+        [TestMethod]
+        public void SignedZero_Passes() => Chk(np.array(new[] { -0.0, 0.0, 1.0 })).Should().NotThrow();
+
+        [TestMethod]
+        public void Subnormal_And_MaxFinite_Pass() =>
+            Chk(np.array(new[] { 5e-324, 1.7976931348623157e308, -1.7976931348623157e308 })).Should().NotThrow();
+
+        [TestMethod]
+        public void ColumnBroadcast_InnerStrideZero_HitsNaN_Raises()
+        {
+            // (3,1) broadcast to (3,4): inner axis has stride 0 — exercises the odometer's stride-0 run.
+            var col = np.array(new[,] { { 1.0 }, { nan }, { 3.0 } });
+            Chk(np.broadcast_to(col, new Shape(3, 4))).Should().Throw<ValueError>();
+        }
+
+        [TestMethod]
+        public void FiveD_StridedView_SkipsNaN_Passes()
+        {
+            var a5 = np.ones(new Shape(2, 3, 2, 3, 4), NPTypeCode.Double);
+            a5[1, 2, 1, 2, 3] = inf;                 // lives at axis0=1, axis2=1
+            Chk(a5["::2, :, ::2"]).Should().NotThrow(); // view selects axis0={0}, axis2={0} — inf excluded
+        }
+
+        [TestMethod]
+        public void Stride3_Gather_HitsAndSkips()
+        {
+            var b = np.ones(new Shape(30), NPTypeCode.Double);
+            b[9] = nan;
+            Chk(b["::3"]).Should().Throw<ValueError>();  // 0,3,6,9,... hits 9
+            var c = np.ones(new Shape(30), NPTypeCode.Double);
+            c[9] = nan;
+            Chk(c["1::3"]).Should().NotThrow();          // 1,4,7,10,... skips 9
+        }
+
+        [TestMethod]
+        public void SimdBoundary_Sweep_NaNAtEveryPosition_AlwaysDetected()
+        {
+            // Sizes straddling the 4×-unroll SIMD body, the 1-vector remainder and the scalar tail.
+            foreach (var n in new[] { 4, 5, 8, 9, 16, 17, 33, 64, 65 })
+                for (int pos = 0; pos < n; pos++)
+                {
+                    var a = np.ones(new Shape(n), NPTypeCode.Double);
+                    a[pos] = nan;
+                    Chk(a).Should().Throw<ValueError>($"NaN at position {pos} of {n} must be found");
+                }
+        }
     }
 }
