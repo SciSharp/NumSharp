@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -18,7 +19,7 @@ namespace NumSharp.Interop.UnitTests
             ExportTo("x", ns);
 
             PyStr("type(x).__name__").Should().Be("ndarray");
-            PyStr("x.dtype.str").Should().Be(PythonConvert.ToNumpyDtypeStr(ns.typecode));
+            PyStr("x.dtype.str").Should().Be(NDArrayInterop.ToNumpyDtypeStr(ns.typecode));
             PyStr("x.shape").Should().Be("(2, 3)");
             PyStr("x.tolist()").Should().Be("[[0, 1, 2], [3, 4, 5]]");
 
@@ -69,7 +70,7 @@ namespace NumSharp.Interop.UnitTests
         public void Decimal_HasNoNumpyDtype_Throws()
         {
             var dec = np.arange(3).astype(NPTypeCode.Decimal);
-            ((Action)(() => PythonConvert.ToNumpy(dec)))
+            ((Action)(() => NDArrayInterop.ToNumpy(dec)))
                 .Should().Throw<NotSupportedException>().WithMessage("*decimal*astype*");
         }
 
@@ -176,7 +177,7 @@ namespace NumSharp.Interop.UnitTests
         public void MemoryView_NonContiguous_ThrowsWithGuidance()
         {
             var strided = np.arange(24).reshape(4, 6)["::2"];
-            ((Action)(() => PythonConvert.ToMemoryView(strided)))
+            ((Action)(() => NDArrayInterop.ToMemoryView(strided)))
                 .Should().Throw<InvalidOperationException>().WithMessage("*contiguous*");
         }
 
@@ -185,7 +186,7 @@ namespace NumSharp.Interop.UnitTests
         {
             var nd = np.arange(3);
             nd.Dispose();
-            ((Action)(() => PythonConvert.ToNumpy(nd)))
+            ((Action)(() => NDArrayInterop.ToNumpy(nd)))
                 .Should().Throw<ObjectDisposedException>("exporting freed memory would be a use-after-free");
         }
 

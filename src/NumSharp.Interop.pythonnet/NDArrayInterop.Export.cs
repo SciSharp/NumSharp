@@ -2,9 +2,9 @@ using System;
 using NumSharp.Backends.Unmanaged;
 using Python.Runtime;
 
-namespace NumSharp.Interop
+namespace NumSharp.Interop.PythonNet
 {
-    public static partial class PythonConvert
+    public static partial class NDArrayInterop
     {
         // ===========================  NumSharp  ->  Python (numpy)  ===========================
 
@@ -27,15 +27,15 @@ namespace NumSharp.Interop
         ///     is collected; if the engine shuts down while Python still holds views, the pin is swept
         ///     right after <see cref="PythonEngine.Shutdown"/> completes (pythonnet runs no Python atexit
         ///     pass, so the finalize callback cannot fire during shutdown — see
-        ///     <see cref="InteropRuntime"/>'s orphaned-exports sweep). While exported,
+        ///     <see cref="PythonInteropRuntime"/>'s orphaned-exports sweep). While exported,
         ///     <c>ndarray.resize(refcheck=True)</c> on the source refuses to reallocate — the same
         ///     protection NumPy applies to exported buffers.</para>
         /// </summary>
         public static unsafe PyObject ToNumpy(NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
-            InteropRuntime.EnsureEngine();
-            InteropRuntime.DrainPending();
+            PythonInteropRuntime.EnsureEngine();
+            PythonInteropRuntime.DrainPending();
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
@@ -64,7 +64,7 @@ namespace NumSharp.Interop
                     {
                         keeper = new ExportKeeper(source, slice);
                         RootOnPythonObject(baseBuffer, keeper);
-                        InteropRuntime.TrackExport(keeper);
+                        PythonInteropRuntime.TrackExport(keeper);
                     }
 
                     return arr;
@@ -98,8 +98,8 @@ namespace NumSharp.Interop
         public static unsafe PyObject ToNumpyCopy(NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
-            InteropRuntime.EnsureEngine();
-            InteropRuntime.DrainPending();
+            PythonInteropRuntime.EnsureEngine();
+            PythonInteropRuntime.DrainPending();
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
@@ -145,8 +145,8 @@ namespace NumSharp.Interop
         public static unsafe PyObject ToMemoryView(NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
-            InteropRuntime.EnsureEngine();
-            InteropRuntime.DrainPending();
+            PythonInteropRuntime.EnsureEngine();
+            PythonInteropRuntime.DrainPending();
 
             _ = ToBufferFormat(source.typecode);   // dtype gate (Decimal throws)
 
@@ -173,7 +173,7 @@ namespace NumSharp.Interop
 
                     keeper = new ExportKeeper(source, slice);
                     RootOnPythonObject(ctBuf, keeper);
-                    InteropRuntime.TrackExport(keeper);
+                    PythonInteropRuntime.TrackExport(keeper);
 
                     return mv;
                 }
@@ -198,7 +198,7 @@ namespace NumSharp.Interop
         ///     (the caller holds an ARC reference for the duration). <paramref name="baseBuffer"/> is the
         ///     deepest Python base object (the ctypes buffer) every derived numpy view chains to —
         ///     the correct attachment point for a keep-alive. All Python work runs through the
-        ///     session-cached callables on <see cref="InteropRuntime"/> (no dynamic dispatch), and every
+        ///     session-cached callables on <see cref="PythonInteropRuntime"/> (no dynamic dispatch), and every
         ///     intermediate wrapper is disposed deterministically instead of drifting to pythonnet's
         ///     finalizer queue — numpy's own reference chain (arr → flat → ctBuf) carries the lifetime.
         /// </summary>
@@ -271,7 +271,7 @@ namespace NumSharp.Interop
         ///     object alive in a global registry until the target is collected, then runs the marshaled
         ///     delegate under the GIL — CLR-only work, safe at any engine phase. CPython's documented
         ///     at-exit pass never happens under embedding (pythonnet's <c>Shutdown</c> runs no atexit —
-        ///     probed), which is exactly why <see cref="InteropRuntime"/> sweeps still-registered keepers
+        ///     probed), which is exactly why <see cref="PythonInteropRuntime"/> sweeps still-registered keepers
         ///     after the engine dies.
         /// </summary>
         private static void RootOnPythonObject(PyObject target, ExportKeeper keeper)

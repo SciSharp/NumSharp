@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -17,14 +18,14 @@ namespace NumSharp.Interop.UnitTests
         /// <summary>Register once for the whole run; safe no matter which test class runs first.</summary>
         internal static void EnsureCodec()
         {
-            PythonConvert.RegisterCodec();
+            NDArrayInterop.RegisterCodec();
         }
 
         [TestMethod]
         public void Register_IsIdempotentPerSession()
         {
             EnsureCodec();
-            PythonConvert.RegisterCodec().Should().BeFalse("second registration in one engine session must be a no-op");
+            NDArrayInterop.RegisterCodec().Should().BeFalse("second registration in one engine session must be a no-op");
         }
 
         [TestMethod]

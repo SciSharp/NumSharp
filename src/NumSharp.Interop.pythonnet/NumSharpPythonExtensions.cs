@@ -1,6 +1,6 @@
 using Python.Runtime;
 
-namespace NumSharp.Interop
+namespace NumSharp.Interop.PythonNet
 {
     /// <summary>
     ///     Fluent NumSharp → Python conversions (<c>using NumSharp.Interop;</c> to opt in).
@@ -8,26 +8,26 @@ namespace NumSharp.Interop
     /// </summary>
     public static class NumSharpPythonExtensions
     {
-        /// <inheritdoc cref="PythonConvert.ToNumpy(NDArray)"/>
-        public static PyObject ToNumpy(this NDArray source) => PythonConvert.ToNumpy(source);
+        /// <inheritdoc cref="NDArrayInterop.ToNumpy(NDArray)"/>
+        public static PyObject ToNumpy(this NDArray source) => NDArrayInterop.ToNumpy(source);
 
-        /// <inheritdoc cref="PythonConvert.ToNumpy(NDArray, bool)"/>
-        public static PyObject ToNumpy(this NDArray source, bool copy) => PythonConvert.ToNumpy(source, copy);
+        /// <inheritdoc cref="NDArrayInterop.ToNumpy(NDArray, bool)"/>
+        public static PyObject ToNumpy(this NDArray source, bool copy) => NDArrayInterop.ToNumpy(source, copy);
 
-        /// <inheritdoc cref="PythonConvert.ToNumpyCopy(NDArray)"/>
-        public static PyObject ToNumpyCopy(this NDArray source) => PythonConvert.ToNumpyCopy(source);
+        /// <inheritdoc cref="NDArrayInterop.ToNumpyCopy(NDArray)"/>
+        public static PyObject ToNumpyCopy(this NDArray source) => NDArrayInterop.ToNumpyCopy(source);
 
         /// <summary>
         ///     Alias of <see cref="ToNumpy(NDArray)"/> matching pythonnet's <c>ToPython()</c> naming.
         ///     More specific than pythonnet's <c>object.ToPython()</c> extension, so it wins overload
         ///     resolution for <see cref="NDArray"/> — and unlike the untyped one it produces a numpy
-        ///     array even without <see cref="PythonConvert.RegisterCodec()"/>.
+        ///     array even without <see cref="NDArrayInterop.RegisterCodec()"/>.
         /// </summary>
-        /// <inheritdoc cref="PythonConvert.ToNumpy(NDArray)"/>
-        public static PyObject ToPython(this NDArray source) => PythonConvert.ToNumpy(source);
+        /// <inheritdoc cref="NDArrayInterop.ToNumpy(NDArray)"/>
+        public static PyObject ToPython(this NDArray source) => NDArrayInterop.ToNumpy(source);
 
-        /// <inheritdoc cref="PythonConvert.ToMemoryView(NDArray)"/>
-        public static PyObject ToMemoryView(this NDArray source) => PythonConvert.ToMemoryView(source);
+        /// <inheritdoc cref="NDArrayInterop.ToMemoryView(NDArray)"/>
+        public static PyObject ToMemoryView(this NDArray source) => NDArrayInterop.ToMemoryView(source);
     }
 
     /// <summary>
@@ -36,10 +36,10 @@ namespace NumSharp.Interop
     /// </summary>
     public static class PyObjectNumSharpExtensions
     {
-        /// <inheritdoc cref="PythonConvert.ToNDArray(PyObject)"/>
-        public static NDArray ToNDArray(this PyObject obj) => PythonConvert.ToNDArray(obj);
+        /// <inheritdoc cref="NDArrayInterop.ToNDArray(PyObject)"/>
+        public static NDArray ToNDArray(this PyObject obj) => NDArrayInterop.ToNDArray(obj);
 
-        /// <inheritdoc cref="PythonConvert.ToNDArrayView(PyObject, bool)"/>
-        public static NDArray AsNDArray(this PyObject obj, bool allowReadonly = false) => PythonConvert.ToNDArrayView(obj, allowReadonly);
+        /// <inheritdoc cref="NDArrayInterop.ToNDArrayView(PyObject, bool)"/>
+        public static NDArray AsNDArray(this PyObject obj, bool allowReadonly = false) => NDArrayInterop.ToNDArrayView(obj, allowReadonly);
     }
 }
