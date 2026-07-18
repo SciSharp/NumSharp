@@ -30,12 +30,12 @@ namespace NumSharp.Interop
             {
                 using PyObject mv = OpenMemoryView(obj);
 
-                string format = GetStr(mv, InteropRuntime.NameFormat);
-                long itemsize = GetLong(mv, InteropRuntime.NameItemsize);
+                string format = mv.format;
+                long itemsize = mv.itemsize;
                 bool widenComplex64 = IsComplex64Format(format);
                 NPTypeCode tc = widenComplex64 ? NPTypeCode.Complex : FromBufferFormat(format, itemsize);
 
-                long[] dims = GetLongTuple(mv, InteropRuntime.NameShape);
+                long[] dims = mv.shape;
                 Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
                 if (shape.Size == 0)
                     return new NDArray(tc, shape, fillZeros: false);
@@ -43,7 +43,7 @@ namespace NumSharp.Interop
                 var dest = new NDArray(tc, shape, fillZeros: false);
                 long expectedSourceBytes = shape.Size * itemsize;
 
-                if (GetBool(mv, InteropRuntime.NameCContiguous))
+                if (mv.c_contiguous)
                 {
                     using PyBuffer buf = obj.GetBuffer(PyBUF.SIMPLE);
                     CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
@@ -52,8 +52,7 @@ namespace NumSharp.Interop
                 {
                     // Linearize through CPython (correct for every stride pattern incl. suboffsets),
                     // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
-                    using PyObject tobytes = mv.GetAttr(InteropRuntime.NameTobytes);
-                    using PyObject bytesObj = tobytes.Invoke(InteropRuntime.StrC);
+                    using PyObject bytesObj = mv.tobytes("C");
                     using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
                     CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
                 }
@@ -87,11 +86,19 @@ namespace NumSharp.Interop
         /// </summary>
         /// <param name="obj">The exporter to view.</param>
         /// <param name="allowReadonly">
-        ///     Accept read-only sources (<c>bytes</c>, read-only numpy arrays, ...) and return a view that
-        ///     NumSharp cannot mark immutable — the caller promises not to write through it. Default
-        ///     <c>false</c>: read-only sources throw with guidance instead of risking corruption of
-        ///     immutable Python objects.
+        ///     Accept read-only sources (<c>bytes</c>, read-only numpy arrays, ...) and return a
+        ///     NON-WRITEABLE view (<see cref="Shape.IsWriteable"/> is <c>false</c>; guarded write paths
+        ///     raise NumPy's "assignment destination is read-only") — exactly how numpy marks arrays
+        ///     over read-only buffers <c>writeable=False</c>. Default <c>false</c>: read-only sources
+        ///     throw with guidance instead.
         /// </param>
+        /// <remarks>
+        ///     The returned array does NOT own its data (its storage reports view semantics, like
+        ///     numpy's <c>flags.owndata == False</c> for foreign buffers): a size-changing
+        ///     <see cref="NDArray.resize(Shape, bool)"/> refuses with numpy's "cannot resize this
+        ///     array: it does not own its data" instead of silently reallocating away from the
+        ///     shared Python memory, and <c>np.require(..., "O")</c> produces an owning copy.
+        /// </remarks>
         public static unsafe NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
@@ -114,7 +121,7 @@ namespace NumSharp.Interop
                         return ViewViaArrayInterface(obj, allowReadonly);
                     }
 
-                    if (!GetBool(mv, InteropRuntime.NameCContiguous))
+                    if (!mv.c_contiguous)
                     {
                         if (obj.HasAttr("__array_interface__"))
                             return ViewViaArrayInterface(obj, allowReadonly);
@@ -122,11 +129,11 @@ namespace NumSharp.Interop
                             "buffer is not C-contiguous and the exporter is not a numpy array; a zero-copy view is not possible. Use ToNDArray (copy).");
                     }
 
-                    string format = GetStr(mv, InteropRuntime.NameFormat);
-                    long itemsize = GetLong(mv, InteropRuntime.NameItemsize);
+                    string format = mv.format;
+                    long itemsize = mv.itemsize;
                     NPTypeCode tc = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) throws with copy guidance
 
-                    long[] dims = GetLongTuple(mv, InteropRuntime.NameShape);
+                    long[] dims = mv.shape;
                     Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
                     if (shape.Size == 0)
                         return new NDArray(tc, shape, fillZeros: false);
@@ -136,7 +143,7 @@ namespace NumSharp.Interop
                     mv.Dispose();
                     mv = null;
 
-                    PyBuffer buf = AcquireBuffer(obj, allowReadonly);
+                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, out bool readOnly);
                     var lease = new ImportLease(buf, holder: null, bytes: buf.Length);
                     try
                     {
@@ -144,8 +151,19 @@ namespace NumSharp.Interop
                             throw new InvalidOperationException(
                                 $"exporter reported {buf.Length} bytes but shape {shape} x itemsize {itemsize} needs {shape.Size * itemsize}.");
 
+                        // numpy marks arrays over read-only buffers writeable=False; carry the same
+                        // flag so NumSharp's guarded write paths raise "assignment destination is
+                        // read-only" instead of corrupting an immutable Python object. Derived views
+                        // inherit it (Shape.Slice / GetView carry non-writeability through).
+                        if (readOnly)
+                            shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
                         IArraySlice slice = WrapExternal(tc, (void*)buf.Buffer, shape.Size, lease.Release);
-                        var nd = new NDArray(new UnmanagedStorage(slice, shape));
+                        // Alias() so the storage reports VIEW semantics (numpy: flags.owndata == False
+                        // for foreign buffers): ndarray.resize then refuses to reallocate ("cannot
+                        // resize this array: it does not own its data") instead of silently detaching
+                        // the view from Python's memory, and np.require(..., "O") copies.
+                        var nd = new NDArray(new UnmanagedStorage(slice, shape).Alias());
                         InteropRuntime.TrackImport(lease);
                         return nd;
                     }
@@ -169,7 +187,7 @@ namespace NumSharp.Interop
         {
             try
             {
-                return InteropRuntime.BuiltinsMemoryview.Invoke(obj);
+                return builtins.memoryview(obj);
             }
             catch (PythonException e)
             {
@@ -179,20 +197,23 @@ namespace NumSharp.Interop
             }
         }
 
-        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly)
+        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly, out bool readOnly)
         {
             // WRITABLE first: a writable lease is what makes the view's shared MUTATION legal.
             // Read-only exporters (bytes, arr.setflags(write=False), ...) refuse it with BufferError.
             try
             {
-                return obj.GetBuffer(PyBUF.WRITABLE);
+                PyBuffer buf = obj.GetBuffer(PyBUF.WRITABLE);
+                readOnly = false;
+                return buf;
             }
             catch (PythonException e)
             {
                 if (!allowReadonly)
                     throw new InvalidOperationException(
                         "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
-                        "Use ToNDArray (copy), or pass allowReadonly:true if you promise not to write through the view.", e);
+                        "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).", e);
+                readOnly = true;
                 return obj.GetBuffer(PyBUF.SIMPLE);
             }
         }
@@ -206,7 +227,7 @@ namespace NumSharp.Interop
         /// </summary>
         private static unsafe NDArray ViewViaArrayInterface(PyObject obj, bool allowReadonly)
         {
-            using PyObject aiObj = obj.GetAttr(InteropRuntime.NameArrayInterface);
+            using PyObject aiObj = obj.__array_interface__;
             using var ai = new PyDict(aiObj);
 
             string typestr;
@@ -226,7 +247,7 @@ namespace NumSharp.Interop
             if (readOnly && !allowReadonly)
                 throw new InvalidOperationException(
                     "the numpy array is read-only; writing through a NumSharp view would break its immutability contract. " +
-                    "Use ToNDArray (copy), or pass allowReadonly:true if you promise not to write through the view.");
+                    "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
 
             long[] dims;
             using (PyObject s = ai[InteropRuntime.NameShape]) dims = TupleToLongs(s);
@@ -279,6 +300,13 @@ namespace NumSharp.Interop
                 shape = new Shape(dims, elemStrides, offset: -minOffset, bufferSize: spanElements);
             }
 
+            // The interface's data tuple is (pointer, readonly): numpy reports readonly=True for
+            // writeable=False arrays. Mirror it as a non-writeable NumSharp shape so guarded write
+            // paths raise "assignment destination is read-only" (broadcast sources are additionally
+            // non-writeable via their stride-0 BROADCASTED flag either way).
+            if (readOnly)
+                shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
             // Keep the numpy array alive with our OWN strong reference (independent of the caller's
             // PyObject wrapper): a single-element Python list is an unambiguous, public-API container.
             var holder = new PyList();
@@ -291,9 +319,12 @@ namespace NumSharp.Interop
                 // The strided shape's logical size differs from the physical span, so the
                 // validating (slice, shape) ctor cannot be used — build a flat storage over the
                 // span and Alias it with the strided shape, exactly how NumSharp's own slicing
-                // constructs non-contiguous views.
+                // constructs non-contiguous views. The contiguous branch aliases too, purely for
+                // the ownership contract: numpy arrays over foreign buffers have owndata == False,
+                // and it is view semantics that make ndarray.resize refuse to reallocate away from
+                // the shared Python memory.
                 UnmanagedStorage storage = byteStrides is null
-                    ? new UnmanagedStorage(slice, shape)
+                    ? new UnmanagedStorage(slice, shape).Alias()
                     : new UnmanagedStorage(slice, Shape.Vector(spanElements)).Alias(shape);
                 var nd = new NDArray(storage);
                 InteropRuntime.TrackImport(lease);

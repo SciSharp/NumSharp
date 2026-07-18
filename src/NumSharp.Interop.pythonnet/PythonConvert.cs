@@ -45,7 +45,9 @@ namespace NumSharp.Interop
     ///     outer <see cref="Py.GIL"/> is fine). The Python engine must be initialized first; conversions
     ///     made in one engine session must not be used after <see cref="PythonEngine.Shutdown"/> (import
     ///     views lose their memory with the interpreter — the shutdown handler releases their leases
-    ///     crash-free; exported buffers are released by Python's own finalization pass).</para>
+    ///     crash-free; exported buffers still referenced by Python are swept right after the engine
+    ///     finishes dying — pythonnet's Shutdown runs no Python atexit pass, so their
+    ///     <c>weakref.finalize</c> callbacks cannot fire then).</para>
     ///
     ///     <para><b>Note on <see cref="PythonEngine.Shutdown"/> itself:</b> on .NET 8+ pythonnet 3.0.x's
     ///     shutdown crashes in its own state stashing (BinaryFormatter was removed from the runtime).

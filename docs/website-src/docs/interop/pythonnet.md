@@ -84,7 +84,7 @@ PyObject m = nd.ToMemoryView();     // raw-bytes memoryview
 
 NDArray  b = py.ToNDArray();        // copy
 NDArray  v = py.AsNDArray();        // zero-copy view
-NDArray  r = py.AsNDArray(allowReadonly: true);   // view of a read-only exporter (don't write!)
+NDArray  r = py.AsNDArray(allowReadonly: true);   // NON-WRITEABLE view of a read-only exporter
 ```
 
 ---
@@ -108,7 +108,9 @@ Imports are symmetric. `ToNDArrayView` has two zero-copy routes:
 - **C-contiguous PEP 3118 exporters** (any object): the buffer is acquired with `PyBUF.WRITABLE`, which pins the exporter — resizable objects like `bytearray` are locked against reallocation for the lease's lifetime (`ba.append(...)` raises `BufferError` while a view lives).
 - **Non-contiguous numpy arrays** (slices, transposes, Fortran order, broadcasts): imported through `__array_interface__` as true strided NumSharp views with identical layout. Broadcast sources become read-only NumSharp views; the numpy array is kept alive by a strong reference, so numpy's own `resize(refcheck=True)` refuses to reallocate under the view.
 
-Read-only sources (`bytes`, arrays with `writeable=False`) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in (and don't write), or use `ToNDArray` to copy.
+Read-only sources (`bytes`, arrays with `writeable=False`) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (numpy's `writeable=False`, carried as `Shape.IsWriteable == false`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
+
+Import views also **do not own their data** — like `np.frombuffer(...)`, whose `flags.owndata` is `False`: a size-changing `ndarray.resize` refuses with NumPy's `cannot resize this array: it does not own its data` instead of silently reallocating away from the shared Python memory, and `np.require(..., "O")` produces an owning copy.
 
 ---
 
@@ -116,7 +118,7 @@ Read-only sources (`bytes`, arrays with `writeable=False`) are **refused** for v
 
 This is the part that makes the bridge production-grade. The rules:
 
-**Exports** (`ToNumpy`, `ToMemoryView`) take their own atomic reference on the NumSharp buffer, so the memory survives even if every C# reference — including the returned `PyObject` wrapper — is disposed or garbage-collected. Release is owned by Python: a `weakref.finalize` on the exported array's *base* buffer object (which every derived numpy view — `arr[1:]`, `arr.T`, `np.asarray(arr)` — chains to) fires when the **last Python-side view** dies, or at interpreter exit. While exported, `ndarray.resize(refcheck: true)` on the source refuses to reallocate — the same guard NumPy applies to referenced arrays.
+**Exports** (`ToNumpy`, `ToMemoryView`) take their own atomic reference on the NumSharp buffer, so the memory survives even if every C# reference — including the returned `PyObject` wrapper — is disposed or garbage-collected. Release is owned by Python: a `weakref.finalize` on the exported array's *base* buffer object (which every derived numpy view — `arr[1:]`, `arr.T`, `np.asarray(arr)` — chains to) fires when the **last Python-side view** dies. If the engine shuts down while Python still holds views, the pin is swept right after `PythonEngine.Shutdown()` completes — pythonnet runs no Python atexit pass, so finalize callbacks cannot fire during shutdown (the sweep waits until the interpreter is provably gone, so it can never race Python reads). While exported, `ndarray.resize(refcheck: true)` on the source refuses to reallocate — the same guard NumPy applies to referenced arrays.
 
 **Imports** (`ToNDArrayView`) lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the **last NumSharp view over the memory** — including derived slices like `nd["2:"]` — is disposed or collected. Explicitly disposing the original `NDArray` while a derived slice lives does *not* free the buffer; the refcount decides, not disposal order. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread).
 
@@ -202,7 +204,7 @@ numpy `ndarray` subclasses (`matrix`, `memmap`, user subclasses) decode via an `
 ## Engine Lifecycle
 
 - One engine per process: initialize once; CPython + numpy do not support re-initialization after `Py_Finalize`.
-- **Import views die with the interpreter.** `PythonEngine.Shutdown()` runs the package's shutdown handler first, which releases every outstanding lease crash-free — but the `NDArray`s over that memory must not be touched afterwards. Exported buffers are released by Python's own finalization pass (worst case they leak safely — never a use-after-free).
+- **Import views die with the interpreter.** `PythonEngine.Shutdown()` runs the package's shutdown handler first, which releases every outstanding lease crash-free — but the `NDArray`s over that memory must not be touched afterwards (disposing them stays safe). Exported buffers still referenced by Python are swept right after shutdown completes — never during teardown, never a use-after-free, and no leak survives the engine.
 - On .NET 8+, pythonnet 3.0.x's own `Shutdown` crashes in its BinaryFormatter state-stashing (removed from the runtime). Opt out first:
 
 ```csharp

@@ -22,8 +22,9 @@ namespace NumSharp.Interop
         ///     <c>false</c> (default): <c>PyObject.As&lt;NDArray&gt;()</c> copies
         ///     (<see cref="PythonConvert.ToNDArray"/> — safe, owns its memory).
         ///     <c>true</c>: it produces zero-copy views (<see cref="PythonConvert.ToNDArrayView"/> with
-        ///     <c>allowReadonly:true</c> — shared mutation and shared lifetime; do not write through views
-        ///     of read-only sources).
+        ///     <c>allowReadonly:true</c> — shared mutation and shared lifetime; read-only sources decode
+        ///     as NON-WRITEABLE views, so guarded writes through them throw instead of corrupting
+        ///     immutable Python objects).
         /// </summary>
         public bool DecodeAsView { get; init; }
 

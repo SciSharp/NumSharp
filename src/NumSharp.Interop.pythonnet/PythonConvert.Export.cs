@@ -24,9 +24,12 @@ namespace NumSharp.Interop
         ///     <see cref="PyObject"/> wrapper — are disposed or garbage-collected. The reference is
         ///     released by a <c>weakref.finalize</c> on the exported array's base buffer object when the
         ///     LAST Python-side view over it (including derived views like <c>arr[1:]</c>, <c>arr.T</c>)
-        ///     is collected, or at interpreter exit. While exported, <c>ndarray.resize(refcheck=True)</c>
-        ///     on the source refuses to reallocate — the same protection NumPy applies to exported
-        ///     buffers.</para>
+        ///     is collected; if the engine shuts down while Python still holds views, the pin is swept
+        ///     right after <see cref="PythonEngine.Shutdown"/> completes (pythonnet runs no Python atexit
+        ///     pass, so the finalize callback cannot fire during shutdown — see
+        ///     <see cref="InteropRuntime"/>'s orphaned-exports sweep). While exported,
+        ///     <c>ndarray.resize(refcheck=True)</c> on the source refuses to reallocate — the same
+        ///     protection NumPy applies to exported buffers.</para>
         /// </summary>
         public static unsafe PyObject ToNumpy(NDArray source)
         {
@@ -43,7 +46,7 @@ namespace NumSharp.Interop
                 {
                     // Nothing to share — an empty array of the right dtype/shape IS the view.
                     using var emptyDims = MakeTuple(shape.Dimensions);
-                    return InteropRuntime.NpEmpty.Invoke(emptyDims, InteropRuntime.DtypeString(source.typecode));
+                    return np.empty(emptyDims, source.typecode);
                 }
 
                 // Pin the buffer for the whole build; on success ownership of this reference
@@ -106,7 +109,7 @@ namespace NumSharp.Interop
                 if (shape.Size == 0)
                 {
                     using var emptyDims = MakeTuple(shape.Dimensions);
-                    return InteropRuntime.NpEmpty.Invoke(emptyDims, InteropRuntime.DtypeString(source.typecode));
+                    return np.empty(emptyDims, source.typecode);
                 }
 
                 // Guard the buffer against a concurrent Dispose for the duration of the copy only.
@@ -119,7 +122,7 @@ namespace NumSharp.Interop
                     using PyObject view = BuildSharedView(source, slice, out PyObject baseBuffer);
                     using (baseBuffer)
                     {
-                        return InteropRuntime.NpArray.Invoke(view);   // np.array copies by default
+                        return np.array(view);   // np.array copies by default
                     }
                 }
                 finally
@@ -163,11 +166,10 @@ namespace NumSharp.Interop
                 try
                 {
                     long nbytes = shape.Size * source.dtypesize;
-                    using PyObject ctBuf = MakeCtypesWindow((long)slice.Address, nbytes);
+                    using PyObject ctBuf = ctypes.c_char.mul(nbytes).from_address((long)slice.Address);
 
-                    using (PyObject raw = InteropRuntime.BuiltinsMemoryview.Invoke(ctBuf))
-                    using (PyObject cast = raw.GetAttr(InteropRuntime.NameCast))
-                        mv = cast.Invoke(InteropRuntime.StrB);   // the memoryview holds its own exporter ref on ctBuf
+                    using (PyObject raw = builtins.memoryview(ctBuf))
+                        mv = raw.cast("B");   // the memoryview holds its own exporter ref on ctBuf
 
                     keeper = new ExportKeeper(source, slice);
                     RootOnPythonObject(ctBuf, keeper);
@@ -218,8 +220,8 @@ namespace NumSharp.Interop
             PyObject ctBuf = null, flat = null, arr = null;
             try
             {
-                ctBuf = MakeCtypesWindow(dataPtr, tailBytes);
-                flat = InteropRuntime.NpFrombuffer.Invoke(ctBuf, InteropRuntime.DtypeString(source.typecode));
+                ctBuf = ctypes.c_char.mul(tailBytes).from_address(dataPtr);
+                flat = np.frombuffer(ctBuf, source.typecode);
 
                 // The trivial paths require the view to cover its backing window EXACTLY: a contiguous
                 // offset-0 slice like ring["0:16"] keeps the full base block as its InternalArray
@@ -234,8 +236,7 @@ namespace NumSharp.Interop
                 else if (wholeWindow && dims.Length > 1)
                 {
                     using var dimsTuple = MakeTuple(dims);
-                    using PyObject reshape = flat.GetAttr(InteropRuntime.NameReshape);
-                    arr = reshape.Invoke(dimsTuple);
+                    arr = flat.reshape(dimsTuple);
                 }
                 else
                 {
@@ -245,16 +246,11 @@ namespace NumSharp.Interop
                         byteStrides[i] = elemStrides[i] * itemsize;
                     using var dimsTuple = MakeTuple(dims);
                     using var stridesTuple = MakeTuple(byteStrides);
-                    arr = InteropRuntime.NpAsStrided.Invoke(flat, dimsTuple, stridesTuple);
+                    arr = np.lib.stride_tricks.as_strided(flat, dimsTuple, stridesTuple);
                 }
 
                 if (!shape.IsWriteable)
-                {
-                    // broadcast views are read-only, as in NumSharp/NumPy.
-                    // setflags(write=None, align=None, uic=None) — the first positional IS write.
-                    using PyObject setflags = arr.GetAttr(InteropRuntime.NameSetflags);
-                    using PyObject none = setflags.Invoke(InteropRuntime.FalseLiteral);
-                }
+                    arr.setflags(write: false);   // broadcast views are read-only, as in NumSharp/NumPy
 
                 baseBuffer = ctBuf;
                 PyObject result = arr;
@@ -271,28 +267,17 @@ namespace NumSharp.Interop
         }
 
         /// <summary>
-        ///     <c>(ctypes.c_char * nbytes).from_address(address)</c> through the cached bound
-        ///     <c>c_char.__mul__</c> — the raw-pointer window every zero-copy export is built over.
-        /// </summary>
-        private static PyObject MakeCtypesWindow(long address, long nbytes)
-        {
-            using var size = new PyInt(nbytes);
-            using PyObject arrayType = InteropRuntime.CCharMul.Invoke(size);
-            using PyObject fromAddress = arrayType.GetAttr(InteropRuntime.NameFromAddress);
-            using var addr = new PyInt(address);
-            return fromAddress.Invoke(addr);
-        }
-
-        /// <summary>
         ///     Register <c>weakref.finalize(pythonObject, keeper.Release)</c>: CPython keeps the finalize
-        ///     object alive in a global registry until either the target is collected or the interpreter
-        ///     exits (an atexit pass is guaranteed) — in both cases the marshaled delegate runs under the
-        ///     GIL and releases the NumSharp buffer reference. CLR-only work, safe at any engine phase.
+        ///     object alive in a global registry until the target is collected, then runs the marshaled
+        ///     delegate under the GIL — CLR-only work, safe at any engine phase. CPython's documented
+        ///     at-exit pass never happens under embedding (pythonnet's <c>Shutdown</c> runs no atexit —
+        ///     probed), which is exactly why <see cref="InteropRuntime"/> sweeps still-registered keepers
+        ///     after the engine dies.
         /// </summary>
         private static void RootOnPythonObject(PyObject target, ExportKeeper keeper)
         {
             using PyObject callback = ((Action)keeper.Release).ToPython();
-            using PyObject finalizer = InteropRuntime.WeakrefFinalize.Invoke(target, callback);
+            using PyObject finalizer = weakref.finalize(target, callback);
         }
 
         private static PyTuple MakeTuple(long[] values)
