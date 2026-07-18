@@ -59,6 +59,13 @@ namespace NumSharp.Interop
                 PythonEngine.AddShutdownHandler(OnEngineShutdown);
                 Volatile.Write(ref _engineTorndown, 0);
                 Volatile.Write(ref _sessionLive, 1);
+
+                // A previous session may have died while Python still held exported buffers; those
+                // pins belong to an interpreter that no longer exists (see the orphaned-exports
+                // region). If the deferred sweep has not caught them yet — e.g. an immediate
+                // Shutdown -> Initialize cycle raced its poll — release them before this session
+                // starts so the leak cannot outlive the session boundary.
+                ReleaseOrphanedExports();
             }
         }
 
@@ -98,7 +105,7 @@ namespace NumSharp.Interop
 
         private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsStrided;
         private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
-        private static PyObject _falseLiteral, _strC, _strB;
+        private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
                                 _nameFormat, _nameItemsize, _nameShape, _nameCContiguous,
                                 _nameArrayInterface, _nameTypestr, _nameData, _nameStrides;
@@ -137,6 +144,9 @@ namespace NumSharp.Interop
 
         /// <summary>Cached <c>builtins.memoryview</c>. Call under the GIL.</summary>
         internal static PyObject BuiltinsMemoryview => GetCached(ref _builtinsMemoryview, static () => Builtins.GetAttr("memoryview"));
+
+        /// <summary>Cached Python <c>True</c> (counterpart of <see cref="FalseLiteral"/> for <c>setflags</c>).</summary>
+        internal static PyObject TrueLiteral => GetCached(ref _trueLiteral, static () => true.ToPython());
 
         /// <summary>Cached Python <c>False</c> (first positional of <c>ndarray.setflags</c> is <c>write</c>).</summary>
         internal static PyObject FalseLiteral => GetCached(ref _falseLiteral, static () => false.ToPython());
@@ -202,6 +212,7 @@ namespace NumSharp.Interop
             DisposeModule(ref _ctypesCCharMul);
             DisposeModule(ref _weakrefFinalize);
             DisposeModule(ref _builtinsMemoryview);
+            DisposeModule(ref _trueLiteral);
             DisposeModule(ref _falseLiteral);
             DisposeModule(ref _strC);
             DisposeModule(ref _strB);
@@ -256,6 +267,76 @@ namespace NumSharp.Interop
         {
             if (_imports.TryRemove(lease, out _))
                 Interlocked.Decrement(ref _liveImports);
+        }
+
+        // ---- orphaned exports (engine death) ----------------------------------------------------
+        //
+        // Export pins are normally released by a Python-side weakref.finalize when the last view
+        // dies. pythonnet's PythonEngine.Shutdown, however, performs NO Python atexit pass (probed
+        // on 3.0.x: neither atexit.register callbacks nor weakref.finalize's guaranteed exit pass
+        // execute), so the finalize callbacks of exports STILL referenced by Python when Shutdown
+        // begins can never fire — without a sweep, each such pin leaks its NumSharp buffer for the
+        // rest of the process.
+        //
+        // The shutdown handler therefore SNAPSHOTS the live keepers, and this region releases them
+        // only once the engine has provably finished dying (PythonEngine.IsInitialized went false,
+        // or a new session was wired — either proves the old interpreter, and every Python view it
+        // held, is gone). Releasing DURING teardown would be premature: interpreter code that runs
+        // while dying (module teardown, __del__ during a future pythonnet's real Py_Finalize GC
+        // pass) may still read exported buffers. Release itself is CLR-only and idempotent, so a
+        // finalize callback that somehow DID fire earlier makes the sweep a harmless no-op.
+
+        private static readonly List<ExportKeeper> _orphanedExports = new();
+
+        /// <summary>Snapshot every live export keeper for the post-shutdown sweep. Called by the
+        /// shutdown handler under GIL+gate; the dying interpreter still owns views of them HERE.</summary>
+        private static void CaptureOrphanedExports()
+        {
+            lock (_orphanedExports)
+            {
+                foreach (var keeper in _exports.Keys)
+                    _orphanedExports.Add(keeper);
+            }
+        }
+
+        /// <summary>
+        ///     Background waiter scheduled by the shutdown handler: polls (with backoff) until the
+        ///     engine has fully finished shutting down — <see cref="PythonEngine.IsInitialized"/>
+        ///     flips false at the very END of <see cref="PythonEngine.Shutdown"/> — or a new session
+        ///     was wired (an Initialize can only follow a completed Shutdown). Both prove no Python
+        ///     code can ever read the exported buffers again, making the release safe.
+        /// </summary>
+        private static void SweepOrphanedExportsWhenEngineDead()
+        {
+            int delay = 1;
+            while (PythonEngine.IsInitialized && Volatile.Read(ref _sessionLive) == 0)
+            {
+                Thread.Sleep(delay);
+                if (delay < 50)
+                    delay *= 2;
+            }
+
+            ReleaseOrphanedExports();
+        }
+
+        /// <summary>
+        ///     Drop the ARC pins of all snapshot keepers (CLR-only; frees each buffer if the pin was
+        ///     its last reference). Idempotent and thread-safe: the poller and a re-initializing
+        ///     session may both call it; <see cref="ExportKeeper.Release"/> is single-shot per keeper.
+        /// </summary>
+        internal static void ReleaseOrphanedExports()
+        {
+            ExportKeeper[] orphans;
+            lock (_orphanedExports)
+            {
+                if (_orphanedExports.Count == 0)
+                    return;
+                orphans = _orphanedExports.ToArray();
+                _orphanedExports.Clear();
+            }
+
+            foreach (var keeper in orphans)
+                keeper.Release();
         }
 
         // ---- deferred Python-side disposal ------------------------------------------------------
@@ -334,10 +415,14 @@ namespace NumSharp.Interop
         ///     memory are invalid after engine shutdown (the interpreter that owned the memory is gone);
         ///     that is documented on <see cref="PythonConvert.ToNDArrayView(PyObject, bool)"/>.
         ///
-        ///     Export keepers are NOT force-released here: Python <c>atexit</c>/GC still runs during
-        ///     <c>Py_Finalize</c> and may touch exported arrays; their <c>weakref.finalize</c> callbacks
-        ///     fire during finalization and release the NumSharp buffer refs then (CLR-only work, safe
-        ///     at any point). A callback that never fires leaks the buffer — safe by construction.
+        ///     Export keepers are NOT released here — but not for the reason one might hope. Their
+        ///     <c>weakref.finalize</c> callbacks will never run: pythonnet's <c>Shutdown</c> performs
+        ///     no Python atexit pass at all (probed on 3.0.x — neither <c>atexit.register</c> callbacks
+        ///     nor <c>weakref.finalize</c>'s guaranteed exit pass execute), so every export still
+        ///     referenced by Python would simply leak. Releasing them HERE is not safe either: the
+        ///     interpreter is still alive during the handler and may yet read exported memory while it
+        ///     dies. The resolution is the orphaned-exports region above: snapshot now, release the
+        ///     pins as soon as the engine is provably gone.
         /// </summary>
         private static void OnEngineShutdown()
         {
@@ -352,6 +437,8 @@ namespace NumSharp.Interop
                 foreach (var lease in _imports.Keys)
                     lease.ForceReleaseUnderGil();
 
+                CaptureOrphanedExports();
+
                 DisposeSessionCache();
                 DisposeModule(ref _numpy);
                 DisposeModule(ref _ctypes);
@@ -363,6 +450,12 @@ namespace NumSharp.Interop
             // so a new engine session must register ours again.
             Volatile.Write(ref CodecRegistered, 0);
             Volatile.Write(ref _sessionLive, 0);
+
+            bool anyOrphans;
+            lock (_orphanedExports)
+                anyOrphans = _orphanedExports.Count > 0;
+            if (anyOrphans)
+                ThreadPool.QueueUserWorkItem(static _ => SweepOrphanedExportsWhenEngineDead());
         }
 
         private static void DisposeModule(ref PyObject cache)
@@ -380,8 +473,10 @@ namespace NumSharp.Interop
     ///     <see cref="NDArray"/> referencing it is disposed or collected. The Python side owns the
     ///     release: a <c>weakref.finalize</c> registered on the deepest base object of the exported
     ///     numpy array (the ctypes buffer every derived numpy view chains to) invokes
-    ///     <see cref="Release"/> when the LAST Python-side view is collected — including at
-    ///     interpreter exit, since <c>weakref.finalize</c> guarantees an atexit pass.</para>
+    ///     <see cref="Release"/> when the LAST Python-side view is collected. CPython's documented
+    ///     at-exit finalize pass does NOT happen under embedding — pythonnet's <c>Shutdown</c> runs
+    ///     no atexit (probed) — so keepers still pinned when the engine dies are swept by
+    ///     <see cref="InteropRuntime"/>'s orphaned-exports path right after shutdown completes.</para>
     ///
     ///     <para><see cref="Release"/> touches only CLR state (no GIL, no Python calls), so it is safe
     ///     from any thread at any point of the engine lifecycle, including during <c>Py_Finalize</c>.</para>

@@ -855,7 +855,7 @@ namespace NumSharp.Backends.Unmanaged
             *(Address + index) = value;
         }
 
-        [MethodImpl(Optimize)]
+        [MethodImpl(OptimizeAndInline)]
         public void Free()
         {
             // Backwards-compatible "force free, ignore refcount" — used by
@@ -1261,6 +1261,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             /// Add a logical reference. Returns false if the buffer is already released.
             /// </summary>
+            [MethodImpl(OptimizeAndInline)]
             public bool TryAddRef()
             {
                 // Non-owning wraps are immortal — refcount is meaningless.
@@ -1278,6 +1279,7 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             /// Drop a logical reference. Frees the buffer when the final reference is released.
             /// </summary>
+            [MethodImpl(OptimizeAndInline)]
             public void Release()
             {
                 if (_type == AllocationType.Wrap) return;
@@ -1304,15 +1306,22 @@ namespace NumSharp.Backends.Unmanaged
             }
 
             /// <summary>Diagnostic: true once the buffer has been freed.</summary>
-            public bool IsReleased => Volatile.Read(ref _freed) != 0;
+            public bool IsReleased
+            {
+                [MethodImpl(OptimizeAndInline)]
+                get => Volatile.Read(ref _freed) != 0;
+            }
 
             /// <summary>
             /// <c>true</c> when at most one logical reference is held (refcount &lt;= 1).
             /// Non-owning wraps are immortal (refcount is meaningless) and report
             /// <c>true</c>. Used by resize's refcheck to detect buffer sharing.
             /// </summary>
-            public bool IsUniquelyReferenced =>
-                _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
+            public bool IsUniquelyReferenced
+            {
+                [MethodImpl(OptimizeAndInline)]
+                get => _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
+            }
 
             /// <summary>
             /// Backwards-compatible "force free" entry point. Maps to the

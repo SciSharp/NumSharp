@@ -55,6 +55,13 @@ namespace NumSharp.Interop.UnitTests
         ///     Full engine shutdown at the end of the run. This is itself part of the proof: the
         ///     interop's shutdown handler must drain every outstanding lease crash-free, and the test
         ///     host must exit cleanly afterwards (a post-shutdown finalizer crash would fail the run).
+        ///
+        ///     <para>When <see cref="ShutdownLeakTests"/> ran, this is also where its assertions live —
+        ///     the only in-process observation point AFTER a real engine death. pythonnet's Shutdown
+        ///     runs no Python atexit pass (probed), so the <c>weakref.finalize</c> callbacks of
+        ///     still-referenced exports never fire here; the interop's own deferred sweep must release
+        ///     those pins once the engine has fully finished dying, and the import force-drain must
+        ///     make later <c>Dispose</c> calls harmless no-ops.</para>
         /// </summary>
         [AssemblyCleanup]
         public static void Stop()
@@ -73,6 +80,52 @@ namespace NumSharp.Interop.UnitTests
             {
                 Trace.WriteLine($"PythonEngine.Shutdown reported: {e.Message}");
             }
+
+            AssertShutdownLifetimeContract();
+        }
+
+        /// <summary>The post-shutdown half of <see cref="ShutdownLeakTests"/>.</summary>
+        private static void AssertShutdownLifetimeContract()
+        {
+            // --- exports: the deferred sweep must release Python-held pins once the engine is gone.
+            if (ShutdownLeakTests.OrphanExportSlice is not null)
+            {
+                bool swept = PollUntil(() => PythonConvert.LiveExports == 0 &&
+                                             ShutdownLeakTests.OrphanExportSlice.IsReleased, 10_000);
+                if (!swept)
+                    throw new AssertFailedException(
+                        $"exports leaked at engine shutdown: LiveExports={PythonConvert.LiveExports}, " +
+                        $"orphan buffer released={ShutdownLeakTests.OrphanExportSlice.IsReleased}. " +
+                        "pythonnet's Shutdown runs no atexit pass, so without the interop's own sweep " +
+                        "these pins are permanent.");
+            }
+
+            // --- imports: the shutdown handler force-drains synchronously, and a later Dispose of the
+            //     still-referenced NDArray must be a harmless no-op (the lease was already claimed).
+            if (ShutdownLeakTests.OrphanImportView is not null)
+            {
+                if (!PollUntil(() => PythonConvert.LiveImports == 0, 5_000))
+                    throw new AssertFailedException(
+                        $"import leases survived engine shutdown: LiveImports={PythonConvert.LiveImports}.");
+
+                ShutdownLeakTests.OrphanImportView.Dispose();   // must not throw, must not double-release
+                if (!ShutdownLeakTests.OrphanImportSlice.IsReleased)
+                    throw new AssertFailedException(
+                        "disposing the last NDArray over a force-drained lease must free the NumSharp block.");
+            }
+        }
+
+        private static bool PollUntil(Func<bool> condition, int timeoutMs)
+        {
+            var sw = Stopwatch.StartNew();
+            while (!condition())
+            {
+                if (sw.ElapsedMilliseconds > timeoutMs)
+                    return condition();
+                System.Threading.Thread.Sleep(25);
+            }
+
+            return true;
         }
 
         public static void EnsureOrInconclusive()
