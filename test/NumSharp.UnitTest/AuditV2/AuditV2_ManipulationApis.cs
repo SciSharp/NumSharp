@@ -374,9 +374,11 @@ public class AuditV2_ManipulationApis
     // =====================================================================
 
     /// <summary>
-    /// T1.61 — copyto into unwriteable destination throws ArgumentException (NumPy: ValueError).
-    /// FIXED — np.copyto now performs the writeability check itself and throws ArgumentException
-    /// with the canonical "assignment destination is read-only" message.
+    /// T1.61 — copyto into unwriteable destination throws NumSharpException (NumPy: ValueError).
+    /// FIXED — np.copyto routes through the one standard write guard
+    /// (NumSharpException.ThrowIfNotWriteable, NumPy's PyArray_FailUnlessWriteable), so it throws
+    /// the same NumSharpException with the canonical "assignment destination is read-only" message
+    /// as every other write path (indexer setters, guarded views over read-only memmaps/imports).
     /// </summary>
     [TestMethod]
     public void T1_61_Copyto_UnwriteableDst_ThrowsValueErrorEquivalent()
@@ -387,8 +389,8 @@ public class AuditV2_ManipulationApis
         var src = np.array(new double[] { 2.0, 3.0, 4.0, 5.0, 6.0 });
 
         Action act = () => np.copyto(bDst, src);
-        act.Should().Throw<ArgumentException>(
-            "NumPy raises ValueError on write to read-only destination; the .NET equivalent is ArgumentException")
+        act.Should().Throw<NumSharpException>(
+            "NumPy raises ValueError on write to read-only destination; NumSharp's canonical guard raises NumSharpException")
             .WithMessage("*assignment destination is read-only*");
     }
 

@@ -18,8 +18,12 @@ namespace NumSharp
         /// <param name="where">Optional boolean mask broadcast to <paramref name="dst"/>'s shape. Elements of
         ///     <paramref name="src"/> are only written to <paramref name="dst"/> where the mask is <c>true</c>.
         ///     <c>null</c> (default) is equivalent to <c>where=True</c> — every element is copied.</param>
-        /// <exception cref="ArgumentException">If <paramref name="dst"/> is read-only, or <paramref name="casting"/>
-        ///     is not a recognised casting name, or <paramref name="where"/> is not a boolean array.</exception>
+        /// <exception cref="NumSharpException">If <paramref name="dst"/> is read-only (NumPy raises
+        ///     <c>ValueError: assignment destination is read-only</c>; the standard write guard —
+        ///     <see cref="NumSharpException.ThrowIfNotWriteable"/> — is the same one every other
+        ///     write path uses).</exception>
+        /// <exception cref="ArgumentException">If <paramref name="casting"/> is not a recognised casting
+        ///     name, or <paramref name="where"/> is not a boolean array.</exception>
         /// <exception cref="InvalidCastException">If casting from <paramref name="src"/>'s dtype to
         ///     <paramref name="dst"/>'s dtype is not allowed under the chosen rule (NumPy raises
         ///     <c>TypeError</c>).</exception>
@@ -32,10 +36,9 @@ namespace NumSharp
             if (src is null)
                 throw new ArgumentNullException(nameof(src));
 
-            // NumPy raises ValueError on write to a read-only destination — the closest .NET
-            // analogue is ArgumentException so callers can catch the canonical "value error" type.
-            if (!dst.Shape.IsWriteable)
-                throw new ArgumentException("assignment destination is read-only", nameof(dst));
+            // NumPy raises ValueError on write to a read-only destination (PyArray_FailUnlessWriteable);
+            // route through the one standard guard so every write path throws the identical error.
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
             // NumPy raises ValueError for unrecognised casting names.
             NPY_CASTING castingRule = ParseCastingName(casting);
