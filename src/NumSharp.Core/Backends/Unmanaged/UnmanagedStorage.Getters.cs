@@ -392,6 +392,15 @@ namespace NumSharp.Backends
                 return CloneData<T>();
 
             var internalArray = InternalArray;
+            // Contiguity is offset-independent (NumPy-aligned): a contiguous
+            // VIEW may occupy [offset, offset+size) inside a larger buffer —
+            // np.split / np.unstack children are built that way. Narrow to the
+            // logical window (zero-copy, still writes through) so both the
+            // same-type return and the cast below see exactly the view's
+            // elements rather than the whole backing buffer.
+            if (internalArray != null && (Shape.offset != 0 || internalArray.Count != Shape.size))
+                internalArray = internalArray.Slice(Shape.offset, Shape.size);
+
             if (internalArray is ArraySlice<T> ret)
                 return ret;
 

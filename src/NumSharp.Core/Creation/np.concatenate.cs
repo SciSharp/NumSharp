@@ -182,20 +182,24 @@ namespace NumSharp
             }
             else
             {
-                // NumPy-aligned: when every input is F-contiguous, produce an
-                // F-contiguous destination; otherwise default to C. A (1,N)
-                // input that is BOTH C- and F-contig (ambiguous layout) still
-                // counts toward the F-contig vote.
-                bool allF = true;
+                // NumPy-aligned: F-contiguous destination only when every input
+                // is F-contiguous AND NOT every input is also C-contiguous
+                // (PyArray_CreateMultiSortedStridePerm ambiguity resolution:
+                // inputs that are BOTH C- and F-contig, e.g. (N,1)/(1,N) views,
+                // resolve to C order — probed NumPy 2.4.2). Same rule as
+                // np.block's _block_slicing: order = 'F' if F and not C.
+                bool allF = true, allC = true;
                 for (int k = 0; k < workArrays.Length; k++)
                 {
-                    if (!workArrays[k].Shape.IsFContiguous)
-                    {
+                    var sh = workArrays[k].Shape;
+                    if (!sh.IsFContiguous)
                         allF = false;
+                    if (!sh.IsContiguous)
+                        allC = false;
+                    if (!allF && !allC)
                         break;
-                    }
                 }
-                var retShape = allF ? new Shape(firstShape, 'F') : new Shape(firstShape);
+                var retShape = allF && !allC ? new Shape(firstShape, 'F') : new Shape(firstShape);
                 // fillZeros: false — every byte is overwritten below.
                 dst = new NDArray(resultType, retShape, fillZeros: false);
             }
@@ -324,6 +328,19 @@ namespace NumSharp
             long dstRowSize = dst.shape[axis] * innerStride;
             long dstRowBytes = dstRowSize * elemSize;
 
+            // Degenerate-slab specialization: (N,1)-style concats (column_stack
+            // of 1-D inputs) shrink each per-outer slab to a handful of bytes —
+            // the generic loop below would issue outerCount*nsrc dynamic-size
+            // Buffer.MemoryCopy calls (~4.5ns each through Memmove dispatch;
+            // 2M of them for two 1M columns). When every slab is the same tiny
+            // size, an interleave loop with CONSTANT-size stores runs ~10-20x
+            // faster (~0.2ns/copy) because the JIT reduces each copy to a
+            // single fixed-width load/store pair. No setup cost beyond the
+            // O(nsrc) uniformity check, so it applies at every outerCount.
+            if (TryUniformTinySlabInterleave(
+                    dst, sources, axis, innerStride, elemSize, outerCount, dstRowBytes))
+                return true;
+
             byte* dstBase = dst.Storage.Address;
             // Account for sliced/aliased output via Shape.offset (offset is in elements for unmanaged storage).
             long dstOffsetBytes = dst.Shape.Offset * elemSize;
@@ -357,6 +374,90 @@ namespace NumSharp
                         sourceBytesToCopy: bytes);
                     dstWritePos += bytes;
                 }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        ///     Interleave specialization for <see cref="TryDirectMemcpyConcat"/>:
+        ///     when every source contributes the SAME tiny per-outer slab
+        ///     (1/2/4/8/16 bytes — the (N,1) column pattern), copy via
+        ///     constant-size loads/stores instead of dynamic-size
+        ///     <see cref="Buffer.MemoryCopy"/>. The o-outer order keeps dst
+        ///     writes sequential (write-combining friendly).
+        /// </summary>
+        /// <returns>True if the specialization applied and copied everything.</returns>
+        private static unsafe bool TryUniformTinySlabInterleave(
+            NDArray dst, NDArray[] sources, int axis, long innerStride,
+            int elemSize, long outerCount, long dstRowBytes)
+        {
+            int nsrc = sources.Length;
+
+            long slab = sources[0].shape[axis] * innerStride * elemSize;
+            if (slab != 1 && slab != 2 && slab != 4 && slab != 8 && slab != 16)
+                return false;
+            for (int k = 1; k < nsrc; k++)
+                if (sources[k].shape[axis] * innerStride * elemSize != slab)
+                    return false;
+
+            byte* dRow = dst.Storage.Address + dst.Shape.Offset * elemSize;
+            byte** srcPtrs = stackalloc byte*[nsrc];
+            for (int k = 0; k < nsrc; k++)
+                srcPtrs[k] = sources[k].Storage.Address + sources[k].Shape.Offset * elemSize;
+
+            switch (slab)
+            {
+                case 1:
+                    for (long o = 0; o < outerCount; o++)
+                    {
+                        byte* d = dRow + o * dstRowBytes;
+                        for (int k = 0; k < nsrc; k++)
+                            d[k] = srcPtrs[k][o];
+                    }
+
+                    break;
+                case 2:
+                    for (long o = 0; o < outerCount; o++)
+                    {
+                        byte* d = dRow + o * dstRowBytes;
+                        for (int k = 0; k < nsrc; k++)
+                            *(ushort*)(d + k * 2) = *(ushort*)(srcPtrs[k] + o * 2);
+                    }
+
+                    break;
+                case 4:
+                    for (long o = 0; o < outerCount; o++)
+                    {
+                        byte* d = dRow + o * dstRowBytes;
+                        for (int k = 0; k < nsrc; k++)
+                            *(uint*)(d + k * 4) = *(uint*)(srcPtrs[k] + o * 4);
+                    }
+
+                    break;
+                case 8:
+                    for (long o = 0; o < outerCount; o++)
+                    {
+                        byte* d = dRow + o * dstRowBytes;
+                        for (int k = 0; k < nsrc; k++)
+                            *(ulong*)(d + k * 8) = *(ulong*)(srcPtrs[k] + o * 8);
+                    }
+
+                    break;
+                case 16:
+                    for (long o = 0; o < outerCount; o++)
+                    {
+                        byte* d = dRow + o * dstRowBytes;
+                        for (int k = 0; k < nsrc; k++)
+                        {
+                            var s = (ulong*)(srcPtrs[k] + o * 16);
+                            var t = (ulong*)(d + k * 16);
+                            t[0] = s[0];
+                            t[1] = s[1];
+                        }
+                    }
+
+                    break;
             }
 
             return true;
@@ -424,6 +525,22 @@ namespace NumSharp
             {
                 for (int i = axis + 1; i < ndim; i++) outerCount *= dst.shape[i];
                 for (int i = 0; i < axis; i++) innerStride *= dst.shape[i];
+            }
+
+            // Same degenerate-slab guard as TryDirectMemcpyConcat: tiny per-outer
+            // slabs across many rows lose to the general strided-kernel path.
+            if (outerCount >= 1024)
+            {
+                long maxSlabBytes = 0;
+                for (int k = 0; k < sources.Length; k++)
+                {
+                    long sb = sources[k].shape[axis] * innerStride * dstElemSize;
+                    if (sb > maxSlabBytes)
+                        maxSlabBytes = sb;
+                }
+
+                if (maxSlabBytes <= 16)
+                    return false;
             }
 
             long dstRowElems = dst.shape[axis] * innerStride;

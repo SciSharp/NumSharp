@@ -400,6 +400,35 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [TestMethod]
+        public void AmbiguousLayout_BothCF_Inputs_ProduceCOrder()
+        {
+            // NumPy 2.4.2 (PyArray_CreateMultiSortedStridePerm): inputs that are
+            // BOTH C- and F-contiguous — e.g. (N,1) column views — resolve to a
+            // C-ordered result. F is chosen only when all inputs are F-contig
+            // AND not all are C-contig.
+            var t1 = np.arange(3).reshape(1, 3).T;          // (3,1), C&F
+            var t2 = (np.arange(3) + 10).reshape(1, 3).T;   // (3,1), C&F
+            t1.Shape.IsFContiguous.Should().BeTrue("precondition: ambiguous layout");
+            t1.Shape.IsContiguous.Should().BeTrue("precondition: ambiguous layout");
+
+            var r = np.concatenate(new[] { t1, t2 }, 1);
+            r.Shape.IsContiguous.Should().BeTrue();
+            r.Shape.IsFContiguous.Should().BeFalse();
+            r.Data<int>().Should().Equal(0, 10, 1, 11, 2, 12);
+        }
+
+        [TestMethod]
+        public void MixedFOnly_And_AmbiguousInputs_ProduceFOrder()
+        {
+            // all F-contig, not all C-contig -> F result (probed NumPy 2.4.2)
+            var fOnly = np.asfortranarray(np.arange(6).reshape(3, 2));
+            var both = np.zeros((3, 1), np.int32);
+            var r = np.concatenate(new[] { fOnly, both }, 1);
+            r.Shape.IsFContiguous.Should().BeTrue();
+            r.Shape.IsContiguous.Should().BeFalse();
+        }
+
+        [TestMethod]
         public void StridedView_Concat_Works()
         {
             var a = np.arange(12).reshape(3, 4);
