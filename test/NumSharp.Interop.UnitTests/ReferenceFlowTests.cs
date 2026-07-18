@@ -9,6 +9,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -36,7 +37,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void PyObjectRepository_WrapperIsTheOnlyReference_LazyReadsStayValid()
         {
-            int e0 = PythonConvert.LiveExports;
+            int e0 = NDArrayInterop.LiveExports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             Dictionary<string, PyObject> BuildRepository()
@@ -45,7 +46,7 @@ namespace NumSharp.Interop.UnitTests
                 for (int i = 0; i < 5; i++)
                 {
                     var nd = np.arange(6).astype(NPTypeCode.Double) * (i + 1);   // dropped right away
-                    repo[$"series-{i}"] = PythonConvert.ToNumpy(nd);
+                    repo[$"series-{i}"] = NDArrayInterop.ToNumpy(nd);
                 }
 
                 return repo;
@@ -54,7 +55,7 @@ namespace NumSharp.Interop.UnitTests
             var repository = BuildRepository();
             Pump(); Pump(); Pump();   // every source NDArray is now collectable — buffers must survive
 
-            PythonConvert.LiveExports.Should().Be(e0 + 5);
+            NDArrayInterop.LiveExports.Should().Be(e0 + 5);
             for (int i = 0; i < 5; i++)
             {
                 using (Gil())
@@ -71,7 +72,7 @@ namespace NumSharp.Interop.UnitTests
             }
             repository.Clear();
 
-            WaitFor(() => PythonConvert.LiveExports == e0).Should().BeTrue(
+            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue(
                 "disposing the stored wrappers was the last reference chain — everything must drain");
         }
 
@@ -83,7 +84,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void ImportRegistry_LazyKernelAccess_RetirementReleasesStepwise()
         {
-            int i0 = PythonConvert.LiveImports;
+            int i0 = NDArrayInterop.LiveImports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             Dictionary<int, NDArray> BuildRegistry()
@@ -104,7 +105,7 @@ namespace NumSharp.Interop.UnitTests
 
             var registry = BuildRegistry();
             Pump(); Pump();
-            PythonConvert.LiveImports.Should().Be(i0 + 4);
+            NDArrayInterop.LiveImports.Should().Be(i0 + 4);
 
             foreach (int k in new[] { 2, 0, 3, 1 })
                 LazySum(registry, k).Should().BeApproximately(28.0 * (k + 1), 1e-9,
@@ -113,7 +114,7 @@ namespace NumSharp.Interop.UnitTests
             for (int k = 0; k < 4; k++)
             {
                 registry.Remove(k);
-                WaitFor(() => PythonConvert.LiveImports == i0 + 3 - k).Should().BeTrue(
+                WaitFor(() => NDArrayInterop.LiveImports == i0 + 3 - k).Should().BeTrue(
                     $"retiring entry {k} must release exactly its own lease and nothing else");
             }
         }
@@ -126,18 +127,18 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void DroppedWrapper_WithoutDispose_IsReclaimedSafely()
         {
-            int e0 = PythonConvert.LiveExports;
+            int e0 = NDArrayInterop.LiveExports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             void CreateAndDrop()
             {
                 var nd = np.arange(4).astype(NPTypeCode.Double);
-                var wrapper = PythonConvert.ToNumpy(nd);   // never disposed, never bound to a name
+                var wrapper = NDArrayInterop.ToNumpy(nd);   // never disposed, never bound to a name
                 GC.KeepAlive(wrapper);
             }
 
             CreateAndDrop();
-            WaitFor(() => PythonConvert.LiveExports == e0).Should().BeTrue(
+            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue(
                 "an undisposed wrapper must be reclaimed through pythonnet's deferred finalization");
         }
 
@@ -153,7 +154,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void ProducerConsumer_PyObjectsAcrossThreads()
         {
-            int e0 = PythonConvert.LiveExports;
+            int e0 = NDArrayInterop.LiveExports;
             var queue = new BlockingCollection<(PyObject Array, double ExpectedSum)>();
             var failures = new ConcurrentQueue<Exception>();
 
@@ -164,7 +165,7 @@ namespace NumSharp.Interop.UnitTests
                     for (int i = 0; i < 12; i++)
                     {
                         var nd = np.arange(6).astype(NPTypeCode.Double) + i;   // sum = 15 + 6i
-                        queue.Add((PythonConvert.ToNumpy(nd), 15.0 + 6 * i));
+                        queue.Add((NDArrayInterop.ToNumpy(nd), 15.0 + 6 * i));
                     }
                 }
                 catch (Exception e) { failures.Enqueue(e); }
@@ -197,7 +198,7 @@ namespace NumSharp.Interop.UnitTests
             consumer.Join(30_000).Should().BeTrue("consumer must not deadlock");
 
             failures.Should().BeEmpty(string.Join(" | ", failures));
-            WaitFor(() => PythonConvert.LiveExports == e0).Should().BeTrue("all handed-off exports must drain");
+            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue("all handed-off exports must drain");
         }
 
         /// <summary>
@@ -208,7 +209,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void ProducerConsumer_ImportedViewsAcrossThreads()
         {
-            int i0 = PythonConvert.LiveImports;
+            int i0 = NDArrayInterop.LiveImports;
             var queue = new BlockingCollection<(NDArray View, int Tag)>();
             var failures = new ConcurrentQueue<Exception>();
 
@@ -251,7 +252,7 @@ namespace NumSharp.Interop.UnitTests
             consumer.Join(30_000).Should().BeTrue("consumer must not deadlock");
 
             failures.Should().BeEmpty(string.Join(" | ", failures));
-            WaitFor(() => PythonConvert.LiveImports == i0).Should().BeTrue("all handed-off leases must drain");
+            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue("all handed-off leases must drain");
         }
 
         // ------------------------------------------------------------------------------------------
@@ -266,7 +267,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void LazyClosures_CaptureConversions_EvaluateAfterTheirCreatorDied()
         {
-            int e0 = PythonConvert.LiveExports, i0 = PythonConvert.LiveImports;
+            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             List<Func<double>> BuildThunks()
@@ -301,7 +302,7 @@ namespace NumSharp.Interop.UnitTests
 
             EvaluatePhase();
             PyExec("del cl_exp");
-            WaitFor(() => PythonConvert.LiveExports == e0 && PythonConvert.LiveImports == i0)
+            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0)
                 .Should().BeTrue("dropping the thunk list must release the captured conversions");
         }
 
@@ -357,19 +358,19 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void PythonContainer_AndSecondWrapper_EachKeepTheExportAlive()
         {
-            int e0 = PythonConvert.LiveExports;
+            int e0 = NDArrayInterop.LiveExports;
             PyExec("holder = []");
 
             var nd = np.arange(6).astype(NPTypeCode.Double);
             using (Gil())
             {
-                using var p = PythonConvert.ToNumpy(nd);
+                using var p = NDArrayInterop.ToNumpy(nd);
                 Scope.Set("tmp_h", p);
             }
             PyExec("holder.append(tmp_h)\ndel tmp_h");   // wrapper disposed, scope name deleted
             Pump(); Pump();
 
-            PythonConvert.LiveExports.Should().Be(e0 + 1, "the python list is a real reference");
+            NDArrayInterop.LiveExports.Should().Be(e0 + 1, "the python list is a real reference");
             PyFloat("float(holder[0].sum())").Should().BeApproximately(15.0, 1e-9);
 
             // second-wrapper independence
@@ -384,7 +385,7 @@ namespace NumSharp.Interop.UnitTests
             PyBool("still is holder[0]").Should().BeTrue("disposing one wrapper must not invalidate another");
 
             PyExec("holder.clear()\ndel still");
-            WaitFor(() => PythonConvert.LiveExports == e0).Should().BeTrue(
+            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue(
                 "emptying the container releases the last reference");
         }
 
@@ -396,7 +397,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void DisposingTheOriginal_DoesNotFreeUnderADerivedView()
         {
-            int i0 = PythonConvert.LiveImports;
+            int i0 = NDArrayInterop.LiveImports;
             PyExec("pd_src = np.arange(8, dtype='f8')");
 
             [MethodImpl(MethodImplOptions.NoInlining)]
@@ -410,7 +411,7 @@ namespace NumSharp.Interop.UnitTests
                 original.IsDisposed.Should().BeTrue();
 
                 Pump();
-                PythonConvert.LiveImports.Should().Be(i0 + 1,
+                NDArrayInterop.LiveImports.Should().Be(i0 + 1,
                     "the lease must survive the original's explicit disposal while the derived view lives");
 
                 ReadAt<double>(derived, 0).Should().BeApproximately(2.0, 1e-12, "derived data intact after the disposal");
@@ -419,7 +420,7 @@ namespace NumSharp.Interop.UnitTests
             }
 
             Lifecycle();
-            WaitFor(() => PythonConvert.LiveImports == i0).Should().BeTrue(
+            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue(
                 "the derived view's death is what ends the lease");
         }
 
@@ -433,7 +434,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void TransitiveChain_DictEntryAlone_KeepsRootAlive_TeardownCascades()
         {
-            int e0 = PythonConvert.LiveExports, i0 = PythonConvert.LiveImports;
+            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
             PyExec("import weakref\nchain_root = np.arange(5, dtype='f8') * 2\nwr_root = weakref.ref(chain_root)");
 
             [MethodImpl(MethodImplOptions.NoInlining)]
@@ -450,14 +451,14 @@ namespace NumSharp.Interop.UnitTests
             Pump(); Pump();
 
             PyBool("wr_root() is not None").Should().BeTrue("the dict entry must transitively root the original array");
-            PythonConvert.LiveExports.Should().Be(e0 + 1);
-            PythonConvert.LiveImports.Should().Be(i0 + 1, "the keeper holds the C# view alive, which holds the lease");
+            NDArrayInterop.LiveExports.Should().Be(e0 + 1);
+            NDArrayInterop.LiveImports.Should().Be(i0 + 1, "the keeper holds the C# view alive, which holds the lease");
             PyFloat("float(store['d'].sum())").Should().BeApproximately(20.0, 1e-9, "lazy access straight through the chain");
             PyExec("store['d'][0] = -8.0");
             PyBool("wr_root() is not None").Should().BeTrue();
 
             PyExec("store.clear()");
-            WaitFor(() => PythonConvert.LiveExports == e0 && PythonConvert.LiveImports == i0, 15_000)
+            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0, 15_000)
                 .Should().BeTrue("clearing the dict must cascade: keeper releases -> view collects -> lease releases");
             Pump();
             PyBool("wr_root() is None").Should().BeTrue("the root array itself must be freed at the end of the cascade");
@@ -471,7 +472,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void HeldGil_DisposeAndConvert_NeverBlocks()
         {
-            int e0 = PythonConvert.LiveExports, i0 = PythonConvert.LiveImports;
+            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
             PyExec("g_src = np.arange(4, dtype='f8')");
             var view = ViewOf("g_src");
 
@@ -480,14 +481,14 @@ namespace NumSharp.Interop.UnitTests
             {
                 view.Dispose();   // enqueue-only: must not wait for the drain gate or the GIL
 
-                using var copy = PythonConvert.ToNumpyCopy(np.arange(3));       // runs the inline drain under our GIL
-                using var export = PythonConvert.ToNumpy(np.arange(3));         // full rooting cycle under our GIL
+                using var copy = NDArrayInterop.ToNumpyCopy(np.arange(3));       // runs the inline drain under our GIL
+                using var export = NDArrayInterop.ToNumpy(np.arange(3));         // full rooting cycle under our GIL
                 using var import = Scope.Eval("np.arange(3, dtype='i8')");
-                PythonConvert.ToNDArray(import).size.Should().Be(3);
+                NDArrayInterop.ToNDArray(import).size.Should().Be(3);
             }
 
             sw.ElapsedMilliseconds.Should().BeLessThan(10_000, "no path may block against the held GIL");
-            WaitFor(() => PythonConvert.LiveExports == e0 && PythonConvert.LiveImports == i0)
+            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0)
                 .Should().BeTrue("the deferred disposal must drain once the GIL owner moved on");
         }
     }

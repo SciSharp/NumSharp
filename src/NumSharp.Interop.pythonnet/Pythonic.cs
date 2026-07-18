@@ -1,7 +1,6 @@
-using System;
 using Python.Runtime;
 
-namespace NumSharp.Interop
+namespace NumSharp.Interop.PythonNet
 {
     // =====================================================================================
     //  Python-shaped access to the session-cached interop callables.
@@ -20,7 +19,7 @@ namespace NumSharp.Interop
     //      using var b = mv.tobytes("C");                                # mv.tobytes('C')
     //
     //  This is a veneer, not a second cache: every member resolves through
-    //  <see cref="InteropRuntime"/>'s per-session cache (pre-resolved callables, interned
+    //  <see cref="PythonInteropRuntime"/>'s per-session cache (pre-resolved callables, interned
     //  attribute-name PyStrings, cached literals) and calls Invoke directly — no dynamic,
     //  no per-call attribute walks, no extra dispatch layers beyond an inlineable static.
     //
@@ -32,21 +31,21 @@ namespace NumSharp.Interop
 
     /// <summary>
     ///     <c>import numpy as np</c> — the numpy calls the interop makes, as they read in Python.
-    ///     Session-cached callables via <see cref="InteropRuntime"/>; call under the GIL.
+    ///     Session-cached callables via <see cref="PythonInteropRuntime"/>; call under the GIL.
     /// </summary>
     internal static class np
     {
         /// <summary><c>np.empty(shape, dtype)</c> — dtype routed through the cached per-dtype PyString.</summary>
         internal static PyObject empty(PyObject shape, NPTypeCode dtype)
-            => InteropRuntime.NpEmpty.Invoke(shape, InteropRuntime.DtypeString(dtype));
+            => PythonInteropRuntime.NpEmpty.Invoke(shape, PythonInteropRuntime.DtypeString(dtype));
 
         /// <summary><c>np.frombuffer(buffer, dtype)</c> — dtype routed through the cached per-dtype PyString.</summary>
         internal static PyObject frombuffer(PyObject buffer, NPTypeCode dtype)
-            => InteropRuntime.NpFrombuffer.Invoke(buffer, InteropRuntime.DtypeString(dtype));
+            => PythonInteropRuntime.NpFrombuffer.Invoke(buffer, PythonInteropRuntime.DtypeString(dtype));
 
         /// <summary><c>np.array(obj)</c> — copies by default, exactly the property the copy path relies on.</summary>
         internal static PyObject array(PyObject obj)
-            => InteropRuntime.NpArray.Invoke(obj);
+            => PythonInteropRuntime.NpArray.Invoke(obj);
 
         /// <summary><c>np.lib</c> submodule namespace.</summary>
         internal static class lib
@@ -56,7 +55,7 @@ namespace NumSharp.Interop
             {
                 /// <summary><c>np.lib.stride_tricks.as_strided(x, shape, strides)</c> — no bounds checking, by design.</summary>
                 internal static PyObject as_strided(PyObject x, PyObject shape, PyObject strides)
-                    => InteropRuntime.NpAsStrided.Invoke(x, shape, strides);
+                    => PythonInteropRuntime.NpAsStrided.Invoke(x, shape, strides);
             }
         }
     }
@@ -78,7 +77,7 @@ namespace NumSharp.Interop
             internal static SizedArray mul(long n)
             {
                 using var count = new PyInt(n);
-                return new SizedArray(InteropRuntime.CCharMul.Invoke(count));
+                return new SizedArray(PythonInteropRuntime.CCharMul.Invoke(count));
             }
         }
 
@@ -101,7 +100,7 @@ namespace NumSharp.Interop
             {
                 try
                 {
-                    using PyObject fromAddress = _type.GetAttr(InteropRuntime.NameFromAddress);
+                    using PyObject fromAddress = _type.GetAttr(PythonInteropRuntime.NameFromAddress);
                     using var addr = new PyInt(address);
                     return fromAddress.Invoke(addr);
                 }
@@ -123,7 +122,7 @@ namespace NumSharp.Interop
         ///     the target dies (or interpreter finalization), then calls <paramref name="func"/> once.
         /// </summary>
         internal static PyObject finalize(PyObject obj, PyObject func)
-            => InteropRuntime.WeakrefFinalize.Invoke(obj, func);
+            => PythonInteropRuntime.WeakrefFinalize.Invoke(obj, func);
     }
 
     /// <summary>
@@ -134,7 +133,7 @@ namespace NumSharp.Interop
         /// <summary><c>memoryview(obj)</c> — raises <c>TypeError</c> for non-exporters (surfaced as
         /// <see cref="PythonException"/>, translated by the import path).</summary>
         internal static PyObject memoryview(PyObject obj)
-            => InteropRuntime.BuiltinsMemoryview.Invoke(obj);
+            => PythonInteropRuntime.BuiltinsMemoryview.Invoke(obj);
     }
 
     /// <summary>
@@ -150,40 +149,40 @@ namespace NumSharp.Interop
         extension(PyObject obj)
         {
             /// <summary><c>memoryview.format</c> — the PEP 3118 struct format string.</summary>
-            internal string format => PythonConvert.GetStr(obj, InteropRuntime.NameFormat);
+            internal string format => NDArrayInterop.GetStr(obj, PythonInteropRuntime.NameFormat);
 
             /// <summary><c>memoryview.itemsize</c>.</summary>
-            internal long itemsize => PythonConvert.GetLong(obj, InteropRuntime.NameItemsize);
+            internal long itemsize => NDArrayInterop.GetLong(obj, PythonInteropRuntime.NameItemsize);
 
             /// <summary><c>memoryview.shape</c> as element counts (<c>null</c> when Python reports <c>None</c>).</summary>
-            internal long[] shape => PythonConvert.GetLongTuple(obj, InteropRuntime.NameShape);
+            internal long[] shape => NDArrayInterop.GetLongTuple(obj, PythonInteropRuntime.NameShape);
 
             /// <summary><c>memoryview.c_contiguous</c>.</summary>
-            internal bool c_contiguous => PythonConvert.GetBool(obj, InteropRuntime.NameCContiguous);
+            internal bool c_contiguous => NDArrayInterop.GetBool(obj, PythonInteropRuntime.NameCContiguous);
 
             /// <summary><c>obj.__array_interface__</c> — numpy's array-interface dict (v3).</summary>
-            internal PyObject __array_interface__ => obj.GetAttr(InteropRuntime.NameArrayInterface);
+            internal PyObject __array_interface__ => obj.GetAttr(PythonInteropRuntime.NameArrayInterface);
 
             /// <summary><c>ndarray.reshape(shape)</c>.</summary>
             internal PyObject reshape(PyObject shape)
             {
-                using PyObject method = obj.GetAttr(InteropRuntime.NameReshape);
+                using PyObject method = obj.GetAttr(PythonInteropRuntime.NameReshape);
                 return method.Invoke(shape);
             }
 
             /// <summary><c>ndarray.setflags(write=...)</c> — the first positional IS <c>write</c>.</summary>
             internal void setflags(bool write)
             {
-                using PyObject method = obj.GetAttr(InteropRuntime.NameSetflags);
-                using PyObject none = method.Invoke(write ? InteropRuntime.TrueLiteral : InteropRuntime.FalseLiteral);
+                using PyObject method = obj.GetAttr(PythonInteropRuntime.NameSetflags);
+                using PyObject none = method.Invoke(write ? PythonInteropRuntime.TrueLiteral : PythonInteropRuntime.FalseLiteral);
             }
 
             /// <summary><c>memoryview.cast(format)</c> — <c>"B"</c> routes through the cached literal.</summary>
             internal PyObject cast(string format)
             {
-                using PyObject method = obj.GetAttr(InteropRuntime.NameCast);
+                using PyObject method = obj.GetAttr(PythonInteropRuntime.NameCast);
                 if (format == "B")
-                    return method.Invoke(InteropRuntime.StrB);
+                    return method.Invoke(PythonInteropRuntime.StrB);
                 using var fmt = new PyString(format);
                 return method.Invoke(fmt);
             }
@@ -191,9 +190,9 @@ namespace NumSharp.Interop
             /// <summary><c>memoryview.tobytes(order)</c> — <c>"C"</c> routes through the cached literal.</summary>
             internal PyObject tobytes(string order)
             {
-                using PyObject method = obj.GetAttr(InteropRuntime.NameTobytes);
+                using PyObject method = obj.GetAttr(PythonInteropRuntime.NameTobytes);
                 if (order == "C")
-                    return method.Invoke(InteropRuntime.StrC);
+                    return method.Invoke(PythonInteropRuntime.StrC);
                 using var o = new PyString(order);
                 return method.Invoke(o);
             }

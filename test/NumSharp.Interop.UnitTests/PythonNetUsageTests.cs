@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -157,7 +158,7 @@ namespace NumSharp.Interop.UnitTests
                 while (iterator.MoveNext())
                 {
                     using PyObject chunk = iterator.Current;
-                    rows.Add(PythonConvert.ToNDArray(chunk));   // each yielded array copied out
+                    rows.Add(NDArrayInterop.ToNDArray(chunk));   // each yielded array copied out
                 }
             }
 

@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 namespace NumSharp.Interop.UnitTests
@@ -41,12 +42,12 @@ namespace NumSharp.Interop.UnitTests
         public void OrphanExport_HeldOnlyByPython_AwaitsTheShutdownSweep()
         {
             PythonSession.EnsureOrInconclusive();
-            int before = PythonConvert.LiveExports;
+            int before = NDArrayInterop.LiveExports;
 
             var nd = np.arange(6).astype(NPTypeCode.Double);
             using (Py.GIL())
             {
-                using PyObject arr = PythonConvert.ToNumpy(nd);
+                using PyObject arr = NDArrayInterop.ToNumpy(nd);
                 using PyObject main = Py.Import("__main__");
                 main.SetAttr("shutdown_orphan_export", arr);   // Python is now the ONLY holder
             }
@@ -54,7 +55,7 @@ namespace NumSharp.Interop.UnitTests
             OrphanExportSlice = nd.Storage.InternalArray;
             nd.Dispose();   // C# reference gone; the export pin alone keeps the buffer alive
 
-            PythonConvert.LiveExports.Should().Be(before + 1, "the orphan must be pinned for Python");
+            NDArrayInterop.LiveExports.Should().Be(before + 1, "the orphan must be pinned for Python");
             OrphanExportSlice.IsReleased.Should().BeFalse("the buffer must stay alive while Python can see it");
             // ... release is asserted in PythonSession.Stop, after PythonEngine.Shutdown().
         }
@@ -63,18 +64,18 @@ namespace NumSharp.Interop.UnitTests
         public void OrphanImport_StillReferencedByCSharp_AwaitsTheShutdownDrain()
         {
             PythonSession.EnsureOrInconclusive();
-            int before = PythonConvert.LiveImports;
+            int before = NDArrayInterop.LiveImports;
 
             using (Py.GIL())
             {
                 PythonEngine.RunSimpleString("import numpy as _np\nshutdown_orphan_import = _np.arange(8) * 2.0");
                 using PyObject main = Py.Import("__main__");
                 using PyObject src = main.GetAttr("shutdown_orphan_import");
-                OrphanImportView = PythonConvert.ToNDArrayView(src);
+                OrphanImportView = NDArrayInterop.ToNDArrayView(src);
             }
 
             OrphanImportSlice = OrphanImportView.Storage.InternalArray;
-            PythonConvert.LiveImports.Should().Be(before + 1, "the orphan lease must be live");
+            NDArrayInterop.LiveImports.Should().Be(before + 1, "the orphan lease must be live");
             // ... the force-drain and the safe post-shutdown Dispose are asserted in PythonSession.Stop.
         }
     }
