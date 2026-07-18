@@ -66,9 +66,19 @@ namespace NumSharp.UnitTest.Manipulation
         [TestMethod]
         public void RepeatedAxis_Throws()
         {
+            // NumPy raises ValueError; NumSharp's analog is ArgumentException.
             var nd = np.arange(6).reshape(2, 3);
             new Action(() => np.permute_dims(nd, new int[] {0, 0})).Should()
-                .Throw<Exception>().WithMessage("*repeated axis*");
+                .Throw<ArgumentException>().WithMessage("*repeated axis in transpose*");
+        }
+
+        [TestMethod]
+        public void NegativeAxisDuplicate_Throws()
+        {
+            // (0, -2) normalizes to (0, 0) -> repeated axis, matching NumPy.
+            var nd = np.arange(6).reshape(2, 3);
+            new Action(() => np.permute_dims(nd, new int[] {0, -2})).Should()
+                .Throw<ArgumentException>().WithMessage("*repeated axis in transpose*");
         }
 
         [TestMethod]
@@ -76,7 +86,33 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var nd = np.arange(6).reshape(2, 3);
             new Action(() => np.permute_dims(nd, new int[] {0})).Should()
-                .Throw<Exception>().WithMessage("*axes don't match*");
+                .Throw<ArgumentException>().WithMessage("*axes don't match*");
+            new Action(() => np.permute_dims(nd, new int[] {0, 1, 2})).Should()
+                .Throw<ArgumentException>().WithMessage("*axes don't match*");
+        }
+
+        [TestMethod]
+        public void OutOfRangeAxis_Throws()
+        {
+            // NumPy raises AxisError; NumSharp's analog is AxisOutOfRangeException.
+            var nd = np.arange(6).reshape(2, 3);
+            new Action(() => np.permute_dims(nd, new int[] {0, 2})).Should()
+                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+            new Action(() => np.permute_dims(nd, new int[] {0, -3})).Should()
+                .Throw<AxisOutOfRangeException>().WithMessage("*out of bounds*");
+        }
+
+        [TestMethod]
+        public void EmptyAxes_ScalarOk_HigherRankThrows()
+        {
+            // NumPy: an explicit length-0 permutation matches only a 0-d array;
+            // for ndim >= 1 it raises ValueError "axes don't match array".
+            // (Distinct from axes=null, which reverses.)
+            np.permute_dims(NDArray.Scalar(5), new int[0]).Should().BeShaped(size: 1, ndim: 0);
+            new Action(() => np.permute_dims(np.array(1, 2, 3), new int[0])).Should()
+                .Throw<ArgumentException>().WithMessage("*axes don't match*");
+            new Action(() => np.permute_dims(np.arange(6).reshape(2, 3), new int[0])).Should()
+                .Throw<ArgumentException>().WithMessage("*axes don't match*");
         }
     }
 }

@@ -98,5 +98,33 @@ namespace NumSharp.UnitTest.Manipulation
             new Action(() => { var _ = np.array(1, 2, 3).mT; }).Should()
                 .Throw<ArgumentException>().WithMessage("*matrix transpose with ndim < 2 is undefined*");
         }
+
+        [TestMethod]
+        public void mT_mT_RoundTrip()
+        {
+            // Swapping the last two axes twice restores the original layout and values.
+            var nd = np.arange(24).reshape(2, 3, 4);
+            nd.mT.mT.Should().BeShaped(2, 3, 4);
+            np.array_equal(nd.mT.mT, nd).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void AllDtypes_Preserved()
+        {
+            // Pure view: dtype is preserved and the (2,3)->(3,2) swap works for every supported type.
+            var dtypes = new[]
+            {
+                NPTypeCode.Boolean, NPTypeCode.Byte, NPTypeCode.SByte, NPTypeCode.Int16, NPTypeCode.UInt16,
+                NPTypeCode.Int32, NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char,
+                NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal, NPTypeCode.Complex
+            };
+            foreach (var t in dtypes)
+            {
+                var a = np.arange(6).reshape(2, 3).astype(t);
+                var mt = np.matrix_transpose(a);
+                mt.Should().BeShaped(3, 2);
+                mt.typecode.Should().Be(t);
+            }
+        }
     }
 }
