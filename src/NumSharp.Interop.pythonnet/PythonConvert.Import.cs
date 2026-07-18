@@ -30,12 +30,12 @@ namespace NumSharp.Interop
             {
                 using PyObject mv = OpenMemoryView(obj);
 
-                string format = GetStr(mv, "format");
-                long itemsize = GetLong(mv, "itemsize");
+                string format = GetStr(mv, InteropRuntime.NameFormat);
+                long itemsize = GetLong(mv, InteropRuntime.NameItemsize);
                 bool widenComplex64 = IsComplex64Format(format);
                 NPTypeCode tc = widenComplex64 ? NPTypeCode.Complex : FromBufferFormat(format, itemsize);
 
-                long[] dims = GetLongTuple(mv, "shape");
+                long[] dims = GetLongTuple(mv, InteropRuntime.NameShape);
                 Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
                 if (shape.Size == 0)
                     return new NDArray(tc, shape, fillZeros: false);
@@ -43,7 +43,7 @@ namespace NumSharp.Interop
                 var dest = new NDArray(tc, shape, fillZeros: false);
                 long expectedSourceBytes = shape.Size * itemsize;
 
-                if (GetBool(mv, "c_contiguous"))
+                if (GetBool(mv, InteropRuntime.NameCContiguous))
                 {
                     using PyBuffer buf = obj.GetBuffer(PyBUF.SIMPLE);
                     CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
@@ -52,8 +52,8 @@ namespace NumSharp.Interop
                 {
                     // Linearize through CPython (correct for every stride pattern incl. suboffsets),
                     // then blit the C-ordered bytes. The bytes object is a plain contiguous exporter.
-                    using PyObject order = "C".ToPython();
-                    using PyObject bytesObj = mv.InvokeMethod("tobytes", order);
+                    using PyObject tobytes = mv.GetAttr(InteropRuntime.NameTobytes);
+                    using PyObject bytesObj = tobytes.Invoke(InteropRuntime.StrC);
                     using PyBuffer buf = bytesObj.GetBuffer(PyBUF.SIMPLE);
                     CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
                 }
@@ -114,7 +114,7 @@ namespace NumSharp.Interop
                         return ViewViaArrayInterface(obj, allowReadonly);
                     }
 
-                    if (!GetBool(mv, "c_contiguous"))
+                    if (!GetBool(mv, InteropRuntime.NameCContiguous))
                     {
                         if (obj.HasAttr("__array_interface__"))
                             return ViewViaArrayInterface(obj, allowReadonly);
@@ -122,11 +122,11 @@ namespace NumSharp.Interop
                             "buffer is not C-contiguous and the exporter is not a numpy array; a zero-copy view is not possible. Use ToNDArray (copy).");
                     }
 
-                    string format = GetStr(mv, "format");
-                    long itemsize = GetLong(mv, "itemsize");
+                    string format = GetStr(mv, InteropRuntime.NameFormat);
+                    long itemsize = GetLong(mv, InteropRuntime.NameItemsize);
                     NPTypeCode tc = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) throws with copy guidance
 
-                    long[] dims = GetLongTuple(mv, "shape");
+                    long[] dims = GetLongTuple(mv, InteropRuntime.NameShape);
                     Shape shape = dims.Length == 0 ? new Shape() : new Shape(dims);
                     if (shape.Size == 0)
                         return new NDArray(tc, shape, fillZeros: false);
@@ -169,7 +169,7 @@ namespace NumSharp.Interop
         {
             try
             {
-                return InteropRuntime.Builtins.InvokeMethod("memoryview", obj);
+                return InteropRuntime.BuiltinsMemoryview.Invoke(obj);
             }
             catch (PythonException e)
             {
@@ -206,17 +206,17 @@ namespace NumSharp.Interop
         /// </summary>
         private static unsafe NDArray ViewViaArrayInterface(PyObject obj, bool allowReadonly)
         {
-            using PyObject aiObj = obj.GetAttr("__array_interface__");
+            using PyObject aiObj = obj.GetAttr(InteropRuntime.NameArrayInterface);
             using var ai = new PyDict(aiObj);
 
             string typestr;
-            using (PyObject t = ai["typestr"]) typestr = t.As<string>();
+            using (PyObject t = ai[InteropRuntime.NameTypestr]) typestr = t.As<string>();
             NPTypeCode tc = FromNumpyDtypeStr(typestr);   // rejects big-endian / datetime / object dtypes
             int itemsize = tc.SizeOf();
 
             long dataPtr;
             bool readOnly;
-            using (PyObject data = ai["data"])
+            using (PyObject data = ai[InteropRuntime.NameData])
             {
                 using var dataTuple = PyTuple.AsTuple(data);
                 using (PyObject p = dataTuple[0]) dataPtr = p.As<long>();
@@ -229,7 +229,7 @@ namespace NumSharp.Interop
                     "Use ToNDArray (copy), or pass allowReadonly:true if you promise not to write through the view.");
 
             long[] dims;
-            using (PyObject s = ai["shape"]) dims = TupleToLongs(s);
+            using (PyObject s = ai[InteropRuntime.NameShape]) dims = TupleToLongs(s);
 
             long sizeFromDims = 1;
             for (int i = 0; i < dims.Length; i++)
@@ -238,8 +238,8 @@ namespace NumSharp.Interop
                 return new NDArray(tc, new Shape(dims), fillZeros: false);
 
             long[] byteStrides = null;
-            if (ai.HasKey("strides"))
-                using (PyObject s = ai["strides"])
+            if (ai.HasKey(InteropRuntime.NameStrides))
+                using (PyObject s = ai[InteropRuntime.NameStrides])
                     if (!s.IsNone())
                         byteStrides = TupleToLongs(s);
 

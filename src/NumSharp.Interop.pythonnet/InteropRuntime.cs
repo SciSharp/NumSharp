@@ -86,6 +86,142 @@ namespace NumSharp.Interop
             return winner ?? module;
         }
 
+        // ---- session-cached callables, attribute names & literals ------------------------------
+        //
+        // Every conversion used to walk dynamic dispatch (DLR call sites -> pythonnet
+        // DynamicMetaObject -> GetAttr string marshaling -> Invoke) for each Python operation.
+        // These caches resolve each callable / attribute-name / literal ONCE per engine session,
+        // turning a conversion into direct Invoke calls on pre-resolved PyObjects. All accessors
+        // must be called under the GIL (they are — only conversion bodies and the shutdown
+        // handler touch them). Losing racers dispose their instance immediately (safe under the
+        // GIL); winners are owned by the session and swept by OnEngineShutdown.
+
+        private static PyObject _npEmpty, _npFrombuffer, _npArray, _npAsStrided;
+        private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
+        private static PyObject _falseLiteral, _strC, _strB;
+        private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
+                                _nameFormat, _nameItemsize, _nameShape, _nameCContiguous,
+                                _nameArrayInterface, _nameTypestr, _nameData, _nameStrides;
+        private static readonly PyObject[] _dtypeStrings = new PyObject[129]; // indexed by (int)NPTypeCode; max = Complex (128)
+
+        /// <summary>Cached <c>numpy.empty</c>. Call under the GIL.</summary>
+        internal static PyObject NpEmpty => GetCached(ref _npEmpty, static () => Numpy.GetAttr("empty"));
+
+        /// <summary>Cached <c>numpy.frombuffer</c>. Call under the GIL.</summary>
+        internal static PyObject NpFrombuffer => GetCached(ref _npFrombuffer, static () => Numpy.GetAttr("frombuffer"));
+
+        /// <summary>Cached <c>numpy.array</c>. Call under the GIL.</summary>
+        internal static PyObject NpArray => GetCached(ref _npArray, static () => Numpy.GetAttr("array"));
+
+        /// <summary>Cached <c>numpy.lib.stride_tricks.as_strided</c>. Call under the GIL.</summary>
+        internal static PyObject NpAsStrided => GetCached(ref _npAsStrided, static () =>
+        {
+            using var lib = Numpy.GetAttr("lib");
+            using var strideTricks = lib.GetAttr("stride_tricks");
+            return strideTricks.GetAttr("as_strided");
+        });
+
+        /// <summary>
+        ///     Cached bound <c>ctypes.c_char.__mul__</c> — computes the sized array type
+        ///     <c>(ctypes.c_char * n)</c> as a direct call (the metaclass exposes the repeat
+        ///     operator as a bound <c>__mul__</c> on the type). Call under the GIL.
+        /// </summary>
+        internal static PyObject CCharMul => GetCached(ref _ctypesCCharMul, static () =>
+        {
+            using var cchar = Ctypes.GetAttr("c_char");
+            return cchar.GetAttr("__mul__");
+        });
+
+        /// <summary>Cached <c>weakref.finalize</c>. Call under the GIL.</summary>
+        internal static PyObject WeakrefFinalize => GetCached(ref _weakrefFinalize, static () => Weakref.GetAttr("finalize"));
+
+        /// <summary>Cached <c>builtins.memoryview</c>. Call under the GIL.</summary>
+        internal static PyObject BuiltinsMemoryview => GetCached(ref _builtinsMemoryview, static () => Builtins.GetAttr("memoryview"));
+
+        /// <summary>Cached Python <c>False</c> (first positional of <c>ndarray.setflags</c> is <c>write</c>).</summary>
+        internal static PyObject FalseLiteral => GetCached(ref _falseLiteral, static () => false.ToPython());
+
+        /// <summary>Cached <c>'C'</c> (memoryview.tobytes order).</summary>
+        internal static PyObject StrC => GetCached(ref _strC, static () => new PyString("C"));
+
+        /// <summary>Cached <c>'B'</c> (memoryview.cast format).</summary>
+        internal static PyObject StrB => GetCached(ref _strB, static () => new PyString("B"));
+
+        // Attribute names / dict keys — cached PyStrings avoid the per-call UTF-8 marshal +
+        // unicode allocation of the string-based GetAttr/indexer overloads.
+        internal static PyObject NameFromAddress => GetCached(ref _nameFromAddress, static () => new PyString("from_address"));
+        internal static PyObject NameReshape => GetCached(ref _nameReshape, static () => new PyString("reshape"));
+        internal static PyObject NameSetflags => GetCached(ref _nameSetflags, static () => new PyString("setflags"));
+        internal static PyObject NameCast => GetCached(ref _nameCast, static () => new PyString("cast"));
+        internal static PyObject NameTobytes => GetCached(ref _nameTobytes, static () => new PyString("tobytes"));
+        internal static PyObject NameFormat => GetCached(ref _nameFormat, static () => new PyString("format"));
+        internal static PyObject NameItemsize => GetCached(ref _nameItemsize, static () => new PyString("itemsize"));
+        internal static PyObject NameShape => GetCached(ref _nameShape, static () => new PyString("shape"));
+        internal static PyObject NameCContiguous => GetCached(ref _nameCContiguous, static () => new PyString("c_contiguous"));
+        internal static PyObject NameArrayInterface => GetCached(ref _nameArrayInterface, static () => new PyString("__array_interface__"));
+        internal static PyObject NameTypestr => GetCached(ref _nameTypestr, static () => new PyString("typestr"));
+        internal static PyObject NameData => GetCached(ref _nameData, static () => new PyString("data"));
+        internal static PyObject NameStrides => GetCached(ref _nameStrides, static () => new PyString("strides"));
+
+        /// <summary>
+        ///     Cached PyString of <see cref="PythonConvert.ToNumpyDtypeStr"/> for <paramref name="tc"/>
+        ///     (session-owned — callers must NOT dispose it). Call under the GIL.
+        /// </summary>
+        internal static PyObject DtypeString(NPTypeCode tc)
+        {
+            ref PyObject cache = ref _dtypeStrings[(int)tc];
+            var v = Volatile.Read(ref cache);
+            if (v is not null)
+                return v;
+            return PublishCached(ref cache, new PyString(PythonConvert.ToNumpyDtypeStr(tc)));
+        }
+
+        private static PyObject GetCached(ref PyObject cache, Func<PyObject> resolve)
+        {
+            var v = Volatile.Read(ref cache);
+            if (v is not null)
+                return v;
+            return PublishCached(ref cache, resolve());
+        }
+
+        private static PyObject PublishCached(ref PyObject cache, PyObject fresh)
+        {
+            var winner = Interlocked.CompareExchange(ref cache, fresh, null);
+            if (winner is null)
+                return fresh;
+            fresh.Dispose();   // racing loser — safe to decref immediately, every caller holds the GIL
+            return winner;
+        }
+
+        private static void DisposeSessionCache()
+        {
+            DisposeModule(ref _npEmpty);
+            DisposeModule(ref _npFrombuffer);
+            DisposeModule(ref _npArray);
+            DisposeModule(ref _npAsStrided);
+            DisposeModule(ref _ctypesCCharMul);
+            DisposeModule(ref _weakrefFinalize);
+            DisposeModule(ref _builtinsMemoryview);
+            DisposeModule(ref _falseLiteral);
+            DisposeModule(ref _strC);
+            DisposeModule(ref _strB);
+            DisposeModule(ref _nameFromAddress);
+            DisposeModule(ref _nameReshape);
+            DisposeModule(ref _nameSetflags);
+            DisposeModule(ref _nameCast);
+            DisposeModule(ref _nameTobytes);
+            DisposeModule(ref _nameFormat);
+            DisposeModule(ref _nameItemsize);
+            DisposeModule(ref _nameShape);
+            DisposeModule(ref _nameCContiguous);
+            DisposeModule(ref _nameArrayInterface);
+            DisposeModule(ref _nameTypestr);
+            DisposeModule(ref _nameData);
+            DisposeModule(ref _nameStrides);
+            for (int i = 0; i < _dtypeStrings.Length; i++)
+                DisposeModule(ref _dtypeStrings[i]);
+        }
+
         // ---- live-conversion registries (lock-free) --------------------------------------------
 
         private static readonly ConcurrentDictionary<ExportKeeper, byte> _exports = new();
@@ -216,6 +352,7 @@ namespace NumSharp.Interop
                 foreach (var lease in _imports.Keys)
                     lease.ForceReleaseUnderGil();
 
+                DisposeSessionCache();
                 DisposeModule(ref _numpy);
                 DisposeModule(ref _ctypes);
                 DisposeModule(ref _builtins);

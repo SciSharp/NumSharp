@@ -34,18 +34,16 @@ namespace NumSharp.Interop
             InteropRuntime.EnsureEngine();
             InteropRuntime.DrainPending();
 
-            string dtypeStr = ToNumpyDtypeStr(source.typecode);   // throws for Decimal
+            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
             using (Py.GIL())
             {
-                dynamic np = InteropRuntime.Numpy;
-
                 var shape = source.Shape;
                 if (shape.Size == 0)
                 {
                     // Nothing to share — an empty array of the right dtype/shape IS the view.
                     using var emptyDims = MakeTuple(shape.Dimensions);
-                    return (PyObject)np.empty(emptyDims, dtypeStr);
+                    return InteropRuntime.NpEmpty.Invoke(emptyDims, InteropRuntime.DtypeString(source.typecode));
                 }
 
                 // Pin the buffer for the whole build; on success ownership of this reference
@@ -54,21 +52,30 @@ namespace NumSharp.Interop
                 if (!slice.TryAddRef())
                     throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
 
+                PyObject arr = null;
+                ExportKeeper keeper = null;
                 try
                 {
-                    dynamic arr = BuildSharedView(np, source, slice, out PyObject baseBuffer);
+                    arr = BuildSharedView(source, slice, out PyObject baseBuffer);
                     using (baseBuffer)
                     {
-                        var keeper = new ExportKeeper(source, slice);
+                        keeper = new ExportKeeper(source, slice);
                         RootOnPythonObject(baseBuffer, keeper);
                         InteropRuntime.TrackExport(keeper);
                     }
 
-                    return (PyObject)arr;
+                    return arr;
                 }
                 catch
                 {
-                    slice.Release();
+                    arr?.Dispose();
+                    // Once the weakref.finalize is registered the keeper owns the reference and
+                    // WILL be invoked when the base buffer dies — release through the keeper
+                    // (idempotent) so a late finalize callback cannot double-release.
+                    if (keeper is null)
+                        slice.Release();
+                    else
+                        keeper.Release();
                     throw;
                 }
             }
@@ -91,17 +98,15 @@ namespace NumSharp.Interop
             InteropRuntime.EnsureEngine();
             InteropRuntime.DrainPending();
 
-            string dtypeStr = ToNumpyDtypeStr(source.typecode);   // throws for Decimal
+            _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
             using (Py.GIL())
             {
-                dynamic np = InteropRuntime.Numpy;
-
                 var shape = source.Shape;
                 if (shape.Size == 0)
                 {
                     using var emptyDims = MakeTuple(shape.Dimensions);
-                    return (PyObject)np.empty(emptyDims, dtypeStr);
+                    return InteropRuntime.NpEmpty.Invoke(emptyDims, InteropRuntime.DtypeString(source.typecode));
                 }
 
                 // Guard the buffer against a concurrent Dispose for the duration of the copy only.
@@ -111,10 +116,10 @@ namespace NumSharp.Interop
 
                 try
                 {
-                    dynamic view = BuildSharedView(np, source, slice, out PyObject baseBuffer);
+                    using PyObject view = BuildSharedView(source, slice, out PyObject baseBuffer);
                     using (baseBuffer)
                     {
-                        return (PyObject)np.array(view);   // np.array copies by default
+                        return InteropRuntime.NpArray.Invoke(view);   // np.array copies by default
                     }
                 }
                 finally
@@ -153,27 +158,32 @@ namespace NumSharp.Interop
                 if (!slice.TryAddRef())
                     throw new ObjectDisposedException(nameof(source), "the NumSharp buffer has already been released.");
 
+                PyObject mv = null;
+                ExportKeeper keeper = null;
                 try
                 {
-                    dynamic ct = InteropRuntime.Ctypes;
-                    dynamic builtins = InteropRuntime.Builtins;
-
                     long nbytes = shape.Size * source.dtypesize;
-                    dynamic ctBuf = (ct.c_char * nbytes).from_address((long)slice.Address);
-                    dynamic mv = builtins.memoryview(ctBuf).cast("B");
+                    using PyObject ctBuf = MakeCtypesWindow((long)slice.Address, nbytes);
 
-                    using (PyObject baseBuffer = (PyObject)ctBuf)
-                    {
-                        var keeper = new ExportKeeper(source, slice);
-                        RootOnPythonObject(baseBuffer, keeper);
-                        InteropRuntime.TrackExport(keeper);
-                    }
+                    using (PyObject raw = InteropRuntime.BuiltinsMemoryview.Invoke(ctBuf))
+                    using (PyObject cast = raw.GetAttr(InteropRuntime.NameCast))
+                        mv = cast.Invoke(InteropRuntime.StrB);   // the memoryview holds its own exporter ref on ctBuf
 
-                    return (PyObject)mv;
+                    keeper = new ExportKeeper(source, slice);
+                    RootOnPythonObject(ctBuf, keeper);
+                    InteropRuntime.TrackExport(keeper);
+
+                    return mv;
                 }
                 catch
                 {
-                    slice.Release();
+                    mv?.Dispose();
+                    // Same keeper-owned release rule as ToNumpy: after weakref.finalize registration
+                    // the late callback and this path must share one idempotent Release.
+                    if (keeper is null)
+                        slice.Release();
+                    else
+                        keeper.Release();
                     throw;
                 }
             }
@@ -185,12 +195,13 @@ namespace NumSharp.Interop
         ///     Build the numpy view over <paramref name="slice"/>'s memory WITHOUT lifetime rooting
         ///     (the caller holds an ARC reference for the duration). <paramref name="baseBuffer"/> is the
         ///     deepest Python base object (the ctypes buffer) every derived numpy view chains to —
-        ///     the correct attachment point for a keep-alive.
+        ///     the correct attachment point for a keep-alive. All Python work runs through the
+        ///     session-cached callables on <see cref="InteropRuntime"/> (no dynamic dispatch), and every
+        ///     intermediate wrapper is disposed deterministically instead of drifting to pythonnet's
+        ///     finalizer queue — numpy's own reference chain (arr → flat → ctBuf) carries the lifetime.
         /// </summary>
-        private static unsafe dynamic BuildSharedView(dynamic np, NDArray source, IArraySlice slice, out PyObject baseBuffer)
+        private static unsafe PyObject BuildSharedView(NDArray source, IArraySlice slice, out PyObject baseBuffer)
         {
-            dynamic ct = InteropRuntime.Ctypes;
-
             var shape = source.Shape;
             int itemsize = source.dtypesize;
             long[] dims = shape.Dimensions;
@@ -204,41 +215,72 @@ namespace NumSharp.Interop
             long dataPtr = (long)slice.Address + offset * itemsize;
             long tailBytes = (slice.Count - offset) * itemsize;
 
-            dynamic ctBuf = (ct.c_char * tailBytes).from_address(dataPtr);
-            string dtypeStr = ToNumpyDtypeStr(source.typecode);
-            dynamic flat = np.frombuffer(ctBuf, dtypeStr);
-
-            dynamic arr;
-            // The trivial paths require the view to cover its backing window EXACTLY: a contiguous
-            // offset-0 slice like ring["0:16"] keeps the full base block as its InternalArray
-            // (NumSharp only re-slices the array when offset > 0), so flat/reshape would leak the
-            // whole buffer into the export — the strided path below trims to the true extent.
-            bool wholeWindow = shape.IsContiguous && offset == 0 && shape.Size == slice.Count;
-            if (wholeWindow && dims.Length == 1)
+            PyObject ctBuf = null, flat = null, arr = null;
+            try
             {
-                arr = flat;
-            }
-            else if (wholeWindow && dims.Length > 1)
-            {
-                using var dimsTuple = MakeTuple(dims);
-                arr = flat.reshape(dimsTuple);
-            }
-            else
-            {
-                // Strided / offset / prefix-window / broadcast / scalar: express the exact layout.
-                var byteStrides = new long[elemStrides.Length];
-                for (int i = 0; i < elemStrides.Length; i++)
-                    byteStrides[i] = elemStrides[i] * itemsize;
-                using var dimsTuple = MakeTuple(dims);
-                using var stridesTuple = MakeTuple(byteStrides);
-                arr = np.lib.stride_tricks.as_strided(flat, dimsTuple, stridesTuple);
-            }
+                ctBuf = MakeCtypesWindow(dataPtr, tailBytes);
+                flat = InteropRuntime.NpFrombuffer.Invoke(ctBuf, InteropRuntime.DtypeString(source.typecode));
 
-            if (!shape.IsWriteable)
-                arr.setflags(write: false);   // broadcast views are read-only, as in NumSharp/NumPy
+                // The trivial paths require the view to cover its backing window EXACTLY: a contiguous
+                // offset-0 slice like ring["0:16"] keeps the full base block as its InternalArray
+                // (NumSharp only re-slices the array when offset > 0), so flat/reshape would leak the
+                // whole buffer into the export — the strided path below trims to the true extent.
+                bool wholeWindow = shape.IsContiguous && offset == 0 && shape.Size == slice.Count;
+                if (wholeWindow && dims.Length == 1)
+                {
+                    arr = flat;
+                    flat = null;   // the flat view IS the result — ownership moves to arr
+                }
+                else if (wholeWindow && dims.Length > 1)
+                {
+                    using var dimsTuple = MakeTuple(dims);
+                    using PyObject reshape = flat.GetAttr(InteropRuntime.NameReshape);
+                    arr = reshape.Invoke(dimsTuple);
+                }
+                else
+                {
+                    // Strided / offset / prefix-window / broadcast / scalar: express the exact layout.
+                    var byteStrides = new long[elemStrides.Length];
+                    for (int i = 0; i < elemStrides.Length; i++)
+                        byteStrides[i] = elemStrides[i] * itemsize;
+                    using var dimsTuple = MakeTuple(dims);
+                    using var stridesTuple = MakeTuple(byteStrides);
+                    arr = InteropRuntime.NpAsStrided.Invoke(flat, dimsTuple, stridesTuple);
+                }
 
-            baseBuffer = (PyObject)ctBuf;
-            return arr;
+                if (!shape.IsWriteable)
+                {
+                    // broadcast views are read-only, as in NumSharp/NumPy.
+                    // setflags(write=None, align=None, uic=None) — the first positional IS write.
+                    using PyObject setflags = arr.GetAttr(InteropRuntime.NameSetflags);
+                    using PyObject none = setflags.Invoke(InteropRuntime.FalseLiteral);
+                }
+
+                baseBuffer = ctBuf;
+                PyObject result = arr;
+                ctBuf = null;   // ownership of both transfers to the caller
+                arr = null;
+                return result;
+            }
+            finally
+            {
+                flat?.Dispose();    // intermediate on every path that did not return it
+                arr?.Dispose();     // non-null here only when a later step threw
+                ctBuf?.Dispose();   // non-null here only when a later step threw
+            }
+        }
+
+        /// <summary>
+        ///     <c>(ctypes.c_char * nbytes).from_address(address)</c> through the cached bound
+        ///     <c>c_char.__mul__</c> — the raw-pointer window every zero-copy export is built over.
+        /// </summary>
+        private static PyObject MakeCtypesWindow(long address, long nbytes)
+        {
+            using var size = new PyInt(nbytes);
+            using PyObject arrayType = InteropRuntime.CCharMul.Invoke(size);
+            using PyObject fromAddress = arrayType.GetAttr(InteropRuntime.NameFromAddress);
+            using var addr = new PyInt(address);
+            return fromAddress.Invoke(addr);
         }
 
         /// <summary>
@@ -249,9 +291,8 @@ namespace NumSharp.Interop
         /// </summary>
         private static void RootOnPythonObject(PyObject target, ExportKeeper keeper)
         {
-            dynamic weakref = InteropRuntime.Weakref;
             using PyObject callback = ((Action)keeper.Release).ToPython();
-            using PyObject finalizer = (PyObject)weakref.finalize(target, callback);
+            using PyObject finalizer = InteropRuntime.WeakrefFinalize.Invoke(target, callback);
         }
 
         private static PyTuple MakeTuple(long[] values)

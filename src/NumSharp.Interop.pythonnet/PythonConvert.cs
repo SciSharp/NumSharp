@@ -198,12 +198,14 @@ namespace NumSharp.Interop
         }
 
         // ---- memoryview metadata helpers (avoid pythonnet 3.0.1's broken PyBuffer flags) --------
+        // The attribute names are session-cached PyStrings (see InteropRuntime): GetAttr(PyObject)
+        // skips the per-call UTF-8 marshal + unicode allocation of the string-based overload.
 
-        internal static string GetStr(PyObject o, string attr) { using var a = o.GetAttr(attr); return a.As<string>(); }
-        internal static long GetLong(PyObject o, string attr) { using var a = o.GetAttr(attr); return a.As<long>(); }
-        internal static bool GetBool(PyObject o, string attr) { using var a = o.GetAttr(attr); return a.As<bool>(); }
+        internal static string GetStr(PyObject o, PyObject attr) { using var a = o.GetAttr(attr); return a.As<string>(); }
+        internal static long GetLong(PyObject o, PyObject attr) { using var a = o.GetAttr(attr); return a.As<long>(); }
+        internal static bool GetBool(PyObject o, PyObject attr) { using var a = o.GetAttr(attr); return a.As<bool>(); }
 
-        internal static long[] GetLongTuple(PyObject o, string attr)
+        internal static long[] GetLongTuple(PyObject o, PyObject attr)
         {
             using PyObject t = o.GetAttr(attr);
             if (t.IsNone())
