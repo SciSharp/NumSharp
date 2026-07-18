@@ -228,5 +228,84 @@ namespace NumSharp.UnitTest.Manipulation
             np.trim_zeros(a["::2"]).Should().BeOfValues(1).And.BeShaped(1);     // [0,1,0,0] -> [1]
             np.trim_zeros(a["::-1"]).Should().BeOfValues(3, 0, 2, 1).And.BeShaped(4); // [0,0,3,0,2,1,0,0] -> [3,0,2,1]
         }
+
+        // ---- second-pass edge coverage (all values probed against NumPy 2.4.2) ----
+        [TestMethod]
+        public void TwoD_NonContiguousLayouts()
+        {
+            var b = np.array(0, 0, 2, 3, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0).reshape(3, 6);
+            np.trim_zeros(b["::-1"]).Should().BeOfValues(1, 0, 3, 0, 2, 3).And.BeShaped(2, 3);       // reversed rows
+            np.trim_zeros(np.asfortranarray(b)).Should().BeOfValues(0, 2, 3, 1, 0, 3).And.BeShaped(2, 3); // F-order
+            np.trim_zeros(b.T).Should().BeOfValues(0, 1, 2, 0, 3, 3).And.BeShaped(3, 2);              // transposed
+        }
+
+        [TestMethod]
+        public void ZeroDimensionShapes()
+        {
+            np.trim_zeros(np.zeros(new Shape(0, 5)).astype(NPTypeCode.Int32)).Should().BeShaped(0, 0);
+            np.trim_zeros(np.zeros(new Shape(3, 0)).astype(NPTypeCode.Int32)).Should().BeShaped(0, 0);
+            np.trim_zeros(np.zeros(new Shape(2, 0, 3)).astype(NPTypeCode.Int32)).Should().BeShaped(0, 0, 0);
+            // untrimmed axis is already empty, so it stays 0 too -> (0,0)
+            np.trim_zeros(np.zeros(new Shape(0, 5)).astype(NPTypeCode.Int32), "fb", 1).Should().BeShaped(0, 0);
+        }
+
+        [TestMethod]
+        public void AllNonzero_ReturnsFull()
+        {
+            np.trim_zeros(np.array(1, 2, 3)).Should().BeOfValues(1, 2, 3).And.BeShaped(3);
+            np.trim_zeros(np.ones(new Shape(2, 3)).astype(NPTypeCode.Int32)).Should().BeShaped(2, 3);
+        }
+
+        [TestMethod]
+        public void InteriorZeroHyperplane_Preserved()
+        {
+            // middle row is all-zero but lies inside the bounding box -> kept
+            np.trim_zeros(np.array(1, 0, 0, 0, 0, 1).reshape(3, 2)).Should()
+                .BeOfValues(1, 0, 0, 0, 0, 1).And.BeShaped(3, 2);
+            // only the corner is non-zero
+            np.trim_zeros(np.array(0, 0, 0, 5).reshape(2, 2)).Should().BeOfValues(5).And.BeShaped(1, 1);
+        }
+
+        [TestMethod]
+        public void FourD_BoundingBox()
+        {
+            var c = np.zeros(new Shape(2, 2, 2, 2)).astype(NPTypeCode.Int32);
+            c[1, 0, 1, 0] = (NDArray)7;
+            np.trim_zeros(c).Should().BeOfValues(7).And.BeShaped(1, 1, 1, 1);
+        }
+
+        [TestMethod]
+        public void NaN_IsNonZero_NotTrimmed()
+        {
+            var r = np.trim_zeros(np.array(double.NaN, double.NaN, double.NaN));
+            r.Should().BeShaped(3);
+            double.IsNaN((double)r[0]).Should().BeTrue();
+        }
+
+        [TestMethod]
+        public void BroadcastInput_TrimsToView()
+        {
+            var b = np.broadcast_to(np.array(0, 1, 0), new Shape(2, 3));
+            np.trim_zeros(b).Should().BeOfValues(1, 1).And.BeShaped(2, 1);
+        }
+
+        [TestMethod]
+        public void TrimSpec_Whitespace_Throws()
+        {
+            var a = np.array(0, 1, 0);
+            new Action(() => np.trim_zeros(a, " fb")).Should()
+                .Throw<ArgumentException>().WithMessage("*unexpected character(s) in `trim`: ' fb'*");
+        }
+
+        [TestMethod]
+        public void HalfDecimalComplex_Values()
+        {
+            np.trim_zeros(np.array(new Half[] {(Half)0, (Half)0, (Half)1.5, (Half)0})).Should().BeShaped(1);
+            np.trim_zeros(np.array(new decimal[] {0m, 0m, 2m, 0m})).Should().BeShaped(1);
+            // complex: 0+0j is zero, 0+2j is non-zero
+            var cx = np.array(new System.Numerics.Complex[]
+                {new(0, 0), new(0, 2), new(3, 0), new(0, 0)});
+            np.trim_zeros(cx).Should().BeShaped(2);
+        }
     }
 }
