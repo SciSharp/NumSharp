@@ -14,13 +14,13 @@ namespace NumSharp.Interop.PythonNet
     ///
     ///     <para><b>The four verbs</b> (everything else is packaging over these):</para>
     ///     <list type="bullet">
-    ///       <item><see cref="ToNumpy(NDArray)"/> — zero-copy numpy view of NumSharp's buffer (shared
+    ///       <item><see cref="ToNumpy(NDArray, bool?)"/> — zero-copy numpy view of NumSharp's buffer (shared
     ///         mutation; source rooted for the lifetime of ALL Python-side views; full strided fidelity
     ///         including slices, transposes, Fortran order, negative strides and read-only broadcasts).</item>
-    ///       <item><see cref="ToNumpyCopy(NDArray)"/> — independent numpy array (no shared memory).</item>
-    ///       <item><see cref="ToNDArray(PyObject)"/> — copy ANY PEP 3118 buffer object into a fresh
+    ///       <item><see cref="ToNumpyCopy(NDArray, bool?)"/> — independent numpy array (no shared memory).</item>
+    ///       <item><see cref="ToNDArray(PyObject, bool?)"/> — copy ANY PEP 3118 buffer object into a fresh
     ///         C-contiguous NumSharp array (honors strides / Fortran order; numpy-agnostic).</item>
-    ///       <item><see cref="ToNDArrayView(PyObject, bool)"/> — zero-copy NumSharp view over Python
+    ///       <item><see cref="ToNDArrayView(PyObject, bool, bool?)"/> — zero-copy NumSharp view over Python
     ///         memory (shared mutation; the exporter is leased for the lifetime of ALL NumSharp-side
     ///         views, including derived slices).</item>
     ///     </list>
@@ -41,7 +41,10 @@ namespace NumSharp.Interop.PythonNet
     ///     crash-free <c>PyBUF.SIMPLE</c>/<c>PyBUF.WRITABLE</c> flags to obtain the raw pointer.</para>
     ///
     ///     <para><b>Threading:</b> every method acquires the GIL itself (re-entrant, so nesting under an
-    ///     outer <see cref="Py.GIL"/> is fine). The Python engine must be initialized first; conversions
+    ///     outer <see cref="Py.GIL"/> is fine) — unless GIL management is switched off, per call via the
+    ///     nullable <c>requireGIL</c> parameter each verb takes, or process-wide via
+    ///     <see cref="RequireGIL"/> (the <c>null</c> fallback). With management off the calling thread
+    ///     MUST already hold the GIL. The Python engine must be initialized first; conversions
     ///     made in one engine session must not be used after <see cref="PythonEngine.Shutdown"/> (import
     ///     views lose their memory with the interpreter — the shutdown handler releases their leases
     ///     crash-free; exported buffers still referenced by Python are swept right after the engine
@@ -58,17 +61,72 @@ namespace NumSharp.Interop.PythonNet
     {
         /// <summary>
         ///     Number of NumSharp buffers currently rooted by live Python-side views
-        ///     (created by <see cref="ToNumpy(NDArray)"/> / <see cref="ToMemoryView(NDArray)"/>,
+        ///     (created by <see cref="ToNumpy(NDArray, bool?)"/> / <see cref="ToMemoryView(NDArray, bool?)"/>,
         ///     released by Python garbage collection or interpreter exit).
         /// </summary>
         public static int LiveExports => PythonInteropRuntime.LiveExports;
 
         /// <summary>
         ///     Number of Python buffers currently leased by live NumSharp views
-        ///     (created by <see cref="ToNDArrayView(PyObject, bool)"/>, released when the last
+        ///     (created by <see cref="ToNDArrayView(PyObject, bool, bool?)"/>, released when the last
         ///     NumSharp view over the memory is disposed or collected).
         /// </summary>
         public static int LiveImports => PythonInteropRuntime.LiveImports;
+
+        // ===========================  GIL policy  =============================================
+
+        private static volatile bool _requireGil = true;
+
+        /// <summary>
+        ///     Process-wide default for GIL management (default <c>true</c>): whether conversions
+        ///     acquire the GIL themselves via <see cref="Py.GIL"/>. Every conversion verb also takes
+        ///     a nullable <c>requireGIL</c> parameter — a non-<c>null</c> argument overrides this
+        ///     default for that call.
+        ///
+        ///     <para><b><c>false</c> means the caller owns the GIL.</b> Conversions then run inside a
+        ///     shared no-op guard instead of <see cref="Py.GIL"/>, so the calling thread MUST already
+        ///     hold the GIL — in practice an enclosing <see cref="Py.GIL"/> block. Skipping the
+        ///     per-call <c>PyGILState_Ensure</c>/<c>Release</c> pair (and the <see cref="Py.GILState"/>
+        ///     allocation) is a hot-loop micro-optimization and an escape hatch for embeddings where
+        ///     <c>PyGILState</c> is problematic; converting GIL-less WITHOUT actually holding the GIL
+        ///     is undefined behavior — probed: an immediate access violation at the first C-API call,
+        ///     exactly as with any raw C-API misuse.</para>
+        ///
+        ///     <para><b>Python → .NET callbacks do NOT hold the GIL.</b> A .NET method or delegate body
+        ///     invoked FROM Python is the one place that looks safe but is not: pythonnet's method
+        ///     binder RELEASES the GIL around the managed body (probed on pythonnet 3.0.5 and 3.1.0,
+        ///     both embedded and Python-hosted: <c>PyGILState_Check() == 0</c> inside the body, and a
+        ///     GIL-less conversion there dies with an access violation). Keep GIL management ON inside
+        ///     such callbacks — only pythonnet's argument/return-value marshaling (where codecs run)
+        ///     executes under the GIL, never the body itself.</para>
+        ///
+        ///     <para><b>Scope:</b> the policy covers the conversion verbs only. The interop's
+        ///     background machinery (deferred lease disposal, the engine-shutdown drain) always
+        ///     manages the GIL itself — it runs on threads that cannot inherit the caller's GIL.</para>
+        /// </summary>
+        public static bool RequireGIL
+        {
+            get => _requireGil;
+            set => _requireGil = value;
+        }
+
+        /// <summary>The shared guard handed out when GIL management is off — disposal is a no-op,
+        /// so the <c>using</c> shape of every conversion body is preserved verbatim.</summary>
+        private static readonly IDisposable NoGil = new NoGilGuard();
+
+        private sealed class NoGilGuard : IDisposable
+        {
+            public void Dispose() { }
+        }
+
+        /// <summary>
+        ///     <see cref="Py.GIL"/> per the effective policy — <paramref name="requireGIL"/> when
+        ///     non-<c>null</c>, else <see cref="RequireGIL"/> — or the shared no-op guard when GIL
+        ///     management is off. The policy is read exactly once, here; a concurrent
+        ///     <see cref="RequireGIL"/> flip cannot split one conversion across two policies.
+        /// </summary>
+        internal static IDisposable AcquireGil(bool? requireGIL)
+            => (requireGIL ?? _requireGil) ? Py.GIL() : NoGil;
 
         // ===========================  codec registration  =====================================
 
@@ -214,7 +272,12 @@ namespace NumSharp.Interop.PythonNet
             using var tup = PyTuple.AsTuple(t);
             int n = (int)tup.Length();
             var values = new long[n];
-            for (int i = 0; i < n; i++) { using var e = tup[i]; values[i] = e.As<long>(); }
+            for (int i = 0; i < n; i++)
+            {
+                using var e = tup[i];
+                values[i] = e.As<long>();
+            }
+
             return values;
         }
 
