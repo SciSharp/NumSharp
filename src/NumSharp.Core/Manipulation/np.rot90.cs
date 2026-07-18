@@ -50,13 +50,8 @@ namespace NumSharp
             k = ((k % 4) + 4) % 4;
 
             if (k == 0)
-                // NumPy returns m[:] — a full view that shares memory with m. For an empty array
-                // return a fresh same-shape array instead (consistent with how the k=1/2/3 paths and
-                // DefaultEngine.Transpose treat size==0): aliasing a zero-length offset view yields a
-                // shape that downstream buffer ops can't materialize, and there is no data to share.
-                return m.Shape.size == 0
-                    ? new NDArray(m.dtype, m.Shape.dimensions)
-                    : new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
+                // NumPy returns m[:] — a full view that shares memory with m.
+                return new NDArray(m.Storage.Alias(m.Shape)) {TensorEngine = m.TensorEngine};
 
             // Normalize the (validated) axes to [0, ndim) for the view ops below, matching
             // Python's negative indexing of both flip(m, axis) and axes_list[axis].
@@ -87,20 +82,16 @@ namespace NumSharp
         private static NDArray FlipAxisView(NDArray m, int axis)
         {
             var shape = m.Shape;
-
-            // Empty arrays cannot be aliased through Alias (no backing buffer); build a fresh
-            // empty array with the same shape — flipping is a no-op on zero elements anyway.
-            if (shape.size == 0)
-                return new NDArray(m.dtype, shape.dimensions);
-
             var dims = (long[])shape.dimensions.Clone();
             var strides = (long[])shape.strides.Clone();
             long offset = shape.offset;
 
-            // Advance to the last element along `axis`, then reverse its stride. A stride of 0
-            // (broadcast axis) negates to 0 and the offset is unchanged — reversing a stretched
-            // axis is a no-op, exactly as in NumPy.
-            offset += strides[axis] * (dims[axis] - 1);
+            // Advance to the last element along `axis`, then reverse its stride. Guard an empty
+            // axis (dims[axis] == 0 has no last element, so leave the offset put) and note a
+            // stride-0 broadcast axis negates to 0 with an unchanged offset — reversing a
+            // stretched axis is a no-op, exactly as in NumPy.
+            if (dims[axis] > 0)
+                offset += strides[axis] * (dims[axis] - 1);
             strides[axis] = -strides[axis];
 
             long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
