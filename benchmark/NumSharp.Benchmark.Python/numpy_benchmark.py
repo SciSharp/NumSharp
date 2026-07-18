@@ -668,6 +668,45 @@ def run_manipulation_benchmarks(n: int, iterations: int) -> List[BenchmarkResult
     r.name, r.category, r.suite, r.dtype = "np.stack", "Stack", "Manipulation", dtype_name
     results.append(r)
 
+    # Reversal / rotation / transpose-alias views + the trim_zeros crop (journey2 additions —
+    # twins of Benchmarks/Manipulation/FlipRotBenchmarks.cs). The first six are O(1)/O(ndim) pure
+    # views; trim_zeros does an O(N) nonzero bounding-box scan. Names normalize 1:1 onto the C#
+    # [Benchmark(Description)] labels ("np.flip(a)" -> "np.flip", ...) for the (op, dtype, N) join.
+    def np_flip(): return np.flip(arr_2d)
+    r = benchmark(np_flip, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.flip", "Flip", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_fliplr(): return np.fliplr(arr_2d)
+    r = benchmark(np_fliplr, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.fliplr", "Flip", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_flipud(): return np.flipud(arr_2d)
+    r = benchmark(np_flipud, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.flipud", "Flip", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_rot90(): return np.rot90(arr_2d)
+    r = benchmark(np_rot90, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.rot90", "Rot90", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_permute_dims(): return np.permute_dims(arr_2d)
+    r = benchmark(np_permute_dims, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.permute_dims", "Transpose", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_matrix_transpose(): return np.matrix_transpose(arr_2d)
+    r = benchmark(np_matrix_transpose, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.matrix_transpose", "Transpose", "Manipulation", dtype_name
+    results.append(r)
+
+    def np_trim_zeros(): return np.trim_zeros(arr_2d, 'fb')
+    r = benchmark(np_trim_zeros, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = "np.trim_zeros", "TrimZeros", "Manipulation", dtype_name
+    results.append(r)
+
     return results
 
 # =============================================================================
