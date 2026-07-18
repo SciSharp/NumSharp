@@ -508,6 +508,23 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     View of the matrix transposed array. <br></br>
+        ///     Swaps the two innermost dimensions, i.e. an array of shape <c>(..., M, N)</c> becomes <c>(..., N, M)</c>.<br></br>
+        ///     Same as <c>np.matrix_transpose(self)</c> / <c>self.swapaxes(-1, -2)</c>. Requires at least 2 dimensions.
+        /// </summary>
+        /// <exception cref="System.ArgumentException">If this array has fewer than 2 dimensions.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.mT.html</remarks>
+        public NDArray mT
+        {
+            get
+            {
+                if (ndim < 2)
+                    throw new System.ArgumentException("matrix transpose with ndim < 2 is undefined");
+                return TensorEngine.SwapAxes(this, -1, -2);
+            }
+        }
+
+        /// <summary>
         ///     The shape representing this <see cref="NDArray"/>.
         /// </summary>
         public Shape Shape
