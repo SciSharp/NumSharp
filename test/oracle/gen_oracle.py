@@ -775,6 +775,11 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
                 jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
                 jobs.append(("delete", {"obj": 0, "axis": 0}, lambda v: np.delete(v, 0, axis=0)))
+                # rot90's three non-trivial k values exercise its three distinct paths:
+                # k=1 flip+transpose, k=2 double-flip, k=3 transpose+flip. Default axes (0, 1).
+                jobs.append(("rot90", {"k": 1}, lambda v: np.rot90(v, 1)))
+                jobs.append(("rot90", {"k": 2}, lambda v: np.rot90(v, 2)))
+                jobs.append(("rot90", {"k": 3}, lambda v: np.rot90(v, 3)))
             for (opname, params, f) in jobs:
                 try:
                     r = np.asarray(f(view))

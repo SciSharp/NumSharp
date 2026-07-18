@@ -89,6 +89,7 @@ namespace NumSharp.UnitTest.Fuzz
                 case "reshape": return np.reshape(ops[0], ParseIntArray(p["shape"]));
                 case "swapaxes": return np.swapaxes(ops[0], p["a1"].GetInt32(), p["a2"].GetInt32());
                 case "moveaxis": return np.moveaxis(ops[0], p["src"].GetInt32(), p["dst"].GetInt32());
+                case "rot90": return np.rot90(ops[0], p["k"].GetInt32());
                 case "delete": return np.delete(ops[0], p["obj"].GetInt32(), p["axis"].GetInt32());
                 case "atleast_1d": return np.atleast_1d(ops[0]);
                 case "atleast_2d": return np.atleast_2d(ops[0]);
