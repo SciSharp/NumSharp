@@ -29,6 +29,29 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [TestMethod]
+        public void Flatten_EmptyViewWithNonZeroOffset_ReturnsEmpty()
+        {
+            // Regression: an empty slice keeps its parent's offset while its own backing buffer
+            // Count collapses to 0. UnmanagedStorage.CloneData used to Slice(offset, 0) on that
+            // zero-length buffer (start=offset > Count=0) and throw ArgumentOutOfRangeException.
+            // NumPy: arr[1:,1:,1:1].flatten() -> shape (0,).
+            var v = np.arange(24).reshape(4, 3, 2)["1:, 1:, 1:1"];   // (3,2,0), offset != 0
+            v.size.Should().Be(0);
+
+            var f = v.flatten();
+            f.shape.Should().ContainInOrder(0L);
+            f.size.Should().Be(0);
+
+            // 1-D empty offset view (offset via a mid-array empty slice)
+            np.arange(10)["5:5"].flatten().size.Should().Be(0);
+
+            // The sibling materializers agree.
+            v.ravel().size.Should().Be(0);
+            v.copy().size.Should().Be(0);
+            v.astype(NPTypeCode.Double).size.Should().Be(0);
+        }
+
+        [TestMethod]
         public void Flatten_FOrder_StillCorrect()
         {
             // np.flatten('F') reads column-major.

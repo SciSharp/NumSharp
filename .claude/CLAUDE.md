@@ -241,7 +241,7 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `ascontiguousarray`, `asfortranarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
@@ -251,6 +251,8 @@ stays read-only). `flip(m, axis: null)` flips ALL axes; `flip(m, int[])` is the 
 negative axis — THEN `ValueError("repeated axis")`, so `(0,0,5)` raises AxisError). 0-d: `flip(m)` returns
 the scalar (NumPy's `m[()]`), `flip(m, 0)` raises AxisError. `fliplr` requires ndim≥2 / `flipud` ndim≥1
 (`ValueError("Input must be >= 2-d." / ">= 1-d.")` verbatim). See `Manipulation/np.flip.cs`.
+
+`rot90(m, k=1, axes=(0,1))` rotates in the plane of two axes by `90°·k` (counterclockwise from the first axis toward the second). Like NumPy it is a **pure view composition** of axis-flips + a transpose — no data moves, so the result shares memory with `m` (read-only when the source is, e.g. a broadcast view). `k` is taken mod 4 (Python-style, so negatives wrap); `k∈{0}` returns a full view, `k∈{2}` flips both axes, `k∈{1,3}` flip-then-transpose. Validation mirrors NumPy verbatim (`ArgumentException`): `len(axes)!=2` → "len(axes) must be 2.", `axes[0]==axes[1] || |axes[0]-axes[1]|==ndim` → "Axes must be different." (this fires *before* the range check, so e.g. `axes=(0,2)` on 2-D reports "different", not out-of-range), else out-of-range. See `Manipulation/np.rot90.cs`.
 
 `resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs`, `Manipulation/NDArray.resize.cs`.
 

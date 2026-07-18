@@ -1532,4 +1532,28 @@ public class TypePromotionDifferenceTests
         Assert.ThrowsException<ArgumentException>(() => np.amin(empty),
             "NumSharp now raises ArgumentException matching NumPy's ValueError.");
     }
+
+    [TestMethod]
+    public void CumProd_EmptyArray_FlattensAndWidensLikeCumSum()
+    {
+        // NumPy: cumprod(empty) with axis=None flattens to (0,) and widens to the accumulator
+        // dtype (NEP50) — exactly like cumsum. NumSharp's ReduceCumMul used to `return arr`
+        // unchanged, giving a multi-dim source the WRONG shape (0,3) and the WRONG (source) dtype.
+        var e = np.zeros(new[] { 0, 3 }).astype(NPTypeCode.Int32);
+
+        var flat = np.cumprod(e);                         // axis=None -> ravel
+        CollectionAssert.AreEqual(new long[] { 0 }, flat.shape);
+        Assert.AreEqual(NPTypeCode.Int64, flat.typecode); // NEP50 int32 -> int64
+
+        var kept = np.cumprod(e, 0);                      // with axis -> shape preserved
+        CollectionAssert.AreEqual(new long[] { 0, 3 }, kept.shape);
+        Assert.AreEqual(NPTypeCode.Int64, kept.typecode);
+
+        // floats are preserved; uint8 widens to uint64 (same accumulator rules as cumsum)
+        Assert.AreEqual(NPTypeCode.Single, np.cumprod(np.zeros(new[] { 0, 3 }).astype(NPTypeCode.Single)).typecode);
+        Assert.AreEqual(NPTypeCode.UInt64, np.cumprod(np.zeros(new[] { 0, 3 }).astype(NPTypeCode.Byte)).typecode);
+
+        // out-of-range axis on an empty array raises (NumPy AxisError), not a silent no-op
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.cumprod(e, 5));
+    }
 }

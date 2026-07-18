@@ -775,6 +775,19 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
                 jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
                 jobs.append(("delete", {"obj": 0, "axis": 0}, lambda v: np.delete(v, 0, axis=0)))
+                # rot90's three non-trivial k values exercise its three distinct paths:
+                # k=1 flip+transpose, k=2 double-flip, k=3 transpose+flip. Default plane (0, 1)
+                # plus the reversed plane (1, 0) — the inverse direction, axes[0] > axes[1].
+                jobs.append(("rot90", {"k": 1, "axes": [0, 1]}, lambda v: np.rot90(v, 1, (0, 1))))
+                jobs.append(("rot90", {"k": 2, "axes": [0, 1]}, lambda v: np.rot90(v, 2, (0, 1))))
+                jobs.append(("rot90", {"k": 3, "axes": [0, 1]}, lambda v: np.rot90(v, 3, (0, 1))))
+                jobs.append(("rot90", {"k": 1, "axes": [1, 0]}, lambda v: np.rot90(v, 1, (1, 0))))
+                if nd >= 3:
+                    # non-default planes: a non-adjacent pair, and a negative-axis pair.
+                    jobs.append(("rot90", {"k": 1, "axes": [0, nd - 1]},
+                                 lambda v, nd=nd: np.rot90(v, 1, (0, nd - 1))))
+                    jobs.append(("rot90", {"k": 3, "axes": [-1, -2]},
+                                 lambda v: np.rot90(v, 3, (-1, -2))))
             for (opname, params, f) in jobs:
                 try:
                     r = np.asarray(f(view))
