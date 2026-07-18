@@ -20,7 +20,7 @@ namespace NumSharp.Interop.PythonNet
         ///     <para>0-d exporters produce scalar NDArrays. complex64 buffers (format 'Zf') are widened
         ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy.</para>
         /// </summary>
-        public static unsafe NDArray ToNDArray(PyObject obj)
+        public static unsafe NDArray ToNDArray(this PyObject obj)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             PythonInteropRuntime.EnsureEngine();
@@ -180,6 +180,14 @@ namespace NumSharp.Interop.PythonNet
                 }
             }
         }
+
+        /// <summary>
+        ///     Fluent alias of <see cref="ToNDArrayView(PyObject, bool)"/> following numpy's
+        ///     <c>array</c>/<c>asarray</c> naming: <c>To…</c> copies, <c>As…</c> shares. Returns a
+        ///     zero-copy NumSharp view over the exporter's memory (shared mutation, shared lifetime).
+        /// </summary>
+        /// <inheritdoc cref="ToNDArrayView(PyObject, bool)"/>
+        public static NDArray AsNDArray(this PyObject obj, bool allowReadonly = false) => ToNDArrayView(obj, allowReadonly);
 
         // ---- zero-copy import internals ----------------------------------------------------------
 

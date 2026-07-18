@@ -18,7 +18,7 @@ The package depends on `pythonnet` (≥ 3.0.1) and co-versions with NumSharp. Yo
 
 ```csharp
 using NumSharp;
-using NumSharp.Interop;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 Runtime.PythonDLL = @"C:\Python312\python312.dll";   // or set the PYTHONNET_PYDLL env var
@@ -34,7 +34,7 @@ PythonEngine.BeginAllowThreads();                    // release the GIL from the
 
 ```csharp
 using NumSharp;
-using NumSharp.Interop;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 var nd = np.arange(6).reshape(2, 3);
@@ -62,20 +62,20 @@ using (Py.GIL())
 
 ## The Four Verbs
 
-Everything in the package is packaging over four operations on the static `PythonConvert` engine:
+Everything in the package is packaging over four operations on the static `NDArrayInterop` engine:
 
 | Direction | Verb | Semantics |
 |---|---|---|
-| NumSharp → Python | `PythonConvert.ToNumpy(nd)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
-| NumSharp → Python | `PythonConvert.ToNumpyCopy(nd)` | Independent numpy array — no shared memory, no lifetime coupling |
-| Python → NumSharp | `PythonConvert.ToNDArray(py)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
-| Python → NumSharp | `PythonConvert.ToNDArrayView(py[, allowReadonly])` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
+| NumSharp → Python | `NDArrayInterop.ToNumpy(nd)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
+| NumSharp → Python | `NDArrayInterop.ToNumpyCopy(nd)` | Independent numpy array — no shared memory, no lifetime coupling |
+| Python → NumSharp | `NDArrayInterop.ToNDArray(py)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
+| Python → NumSharp | `NDArrayInterop.ToNDArrayView(py[, allowReadonly])` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
 
-Plus `PythonConvert.ToMemoryView(nd)` — a writable Python `memoryview` of raw bytes, for non-numpy consumers of the buffer protocol (`PIL.Image.frombuffer`, `struct.unpack_from`, sockets, ...) — and the dtype maps (`ToNumpyDtypeStr`, `FromNumpyDtypeStr`, `ToBufferFormat`, `FromBufferFormat`).
+Plus `NDArrayInterop.ToMemoryView(nd)` — a writable Python `memoryview` of raw bytes, for non-numpy consumers of the buffer protocol (`PIL.Image.frombuffer`, `struct.unpack_from`, sockets, ...) — and the dtype maps (`ToNumpyDtypeStr`, `FromNumpyDtypeStr`, `ToBufferFormat`, `FromBufferFormat`).
 
 ### Extension methods
 
-`using NumSharp.Interop;` adds the fluent forms. The convention mirrors numpy's `array`/`asarray`: **`To…` copies, `As…` shares** (`ToNumpy` is the exception — the zero-copy view is the package's headline, and `ToNumpyCopy` is the explicit copy).
+The verbs double as extension methods on `NDArrayInterop`, so `using NumSharp.Interop.PythonNet;` also adds the fluent forms. The convention mirrors numpy's `array`/`asarray`: **`To…` copies, `As…` shares** (`ToNumpy` is the exception — the zero-copy view is the package's headline, and `ToNumpyCopy` is the explicit copy).
 
 ```csharp
 PyObject a = nd.ToNumpy();          // zero-copy view (alias: nd.ToPython())
@@ -142,8 +142,8 @@ double total = (double)np.sum(importedView);   // NumSharp kernels over Python-o
 Two observability counters expose the live state — useful in tests and leak hunts:
 
 ```csharp
-int pins   = PythonConvert.LiveExports;   // NumSharp buffers rooted by live Python views
-int leases = PythonConvert.LiveImports;   // Python buffers leased by live NumSharp views
+int pins   = NDArrayInterop.LiveExports;   // NumSharp buffers rooted by live Python views
+int leases = NDArrayInterop.LiveImports;   // Python buffers leased by live NumSharp views
 ```
 
 ---
@@ -153,7 +153,7 @@ int leases = PythonConvert.LiveImports;   // Python buffers leased by live NumSh
 Register once and `NDArray` ⇄ numpy conversion happens automatically at every pythonnet boundary — `scope.Set`, Python call arguments, `ToPython()`, and `pyObj.As<NDArray>()` on the way back:
 
 ```csharp
-PythonConvert.RegisterCodec();   // once per engine session; idempotent
+NDArrayInterop.RegisterCodec();   // once per engine session; idempotent
 
 using (Py.GIL())
 {
@@ -195,7 +195,7 @@ numpy `ndarray` subclasses (`matrix`, `memmap`, user subclasses) decode via an `
 
 ## Threading & the GIL
 
-- Every `PythonConvert` method **acquires the GIL itself** (re-entrantly — nesting under your own `Py.GIL()` is fine). You can call the API from any thread, including threads that never touched Python before.
+- Every `NDArrayInterop` method **acquires the GIL itself** (re-entrantly — nesting under your own `Py.GIL()` is fine). You can call the API from any thread, including threads that never touched Python before.
 - Your own `PyObject` handling still follows pythonnet's rules — in particular, **dispose `PyObject`s under the GIL** (pythonnet 3.0.x requires it for the final decref).
 - Internal releases never block: dropping the last NumSharp view of a lease only *enqueues* the Python-side release, which is drained under the GIL by a background worker, inline at the next conversion, and at engine shutdown. A thread that holds the GIL indefinitely cannot deadlock the interop.
 

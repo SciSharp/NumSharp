@@ -31,7 +31,7 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>ndarray.resize(refcheck=True)</c> on the source refuses to reallocate — the same
         ///     protection NumPy applies to exported buffers.</para>
         /// </summary>
-        public static unsafe PyObject ToNumpy(NDArray source)
+        public static unsafe PyObject ToNumpy(this NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();
@@ -88,14 +88,24 @@ namespace NumSharp.Interop.PythonNet
         ///     <see cref="ToNumpy(NDArray)"/> when <paramref name="copy"/> is <c>false</c> (zero-copy shared
         ///     view), <see cref="ToNumpyCopy"/> when <c>true</c> (independent numpy array).
         /// </summary>
-        public static PyObject ToNumpy(NDArray source, bool copy) => copy ? ToNumpyCopy(source) : ToNumpy(source);
+        public static PyObject ToNumpy(this NDArray source, bool copy) => copy ? ToNumpyCopy(source) : ToNumpy(source);
+
+        /// <summary>
+        ///     Fluent alias of <see cref="ToNumpy(NDArray)"/> matching pythonnet's <c>ToPython()</c> naming.
+        ///     Being typed for <see cref="NDArray"/> it is more specific than pythonnet's
+        ///     <c>object.ToPython()</c> extension, so it wins overload resolution for an
+        ///     <see cref="NDArray"/> — and unlike the untyped one it produces a numpy array even without
+        ///     <see cref="RegisterCodec()"/>.
+        /// </summary>
+        /// <inheritdoc cref="ToNumpy(NDArray)"/>
+        public static PyObject ToPython(this NDArray source) => ToNumpy(source);
 
         /// <summary>
         ///     Copy a NumSharp array into an independent, C-contiguous numpy array (no shared memory, no
         ///     lifetime coupling). Values follow the source's logical layout, so sliced / transposed /
         ///     broadcast views copy element-exact. Same dtype mapping as <see cref="ToNumpy(NDArray)"/>.
         /// </summary>
-        public static unsafe PyObject ToNumpyCopy(NDArray source)
+        public static unsafe PyObject ToNumpyCopy(this NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();
@@ -142,7 +152,7 @@ namespace NumSharp.Interop.PythonNet
         /// </summary>
         /// <exception cref="InvalidOperationException">The source is not C-contiguous — materialize first
         /// (<c>np.ascontiguousarray(nd)</c> or <c>nd.copy()</c>).</exception>
-        public static unsafe PyObject ToMemoryView(NDArray source)
+        public static unsafe PyObject ToMemoryView(this NDArray source)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();

@@ -14,7 +14,7 @@ Numpy.NET's `NDarray` **is** a `PyObject` — `PythonObject.self` is public, and
 
 ```csharp
 using Numpy;                  // Numpy.NET
-using NumSharp.Interop;       // the bridge
+using NumSharp.Interop.PythonNet;  // the bridge
 using np2 = Numpy.np;         // NumSharp's np wins bare-name lookup; alias theirs
 
 // Wrap: Numpy.NET's ENTIRE C# API now operates over NumSharp's buffer, zero-copy
@@ -156,7 +156,7 @@ using (Py.GIL())
 
 ## The codec sees their arrays too
 
-A Numpy.NET `NDarray` *is* a `numpy.ndarray`, so with [`PythonConvert.RegisterCodec()`](pythonnet.md#auto-marshaling-the-codec) registered, `their.self.As<NDArray>()` decodes like any numpy array (as a safe copy by default), and the same object can simultaneously live in a plain pythonnet scope — the scope name, the Numpy.NET wrapper and numpy itself are one object.
+A Numpy.NET `NDarray` *is* a `numpy.ndarray`, so with [`NDArrayInterop.RegisterCodec()`](pythonnet.md#auto-marshaling-the-codec) registered, `their.self.As<NDArray>()` decodes like any numpy array (as a safe copy by default), and the same object can simultaneously live in a plain pythonnet scope — the scope name, the Numpy.NET wrapper and numpy itself are one object.
 
 > Proven by `Codec_DecodesNumpyNetArrays_AndScopesInterleave`.
 
