@@ -187,6 +187,9 @@ Functions for changing array shape and dimensions.
 | `np.swapaxes(a, ax1, ax2)` | Swap two axes |
 | `np.moveaxis(a, src, dst)` | Move axes to new positions |
 | `np.rollaxis(a, axis)` | Roll axis backwards |
+| `np.flip(a, axis)` | Reverse element order along axes (returns view) |
+| `np.fliplr(a)` | Flip left/right — reverse axis 1 (returns view) |
+| `np.flipud(a)` | Flip up/down — reverse axis 0 (returns view) |
 | `np.atleast_1d(a)` | Convert to at least 1-D |
 | `np.atleast_2d(a)` | Convert to at least 2-D |
 | `np.atleast_3d(a)` | Convert to at least 3-D |
