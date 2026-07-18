@@ -8,8 +8,12 @@ namespace NumSharp
     {
         public static NDArray expand_dims(NDArray a, int axis)
         {
-            //test if the ndarray is empty.
-            if (a.size == 0 || a.Shape.IsEmpty)
+            // Only the uninitialized-shape sentinel is passed through. A genuine empty array
+            // (size == 0 but with real dimensions, e.g. (0, 3)) MUST still gain the new axis —
+            // NumPy: expand_dims((0, 3), 0) -> (1, 0, 3). Guarding on a.size == 0 here made
+            // expand_dims a no-op for every empty array (and, transitively, broke np.stack and
+            // np.atleast_2d / np.vstack, which build on it).
+            if (a.Shape.IsEmpty)
                 return a;
 
             return new NDArray(a.Storage.Alias(a.Shape.ExpandDimension(axis))) { TensorEngine = a.TensorEngine };
@@ -31,7 +35,8 @@ namespace NumSharp
             if (axis == null || axis.Length == 0)
                 return a;
 
-            if (a.size == 0 || a.Shape.IsEmpty)
+            // See the single-axis overload: a size == 0 array must still gain the new axes.
+            if (a.Shape.IsEmpty)
                 return a;
 
             return new NDArray(a.Storage.Alias(a.Shape.ExpandDimensions(axis))) { TensorEngine = a.TensorEngine };

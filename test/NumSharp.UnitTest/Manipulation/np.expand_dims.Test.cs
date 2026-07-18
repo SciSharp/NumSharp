@@ -205,5 +205,19 @@ namespace NumSharp.UnitTest.Manipulation
 
             r.Data<int>().Should().Equal(0, 1, 2, 3, 4, 5);
         }
+
+        [TestMethod]
+        public void ExpandDims_EmptyArray_StillInsertsAxis()
+        {
+            // Regression: expand_dims used to early-return the input when a.size == 0, making it a
+            // no-op for every empty array (and, via np.stack / np.atleast_2d, breaking those too).
+            // NumPy always inserts the axis regardless of emptiness.
+            np.expand_dims(np.zeros(new[] {0}), 0).shape.Should().Equal(1L, 0L);          // (0,)   -> (1,0)
+            np.expand_dims(np.zeros(new[] {0, 3}), 0).shape.Should().Equal(1L, 0L, 3L);   // (0,3)  -> (1,0,3)
+            np.expand_dims(np.zeros(new[] {3, 0}), 0).shape.Should().Equal(1L, 3L, 0L);   // (3,0)  -> (1,3,0)
+            np.expand_dims(np.zeros(new[] {2, 0, 3}), 1).shape.Should().Equal(2L, 1L, 0L, 3L);
+            // int[]-axis overload
+            np.expand_dims(np.zeros(new[] {0, 3}), new[] {0, 2}).shape.Should().Equal(1L, 0L, 1L, 3L);
+        }
     }
 }
