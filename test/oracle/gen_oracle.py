@@ -768,9 +768,21 @@ def gen_manip(dtypes, layout_names):
                 ("atleast_1d", {}, lambda v: np.atleast_1d(v)),
                 ("atleast_2d", {}, lambda v: np.atleast_2d(v)),
                 ("atleast_3d", {}, lambda v: np.atleast_3d(v)),
+                ("flip", {}, lambda v: np.flip(v)),            # reverse ALL axes (0-d -> scalar)
             ]
             if sz > 0:
                 jobs.append(("reshape", {"shape": [sz]}, lambda v, sz=sz: v.reshape(sz)))
+            if nd >= 1:
+                # flipud (>= 1-d) + single-axis flip (int overload). trim_zeros is value-dependent:
+                # the int/uint pools are front-loaded with 0 and the float pool carries 0.0/-0.0 amid
+                # nan/inf, so f / b / fb each exercise real leading/trailing edge cropping (not no-ops).
+                jobs.append(("flipud", {}, lambda v: np.flipud(v)))
+                jobs.append(("flip", {"axis": 0}, lambda v: np.flip(v, 0)))
+                jobs.append(("trim_zeros", {"trim": "fb"}, lambda v: np.trim_zeros(v, "fb")))
+                jobs.append(("trim_zeros", {"trim": "f"}, lambda v: np.trim_zeros(v, "f")))
+                jobs.append(("trim_zeros", {"trim": "b"}, lambda v: np.trim_zeros(v, "b")))
+                jobs.append(("trim_zeros", {"trim": "fb", "axis": 0},
+                             lambda v: np.trim_zeros(v, "fb", axis=0)))
             if nd >= 2:
                 jobs.append(("swapaxes", {"a1": 0, "a2": nd - 1}, lambda v, nd=nd: np.swapaxes(v, 0, nd - 1)))
                 jobs.append(("moveaxis", {"src": 0, "dst": nd - 1}, lambda v, nd=nd: np.moveaxis(v, 0, nd - 1)))
@@ -782,12 +794,23 @@ def gen_manip(dtypes, layout_names):
                 jobs.append(("rot90", {"k": 2, "axes": [0, 1]}, lambda v: np.rot90(v, 2, (0, 1))))
                 jobs.append(("rot90", {"k": 3, "axes": [0, 1]}, lambda v: np.rot90(v, 3, (0, 1))))
                 jobs.append(("rot90", {"k": 1, "axes": [1, 0]}, lambda v: np.rot90(v, 1, (1, 0))))
+                # fliplr + the transpose aliases (permute_dims == transpose; matrix_transpose swaps the
+                # last two axes) + the int[]-axes forms of flip / trim_zeros — all pure O(1)/O(ndim) views.
+                jobs.append(("fliplr", {}, lambda v: np.fliplr(v)))
+                jobs.append(("flip", {"axes": [0, nd - 1]}, lambda v, nd=nd: np.flip(v, (0, nd - 1))))
+                jobs.append(("permute_dims", {}, lambda v: np.permute_dims(v)))
+                jobs.append(("matrix_transpose", {}, lambda v: np.matrix_transpose(v)))
+                jobs.append(("trim_zeros", {"trim": "fb", "axes": [nd - 1]},
+                             lambda v, nd=nd: np.trim_zeros(v, "fb", axis=(nd - 1,))))
                 if nd >= 3:
                     # non-default planes: a non-adjacent pair, and a negative-axis pair.
                     jobs.append(("rot90", {"k": 1, "axes": [0, nd - 1]},
                                  lambda v, nd=nd: np.rot90(v, 1, (0, nd - 1))))
                     jobs.append(("rot90", {"k": 3, "axes": [-1, -2]},
                                  lambda v: np.rot90(v, 3, (-1, -2))))
+                    # explicit-axes permutation (axis roll) — the permute_dims axes path.
+                    jobs.append(("permute_dims", {"axes": list(range(1, nd)) + [0]},
+                                 lambda v, nd=nd: np.permute_dims(v, tuple(range(1, nd)) + (0,))))
             for (opname, params, f) in jobs:
                 try:
                     r = np.asarray(f(view))
