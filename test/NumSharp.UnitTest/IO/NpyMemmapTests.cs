@@ -277,7 +277,9 @@ namespace NumSharp.UnitTest.IO
         {
             string p = Write("a.npy", Arange(6));
             var m = (NDArray)np.load(p, mmap_mode: "r");
-            Assert.ThrowsException<ArgumentException>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
+            // np.copyto routes through the standard write guard (NumSharpException:
+            // "assignment destination is read-only"), same as every other write path.
+            Assert.ThrowsException<NumSharpException>(() => np.copyto(m, np.zeros(new Shape(6), NPTypeCode.Int32)));
             m.Dispose();
         }
 
