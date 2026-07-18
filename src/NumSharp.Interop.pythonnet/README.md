@@ -4,7 +4,7 @@ Zero-copy interop between NumSharp `NDArray` and the Python ecosystem via [Pytho
 
 ```csharp
 using NumSharp;
-using NumSharp.Interop;
+using NumSharp.Interop.PythonNet;
 using Python.Runtime;
 
 Runtime.PythonDLL = "python312.dll";     // or the PYTHONNET_PYDLL env var
@@ -13,7 +13,7 @@ PythonEngine.Initialize();
 
 ## The four verbs
 
-Everything is packaging over four operations on the static `PythonConvert` engine:
+Everything is packaging over four operations on the static `NDArrayInterop` engine:
 
 | Direction | Verb | Semantics |
 |---|---|---|
@@ -26,8 +26,11 @@ Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-num
 
 ## Extension methods (the ergonomic default)
 
+The verbs above double as extension methods — `NDArrayInterop` provides them, so importing its
+namespace lets you call them fluently on `NDArray` / `PyObject` as well as statically:
+
 ```csharp
-using NumSharp.Interop;
+using NumSharp.Interop.PythonNet;
 
 PyObject a = nd.ToNumpy();          // zero-copy view (also: nd.ToPython())
 PyObject c = nd.ToNumpyCopy();      // independent copy
@@ -38,7 +41,7 @@ NDArray  v = py.AsNDArray();        // view   (As… = share, like numpy array/a
 ## Codec (auto-marshaling)
 
 ```csharp
-PythonConvert.RegisterCodec();      // once per engine session; idempotent
+NDArrayInterop.RegisterCodec();     // once per engine session; idempotent
 
 using (Py.GIL())
 {
@@ -54,7 +57,7 @@ using (Py.GIL())
 
 **Exports** take their own atomic reference on the NumSharp buffer (NumSharp's ARC), so the memory survives even if every C# reference — including the returned `PyObject` wrapper — is disposed or collected. Release is owned by Python: a `weakref.finalize` on the exported array's *base* buffer object (which every derived numpy view chains to) fires when the last Python-side view dies. If the engine shuts down while Python still holds views, the pin is swept right after `PythonEngine.Shutdown()` completes — pythonnet runs no Python atexit pass, so the finalize callbacks cannot fire during shutdown (probed; the sweep waits until the interpreter is provably gone, so it can never race Python reads). While exported, `ndarray.resize(refcheck: true)` on the source refuses to reallocate — the same guard NumPy applies to referenced arrays.
 
-**Imports** lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the last NumSharp view over the memory — *including derived slices like `nd["2:"]`* — is disposed or collected. C-contiguous leases hold a real `Py_buffer`, so resizable exporters (`bytearray`) are locked against reallocation, and numpy's `resize` refcheck refuses while the lease lives. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread); `PythonConvert.LiveExports` / `LiveImports` expose the counters.
+**Imports** lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the last NumSharp view over the memory — *including derived slices like `nd["2:"]`* — is disposed or collected. C-contiguous leases hold a real `Py_buffer`, so resizable exporters (`bytearray`) are locked against reallocation, and numpy's `resize` refcheck refuses while the lease lives. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread); `NDArrayInterop.LiveExports` / `LiveImports` expose the counters.
 
 Read-only sources (`bytes`, non-writeable numpy arrays) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (`Shape.IsWriteable == false`, exactly numpy's `writeable=False`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
 
