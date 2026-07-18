@@ -288,6 +288,186 @@ pattern appears at 14 sites across the Direct partials. It is why the generator
 can be aggressive — a path that only ever makes things faster, and quietly steps
 aside when it cannot, is a path you can trust.
 
+## Anatomy of a Kernel: a Guided Tour in IL
+
+The lifecycle above is abstract. This section builds a real kernel from the
+ground up — atom, operation, factory, loop, intrinsic, and finally the plug-in
+point that fusion and custom operations use. Every snippet is distilled from the
+actual source; the parenthetical names point to the full versions.
+
+### 1. The atom: load one typed element
+
+IL is a stack machine, and the smallest thing a kernel does is push one element
+from a pointer. There is no generic "load" — the value's dtype picks the opcode
+(`EmitLoadIndirect`):
+
+```csharp
+static void EmitLoadIndirect(ILGenerator il, NPTypeCode type)
+{
+    switch (type)
+    {
+        case NPTypeCode.Int32:   il.Emit(OpCodes.Ldind_I4); break;          // 4-byte signed
+        case NPTypeCode.Single:  il.Emit(OpCodes.Ldind_R4); break;          // float32
+        case NPTypeCode.Double:  il.Emit(OpCodes.Ldind_R8); break;          // float64
+        case NPTypeCode.Half:    il.Emit(OpCodes.Ldobj, typeof(Half));    break;   // value struct
+        case NPTypeCode.Complex: il.Emit(OpCodes.Ldobj, typeof(Complex)); break;   // value struct
+        // ...one arm per dtype; bool/byte use Ldind_U1, char/ushort Ldind_U2, ...
+    }
+}
+```
+
+Note the recurring split: the wide value-struct dtypes (`Half`, `Decimal`,
+`Complex`) move with `Ldobj`/`Stobj`, while the primitives get a dedicated
+`Ldind.*`/`Stind.*`. A whole kernel is just these typed moves glued together by
+operations.
+
+### 2. The operation: arithmetic is (usually) one opcode
+
+With both operands on the stack, most binary ops are a single instruction
+(`EmitScalarOperation`):
+
+```csharp
+var opcode = op switch
+{
+    BinaryOp.Add        => OpCodes.Add,
+    BinaryOp.Subtract   => OpCodes.Sub,
+    BinaryOp.Multiply   => OpCodes.Mul,
+    BinaryOp.Divide     => IsUnsigned(resultType) ? OpCodes.Div_Un : OpCodes.Div,
+    BinaryOp.BitwiseAnd => OpCodes.And,
+    // ...
+};
+il.Emit(opcode);
+```
+
+"Usually" is load-bearing. `Power`, `Mod`, `FloorDivide`, the shifts, and
+`maximum`/`minimum` are intercepted *before* this switch and routed to
+NumPy-faithful helpers, because the naive opcode disagrees with NumPy — C#'s `%`
+takes the dividend's sign where NumPy takes the divisor's, and IL has no integer
+power at all. Even plain division needs a different opcode for unsigned operands
+(`Div_Un`). The switch is the fast common case; the interceptions are where
+compatibility is bought.
+
+### 3. The factory: build, cache, materialize
+
+An operation plus its operand types becomes a kernel inside a `DynamicMethod`.
+The clearest example is the raw inner-loop factory (`InnerLoop.cs`):
+
+```csharp
+internal static NDInnerLoopFunc CompileRawInnerLoop(Action<ILGenerator> body, string cacheKey)
+    => _innerLoopCache.GetOrAdd(cacheKey, _ =>
+    {
+        var dm = new DynamicMethod(
+            name:           $"NDInnerLoop_{Sanitize(cacheKey)}",
+            returnType:     typeof(void),
+            parameterTypes: new[] { typeof(void**), typeof(long*), typeof(long), typeof(void*) },
+            owner:          typeof(DirectILKernelGenerator),
+            skipVisibility: true);          // emitted IL may touch internal/private members
+
+        body(dm.GetILGenerator());          // the caller writes the method body
+        return dm.CreateDelegate<NDInnerLoopFunc>();   // JIT compiles it on first invoke
+    });
+```
+
+Four ideas in ten lines: `GetOrAdd` makes emission happen at most once per key;
+the `parameterTypes` array *is* the `NDInnerLoopFunc` contract from
+[Two Generators](#two-generators-two-contracts); `skipVisibility: true` lets the
+generated code reach NumSharp internals; and `CreateDelegate` returns a callable
+that the JIT lowers to native code the first time it runs.
+
+### 4. Addressing and the loop skeleton
+
+Inside the body, element addresses are plain pointer arithmetic. For a
+contiguous operand the address of element `i` is `base + i * elemSize`
+(`EmitAddrIPlusOffset`, simplified):
+
+```csharp
+il.Emit(OpCodes.Ldloc, basePtr);    // base
+il.Emit(OpCodes.Ldloc, locI);       // i
+il.Emit(OpCodes.Ldc_I8, elemSize);  // JIT-time constant; folds to a shift for power-of-2 sizes
+il.Emit(OpCodes.Mul);
+il.Emit(OpCodes.Conv_I);
+il.Emit(OpCodes.Add);               // base + i*elemSize
+```
+
+Those addresses drive the canonical throughput shape — a vector main loop that
+advances `vectorCount` elements at a time, then a scalar tail that mops up the
+`count % vectorCount` remainder:
+
+```text
+vectorEnd = count - vectorCount
+i = 0
+while i <= vectorEnd:            # SIMD main loop (the real code 4x-unrolls this)
+    load V<T> from each input at i
+    <vector body>               # e.g. one Vector<double> add
+    store V<T> to output at i
+    i += vectorCount
+while i < count:                # scalar tail
+    load *input at i
+    <scalar body>
+    store *output at i
+    i += 1
+```
+
+The loop guards are emitted with `DefineLabel`/`MarkLabel` and a `Bgt`/`Bge`
+branch — the 524 labels across the tree are almost all doing exactly this. The
+tail is not optional: `count` is rarely a whole number of vectors.
+
+### 5. Calling a SIMD intrinsic through the reflection cache
+
+The `<vector body>` is where SIMD happens, and a vector load turns out to be just
+a `call` to a cached, already-closed `MethodInfo` (`EmitVectorLoad`):
+
+```csharp
+internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
+{
+    var clr = GetClrType(type);
+    var x86 = VectorMethodCache.LoadX86(VectorBits, clr);       // Avx.LoadVector256(T*), etc.
+    if (x86 != null) { il.EmitCall(OpCodes.Call, x86, null); return; }   // ~1.8-2x tighter codegen
+    il.EmitCall(OpCodes.Call, VectorMethodCache.Load(VectorBits, clr), null);  // portable fallback
+}
+```
+
+Two techniques in one method. The cache resolves the reflection *once* and hands
+the same closed handle to every emitter, so an eligibility check and the emitter
+can never disagree about what the runtime exposes (see
+[SIMD Strategy](#simd-strategy)); and the emitter prefers the x86 intrinsic when
+the host has it. The store variant adds a third lesson in how mechanical IL is:
+`Avx.Store(T*, V)` takes its arguments in the opposite order from
+`Vector.Store(V, T*)`, so `EmitVectorStore` swaps two stack slots through locals
+before the call. The evaluation stack is yours to manage by hand, one push at a
+time.
+
+### 6. The plug-in point: supply the element math, inherit the loop
+
+Everything above is reusable machinery. A caller adding a new elementwise
+operation does *not* re-emit loops and addresses — it supplies only the
+per-element (and optional per-vector) math as `Action<ILGenerator>` closures and
+lets the factory wrap them. This is exactly how `np.evaluate` compiles an
+expression tree (`NDExpr.Compile`):
+
+```csharp
+Action<ILGenerator> scalarBody = il =>
+{
+    // the shell has pushed N inputs; pop into locals, emit the tree, leave 1 result
+    ...
+    EmitScalar(il, ctx);          // for a*b+2 → Mul, Ldc_R8 2, Add
+};
+
+// vectorBody is null when the op or dtype can't vectorize — the factory then
+// silently uses the scalar path, with no branch required at the call site.
+Action<ILGenerator>? vectorBody = wantSimd
+    ? il => { ...; EmitVector(il, ctx); }
+    : null;
+
+return DirectILKernelGenerator.CompileInnerLoop(operandTypes, scalarBody, vectorBody, key);
+```
+
+That is the entire extension model. `CompileInnerLoop` supplies the 4×-unrolled
+SIMD loop, the one-vector remainder, the AVX2 gather path, and the scalar-strided
+fallback; the caller supplies a handful of opcodes describing one element. Custom
+NDIter operations (`NDIter.Execution.Custom.cs`) plug in the same way. The
+machinery is written once; each new operation is cheap.
+
 ## Choosing the Loop
 
 Layout classification is where the generator earns its keep, and the two
@@ -312,7 +492,13 @@ gets its own branch-free specialized kernel — up to 12 × 12 × 5 × 5 = 3,600
 possible binary kernels, and 12 × 12 × 6 × 5 = 4,320 comparison kernels, though
 in practice only the handful your program actually exercises are ever emitted.
 Because the path is decided before the kernel is even looked up, the hot loop
-contains no layout branching at all.
+contains no layout branching at all:
+
+```csharp
+var path   = StrideDetector.Classify<T>(lhsStrides, rhsStrides, shape, ndim);
+var key    = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, path);
+var kernel = DirectILKernelGenerator.GetMixedTypeKernel(key);   // one branch-free kernel per path
+```
 
 One optimization is worth calling out because it turns a slow path into a fast
 one for free. Before classifying, `DefaultEngine` coalesces adjacent dimensions
@@ -330,6 +516,13 @@ cannot bake the path into the key, because a single compiled kernel is reused
 across chunks whose strides differ from one call to the next. So it emits the dispatch *into the kernel*: cheap integer compares at the
 top of the body check each operand's byte stride against its element size and
 branch to the matching loop.
+
+```csharp
+// emitted once, near the top of the inner-loop body:
+il.Emit(OpCodes.Ldloc, strideLocals[op]);
+il.Emit(OpCodes.Ldc_I8, (long)elemSize);
+il.Emit(OpCodes.Bne_Un, lblScalarStrided);   // this operand isn't contiguous → scalar path
+```
 
 | Tier | Entry point | Who emits what |
 | --- | --- | --- |
@@ -433,7 +626,24 @@ A representative small trap: a `bool` array is *logically* only `{0, 1}`, but a
 `np.frombuffer` view or foreign interop buffer can legally hold a byte like 255.
 So `EmitConvertTo` normalizes `!= 0 → 1` **before** widening a bool to any
 numeric type — otherwise `sum` over such a buffer would add 255 instead of
-counting a True. Even `NegateHalf` earns a bespoke helper: the BCL's
+counting a True:
+
+```csharp
+// bool is logically {0,1}, but a frombuffer view can hold a raw byte like 255.
+if (from == NPTypeCode.Boolean)
+{
+    il.Emit(OpCodes.Ldc_I4_0);
+    il.Emit(OpCodes.Cgt_Un);        // value = (value != 0) ? 1 : 0
+    from = NPTypeCode.Byte;         // continue widening from a clean 0/1 byte
+}
+
+// float → int: IL's conv.* SATURATES and yields 0 for NaN; NumPy truncates and
+// returns a type-min sentinel. Route through the Converts table, not Conv_I4.
+if ((from == NPTypeCode.Single || from == NPTypeCode.Double) && toIsInteger)
+    il.EmitCall(OpCodes.Call, ConvertsFloatToIntMethod(from, to), null);
+```
+
+Even `NegateHalf` earns a bespoke helper: the BCL's
 `Half.op_UnaryNegation` round-trips through `float`, which benchmarked 7.3×
 slower and made half-precision negate the single worst cell in the elementwise
 matrix (~0.14× of NumPy), so the emitter flips the sign bit directly instead.
@@ -503,10 +713,12 @@ return
 ```
 
 That gives a custom operation the same generated loop shape as a built-in ufunc
-without hand-writing any pointer arithmetic. The gather path is worth a note: its
-lane-index budget is `GatherStrideLimit = int.MaxValue / 8` (the largest lane
-offset is 7× the stride), and it applies only to 32- and 64-bit dtypes at 256-bit
-width — precisely the set NumPy's own `npyv_loadn` gathers.
+without hand-writing any pointer arithmetic — see
+[Anatomy §6](#6-the-plug-in-point-supply-the-element-math-inherit-the-loop) for
+the caller side. The gather path is worth a note: its lane-index budget is
+`GatherStrideLimit = int.MaxValue / 8` (the largest lane offset is 7× the
+stride), and it applies only to 32- and 64-bit dtypes at 256-bit width —
+precisely the set NumPy's own `npyv_loadn` gathers.
 
 ### Reflection caches — one source of truth
 
