@@ -9,39 +9,6 @@ This is the performance backbone behind elementwise ufuncs, reductions, scans,
 casts, selection/indexing helpers, `np.where`, `np.average`, `np.evaluate`, and
 the NDIter custom-operation bridge.
 
-## At A Glance
-
-| Measurement | Current source snapshot |
-| --- | ---: |
-| Kernel source files | 83 |
-| Kernel source lines | 42,822 |
-| Whole-array `DirectILKernelGenerator` partials | 64 files / 38,004 lines |
-| NDIter `ILKernelGenerator` partials | 5 files / 1,833 lines |
-| Shared kernel infrastructure files | 14 files / 2,985 lines |
-| `new DynamicMethod(...)` constructor sites | 57 |
-| `CreateDelegate(...)` sites | 56 |
-| Raw IL `Emit(...)` calls in the kernel tree | 7,012 |
-| `EmitCall(...)` sites | 390 |
-| Local slots declared by emitters | 484 |
-| Labels declared by emitters | 524 |
-| Kernel delegate type declarations | 40 |
-| `unsafe delegate` contracts | 39 |
-| Direct generator cache declarations | 43 `ConcurrentDictionary` fields |
-| Test files touching kernel, NDIter, or SIMD terminology | 136 |
-
-The kernel surface is broad:
-
-| Surface | Count | Examples |
-| --- | ---: | --- |
-| Binary operations | 17 | `add`, `subtract`, `multiply`, `divide`, bitwise ops, `power`, `floor_divide`, `arctan2`, `maximum`, `fmax` |
-| Unary operations | 35 | trig, exp/log family, rounding, `abs`, `sign`, `reciprocal`, predicates, bitwise/logical not |
-| Reductions | 20 | `sum`, `prod`, `min`, `max`, `arg*`, `mean`, `std`, `var`, NaN-aware variants |
-| Comparisons | 6 | `equal`, `not_equal`, `<`, `<=`, `>`, `>=` |
-| Dtypes | 15 | bool, integer widths, char, half, single, double, decimal, complex |
-| Binary layout paths | 5 | full SIMD, scalar-left/right broadcast, chunked SIMD, general strided |
-
-These numbers come from the checked-in source, not from handwritten estimates.
-
 ## Two Generators
 
 There are two physically separate generators because there are two different
@@ -132,7 +99,41 @@ about who drives the loop.
 | Reflection or intrinsic lookup behavior | `VectorMethodCache.cs` / `ScalarMethodCache.cs` | Eligibility checks and emitters must agree on available runtime methods. |
 | Cache observability or test reset behavior | `GeneratedDelegates.cs` | Public counts and internal clear hooks are centralized there. |
 
+
 ## Source Inventory
+
+### At A Glance
+
+| Measurement | Current source snapshot |
+| --- | ---: |
+| Kernel source files | 83 |
+| Kernel source lines | 42,822 |
+| Whole-array `DirectILKernelGenerator` partials | 64 files / 38,004 lines |
+| NDIter `ILKernelGenerator` partials | 5 files / 1,833 lines |
+| Shared kernel infrastructure files | 14 files / 2,985 lines |
+| `new DynamicMethod(...)` constructor sites | 57 |
+| `CreateDelegate(...)` sites | 56 |
+| Raw IL `Emit(...)` calls in the kernel tree | 7,012 |
+| `EmitCall(...)` sites | 390 |
+| Local slots declared by emitters | 484 |
+| Labels declared by emitters | 524 |
+| Kernel delegate type declarations | 40 |
+| `unsafe delegate` contracts | 39 |
+| Direct generator cache declarations | 43 `ConcurrentDictionary` fields |
+| Test files touching kernel, NDIter, or SIMD terminology | 136 |
+
+The kernel surface is broad:
+
+| Surface | Count | Examples |
+| --- | ---: | --- |
+| Binary operations | 17 | `add`, `subtract`, `multiply`, `divide`, bitwise ops, `power`, `floor_divide`, `arctan2`, `maximum`, `fmax` |
+| Unary operations | 35 | trig, exp/log family, rounding, `abs`, `sign`, `reciprocal`, predicates, bitwise/logical not |
+| Reductions | 20 | `sum`, `prod`, `min`, `max`, `arg*`, `mean`, `std`, `var`, NaN-aware variants |
+| Comparisons | 6 | `equal`, `not_equal`, `<`, `<=`, `>`, `>=` |
+| Dtypes | 15 | bool, integer widths, char, half, single, double, decimal, complex |
+| Binary layout paths | 5 | full SIMD, scalar-left/right broadcast, chunked SIMD, general strided |
+
+These numbers come from the checked-in source, not from handwritten estimates.
 
 ### Generator Totals
 
