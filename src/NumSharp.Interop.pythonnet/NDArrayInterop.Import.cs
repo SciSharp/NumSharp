@@ -20,13 +20,19 @@ namespace NumSharp.Interop.PythonNet
         ///     <para>0-d exporters produce scalar NDArrays. complex64 buffers (format 'Zf') are widened
         ///     to <see cref="NPTypeCode.Complex"/> (complex128) during the copy.</para>
         /// </summary>
-        public static unsafe NDArray ToNDArray(this PyObject obj)
+        /// <param name="obj">The buffer-protocol exporter to copy.</param>
+        /// <param name="requireGIL">
+        ///     <c>true</c>: acquire the GIL for this call (re-entrant under an outer <see cref="Py.GIL"/>);
+        ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
+        ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
+        /// </param>
+        public static unsafe NDArray ToNDArray(this PyObject obj, bool? requireGIL = null)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             PythonInteropRuntime.EnsureEngine();
             PythonInteropRuntime.DrainPending();
 
-            using (Py.GIL())
+            using (AcquireGil(requireGIL))
             {
                 using PyObject mv = OpenMemoryView(obj);
 
@@ -92,6 +98,11 @@ namespace NumSharp.Interop.PythonNet
         ///     over read-only buffers <c>writeable=False</c>. Default <c>false</c>: read-only sources
         ///     throw with guidance instead.
         /// </param>
+        /// <param name="requireGIL">
+        ///     <c>true</c>: acquire the GIL for this call (re-entrant under an outer <see cref="Py.GIL"/>);
+        ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
+        ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
+        /// </param>
         /// <remarks>
         ///     The returned array does NOT own its data (its storage reports view semantics, like
         ///     numpy's <c>flags.owndata == False</c> for foreign buffers): a size-changing
@@ -99,13 +110,13 @@ namespace NumSharp.Interop.PythonNet
         ///     array: it does not own its data" instead of silently reallocating away from the
         ///     shared Python memory, and <c>np.require(..., "O")</c> produces an owning copy.
         /// </remarks>
-        public static unsafe NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false)
+        public static unsafe NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false, bool? requireGIL = null)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             PythonInteropRuntime.EnsureEngine();
             PythonInteropRuntime.DrainPending();
 
-            using (Py.GIL())
+            using (AcquireGil(requireGIL))
             {
                 PyObject mv = null;
                 try
@@ -182,12 +193,13 @@ namespace NumSharp.Interop.PythonNet
         }
 
         /// <summary>
-        ///     Fluent alias of <see cref="ToNDArrayView(PyObject, bool)"/> following numpy's
+        ///     Fluent alias of <see cref="ToNDArrayView(PyObject, bool, bool?)"/> following numpy's
         ///     <c>array</c>/<c>asarray</c> naming: <c>To…</c> copies, <c>As…</c> shares. Returns a
         ///     zero-copy NumSharp view over the exporter's memory (shared mutation, shared lifetime).
         /// </summary>
-        /// <inheritdoc cref="ToNDArrayView(PyObject, bool)"/>
-        public static NDArray AsNDArray(this PyObject obj, bool allowReadonly = false) => ToNDArrayView(obj, allowReadonly);
+        /// <inheritdoc cref="ToNDArrayView(PyObject, bool, bool?)"/>
+        public static NDArray AsNDArray(this PyObject obj, bool allowReadonly = false, bool? requireGIL = null)
+            => ToNDArrayView(obj, allowReadonly, requireGIL);
 
         // ---- zero-copy import internals ----------------------------------------------------------
 

@@ -413,7 +413,7 @@ namespace NumSharp.Interop.PythonNet
         ///     its <c>PyBuffer</c> disposed NOW: pythonnet 3.0.x's <c>~PyBuffer()</c> throws when the
         ///     runtime is down, which would crash the finalizer thread later. NDArray views over Python
         ///     memory are invalid after engine shutdown (the interpreter that owned the memory is gone);
-        ///     that is documented on <see cref="NDArrayInterop.ToNDArrayView(PyObject, bool)"/>.
+        ///     that is documented on <see cref="NDArrayInterop.ToNDArrayView(PyObject, bool, bool?)"/>.
         ///
         ///     Export keepers are NOT released here — but not for the reason one might hope. Their
         ///     <c>weakref.finalize</c> callbacks will never run: pythonnet's <c>Shutdown</c> performs

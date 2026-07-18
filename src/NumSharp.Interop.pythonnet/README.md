@@ -66,6 +66,16 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
 ## Rules & limits
 
 - **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules.
+- **GIL opt-out**: every conversion verb takes a nullable `requireGIL` parameter; `null` (the default) follows the process-wide `NDArrayInterop.RequireGIL` (default `true`). An effective `false` replaces `Py.GIL()` with a shared no-op guard — the calling thread must **already hold the GIL** (an enclosing `Py.GIL()` block); converting GIL-less without holding it is an immediate access violation. **Trap:** a .NET method/delegate body invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies (probed on 3.0.5/3.1.0: `PyGILState_Check() == 0` inside the body) — so keep GIL management on inside Python→.NET callbacks. The interop's background machinery (deferred lease disposal, shutdown drain) always manages the GIL itself, regardless of the policy.
+
+  ```csharp
+  using (Py.GIL())                                     // ONE acquisition...
+      for (int i = 0; i < n; i++)
+          using (PyObject p = batch[i].ToNumpy(requireGIL: false))   // ...N conversions inside
+              consumer.Invoke(p);
+
+  NDArrayInterop.RequireGIL = false;                   // or process-wide, when EVERY call site holds the GIL
+  ```
 - **Engine lifetime**: import views die with the interpreter. `PythonEngine.Shutdown()` releases all outstanding leases crash-free (a registered shutdown handler), but the NDArrays over that memory must not be touched afterwards (disposing them stays safe). Exports still held by Python are swept right after shutdown completes — no leak survives the engine.
 - **`PythonEngine.Shutdown` on .NET 8+**: pythonnet 3.0.x crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);`.
 - **dtypes**: all NumSharp dtypes map except `Decimal` (no numpy equivalent — convert first); `Char` is exported as `uint16` (UTF-16 code units). Big-endian buffers are rejected (byte-swap first: `arr.astype(arr.dtype.newbyteorder('<'))`). complex64 imports copy-widen to complex128 (no zero-copy view).

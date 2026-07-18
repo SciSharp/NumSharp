@@ -13,7 +13,7 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     <c>true</c> (default): <see cref="NDArray"/> values crossing into Python become zero-copy
-        ///     numpy views (<see cref="NDArrayInterop.ToNumpy(NDArray)"/> — shared mutation, source rooted).
+        ///     numpy views (<see cref="NDArrayInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source rooted).
         ///     <c>false</c>: they become independent copies (<see cref="NDArrayInterop.ToNumpyCopy"/>).
         /// </summary>
         public bool EncodeAsView { get; init; } = true;

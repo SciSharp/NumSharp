@@ -31,7 +31,13 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>ndarray.resize(refcheck=True)</c> on the source refuses to reallocate — the same
         ///     protection NumPy applies to exported buffers.</para>
         /// </summary>
-        public static unsafe PyObject ToNumpy(this NDArray source)
+        /// <param name="source">The NumSharp array to export.</param>
+        /// <param name="requireGIL">
+        ///     <c>true</c>: acquire the GIL for this call (re-entrant under an outer <see cref="Py.GIL"/>);
+        ///     <c>false</c>: no GIL management — the calling thread must ALREADY hold the GIL;
+        ///     <c>null</c> (default): follow <see cref="RequireGIL"/>.
+        /// </param>
+        public static unsafe PyObject ToNumpy(this NDArray source, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();
@@ -39,7 +45,7 @@ namespace NumSharp.Interop.PythonNet
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
-            using (Py.GIL())
+            using (AcquireGil(requireGIL))
             {
                 var shape = source.Shape;
                 if (shape.Size == 0)
@@ -85,27 +91,31 @@ namespace NumSharp.Interop.PythonNet
         }
 
         /// <summary>
-        ///     <see cref="ToNumpy(NDArray)"/> when <paramref name="copy"/> is <c>false</c> (zero-copy shared
-        ///     view), <see cref="ToNumpyCopy"/> when <c>true</c> (independent numpy array).
+        ///     <see cref="ToNumpy(NDArray, bool?)"/> when <paramref name="copy"/> is <c>false</c> (zero-copy
+        ///     shared view), <see cref="ToNumpyCopy"/> when <c>true</c> (independent numpy array).
         /// </summary>
-        public static PyObject ToNumpy(this NDArray source, bool copy) => copy ? ToNumpyCopy(source) : ToNumpy(source);
+        /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
+        /// <param name="copy"><c>true</c> for an independent copy, <c>false</c> for the zero-copy view.</param>
+        public static PyObject ToNumpy(this NDArray source, bool copy, bool? requireGIL = null)
+            => copy ? ToNumpyCopy(source, requireGIL) : ToNumpy(source, requireGIL);
 
         /// <summary>
-        ///     Fluent alias of <see cref="ToNumpy(NDArray)"/> matching pythonnet's <c>ToPython()</c> naming.
-        ///     Being typed for <see cref="NDArray"/> it is more specific than pythonnet's
+        ///     Fluent alias of <see cref="ToNumpy(NDArray, bool?)"/> matching pythonnet's <c>ToPython()</c>
+        ///     naming. Being typed for <see cref="NDArray"/> it is more specific than pythonnet's
         ///     <c>object.ToPython()</c> extension, so it wins overload resolution for an
         ///     <see cref="NDArray"/> — and unlike the untyped one it produces a numpy array even without
         ///     <see cref="RegisterCodec()"/>.
         /// </summary>
-        /// <inheritdoc cref="ToNumpy(NDArray)"/>
-        public static PyObject ToPython(this NDArray source) => ToNumpy(source);
+        /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
+        public static PyObject ToPython(this NDArray source, bool? requireGIL = null) => ToNumpy(source, requireGIL);
 
         /// <summary>
         ///     Copy a NumSharp array into an independent, C-contiguous numpy array (no shared memory, no
         ///     lifetime coupling). Values follow the source's logical layout, so sliced / transposed /
-        ///     broadcast views copy element-exact. Same dtype mapping as <see cref="ToNumpy(NDArray)"/>.
+        ///     broadcast views copy element-exact. Same dtype mapping as <see cref="ToNumpy(NDArray, bool?)"/>.
         /// </summary>
-        public static unsafe PyObject ToNumpyCopy(this NDArray source)
+        /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
+        public static unsafe PyObject ToNumpyCopy(this NDArray source, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();
@@ -113,7 +123,7 @@ namespace NumSharp.Interop.PythonNet
 
             _ = ToNumpyDtypeStr(source.typecode);   // dtype gate — throws for Decimal before any Python work
 
-            using (Py.GIL())
+            using (AcquireGil(requireGIL))
             {
                 var shape = source.Shape;
                 if (shape.Size == 0)
@@ -148,11 +158,12 @@ namespace NumSharp.Interop.PythonNet
         ///     (format 'B') — for non-numpy consumers of the buffer protocol (<c>PIL.Image.frombuffer</c>,
         ///     <c>struct.unpack_from</c>, sockets, ...). Zero-copy and writable: mutations through the
         ///     memoryview are visible in NumSharp. The NumSharp buffer is rooted exactly like
-        ///     <see cref="ToNumpy(NDArray)"/> — it survives until the last Python-side reference dies.
+        ///     <see cref="ToNumpy(NDArray, bool?)"/> — it survives until the last Python-side reference dies.
         /// </summary>
+        /// <inheritdoc cref="ToNumpy(NDArray, bool?)"/>
         /// <exception cref="InvalidOperationException">The source is not C-contiguous — materialize first
         /// (<c>np.ascontiguousarray(nd)</c> or <c>nd.copy()</c>).</exception>
-        public static unsafe PyObject ToMemoryView(this NDArray source)
+        public static unsafe PyObject ToMemoryView(this NDArray source, bool? requireGIL = null)
         {
             if (source is null) throw new ArgumentNullException(nameof(source));
             PythonInteropRuntime.EnsureEngine();
@@ -165,7 +176,7 @@ namespace NumSharp.Interop.PythonNet
                 throw new InvalidOperationException(
                     "the array is not C-contiguous; a flat memoryview would misrepresent it. Materialize first: np.ascontiguousarray(nd) or nd.copy().");
 
-            using (Py.GIL())
+            using (AcquireGil(requireGIL))
             {
                 IArraySlice slice = source.Storage.InternalArray;
                 if (!slice.TryAddRef())
