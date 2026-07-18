@@ -241,7 +241,9 @@ Tested against NumPy 2.x.
 `arange`, `array`, `asanyarray`, `asarray`, `ascontiguousarray`, `asfortranarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
 ### Shape Manipulation
-`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
+`append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `hsplit`, `hstack`, `insert`, `moveaxis`, `pad`, `ravel`, `repeat`, `reshape`, `resize`, `roll`, `rollaxis`, `split`, `squeeze`, `stack`, `swapaxes`, `tile`, `transpose`, `unique`, `vsplit`, `vstack`
+
+`resize` ships as both `np.resize(a, new_shape)` (function — fills the enlarged output with **repeated copies** of `a` in C-order via an exact-sized doubling byte-tile; empty source / zero new-size → `zeros`; always C-contiguous; any input layout is raveled first) and `ndarray.resize(new_shape, refcheck=true)` (**in-place** — grows with **zeros**, shrinks by truncation, operates on the raw contiguous buffer so an F-contiguous resize relabels memory column-major). The method mirrors NumPy's guards verbatim (`IncorrectShapeException`): single-segment only, and when the byte size changes it must own its data (not a view) and — under `refcheck` — not be shared (`IArraySlice.IsUniquelyReferenced`, backed by the ARC block refcount); `refcheck:false` bypasses. Same-size resize is a pure in-place reshape (no ownership/reference check). See `Manipulation/np.resize.cs`, `Manipulation/NDArray.resize.cs`.
 
 ### Broadcasting
 `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`

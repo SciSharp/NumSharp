@@ -876,6 +876,12 @@ namespace NumSharp.Backends.Unmanaged
 
         public bool IsReleased => _disposer.IsReleased;
 
+        /// <summary>
+        ///     <c>true</c> when this block is held by at most one logical reference.
+        ///     Forwards to the inner <see cref="Disposer"/>.
+        /// </summary>
+        public bool IsUniquelyReferenced => _disposer.IsUniquelyReferenced;
+
         [MethodImpl(OptimizeAndInline)]
         public IEnumerator<T> GetEnumerator()
         {
@@ -1299,6 +1305,14 @@ namespace NumSharp.Backends.Unmanaged
 
             /// <summary>Diagnostic: true once the buffer has been freed.</summary>
             public bool IsReleased => Volatile.Read(ref _freed) != 0;
+
+            /// <summary>
+            /// <c>true</c> when at most one logical reference is held (refcount &lt;= 1).
+            /// Non-owning wraps are immortal (refcount is meaningless) and report
+            /// <c>true</c>. Used by resize's refcheck to detect buffer sharing.
+            /// </summary>
+            public bool IsUniquelyReferenced =>
+                _type == AllocationType.Wrap || Interlocked.Read(ref _refCount) <= 1;
 
             /// <summary>
             /// Backwards-compatible "force free" entry point. Maps to the

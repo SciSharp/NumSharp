@@ -99,5 +99,15 @@ namespace NumSharp.Backends.Unmanaged
         ///     Diagnostic: <c>true</c> once the underlying buffer has been freed.
         /// </summary>
         bool IsReleased { get; }
+
+        /// <summary>
+        ///     <c>true</c> when the underlying <see cref="MemoryBlock"/> is held by
+        ///     at most one logical reference (this owner), i.e. no other
+        ///     <see cref="NDArray"/> / view shares its buffer. Non-owning wraps
+        ///     (external / pinned memory) report <c>true</c> since their refcount is
+        ///     immortal and meaningless. Used by <c>ndarray.resize</c>'s refcheck to
+        ///     mirror NumPy's "references or is referenced by another array" guard.
+        /// </summary>
+        bool IsUniquelyReferenced { get; }
     }
 }
