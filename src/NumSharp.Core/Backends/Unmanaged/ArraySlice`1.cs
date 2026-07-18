@@ -587,6 +587,8 @@ namespace NumSharp.Backends.Unmanaged
 
         public bool IsReleased => MemoryBlock.IsReleased;
 
+        public bool IsUniquelyReferenced => MemoryBlock.IsUniquelyReferenced;
+
 
         /// <summary>
         /// Copies the contents of this span into a new array.  This heap
