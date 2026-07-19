@@ -78,17 +78,35 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Auto_Decode_NonContiguousNonNumpy_FallsBackToCopy()
+        public void Auto_Decode_StridedMemoryview_IsNowAView()
         {
-            // A sliced memoryview is non-contiguous AND has no __array_interface__, so no view is
-            // possible — Auto linearizes it as a copy rather than declining.
-            NDArray nd = Decode(Auto, "memoryview(bytearray(range(16)))[::2]", out bool ok);
+            // A sliced memoryview is non-contiguous with no __array_interface__, yet the buffer-strides
+            // route makes it viewable — so Auto SHARES it (view-first) instead of copying.
+            PyExec("ba_sm = bytearray(range(16))");
+            NDArray nd = Decode(Auto, "memoryview(ba_sm)[::2]", out bool ok);
 
-            ok.Should().BeTrue("Auto copies when the exporter cannot be viewed");
+            ok.Should().BeTrue();
             nd.size.Should().Be(8);
-            ReadAt<byte>(nd, 0).Should().Be(0);
-            ReadAt<byte>(nd, 1).Should().Be(2);
-            ReadAt<byte>(nd, 2).Should().Be(4);
+            WriteAt(nd, (byte)77, 1);   // logical 1 -> byte 2
+            PyLong("ba_sm[2]").Should().Be(77, "Auto now views a strided memoryview — the write reaches Python");
+            nd.Dispose();
+        }
+
+        [TestMethod]
+        public void Auto_Decode_StridedComplex64_FallsBackToCopy()
+        {
+            // Strided AND complex64 is genuinely unviewable (no 16-byte reinterpret), so even the
+            // buffer-strides route declines and Auto falls back to a widening copy.
+            PyExec("cm_auto = np.array([1+2j, 3+4j, 5+6j, 7+8j], dtype='c8')");
+            NDArray nd = Decode(Auto, "memoryview(cm_auto)[::2]", out bool ok);
+
+            ok.Should().BeTrue("Auto copies when a strided source is genuinely unviewable");
+            nd.typecode.Should().Be(NPTypeCode.Complex, "complex64 widens to complex128 on the copy path");
+            nd.size.Should().Be(2);
+            ReadAt<Complex>(nd, 0).Should().Be(new Complex(1, 2));
+
+            WriteAt(nd, new Complex(9, 9), 0);
+            PyFloat("float(cm_auto[0].real)").Should().BeApproximately(1.0, 1e-12, "the fallback is an independent copy");
             nd.Dispose();
         }
 
@@ -129,10 +147,25 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void View_Decode_NonContiguousNonNumpy_Declines()
+        public void View_Decode_StridedMemoryview_IsAView()
         {
-            NDArray nd = Decode(ViewOnly, "memoryview(bytearray(range(16)))[::2]", out bool ok);
-            ok.Should().BeFalse("a non-viewable exporter is declined in View mode, never copied");
+            // The buffer-strides route makes a sliced memoryview viewable, so View mode shares it.
+            PyExec("ba_sv = bytearray(range(16))");
+            NDArray nd = Decode(ViewOnly, "memoryview(ba_sv)[::2]", out bool ok);
+
+            ok.Should().BeTrue("View mode shares a strided memoryview via the buffer-strides route");
+            WriteAt(nd, (byte)33, 0);
+            PyLong("ba_sv[0]").Should().Be(33, "the strided view is writable and shared");
+            nd.Dispose();
+        }
+
+        [TestMethod]
+        public void View_Decode_StridedComplex64_Declines_NoSilentCopy()
+        {
+            // Genuinely unviewable even strided → View mode declines rather than silently copying.
+            PyExec("cm_view = np.array([1+2j, 3+4j, 5+6j, 7+8j], dtype='c8')");
+            NDArray nd = Decode(ViewOnly, "memoryview(cm_view)[::2]", out bool ok);
+            ok.Should().BeFalse("a genuinely unviewable strided source is declined in View mode, never copied");
             nd.Should().BeNull();
         }
 

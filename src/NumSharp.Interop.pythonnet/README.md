@@ -20,7 +20,7 @@ Everything is packaging over four operations on the static `NDArrayInterop` engi
 | NumSharp → Python | `ToNumpy(nd)` | **zero-copy numpy view** of NumSharp's buffer — shared mutation, source rooted; full layout fidelity (slices, transposes, Fortran order, negative strides; broadcasts become read-only; scalars become 0-d) |
 | NumSharp → Python | `ToNumpyCopy(nd)` | independent numpy array (no shared memory, no lifetime coupling) |
 | Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` (honors strides / Fortran order; complex64 widens to complex128; 0-d becomes a scalar) |
-| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation; C-contiguous buffers via a locked `PyBuffer` lease, non-contiguous numpy arrays via `__array_interface__` as true strided views |
+| Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation, via three routes: C-contiguous buffers through a locked `PyBuffer` lease; non-contiguous **numpy** arrays through `__array_interface__`; and non-contiguous **non-numpy** exporters (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview) through a `PyBUF.STRIDED` pointer + the memoryview's own shape/strides. Only genuinely irreducible layouts (complex64, big-endian, non-element strides) decline |
 
 Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-numpy consumers) and the dtype maps `ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`.
 
