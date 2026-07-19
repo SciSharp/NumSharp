@@ -51,7 +51,17 @@ using (Py.GIL())
 }
 ```
 
-`NumpyCodecOptions` controls the policies: `EncodeAsView` (default `true`), `DecodeAsView` (default `false` — decode copies), `DecodeAnyBuffer` (default `true` — `memoryview`/`bytes`/`bytearray`/`array.array` also decode). numpy `ndarray` subclasses (`matrix`, `memmap`) decode via an `__mro__` walk. Arrays with no numpy dtype (`decimal`) fall back to pythonnet's default CLR wrapping instead of failing.
+`NumpyCodecOptions` controls the policies via **`NumpyCodecMode`** — one enum for both directions (`EncodeMode` / `DecodeMode`):
+
+| Mode | Meaning |
+|---|---|
+| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy. On decode the fallback is real (complex64, big-endian, non-contiguous non-numpy exporters copy; everything else stays a view). On encode a view and a copy have identical dtype coverage, so Auto always yields a view. |
+| `View` | Always share; **decline** the conversion (return no value) if a view is impossible — a loud failure for callers who depend on shared memory. |
+| `Copy` | Always an independent copy — no shared memory, no Py_buffer lock, total coverage. |
+
+Plus `DecodeAnyBuffer` (default `true` — `memoryview`/`bytes`/`bytearray`/`array.array` also decode; `false` = numpy arrays only). numpy `ndarray` subclasses (`matrix`, `memmap`) decode via an `__mro__` walk. Arrays with no numpy dtype (`decimal`) fall back to pythonnet's default CLR wrapping instead of failing.
+
+> **`Auto` decode shares memory.** Under the default, `pyObj.As<NDArray>()` on a contiguous/strided-numpy source is a zero-copy view: mutations flow both ways, read-only sources decode as non-writeable views, and the view holds a `Py_buffer` lock on the source (a `bytearray` cannot be resized while it lives). Use `DecodeMode = Copy` when you want a detached snapshot that never touches the Python object.
 
 ## Lifetime & memory safety (the design)
 

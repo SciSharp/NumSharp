@@ -4,29 +4,76 @@ using Python.Runtime;
 namespace NumSharp.Interop.PythonNet
 {
     /// <summary>
+    ///     How <see cref="NumpyCodec"/> materializes a conversion in one direction — encode
+    ///     (<see cref="NDArray"/> → Python) or decode (Python → <see cref="NDArray"/>). One enum serves
+    ///     both directions.
+    /// </summary>
+    public enum NumpyCodecMode
+    {
+        /// <summary>
+        ///     <b>Zero-copy VIEW when the dtype and layout permit it; an independent COPY only when a
+        ///     view is impossible.</b> Shared memory whenever it is achievable, a safe copy as the
+        ///     fallback — never a blanket copy.
+        ///
+        ///     <para>On <b>decode</b> the fallback is real: complex64, big-endian, and non-contiguous
+        ///     non-numpy exporters have no zero-copy NumSharp representation and transparently become
+        ///     copies, while contiguous / strided-numpy sources stay zero-copy views (read-only sources
+        ///     become NON-WRITEABLE views). On <b>encode</b> a view and a copy have identical dtype
+        ///     coverage — both need a numpy-expressible dtype — so Auto always yields a view, and the
+        ///     only unrepresentable dtype (<see cref="NPTypeCode.Decimal"/>) falls through to pythonnet's
+        ///     CLR wrapping either way.</para>
+        /// </summary>
+        Auto = 0,
+
+        /// <summary>
+        ///     <b>Always a zero-copy VIEW</b> (shared memory, live mutation both ways). A conversion that
+        ///     cannot be expressed as a view is DECLINED (the encode/decode fails) rather than silently
+        ///     copying — for callers that depend on the shared-memory contract and want a loud failure
+        ///     otherwise. Read-only decode sources become NON-WRITEABLE views.
+        /// </summary>
+        View = 1,
+
+        /// <summary>
+        ///     <b>Always an independent COPY</b> — no shared memory, no lifetime coupling, no Py_buffer
+        ///     lock on the source, total dtype/layout coverage. The most predictable mode.
+        /// </summary>
+        Copy = 2,
+    }
+
+    /// <summary>
     ///     Policies for <see cref="NumpyCodec"/> / <see cref="NDArrayPythonInterop.RegisterCodec()"/>.
     /// </summary>
     public sealed class NumpyCodecOptions
     {
-        /// <summary>The defaults: encode as zero-copy view, decode as copy, decode any buffer exporter.</summary>
+        /// <summary>The defaults: <see cref="NumpyCodecMode.Auto"/> both ways, decode any buffer exporter.</summary>
         public static readonly NumpyCodecOptions Default = new();
 
         /// <summary>
-        ///     <c>true</c> (default): <see cref="NDArray"/> values crossing into Python become zero-copy
-        ///     numpy views (<see cref="NDArrayPythonInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source rooted).
-        ///     <c>false</c>: they become independent copies (<see cref="NDArrayPythonInterop.ToNumpyCopy"/>).
+        ///     How <see cref="NDArray"/> values crossing INTO Python are materialized. Default
+        ///     <see cref="NumpyCodecMode.Auto"/> — a zero-copy numpy view
+        ///     (<see cref="NDArrayPythonInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source
+        ///     rooted). On encode a view and a copy have the same dtype coverage, so
+        ///     <see cref="NumpyCodecMode.Auto"/> and <see cref="NumpyCodecMode.View"/> behave identically
+        ///     and only <see cref="NumpyCodecMode.Copy"/> forces
+        ///     <see cref="NDArrayPythonInterop.ToNumpyCopy"/>.
         /// </summary>
-        public bool EncodeAsView { get; init; } = true;
+        public NumpyCodecMode EncodeMode { get; init; } = NumpyCodecMode.Auto;
 
         /// <summary>
-        ///     <c>false</c> (default): <c>PyObject.As&lt;NDArray&gt;()</c> copies
-        ///     (<see cref="NDArrayPythonInterop.ToNDArray"/> — safe, owns its memory).
-        ///     <c>true</c>: it produces zero-copy views (<see cref="NDArrayPythonInterop.ToNDArrayView"/> with
-        ///     <c>allowReadonly:true</c> — shared mutation and shared lifetime; read-only sources decode
-        ///     as NON-WRITEABLE views, so guarded writes through them throw instead of corrupting
-        ///     immutable Python objects).
+        ///     How Python objects crossing INTO .NET (<c>PyObject.As&lt;NDArray&gt;()</c>) are
+        ///     materialized. Default <see cref="NumpyCodecMode.Auto"/> — a zero-copy view
+        ///     (<see cref="NDArrayPythonInterop.ToNDArrayView"/> with <c>allowReadonly:true</c>) when the
+        ///     source's dtype/layout permits, otherwise an independent copy
+        ///     (<see cref="NDArrayPythonInterop.ToNDArray"/>). <see cref="NumpyCodecMode.View"/> declines
+        ///     the decode when a view is impossible; <see cref="NumpyCodecMode.Copy"/> always copies.
+        ///
+        ///     <para><b>Auto/View share memory:</b> mutations flow both ways, read-only sources decode as
+        ///     NON-WRITEABLE views (guarded writes through them throw instead of corrupting immutable
+        ///     Python objects), and a live view holds a Py_buffer lock on the source (a <c>bytearray</c>
+        ///     cannot be resized while the view lives). Choose <see cref="NumpyCodecMode.Copy"/> for a
+        ///     detached snapshot that never touches the Python object.</para>
         /// </summary>
-        public bool DecodeAsView { get; init; }
+        public NumpyCodecMode DecodeMode { get; init; } = NumpyCodecMode.Auto;
 
         /// <summary>
         ///     <c>true</c> (default): besides <c>numpy.ndarray</c> (and subclasses), the built-in buffer
@@ -70,12 +117,23 @@ namespace NumSharp.Interop.PythonNet
             var nd = (NDArray)value;
             try
             {
-                return _options.EncodeAsView ? NDArrayPythonInterop.ToNumpy(nd) : NDArrayPythonInterop.ToNumpyCopy(nd);
+                switch (_options.EncodeMode)
+                {
+                    case NumpyCodecMode.Copy:
+                        return NDArrayPythonInterop.ToNumpyCopy(nd);
+                    case NumpyCodecMode.View:
+                        return NDArrayPythonInterop.ToNumpy(nd);
+                    default: // Auto: view-first, copy-fallback. On encode both need a numpy dtype, so the
+                             // fallback is a no-op today (Decimal fails both); kept for a uniform contract
+                             // and any future dtype-coverage divergence between the two paths.
+                        try { return NDArrayPythonInterop.ToNumpy(nd); }
+                        catch (NotSupportedException) { return NDArrayPythonInterop.ToNumpyCopy(nd); }
+                }
             }
             catch (NotSupportedException)
             {
-                // No numpy dtype (Decimal): let pythonnet wrap the NDArray as a plain CLR object,
-                // which is still fully usable from Python through the CLR binding.
+                // No numpy dtype (Decimal) in ANY mode: let pythonnet wrap the NDArray as a plain CLR
+                // object, which is still fully usable from Python through the CLR binding.
                 return null;
             }
         }
@@ -106,25 +164,40 @@ namespace NumSharp.Interop.PythonNet
         /// <inheritdoc/>
         public bool TryDecode<T>(PyObject pyObj, out T value)
         {
+            value = default;
             if (typeof(T) != typeof(NDArray))
-            {
-                value = default;
                 return false;
-            }
 
-            try
+            NDArray nd = _options.DecodeMode switch
             {
-                NDArray nd = _options.DecodeAsView
-                    ? NDArrayPythonInterop.ToNDArrayView(pyObj, allowReadonly: true)
-                    : NDArrayPythonInterop.ToNDArray(pyObj);
-                value = (T)(object)nd;
-                return true;
-            }
-            catch
-            {
-                value = default;
-                return false;   // unsupported dtype/layout: let pythonnet report its default error
-            }
+                NumpyCodecMode.Copy => TryDecodeCopy(pyObj),
+                NumpyCodecMode.View => TryDecodeView(pyObj),
+                _                    => TryDecodeView(pyObj) ?? TryDecodeCopy(pyObj),   // Auto
+            };
+
+            if (nd is null)
+                return false;   // no view was possible in View mode, or an unsupported dtype/layout in any mode
+            value = (T)(object)nd;
+            return true;
+        }
+
+        /// <summary>
+        ///     A zero-copy view over the source, or <c>null</c> when the source has no zero-copy NumSharp
+        ///     representation (complex64 / big-endian / non-contiguous non-numpy / stride not an element
+        ///     multiple). Any failure is treated as "not viewable" — the Auto path then copies, the View
+        ///     path declines the decode.
+        /// </summary>
+        private static NDArray TryDecodeView(PyObject pyObj)
+        {
+            try { return NDArrayPythonInterop.ToNDArrayView(pyObj, allowReadonly: true); }
+            catch { return null; }
+        }
+
+        /// <summary>An independent copy, or <c>null</c> if the source cannot be copied either (no NumSharp dtype).</summary>
+        private static NDArray TryDecodeCopy(PyObject pyObj)
+        {
+            try { return NDArrayPythonInterop.ToNDArray(pyObj); }
+            catch { return null; }
         }
 
         /// <summary>Walks <c>__mro__</c> so numpy.matrix / numpy.memmap / user ndarray subclasses decode too.</summary>
