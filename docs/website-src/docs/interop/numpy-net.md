@@ -156,7 +156,7 @@ using (Py.GIL())
 
 ## The codec sees their arrays too
 
-A Numpy.NET `NDarray` *is* a `numpy.ndarray`, so with [`NDArrayInterop.RegisterCodec()`](pythonnet.md#auto-marshaling-the-codec) registered, `their.self.As<NDArray>()` decodes like any numpy array (as a safe copy by default), and the same object can simultaneously live in a plain pythonnet scope — the scope name, the Numpy.NET wrapper and numpy itself are one object.
+A Numpy.NET `NDarray` *is* a `numpy.ndarray`, so with [`NDArrayPythonInterop.RegisterCodec()`](pythonnet.md#auto-marshaling-the-codec) registered, `their.self.As<NDArray>()` decodes like any numpy array — under the default [`Auto`](zero-copy-model.md) mode a contiguous source comes back as a **zero-copy view**, so a NumSharp write lands in their array. The same object can simultaneously live in a plain pythonnet scope: the scope name, the Numpy.NET wrapper and numpy itself are one object. Pass `DecodeMode = NumpyCodecMode.Copy` if you want a detached snapshot instead.
 
 > Proven by `Codec_DecodesNumpyNetArrays_AndScopesInterleave`.
 

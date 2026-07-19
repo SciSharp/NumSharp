@@ -62,20 +62,20 @@ using (Py.GIL())
 
 ## The Four Verbs
 
-Everything in the package is packaging over four operations on the static `NDArrayInterop` engine:
+Everything in the package is packaging over four operations on the static `NDArrayPythonInterop` engine:
 
 | Direction | Verb | Semantics |
 |---|---|---|
-| NumSharp → Python | `NDArrayInterop.ToNumpy(nd)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
-| NumSharp → Python | `NDArrayInterop.ToNumpyCopy(nd)` | Independent numpy array — no shared memory, no lifetime coupling |
-| Python → NumSharp | `NDArrayInterop.ToNDArray(py)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
-| Python → NumSharp | `NDArrayInterop.ToNDArrayView(py[, allowReadonly])` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
+| NumSharp → Python | `NDArrayPythonInterop.ToNumpy(nd)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
+| NumSharp → Python | `NDArrayPythonInterop.ToNumpyCopy(nd)` | Independent numpy array — no shared memory, no lifetime coupling |
+| Python → NumSharp | `NDArrayPythonInterop.ToNDArray(py)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
+| Python → NumSharp | `NDArrayPythonInterop.ToNDArrayView(py[, allowReadonly])` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
 
-Plus `NDArrayInterop.ToMemoryView(nd)` — a writable Python `memoryview` of raw bytes, for non-numpy consumers of the buffer protocol (`PIL.Image.frombuffer`, `struct.unpack_from`, sockets, ...) — and the dtype maps (`ToNumpyDtypeStr`, `FromNumpyDtypeStr`, `ToBufferFormat`, `FromBufferFormat`).
+Plus `NDArrayPythonInterop.ToMemoryView(nd)` — a writable Python `memoryview` of raw bytes, for non-numpy consumers of the buffer protocol (`PIL.Image.frombuffer`, `struct.unpack_from`, sockets, ...) — and the dtype maps (`ToNumpyDtypeStr`, `FromNumpyDtypeStr`, `ToBufferFormat`, `FromBufferFormat`).
 
 ### Extension methods
 
-The verbs double as extension methods on `NDArrayInterop`, so `using NumSharp.Interop.PythonNet;` also adds the fluent forms. The convention mirrors numpy's `array`/`asarray`: **`To…` copies, `As…` shares** (`ToNumpy` is the exception — the zero-copy view is the package's headline, and `ToNumpyCopy` is the explicit copy).
+The verbs double as extension methods on `NDArrayPythonInterop`, so `using NumSharp.Interop.PythonNet;` also adds the fluent forms. The convention mirrors numpy's `array`/`asarray`: **`To…` copies, `As…` shares** (`ToNumpy` is the exception — the zero-copy view is the package's headline, and `ToNumpyCopy` is the explicit copy).
 
 ```csharp
 PyObject a = nd.ToNumpy();          // zero-copy view (alias: nd.ToPython())
@@ -103,10 +103,13 @@ NDArray  r = py.AsNDArray(allowReadonly: true);   // NON-WRITEABLE view of a rea
 | Scalar (0-d) | 0-d array |
 | Empty | Empty array of the right shape/dtype |
 
-Imports are symmetric. `ToNDArrayView` has two zero-copy routes:
+Imports are symmetric. `ToNDArrayView` has **three** zero-copy routes — see [The Zero-Copy Model](zero-copy-model.md) for the full decision tree:
 
 - **C-contiguous PEP 3118 exporters** (any object): the buffer is acquired with `PyBUF.WRITABLE`, which pins the exporter — resizable objects like `bytearray` are locked against reallocation for the lease's lifetime (`ba.append(...)` raises `BufferError` while a view lives).
 - **Non-contiguous numpy arrays** (slices, transposes, Fortran order, broadcasts): imported through `__array_interface__` as true strided NumSharp views with identical layout. Broadcast sources become read-only NumSharp views; the numpy array is kept alive by a strong reference, so numpy's own `resize(refcheck=True)` refuses to reallocate under the view.
+- **Non-contiguous non-numpy exporters** (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview): the base pointer comes from a `PyBUF.STRIDED` request and the exact shape/strides from the memoryview itself, so these are true views too rather than copies.
+
+The lease is always acquired **through the exporter's `memoryview`**, never the raw object: pythonnet 3.0.x's `obj.GetBuffer` is per-exporter buggy (on a raw `ctypes` array it hard-crashes for every flag), while the memoryview over the same memory leases cleanly and keeps the source pinned. Measured coverage across 48 exporter varieties: **45 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable).
 
 Read-only sources (`bytes`, arrays with `writeable=False`) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (numpy's `writeable=False`, carried as `Shape.IsWriteable == false`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
 
@@ -142,8 +145,8 @@ double total = (double)np.sum(importedView);   // NumSharp kernels over Python-o
 Two observability counters expose the live state — useful in tests and leak hunts:
 
 ```csharp
-int pins   = NDArrayInterop.LiveExports;   // NumSharp buffers rooted by live Python views
-int leases = NDArrayInterop.LiveImports;   // Python buffers leased by live NumSharp views
+int pins   = NDArrayPythonInterop.LiveExports;   // NumSharp buffers rooted by live Python views
+int leases = NDArrayPythonInterop.LiveImports;   // Python buffers leased by live NumSharp views
 ```
 
 ---
@@ -153,7 +156,7 @@ int leases = NDArrayInterop.LiveImports;   // Python buffers leased by live NumS
 Register once and `NDArray` ⇄ numpy conversion happens automatically at every pythonnet boundary — `scope.Set`, Python call arguments, `ToPython()`, and `pyObj.As<NDArray>()` on the way back:
 
 ```csharp
-NDArrayInterop.RegisterCodec();   // once per engine session; idempotent
+NDArrayPythonInterop.RegisterCodec();   // once per engine session; idempotent
 
 using (Py.GIL())
 {
@@ -163,13 +166,21 @@ using (Py.GIL())
 }
 ```
 
-Policies via `NumpyCodecOptions`:
+Policies via `NumpyCodecOptions`. `EncodeMode` / `DecodeMode` take a **`NumpyCodecMode`** — one enum for both directions:
+
+| Mode | Meaning |
+|---|---|
+| `Auto` *(default)* | **Zero-copy view when the dtype/layout permits, an independent copy only when a view is impossible** — never a blanket copy |
+| `View` | Always share; **decline** the conversion if a view is impossible — a loud failure instead of a silent copy |
+| `Copy` | Always an independent copy — no shared memory, no `Py_buffer` lock, total coverage |
 
 | Option | Default | Meaning |
 |---|---|---|
-| `EncodeAsView` | `true` | `NDArray` crossing into Python becomes a zero-copy view (`false`: independent copy) |
-| `DecodeAsView` | `false` | `As<NDArray>()` copies (`true`: zero-copy views, `allowReadonly` implied) |
-| `DecodeAnyBuffer` | `true` | `memoryview`/`bytes`/`bytearray`/`array.array` also decode to `NDArray` |
+| `EncodeMode` | `Auto` | How `NDArray` crossing into Python is materialized (a view and a copy have identical coverage on encode, so `Auto` always yields a view) |
+| `DecodeMode` | `Auto` | How `As<NDArray>()` materializes — view-first, copy-fallback |
+| `DecodeAnyBuffer` | `true` | Besides numpy, **any** buffer exporter decodes: `memoryview`/`bytes`/`bytearray`/`array.array` by name, plus everything else (`ctypes` arrays, C-extension buffers) via the PEP 688 `__buffer__` capability check on Python 3.12+ |
+
+> **`Auto` decode shares memory.** `pyObj.As<NDArray>()` on a viewable source is a zero-copy view: mutations flow both ways, read-only sources decode as non-writeable views, and the view holds a `Py_buffer` lock (a `bytearray` cannot be resized while it lives). Use `DecodeMode = Copy` for a detached snapshot. Full rationale: [The Zero-Copy Model](zero-copy-model.md).
 
 numpy `ndarray` subclasses (`matrix`, `memmap`, user subclasses) decode via an `__mro__` walk. Arrays with no numpy dtype (`decimal`) fall back to pythonnet's default CLR-object wrapping instead of failing the conversion.
 
@@ -195,7 +206,18 @@ numpy `ndarray` subclasses (`matrix`, `memmap`, user subclasses) decode via an `
 
 ## Threading & the GIL
 
-- Every `NDArrayInterop` method **acquires the GIL itself** (re-entrantly — nesting under your own `Py.GIL()` is fine). You can call the API from any thread, including threads that never touched Python before.
+- Every `NDArrayPythonInterop` method **acquires the GIL itself** (re-entrantly — nesting under your own `Py.GIL()` is fine). You can call the API from any thread, including threads that never touched Python before.
+- **Optional opt-out.** Every verb takes a nullable `requireGIL`; `null` (the default) follows the process-wide `NDArrayPythonInterop.RequireGIL` (default `true`). Passing `false` skips the per-call `PyGILState_Ensure`/`Release` — useful for hot loops under one outer acquisition — but then **the caller must already hold the GIL**:
+
+  ```csharp
+  using (Py.GIL())                                              // ONE acquisition...
+      foreach (var batch in batches)
+          using (PyObject p = batch.ToNumpy(requireGIL: false))  // ...N conversions inside
+              consumer.Invoke(p);
+  ```
+
+  > **Trap:** a .NET method or delegate invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies. Keep GIL management **on** inside Python → .NET callbacks. Only pythonnet's argument/return marshaling (where the codec runs) executes under the GIL.
+
 - Your own `PyObject` handling still follows pythonnet's rules — in particular, **dispose `PyObject`s under the GIL** (pythonnet 3.0.x requires it for the final decref).
 - Internal releases never block: dropping the last NumSharp view of a lease only *enqueues* the Python-side release, which is drained under the GIL by a background worker, inline at the next conversion, and at engine shutdown. A thread that holds the GIL indefinitely cannot deadlock the interop.
 
@@ -218,7 +240,7 @@ PythonEngine.Shutdown();
 
 | Component | Supported |
 |---|---|
-| pythonnet | 3.0.1+ (package floor). The bridge deliberately uses only `PyBUF.SIMPLE`/`PyBUF.WRITABLE` and reads buffer metadata through Python's `memoryview` — 3.0.1's `PyBuffer` is broken for shape/strides/format flags, and this code path is correct on every 3.0.x |
+| pythonnet | 3.0.1+ (package floor). The bridge reads all buffer metadata through Python's `memoryview` and uses only the `SIMPLE`/`WRITABLE`/`STRIDED`/`STRIDED_RO` buffer flags — 3.0.1's `PyBuffer` is broken for shape/strides/format flags, and this code path is correct on every 3.0.x. Leases are acquired through the `memoryview` rather than the raw object, which also sidesteps pythonnet's per-exporter `GetBuffer` crashes (e.g. raw `ctypes` arrays) |
 | Python | Whatever your pythonnet supports (3.0.1 → up to 3.11; ≥ 3.0.4 → 3.12/3.13) |
 | numpy | Any — the bridge talks buffer protocol and `__array_interface__`, not numpy's C API. Verified against numpy 2.4.2 |
 
