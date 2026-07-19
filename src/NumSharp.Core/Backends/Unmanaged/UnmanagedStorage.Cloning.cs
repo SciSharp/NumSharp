@@ -448,6 +448,15 @@ namespace NumSharp.Backends
         /// </remarks>
         public IArraySlice CloneData()
         {
+            // An empty array (any dim == 0) has no elements to copy — return a fresh zero-length
+            // buffer of this dtype. This MUST precede the contiguous branch: an empty slice keeps
+            // its parent's offset while its own backing IArraySlice.Count has already collapsed to
+            // 0, so InternalArray.Slice(offset, 0) below would trip start > Count == 0 and throw
+            // (e.g. arr["1:,1:,1:1"].flatten()). NumPy's flatten / ravel / copy of an empty array
+            // all yield an empty array.
+            if (_shape.size == 0)
+                return ArraySlice.Allocate(_typecode, 0L, false);
+
             // Contiguous shapes can copy directly from memory.
             // Must account for offset AND the size-vs-buffer mismatch — slice
             // to exactly _shape.size starting at _shape.offset so the cloned

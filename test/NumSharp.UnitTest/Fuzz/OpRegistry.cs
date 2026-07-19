@@ -89,6 +89,22 @@ namespace NumSharp.UnitTest.Fuzz
                 case "reshape": return np.reshape(ops[0], ParseIntArray(p["shape"]));
                 case "swapaxes": return np.swapaxes(ops[0], p["a1"].GetInt32(), p["a2"].GetInt32());
                 case "moveaxis": return np.moveaxis(ops[0], p["src"].GetInt32(), p["dst"].GetInt32());
+                case "rot90": return np.rot90(ops[0], p["k"].GetInt32(),
+                    p.ContainsKey("axes") ? ParseIntArray(p["axes"]) : null);
+                // flip family + transpose aliases + trim_zeros. "axes" -> int[] overload, "axis" -> int overload.
+                case "flip":
+                    if (p.ContainsKey("axes")) return np.flip(ops[0], ParseIntArray(p["axes"]));
+                    return p.ContainsKey("axis") ? np.flip(ops[0], p["axis"].GetInt32()) : np.flip(ops[0]);
+                case "fliplr": return np.fliplr(ops[0]);
+                case "flipud": return np.flipud(ops[0]);
+                case "permute_dims": return np.permute_dims(ops[0],
+                    p.ContainsKey("axes") ? ParseIntArray(p["axes"]) : null);
+                case "matrix_transpose": return np.matrix_transpose(ops[0]);
+                case "trim_zeros":
+                    if (p.ContainsKey("axes")) return np.trim_zeros(ops[0], p["trim"].GetString(), ParseIntArray(p["axes"]));
+                    return p.ContainsKey("axis")
+                        ? np.trim_zeros(ops[0], p["trim"].GetString(), p["axis"].GetInt32())
+                        : np.trim_zeros(ops[0], p["trim"].GetString());
                 case "delete": return np.delete(ops[0], p["obj"].GetInt32(), p["axis"].GetInt32());
                 case "atleast_1d": return np.atleast_1d(ops[0]);
                 case "atleast_2d": return np.atleast_2d(ops[0]);

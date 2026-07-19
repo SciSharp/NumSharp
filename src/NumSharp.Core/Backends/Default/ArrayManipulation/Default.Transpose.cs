@@ -129,7 +129,11 @@ namespace NumSharp.Backends
             int i, n;
             var permutation = new int[nd.ndim];
             var reverse_permutation = new int[nd.ndim];
-            if (premute == null || premute.Length == 0)
+            // NumPy distinguishes axes=None (reverse all axes) from an explicit length-0
+            // permutation axes=() / []: the empty permutation only matches a 0-d array,
+            // and raises "axes don't match array" for any ndim >= 1. So only a null
+            // `premute` means "reverse"; an empty array falls through to the length check.
+            if (premute == null)
             {
                 n = nd.ndim;
                 for (i = 0; i < n; i++)
@@ -142,7 +146,7 @@ namespace NumSharp.Backends
                 n = premute.Length;
                 int[] axes = premute;
                 if (n != nd.ndim)
-                    throw new Exception("axes don't match array");
+                    throw new ArgumentException("axes don't match array");
 
                 for (i = 0; i < n; i++)
                     reverse_permutation[i] = -1;
@@ -151,7 +155,7 @@ namespace NumSharp.Backends
                 {
                     int axis = check_and_adjust_axis(nd, axes[i]);
                     if (reverse_permutation[axis] != -1)
-                        throw new Exception("repeated axis in transpose");
+                        throw new ArgumentException("repeated axis in transpose");
 
                     reverse_permutation[axis] = i;
                     permutation[i] = axis;

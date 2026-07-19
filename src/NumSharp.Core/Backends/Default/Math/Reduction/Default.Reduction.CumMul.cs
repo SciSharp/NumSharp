@@ -19,8 +19,27 @@ namespace NumSharp.Backends
             }
 
             var shape = arr.Shape;
+
+            // Empty: cumprod returns a FRESH array of the accumulator dtype (NEP50 widening applies
+            // even when empty — cumprod(empty int32) is int64, like cumsum). axis=None ravels to a
+            // 1-D (0,) result; with an axis the shape is preserved. Returning `arr` unchanged (as
+            // before) kept the source dtype AND, for a multi-dim source, the un-raveled shape —
+            // e.g. cumprod((0,3)) gave (0,3) where NumPy gives (0,). Mirrors ReduceCumAdd.
             if (shape.IsEmpty || shape.size == 0)
-                return arr;
+            {
+                var emptyRetType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+                if (axis_ != null)
+                {
+                    int nd = Math.Max(arr.ndim, 1);
+                    int ax = axis_.Value < 0 ? axis_.Value + nd : axis_.Value;
+                    if (ax < 0 || ax >= nd)
+                        throw new ArgumentOutOfRangeException(nameof(axis_),
+                            $"axis {axis_.Value} is out of bounds for array of dimension {nd}");
+                }
+
+                return new NDArray(emptyRetType,
+                    axis_ == null ? Shape.Vector((int)shape.size) : new Shape(shape.dimensions), false);
+            }
 
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, copy: true) : arr.Clone();
