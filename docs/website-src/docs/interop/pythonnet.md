@@ -2,7 +2,7 @@
 
 The **NumSharp.Interop.pythonnet** package bridges `NDArray` to the Python ecosystem through [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. It binds only to pythonnet's `PyObject` and Python's PEP 3118 buffer protocol, so it works with *any* numpy, *any* Python, and **any** buffer-exporting object: numpy arrays, `memoryview`, `bytes`, `bytearray`, `array.array`, `ctypes` arrays, `io.BytesIO` buffers, PIL images, torch CPU tensors, custom C extensions.
 
-Both directions are **zero-copy by default**: Python mutates NumSharp's memory and NumSharp mutates Python's, with lifetimes coupled so neither side can free the buffer while the other can still see it. Measured across 48 exporter varieties, **45 share memory and 2 copy** — and those 2 are layouts that genuinely cannot be shared, not gaps. See [The Zero-Copy Model](zero-copy-model.md) for the decision tree.
+Both directions are **zero-copy by default**: Python mutates NumSharp's memory and NumSharp mutates Python's, with lifetimes coupled so neither side can free the buffer while the other can still see it. Measured across 50 exporter varieties, **47 share memory and 2 copy** — and those 2 are layouts that genuinely cannot be shared, not gaps. See [The Zero-Copy Model](zero-copy-model.md) for the decision tree.
 
 > Migrating from or coexisting with SciSharp's Numpy.NET packages? See [Numpy.NET — coexistence & migration](numpy-net.md); every sample there maps 1:1 to a test in `NumSharp.Interop.UnitTests`.
 
@@ -149,7 +149,7 @@ Imports are symmetric. `ToNDArrayView` has **three** zero-copy routes — see [T
 - **Non-contiguous numpy arrays** (slices, transposes, Fortran order, broadcasts): imported through `__array_interface__` as true strided NumSharp views with identical layout. Broadcast sources become read-only NumSharp views; the numpy array is kept alive by a strong reference, so numpy's own `resize(refcheck=True)` refuses to reallocate under the view.
 - **Non-contiguous non-numpy exporters** (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview): the base pointer comes from a `PyBUF.STRIDED` request and the exact shape/strides from the memoryview itself, so these are true views too rather than copies.
 
-The lease is always acquired **through the exporter's `memoryview`**, never the raw object: pythonnet 3.0.x's `obj.GetBuffer` is per-exporter buggy (on a raw `ctypes` array it hard-crashes for every flag), while the memoryview over the same memory leases cleanly and keeps the source pinned. Measured coverage across 48 exporter varieties: **45 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable).
+The lease is always acquired **through the exporter's `memoryview`**, never the raw object: pythonnet 3.0.x's `obj.GetBuffer` is per-exporter buggy (on a raw `ctypes` array it hard-crashes for every flag), while the memoryview over the same memory leases cleanly and keeps the source pinned. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable) and 1 rejected (big-endian multi-byte).
 
 Read-only sources (`bytes`, arrays with `writeable=False`) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (numpy's `writeable=False`, carried as `Shape.IsWriteable == false`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
 
@@ -315,10 +315,13 @@ PythonEngine.Shutdown();
 
 ## Testing
 
-The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests` (149 tests on each of `net8.0` and `net10.0`) — covering every dtype and layout in both directions, all three conversion routes, the codec modes, the GIL policy, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
+The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests` (202 tests on each of `net8.0` and `net10.0`) — covering every dtype and layout in both directions, all three conversion routes, the codec modes, the GIL policy, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
+
+**These docs are part of that suite.** Every code example, table row and quoted error message on this page, on [The Zero-Copy Model](zero-copy-model.md) and on [Interoperability](index.md) is executed by a `DocExamples_*` class named after the page — so a sample that stops compiling or stops behaving as described fails the build, not the reader. The measured coverage census and the suite size quoted just above are asserted there too, against the assembly itself.
 
 ```bash
 cd test/NumSharp.Interop.UnitTests
 dotnet test                                   # both frameworks
 dotnet test --filter "ClassName~StridedBufferViewTests"
+dotnet test --filter "ClassName~DocExamples"   # just the documentation gate
 ```

@@ -253,21 +253,26 @@ want a snapshot that never touches the Python object at all, use `DecodeMode = C
 
 ## Measured coverage
 
-A census of 48 exporter varieties through the view path (CPython 3.12, numpy 2.4.2, pythonnet 3.0.5):
+A census of 50 exporter varieties through the view path (CPython 3.12, numpy 2.4.2, pythonnet 3.0.5).
+This is not a remembered figure: the census below **is** a test —
+`DocExamples_ZeroCopyModelPage.Coverage_Census_MeasuresTheDocumentedTotals` builds every variety,
+pushes it through the view path, falls back to the copy path when the view declines, and asserts these
+totals on every run.
 
-| Category | Result |
-|---|---|
-| `bytes`, `bytearray`, `memoryview`, `BytesIO.getbuffer()` | **view** |
-| `array.array` — all 12 typecodes (`b B h H i I l L q Q f d`) | **view** |
-| `ctypes` arrays (`c_int`, `c_double`, `c_ubyte`, `c_int16`, ...) | **view** |
-| numpy dtypes: `i1 u1 i2 u2 i4 u4 i8 u8 f2 f4 f8 c16`, big-endian `i1` | **view** |
-| numpy layouts: contiguous, strided, reversed, transposed, F-order, broadcast, read-only, 0-d | **view** |
-| `memoryview` casts and strided/reversed forms | **view** |
-| numpy `complex64` | copy (widened) |
-| sub-item stride (`as_strided`) | copy (linearised) |
-| big-endian multi-byte | rejected by both paths — byte-swap first |
+| Category | # | Result |
+|---|--:|---|
+| `bytes`, `bytearray`, `memoryview`, `BytesIO.getbuffer()` | 4 | **view** |
+| `array.array` — all 12 typecodes (`b B h H i I l L q Q f d`) | 12 | **view** |
+| `ctypes` arrays (`c_int`, `c_double`, `c_ubyte`, `c_int16`, `c_uint32`, `c_int64`) | 6 | **view** |
+| numpy dtypes: `i1 u1 i2 u2 i4 u4 i8 u8 f2 f4 f8 c16`, big-endian `i1` | 13 | **view** |
+| numpy layouts: contiguous, strided, reversed, transposed, F-order, broadcast, read-only, 0-d | 8 | **view** |
+| `memoryview` forms: `cast('B')`, `[::2]`, `[1::2]`, `[::-1]` | 4 | **view** |
+| numpy `complex64` | 1 | copy (widened) |
+| sub-item stride (`as_strided`) | 1 | copy (linearised) |
+| big-endian multi-byte | 1 | rejected by both paths — byte-swap first |
 
-**45 view, 2 copy.** Both copies are the genuine floor described above, not gaps.
+**47 view, 2 copy, 1 rejected.** Both copies are the genuine floor described above, not gaps; the
+rejection is big-endian multi-byte data, which neither path will silently misread.
 
 > **Why acquisition goes through the `memoryview`.** The lease is always taken from the exporter's
 > `memoryview`, never the raw object. pythonnet 3.0.x's `obj.GetBuffer` is per-exporter buggy — on a

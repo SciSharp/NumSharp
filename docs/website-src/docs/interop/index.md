@@ -10,7 +10,7 @@ NumSharp arrays are raw, unmanaged, densely-typed buffers — exactly the shape 
 
 Guides — every sample maps 1:1 to a test in `NumSharp.Interop.UnitTests`:
 
-- [The Zero-Copy Model](zero-copy-model.md): how a conversion decides **view or copy** — the `Auto` decision tree, the three routes that produce a view, the three layouts that genuinely cannot be shared (`complex64`, big-endian, sub-item strides), the `Py_buffer` lock you accept when you share, and the measured coverage (45 view / 2 copy across 48 exporter varieties).
+- [The Zero-Copy Model](zero-copy-model.md): how a conversion decides **view or copy** — the `Auto` decision tree, the three routes that produce a view, the three layouts that genuinely cannot be shared (`complex64`, big-endian, sub-item strides), the `Py_buffer` lock you accept when you share, and the measured coverage (47 view / 2 copy / 1 rejected across 50 exporter varieties).
 - [Numpy.NET — coexistence & migration](numpy-net.md): zero-copy interop with SciSharp's `Numpy`/`Numpy.Bare` packages — wrap NumSharp buffers in their `NDarray`, lease their arrays into NumSharp, one shared engine, and the GIL rule their library needs.
 
 ## The Interop Contract
@@ -29,6 +29,14 @@ var nd = new NDArray(new UnmanagedStorage(
 ```
 
 The release hook is the whole trick: it fires when the **last** NumSharp reference to that block — the original array *or any view derived from it* — goes away, whether by `Dispose()` or by the GC. A bridge puts "tell the other side we're done" in that hook and the refcount takes care of ordering, so neither side has to know about the other's lifetime rules.
+
+> **Alias it, or it can detach.** Written exactly as above, the array believes it **owns** the block, so a size-changing `nd.resize(...)` succeeds: it allocates fresh NumSharp memory, releases the foreign one and leaves your bridge pointing at nothing. Pass the storage through `Alias` to give it view semantics instead — numpy's `owndata == False` — and the same resize refuses with `cannot resize this array: it does not own its data`:
+>
+> ```csharp
+> var storage = new UnmanagedStorage(slice, Shape.Vector(length)).Alias(new Shape(rows, cols));
+> ```
+>
+> This is what the pythonnet bridge's import path does, and it is what makes an imported view behave like `np.frombuffer(...)` on both sides of the boundary.
 
 ## Three questions every bridge must answer
 

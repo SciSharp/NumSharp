@@ -41,4 +41,15 @@
     <ProjectReference Include="..\..\src\NumSharp.Interop.pythonnet\NumSharp.Interop.pythonnet.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The interop documentation pages, copied so DocExamples_DocIntegrity can hold the prose to the
+         code: every test name a page cites must exist, and the suite size it quotes must be real.
+         DO NOT drop this rule — without the files the integrity tests fail loudly (by design; they
+         must never degrade into asserting nothing when the copy is missing). -->
+    <None Include="..\..\docs\website-src\docs\interop\*.md"
+          LinkBase="docs\interop" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\NumSharp.Interop.pythonnet\README.md"
+          LinkBase="docs\package" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
