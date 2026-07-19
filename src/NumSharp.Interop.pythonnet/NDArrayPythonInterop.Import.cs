@@ -172,20 +172,25 @@ namespace NumSharp.Interop.PythonNet
                     if (shape.Size == 0)
                         return new NDArray(tc, shape, fillZeros: false);
 
-                    // Read writeability from the metadata view while it is still open: it is the
-                    // authoritative signal and lets AcquireBuffer AVOID probing PyBUF.WRITABLE on a
-                    // read-only source. That probe is not merely wasteful — GetBuffer(PyBUF.WRITABLE)
-                    // on a read-only *memoryview* HARD-CRASHES pythonnet 3.0.5 (bytes throws cleanly,
-                    // a memoryview segfaults), so it must never be attempted when we already know the
-                    // source is read-only.
+                    // Read writeability from the metadata view: it is the authoritative signal and lets
+                    // AcquireBuffer AVOID probing PyBUF.WRITABLE on a read-only source. That probe is not
+                    // merely wasteful — GetBuffer(PyBUF.WRITABLE) on a read-only *memoryview* HARD-CRASHES
+                    // pythonnet 3.0.5 (bytes throws cleanly, a memoryview segfaults), so it must never be
+                    // attempted when we already know the source is read-only.
                     bool sourceReadonly = GetBool(mv, PythonRuntimeInterop.NameReadonly);
 
-                    // Dispose the metadata view BEFORE taking the lease buffer: some exporters
-                    // count every open view (an extra one is harmless but untidy).
+                    // Take the lease buffer FROM THE MEMORYVIEW WRAPPER, not the raw object. The
+                    // memoryview is CPython's canonical, uniformly-behaved buffer exporter, so acquiring
+                    // through it sidesteps pythonnet 3.0.x's per-exporter GetBuffer bugs: a raw ctypes
+                    // array, for example, hard-crashes obj.GetBuffer for EVERY flag, while the memoryview
+                    // over the very same memory leases cleanly. The PyBuffer keeps the memoryview alive
+                    // (Py_buffer.obj holds it), which in turn keeps the source pinned — so the wrapper is
+                    // disposed right after, and any resize-lock on the source (bytearray) still holds for
+                    // the lease's lifetime through the retained memoryview.
+                    PyBuffer buf = AcquireBuffer(mv, allowReadonly, sourceReadonly, PyBUF.WRITABLE, PyBUF.SIMPLE, out bool readOnly);
                     mv.Dispose();
                     mv = null;
 
-                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, sourceReadonly, PyBUF.WRITABLE, PyBUF.SIMPLE, out bool readOnly);
                     var lease = new ImportLease(buf, holder: null, bytes: buf.Length);
                     try
                     {

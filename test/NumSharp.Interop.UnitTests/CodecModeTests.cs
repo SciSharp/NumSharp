@@ -184,6 +184,44 @@ namespace NumSharp.Interop.UnitTests
             nd.Dispose();
         }
 
+        // ---- acceptance: capability check, not a name allowlist -------------------------------------
+
+        [TestMethod]
+        public void CanDecode_AcceptsAnyBufferExporter_AndRejectsNonBuffers()
+        {
+            // A ctypes array's tp_name is generated per element type AND length ("c_long_Array_4"), so
+            // it can never be allowlisted — the PEP 688 __buffer__ capability check is what accepts it.
+            using (Gil())
+            {
+                using var ct = Scope.Eval("__import__('ctypes').c_int * 4");   // the TYPE itself
+                Auto.CanDecode(new PyType(ct), typeof(NDArray)).Should().BeTrue("any buffer exporter must decode");
+
+                foreach (string nonBuffer in new[] { "dict", "int", "str", "list", "float" })
+                {
+                    using var t = Scope.Eval(nonBuffer);
+                    Auto.CanDecode(new PyType(t), typeof(NDArray)).Should().BeFalse(
+                        $"{nonBuffer} exports no buffer — acceptance must not widen past real exporters");
+                }
+            }
+        }
+
+        [TestMethod]
+        public void Auto_Decode_CtypesArray_IsAView()
+        {
+            // The payoff of the capability check + memoryview-wrapper acquisition: a ctypes array now
+            // flows through Auto and comes back as a zero-copy shared view.
+            PyExec("import ctypes\ncar_auto = (ctypes.c_int * 4)()\ncar_auto[0]=5; car_auto[1]=6; car_auto[2]=7; car_auto[3]=8");
+            NDArray nd = Decode(Auto, "car_auto", out bool ok);
+
+            ok.Should().BeTrue("a ctypes array is a buffer exporter, so Auto decodes it");
+            nd.typecode.Should().Be(NPTypeCode.Int32);
+            ReadAt<int>(nd, 2).Should().Be(7);
+
+            WriteAt(nd, 4242, 0);
+            PyLong("car_auto[0]").Should().Be(4242, "Auto decoded the ctypes array as a VIEW — the write reaches Python");
+            nd.Dispose();
+        }
+
         // ---- encode: Auto/View share, Copy detaches ------------------------------------------------
 
         [TestMethod]
