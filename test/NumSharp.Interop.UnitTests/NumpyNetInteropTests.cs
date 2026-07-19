@@ -46,7 +46,7 @@ namespace NumSharp.Interop.UnitTests
             }
 
             PyLong("1 + 1").Should().Be(2, "our scopes keep working — one shared engine, not a hijack");
-            NDArrayInterop.LiveExports.Should().Be(0, "Numpy.NET's own arrays involve no NumSharp pins");
+            NDArrayPythonInterop.LiveExports.Should().Be(0, "Numpy.NET's own arrays involve no NumSharp pins");
         }
 
         [TestMethod]
@@ -56,7 +56,7 @@ namespace NumSharp.Interop.UnitTests
 
             using (Gil())
             {
-                using var wrapped = new NDarray(NDArrayInterop.ToNumpy(ours));
+                using var wrapped = new NDarray(NDArrayPythonInterop.ToNumpy(ours));
 
                 wrapped.sum().item<double>().Should().BeApproximately(15.0, 1e-9, "Numpy.NET computes over NumSharp memory");
 
@@ -87,9 +87,9 @@ namespace NumSharp.Interop.UnitTests
 
             NDArray view;
             using (Gil())
-                view = NDArrayInterop.ToNDArrayView(their.self);
+                view = NDArrayPythonInterop.ToNDArrayView(their.self);
 
-            NDArrayInterop.LiveImports.Should().Be(1);
+            NDArrayPythonInterop.LiveImports.Should().Be(1);
 
             WriteAt(view, -7.5, 1);
             using (Gil())
@@ -122,7 +122,7 @@ namespace NumSharp.Interop.UnitTests
                 var ours = np.arange(4).astype(tc);
                 using (Gil())
                 {
-                    using var wrapped = new NDarray(NDArrayInterop.ToNumpy(ours));
+                    using var wrapped = new NDarray(NDArrayPythonInterop.ToNumpy(ours));
                     wrapped.dtype.ToString().Should().Be(numpyName, tc.ToString());
                     switch (tc)
                     {
@@ -140,7 +140,7 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
             {
                 using var theirI4 = np2.arange(4).astype(np2.int32);
-                var nd = NDArrayInterop.ToNDArray(theirI4.self);
+                var nd = NDArrayPythonInterop.ToNDArray(theirI4.self);
                 nd.typecode.Should().Be(NPTypeCode.Int32);
                 ReadAt<int>(nd, 3).Should().Be(3);
 
@@ -162,7 +162,7 @@ namespace NumSharp.Interop.UnitTests
 
             NDArray sliceView;
             using (Gil())
-                sliceView = NDArrayInterop.ToNDArrayView(theirSlice.self);
+                sliceView = NDArrayPythonInterop.ToNDArrayView(theirSlice.self);
             sliceView.size.Should().Be(6);
             ReadAt<double>(sliceView, 0).Should().BeApproximately(2.0, 1e-12);
 
@@ -175,7 +175,7 @@ namespace NumSharp.Interop.UnitTests
             var v = b["1:3, ::2"];
             using (Gil())
             {
-                using var wrappedStrided = new NDarray(NDArrayInterop.ToNumpy(v));
+                using var wrappedStrided = new NDarray(NDArrayPythonInterop.ToNumpy(v));
                 wrappedStrided.shape.Dimensions.Should().Equal(2, 3);
                 wrappedStrided.GetData<double>().Should().Equal(new[] { 6.0, 8, 10, 12, 14, 16 },
                     "Numpy.NET must see the LOGICAL order of the strided NumSharp view");
@@ -193,13 +193,13 @@ namespace NumSharp.Interop.UnitTests
             {
                 var src = np.arange(5).astype(NPTypeCode.Double) * 2;   // 0 2 4 6 8 — dropped immediately
                 using (Gil())
-                    return new NDarray(NDArrayInterop.ToNumpy(src));
+                    return new NDarray(NDArrayPythonInterop.ToNumpy(src));
             }
 
             var wrapped = MakeWrapped();
             Pump(); Pump(); Pump();   // the source NDArray is long collectable
 
-            NDArrayInterop.LiveExports.Should().Be(1, "the Numpy.NET wrapper's python reference pins the buffer");
+            NDArrayPythonInterop.LiveExports.Should().Be(1, "the Numpy.NET wrapper's python reference pins the buffer");
             using (Gil())
                 wrapped.sum().item<double>().Should().BeApproximately(20.0, 1e-9,
                     "Numpy.NET still reads valid NumSharp memory after every NumSharp-side reference died");
@@ -210,7 +210,7 @@ namespace NumSharp.Interop.UnitTests
                 wrapped.Dispose();
             wrapped = null;
 
-            WaitFor(() => NDArrayInterop.LiveExports == 0).Should().BeTrue(
+            WaitFor(() => NDArrayPythonInterop.LiveExports == 0).Should().BeTrue(
                 "disposing the Numpy.NET wrapper was the last reference — the pin must drain");
         }
 
@@ -221,7 +221,7 @@ namespace NumSharp.Interop.UnitTests
             using (Gil())
             {
                 var their = np2.arange(6).astype(np2.float64);
-                view = NDArrayInterop.ToNDArrayView(their.self);
+                view = NDArrayPythonInterop.ToNDArrayView(their.self);
                 their.Dispose();   // their wrapper gone; our lease is now the only holder
             }
 
@@ -230,7 +230,7 @@ namespace NumSharp.Interop.UnitTests
                 "the lease must keep the numpy array alive after Numpy.NET's wrapper was disposed");
             WriteAt(view, 11.5, 0);
             ReadAt<double>(view, 0).Should().BeApproximately(11.5, 1e-12);
-            NDArrayInterop.LiveImports.Should().Be(1);
+            NDArrayPythonInterop.LiveImports.Should().Be(1);
         }
 
         [TestMethod]
@@ -243,11 +243,11 @@ namespace NumSharp.Interop.UnitTests
             double theirMean;
             using (Gil())
             {
-                using var wa = new NDarray(NDArrayInterop.ToNumpy(a));
-                using var wb = new NDarray(NDArrayInterop.ToNumpy(b));
+                using var wa = new NDarray(NDArrayPythonInterop.ToNumpy(a));
+                using var wb = new NDarray(NDArrayPythonInterop.ToNumpy(b));
                 using var theirProduct = np2.matmul(wa, wb);
                 theirMean = theirProduct.mean();   // Numpy.NET's mean() returns double directly
-                product = NDArrayInterop.ToNDArray(theirProduct.self);
+                product = NDArrayPythonInterop.ToNDArray(theirProduct.self);
             }
 
             var expected = np.matmul(a, b);

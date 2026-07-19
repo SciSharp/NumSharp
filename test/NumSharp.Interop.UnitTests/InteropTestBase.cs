@@ -11,7 +11,7 @@ namespace NumSharp.Interop.UnitTests
     ///     Shared plumbing for all engine-backed interop tests.
     ///
     ///     <para><b>Leak gate:</b> every test captures the <see cref="NNDArrayInteropLiveExports"/> /
-    ///     <see cref="NDArrayInterop.LiveImports"/> baseline on entry, and the cleanup FAILS the test
+    ///     <see cref="NDArrayPythonInterop.LiveImports"/> baseline on entry, and the cleanup FAILS the test
     ///     unless the counters return to that baseline — so every single test doubles as a
     ///     no-leak / no-premature-free assertion.</para>
     ///
@@ -37,8 +37,8 @@ namespace NumSharp.Interop.UnitTests
             PythonSession.EnsureOrInconclusive();
 
             Settle();
-            _baseExports = NDArrayInterop.LiveExports;
-            _baseImports = NDArrayInterop.LiveImports;
+            _baseExports = NDArrayPythonInterop.LiveExports;
+            _baseImports = NDArrayPythonInterop.LiveImports;
 
             using (Py.GIL())
             {
@@ -57,11 +57,11 @@ namespace NumSharp.Interop.UnitTests
                 Scope.Dispose();
             Scope = null;
 
-            bool settled = WaitFor(() => NDArrayInterop.LiveExports <= _baseExports &&
-                                         NDArrayInterop.LiveImports <= _baseImports, 12_000);
+            bool settled = WaitFor(() => NDArrayPythonInterop.LiveExports <= _baseExports &&
+                                         NDArrayPythonInterop.LiveImports <= _baseImports, 12_000);
             Assert.IsTrue(settled,
-                $"interop leaked conversions: LiveExports {_baseExports} -> {NDArrayInterop.LiveExports}, " +
-                $"LiveImports {_baseImports} -> {NDArrayInterop.LiveImports}");
+                $"interop leaked conversions: LiveExports {_baseExports} -> {NDArrayPythonInterop.LiveExports}, " +
+                $"LiveImports {_baseImports} -> {NDArrayPythonInterop.LiveImports}");
         }
 
         // ---- python helpers (each opens/closes its own GIL scope) --------------------------------
@@ -96,31 +96,31 @@ namespace NumSharp.Interop.UnitTests
         /// <summary>Zero-copy export of <paramref name="nd"/> bound to a scope name.</summary>
         protected void ExportTo(string name, NDArray nd)
         {
-            using (Py.GIL()) { using var p = NDArrayInterop.ToNumpy(nd); Scope.Set(name, p); }
+            using (Py.GIL()) { using var p = NDArrayPythonInterop.ToNumpy(nd); Scope.Set(name, p); }
         }
 
         /// <summary>Independent-copy export bound to a scope name.</summary>
         protected void ExportCopyTo(string name, NDArray nd)
         {
-            using (Py.GIL()) { using var p = NDArrayInterop.ToNumpyCopy(nd); Scope.Set(name, p); }
+            using (Py.GIL()) { using var p = NDArrayPythonInterop.ToNumpyCopy(nd); Scope.Set(name, p); }
         }
 
         /// <summary>Raw-bytes memoryview export bound to a scope name.</summary>
         protected void ExportMemoryViewTo(string name, NDArray nd)
         {
-            using (Py.GIL()) { using var p = NDArrayInterop.ToMemoryView(nd); Scope.Set(name, p); }
+            using (Py.GIL()) { using var p = NDArrayPythonInterop.ToMemoryView(nd); Scope.Set(name, p); }
         }
 
         /// <summary>Copy-import the result of a python expression.</summary>
         protected NDArray ImportOf(string expr)
         {
-            using (Py.GIL()) { using var p = Scope.Eval(expr); return NDArrayInterop.ToNDArray(p); }
+            using (Py.GIL()) { using var p = Scope.Eval(expr); return NDArrayPythonInterop.ToNDArray(p); }
         }
 
         /// <summary>Zero-copy view-import the result of a python expression.</summary>
         protected NDArray ViewOf(string expr, bool allowReadonly = false)
         {
-            using (Py.GIL()) { using var p = Scope.Eval(expr); return NDArrayInterop.ToNDArrayView(p, allowReadonly); }
+            using (Py.GIL()) { using var p = Scope.Eval(expr); return NDArrayPythonInterop.ToNDArrayView(p, allowReadonly); }
         }
 
         // ---- direct-memory readers/writers (prove aliasing at the pointer level) -----------------
@@ -157,7 +157,7 @@ namespace NumSharp.Interop.UnitTests
             {
                 Finalizer.Instance.Collect();
                 PythonEngine.RunSimpleString("import gc; gc.collect()");
-                using var t = NDArrayInterop.ToNumpyCopy(np.arange(1));
+                using var t = NDArrayPythonInterop.ToNumpyCopy(np.arange(1));
             }
         }
 
@@ -180,7 +180,7 @@ namespace NumSharp.Interop.UnitTests
             int lastE = -1, lastI = -1;
             for (int i = 0; i < 40; i++)
             {
-                int e = NDArrayInterop.LiveExports, im = NDArrayInterop.LiveImports;
+                int e = NDArrayPythonInterop.LiveExports, im = NDArrayPythonInterop.LiveImports;
                 if (e == lastE && im == lastI && (e + im == 0 || i > 2))
                     return;
                 lastE = e; lastI = im;

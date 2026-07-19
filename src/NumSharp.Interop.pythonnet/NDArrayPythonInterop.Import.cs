@@ -6,7 +6,7 @@ using Python.Runtime;
 
 namespace NumSharp.Interop.PythonNet
 {
-    public static partial class NDArrayInterop
+    public static partial class NDArrayPythonInterop
     {
         // ===========================  Python  ->  NumSharp  ==================================
 
@@ -29,8 +29,8 @@ namespace NumSharp.Interop.PythonNet
         public static unsafe NDArray ToNDArray(this PyObject obj, bool? requireGIL = null)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            PythonInteropRuntime.EnsureEngine();
-            PythonInteropRuntime.DrainPending();
+            PythonRuntimeInterop.EnsureEngine();
+            PythonRuntimeInterop.DrainPending();
 
             using (AcquireGil(requireGIL))
             {
@@ -113,8 +113,8 @@ namespace NumSharp.Interop.PythonNet
         public static unsafe NDArray ToNDArrayView(PyObject obj, bool allowReadonly = false, bool? requireGIL = null)
         {
             if (obj is null) throw new ArgumentNullException(nameof(obj));
-            PythonInteropRuntime.EnsureEngine();
-            PythonInteropRuntime.DrainPending();
+            PythonRuntimeInterop.EnsureEngine();
+            PythonRuntimeInterop.DrainPending();
 
             using (AcquireGil(requireGIL))
             {
@@ -175,12 +175,12 @@ namespace NumSharp.Interop.PythonNet
                         // resize this array: it does not own its data") instead of silently detaching
                         // the view from Python's memory, and np.require(..., "O") copies.
                         var nd = new NDArray(new UnmanagedStorage(slice, shape).Alias());
-                        PythonInteropRuntime.TrackImport(lease);
+                        PythonRuntimeInterop.TrackImport(lease);
                         return nd;
                     }
                     catch
                     {
-                        PythonInteropRuntime.TrackImport(lease);   // let the release path account for it
+                        PythonRuntimeInterop.TrackImport(lease);   // let the release path account for it
                         lease.Release();
                         throw;
                     }
@@ -251,13 +251,13 @@ namespace NumSharp.Interop.PythonNet
             using var ai = new PyDict(aiObj);
 
             string typestr;
-            using (PyObject t = ai[PythonInteropRuntime.NameTypestr]) typestr = t.As<string>();
+            using (PyObject t = ai[PythonRuntimeInterop.NameTypestr]) typestr = t.As<string>();
             NPTypeCode tc = FromNumpyDtypeStr(typestr);   // rejects big-endian / datetime / object dtypes
             int itemsize = tc.SizeOf();
 
             long dataPtr;
             bool readOnly;
-            using (PyObject data = ai[PythonInteropRuntime.NameData])
+            using (PyObject data = ai[PythonRuntimeInterop.NameData])
             {
                 using var dataTuple = PyTuple.AsTuple(data);
                 using (PyObject p = dataTuple[0]) dataPtr = p.As<long>();
@@ -270,7 +270,7 @@ namespace NumSharp.Interop.PythonNet
                     "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
 
             long[] dims;
-            using (PyObject s = ai[PythonInteropRuntime.NameShape]) dims = TupleToLongs(s);
+            using (PyObject s = ai[PythonRuntimeInterop.NameShape]) dims = TupleToLongs(s);
 
             long sizeFromDims = 1;
             for (int i = 0; i < dims.Length; i++)
@@ -279,8 +279,8 @@ namespace NumSharp.Interop.PythonNet
                 return new NDArray(tc, new Shape(dims), fillZeros: false);
 
             long[] byteStrides = null;
-            if (ai.HasKey(PythonInteropRuntime.NameStrides))
-                using (PyObject s = ai[PythonInteropRuntime.NameStrides])
+            if (ai.HasKey(PythonRuntimeInterop.NameStrides))
+                using (PyObject s = ai[PythonRuntimeInterop.NameStrides])
                     if (!s.IsNone())
                         byteStrides = TupleToLongs(s);
 
@@ -347,12 +347,12 @@ namespace NumSharp.Interop.PythonNet
                     ? new UnmanagedStorage(slice, shape).Alias()
                     : new UnmanagedStorage(slice, Shape.Vector(spanElements)).Alias(shape);
                 var nd = new NDArray(storage);
-                PythonInteropRuntime.TrackImport(lease);
+                PythonRuntimeInterop.TrackImport(lease);
                 return nd;
             }
             catch
             {
-                PythonInteropRuntime.TrackImport(lease);
+                PythonRuntimeInterop.TrackImport(lease);
                 lease.Release();
                 throw;
             }

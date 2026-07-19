@@ -57,21 +57,21 @@ namespace NumSharp.Interop.PythonNet
     ///     call Shutdown should opt out of stashing first:
     ///     <c>RuntimeData.FormatterType = typeof(NoopFormatter);</c>.</para>
     /// </summary>
-    public static partial class NDArrayInterop
+    public static partial class NDArrayPythonInterop
     {
         /// <summary>
         ///     Number of NumSharp buffers currently rooted by live Python-side views
         ///     (created by <see cref="ToNumpy(NDArray, bool?)"/> / <see cref="ToMemoryView(NDArray, bool?)"/>,
         ///     released by Python garbage collection or interpreter exit).
         /// </summary>
-        public static int LiveExports => PythonInteropRuntime.LiveExports;
+        public static int LiveExports => PythonRuntimeInterop.LiveExports;
 
         /// <summary>
         ///     Number of Python buffers currently leased by live NumSharp views
         ///     (created by <see cref="ToNDArrayView(PyObject, bool, bool?)"/>, released when the last
         ///     NumSharp view over the memory is disposed or collected).
         /// </summary>
-        public static int LiveImports => PythonInteropRuntime.LiveImports;
+        public static int LiveImports => PythonRuntimeInterop.LiveImports;
 
         // ===========================  GIL policy  =============================================
 
@@ -151,8 +151,8 @@ namespace NumSharp.Interop.PythonNet
         public static bool RegisterCodec(NumpyCodecOptions options)
         {
             if (options is null) throw new ArgumentNullException(nameof(options));
-            PythonInteropRuntime.EnsureEngine();
-            if (System.Threading.Interlocked.Exchange(ref PythonInteropRuntime.CodecRegistered, 1) != 0)
+            PythonRuntimeInterop.EnsureEngine();
+            if (System.Threading.Interlocked.Exchange(ref PythonRuntimeInterop.CodecRegistered, 1) != 0)
                 return false;
             var codec = new NumpyCodec(options);
             PyObjectConversions.RegisterEncoder(codec);
@@ -257,7 +257,7 @@ namespace NumSharp.Interop.PythonNet
         }
 
         // ---- memoryview metadata helpers (avoid pythonnet 3.0.1's broken PyBuffer flags) --------
-        // The attribute names are session-cached PyStrings (see PythonInteropRuntime): GetAttr(PyObject)
+        // The attribute names are session-cached PyStrings (see PythonRuntimeInterop): GetAttr(PyObject)
         // skips the per-call UTF-8 marshal + unicode allocation of the string-based overload.
 
         internal static string GetStr(PyObject o, PyObject attr) { using var a = o.GetAttr(attr); return a.As<string>(); }

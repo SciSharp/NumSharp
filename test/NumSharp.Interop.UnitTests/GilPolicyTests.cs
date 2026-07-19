@@ -11,7 +11,7 @@ namespace NumSharp.Interop.UnitTests
 {
     /// <summary>
     ///     The GIL-management policy: every conversion verb takes a nullable <c>requireGIL</c>
-    ///     parameter, <c>null</c> falls back to the process-wide <see cref="NDArrayInterop.RequireGIL"/>
+    ///     parameter, <c>null</c> falls back to the process-wide <see cref="NDArrayPythonInterop.RequireGIL"/>
     ///     (default <c>true</c>), and an effective <c>false</c> replaces <see cref="Py.GIL"/> with a
     ///     shared no-op guard — the caller must already hold the GIL.
     ///
@@ -29,7 +29,7 @@ namespace NumSharp.Interop.UnitTests
         /// <summary>Belt-and-braces on top of each test's own <c>finally</c>: the global policy must
         /// never leak into other suites (runs before the base cleanup and its leak gate).</summary>
         [TestCleanup]
-        public void RestoreGilPolicy() => NDArrayInterop.RequireGIL = true;
+        public void RestoreGilPolicy() => NDArrayPythonInterop.RequireGIL = true;
 
         // ---- the policy surface -------------------------------------------------------------------
 
@@ -38,14 +38,14 @@ namespace NumSharp.Interop.UnitTests
         {
             // Every mutating test restores the global (finally + [TestCleanup]) and the assembly is
             // [DoNotParallelize], so observing true here IS observing the default.
-            NDArrayInterop.RequireGIL.Should().BeTrue("GIL management must be opt-OUT — the safe default acquires");
+            NDArrayPythonInterop.RequireGIL.Should().BeTrue("GIL management must be opt-OUT — the safe default acquires");
         }
 
         [TestMethod]
         public void AcquireGil_False_IsTheSharedNoOpGuard()
         {
-            IDisposable g1 = NDArrayInterop.AcquireGil(false);
-            IDisposable g2 = NDArrayInterop.AcquireGil(false);
+            IDisposable g1 = NDArrayPythonInterop.AcquireGil(false);
+            IDisposable g2 = NDArrayPythonInterop.AcquireGil(false);
 
             g1.Should().BeSameAs(g2, "the no-GIL guard is one shared instance — zero per-call allocation");
             g1.Should().NotBeAssignableTo<Py.GILState>("false must not touch PyGILState at all");
@@ -58,7 +58,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void AcquireGil_True_IsARealGilScope()
         {
-            IDisposable g = NDArrayInterop.AcquireGil(true);
+            IDisposable g = NDArrayPythonInterop.AcquireGil(true);
             try
             {
                 g.Should().BeAssignableTo<Py.GILState>("explicit true must actually take the GIL");
@@ -72,19 +72,19 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void AcquireGil_Null_FollowsTheGlobal()
         {
-            IDisposable noGil = NDArrayInterop.AcquireGil(false);
+            IDisposable noGil = NDArrayPythonInterop.AcquireGil(false);
 
-            NDArrayInterop.RequireGIL = false;
+            NDArrayPythonInterop.RequireGIL = false;
             try
             {
-                NDArrayInterop.AcquireGil(null).Should().BeSameAs(noGil, "null + RequireGIL=false → the no-op guard");
+                NDArrayPythonInterop.AcquireGil(null).Should().BeSameAs(noGil, "null + RequireGIL=false → the no-op guard");
             }
             finally
             {
-                NDArrayInterop.RequireGIL = true;
+                NDArrayPythonInterop.RequireGIL = true;
             }
 
-            IDisposable g = NDArrayInterop.AcquireGil(null);
+            IDisposable g = NDArrayPythonInterop.AcquireGil(null);
             try
             {
                 g.Should().BeAssignableTo<Py.GILState>("null + RequireGIL=true → a real GIL scope");
@@ -99,15 +99,15 @@ namespace NumSharp.Interop.UnitTests
         public void AcquireGil_ExplicitParameter_OverridesTheGlobal()
         {
             // global true (the default), explicit false → no-op guard
-            NDArrayInterop.AcquireGil(false).Should().BeSameAs(NDArrayInterop.AcquireGil(false));
-            NDArrayInterop.AcquireGil(false).Should().NotBeAssignableTo<Py.GILState>(
+            NDArrayPythonInterop.AcquireGil(false).Should().BeSameAs(NDArrayPythonInterop.AcquireGil(false));
+            NDArrayPythonInterop.AcquireGil(false).Should().NotBeAssignableTo<Py.GILState>(
                 "explicit false must win over the global true");
 
             // global false, explicit true → real GIL scope
-            NDArrayInterop.RequireGIL = false;
+            NDArrayPythonInterop.RequireGIL = false;
             try
             {
-                IDisposable g = NDArrayInterop.AcquireGil(true);
+                IDisposable g = NDArrayPythonInterop.AcquireGil(true);
                 try
                 {
                     g.Should().BeAssignableTo<Py.GILState>("explicit true must win over the global false");
@@ -119,7 +119,7 @@ namespace NumSharp.Interop.UnitTests
             }
             finally
             {
-                NDArrayInterop.RequireGIL = true;
+                NDArrayPythonInterop.RequireGIL = true;
             }
         }
 
@@ -266,7 +266,7 @@ namespace NumSharp.Interop.UnitTests
                 Scope.Exec("vsrc = np.arange(5.0)");
                 using (PyObject vp = Scope.Eval("vsrc"))
                 {
-                    NDArray view = NDArrayInterop.ToNDArrayView(vp, allowReadonly: false, requireGIL: false);
+                    NDArray view = NDArrayPythonInterop.ToNDArrayView(vp, allowReadonly: false, requireGIL: false);
                     WriteAt(view, 42.0, 3);
                     view.Dispose();
                 }
@@ -298,7 +298,7 @@ namespace NumSharp.Interop.UnitTests
         {
             var nd = np.arange(4).astype(NPTypeCode.Double);
 
-            NDArrayInterop.RequireGIL = false;
+            NDArrayPythonInterop.RequireGIL = false;
             try
             {
                 using (Gil())
@@ -315,7 +315,7 @@ namespace NumSharp.Interop.UnitTests
             }
             finally
             {
-                NDArrayInterop.RequireGIL = true;
+                NDArrayPythonInterop.RequireGIL = true;
             }
 
             PyExec("g_ng[1] = -1.0");
@@ -331,7 +331,7 @@ namespace NumSharp.Interop.UnitTests
             CodecTests.EnsureCodec();
             var nd = np.arange(4).astype(NPTypeCode.Double);
 
-            NDArrayInterop.RequireGIL = false;
+            NDArrayPythonInterop.RequireGIL = false;
             try
             {
                 using (Gil())
@@ -344,7 +344,7 @@ namespace NumSharp.Interop.UnitTests
             }
             finally
             {
-                NDArrayInterop.RequireGIL = true;
+                NDArrayPythonInterop.RequireGIL = true;
             }
 
             PyExec("codec_ng[0] = 9.0");
@@ -359,26 +359,26 @@ namespace NumSharp.Interop.UnitTests
             // The ThreadPool drain and the shutdown drain run on threads that cannot inherit the
             // caller's GIL — they must keep acquiring regardless of the policy, or every disposal
             // under the opt-out would touch the C-API bare on a naked thread.
-            NDArrayInterop.RequireGIL = false;
+            NDArrayPythonInterop.RequireGIL = false;
             try
             {
-                int baseline = NDArrayInterop.LiveImports;
+                int baseline = NDArrayPythonInterop.LiveImports;
 
                 using (Gil())
                 {
                     Scope.Exec("drainsrc = np.arange(8.0)");
                     using PyObject src = Scope.Eval("drainsrc");
-                    NDArray view = NDArrayInterop.ToNDArrayView(src, allowReadonly: false, requireGIL: false);
-                    NDArrayInterop.LiveImports.Should().Be(baseline + 1);
+                    NDArray view = NDArrayPythonInterop.ToNDArrayView(src, allowReadonly: false, requireGIL: false);
+                    NDArrayPythonInterop.LiveImports.Should().Be(baseline + 1);
                     view.Dispose();   // enqueues the lease; the drain takes the GIL ITSELF
                 }
 
-                WaitFor(() => NDArrayInterop.LiveImports == baseline, 12_000).Should().BeTrue(
+                WaitFor(() => NDArrayPythonInterop.LiveImports == baseline, 12_000).Should().BeTrue(
                     "the deferred drain manages the GIL itself and must be immune to the global opt-out");
             }
             finally
             {
-                NDArrayInterop.RequireGIL = true;
+                NDArrayPythonInterop.RequireGIL = true;
             }
         }
 

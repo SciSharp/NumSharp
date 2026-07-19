@@ -25,20 +25,20 @@ namespace NumSharp.Interop.UnitTests
         {
             foreach (var tc in NumpyMappable)
             {
-                string s = NDArrayInterop.ToNumpyDtypeStr(tc);
+                string s = NDArrayPythonInterop.ToNumpyDtypeStr(tc);
                 s.Should().NotBeNullOrEmpty(tc.ToString());
                 "<|".Should().Contain(s[0].ToString(), "only little-endian or order-irrelevant markers may be produced");
             }
 
-            NDArrayInterop.ToNumpyDtypeStr(NPTypeCode.Char).Should().Be("<u2", "a C# char is a UTF-16 code unit");
-            NDArrayInterop.ToNumpyDtypeStr(NPTypeCode.Boolean).Should().Be("|b1");
-            NDArrayInterop.ToNumpyDtypeStr(NPTypeCode.Complex).Should().Be("<c16");
+            NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Char).Should().Be("<u2", "a C# char is a UTF-16 code unit");
+            NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Boolean).Should().Be("|b1");
+            NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Complex).Should().Be("<c16");
         }
 
         [TestMethod]
         public void ToNumpyDtypeStr_Decimal_Throws()
         {
-            ((Action)(() => NDArrayInterop.ToNumpyDtypeStr(NPTypeCode.Decimal)))
+            ((Action)(() => NDArrayPythonInterop.ToNumpyDtypeStr(NPTypeCode.Decimal)))
                 .Should().Throw<NotSupportedException>().WithMessage("*decimal*");
         }
 
@@ -48,22 +48,22 @@ namespace NumSharp.Interop.UnitTests
             foreach (var tc in NumpyMappable)
             {
                 var expected = tc == NPTypeCode.Char ? NPTypeCode.UInt16 : tc;   // char is exported as its u2 proxy
-                NDArrayInterop.FromNumpyDtypeStr(NDArrayInterop.ToNumpyDtypeStr(tc)).Should().Be(expected, tc.ToString());
+                NDArrayPythonInterop.FromNumpyDtypeStr(NDArrayPythonInterop.ToNumpyDtypeStr(tc)).Should().Be(expected, tc.ToString());
             }
         }
 
         [TestMethod]
         public void FromNumpyDtypeStr_AcceptsMarkerVariants_RejectsForeign()
         {
-            NDArrayInterop.FromNumpyDtypeStr("f8").Should().Be(NPTypeCode.Double, "bare code");
-            NDArrayInterop.FromNumpyDtypeStr("=f4").Should().Be(NPTypeCode.Single, "native marker");
-            NDArrayInterop.FromNumpyDtypeStr("|b1").Should().Be(NPTypeCode.Boolean);
+            NDArrayPythonInterop.FromNumpyDtypeStr("f8").Should().Be(NPTypeCode.Double, "bare code");
+            NDArrayPythonInterop.FromNumpyDtypeStr("=f4").Should().Be(NPTypeCode.Single, "native marker");
+            NDArrayPythonInterop.FromNumpyDtypeStr("|b1").Should().Be(NPTypeCode.Boolean);
 
-            ((Action)(() => NDArrayInterop.FromNumpyDtypeStr(">f8")))
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr(">f8")))
                 .Should().Throw<NotSupportedException>().WithMessage("*big-endian*", "silent byte-swapping is a data corruption");
-            ((Action)(() => NDArrayInterop.FromNumpyDtypeStr("<M8[ns]")))
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("<M8[ns]")))
                 .Should().Throw<NotSupportedException>("datetime64 has no NumSharp dtype");
-            ((Action)(() => NDArrayInterop.FromNumpyDtypeStr("V16")))
+            ((Action)(() => NDArrayPythonInterop.FromNumpyDtypeStr("V16")))
                 .Should().Throw<NotSupportedException>("void/record dtypes have no NumSharp dtype");
         }
 
@@ -72,49 +72,49 @@ namespace NumSharp.Interop.UnitTests
         {
             foreach (var tc in NumpyMappable)
             {
-                string fmt = NDArrayInterop.ToBufferFormat(tc);
+                string fmt = NDArrayPythonInterop.ToBufferFormat(tc);
                 var expected = tc == NPTypeCode.Char ? NPTypeCode.UInt16 : tc;
-                NDArrayInterop.FromBufferFormat(fmt, tc.SizeOf()).Should().Be(expected, $"{tc} -> '{fmt}'");
+                NDArrayPythonInterop.FromBufferFormat(fmt, tc.SizeOf()).Should().Be(expected, $"{tc} -> '{fmt}'");
             }
 
-            ((Action)(() => NDArrayInterop.ToBufferFormat(NPTypeCode.Decimal)))
+            ((Action)(() => NDArrayPythonInterop.ToBufferFormat(NPTypeCode.Decimal)))
                 .Should().Throw<NotSupportedException>();
         }
 
         [TestMethod]
         public void FromBufferFormat_PlatformAmbiguousCodes_UseItemSize()
         {
-            NDArrayInterop.FromBufferFormat("l", 4).Should().Be(NPTypeCode.Int32, "32-bit C long (Windows)");
-            NDArrayInterop.FromBufferFormat("l", 8).Should().Be(NPTypeCode.Int64, "64-bit C long (unix)");
-            NDArrayInterop.FromBufferFormat("L", 4).Should().Be(NPTypeCode.UInt32);
-            NDArrayInterop.FromBufferFormat("L", 8).Should().Be(NPTypeCode.UInt64);
-            NDArrayInterop.FromBufferFormat("@d", 8).Should().Be(NPTypeCode.Double, "native-order marker strips");
-            NDArrayInterop.FromBufferFormat("", 1).Should().Be(NPTypeCode.Byte, "empty format means raw bytes");
+            NDArrayPythonInterop.FromBufferFormat("l", 4).Should().Be(NPTypeCode.Int32, "32-bit C long (Windows)");
+            NDArrayPythonInterop.FromBufferFormat("l", 8).Should().Be(NPTypeCode.Int64, "64-bit C long (unix)");
+            NDArrayPythonInterop.FromBufferFormat("L", 4).Should().Be(NPTypeCode.UInt32);
+            NDArrayPythonInterop.FromBufferFormat("L", 8).Should().Be(NPTypeCode.UInt64);
+            NDArrayPythonInterop.FromBufferFormat("@d", 8).Should().Be(NPTypeCode.Double, "native-order marker strips");
+            NDArrayPythonInterop.FromBufferFormat("", 1).Should().Be(NPTypeCode.Byte, "empty format means raw bytes");
         }
 
         [TestMethod]
         public void FromBufferFormat_BigEndian_RejectedForMultiByte_AllowedForSingleByte()
         {
-            ((Action)(() => NDArrayInterop.FromBufferFormat(">i", 4)))
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat(">i", 4)))
                 .Should().Throw<NotSupportedException>().WithMessage("*big-endian*");
-            ((Action)(() => NDArrayInterop.FromBufferFormat("!H", 2)))
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("!H", 2)))
                 .Should().Throw<NotSupportedException>("'!' is network byte order, i.e. big-endian");
 
-            NDArrayInterop.FromBufferFormat(">B", 1).Should().Be(NPTypeCode.Byte, "byte order is irrelevant for 1-byte types");
-            NDArrayInterop.FromBufferFormat(">?", 1).Should().Be(NPTypeCode.Boolean);
+            NDArrayPythonInterop.FromBufferFormat(">B", 1).Should().Be(NPTypeCode.Byte, "byte order is irrelevant for 1-byte types");
+            NDArrayPythonInterop.FromBufferFormat(">?", 1).Should().Be(NPTypeCode.Boolean);
         }
 
         [TestMethod]
         public void FromBufferFormat_Complex64_ThrowsWithWideningGuidance()
         {
-            ((Action)(() => NDArrayInterop.FromBufferFormat("Zf", 8)))
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("Zf", 8)))
                 .Should().Throw<NotSupportedException>().WithMessage("*complex64*ToNDArray*");
         }
 
         [TestMethod]
         public void FromBufferFormat_UnknownCode_Throws()
         {
-            ((Action)(() => NDArrayInterop.FromBufferFormat("x", 1)))
+            ((Action)(() => NDArrayPythonInterop.FromBufferFormat("x", 1)))
                 .Should().Throw<NotSupportedException>().WithMessage("*'x'*");
         }
     }

@@ -4,7 +4,7 @@ using Python.Runtime;
 namespace NumSharp.Interop.PythonNet
 {
     /// <summary>
-    ///     Policies for <see cref="NumpyCodec"/> / <see cref="NDArrayInterop.RegisterCodec()"/>.
+    ///     Policies for <see cref="NumpyCodec"/> / <see cref="NDArrayPythonInterop.RegisterCodec()"/>.
     /// </summary>
     public sealed class NumpyCodecOptions
     {
@@ -13,15 +13,15 @@ namespace NumSharp.Interop.PythonNet
 
         /// <summary>
         ///     <c>true</c> (default): <see cref="NDArray"/> values crossing into Python become zero-copy
-        ///     numpy views (<see cref="NDArrayInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source rooted).
-        ///     <c>false</c>: they become independent copies (<see cref="NDArrayInterop.ToNumpyCopy"/>).
+        ///     numpy views (<see cref="NDArrayPythonInterop.ToNumpy(NDArray, bool?)"/> — shared mutation, source rooted).
+        ///     <c>false</c>: they become independent copies (<see cref="NDArrayPythonInterop.ToNumpyCopy"/>).
         /// </summary>
         public bool EncodeAsView { get; init; } = true;
 
         /// <summary>
         ///     <c>false</c> (default): <c>PyObject.As&lt;NDArray&gt;()</c> copies
-        ///     (<see cref="NDArrayInterop.ToNDArray"/> — safe, owns its memory).
-        ///     <c>true</c>: it produces zero-copy views (<see cref="NDArrayInterop.ToNDArrayView"/> with
+        ///     (<see cref="NDArrayPythonInterop.ToNDArray"/> — safe, owns its memory).
+        ///     <c>true</c>: it produces zero-copy views (<see cref="NDArrayPythonInterop.ToNDArrayView"/> with
         ///     <c>allowReadonly:true</c> — shared mutation and shared lifetime; read-only sources decode
         ///     as NON-WRITEABLE views, so guarded writes through them throw instead of corrupting
         ///     immutable Python objects).
@@ -38,7 +38,7 @@ namespace NumSharp.Interop.PythonNet
 
     /// <summary>
     ///     pythonnet auto-marshaling codec: once registered (see
-    ///     <see cref="NDArrayInterop.RegisterCodec()"/>), <see cref="NDArray"/> ⇄ numpy conversion happens
+    ///     <see cref="NDArrayPythonInterop.RegisterCodec()"/>), <see cref="NDArray"/> ⇄ numpy conversion happens
     ///     automatically at every pythonnet boundary — <c>nd.ToPython()</c>, <c>scope.Set("x", nd)</c>,
     ///     passing an <see cref="NDArray"/> to a Python callable, and <c>pyObj.As&lt;NDArray&gt;()</c> on
     ///     the way back — with no explicit conversion calls.
@@ -70,7 +70,7 @@ namespace NumSharp.Interop.PythonNet
             var nd = (NDArray)value;
             try
             {
-                return _options.EncodeAsView ? NDArrayInterop.ToNumpy(nd) : NDArrayInterop.ToNumpyCopy(nd);
+                return _options.EncodeAsView ? NDArrayPythonInterop.ToNumpy(nd) : NDArrayPythonInterop.ToNumpyCopy(nd);
             }
             catch (NotSupportedException)
             {
@@ -115,8 +115,8 @@ namespace NumSharp.Interop.PythonNet
             try
             {
                 NDArray nd = _options.DecodeAsView
-                    ? NDArrayInterop.ToNDArrayView(pyObj, allowReadonly: true)
-                    : NDArrayInterop.ToNDArray(pyObj);
+                    ? NDArrayPythonInterop.ToNDArrayView(pyObj, allowReadonly: true)
+                    : NDArrayPythonInterop.ToNDArray(pyObj);
                 value = (T)(object)nd;
                 return true;
             }

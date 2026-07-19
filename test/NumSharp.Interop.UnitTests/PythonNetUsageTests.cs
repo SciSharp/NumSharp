@@ -158,7 +158,7 @@ namespace NumSharp.Interop.UnitTests
                 while (iterator.MoveNext())
                 {
                     using PyObject chunk = iterator.Current;
-                    rows.Add(NDArrayInterop.ToNDArray(chunk));   // each yielded array copied out
+                    rows.Add(NDArrayPythonInterop.ToNDArray(chunk));   // each yielded array copied out
                 }
             }
 

@@ -35,7 +35,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void ImportedView_GrowResize_RefusesLikeNumPy_AndStaysAttached()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("rz_src = np.arange(8, dtype='f8')");
             var view = ViewOf("rz_src");
 
@@ -46,7 +46,7 @@ namespace NumSharp.Interop.UnitTests
                 .Should().Throw<IncorrectShapeException>().WithMessage("*does not own its data*");
 
             // The refusal must leave the view fully attached: same lease, same shared memory.
-            NDArrayInterop.LiveImports.Should().Be(i0 + 1, "the refused resize must not have touched the lease");
+            NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1, "the refused resize must not have touched the lease");
             view.size.Should().Be(8, "the refused resize must not have changed the view");
 
             WriteAt(view, -3.5, 2);
@@ -61,7 +61,7 @@ namespace NumSharp.Interop.UnitTests
                 .Should().Throw<IncorrectShapeException>().WithMessage("*does not own its data*");
 
             view.Dispose();
-            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue();
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0).Should().BeTrue();
         }
 
         [TestMethod]
@@ -200,26 +200,26 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void View_ZeroDim_IsLeased_AndAliasesTheScalar()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("zd = np.array(3.25)");   // 0-d, writable ndarray
 
             var view = ViewOf("zd");
             view.ndim.Should().Be(0);
             view.size.Should().Be(1);
-            NDArrayInterop.LiveImports.Should().Be(i0 + 1, "a 0-d view is a real lease, not a copy");
+            NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1, "a 0-d view is a real lease, not a copy");
 
             ReadAt<double>(view).Should().BeApproximately(3.25, 1e-12);
             WriteAt(view, 9.5);
             PyFloat("float(zd)").Should().BeApproximately(9.5, 1e-12, "0-d writes must land in Python's scalar");
 
             view.Dispose();
-            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue("disposing the 0-d view releases its lease");
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0).Should().BeTrue("disposing the 0-d view releases its lease");
         }
 
         [TestMethod]
         public void AsNDArray_Extension_IsTheZeroCopyVerb()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("ext_src = np.arange(6, dtype='f8')");
 
             NDArray view;
@@ -229,12 +229,12 @@ namespace NumSharp.Interop.UnitTests
                 view = src.AsNDArray();   // the extension: As... = share, like numpy asarray
             }
 
-            NDArrayInterop.LiveImports.Should().Be(i0 + 1, "AsNDArray must lease, not copy");
+            NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1, "AsNDArray must lease, not copy");
             WriteAt(view, -2.5, 4);
             PyFloat("float(ext_src[4])").Should().BeApproximately(-2.5, 1e-12, "the extension view aliases Python memory");
 
             view.Dispose();
-            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue();
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0).Should().BeTrue();
         }
     }
 }
