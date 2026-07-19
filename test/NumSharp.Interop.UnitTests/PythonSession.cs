@@ -252,12 +252,12 @@ namespace NumSharp.Interop.UnitTests
                 {
                     string soname = lines.Length > 3 ? lines[3].Trim() : "";
                     string libdir = lines.Length > 4 ? lines[4].Trim() : "";
-                    dll = soname.Length > 0 && libdir.Length > 0 ? Path.Combine(libdir, soname) : null;
+                    dll = FindUnixPythonLibrary(prefix, soname, libdir, major, minor);
                 }
 
                 if (dll is null || !File.Exists(dll))
                 {
-                    detail = $"shared library not found at '{dll}'";
+                    detail = $"shared library not found (prefix '{prefix}')";
                     return false;
                 }
 
@@ -269,6 +269,46 @@ namespace NumSharp.Interop.UnitTests
                 detail = e.Message;
                 return false;
             }
+        }
+
+        /// <summary>
+        ///     Resolve libpython on Linux/macOS, returning the first candidate that exists.
+        ///
+        ///     <para><c>Path.Combine(LIBDIR, INSTSONAME)</c> alone is NOT enough. It holds for
+        ///     ordinary unix shared builds (<c>libpython3.12.so.1.0</c> under <c>LIBDIR</c>), but a
+        ///     macOS FRAMEWORK build — what python.org ships and what actions/setup-python installs
+        ///     on macOS runners — reports <c>INSTSONAME</c> as a RELATIVE framework path
+        ///     (<c>Python.framework/Versions/3.12/Python</c>) that does not live under <c>LIBDIR</c>
+        ///     at all. Combining them yields <c>…/Versions/3.12/lib/Python.framework/Versions/3.12/Python</c>,
+        ///     which does not exist, so discovery failed and the whole interop suite silently reported
+        ///     Inconclusive on macOS (140 of 149 skipped) while CI still showed green.</para>
+        ///
+        ///     <para>The framework binary sits directly in the version prefix, so the file NAME of
+        ///     <c>INSTSONAME</c> combined with <c>sys.base_prefix</c> finds it. The plain
+        ///     <c>libpython&lt;maj&gt;.&lt;min&gt;.{so,dylib}</c> spellings cover non-framework macOS
+        ///     builds and distros whose <c>INSTSONAME</c> is missing.</para>
+        /// </summary>
+        private static string FindUnixPythonLibrary(string prefix, string soname, string libdir, int major, int minor)
+        {
+            string ext = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "dylib" : "so";
+            var candidates = new List<string>();
+
+            if (soname.Length > 0 && libdir.Length > 0)
+                candidates.Add(Path.Combine(libdir, soname));            // unix shared build
+            if (soname.Length > 0 && prefix.Length > 0)
+                candidates.Add(Path.Combine(prefix, Path.GetFileName(soname)));  // macOS framework
+            if (libdir.Length > 0)
+                candidates.Add(Path.Combine(libdir, $"libpython{major}.{minor}.{ext}"));
+            if (prefix.Length > 0)
+                candidates.Add(Path.Combine(prefix, "lib", $"libpython{major}.{minor}.{ext}"));
+
+            foreach (string candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+
+            return null;
         }
 
         private static string FirstLine(string s)
