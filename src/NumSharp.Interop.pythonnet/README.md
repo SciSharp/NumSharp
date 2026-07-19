@@ -13,7 +13,7 @@ PythonEngine.Initialize();
 
 ## The four verbs
 
-Everything is packaging over four operations on the static `NDArrayInterop` engine:
+Everything is packaging over four operations on the static `NDArrayPythonInterop` engine:
 
 | Direction | Verb | Semantics |
 |---|---|---|
@@ -22,13 +22,13 @@ Everything is packaging over four operations on the static `NDArrayInterop` engi
 | Python → NumSharp | `ToNDArray(py)` | **copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` (honors strides / Fortran order; complex64 widens to complex128; 0-d becomes a scalar) |
 | Python → NumSharp | `ToNDArrayView(py[, allowReadonly])` | **zero-copy NDArray view** over Python memory — shared mutation, via three routes: C-contiguous buffers through a locked `PyBuffer` lease; non-contiguous **numpy** arrays through `__array_interface__`; and non-contiguous **non-numpy** exporters (a sliced / offset / reversed `memoryview`, a strided `array.array` memoryview) through a `PyBUF.STRIDED` pointer + the memoryview's own shape/strides. Only genuinely irreducible layouts (complex64, big-endian, non-element strides) decline |
 
-The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 48 exporter varieties: **45 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable), 1 unsupported (big-endian multi-byte).
+The lease buffer is always acquired **through the exporter's `memoryview`**, never the raw object: the memoryview is CPython's canonical, uniformly-behaved buffer exporter, so this sidesteps pythonnet 3.0.x's per-exporter `GetBuffer` bugs — a raw `ctypes` array hard-crashes `obj.GetBuffer` on *every* flag, while the memoryview over the same memory leases cleanly. Measured coverage across 50 exporter varieties: **47 view, 2 copy** (`complex64`, sub-item strides — both genuinely unrepresentable), 1 unsupported (big-endian multi-byte).
 
 Plus `ToMemoryView(nd)` (a writable Python `memoryview` of raw bytes for non-numpy consumers) and the dtype maps `ToNumpyDtypeStr` / `FromNumpyDtypeStr` / `ToBufferFormat` / `FromBufferFormat`.
 
 ## Extension methods (the ergonomic default)
 
-The verbs above double as extension methods — `NDArrayInterop` provides them, so importing its
+The verbs above double as extension methods — `NDArrayPythonInterop` provides them, so importing its
 namespace lets you call them fluently on `NDArray` / `PyObject` as well as statically:
 
 ```csharp
@@ -43,7 +43,7 @@ NDArray  v = py.AsNDArray();        // view   (As… = share, like numpy array/a
 ## Codec (auto-marshaling)
 
 ```csharp
-NDArrayInterop.RegisterCodec();     // once per engine session; idempotent
+NDArrayPythonInterop.RegisterCodec();     // once per engine session; idempotent
 
 using (Py.GIL())
 {
@@ -69,7 +69,7 @@ Plus `DecodeAnyBuffer` (default `true` — `memoryview`/`bytes`/`bytearray`/`arr
 
 **Exports** take their own atomic reference on the NumSharp buffer (NumSharp's ARC), so the memory survives even if every C# reference — including the returned `PyObject` wrapper — is disposed or collected. Release is owned by Python: a `weakref.finalize` on the exported array's *base* buffer object (which every derived numpy view chains to) fires when the last Python-side view dies. If the engine shuts down while Python still holds views, the pin is swept right after `PythonEngine.Shutdown()` completes — pythonnet runs no Python atexit pass, so the finalize callbacks cannot fire during shutdown (probed; the sweep waits until the interpreter is provably gone, so it can never race Python reads). While exported, `ndarray.resize(refcheck: true)` on the source refuses to reallocate — the same guard NumPy applies to referenced arrays.
 
-**Imports** lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the last NumSharp view over the memory — *including derived slices like `nd["2:"]`* — is disposed or collected. C-contiguous leases hold a real `Py_buffer`, so resizable exporters (`bytearray`) are locked against reallocation, and numpy's `resize` refcheck refuses while the lease lives. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread); `NDArrayInterop.LiveExports` / `LiveImports` expose the counters.
+**Imports** lease the Python buffer through NumSharp's memory-block reference counting: the lease is released when the last NumSharp view over the memory — *including derived slices like `nd["2:"]`* — is disposed or collected. C-contiguous leases hold a real `Py_buffer`, so resizable exporters (`bytearray`) are locked against reallocation, and numpy's `resize` refcheck refuses while the lease lives. The Python-side release is marshaled to the GIL safely (never raw on a finalizer thread); `NDArrayPythonInterop.LiveExports` / `LiveImports` expose the counters.
 
 Read-only sources (`bytes`, non-writeable numpy arrays) are **refused** for views by default — writing through them would corrupt immutable Python objects. Pass `allowReadonly: true` to opt in: the view comes back **non-writeable** (`Shape.IsWriteable == false`, exactly numpy's `writeable=False`), so guarded write paths raise `assignment destination is read-only` instead of corrupting the source. Or use `ToNDArray` to copy.
 
@@ -78,7 +78,7 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
 ## Rules & limits
 
 - **GIL**: every method acquires the GIL itself (re-entrant). Your own `PyObject` usage still follows pythonnet's rules.
-- **GIL opt-out**: every conversion verb takes a nullable `requireGIL` parameter; `null` (the default) follows the process-wide `NDArrayInterop.RequireGIL` (default `true`). An effective `false` replaces `Py.GIL()` with a shared no-op guard — the calling thread must **already hold the GIL** (an enclosing `Py.GIL()` block); converting GIL-less without holding it is an immediate access violation. **Trap:** a .NET method/delegate body invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies (probed on 3.0.5/3.1.0: `PyGILState_Check() == 0` inside the body) — so keep GIL management on inside Python→.NET callbacks. The interop's background machinery (deferred lease disposal, shutdown drain) always manages the GIL itself, regardless of the policy.
+- **GIL opt-out**: every conversion verb takes a nullable `requireGIL` parameter; `null` (the default) follows the process-wide `NDArrayPythonInterop.RequireGIL` (default `true`). An effective `false` replaces `Py.GIL()` with a shared no-op guard — the calling thread must **already hold the GIL** (an enclosing `Py.GIL()` block); converting GIL-less without holding it is an immediate access violation. **Trap:** a .NET method/delegate body invoked *from* Python does **not** hold the GIL — pythonnet's binder releases it around managed bodies (probed on 3.0.5/3.1.0: `PyGILState_Check() == 0` inside the body) — so keep GIL management on inside Python→.NET callbacks. The interop's background machinery (deferred lease disposal, shutdown drain) always manages the GIL itself, regardless of the policy.
 
   ```csharp
   using (Py.GIL())                                     // ONE acquisition...
@@ -86,7 +86,7 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
           using (PyObject p = batch[i].ToNumpy(requireGIL: false))   // ...N conversions inside
               consumer.Invoke(p);
 
-  NDArrayInterop.RequireGIL = false;                   // or process-wide, when EVERY call site holds the GIL
+  NDArrayPythonInterop.RequireGIL = false;                   // or process-wide, when EVERY call site holds the GIL
   ```
 - **Engine lifetime**: import views die with the interpreter. `PythonEngine.Shutdown()` releases all outstanding leases crash-free (a registered shutdown handler), but the NDArrays over that memory must not be touched afterwards (disposing them stays safe). Exports still held by Python are swept right after shutdown completes — no leak survives the engine.
 - **`PythonEngine.Shutdown` on .NET 8+**: pythonnet crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);` (`NoopFormatter` ships from pythonnet 3.0.4 onward — guaranteed by the 3.0.5 floor below).

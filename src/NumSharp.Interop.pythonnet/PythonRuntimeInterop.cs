@@ -81,7 +81,7 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>MaxSupportedVersion</c> first reached it. Read out of each package's own
         ///     <see cref="PythonEngine.MaxSupportedVersion"/>, not the release notes.
         /// </summary>
-        private static string MinimumPythonnetFor(Version python)
+        internal static string MinimumPythonnetFor(Version python)
         {
             if (python.Major != 3)
                 return null;
