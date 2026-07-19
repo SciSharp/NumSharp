@@ -215,6 +215,23 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
+        public void Copy_CtypesArray_Works()
+        {
+            // The copy path reads through the memoryview for the same reason the view path does:
+            // obj.GetBuffer on a raw ctypes array hard-crashes pythonnet, and ToNDArray used to hit
+            // it too — so DecodeMode=Copy / ToNDArray on ctypes took the process down.
+            PyExec("import ctypes\ncc = (ctypes.c_int * 4)()\ncc[0]=1; cc[1]=2; cc[2]=3; cc[3]=4");
+            var nd = ImportOf("cc");
+
+            nd.typecode.Should().Be(NPTypeCode.Int32);
+            nd.size.Should().Be(4);
+            ReadAt<int>(nd, 3).Should().Be(4);
+
+            WriteAt(nd, -1, 0);
+            PyLong("cc[0]").Should().Be(1, "ToNDArray copies — the write must NOT reach the ctypes buffer");
+        }
+
+        [TestMethod]
         public void View_CtypesArray_CoversOtherElementTypes()
         {
             PyExec("import ctypes\ncd = (ctypes.c_double * 3)()\ncd[0]=1.5; cd[1]=2.5; cd[2]=3.5");

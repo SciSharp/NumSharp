@@ -51,7 +51,12 @@ namespace NumSharp.Interop.PythonNet
 
                 if (mv.c_contiguous)
                 {
-                    using PyBuffer buf = obj.GetBuffer(PyBUF.SIMPLE);
+                    // Read through the MEMORYVIEW, not the raw object — same reason as the view path:
+                    // pythonnet 3.0.x's obj.GetBuffer is per-exporter buggy (a raw ctypes array
+                    // hard-crashes it on every flag), while the memoryview over the same memory is
+                    // uniformly safe. Only a read-only SIMPLE lock is needed here; it is released as
+                    // soon as the bytes are blitted.
+                    using PyBuffer buf = mv.GetBuffer(PyBUF.SIMPLE);
                     CopyBuffer((void*)buf.Buffer, buf.Length, dest, expectedSourceBytes, widenComplex64);
                 }
                 else
