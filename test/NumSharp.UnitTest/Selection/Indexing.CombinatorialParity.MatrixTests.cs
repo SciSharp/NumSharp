@@ -13,8 +13,8 @@ namespace NumSharp.UnitTest.Selection;
 /// mapping.c-parity work (docs/plans/advanced-index-combinatorial-handover.md). Every expected
 /// shape/value/raise was probed against NumPy 2.4.2. These are the exact forms the seeded random
 /// differential sweep (test/oracle/gen_index_oracle.py, index_random_20240626.jsonl) flagged and
-/// that are now bit-identical to NumPy; they are split out as a CI gate because the full random
-/// corpus is still [OpenBugs] behind a flaky teardown OOB (handover R3), unrelated to correctness.
+/// that are now bit-identical to NumPy; they are kept as a fast, focused CI gate alongside the full
+/// random corpus (Index_Random), which is GREEN and no longer [OpenBugs] now that R3 is fixed.
 ///
 /// Buckets (see the handover):
 ///   R1  — value must broadcast to an EMPTY / scalar selection on assignment, else ValueError.
@@ -22,6 +22,9 @@ namespace NumSharp.UnitTest.Selection;
 ///   B3  — empty advanced indices gather an empty-shaped result (no bounds-check, empty bool mask).
 ///   B4  — basic assignment into an EMPTY slice selection is a no-op (not a crash).
 ///   R2  — non-consecutive 0-d-bool/int advanced block moves to the FRONT (_get_transpose).
+///   R3  — a boolean mask whose TRAILING block is EMPTY (blockSize == 0) selects nothing: it used to
+///         allocate a zero-length gather/scatter buffer and write an element into it — an OOB
+///         native-heap write that crashed a later GC (the flaky teardown SEGFAULT).
 ///
 /// Fixture: A=arange(12).reshape(3,4)  V=arange(5)  B=arange(24).reshape(2,3,4)  s=array(5) (0-d)
 ///   ACS=A[:,::2] (3,2)  ASO=A[1:] (2,4)  ARS=A[::2] (2,4)  ANC=A[:,::-1] (3,4)
@@ -37,6 +40,8 @@ public class Indexing_CombinatorialParity_MatrixTests
     private static NDArray ASO() => A()["1:"];
     private static NDArray ARS() => A()["::2"];
     private static NDArray ANC() => A()[":", "::-1"];
+    private static NDArray ANR() => A()["::-1"];
+    private static NDArray E03() => np.zeros(new Shape(0, 3), dtype: np.int64);
 
     public sealed record GCase(string Name, Func<NDArray> Op, int[] Shape, long[]? Vals);
     public sealed record SCase(string Name, Func<NDArray> Op, long[] Vals);
@@ -61,6 +66,17 @@ public class Indexing_CombinatorialParity_MatrixTests
         // Non-empty R2: int + slice + True -> block (1,) FRONT, then slice -> (1,2) [4,5] (NOT (2,1)).
         yield return Wrap(new("R2_A_int_sl_T",      () => A()[new object[] { 1, new Slice(0L, 2L, 1L), (NDArray)true }],               new[] { 1, 2 },    new long[] { 4, 5 }));
         yield return Wrap(new("R2_A_int_new_sl_T",  () => A()[new object[] { 1, Slice.NewAxis, new Slice(0L, 2L, 1L), (NDArray)true }], new[] { 1, 1, 2 }, new long[] { 4, 5 }));
+
+        // ── R3: a boolean mask whose TRAILING block is EMPTY (blockSize == 0 — a basic slice emptied
+        //    the last axis, or the array already had a 0-length trailing axis). The selection
+        //    (trueCount,)+trailing is empty, so the result is empty and NOTHING is gathered. Was
+        //    handover R3: BooleanMask allocated a zero-length gather buffer and the kernel wrote an
+        //    element into it — an out-of-bounds native-heap write that crashed a later GC. ──
+        yield return Wrap(new("R3_ANR_mask_emptySlice", () => ANR()[new object[] { np.array(new bool[] { true, true, true }), new Slice(6L, -4L, 1L) }], new[] { 3, 0 },    new long[0]));
+        yield return Wrap(new("R3_A_partMask_emptySl",  () => A()[new object[] { np.array(new bool[] { true, false, true }), new Slice(2L, 2L, 1L) }],  new[] { 2, 0 },    new long[0]));
+        yield return Wrap(new("R3_A_slice_then_mask",   () => A()[":", "6:-4"][np.array(new bool[] { true, true, true })],                               new[] { 3, 0 },    new long[0]));
+        yield return Wrap(new("R3_B_mask_emptySlice",   () => B()[new object[] { np.array(new bool[] { true, true }), new Slice(2L, 2L, 1L) }],           new[] { 2, 0, 4 }, new long[0]));
+        yield return Wrap(new("R3_E03_get_0dTrue",      () => E03()[np.array(true)],                                                                      new[] { 1, 0, 3 }, new long[0]));
     }
 
     [DataTestMethod]
@@ -77,6 +93,12 @@ public class Indexing_CombinatorialParity_MatrixTests
         yield return WrapS(new("B4_emptySlices_ellipsis",   () => { var a = A(); a[new object[] { new Slice(-1L, -4L, 1L), new Slice(-2L, 2L, 2L), Slice.Ellipsis }] = np.array(new long[] { }); return a; }, identity));
         // B2 OK: a 0-d bool on a 0-d scalar consumes no axis -> (1,).
         yield return WrapS(new("B2_s_0dTrue_value", () => s()[np.array(true)], new long[] { 5 }));
+
+        // R3 SET: boolean assignment into an EMPTY selection (blockSize == 0) is a no-op, NOT an OOB
+        //   scatter into arr's zero-length buffer (handover R3, BooleanMaskSet). E03[True] = -7 is the
+        //   exact corpus repro (set/E03/rand/7171); the (0,3) array stays empty and unchanged.
+        yield return WrapS(new("R3_E03_set_0dTrue_scalar", () => { var a = E03(); a[np.array(true)] = (NDArray)(-7L); return a; }, new long[0]));
+        yield return WrapS(new("R3_A_mask_emptySlice_set", () => { var a = A(); a[new object[] { np.array(new bool[] { true, true, true }), new Slice(2L, 2L, 1L) }] = (NDArray)99L; return a; }, identity));
     }
 
     [DataTestMethod]

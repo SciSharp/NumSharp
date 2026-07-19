@@ -2263,3 +2263,11 @@
 {"op":"set","base":"ANC","tokens":[["slice",null,null,null],["arr",[0,2],[2]]],"value":["scalar",-1],"tag":"set:slice,fancy=scalar","np":{"ok":true,"shape":[3,4],"vals":[-1,2,-1,0,-1,6,-1,4,-1,10,-1,8]},"id":"set/ANC/set:slice,fancy=scalar/2262"}
 {"op":"set","base":"ASO","tokens":[["slice",null,null,null],["arr",[0,2],[2]]],"value":["scalar",-1],"tag":"set:slice,fancy=scalar","np":{"ok":true,"shape":[2,4],"vals":[-1,5,-1,7,-1,9,-1,11]},"id":"set/ASO/set:slice,fancy=scalar/2263"}
 {"op":"set","base":"ABC","tokens":[["slice",null,null,null],["arr",[0,2],[2]]],"value":["scalar",-1],"tag":"set:slice,fancy=scalar","np":{"ok":true,"shape":[3,4],"vals":[-1,1,-1,3,-1,1,-1,3,-1,1,-1,3]},"id":"set/ABC/set:slice,fancy=scalar/2264"}
+{"op":"get","base":"E03","tokens":[],"tag":"emptytuple","np":{"ok":true,"shape":[0,3],"vals":[]},"id":"get/E03/emptytuple/2265"}
+{"op":"get","base":"E03","tokens":[["slice",null,null,null]],"tag":"basic1","np":{"ok":true,"shape":[0,3],"vals":[]},"id":"get/E03/basic1/2266"}
+{"op":"get","base":"E03","tokens":[["int",0]],"tag":"basic1","np":{"ok":false,"err":"IndexError"},"id":"get/E03/basic1/2267"}
+{"op":"get","base":"E03","tokens":[["slice",null,null,null],["int",1]],"tag":"basic2","np":{"ok":true,"shape":[0],"vals":[]},"id":"get/E03/basic2/2268"}
+{"op":"get","base":"E03","tokens":[["barr",[],[0,3]]],"tag":"bool:full","np":{"ok":true,"shape":[0],"vals":[]},"id":"get/E03/bool:full/2269"}
+{"op":"get","base":"E03","tokens":[["arr",[],[0]]],"tag":"fancy1:f08","np":{"ok":true,"shape":[0,3],"vals":[]},"id":"get/E03/fancy1:f08/2270"}
+{"op":"set","base":"E03","tokens":[["slice",null,null,null]],"value":["scalar",-1],"tag":"set:colon=scalar","np":{"ok":true,"shape":[0,3],"vals":[]},"id":"set/E03/set:colon=scalar/2271"}
+{"op":"set","base":"E03","tokens":[["int",0]],"value":["scalar",-1],"tag":"set:int=scalar","np":{"ok":false,"err":"IndexError"},"id":"set/E03/set:int=scalar/2272"}

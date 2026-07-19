@@ -11,15 +11,21 @@ testability is decided by its shape. Gaps fall into three kinds:
 
 Authoritative covered set (op corpus, as of this doc): add subtract multiply divide floor_divide
 mod power · negative abs sign sqrt cbrt square reciprocal floor ceil trunc sin cos tan exp log exp2
-expm1 log2 log10 log1p sinh cosh tanh arcsin arccos arctan deg2rad rad2deg positive · equal not_equal
-less greater less_equal greater_equal · bitwise_and/or/xor invert left_shift right_shift · sum prod
-min max mean std var argmax argmin all any median average ptp percentile quantile count_nonzero ·
-cumsum cumprod diff · nansum nanprod nanmax nanmin nanmean nanstd nanvar nanmedian · isnan isinf
-isfinite · maximum minimum fmax fmin isclose · where place clip copyto · argsort searchsorted nonzero ·
-matmul dot outer · astype modf · ravel transpose reshape squeeze expand_dims roll repeat tile swapaxes
-moveaxis delete atleast_1d/2d/3d concatenate stack hstack vstack dstack pad. Decimal oracle (12 tiers)
-adds: power var std matmul astype · floor ceil trunc · diff · clip median ptp percentile quantile ·
-where · sort · ravel transpose reshape (+ the arith/compare/reduce/scan/unary already shared).
+expm1 log2 log10 log1p sinh cosh tanh arcsin arccos arctan deg2rad rad2deg positive rint · equal
+not_equal less greater less_equal greater_equal · bitwise_and/or/xor invert left_shift right_shift ·
+sum prod min max mean std var argmax argmin all any median average ptp percentile quantile
+count_nonzero · cumsum cumprod diff ediff1d · nansum nanprod nanmax nanmin nanmean nanstd nanvar
+nanmedian nanpercentile nanquantile · isnan isinf isfinite iscomplex isreal · maximum minimum fmax
+fmin isclose allclose array_equal logical_and/or/xor/not arctan2 · where (incl. non-bool cond)
+place clip (incl. complex) copyto · argsort sort (incl. NaN + strided) searchsorted nonzero
+flatnonzero argwhere unique · matmul (incl. bool semiring, negstride, k=0) dot outer trace diagonal
+(incl. strided/offset) · astype modf round_ convolve · ravel flatten transpose reshape squeeze
+expand_dims roll rollaxis repeat tile swapaxes moveaxis delete append insert split hsplit vsplit
+dsplit take compress extract put ravel_multi_index unravel_index atleast_1d/2d/3d concatenate stack
+hstack vstack dstack pad. Decimal oracle (12 tiers, 695 cases) adds: power (int exponents −2…3) var
+std matmul astype (↔int·float·bool·int16·uint64) · floor ceil trunc · diff · clip median ptp
+percentile quantile · where · sort · ravel transpose reshape · axis reductions + keepdims + empty +
+flat argmax/argmin/all/any/count_nonzero (+ the arith/compare/reduce/scan/unary already shared).
 
 ---
 
@@ -44,7 +50,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` wired (green or carved+[OpenBug
 - [x] `argwhere` `flatnonzero` — green
 - [x] `unique` — green on contiguous+finite (raw-offset views = #11 unreachable-via-API; inf/NaN complex ordering out of scope)
 - [x] `allclose` `array_equal` — whole-array → 0-D bool · green
-- [x] `iscomplex` `isreal` — **BUG**: ignore the imaginary part (complex → all-real) + garbage on strided → carved, `IsComplex_IgnoresImaginaryPart` / `IsReal_IgnoresImaginaryPart`
+- [x] `iscomplex` `isreal` — **BUG**: ignore the imaginary part (complex → all-real) + garbage on strided → carved, `IsComplex_IgnoresImaginaryPart` / `IsReal_IgnoresImaginaryPart`. (2026-07-07: the GREEN side — 12 real dtypes × 5 contiguous layouts — now actually generates 120 corpus cells in `logic.jsonl`; before that the OpRegistry wiring existed but ZERO cases were emitted, so "wired" was aspirational)
 - [x] `take` `put` `compress` `extract` — green (groupa tier)
 - [x] `ravel_multi_index` `unravel_index` — green (groupa tier). `indices` = creation-shaped (no operand) → Group C
 - [x] `convolve` — 1-D convolution (full/same/valid) · green
@@ -111,9 +117,27 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` wired (green or carved+[OpenBug
 
 ## Group D — parameter/mode gaps WITHIN covered ops
 
-- ufunc `out=` / `where=` / `dtype=` — only `out=`/overlap via the small `aliasing`/`copyto` tiers; not the full `where=`-mask / `dtype=`-loop matrix per ufunc.
-- Reductions — `keepdims=True`, tuple/multi-axis, `ddof` beyond {0,1} only partial (`params` tier).
+Still open:
+- ufunc `out=` / `where=` / `dtype=` — only `out=`/overlap via the small `aliasing`/`copyto` tiers; not the full `where=`-mask / `dtype=`-loop matrix per ufunc (the ufunc surface itself is covered by `Math/UfuncDtypeOverloadTests.cs`, outside this corpus).
+- Reductions — tuple/multi-axis, `ddof` beyond {0,1} only partial (`params` tier).
 - Scans — `cumsum`/`cumprod` `axis=` lightly covered (mostly flattened).
 - `clip` — only scalar lo/hi; no array-broadcast bounds or one-sided.
 - `searchsorted` — `sorter=` not covered.
 - `pad` — limited `mode=` set.
+- `put`/`take` — no `mode=` (raise/wrap/clip) axis.
+
+Closed by the 2026-07-07 remediation (`COMPLETENESS_PLAN.md`, branch `worktree-fuzz-completeness`):
+- ~~`clip` excluded complex128 on a false premise~~ — complex clip covered, bit-exact (G1).
+- ~~`round_` missing bool/int8/uint16/uint32/uint64/complex~~ — widened; 2 real bugs carved+pinned (G2, ledger L2/L3).
+- ~~`matmul` missing bool~~ — AND/OR-semiring cases green (G3); negstride + k=0 edges added (G14).
+- ~~`where` cond always bool~~ — int32/float64/uint8/complex128 truthiness conds green (G4).
+- ~~`iscomplex`/`isreal` zero cases~~ — 120 green cells + carves pointing at the existing pins (G5).
+- ~~index oracle `E03` (empty base) dead, V0 absent from random pools~~ — revived (G6); cross-dtype setters added (G15, `index_setter_dtype.jsonl`).
+- ~~decimal negative power dead code~~ — exponents −2…3 live (G7); decimal axis/keepdims/empty/argmax-family/astype-widening (G8).
+- ~~Char absent from where/logic/matmul/rounding/copyto~~ — woven, +459 cells; round_(char) FIXED, dot(char) 1-D carved+pinned (G9, ledger L8/L9).
+- ~~random fuzzer 7 dtypes / 4 kinds~~ — 13 dtypes × 6 kinds incl. flat reduce + astype; the nightly soak sweeps the widened envelope (G10).
+- ~~sort: no NaN, no strided~~ — NaN-contract + strided/negstride sort/argsort, zero carves (G11).
+- ~~reductions never saw positive-offset views~~ — 4 offset layouts added; caught + FIXED the all/any Half/Complex offset bug (G12, ledger L4).
+- ~~errors tier 10 specs~~ — 16 incl. invert(float) (post-crash-guard), min/max/argmax(empty), floor(complex), searchsorted(2-D) (G13).
+- ~~trace/diagonal contiguous-only~~ — strided/offset views added (G14).
+- Registry excuse over-breadth (int reductions, complex-binary blanket, cumprod/modf/hyperbolic/isclose/complex-NaN) — every branch scoped to its documented cell + tightness self-tests (B1–B7); `RunCorpus` per-file minimum-count floors (B9); invert crash guard verified + pinned (B8).

@@ -250,6 +250,18 @@ adds("A",[["b0",False],S([None,None,None])],SV["sc"],"set:0dboolF=scalar")
 for base in LAYOUTS2:
     adds(base,[S([None,None,None]),FARR["f02"]],SV["sc"],"set:slice,fancy=scalar")
 
+# 4b) G6 (F6) — E03 (empty (0,3)): the recipe existed on both sides but had ZERO cases, so
+# empty-array indexing (get AND set) was entirely ungated. Appended after the setter block so
+# every pre-existing curated ordinal (and therefore case id) stays stable.
+addg("E03",[],"emptytuple")                                   # -> (0,3) itself
+addg("E03",[S([None,None,None])],"basic1")                    # [:]      -> (0,3)
+addg("E03",[["int",0]],"basic1")                              # [0]      -> IndexError
+addg("E03",[S([None,None,None]),["int",1]],"basic2")          # [:, 1]   -> (0,)
+addg("E03",[mask_for([0,3])],"bool:full")                     # mask(0,3)-> (0,)
+addg("E03",[FARR["f08"]],"fancy1:f08")                        # arr []   -> (0,3)
+adds("E03",[S([None,None,None])],SV["sc"],"set:colon=scalar") # no-op OK
+adds("E03",[["int",0]],SV["sc"],"set:int=scalar")             # err
+
 # 5) DTYPE sweep — a handful of forms across all 13 dtypes
 dtype_forms = {
   "int":[["int",1]], "slice":[S([1,3,None])], "negslice":[S([None,None,-1])],
@@ -261,8 +273,48 @@ for dt in DT:
     for fnm,toks in dtype_forms.items():
         dtype_cases.append({"dtype":dt,"tokens":toks,"tag":fnm,"np":eval_get_dtype(dt,toks)})
 
+# 5b) G15 — CROSS-DTYPE setters: the assigned value's dtype differs from the base's, exercising
+# cast-on-set (float->int truncation toward zero, int->bool coercion, unsigned modular wrap for
+# np-SCALAR values — all probed NumPy 2.4.2; python-int scalars would range-check instead, so the
+# oracle assigns np.int64/np.float64). value spec: ["scalar",n] int64 | ["fscalar",x] float64 |
+# ["farr",flat,shape] float64. Replayed by IndexOracleTests.Index_SetterDtype.
+def setter_val_to_np(v):
+    if v[0] == "scalar":  return np.int64(v[1])
+    if v[0] == "fscalar": return np.float64(v[1])
+    return np.array(v[1], dtype=np.float64).reshape(v[2])
+
+def eval_set_dtype(dt, tokens, value):
+    try:
+        b = make_dtype_base(dt).copy()
+        b[np_index(tokens)] = setter_val_to_np(value)
+        if dt == "bool":
+            vals = [1 if x else 0 for x in b.ravel(order="C").tolist()]
+        else:
+            vals = [int(x) for x in np.real(b).ravel(order="C").tolist()]
+        return {"ok": True, "shape": list(b.shape), "vals": vals}
+    except Exception as e:
+        return {"ok": False, "err": type(e).__name__}
+
+SETTER_DTYPE_CASES = [
+    ("int32", [["int",0]], ["fscalar", 2.75]),                    # trunc -> 2
+    ("int32", [["int",1]], ["fscalar", -3.9]),                    # trunc toward zero -> -3
+    ("int32", [["int",0]], ["farr", [1.5, -2.5, 3.9, -0.1], [4]]),
+    ("int32", [S([None,None,None])], ["fscalar", 7.5]),
+    ("bool",  [["int",0]], ["scalar", 5]),                        # nonzero -> True
+    ("bool",  [["int",1]], ["scalar", 0]),                        # zero -> False
+    ("bool",  [S([None,None,None])], ["scalar", 3]),
+    ("uint8", [["int",0]], ["scalar", -1]),                       # np.int64 wrap -> 255
+    ("uint8", [S([None,None,None])], ["scalar", -2]),             # wrap -> 254
+    ("uint8", [["int",2]], ["scalar", 300]),                      # wrap -> 44
+]
+setter_dtype_cases = []
+for (dt, toks, val) in SETTER_DTYPE_CASES:
+    setter_dtype_cases.append({"op": "set", "dtype": dt, "tokens": toks, "value": val,
+                               "tag": "xdtype", "np": eval_set_dtype(dt, toks, val)})
+
 # 6) RANDOM FUZZ — seeded, explores the space far beyond the curated forms
-ND = {"V6":1,"V1":1,"S":0,"A":2,"AT":2,"ARS":2,"ACS":2,"ANR":2,"ANC":2,"ASO":2,"ABC":2,"B":3,"BT":3}
+ND = {"V6":1,"V1":1,"V0":1,"S":0,"A":2,"AT":2,"ARS":2,"ACS":2,"ANR":2,"ANC":2,"ASO":2,"ABC":2,
+      "B":3,"BT":3,"E03":2}
 def rand_tokens(rng, ndim):
     L = rng.randint(0, ndim+2); toks=[]; used_ell=False
     for _ in range(L):
@@ -296,8 +348,10 @@ def radds(base, tokens, value, tag):
     random_set.append({"op":"set","base":base,"tokens":tokens,"value":value,"tag":tag,"np":eval_set(base,tokens,value)})
 def random_fuzz(seed, ng, ns):
     rng = random.Random(seed)
-    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S"]
-    spool=["V6","A","B","ARS","ANR","ASO","ACS"]
+    # G6: E03 (empty 2-D) + V0 (empty 1-D) joined the getter pool, E03 the setter pool —
+    # empty bases were previously absent from the whole random space.
+    gpool=["V6","A","B","AT","ARS","ACS","ANR","ANC","ASO","ABC","BT","V1","S","E03","V0"]
+    spool=["V6","A","B","ARS","ANR","ASO","ACS","E03"]
     for _ in range(ng):
         base=rng.choice(gpool); raddg(base, rand_tokens(rng, ND[base]), "rand")
     for _ in range(ns):
@@ -323,11 +377,13 @@ here = os.path.dirname(os.path.abspath(__file__))
 corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.UnitTest", "Fuzz", "corpus"))
 write_jsonl(os.path.join(corpus_dir, "index_curated.jsonl"), curated)
 write_jsonl(os.path.join(corpus_dir, "index_dtype.jsonl"),   dtype_cases)
+write_jsonl(os.path.join(corpus_dir, "index_setter_dtype.jsonl"), setter_dtype_cases)
 write_jsonl(os.path.join(corpus_dir, f"index_random_{RANDOM_SEED}.jsonl"), random_get + random_set)
 
 def nok(cs): return sum(1 for c in cs if c["np"]["ok"])
 print(f"curated={len(curated)} (np_ok={nok(curated)} np_err={len(curated)-nok(curated)})")
 print(f"dtype={len(dtype_cases)} (np_ok={nok(dtype_cases)})")
+print(f"setter_dtype={len(setter_dtype_cases)} (np_ok={nok(setter_dtype_cases)})")
 rnd = random_get + random_set
 print(f"random[seed={RANDOM_SEED}]={len(rnd)} (get={len(random_get)} set={len(random_set)} np_ok={nok(rnd)} np_err={len(rnd)-nok(rnd)})")
 print(f"-> {corpus_dir}")

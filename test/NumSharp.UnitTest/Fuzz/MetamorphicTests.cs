@@ -48,6 +48,11 @@ namespace NumSharp.UnitTest.Fuzz
             { NPTypeCode.Int32, NPTypeCode.Int64, NPTypeCode.Single, NPTypeCode.Double };
         private static readonly NPTypeCode[] AllNumeric =
             { NPTypeCode.Int32, NPTypeCode.Int64, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Byte, NPTypeCode.UInt32 };
+        // G17: the previously untested dtype tails. Values stay small integer-valued (arange), so
+        // Half is exact and Complex/Decimal arithmetic is exact -- the invariants genuinely hold.
+        // bool joins only where pure data movement or ==-reflexivity keeps the invariant meaningful.
+        private static readonly NPTypeCode[] HalfComplexDecimal =
+            { NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Decimal };
 
         // -(-a) == a
         [TestMethod]
@@ -57,6 +62,10 @@ namespace NumSharp.UnitTest.Fuzz
             var cases = new List<(string, Func<bool>)>();
             foreach (var tc in IntFloat)
                 cases.Add(($"-(-a)==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, -(-a)); }));
+            foreach (var tc in HalfComplexDecimal)                              // G17
+                cases.Add(($"-(-a)==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, -(-a)); }));
+            foreach (var tc in new[] { NPTypeCode.Int32, NPTypeCode.Double })   // G17: strided view
+                cases.Add(($"-(-a)==a strided [{tc}]", () => { var a = Arange(16, tc)["::2"]; return BytesEqual(a, -(-a)); }));
             Run("negate involution", cases);
         }
 
@@ -73,6 +82,13 @@ namespace NumSharp.UnitTest.Fuzz
                     var b = (Arange(12, tc).reshape(3, 4) + Arange(1, tc)); // b = a+1, distinct
                     return BytesEqual(a, (a + b) - b);
                 }));
+            foreach (var tc in HalfComplexDecimal)                              // G17 (values exact)
+                cases.Add(($"(a+b)-b==a [{tc}]", () =>
+                {
+                    var a = Arange(12, tc).reshape(3, 4);
+                    var b = (Arange(12, tc).reshape(3, 4) + Arange(1, tc));
+                    return BytesEqual(a, (a + b) - b);
+                }));
             Run("additive inverse", cases);
         }
 
@@ -87,6 +103,10 @@ namespace NumSharp.UnitTest.Fuzz
                 cases.Add(($"(a.T).T==a 2d [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a.transpose().transpose()); }));
                 cases.Add(($"(a.T).T==a 3d [{tc}]", () => { var a = Arange(24, tc).reshape(2, 3, 4); return BytesEqual(a, a.transpose().transpose()); }));
             }
+            foreach (var tc in new[] { NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Decimal, NPTypeCode.Boolean })  // G17
+                cases.Add(($"(a.T).T==a 2d [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a.transpose().transpose()); }));
+            cases.Add(("(v.T).T==v strided [Double]", () =>                     // G17: strided view
+            { var v = Arange(24, NPTypeCode.Double).reshape(4, 6)[":, ::2"]; return BytesEqual(v, v.transpose().transpose()); }));
             Run("transpose involution", cases);
         }
 
@@ -97,6 +117,12 @@ namespace NumSharp.UnitTest.Fuzz
         {
             var cases = new List<(string, Func<bool>)>();
             foreach (var tc in AllNumeric)
+                cases.Add(($"reshape round-trip [{tc}]", () =>
+                {
+                    var a = Arange(24, tc).reshape(2, 3, 4);
+                    return BytesEqual(a, a.reshape(24).reshape(2, 3, 4));
+                }));
+            foreach (var tc in new[] { NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Decimal, NPTypeCode.Boolean })  // G17
                 cases.Add(($"reshape round-trip [{tc}]", () =>
                 {
                     var a = Arange(24, tc).reshape(2, 3, 4);
@@ -120,6 +146,13 @@ namespace NumSharp.UnitTest.Fuzz
                     return BytesEqual(a, a.astype(NPTypeCode.Int64).astype(NPTypeCode.Int16)); }),
                 ("single->double->single", () => { var a = Arange(12, NPTypeCode.Single).reshape(3, 4);
                     return BytesEqual(a, a.astype(NPTypeCode.Double).astype(NPTypeCode.Single)); }),
+                // G17: half widens losslessly into double; bool/char survive an int32 round trip.
+                ("half->double->half", () => { var a = Arange(12, NPTypeCode.Half).reshape(3, 4);
+                    return BytesEqual(a, a.astype(NPTypeCode.Double).astype(NPTypeCode.Half)); }),
+                ("bool->int32->bool", () => { var a = Arange(12, NPTypeCode.Boolean).reshape(3, 4);
+                    return BytesEqual(a, a.astype(NPTypeCode.Int32).astype(NPTypeCode.Boolean)); }),
+                ("char->int32->char", () => { var a = Arange(12, NPTypeCode.Char).reshape(3, 4);
+                    return BytesEqual(a, a.astype(NPTypeCode.Int32).astype(NPTypeCode.Char)); }),
             };
             Run("widening cast round-trip", cases);
         }
@@ -131,6 +164,11 @@ namespace NumSharp.UnitTest.Fuzz
         {
             var cases = new List<(string, Func<bool>)>();
             foreach (var tc in IntFloat)
+            {
+                cases.Add(($"a*1==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a * np.array(1).astype(tc)); }));
+                cases.Add(($"a+0==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a + np.array(0).astype(tc)); }));
+            }
+            foreach (var tc in HalfComplexDecimal)                              // G17
             {
                 cases.Add(($"a*1==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a * np.array(1).astype(tc)); }));
                 cases.Add(($"a+0==a [{tc}]", () => { var a = Arange(12, tc).reshape(3, 4); return BytesEqual(a, a + np.array(0).astype(tc)); }));
@@ -151,6 +189,13 @@ namespace NumSharp.UnitTest.Fuzz
                     var aa = np.abs(a);
                     return BytesEqual(aa, np.abs(aa));
                 }));
+            foreach (var tc in HalfComplexDecimal)                              // G17
+                cases.Add(($"abs(abs(a))==abs(a) [{tc}]", () =>
+                {
+                    var a = (Arange(12, tc).reshape(3, 4) - np.array(6).astype(tc));
+                    var aa = np.abs(a);                     // Complex: float64 magnitude, then fixpoint
+                    return BytesEqual(aa, np.abs(aa));
+                }));
             Run("abs idempotent", cases);
         }
 
@@ -160,7 +205,8 @@ namespace NumSharp.UnitTest.Fuzz
         public void SumAll_Equals_FlatSum()
         {
             var cases = new List<(string, Func<bool>)>();
-            foreach (var tc in new[] { NPTypeCode.Int32, NPTypeCode.Int64, NPTypeCode.Double })
+            foreach (var tc in new[] { NPTypeCode.Int32, NPTypeCode.Int64, NPTypeCode.Double,
+                                       NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Decimal })  // G17
                 cases.Add(($"sum(a)==sum(ravel(a)) [{tc}]", () =>
                 {
                     var a = Arange(24, tc).reshape(2, 3, 4);
@@ -183,6 +229,14 @@ namespace NumSharp.UnitTest.Fuzz
                     var cat = np.concatenate((a, b), 0);
                     return BytesEqual(a, cat["0:3"]) && BytesEqual(b, cat["3:6"]);
                 }));
+            foreach (var tc in HalfComplexDecimal)                              // G17
+                cases.Add(($"concat halves [{tc}]", () =>
+                {
+                    var a = Arange(12, tc).reshape(3, 4);
+                    var b = (Arange(12, tc).reshape(3, 4) + np.array(100).astype(tc));
+                    var cat = np.concatenate((a, b), 0);
+                    return BytesEqual(a, cat["0:3"]) && BytesEqual(b, cat["3:6"]);
+                }));
             Run("concatenate split-free", cases);
         }
 
@@ -197,6 +251,13 @@ namespace NumSharp.UnitTest.Fuzz
                     var idx = np.argsort<int>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
                 ("argsort(arange) double", () => { var a = Arange(8, NPTypeCode.Double);
                     var idx = np.argsort<double>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                // G17: the untested tails (ascending => identity permutation holds for each).
+                ("argsort(arange) half", () => { var a = Arange(8, NPTypeCode.Half);
+                    var idx = np.argsort<System.Half>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                ("argsort(arange) decimal", () => { var a = Arange(8, NPTypeCode.Decimal);
+                    var idx = np.argsort<decimal>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
+                ("argsort(arange) complex", () => { var a = Arange(8, NPTypeCode.Complex);
+                    var idx = np.argsort<System.Numerics.Complex>(a); var expect = np.arange(8).astype(idx.typecode); return BytesEqual(idx, expect); }),
             };
             Run("argsort of sorted is identity", cases);
         }
@@ -208,6 +269,13 @@ namespace NumSharp.UnitTest.Fuzz
         {
             var cases = new List<(string, Func<bool>)>();
             foreach (var tc in AllNumeric)
+                cases.Add(($"(a==a).all() [{tc}]", () =>
+                {
+                    var a = Arange(12, tc).reshape(3, 4);
+                    return (bool)np.all(a == a);
+                }));
+            foreach (var tc in new[] { NPTypeCode.Half, NPTypeCode.Complex, NPTypeCode.Decimal,
+                                       NPTypeCode.Boolean, NPTypeCode.Char })   // G17
                 cases.Add(($"(a==a).all() [{tc}]", () =>
                 {
                     var a = Arange(12, tc).reshape(3, 4);

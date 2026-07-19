@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -27,6 +27,15 @@ namespace NumSharp.UnitTest.Casting
             NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal, NPTypeCode.Complex
         };
 
+        /// <summary>
+        ///     A temp path unique to THIS test process. The suite multi-targets net8.0 and net10.0 and
+        ///     <c>dotnet test</c> runs both TFMs CONCURRENTLY, so a FIXED name under %TEMP% is shared by
+        ///     two live processes — whichever writes second dies with "The process cannot access the
+        ///     file ... because it is being used by another process". Keying on the PID isolates them.
+        /// </summary>
+        private static string TempPath(string name) =>
+            Path.Combine(Path.GetTempPath(), $"ns_p{Environment.ProcessId}_{name}");
+
         private static string TempWithText(string content)
         {
             string p = Path.Combine(Path.GetTempPath(), "ns_ff_" + Guid.NewGuid().ToString("N") + ".txt");
@@ -39,7 +48,7 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Binary_Count_Offset_EofClamp()
         {
-            string p = Path.Combine(Path.GetTempPath(), "ns_ff_bin.bin");
+            string p = TempPath("ff_bin.bin");
             np.arange(12).astype(NPTypeCode.Int32).tofile(p);
             try
             {
@@ -55,7 +64,7 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Binary_DefaultDtype_IsFloat64()
         {
-            string p = Path.Combine(Path.GetTempPath(), "ns_ff_def.bin");
+            string p = TempPath("ff_def.bin");
             np.arange(4).astype(NPTypeCode.Double).tofile(p);
             try
             {
@@ -69,7 +78,7 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Binary_StreamOverload_ReadsFromCurrentPosition()
         {
-            string p = Path.Combine(Path.GetTempPath(), "ns_ff_stream.bin");
+            string p = TempPath("ff_stream.bin");
             np.arange(6).astype(NPTypeCode.Int32).tofile(p);
             try
             {
@@ -85,7 +94,7 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Binary_Empty_ReturnsEmpty()
         {
-            string p = Path.Combine(Path.GetTempPath(), "ns_ff_empty.bin");
+            string p = TempPath("ff_empty.bin");
             File.WriteAllBytes(p, Array.Empty<byte>());
             try { Assert.AreEqual(0, np.fromfile(p, NPTypeCode.Int32).size); }
             finally { File.Delete(p); }
@@ -243,7 +252,7 @@ namespace NumSharp.UnitTest.Casting
             foreach (var tc in AllDtypes)
             {
                 var a = np.arange(10).astype(tc)["1:9"]; // offset view -> tofile writes logical C-order
-                string p = Path.Combine(Path.GetTempPath(), $"ns_ffrt_{tc}.bin");
+                string p = TempPath($"ffrt_{tc}.bin");
                 try
                 {
                     a.tofile(p);
@@ -264,7 +273,7 @@ namespace NumSharp.UnitTest.Casting
                                        NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double })
             {
                 var a = np.arange(6).astype(tc);
-                string p = Path.Combine(Path.GetTempPath(), $"ns_ffrtt_{tc}.txt");
+                string p = TempPath($"ffrtt_{tc}.txt");
                 try
                 {
                     a.tofile(p, ",");

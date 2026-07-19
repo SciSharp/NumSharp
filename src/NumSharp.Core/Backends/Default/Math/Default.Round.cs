@@ -29,7 +29,9 @@ namespace NumSharp.Backends
             if (typeCode.HasValue)
                 ValidateUnaryInputCast(inputType, typeCode.Value, "rint");
 
-            bool isInt = inputType.IsInteger();
+            // Char rides the integer identity path: it is uint16-semantics (NumPy proxy:
+            // round(uint16) -> identity uint16), but NPTypeCode.Char fails IsInteger().
+            bool isInt = inputType.IsInteger() || inputType == NPTypeCode.Char;
             if (!typeCode.HasValue && isInt && @out is null && where is null)
                 return Cast(nd, inputType, copy: true); // np.round int path = identity copy
 
@@ -58,7 +60,8 @@ namespace NumSharp.Backends
             // round(i4, 1, out=i4) -> identity ints). Negative decimals do
             // real banker's work on ints in NumPy -- a pre-existing NumSharp
             // gap the hand loop below keeps (it no-ops for ints either way).
-            if (decimals >= 0 && !typeCode.HasValue && nd.GetTypeCode.IsInteger())
+            if (decimals >= 0 && !typeCode.HasValue
+                && (nd.GetTypeCode.IsInteger() || nd.GetTypeCode == NPTypeCode.Char))
             {
                 if (@out is null)
                     return Cast(nd, nd.GetTypeCode, copy: true);

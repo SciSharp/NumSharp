@@ -397,14 +397,26 @@ namespace NumSharp.Backends
             //regular case
             var (subShape, offset) = _shape.GetSubshape(indices);
 
-            // Empty source: a valid no-op ONLY when the target region is ALSO empty (e.g. np.pad on
-            // an array with an empty axis does `padded[originalSlice] = array` where both are size 0).
-            // Assigning an empty array into a NON-empty region cannot broadcast -> NumPy ValueError.
+            // Empty source: assigning an empty array into a NON-empty region cannot broadcast ->
+            // NumPy ValueError. Both being empty is NOT automatically a no-op either — NumPy still
+            // requires the value to BROADCAST to the target region, so (0,), (0,0) and (2,0) into
+            // (0,3) all raise, while (0,3), (1,3), (3,), (0,1) and () are genuine no-ops (e.g. np.pad
+            // on an array with an empty axis does `padded[originalSlice] = array`, both size 0).
+            // Probed against NumPy 2.4.2.
             if (valueshape.size == 0)
             {
-                if (subShape.size == 0)
-                    return;
                 string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
+                if (subShape.size == 0)
+                {
+                    try { np.broadcast_to(value, subShape); }
+                    catch (IncorrectShapeException)
+                    {
+                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
+                    }
+
+                    return;
+                }
+
                 throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
             }
 

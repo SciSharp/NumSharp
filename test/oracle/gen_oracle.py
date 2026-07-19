@@ -196,7 +196,12 @@ REDUCE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_co
                   # (and, for f64/f32 min/max, the stride-ordered NDIter routing gated by
                   # DefaultEngine.MinMaxLayoutFavorsNDIter; the Direct kernel walks these
                   # cache-hostile, so they were a measured 6–10× cliff before the routing).
-                  "negstride_1d", "negstride_2d_offset"]
+                  "negstride_1d", "negstride_2d_offset",
+                  # G12 (F19): positive-offset slices + composed/0-d/reshape views — offset
+                  # handling in reductions was previously reached only via negstride_2d_offset
+                  # (and the W9-B repeat bug was precisely an offset bug).
+                  "simple_slice_offset_1d", "sliced_composed", "zerod_from_index",
+                  "reshape_view_2d"]
 
 
 def _axes(ndim):
@@ -303,11 +308,13 @@ STAT_DTYPES = list(ALL_DTYPES)         # widened: median/ptp/average across ever
 STAT_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d", "f_contiguous_2d",
                 "transposed_3d", "strided_2d_cols", "one_element_1d"]
 CNZ_DTYPES = list(ALL_DTYPES)          # widened: count_nonzero is dtype-agnostic
-# clip needs an ORDERED dtype — complex128 has no ordering (NumPy raises). bool is CARVED OUT:
-# NumSharp's general (strided/transposed/F-contig) clip kernel throws "clip not supported for
+# clip dtypes. complex128 IS supported by NumPy's clip (probed 2.4.2: lexicographic
+# real-then-imag ordering, NaN-poisoning comparisons — np.clip([1+2j,5+1j,-3+0j],0,2) ->
+# [1+2j, 2+0j, 0+0j]); included below. bool is CARVED OUT: NumSharp's general
+# (strided/transposed/F-contig) clip kernel throws "clip not supported for
 # Boolean" (only the contiguous path handles bool) — reproduced under [OpenBugs] (Clip_Bool_Strided_*).
 CLIP_DTYPES = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
-               "float16", "float32", "float64"]
+               "float16", "float32", "float64", "complex128"]
 QUANTILE_SPECS = [
     ("percentile", lambda a, q, ax: np.percentile(a, q, axis=ax), [0.0, 25.0, 50.0, 75.0, 100.0]),
     ("quantile", lambda a, q, ax: np.quantile(a, q, axis=ax), [0.0, 0.25, 0.5, 0.75, 1.0]),
@@ -423,6 +430,46 @@ WHERE_DT_PAIRS = [
     ("float16", "float16"), ("float16", "float32"), ("int8", "int16"), ("uint16", "uint16"),
     ("uint32", "int32"), ("int64", "uint64"),
 ]
+
+
+# G4 (F4) — NON-bool where cond: NumPy selects by TRUTHINESS of any dtype cond (probed 2.4.2:
+# NaN is truthy, -0.0 is falsy, complex is truthy iff re!=0 or im!=0). NumSharp matches
+# (probed on all four cond dtypes). The float/complex pools front-load NaN/inf/-0.0, so the
+# truthiness edges are exercised in every case.
+WHERE_COND_DTYPES = ["int32", "float64", "uint8", "complex128"]
+WHERE_COND_XY_PAIRS = [("int32", "int32"), ("float64", "int32"), ("float32", "float64")]
+
+
+def gen_where_cond(cond_dtypes, xy_pairs):
+    cases = []
+    n = 0
+    for cdt in cond_dtypes:
+        for (sx, sy) in xy_pairs:
+            # contiguous: cond/x/y all (4,5) C-contiguous
+            cb = _cbase((4, 5), np.dtype(cdt))
+            xb = _cbase((4, 5), np.dtype(sx))
+            yb = _cbase((4, 5), np.dtype(sy))
+            # strided: all three are [:, ::2] views of (4,10) bases
+            cb2 = _cbase((4, 10), np.dtype(cdt))
+            xb2 = _cbase((4, 10), np.dtype(sx))
+            yb2 = _cbase((4, 10), np.dtype(sy))
+            for (tag, c_pair, x_pair, y_pair) in [
+                ("wh_cond_contig", (cb, cb), (xb, xb), (yb, yb)),
+                ("wh_cond_strided", (cb2, cb2[:, ::2]), (xb2, xb2[:, ::2]), (yb2, yb2[:, ::2])),
+            ]:
+                r = np.where(c_pair[1], x_pair[1], y_pair[1])
+                cases.append({
+                    "id": f"where/{tag}/{cdt}-cond/{sx},{sy}/{n}",
+                    "op": "where",
+                    "params": {},
+                    "operands": [describe(*c_pair), describe(*x_pair), describe(*y_pair)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": tag,
+                    "valueclass": "mixed",
+                })
+                n += 1
+    return cases
 
 
 # T11 — cumulative scans (cumsum/cumprod) and finite differences (diff). NumPy is the oracle for
@@ -546,6 +593,18 @@ LOGIC_BIN_PAIRS = [
     ("complex128", "complex128"),
 ]
 
+# G5 (F5) — iscomplex/isreal: REAL dtypes × CONTIGUOUS layouts ONLY (this is the verified-green
+# envelope). CARVED (both documented bugs already pinned in OpenBugs.DtypeCoverage.cs —
+# IsComplex_IgnoresImaginaryPart / IsReal_IgnoresImaginaryPart, ≈:119/:130):
+#   * complex128 input — NumSharp never inspects the imaginary part (iscomplex -> all False,
+#     isreal -> all True, both wrong for nonzero-imag values);
+#   * strided/F-contiguous/transposed REAL input — same op emits garbage bytes on the
+#     non-contiguous path.
+ISCOMPLEX_OPS = {"iscomplex": np.iscomplex, "isreal": np.isreal}
+ISCOMPLEX_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
+ISCOMPLEX_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "c_contiguous_3d",
+                     "one_element_1d", "scalar_0d"]
+
 # Group A Batch 1: logical_and/or/xor (binary -> bool, truthiness of each element),
 # logical_not (unary -> bool), arctan2 (binary -> float; NumPy promotes int -> float64,
 # raises on complex so gen_binary skips those).
@@ -606,8 +665,10 @@ def gen_place(dtypes, layout_names):
 # W1: added float16 + the narrow integers (int8/int16/uint16/uint32/uint64) — exercises the
 # stride-aware GEMM accumulator at every width (NumPy matmul preserves the input dtype, so e.g.
 # int8@int8 -> int8 with modular overflow; float16@float16 -> float16).
+# G3: added bool — NumPy matmul/dot/outer on bool run the AND/OR semiring with a bool result
+# (probed 2.4.2: matmul(bool,bool) -> dtype bool, OR-of-ANDs).
 MATMUL_DTYPES = ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
-                 "float16", "float32", "float64", "complex128"]
+                 "float16", "float32", "float64", "complex128", "bool"]
 
 # (op, shapeA, shapeB) — spans the matmul gufunc shape space + dot/outer specifics.
 MATMUL_SHAPE_CASES = [
@@ -639,6 +700,8 @@ def _mm_fill(shape, dt):
     dtype = np.dtype(dt)
     if dtype.kind == "c":
         a = (((np.arange(n) % 7) - 3) + 1j * ((np.arange(n) % 5) - 2)).astype(dtype)
+    elif dtype.kind == "b":
+        a = (np.arange(n) % 3 != 1)                          # 2/3 True — AND/OR semiring gets a mix
     elif dtype.kind in "iu":
         a = ((np.arange(n) % 7) + 1).astype(dtype)          # 1..7 (uint-safe, positive)
     else:
@@ -691,6 +754,42 @@ def gen_matmul(shape_cases, dtypes, layouts):
                     n += 1
     if skipped:
         print(f"  (skipped {skipped} cases where NumPy raised)")
+    return cases
+
+
+# G14 — matmul edge layouts the C/F matrix misses: a NEGATIVE-STRIDE operand (B row-reversed
+# via [::-1], nonzero offset) and the k=0 empty inner dimension ((2,0)@(0,3) -> (2,3) zeros;
+# both probed against NumPy 2.4.2 and matching in NumSharp).
+MATMUL_EDGE_DTYPES = ["int32", "float64", "complex128", "bool"]
+
+
+def gen_matmul_edges(dtypes):
+    cases = []
+    n = 0
+    for dt in dtypes:
+        A = _mm_fill((2, 3), dt)
+        Bbase = _mm_fill((3, 2), dt)
+        Bneg = Bbase[::-1]                                    # negative row stride, offset != 0
+        r = np.asarray(np.matmul(A, Bneg))
+        cases.append({
+            "id": f"matmul/negstride/{dt}/{n}", "op": "matmul", "params": {},
+            "operands": [describe(A, A), describe(Bbase, Bneg)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": "negstride", "valueclass": "mixed",
+        })
+        n += 1
+        A0 = np.zeros((2, 0), dtype=np.dtype(dt))             # k=0: empty inner dim
+        B0 = np.zeros((0, 3), dtype=np.dtype(dt))
+        r0 = np.asarray(np.matmul(A0, B0))
+        cases.append({
+            "id": f"matmul/k0/{dt}/{n}", "op": "matmul", "params": {},
+            "operands": [describe(A0, A0), describe(B0, B0)],
+            "expected": {"dtype": r0.dtype.name, "shape": [int(d) for d in r0.shape],
+                         "buffer": np.ascontiguousarray(r0).tobytes().hex()},
+            "layout": "k0", "valueclass": "mixed",
+        })
+        n += 1
     return cases
 
 
@@ -1222,6 +1321,16 @@ def _numpy_raises(opname, arrs, params):
             _ = np.stack(list(arrs), axis=params["axis"])
         elif opname == "subtract":
             _ = arrs[0] - arrs[1]
+        elif opname == "min":
+            _ = np.min(arrs[0], axis=params.get("axis"))
+        elif opname == "max":
+            _ = np.max(arrs[0], axis=params.get("axis"))
+        elif opname == "argmax":
+            _ = np.argmax(arrs[0], axis=params.get("axis"))
+        elif opname == "floor":
+            _ = np.floor(arrs[0])
+        elif opname == "searchsorted":
+            _ = np.searchsorted(arrs[0], arrs[1], side=params.get("side", "left"))
         return False
     except Exception:
         return True
@@ -1243,11 +1352,19 @@ def gen_errors():
         ("concatenate", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                   # dim mismatch
         ("reshape", [_cbase((6,), i32)], {"shape": [4]}),                                           # incompatible size
         ("sum", [_cbase((3,), i32)], {"axis": 5, "keepdims": False}),                               # axis out of range
-        # NOTE: ("invert", [float]) is DELIBERATELY EXCLUDED — it does not raise a catchable
-        # exception, it executes an ILLEGAL CPU INSTRUCTION (ExecutionEngineException) and crashes
-        # the whole test host (a 🔴 crash bug) and
-        # cannot be gated here until the kernel is fixed to reject float input cleanly.
         ("stack", [_cbase((2, 3), i32), _cbase((2, 4), i32)], {"axis": 0}),                          # mismatched shapes
+        # G13 (F17) additions — each probed to raise in NumPy 2.4.2 AND throw cleanly in NumSharp.
+        # less(complex) was in the plan but NumPy 2.4.2 does NOT raise (comparisons on complex
+        # return bool, lexicographic) — dropped.
+        ("min", [np.array([], dtype=f64)], {"axis": None, "keepdims": False}),                      # zero-size reduce
+        ("max", [np.array([], dtype=f64)], {"axis": None, "keepdims": False}),                      # zero-size reduce
+        ("argmax", [np.array([], dtype=f64)], {"axis": 0, "keepdims": False}),                      # argmax of empty
+        ("floor", [np.array([1.5 + 2.0j, -0.5 + 1.0j])], {}),                                       # floor(complex)
+        ("searchsorted", [_cbase((2, 3), i32), np.array([1, 2], dtype=i32)], {"side": "left"}),     # 2-D a
+        # invert(float): NumPy raises TypeError. Historically this was an ILLEGAL-INSTRUCTION
+        # host crash in NumSharp; the B8 loop-resolution guard (Default.Invert.cs) now throws
+        # NumPy's verbatim TypeError, so the spec is safe to gate (see COMPLETENESS_PLAN L1).
+        ("invert", [_cbase((4,), f64)], {}),
     ]
     for (opname, arrs, params) in specs:
         if not _numpy_raises(opname, arrs, params):
@@ -1375,7 +1492,15 @@ def _relabel_dtype(cases, frm, to):
 # ---------------------------------------------------------------------------
 # Group A Batch 2 generators: sort / round_ / trace / diagonal / ediff1d / nan-quantile.
 # ---------------------------------------------------------------------------
-ROUND_DTYPES = ["uint8", "int16", "int32", "int64", "float16", "float32", "float64"]
+# bool is CARVED OUT: np.round(bool, 0) -> float16 [0,1] in NumPy (rint float-tier), while
+# NumSharp's round_ resolves bool -> Double — dtype divergence pinned under [OpenBugs]
+# (OpenBugs.FuzzGaps.cs: Round_Bool_Dtype_Diverges). (bool with decimals!=0 raises in NumPy.)
+# complex128 is included at decimals=0 ONLY: NumSharp's round_ with decimals!=0 is a NO-OP
+# identity for Complex (NumPy rounds re+im via multiply->rint->divide: round(1.55+2.45j, 1)
+# -> 1.6+2.4j) — pinned under [OpenBugs] (OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp);
+# the dec!=0 complex carve lives in gen_round.
+ROUND_DTYPES = ["int8", "uint8", "int16", "int32", "int64", "uint16", "uint32", "uint64",
+                "float16", "float32", "float64", "complex128"]
 # uint8 CARVED: trace of an unsigned dtype upcasts to Int64 in NumSharp but uint64 in NumPy -> [OpenBugs].
 TRACE_DTYPES = ["int16", "int32", "int64", "float16", "float32", "float64", "complex128"]
 EDIFF_DTYPES = ["int16", "int32", "int64", "uint8", "float32", "float64", "complex128"]  # no bool (NumPy bans bool `-`)
@@ -1421,6 +1546,70 @@ def gen_sort(dtypes):
     return cases
 
 
+# G11 (F20) — NaN sorting IS contractual in NumPy (NaN to the end; complex extended order
+# [R+Rj, R+nanj, nan+Rj, nan+nanj] — probed 2.4.2 and matching in NumSharp) + strided/negstride
+# operands (the NumPy-oracle sort tier was contiguous-only; only the decimal tier covered strided).
+# Determinism guards: argsort operands keep ALL values distinct with at most ONE NaN per
+# axis-slice (default quicksort is UNSTABLE — duplicate keys would make the index permutation
+# implementation-defined on both sides); sort-only operands may carry duplicate NaNs (identical
+# bit pattern -> identical result bytes). bool is sort-only in the strided family for the same
+# tie reason.
+def gen_sort_special():
+    cases = []
+    n = 0
+
+    def emit(op, a_base, a_view, axis, tag):
+        nonlocal n
+        try:
+            r = np.asarray(np.sort(a_view, axis=axis) if op == "sort" else np.argsort(a_view, axis=axis))
+        except Exception:
+            return
+        cases.append({
+            "id": f"{op}/{tag}/{a_view.dtype.name}/axis={axis}/{n}",
+            "op": op,
+            "params": {"axis": axis},
+            "operands": [describe(a_base, a_view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "nan" if "nan" in tag else "distinct",
+        })
+        n += 1
+
+    nan = float("nan")
+    for dt in ["float16", "float32", "float64"]:
+        d = np.dtype(dt)
+        a1 = np.array([3.5, nan, -2.0, np.inf, 0.25, -np.inf, 7.0, 1.5], dtype=d)   # distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            emit(op, a1, a1, -1, "nan_1d")
+        a2 = np.array([nan, 4.0, -1.0, nan, 2.5, 0.5, -3.0, 6.0], dtype=d)          # 2 NaNs -> sort only
+        emit("sort", a2, a2, -1, "nan_1d_multi")
+        m = np.array([5.0, -3.5, 12.25, 0.5, nan, 8.0, -7.25, 3.0, 1.5, -0.25, 9.75, -12.5],
+                     dtype=d).reshape(3, 4)                                          # distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            for ax in (0, 1, -1):
+                emit(op, m, m, ax, "nan_2d")
+        sb = np.array([nan, 9.0, 3.5, 1.0, -2.0, 8.0, 0.5, 2.0, 7.0, 4.0, -np.inf, 5.0,
+                       12.0, 6.0, np.inf, 0.0], dtype=d)                             # [::2] -> distinct + 1 NaN
+        for op in ("sort", "argsort"):
+            emit(op, sb, sb[::2], -1, "nan_strided")
+
+    # complex: exactly ONE entry per NaN group (R+nanj, nan+Rj, nan+nanj) -> no within-group ties.
+    cx = np.array([3 + 1j, complex(nan, 1), 1 + 2j, complex(1, nan), 2 + 0j,
+                   complex(nan, nan), -1j, 5 + 3j], dtype=np.complex128)
+    for op in ("sort", "argsort"):
+        emit(op, cx, cx, -1, "nan_1d")
+
+    # strided + negstride views over the distinct permutation pool, every sortable dtype.
+    for dt in SORT_DTYPES:
+        b = _distinct(16, dt)
+        ops = ("sort",) if dt == "bool" else ("sort", "argsort")   # bool: 15 dup keys -> unstable ties
+        for op in ops:
+            emit(op, b, b[::2], -1, "strided")
+            emit(op, b, b[::-1], -1, "negstride")
+    return cases
+
+
 def gen_unique(dtypes):
     """np.unique -> sorted distinct values, over CONTIGUOUS finite data with duplicates. Contiguous +
     finite on purpose: unique is correct via the public API (verified), but the corpus's raw-offset
@@ -1457,7 +1646,9 @@ def gen_unique(dtypes):
 def gen_round(dtypes, layout_names):
     """np.round_/around with decimals; every layout. NumPy is the oracle (banker's rounding).
     CARVE-OUTS (-> [OpenBugs]): dec=-1 (NumSharp's Math.Round rejects negative digits for ints and
-    mis-rounds floats) and float16 with dec>=1 (float16 fractional rounding diverges)."""
+    mis-rounds floats), float16 with dec>=1 (float16 fractional rounding diverges), and
+    complex128 with dec>=1 (NumSharp round_ is a no-op identity for Complex when decimals!=0;
+    OpenBugs.FuzzGaps.cs: Round_Complex_NonzeroDecimals_NoOp)."""
     cases = []
     n = 0
     skipped = 0
@@ -1468,6 +1659,8 @@ def gen_round(dtypes, layout_names):
             operand = describe(base, view)
             for dec in (0, 1, 2):                         # dec=-1 carved (negative-decimals bug)
                 if s == "float16" and dec != 0:           # float16 fractional rounding carved
+                    continue
+                if s == "complex128" and dec != 0:        # complex dec!=0 carved (NumSharp no-op bug)
                     continue
                 try:
                     r = np.asarray(np.round(view, dec))
@@ -1491,7 +1684,9 @@ def gen_round(dtypes, layout_names):
 
 
 def gen_trace_diag(dtypes):
-    """np.trace (2-D -> 0-D sum of diagonal) and np.diagonal (2-D -> 1-D)."""
+    """np.trace (2-D -> 0-D sum of diagonal) and np.diagonal (2-D -> 1-D).
+    G14: contiguous bases PLUS strided/offset views (a[1:5].T, a[:, ::2]) — the diagonal
+    walk must honor a nonzero offset and non-contiguous strides."""
     cases = []
     n = 0
     for dt in dtypes:
@@ -1510,6 +1705,27 @@ def gen_trace_diag(dtypes):
                     "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
                                  "buffer": np.ascontiguousarray(r).tobytes().hex()},
                     "layout": "2d",
+                    "valueclass": "mixed",
+                })
+                n += 1
+    # G14 — strided/offset views (appended so the contiguous case ids above stay stable).
+    for dt in dtypes:
+        b1 = _cbase((6, 4), dt)
+        b2 = _cbase((4, 6), dt)
+        for (tag, base, view) in [("sliced_T", b1, b1[1:5].T), ("strided_cols", b2, b2[:, ::2])]:
+            for opname, f in (("trace", np.trace), ("diagonal", np.diagonal)):
+                try:
+                    r = np.asarray(f(view))
+                except Exception:
+                    continue
+                cases.append({
+                    "id": f"{opname}/{tag}/{dt}/{n}",
+                    "op": opname,
+                    "params": {},
+                    "operands": [describe(base, view)],
+                    "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                 "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                    "layout": tag,
                     "valueclass": "mixed",
                 })
                 n += 1
@@ -1720,6 +1936,14 @@ CHAR_BIT_PAIRS   = [(_C, _C), (_C, "int32"), (_C, "uint64")]
 _CHAR_DIVMOD_OPS = {k: v for k, v in DIVMOD_POWER_OPS.items() if k != "power"}
 _CHAR_UNARY_OPS  = {k: v for k, v in UNARY_OPS.items() if k != "reciprocal"}
 
+# G9 (F8) — pairs/op-sets for the additionally woven modes. The uint16 slot IS the Char;
+# uint8/bool partners stay carved (char-promote bug), power/reciprocal/invert stay carved.
+CHAR_WHERE_PAIRS = [(_C, _C), (_C, "int32"), ("float64", _C)]   # cond stays bool
+CHAR_EXTREMA_OPS = {"maximum": np.maximum, "minimum": np.minimum, "fmax": np.fmax, "fmin": np.fmin}
+CHAR_LOGIC_UNARY = {"isnan": np.isnan, "isinf": np.isinf, "isfinite": np.isfinite,
+                    "logical_not": np.logical_not}
+CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", _C)]
+
 
 def char_tier(mode):
     """Relabelled Char cases to append into tier-file `mode` (woven coverage)."""
@@ -1756,6 +1980,22 @@ def char_tier(mode):
         raw = gen_tail([_C])
     elif mode == "astype_full":
         raw = gen_astype([_C], ALL_DTYPES, L) + gen_astype(ALL_DTYPES, [_C], L)
+    elif mode == "where":                                          # G9: char select values
+        raw = gen_where(CHAR_WHERE_PAIRS, list(WHERE_LAYOUTS.keys()))
+    elif mode == "logic":                                          # G9: extrema + predicates
+        raw = gen_binary(CHAR_EXTREMA_OPS, CHAR_CMP_PAIRS, PL)
+        raw += gen_unary(CHAR_LOGIC_UNARY, [_C], L)
+    elif mode == "matmul":                                         # G9: uint16@uint16 modular GEMM
+        # dot 1-D.1-D CARVED: NumSharp's vector-dot reduces through sum_elementwise_il with an
+        # explicit Char result typecode, and that switch has no Char arm -> NotSupportedException
+        # ("Sum not supported for type Char"). matmul 1-D.1-D and every 2-D+ char case work.
+        # Pinned at OpenBugsFuzzGapsTests.Dot_Char_1D_Throws.
+        shape_cases = [c for c in MATMUL_SHAPE_CASES if not (c[0] == "dot" and c[1] == (4,))]
+        raw = gen_matmul(shape_cases, [_C], MATMUL_LAYOUTS)
+    elif mode == "rounding":                                       # G9: char identity, dec 0/1/2
+        raw = gen_round([_C], L)
+    elif mode == "copyto":                                         # G9: overlap + int32/float64 cross
+        raw = gen_copyto([_C], CHAR_COPYTO_CROSS)
     return _relabel_dtype(raw, _C, "char")
 
 
@@ -1804,16 +2044,21 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "reduce.jsonl"), cases)
     elif mode == "where":
         cases = gen_where(WHERE_DT_PAIRS, list(WHERE_LAYOUTS.keys()))
+        cases += gen_where_cond(WHERE_COND_DTYPES, WHERE_COND_XY_PAIRS)   # G4: non-bool cond
+        cases += char_tier("where")                                        # G9
         write_jsonl(os.path.join(corpus_dir, "where.jsonl"), cases)
     elif mode == "place":
         cases = gen_place(PLACE_DTYPES, PLACE_LAYOUTS)
         write_jsonl(os.path.join(corpus_dir, "place.jsonl"), cases)
     elif mode == "matmul":
         cases = gen_matmul(MATMUL_SHAPE_CASES, MATMUL_DTYPES, MATMUL_LAYOUTS)
+        cases += gen_matmul_edges(MATMUL_EDGE_DTYPES)                  # G14: negstride + k=0
         cases += gen_trace_diag(TRACE_DTYPES)                          # Group A: trace/diagonal
+        cases += char_tier("matmul")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "matmul.jsonl"), cases)
     elif mode == "rounding":
         cases = gen_round(ROUND_DTYPES, list(LAYOUTS.keys()))          # Group A: round_/around
+        cases += char_tier("rounding")                                 # G9
         write_jsonl(os.path.join(corpus_dir, "rounding.jsonl"), cases)
     elif mode == "bitwise":
         cases = gen_binary(BITWISE_BIN_OPS, BITWISE_DT_PAIRS, list(PAIR_LAYOUTS.keys()))
@@ -1849,6 +2094,8 @@ def main():
         cases += gen_unary(LOGICAL_NOT_OP, ALL_DTYPES, list(LAYOUTS.keys()))             # Group A B1
         cases += gen_binary(ARCTAN2_OP, ARCTAN2_PAIRS, list(PAIR_LAYOUTS.keys()))        # Group A B1
         cases += gen_binary(ALLCLOSE_OPS, ALLCLOSE_PAIRS, list(PAIR_LAYOUTS.keys()))     # Group A B3
+        cases += gen_unary(ISCOMPLEX_OPS, ISCOMPLEX_DTYPES, ISCOMPLEX_LAYOUTS)           # G5
+        cases += char_tier("logic")                                                       # G9
         write_jsonl(os.path.join(corpus_dir, "logic.jsonl"), cases)
     elif mode == "modf":
         cases = gen_modf(MODF_DTYPES, MODF_LAYOUTS)
@@ -1866,6 +2113,7 @@ def main():
         cases += gen_nonzero(SORT_DTYPES)
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
+        cases += gen_sort_special()                                     # G11: NaN + strided/negstride
         cases += char_tier("sort")
         write_jsonl(os.path.join(corpus_dir, "sort.jsonl"), cases)
     elif mode == "tail":
@@ -1880,6 +2128,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "aliasing.jsonl"), cases)
     elif mode == "copyto":
         cases = gen_copyto(COPYTO_OVERLAP_DTYPES, COPYTO_CROSS)
+        cases += char_tier("copyto")                                   # G9
         write_jsonl(os.path.join(corpus_dir, "copyto.jsonl"), cases)
     elif mode == "errors":
         cases = gen_errors()
@@ -1888,7 +2137,7 @@ def main():
         cases = gen_groupa()                                            # Group A B4-6
         write_jsonl(os.path.join(corpus_dir, "groupa.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors)")
+        print(f"unknown mode '{mode}' (expected: smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | matmul | rounding | bitwise | unary_extra | nanreduce | scan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa)")
         sys.exit(2)
 
 

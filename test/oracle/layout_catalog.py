@@ -1,5 +1,6 @@
 """
-layout_catalog.py — the canonical catalog of memory layouts (the "44 variations").
+layout_catalog.py — the canonical catalog of memory layouts (the 40 variations:
+26 single-array + 9 pairwise + 5 where-triple).
 
 Mirrored 1:1 by NumSharp.UnitTest/Fuzz/LayoutCatalog.cs (same layout names both sides).
 

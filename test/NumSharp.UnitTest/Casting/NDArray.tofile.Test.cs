@@ -27,6 +27,16 @@ namespace NumSharp.UnitTest.Casting
             NPTypeCode.Half, NPTypeCode.Single, NPTypeCode.Double, NPTypeCode.Decimal, NPTypeCode.Complex
         };
 
+        /// <summary>
+        ///     A temp path unique to THIS test process. The suite multi-targets net8.0 and net10.0 and
+        ///     <c>dotnet test</c> runs both TFMs CONCURRENTLY, so a FIXED name under %TEMP% is shared by
+        ///     two live processes — whichever writes second dies with "The process cannot access the
+        ///     file ... because it is being used by another process". Keying on the PID isolates them.
+        ///     (Flaked roughly 1 local combined run in 3; invisible to CI, which pins one --framework.)
+        /// </summary>
+        private static string TempPath(string name) =>
+            Path.Combine(Path.GetTempPath(), $"ns_p{Environment.ProcessId}_{name}");
+
         private static byte[] Bin(NDArray nd)
         {
             using var ms = new MemoryStream();
@@ -81,7 +91,7 @@ namespace NumSharp.UnitTest.Casting
             foreach (var tc in AllDtypes)
             {
                 var a = np.arange(20).astype(tc)["2:18"]["::2"];
-                string path = Path.Combine(Path.GetTempPath(), $"ns_tofile_rt_{tc}.bin");
+                string path = TempPath($"tofile_rt_{tc}.bin");
                 try
                 {
                     a.tofile(path);
@@ -96,7 +106,7 @@ namespace NumSharp.UnitTest.Casting
         [TestMethod]
         public void Binary_FilenameOverload_TruncatesExistingFile()
         {
-            string path = Path.Combine(Path.GetTempPath(), "ns_tofile_trunc.bin");
+            string path = TempPath("tofile_trunc.bin");
             try
             {
                 File.WriteAllBytes(path, new byte[1000]); // pre-existing longer content

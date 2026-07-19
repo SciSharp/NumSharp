@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NumSharp;
@@ -19,8 +20,12 @@ namespace NumSharp.UnitTest.Fuzz
     ///          operand's dtype drives promotion). NumPy makes 0-D arrays full participants; only
     ///          Python scalar literals are weak. NumSharp cannot distinguish the two (both are 0-D
     ///          NDArrays), and keeping `arr + 5` ergonomic was chosen over strict NEP50 parity.
-    ///       2. Complex true-division differs from NumPy's npy_cdivide by ~1 ULP
-    ///          (System.Numerics.Complex uses a different scaling). Add/sub/mul are bit-exact.
+    ///       2. Complex arithmetic ULP envelopes vs NumPy's npy_c* algorithms (each per-op,
+    ///          measured, and bounded — see the B2 branch): divide within 2 ULP (npy_cdivide
+    ///          scaling); add/subtract within 2 ULP (FMA contraction); multiply within 16 ULP of
+    ///          the ELEMENT magnitude (catastrophic-cancellation regime); power within 512
+    ///          element-magnitude ULP or at a documented inf/NaN edge (Complex.Pow vs npy_cpow,
+    ///          Bug Ledger L6). Every other complex-binary op is gated bit-exact.
     /// </summary>
     public static class MisalignedRegistry
     {
@@ -120,8 +125,11 @@ namespace NumSharp.UnitTest.Fuzz
             // (W8-A) np.modf only supports Single/Double/Decimal: float16 and integer inputs throw
             // "modf only supports floating-point types". NumPy returns (float16,float16) for Half and
             // promotes integer input to (float64,float64). float32/float64 modf is bit-exact incl. the
-            // signed-zero/inf edges. Scoped to the two modf outputs that threw.
-            if ((c.Op == "modf_frac" || c.Op == "modf_int") && kind == DivergenceKind.Threw)
+            // signed-zero/inf edges. Scoped to the two modf outputs that threw AND to the non-f32/f64
+            // input dtypes the bug is documented for (B4/F12) — a modf(float64) throw is a REAL
+            // regression and fails the gate.
+            if ((c.Op == "modf_frac" || c.Op == "modf_int") && kind == DivergenceKind.Threw
+                && c.Operands[0].Dtype != "float32" && c.Operands[0].Dtype != "float64")
                 return "modf(float16/int): no Half kernel, no integer->float64 promotion (throws) [known bug]";
 
             // (W1-E) np.where on the scalar-broadcast path with a narrow-int operand throws
@@ -141,10 +149,39 @@ namespace NumSharp.UnitTest.Fuzz
             // loops. `-` has no bool loop and throws on both sides. Classifier branch removed so the
             // matrix verifies bool add/multiply bit-exact.
 
-            // Complex binary arithmetic (add/sub/mul/div): catastrophic cancellation (re*re-im*im -> 0)
-            // and ~1 ULP from System.Numerics.Complex vs NumPy's npy_c* algorithms.
+            // (B2/F10) Complex BINARY arithmetic — PER-OP scopes. The former branch here excused ANY
+            // value divergence of ANY magnitude for ANY 2-operand complex-result op (so a gross
+            // complex add/matmul/copyto regression passed silently). Dismantled: divide keeps its
+            // own 2-ULP branch at (2) above; add/subtract/multiply/power get the tight scopes below;
+            // every other complex-binary op (matmul/dot/outer/copyto/extrema/concatenate/...) must
+            // be bit-exact and now fails the gate on divergence.
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex && c.Operands.Length == 2)
-                return "complex binary arithmetic (cancellation / ~ULP) [partly known bug]";
+            {
+                // add/subtract run the same naive component formulas on both sides; only FMA
+                // contraction / evaluation order can differ -> every diff capped at 2 ULP.
+                if ((c.Op == "add" || c.Op == "subtract")
+                    && diffs.All(d => BitDiff.WithinUlp(expected, actual, d.Index, tc, 2)))
+                    return "complex add/subtract within 2 ULP (FMA contraction) [documented]";
+                // multiply: npy_cmul vs System.Numerics.Complex round (ac-bd)/(ad+bc) differently
+                // (FMA contraction). In the catastrophic-cancellation regime (ac ~ bd) the RELATIVE
+                // error of the cancelled component is unbounded, but the ABSOLUTE error stays at
+                // rounding scale of the products — i.e. of the element's dominant component. So the
+                // detection: every differing component within 16 ULP *of the element's own
+                // magnitude* (not of itself). A divergence larger than that is a real kernel bug.
+                if (c.Op == "multiply"
+                    && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 16)))
+                    return "complex multiply cancellation / ~ULP at element magnitude (npy_cmul vs System.Numerics) [documented #12]";
+                // power: Complex.Pow (polar exp(w*log z)) vs npy_cpow (special-cases small integer
+                // exponents via repeated squaring) — measured on the corpus the finite interior
+                // diverges by up to ~350 ULP of the affected component, plus the documented gross
+                // inf/NaN edges (Phase-1 F5) where one side goes non-finite. Bound the finite side
+                // at 512 ULP of the ELEMENT's magnitude (same absolute-error anchor as multiply:
+                // still catches sign flips / wrong magnitudes) and excuse the non-finite edges.
+                if (c.Op == "power"
+                    && diffs.All(d => WithinComplexElementMagnitudeUlp(expected, actual, d.Index, 512)
+                                      || NonFiniteInvolved(expected, actual, d.Index)))
+                    return "complex power ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow) [documented F5]";
+            }
 
             // (3) NaN ordering in <= / >= was FIXED in Phase 1 F2 (the unordered Cgt_Un/Clt_Un
             //     compare now yields False for a NaN operand, matching IEEE/NumPy). The classifier
@@ -154,8 +191,9 @@ namespace NumSharp.UnitTest.Fuzz
             // it preserves the narrow integer input dtype on the one-element fast path instead of
             // int16/int32 -> int64, uint8/uint16 -> uint64. cumsum was fixed (ReduceCumAdd now
             // promotes + reshapes every trivial case to match np.add.accumulate); cumprod still
-            // carries the bug in ReduceCumMul. Scoped to a cumprod dtype mismatch.
-            if (c.Op == "cumprod" && kind == DivergenceKind.Dtype)
+            // carries the bug in ReduceCumMul. Scoped to a cumprod dtype mismatch ON THAT size-<=1
+            // fast path only (B3/F11) — a full-size cumprod widening miss is a real bug and fails.
+            if (c.Op == "cumprod" && kind == DivergenceKind.Dtype && ElementCount(c.Operands[0]) <= 1)
                 return "cumprod(size-1 int): skips NEP50 accumulator widening (int16/int32/uint8/uint16) [known bug]";
 
             // --- T13 element-wise extrema (maximum/minimum/fmax/fmin) + isclose ---
@@ -166,7 +204,10 @@ namespace NumSharp.UnitTest.Fuzz
             // LOGIC_BIN_PAIRS, so NO extrema value excuse remains and the matrix verifies them all.
             // isclose on an F-contiguous complex operand diverges — its own comparison kernel (NOT the
             // now-fixed clip-routed extrema path) still pairs a strided complex operand by buffer order.
-            if (c.Op == "isclose" && kind == DivergenceKind.Value)
+            // Scoped to cases with a complex128 operand present (B6/F14) — a real-dtype isclose
+            // divergence is a real bug and fails the gate.
+            if (c.Op == "isclose" && kind == DivergenceKind.Value
+                && c.Operands.Any(o => o.Dtype == "complex128"))
                 return "isclose: F-contiguous/complex strided pairing divergence [known bug]";
 
             // (W11-A / clip_out FIXED) maximum/minimum/clip now PROPAGATE NaN on the out= path
@@ -256,10 +297,27 @@ namespace NumSharp.UnitTest.Fuzz
                 if (kind == DivergenceKind.Value && (c.Op == "min" || c.Op == "max") && tc == NPTypeCode.Boolean)
                     return "bool min/max along axis diverges [known bug]";
                 // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
-                if (kind == DivergenceKind.Value &&
-                    (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
+                // Scoped to FLOAT-FAMILY result dtypes (B1/F9): integer/bool accumulation is exact
+                // (modular) on both sides — an integer-result sum/prod value divergence is a REAL
+                // bug, not "precision", and fails the gate.
+                if (kind == DivergenceKind.Value
+                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
+                        || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
+                    && (c.Op == "sum" || c.Op == "mean" || c.Op == "std" || c.Op == "var" || c.Op == "prod"))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
+
+            // Decimal std (surfaced by scoping B1 to float-family): var — the exact decimal
+            // mean-of-squared-deviations — is bit-exact, so the divergence is purely sqrt(var):
+            // the ORACLE uses an independent Newton sqrt (gen_decimal_oracle.DecSqrt) while
+            // NumSharp uses DecimalMath.Sqrt, and NEITHER is correctly rounded at the 28/29-digit
+            // limit (probed vs 60-digit truth 2026-07-07: oracle low on 2 cases, NumSharp high on
+            // 1, both fine on 1). Excuse ONLY std × decimal × Value with every diff within one
+            // unit of the 28th significant digit (relative 1e-27) — a real iteration/accumulation
+            // bug diverges orders of magnitude more and still fails.
+            if (c.Op == "std" && tc == NPTypeCode.Decimal && kind == DivergenceKind.Value
+                && diffs.All(DecimalLastDigitDiff))
+                return "decimal std: independent 28-digit sqrt implementations differ in the last digit [documented]";
 
             // (4) Unary result-dtype: the transcendental ufuncs (sqrt/cbrt/exp/log/sin/cos/tan) now
             //     follow NumPy's width-based float promotion (Phase 1 F3a) and are verified bit-exact,
@@ -277,11 +335,16 @@ namespace NumSharp.UnitTest.Fuzz
             // float16: bool/int8/uint8/float16). The COMPLEX hyperbolic/inverse-trig kernels are now
             // implemented (NDComplexMath) and verified within ULP below — only Half still throws here;
             // deg2rad/rad2deg additionally throw for Complex (NumPy has no complex loop for them either).
-            // Scoped to a single-operand THREW on these op names so value/dtype cells stay gated.
+            // Scoped to a single-operand THREW on these op names AND to the float16-promoting input
+            // dtypes the bug is documented for (B5/F13; probed: sinh(bool/i8/u8/f16)->float16,
+            // i16/u16->float32 works) — a sinh(float64) throw is a real regression and fails.
             if (kind == DivergenceKind.Threw && c.Operands.Length == 1
                 && (c.Op == "sinh" || c.Op == "cosh" || c.Op == "tanh"
                     || c.Op == "arcsin" || c.Op == "arccos" || c.Op == "arctan"
-                    || c.Op == "deg2rad" || c.Op == "rad2deg"))
+                    || c.Op == "deg2rad" || c.Op == "rad2deg")
+                && (c.Operands[0].Dtype == "bool" || c.Operands[0].Dtype == "int8"
+                    || c.Operands[0].Dtype == "uint8" || c.Operands[0].Dtype == "float16"
+                    || ((c.Op == "deg2rad" || c.Op == "rad2deg") && c.Operands[0].Dtype == "complex128")))
                 return "unary hyperbolic/inverse-trig/angle: no Half kernel (throws NotSupportedException) [known bug]";
 
             // (W3-C) FIXED: np.exp2's float32-output IL kernel used to leave the evaluation stack
@@ -335,8 +398,11 @@ namespace NumSharp.UnitTest.Fuzz
             //     comparison / accumulation collapses the element to NaN+NaN. A documented complex
             //     NaN-ordering/propagation difference — distinct from the elementwise unary math above,
             //     and scoped to the reduction/scan op names so an elementwise regression still fails.
+            //     The diffs must actually INVOLVE a NaN token (B7/F15) — a finite-value complex
+            //     reduce/scan divergence is not "NaN ordering" and fails the gate.
             if (kind == DivergenceKind.Value && tc == NPTypeCode.Complex
-                && (ReduceOps.Contains(c.Op) || c.Op == "cumsum" || c.Op == "cumprod"))
+                && (ReduceOps.Contains(c.Op) || c.Op == "cumsum" || c.Op == "cumprod")
+                && diffs.Any(d => d.Expected.Contains("NaN") || d.Actual.Contains("NaN")))
                 return "complex reduction/scan NaN ordering/propagation differs [documented]";
 
             // Complex np.where was resolved in committed code (no longer throws "Zero-push
@@ -350,6 +416,63 @@ namespace NumSharp.UnitTest.Fuzz
             //     Strided / sliced / broadcast integer operands are read in place (no longer throw).
 
             return null;
+        }
+
+        /// <summary>Element count of a corpus operand (0-d shape [] counts as 1).</summary>
+        private static long ElementCount(FuzzCorpus.Operand o)
+        {
+            long n = 1;
+            foreach (var d in o.Shape)
+                n *= d;
+            return n;
+        }
+
+        /// <summary>
+        ///     True when both differing complex components at <paramref name="index"/> lie within
+        ///     <paramref name="maxUlp"/> ULP of the ELEMENT's magnitude (its largest finite
+        ///     component), not of themselves. This is the absolute-error envelope a differently
+        ///     rounded/contracted (a*c - b*d) can produce: in the catastrophic-cancellation regime
+        ///     the cancelled component's RELATIVE error is unbounded while its ABSOLUTE error stays
+        ///     at rounding scale of the products (~ the dominant component). Non-finite values are
+        ///     never "cancellation".
+        /// </summary>
+        private static bool WithinComplexElementMagnitudeUlp(byte[] exp, byte[] act, int index, int maxUlp)
+        {
+            int o = index * 16;
+            double er = BitConverter.ToDouble(exp, o), ei = BitConverter.ToDouble(exp, o + 8);
+            double ar = BitConverter.ToDouble(act, o), ai = BitConverter.ToDouble(act, o + 8);
+            if (!double.IsFinite(er) || !double.IsFinite(ei) || !double.IsFinite(ar) || !double.IsFinite(ai))
+                return false;
+            double mag = Math.Max(Math.Max(Math.Abs(er), Math.Abs(ei)), Math.Max(Math.Abs(ar), Math.Abs(ai)));
+            double ulp = Math.BitIncrement(mag) - mag;
+            return Math.Abs(er - ar) <= maxUlp * ulp && Math.Abs(ei - ai) <= maxUlp * ulp;
+        }
+
+        /// <summary>
+        ///     Both diff tokens parse as decimal and differ by no more than one unit in the 28th
+        ///     significant digit (relative 1e-27) — the disagreement envelope of two independent,
+        ///     not-correctly-rounded 28/29-digit decimal sqrt implementations.
+        /// </summary>
+        private static bool DecimalLastDigitDiff(BitDiff.Diff d)
+        {
+            if (!decimal.TryParse(d.Expected, System.Globalization.NumberStyles.Float,
+                                  System.Globalization.CultureInfo.InvariantCulture, out var e)
+                || !decimal.TryParse(d.Actual, System.Globalization.NumberStyles.Float,
+                                     System.Globalization.CultureInfo.InvariantCulture, out var a))
+                return false;
+            decimal diff = Math.Abs(e - a);
+            decimal mag = Math.Max(Math.Abs(e), Math.Abs(a));
+            return diff <= mag * 1e-27m;
+        }
+
+        /// <summary>Either side's complex element at <paramref name="index"/> has a NaN/inf component.</summary>
+        private static bool NonFiniteInvolved(byte[] exp, byte[] act, int index)
+        {
+            int o = index * 16;
+            return !double.IsFinite(BitConverter.ToDouble(exp, o))
+                || !double.IsFinite(BitConverter.ToDouble(exp, o + 8))
+                || !double.IsFinite(BitConverter.ToDouble(act, o))
+                || !double.IsFinite(BitConverter.ToDouble(act, o + 8));
         }
     }
 }

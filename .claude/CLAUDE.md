@@ -666,9 +666,9 @@ Proves every NDIter-backed op is **bit-identical** to NumPy 2.4.2 across the inp
 
 ```
 test/oracle/                          corpus generators (NumPy 2.4.2 — run by hand / nightly soak)
-  layout_catalog.py                   memory-layout builders (the "44 variations": 26 single + 9 pair + 5 where)
-  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~90 ops);
-                                      per-mode dtype axes widened to ALL_DTYPES; Char woven into every tier
+  layout_catalog.py                   memory-layout builders (the 40 variations: 26 single + 9 pair + 5 where)
+  gen_oracle.py                       deterministic op matrices (astype/binary/unary/reduce/where/… — ~159 ops);
+                                      per-mode dtype axes widened to ALL_DTYPES; Char woven into 18 tier files
                                       via the uint16 proxy (char_tier, relabelled uint16->char)
   gen_decimal_oracle.cs               INDEPENDENT C# oracle for Decimal (no NumPy analog): naive scalar
                                       System.Decimal math -> decimal_{unary,binary,reduce,scan,power,
@@ -688,7 +688,7 @@ test/NumSharp.UnitTest/Fuzz/          C# replay harness (no Python)
   IndexOracleTests.cs                 index get/set differential gate (curated + dtype + seeded-random tiers)
   MetamorphicTests.cs                 oracle-free invariants (round-trips / involutions / identities — no NumPy)
   HarnessSelfTests.cs                 proves the harness has teeth (BitDiff detects value/NaN/-0 diffs; non-vacuous)
-  corpus/*.jsonl                      committed corpus (~68K cases / 40 tiers; op corpus ~53K incl. 3.7K Char woven + 579 Decimal), copied to test output via the csproj glob
+  corpus/*.jsonl                      committed corpus (~76K cases / 43 tiers; op corpus ~63K incl. 4.4K Char woven + 695 Decimal), copied to test output via the csproj glob
 test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
   NpyOracleCorpus.cs                  opens npy_oracle.zip, rebuilds arrays from the manifest
   NpyOracleTests.cs                   one [NpyOracle] test per claim: read / byte-exact write / header-only
@@ -706,9 +706,9 @@ test/NumSharp.UnitTest/IO/            .npy/.npz format gate (no Python)
 ```
 
 - **Generators live in `test/oracle/`** and write the corpus into `test/NumSharp.UnitTest/Fuzz/corpus/` (path resolved relative to `test/oracle/`). CI replays the committed corpus, never the generators.
-- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~53K cases across the tiers, checking dtype + shape + bytes + error parity; Char woven into every tier, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,265 + `index_dtype` 104 + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants). A failing op case auto-shrinks to a 1-element repro.
-- **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into every tier via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`). Verified Char/clip-bool bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`) — NOT excused in `MisalignedRegistry`.
-- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
+- **Three `FuzzMatrix` gates**: `FuzzCorpusTests` (the op corpus — ~63K cases across the tiers, checking dtype + shape + bytes + error parity + per-file minimum-count floors; Char woven into 18 tier files, 12 `Decimal*` tiers: unary/binary/reduce/scan/power/varstd/matmul/astype/stat/where/sort/manip), `IndexOracleTests` (the index oracle — `index_curated` 2,273 + `index_dtype` 104 + `index_setter_dtype` 10 (cross-dtype cast-on-set) + `index_random` 10,000; the advanced-indexing parity gate), and `MetamorphicTests` (12 NumPy-free invariants incl. Half/Complex/Decimal/bool/char + strided views). A failing op case auto-shrinks to a 1-element repro.
+- **Dtype coverage**: per-mode dtype axes widened toward `ALL_DTYPES`. **Char** (no NumPy dtype) is woven into 18 tier files via the uint16 proxy (`gen_oracle.char_tier`, relabelled uint16→char). **Decimal** (no NumPy analog) rides an independent C# oracle (`gen_decimal_oracle.cs`, naive scalar `System.Decimal`; incl. axis reductions, empty, negative int powers). Verified Char/clip-bool/round/dot bugs are carved from the green corpus and reproduced under `[OpenBugs]` (`OpenBugs.Char.cs`, `OpenBugs.DtypeCoverage.cs`, `OpenBugs.FuzzGaps.cs`) — NOT excused in `MisalignedRegistry`.
+- **Regenerate** (deterministic; needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>` (modes: `smoke astype_full binary divmod_power comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat logic modf manip sort tail params aliasing copyto errors groupa`) + `python test/oracle/gen_index_oracle.py` (the `index_*` tiers) + `python test/oracle/fuzz_random.py 1234 2000 random_smoke.jsonl` + `dotnet run test/oracle/gen_decimal_oracle.cs` (the `decimal_*` tiers), then `dotnet build` (copies the corpus to test output).
 - **Run the gate**: `dotnet test --filter "TestCategory=FuzzMatrix"`. Each case is bit-exact (pass), a documented difference in `MisalignedRegistry` (excused, never silent), or a failure (red). Full divergence ledger: `test/NumSharp.UnitTest/Fuzz/README.md`.
 
 ### The `.npy`/`.npz` format oracle (same philosophy, separate corpus)

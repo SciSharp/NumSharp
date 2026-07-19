@@ -56,6 +56,14 @@ namespace NumSharp
             NDArray aTyped = a.GetTypeCode == retType ? a : a.astype(retType);
             NDArray vTyped = v.GetTypeCode == retType ? v : v.astype(retType);
 
+            // The typed kernels below walk the raw buffer from Address, which does NOT include
+            // Shape.offset — materialize sliced/strided/broadcast views first (astype of a
+            // mismatched dtype already produced a fresh contiguous array).
+            if (aTyped.Shape.IsSliced || aTyped.Shape.IsBroadcasted)
+                aTyped = aTyped.copy();
+            if (vTyped.Shape.IsSliced || vTyped.Shape.IsBroadcasted)
+                vTyped = vTyped.copy();
+
             // Compute convolution based on mode
             // Convolution formula: (a * v)[n] = sum_m(a[m] * v[n-m])
             // This is equivalent to correlation with v reversed: correlate(a, v[::-1])
@@ -87,46 +95,59 @@ namespace NumSharp
 
             var result = new NDArray(retType, Shape.Vector(outLen), true);
 
+            // Accumulator per dtype family mirrors NumPy's correlate inner loops (*_dot in
+            // numpy/_core/src/multiarray/arraytypes.c.src): complex sums real/imag components in
+            // double; every integer accumulates modularly (int64/uint64 accumulate + truncate is
+            // bit-identical to any native-width two's-complement accumulate, so NumPy's
+            // platform-dependent npy_long width is moot); Half accumulates float products in
+            // float; bool is BOOL_dot's OR-of-ANDs; decimal (no NumPy analog) accumulates in
+            // decimal to keep its full 28-digit precision.
             switch (retType)
             {
                 case NPTypeCode.Double:
-                    ConvolveFullTyped<double>(a, v, result, na, nv, outLen);
+                    ConvolveFullDouble(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Single:
-                    ConvolveFullTyped<float>(a, v, result, na, nv, outLen);
+                    ConvolveFullSingle(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Half:
-                    ConvolveFullTyped<Half>(a, v, result, na, nv, outLen);
+                    ConvolveFullHalf(a, v, result, na, nv, outLen);
                     break;
-                case NPTypeCode.Int32:
-                    ConvolveFullTyped<int>(a, v, result, na, nv, outLen);
-                    break;
-                case NPTypeCode.Int64:
-                    ConvolveFullTyped<long>(a, v, result, na, nv, outLen);
-                    break;
-                case NPTypeCode.Int16:
-                    ConvolveFullTyped<short>(a, v, result, na, nv, outLen);
+                case NPTypeCode.Boolean:
+                    ConvolveFullBoolean(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.SByte:
-                    ConvolveFullTyped<sbyte>(a, v, result, na, nv, outLen);
+                    ConvolveFullInteger<sbyte>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Byte:
-                    ConvolveFullTyped<byte>(a, v, result, na, nv, outLen);
+                    ConvolveFullInteger<byte>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int16:
+                    ConvolveFullInteger<short>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt16:
-                    ConvolveFullTyped<ushort>(a, v, result, na, nv, outLen);
+                    ConvolveFullInteger<ushort>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int32:
+                    ConvolveFullInteger<int>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt32:
-                    ConvolveFullTyped<uint>(a, v, result, na, nv, outLen);
+                    ConvolveFullInteger<uint>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int64:
+                    ConvolveFullInteger<long>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt64:
-                    ConvolveFullTyped<ulong>(a, v, result, na, nv, outLen);
+                    ConvolveFullInteger<ulong>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Char:
+                    ConvolveFullInteger<char>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Decimal:
-                    ConvolveFullTyped<decimal>(a, v, result, na, nv, outLen);
+                    ConvolveFullDecimal(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Complex:
-                    ConvolveFullTyped<System.Numerics.Complex>(a, v, result, na, nv, outLen);
+                    ConvolveFullComplex(a, v, result, na, nv, outLen);
                     break;
                 default:
                     throw new NotSupportedException($"Type {retType} is not supported for convolution.");
@@ -135,8 +156,83 @@ namespace NumSharp
             return result;
         }
 
-        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
-            where T : unmanaged
+        private static unsafe void ConvolveFullDouble(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            double* aPtr = (double*)a.Address;
+            double* vPtr = (double*)v.Address;
+            double* rPtr = (double*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                double sum = 0;
+                for (long j = jMin; j <= jMax; j++)
+                    sum += aPtr[j] * vPtr[k - j];
+                rPtr[k] = sum;
+            }
+        }
+
+        private static unsafe void ConvolveFullSingle(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            float* aPtr = (float*)a.Address;
+            float* vPtr = (float*)v.Address;
+            float* rPtr = (float*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                // FLOAT_dot accumulates in float32 (the CBLAS sdot path also runs in float32).
+                float sum = 0f;
+                for (long j = jMin; j <= jMax; j++)
+                    sum += aPtr[j] * vPtr[k - j];
+                rPtr[k] = sum;
+            }
+        }
+
+        private static unsafe void ConvolveFullHalf(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            Half* aPtr = (Half*)a.Address;
+            Half* vPtr = (Half*)v.Address;
+            Half* rPtr = (Half*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                // HALF_dot: products and accumulation in float32, one final round to half.
+                float sum = 0f;
+                for (long j = jMin; j <= jMax; j++)
+                    sum += (float)aPtr[j] * (float)vPtr[k - j];
+                rPtr[k] = (Half)sum;
+            }
+        }
+
+        private static unsafe void ConvolveFullBoolean(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            bool* aPtr = (bool*)a.Address;
+            bool* vPtr = (bool*)v.Address;
+            bool* rPtr = (bool*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                // BOOL_dot: OR of ANDs with early exit.
+                bool any = false;
+                for (long j = jMin; j <= jMax && !any; j++)
+                    any = aPtr[j] && vPtr[k - j];
+                rPtr[k] = any;
+            }
+        }
+
+        private static unsafe void ConvolveFullInteger<T>(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+            where T : unmanaged, System.Numerics.IBinaryInteger<T>
         {
             T* aPtr = (T*)a.Address;
             T* vPtr = (T*)v.Address;
@@ -144,47 +240,59 @@ namespace NumSharp
 
             for (long k = 0; k < outLen; k++)
             {
-                // j ranges from max(0, k-nv+1) to min(na-1, k)
                 long jMin = Math.Max(0, k - nv + 1);
                 long jMax = Math.Min(na - 1, k);
 
-                double sum = 0;
+                // Modular multiply-accumulate: CreateTruncating sign-extends signed sources, so
+                // mod-2^64 products and sums truncated back to T equal NumPy's native-width wrap.
+                ulong sum = 0;
+                for (long j = jMin; j <= jMax; j++)
+                    sum = unchecked(sum + ulong.CreateTruncating(aPtr[j]) * ulong.CreateTruncating(vPtr[k - j]));
+                rPtr[k] = T.CreateTruncating(sum);
+            }
+        }
+
+        private static unsafe void ConvolveFullDecimal(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            decimal* aPtr = (decimal*)a.Address;
+            decimal* vPtr = (decimal*)v.Address;
+            decimal* rPtr = (decimal*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                decimal sum = 0m;
+                for (long j = jMin; j <= jMax; j++)
+                    sum += aPtr[j] * vPtr[k - j];
+                rPtr[k] = sum;
+            }
+        }
+
+        private static unsafe void ConvolveFullComplex(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
+        {
+            var aPtr = (System.Numerics.Complex*)a.Address;
+            var vPtr = (System.Numerics.Complex*)v.Address;
+            var rPtr = (System.Numerics.Complex*)result.Address;
+
+            for (long k = 0; k < outLen; k++)
+            {
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
+
+                // CDOUBLE_dot: component sums in double via the naive complex product, so NaN in
+                // either component propagates into BOTH result components exactly like NumPy.
+                double sumr = 0, sumi = 0;
                 for (long j = jMin; j <= jMax; j++)
                 {
-                    // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
-                    // (object) boxing required since aPtr[j] is generic TIn; Converts.ToDouble dispatches on boxed type.
-                    double aVal = Converts.ToDouble((object)aPtr[j]);
-                    double vVal = Converts.ToDouble((object)vPtr[k - j]);
-                    sum += aVal * vVal;
+                    var x = aPtr[j];
+                    var y = vPtr[k - j];
+                    sumr += x.Real * y.Real - x.Imaginary * y.Imaginary;
+                    sumi += x.Real * y.Imaginary + x.Imaginary * y.Real;
                 }
 
-                // Convert back to target type
-                if (typeof(T) == typeof(double))
-                    rPtr[k] = (T)(object)sum;
-                else if (typeof(T) == typeof(float))
-                    rPtr[k] = (T)(object)(float)sum;
-                else if (typeof(T) == typeof(int))
-                    rPtr[k] = (T)(object)(int)sum;
-                else if (typeof(T) == typeof(long))
-                    rPtr[k] = (T)(object)(long)sum;
-                else if (typeof(T) == typeof(short))
-                    rPtr[k] = (T)(object)(short)sum;
-                else if (typeof(T) == typeof(byte))
-                    rPtr[k] = (T)(object)(byte)sum;
-                else if (typeof(T) == typeof(ushort))
-                    rPtr[k] = (T)(object)(ushort)sum;
-                else if (typeof(T) == typeof(uint))
-                    rPtr[k] = (T)(object)(uint)sum;
-                else if (typeof(T) == typeof(ulong))
-                    rPtr[k] = (T)(object)(ulong)sum;
-                else if (typeof(T) == typeof(decimal))
-                    rPtr[k] = (T)(object)(decimal)sum;
-                else if (typeof(T) == typeof(sbyte))
-                    rPtr[k] = (T)(object)(sbyte)sum;
-                else if (typeof(T) == typeof(Half))
-                    rPtr[k] = (T)(object)(Half)sum;
-                else if (typeof(T) == typeof(System.Numerics.Complex))
-                    rPtr[k] = (T)(object)(System.Numerics.Complex)sum;
+                rPtr[k] = new System.Numerics.Complex(sumr, sumi);
             }
         }
 

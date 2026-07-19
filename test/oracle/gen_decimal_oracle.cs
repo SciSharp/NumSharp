@@ -110,6 +110,8 @@ static class Gen
             case "scalar_0d":       { var b = Fill(1, nonzero, rot);  return new Operand { Base = b, Shape = new int[0], Strides = new long[0], Offset = 0 }; }
             case "one_element_1d":  { var b = Fill(1, nonzero, rot);  return new Operand { Base = b, Shape = new[]{1}, Strides = new long[]{1}, Offset = 0 }; }
             case "highrank_5d":     { var b = Fill(12, nonzero, rot); return new Operand { Base = b, Shape = new[]{2,1,3,1,2}, Strides = new long[]{6,6,2,2,1}, Offset = 0 }; }
+            // G8b: on-demand empty (NOT in SINGLE_LAYOUTS — used only by the explicit empty cases).
+            case "empty_2d":        { return new Operand { Base = new decimal[0], Shape = new[]{0,3}, Strides = new long[]{3,1}, Offset = 0 }; }
             default: throw new Exception("unknown single layout " + name);
         }
     }
@@ -134,12 +136,17 @@ static class Gen
             case "pp_broadcast_row": return (C(new[]{4,5},0,false), C(new[]{5},3,bNonzero));
             case "pp_negstride_both": { var ab=Fill(8,false,0); var bb=Fill(8,bNonzero,3);
                 return (new Operand{Base=ab,Shape=new[]{8},Strides=new long[]{-1},Offset=7}, new Operand{Base=bb,Shape=new[]{8},Strides=new long[]{-1},Offset=7}); }
+            // G8c: the two pair layouts the decimal tier missed (mirrors layout_catalog.py).
+            case "pp_contig_strided": { var a = C(new[]{4,5},0,false); var bb = Fill(40,bNonzero,3);
+                return (a, new Operand{ Base=bb, Shape=new[]{4,5}, Strides=new long[]{10,2}, Offset=0 }); }  // (4,10)[:, ::2]
+            case "pp_broadcast_col": return (C(new[]{4,1},0,false), C(new[]{1,5},3,bNonzero));               // (4,1) op (1,5) -> (4,5)
             default: throw new Exception("unknown pair layout " + name);
         }
     }
     static readonly string[] PAIR_LAYOUTS = {
         "pp_contig_contig","pp_contig_fortran","pp_strided_strided","pp_scalar_right",
         "pp_scalar_left","pp_broadcast_row","pp_negstride_both",
+        "pp_contig_strided","pp_broadcast_col",                       // G8c
     };
 
     // ---- numpy-style broadcast of two shapes ----
@@ -257,6 +264,82 @@ static class Gen
             Add("mean", log.Aggregate(0m,(x,y)=>x+y) / log.Length);
         }
 
+        // ----- G8a: AXIS reductions sum/min/max/mean × axis {0,last} × keepdims {F,T} over the
+        // three 2-D layouts. decimal + is exact so accumulation order is irrelevant; mean is one
+        // division of the same exact sum on both sides. -----
+        foreach (var ln in new[] { "c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols" })
+        {
+            var o = SingleLayout(ln, 1, false);
+            var log = o.Logical();                       // C-order logical values
+            int rows = o.Shape[0], cols = o.Shape[1];
+            foreach (int axis in new[] { 0, 1 })
+            {
+                int outN = axis == 0 ? cols : rows;
+                int m = axis == 0 ? rows : cols;
+                var sums = new decimal[outN]; var mins = new decimal[outN];
+                var maxs = new decimal[outN]; var means = new decimal[outN];
+                for (int j = 0; j < outN; j++)
+                {
+                    decimal acc = 0m, mn = 0m, mx = 0m;
+                    for (int i = 0; i < m; i++)
+                    {
+                        decimal v = axis == 0 ? log[i * cols + j] : log[j * cols + i];
+                        acc += v;
+                        if (i == 0) { mn = v; mx = v; }
+                        else { if (v < mn) mn = v; if (v > mx) mx = v; }
+                    }
+                    sums[j] = acc; mins[j] = mn; maxs[j] = mx; means[j] = acc / m;
+                }
+                foreach (var kd in new[] { false, true })
+                {
+                    int[] shp = kd ? (axis == 0 ? new[] { 1, cols } : new[] { rows, 1 }) : new[] { outN };
+                    string pj = $"{{\"axis\":{axis},\"keepdims\":{(kd ? "true" : "false")}}}";
+                    void AddAx(string op, decimal[] vals) => reduce.Add(Case(
+                        $"{op}/decimal/{ln}/ax{axis}kd{(kd ? 1 : 0)}/{n++}", op, pj,
+                        new[] { o.Describe() }, "decimal", shp, HexOf(vals)));
+                    AddAx("sum", sums); AddAx("min", mins); AddAx("max", maxs); AddAx("mean", means);
+                }
+            }
+        }
+
+        // ----- G8b: EMPTY decimal — sum(empty)=0m, prod(empty)=1m (flat; NumPy identity values). -----
+        {
+            var o = SingleLayout("empty_2d", 0, false);
+            reduce.Add(Case($"sum/decimal/empty_2d/{n++}", "sum", "{}", new[] { o.Describe() },
+                "decimal", new int[0], HexOf(new[] { 0m })));
+            reduce.Add(Case($"prod/decimal/empty_2d/{n++}", "prod", "{}", new[] { o.Describe() },
+                "decimal", new int[0], HexOf(new[] { 1m })));
+        }
+
+        // ----- G8e: flat argmax/argmin (-> int64, first-occurrence on value ties), all/any
+        // (-> bool, x != 0m truthiness), count_nonzero (-> int64). argmax/argmin/count_nonzero
+        // replay with axis=0 over 1-D layouts (== flatten for 1-D; the harness has no
+        // flatten-argmax overload); all/any replay flat (axis=None). -----
+        foreach (var ln in new[] { "c_contiguous_1d", "strided_step2_1d", "negstride_1d", "simple_slice_offset_1d" })
+        {
+            var o = SingleLayout(ln, 1, false);
+            var log = o.Logical();
+            int iMax = 0, iMin = 0; long nz = 0;
+            bool all = true, any = false;
+            for (int i = 0; i < log.Length; i++)
+            {
+                if (log[i] > log[iMax]) iMax = i;
+                if (log[i] < log[iMin]) iMin = i;
+                if (log[i] != 0m) { nz++; any = true; } else all = false;
+            }
+            string pj0 = "{\"axis\":0,\"keepdims\":false}";
+            reduce.Add(Case($"argmax/decimal/{ln}/{n++}", "argmax", pj0, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMax }))));
+            reduce.Add(Case($"argmin/decimal/{ln}/{n++}", "argmin", pj0, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { (long)iMin }))));
+            reduce.Add(Case($"count_nonzero/decimal/{ln}/{n++}", "count_nonzero", pj0, new[] { o.Describe() },
+                "int64", new int[0], HexOf(Bytes(new[] { nz }))));
+            reduce.Add(Case($"all/decimal/{ln}/{n++}", "all", "{}", new[] { o.Describe() },
+                "bool", new int[0], HexOf(new[] { (byte)(all ? 1 : 0) })));
+            reduce.Add(Case($"any/decimal/{ln}/{n++}", "any", "{}", new[] { o.Describe() },
+                "bool", new int[0], HexOf(new[] { (byte)(any ? 1 : 0) })));
+        }
+
         // ----- SCAN (axis=None -> flatten): cumsum/cumprod -----
         foreach (var ln in SINGLE_LAYOUTS)
         {
@@ -294,10 +377,12 @@ static class Gen
         var manip = new List<string>();
 
         // ----- POWER decimal^int (exact: repeated multiply / reciprocal). Exponent is a 0-D
-        // decimal whose value is a whole number — DecimalMath.Pow must be exact for integer powers. -----
+        // decimal whose value is a whole number — DecimalMath.Pow must be exact for integer powers.
+        // G7 (F7): negative exponents were dead code (loop was {0,1,2,3} while IntPow and the
+        // nonzero-base plumbing below already supported e<0). decimal^-n = 1/(a^n), exact oracle. -----
         foreach (var ln in new[] { "c_contiguous_1d", "c_contiguous_2d", "strided_step2_1d", "negstride_1d", "broadcast_1d_to_2d" })
         {
-            foreach (int e in new[] { 0, 1, 2, 3 })
+            foreach (int e in new[] { -2, -1, 0, 1, 2, 3 })
             {
                 var a = SingleLayout(ln, 0, e < 0);                 // nonzero base only when exponent<0
                 var b = new Operand { Base = new[] { (decimal)e }, Shape = new int[0], Strides = new long[0], Offset = 0 };
@@ -355,6 +440,37 @@ static class Gen
             astype.Add(AstypeTo("int64", sh, Bytes(iv), HexOf(iv.Select(x => (decimal)x).ToArray()), ref n));
             astype.Add(AstypeTo("int32", sh, Bytes(iv.Select(x=>(int)x).ToArray()), HexOf(iv.Select(x => (decimal)x).ToArray()), ref n));
             astype.Add(AstypeTo("float64", sh, Bytes(dv), HexOf(dv.Select(x => (decimal)x).ToArray()), ref n));
+        }
+
+        // ----- G8d: astype decimal <-> {bool, int16, uint64} (exact for the pools used). -----
+        foreach (var ln in new[] { "c_contiguous_1d", "strided_step2_1d" })
+        {
+            var o = SmallSingle(ln);                        // pool has 0m -> real bool mix
+            var log = o.Logical();
+            astype.Add(Case($"astype/decimal->bool/{ln}/{n++}", "astype", "{\"dtype\":\"bool\"}",
+                new[] { o.Describe() }, "bool", o.Shape,
+                HexOf(log.Select(x => (byte)(x != 0m ? 1 : 0)).ToArray())));
+            astype.Add(Case($"astype/decimal->int16/{ln}/{n++}", "astype", "{\"dtype\":\"int16\"}",
+                new[] { o.Describe() }, "int16", o.Shape,
+                HexOf(Bytes(log.Select(x => (short)x).ToArray()))));            // truncation toward zero
+        }
+        {
+            // decimal -> uint64: NONNEGATIVE pool only (C# decimal->ulong throws for negatives;
+            // NumPy has no oracle to mirror a modular wrap for base-10, so stay in-range).
+            decimal[] np2 = { 0m, 1m, 2.75m, 7.9m, 42.5m, 100m, 9.99m, 3m };
+            var o = new Operand { Base = np2, Shape = new[]{8}, Strides = new long[]{1}, Offset = 0 };
+            astype.Add(Case($"astype/decimal->uint64/nonneg/{n++}", "astype", "{\"dtype\":\"uint64\"}",
+                new[] { o.Describe() }, "uint64", o.Shape,
+                HexOf(Bytes(np2.Select(x => (ulong)x).ToArray()))));
+        }
+        {
+            // {bool, int16, uint64} -> decimal (always exact).
+            byte[] bv = { 1, 0, 1, 1, 0, 0 };
+            astype.Add(AstypeTo("bool", new[]{6}, bv, HexOf(bv.Select(x => (decimal)x).ToArray()), ref n));
+            short[] sv = { 0, -1, 127, -128, 32767, -32768 };
+            astype.Add(AstypeTo("int16", new[]{6}, Bytes(sv), HexOf(sv.Select(x => (decimal)x).ToArray()), ref n));
+            ulong[] uv = { 0, 1, 255, 65536, 4294967295, 9000000000000000000 };
+            astype.Add(AstypeTo("uint64", new[]{6}, Bytes(uv), HexOf(uv.Select(x => (decimal)x).ToArray()), ref n));
         }
 
         // ----- STAT (axis=None -> scalar): clip / median / ptp / percentile / quantile.
@@ -593,6 +709,8 @@ static class Gen
     }
 
     static byte[] Bytes(long[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
+    static byte[] Bytes(short[] v) { var b = new byte[v.Length*2]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
+    static byte[] Bytes(ulong[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
     static byte[] Bytes(int[] v) { var b = new byte[v.Length*4]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
     static byte[] Bytes(double[] v) { var b = new byte[v.Length*8]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
     static byte[] Bytes(float[] v) { var b = new byte[v.Length*4]; Buffer.BlockCopy(v, 0, b, 0, b.Length); return b; }
