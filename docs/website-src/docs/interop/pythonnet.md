@@ -315,13 +315,13 @@ PythonEngine.Shutdown();
 
 ## Testing
 
-The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests` (202 tests on each of `net8.0` and `net10.0`) — covering every dtype and layout in both directions, all three conversion routes, the codec modes, the GIL policy, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
+The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests`, run on both `net8.0` and `net10.0` — covering every dtype and layout in both directions, all three conversion routes, the codec modes, the GIL policy, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
 
-**These docs are part of that suite.** Every code example, table row and quoted error message on this page, on [The Zero-Copy Model](zero-copy-model.md) and on [Interoperability](index.md) is executed by a `DocExamples_*` class named after the page — so a sample that stops compiling or stops behaving as described fails the build, not the reader. The measured coverage census and the suite size quoted just above are asserted there too, against the assembly itself.
+**The samples on these pages are executable.** Every code example and behavioural claim on this page, on [The Zero-Copy Model](zero-copy-model.md) and on [Interoperability](index.md) is reproduced by a `DocExamples_*` class named after the page, which runs it and asserts what the text promises — including the coverage census below and the version table above. A sample that stops compiling, or stops behaving as described, fails the build rather than the reader.
 
 ```bash
 cd test/NumSharp.Interop.UnitTests
 dotnet test                                   # both frameworks
 dotnet test --filter "ClassName~StridedBufferViewTests"
-dotnet test --filter "ClassName~DocExamples"   # just the documentation gate
+dotnet test --filter "ClassName~DocExamples"   # the samples on these pages
 ```
