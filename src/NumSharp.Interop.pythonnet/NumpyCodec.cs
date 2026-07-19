@@ -76,10 +76,18 @@ namespace NumSharp.Interop.PythonNet
         public NumpyCodecMode DecodeMode { get; init; } = NumpyCodecMode.Auto;
 
         /// <summary>
-        ///     <c>true</c> (default): besides <c>numpy.ndarray</c> (and subclasses), the built-in buffer
-        ///     exporters <c>memoryview</c>, <c>bytes</c>, <c>bytearray</c> and <c>array.array</c> also
-        ///     decode to <see cref="NDArray"/>. <c>false</c>: numpy arrays only.
+        ///     <c>true</c> (default): besides <c>numpy.ndarray</c> (and subclasses), ANY object exporting
+        ///     the PEP 3118 buffer protocol decodes to <see cref="NDArray"/> — the built-ins
+        ///     <c>memoryview</c>, <c>bytes</c>, <c>bytearray</c>, <c>array.array</c> by name, plus every
+        ///     other exporter (<c>ctypes</c> arrays, C-extension buffers, ...) via the PEP 688
+        ///     <c>__buffer__</c> capability check on Python 3.12+. <c>false</c>: numpy arrays only.
         /// </summary>
+        /// <remarks>
+        ///     The capability check exists because exporters like <c>ctypes</c> arrays have a tp_name
+        ///     generated per element type AND length (<c>c_long_Array_4</c>), so they can never be
+        ///     allowlisted. On Python ≤ 3.11 there is no <c>__buffer__</c> dunder, so acceptance falls
+        ///     back to the four built-in names above.
+        /// </remarks>
         public bool DecodeAnyBuffer { get; init; } = true;
     }
 
@@ -151,8 +159,21 @@ namespace NumSharp.Interop.PythonNet
                 string name = objectType.Name;   // tp_name: "numpy.ndarray", "memoryview", "array.array", ...
                 if (name == "numpy.ndarray")
                     return true;
-                if (_options.DecodeAnyBuffer && (name == "memoryview" || name == "bytes" || name == "bytearray" || name == "array.array"))
-                    return true;
+                if (_options.DecodeAnyBuffer)
+                {
+                    if (name == "memoryview" || name == "bytes" || name == "bytearray" || name == "array.array")
+                        return true;
+                    // Capability check instead of a name allowlist: PEP 688 (Python 3.12+) puts
+                    // __buffer__ on EVERY type implementing the C buffer protocol, so any exporter
+                    // decodes — including ones whose tp_name cannot be enumerated at all (a ctypes
+                    // array is named per element type AND length: "c_long_Array_4", "c_double_Array_3",
+                    // ...). Non-buffer builtins (dict/int/str/list/float) do not have it, so this never
+                    // widens beyond real exporters. On Python <= 3.11 the dunder does not exist, the
+                    // check is simply false, and the allowlist above still covers the common types.
+                    if (objectType.HasAttr("__buffer__"))
+                        return true;
+                }
+
                 return IsNdarraySubclass(objectType);
             }
             catch

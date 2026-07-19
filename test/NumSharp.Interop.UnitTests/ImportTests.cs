@@ -192,6 +192,47 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
+        public void View_CtypesArray_SharesMemoryBothWays()
+        {
+            // ctypes used to be unreachable: pythonnet's obj.GetBuffer hard-crashes on a raw ctypes
+            // array for EVERY flag (view AND copy). Acquiring through the memoryview wrapper — the
+            // canonical, uniformly-behaved exporter — makes it a normal shared view.
+            PyExec("import ctypes\ncar = (ctypes.c_int * 4)()\ncar[0]=10; car[1]=20; car[2]=30; car[3]=40");
+            var v = ViewOf("car", allowReadonly: true);
+
+            v.typecode.Should().Be(NPTypeCode.Int32);
+            v.size.Should().Be(4);
+            v.Shape.IsWriteable.Should().BeTrue();
+            ReadAt<int>(v, 2).Should().Be(30);
+
+            WriteAt(v, 999, 1);
+            PyLong("car[1]").Should().Be(999, "NumSharp writes must land in the ctypes buffer");
+
+            PyExec("car[3] = -7");
+            ReadAt<int>(v, 3).Should().Be(-7, "ctypes writes must be visible through the view");
+
+            v.Dispose();
+        }
+
+        [TestMethod]
+        public void View_CtypesArray_CoversOtherElementTypes()
+        {
+            PyExec("import ctypes\ncd = (ctypes.c_double * 3)()\ncd[0]=1.5; cd[1]=2.5; cd[2]=3.5");
+            var d = ViewOf("cd", allowReadonly: true);
+            d.typecode.Should().Be(NPTypeCode.Double);
+            ReadAt<double>(d, 1).Should().BeApproximately(2.5, 1e-12);
+            WriteAt(d, -8.25, 2);
+            PyFloat("cd[2]").Should().BeApproximately(-8.25, 1e-12);
+            d.Dispose();
+
+            PyExec("cb = (ctypes.c_ubyte * 4)()\ncb[0]=1; cb[1]=2; cb[2]=3; cb[3]=4");
+            var b = ViewOf("cb", allowReadonly: true);
+            b.typecode.Should().Be(NPTypeCode.Byte);
+            ReadAt<byte>(b, 3).Should().Be(4);
+            b.Dispose();
+        }
+
+        [TestMethod]
         public void View_SubItemStride_IsRejectedWithCopyGuidance()
         {
             // A 2-byte stride over int32 cannot be expressed by NumSharp's element-based strides.
