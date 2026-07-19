@@ -71,7 +71,7 @@ namespace NumSharp.Interop.PythonNet
         ///     Zero-copy NumSharp view over Python memory: NumSharp SHARES the exporter's buffer
         ///     (mutations visible both ways).
         ///
-        ///     <para><b>Two zero-copy routes:</b></para>
+        ///     <para><b>Three zero-copy routes:</b></para>
         ///     <list type="bullet">
         ///       <item><b>C-contiguous PEP 3118 exporters</b> (any object): the buffer is acquired with
         ///         <c>PyBUF.WRITABLE</c>, which pins the exporter and — for resizable objects like
@@ -81,6 +81,12 @@ namespace NumSharp.Interop.PythonNet
         ///         layout; broadcast (stride-0) sources become read-only NumSharp views. The numpy array
         ///         is kept alive by a strong reference (numpy's <c>resize(refcheck=True)</c> refuses to
         ///         reallocate while it exists).</item>
+        ///       <item><b>Non-contiguous NON-numpy exporters</b> (a sliced / offset / reversed
+        ///         <c>memoryview</c>, a strided <c>memoryview</c> of an <c>array.array</c>, ...): the base
+        ///         pointer comes from a <c>PyBUF.STRIDED</c> buffer and the exact shape/strides from the
+        ///         <c>memoryview</c> itself, reconstructing the strided view (incl. negative strides) —
+        ///         so a view is produced whenever the layout is representable, not only for numpy. Only
+        ///         genuinely irreducible layouts (complex64, big-endian, non-element strides) decline.</item>
         ///     </list>
         ///
         ///     <para><b>Lifetime:</b> the lease is released when the LAST NumSharp view over the memory —
@@ -134,10 +140,27 @@ namespace NumSharp.Interop.PythonNet
 
                     if (!mv.c_contiguous)
                     {
+                        // numpy arrays carry the richest layout metadata (F-order, >1-D strides,
+                        // broadcasts) in __array_interface__ — prefer it.
                         if (obj.HasAttr("__array_interface__"))
                             return ViewViaArrayInterface(obj, allowReadonly);
-                        throw new InvalidOperationException(
-                            "buffer is not C-contiguous and the exporter is not a numpy array; a zero-copy view is not possible. Use ToNDArray (copy).");
+
+                        // ANY other buffer-protocol exporter (a sliced / offset / reversed memoryview,
+                        // a strided memoryview of an array.array, ...) is STILL viewable: the buffer
+                        // protocol hands us the base pointer via a PyBUF.STRIDED request and the
+                        // memoryview reports the exact shape/strides. Reconstruct the strided view
+                        // rather than declining — only genuinely irreducible layouts (complex64,
+                        // big-endian, non-element strides) throw here, and in Auto mode those become
+                        // the copy fallback. Extract the metadata, then release the metadata view
+                        // before taking the lease buffer (same discipline as the contiguous path).
+                        string sFormat = mv.format;
+                        long sItemsize = mv.itemsize;
+                        long[] sDims = mv.shape;
+                        long[] sByteStrides = GetLongTuple(mv, PythonRuntimeInterop.NameStrides);
+                        bool sReadonly = GetBool(mv, PythonRuntimeInterop.NameReadonly);
+                        mv.Dispose();
+                        mv = null;
+                        return ViewViaBufferStrides(obj, sFormat, sItemsize, sDims, sByteStrides, sReadonly, allowReadonly);
                     }
 
                     string format = mv.format;
@@ -162,7 +185,7 @@ namespace NumSharp.Interop.PythonNet
                     mv.Dispose();
                     mv = null;
 
-                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, sourceReadonly, out bool readOnly);
+                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, sourceReadonly, PyBUF.WRITABLE, PyBUF.SIMPLE, out bool readOnly);
                     var lease = new ImportLease(buf, holder: null, bytes: buf.Length);
                     try
                     {
@@ -225,11 +248,17 @@ namespace NumSharp.Interop.PythonNet
             }
         }
 
-        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly, bool sourceReadonly, out bool readOnly)
+        /// <summary>
+        ///     Lease the exporter's buffer, requesting a WRITABLE lock when the source reports itself
+        ///     writable and a read-only lock otherwise. <paramref name="writableFlag"/> /
+        ///     <paramref name="readonlyFlag"/> select the buffer shape: <c>WRITABLE</c>/<c>SIMPLE</c> for
+        ///     a C-contiguous view, <c>STRIDED</c>/<c>STRIDED_RO</c> for a strided one.
+        /// </summary>
+        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly, bool sourceReadonly, PyBUF writableFlag, PyBUF readonlyFlag, out bool readOnly)
         {
             // A writable lease is what makes the view's shared MUTATION legal — but only REQUEST it
             // when the source reports itself writable (<paramref name="sourceReadonly"/> comes from the
-            // exporter's own memoryview.readonly). GetBuffer(PyBUF.WRITABLE) must never be attempted on
+            // exporter's own memoryview.readonly). A writable buffer request must never be attempted on
             // a read-only source: on a read-only *memoryview* it hard-crashes pythonnet 3.0.5 (bytes
             // merely throws BufferError). We therefore gate on the known flag instead of probing by
             // exception — which is also one fewer failed C-API call + throw on every read-only import.
@@ -237,7 +266,7 @@ namespace NumSharp.Interop.PythonNet
             {
                 try
                 {
-                    PyBuffer buf = obj.GetBuffer(PyBUF.WRITABLE);
+                    PyBuffer buf = obj.GetBuffer(writableFlag);
                     readOnly = false;
                     return buf;
                 }
@@ -253,7 +282,79 @@ namespace NumSharp.Interop.PythonNet
                     "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
                     "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
             readOnly = true;
-            return obj.GetBuffer(PyBUF.SIMPLE);
+            return obj.GetBuffer(readonlyFlag);
+        }
+
+        /// <summary>
+        ///     Strided zero-copy import for ANY non-contiguous buffer-protocol exporter that is NOT a
+        ///     numpy array (a sliced / offset / reversed <c>memoryview</c>, a strided memoryview of an
+        ///     <c>array.array</c>, ...). The base pointer comes from a <c>PyBUF.STRIDED</c>(<c>_RO</c>)
+        ///     buffer; the exact <paramref name="dims"/> / <paramref name="byteStrides"/> come from the
+        ///     exporter's own memoryview. The window is normalized so element offsets stay non-negative
+        ///     (PEP 3118's <c>buf</c> addresses element 0; negative strides address memory below it),
+        ///     mirroring <see cref="ViewViaArrayInterface"/> and NumSharp's own reversed views.
+        /// </summary>
+        private static unsafe NDArray ViewViaBufferStrides(PyObject obj, string format, long itemsize, long[] dims, long[] byteStrides, bool sourceReadonly, bool allowReadonly)
+        {
+            NPTypeCode tc = FromBufferFormat(format, itemsize);   // 'Zf' (complex64) / big-endian throw → copy fallback in Auto
+            if (tc.SizeOf() != itemsize)
+                throw new NotSupportedException(
+                    $"buffer itemsize {itemsize} does not match NumSharp dtype {tc} ({tc.SizeOf()} bytes); a zero-copy view is not possible. Use ToNDArray (copy).");
+
+            long sizeFromDims = 1;
+            for (int i = 0; i < dims.Length; i++)
+                sizeFromDims *= dims[i];
+            if (sizeFromDims == 0)
+                return new NDArray(tc, dims.Length == 0 ? new Shape() : new Shape(dims), fillZeros: false);
+
+            if (byteStrides is null || byteStrides.Length != dims.Length)
+                throw new NotSupportedException(
+                    "the exporter did not report per-dimension strides for a non-contiguous buffer; a zero-copy view is not possible. Use ToNDArray (copy).");
+
+            var elemStrides = new long[byteStrides.Length];
+            for (int i = 0; i < byteStrides.Length; i++)
+            {
+                if (byteStrides[i] % itemsize != 0)
+                    throw new NotSupportedException(
+                        $"stride {byteStrides[i]} bytes is not a multiple of itemsize {itemsize}; NumSharp strides are element-based. Use ToNDArray (copy).");
+                elemStrides[i] = byteStrides[i] / itemsize;
+            }
+
+            // Normalize the window: PEP 3118's buf pointer addresses element 0; negative strides put
+            // other elements BELOW it. NumSharp offsets are relative to the block start, so shift the
+            // base down to the lowest touched element.
+            long minOffset = 0, maxOffset = 0;
+            for (int i = 0; i < dims.Length; i++)
+            {
+                long extent = (dims[i] - 1) * elemStrides[i];
+                if (extent < 0) minOffset += extent;
+                else maxOffset += extent;
+            }
+            long spanElements = maxOffset - minOffset + 1;
+
+            PyBuffer buf = AcquireBuffer(obj, allowReadonly, sourceReadonly, PyBUF.STRIDED, PyBUF.STRIDED_RO, out bool readOnly);
+            var lease = new ImportLease(buf, holder: null, bytes: spanElements * itemsize);
+            try
+            {
+                long basePtr = (long)buf.Buffer + minOffset * itemsize;
+                Shape shape = new Shape(dims, elemStrides, offset: -minOffset, bufferSize: spanElements);
+                if (readOnly)
+                    shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+
+                IArraySlice slice = WrapExternal(tc, (void*)basePtr, spanElements, lease.Release);
+                // The strided shape's logical size differs from the physical span, so Alias a flat
+                // storage with the strided shape (as ViewViaArrayInterface / NumSharp slicing do).
+                var storage = new UnmanagedStorage(slice, Shape.Vector(spanElements)).Alias(shape);
+                var nd = new NDArray(storage);
+                PythonRuntimeInterop.TrackImport(lease);
+                return nd;
+            }
+            catch
+            {
+                PythonRuntimeInterop.TrackImport(lease);
+                lease.Release();
+                throw;
+            }
         }
 
         /// <summary>
