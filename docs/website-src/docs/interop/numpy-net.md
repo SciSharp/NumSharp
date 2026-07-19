@@ -167,7 +167,7 @@ A Numpy.NET `NDarray` *is* a `numpy.ndarray`, so with [`NDArrayPythonInterop.Reg
 | Fact | Detail |
 |---|---|
 | Verified combination | `Numpy.Bare 3.11.1.33` + pythonnet 3.0.5 + Python 3.12.12 + numpy 2.4.2 |
-| pythonnet | Numpy.NET depends on pythonnet 3.0.1 — NuGet unifies it with your (or the bridge's) newer 3.0.x |
+| pythonnet | Numpy.NET depends on pythonnet 3.0.1; the bridge's floor is `[3.0.5, 4.0.0)`, and NuGet unifies the two upward to 3.0.5+ — which is also what lets the pair run Python 3.12+ |
 | numpy version | Numpy.NET binds `Py.Import("numpy")` — it uses whatever numpy your interpreter has. Core array APIs work fine on numpy 2.x; some rarely-used generated wrappers may hit numpy 2.0 API removals |
 | `Numpy` vs `Numpy.Bare` | Same types, different assemblies — reference exactly one (CS0433 otherwise). `Bare` is the natural fit when your app already manages Python |
 | Name clash | Both libraries define `np` — alias one: `using np2 = Numpy.np;` |

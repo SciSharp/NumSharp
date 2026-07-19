@@ -92,7 +92,7 @@ fill your buffer in place. A copy there fails silently; `View` fails loudly.
 ## The three routes that produce a view
 
 `ToNDArrayView` tries them in order. All metadata is read through Python's own `memoryview`, never
-pythonnet's `PyBuffer` flags (3.0.1's are broken for shape/strides/format).
+pythonnet's `PyBuffer` flags (broken for shape/strides/format across 3.0.x).
 
 ### Route 1 — C-contiguous exporters (any object)
 

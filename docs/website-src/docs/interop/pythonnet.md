@@ -16,7 +16,7 @@ Both directions are **zero-copy by default**: Python mutates NumSharp's memory a
 dotnet add package NumSharp.Interop.pythonnet
 ```
 
-The package depends on `pythonnet` (≥ 3.0.1) and co-versions with NumSharp. You bring the Python: point pythonnet at a CPython shared library and initialize the engine once per process:
+The package depends on `pythonnet` `[3.0.5, 4.0.0)` and co-versions with NumSharp. You bring the Python: point pythonnet at a CPython shared library and initialize the engine once per process:
 
 ```csharp
 using NumSharp;
@@ -28,15 +28,21 @@ PythonEngine.Initialize();
 PythonEngine.BeginAllowThreads();                    // release the GIL from the init thread
 ```
 
-Each pythonnet release hard-caps the Python it can drive, so **pair the two deliberately** (add an explicit `PackageReference` — NuGet unifies the package's 3.0.1 floor upward):
+Each pythonnet release hard-caps the Python it can drive, and **NuGet resolves the lowest applicable version, never the latest** — so the package's floor *is* the out-of-box experience. That floor is **3.0.5**, which drives **Python 3.7 – 3.13** with no configuration at all. Only **Python 3.14** needs you to opt in:
 
-| Your Python | Minimum pythonnet |
-|---|---|
-| 3.7 – 3.10 | 3.0.0 |
-| 3.11 | 3.0.1 |
-| 3.12 | 3.0.3 |
-| 3.13 | 3.0.5 |
-| 3.14 | 3.1.0 |
+```xml
+<PackageReference Include="pythonnet" Version="3.1.0" />
+```
+
+| Your Python | Minimum pythonnet | That pythonnet supports |
+|---|---|---|
+| 3.7 – 3.10 | 3.0.0 | 3.7 – 3.10 |
+| 3.11 | 3.0.1 | 3.7 – 3.11 |
+| 3.12 | 3.0.3 | 3.7 – 3.12 |
+| 3.13 | 3.0.5 | 3.7 – 3.13 |
+| 3.14 | 3.1.0 | 3.7 – 3.14 |
+
+Read straight out of each package's own `PythonEngine.MinSupportedVersion`/`MaxSupportedVersion`, not the release notes. `MinSupportedVersion` has been 3.7 for the entire v3 line, so each release only ever *adds* the next minor — every version is a strict superset of its predecessors, which is exactly why raising the floor to 3.0.5 costs nothing. The rows below 3.0.5 are there to explain the mapping (and are what the error message quotes back at you); you cannot actually resolve them through this package.
 
 Get it wrong and pythonnet usually dies inside `PythonEngine.Initialize()` with a bare `Failed to load symbol <PyFoo>` — and *sometimes* initializes anyway, which is the dangerous case. The bridge therefore checks the pairing once per session and raises an actionable error instead:
 
@@ -274,7 +280,7 @@ PythonEngine.Shutdown();
 
 | Component | Supported |
 |---|---|
-| pythonnet | 3.0.1+ (package floor); pair with your Python per the [table above](#installation). The bridge reads all buffer metadata through Python's `memoryview` and uses only the `SIMPLE`/`WRITABLE`/`STRIDED`/`STRIDED_RO` buffer flags — 3.0.1's `PyBuffer` is broken for shape/strides/format flags, and this code path is correct on every 3.0.x |
+| pythonnet | `[3.0.5, 4.0.0)` — 3.0.5 is the floor (a strict superset of 3.0.0–3.0.4, so nothing is lost), the 4.x cap keeps a future breaking major out of consumers automatically. Pair with your Python per the [table above](#installation). The bridge reads all buffer metadata through Python's `memoryview` and uses only the `SIMPLE`/`WRITABLE`/`STRIDED`/`STRIDED_RO` buffer flags — the `PyBuffer` shape/strides/format flags are broken across 3.0.x, and this code path is correct on every one of them |
 | Python | 3.7 – 3.14, bounded by your pythonnet (validated at first use with an actionable error) |
 | numpy | Any — the bridge talks buffer protocol and `__array_interface__`, not numpy's C API. Verified against numpy 2.4.2 |
 | .NET | `net8.0` and `net10.0` |
