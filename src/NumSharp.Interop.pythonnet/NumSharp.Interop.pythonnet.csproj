@@ -32,9 +32,27 @@
     <!-- In-repo: ProjectReference (packs as a NuGet dependency on "NumSharp" $(Version)). -->
     <ProjectReference Include="../NumSharp.Core/NumSharp.Core.csproj" />
     <!-- The ONLY external dependency: pythonnet. NO Numpy / Numpy.Bare (avoids the CS0433 flavor clash
-         and the Python-version-coupled wheel pinning). Minimum 3.0.1; unifies upward with whatever
-         Python provider the consumer brings (Python.Included, system Python, etc.). -->
-    <PackageReference Include="pythonnet" Version="3.0.1" />
+         and the Python-version-coupled wheel pinning).
+
+         The range is BOTH knobs at once, and both matter:
+
+         (a) FLOOR = what we compile against. pythonnet is strong-named and bumps AssemblyVersion on
+             EVERY patch (3.0.0.0 ... 3.1.0.0). .NET rolls FORWARD silently but a downgrade is a hard
+             FileNotFoundException, so the compiled reference is the real minimum — measured:
+                 compiled@3.0.0 -> runs on 3.0.0 / 3.0.5 / 3.1.0   OK
+                 compiled@3.0.5 -> runs on 3.0.0                   FileNotFoundException
+         (b) FLOOR = what a bare consumer installs. NuGet resolves LOWEST-applicable, never latest,
+             so whatever we put here IS the out-of-box experience — 3.1.0 on nuget.org is not picked.
+
+         3.0.5 is the floor because each pythonnet hard-caps the Python it can drive while
+         MinSupportedVersion has been 3.7 for the entire v3 line, making 3.0.5 (Python 3.7-3.13) a
+         strict SUPERSET of 3.0.0-3.0.4 (which cap at 3.10/3.11/3.12). Nothing is lost by requiring
+         it, and the previous 3.0.1 floor silently shipped a default that could not run Python 3.12+.
+         Python 3.14 needs 3.1.0 — allowed here, opt in with your own PackageReference.
+
+         The upper bound keeps a future pythonnet 4.x (which may break API) from being resolved into
+         consumers automatically. The source itself compiles clean against all of 3.0.0-3.1.0. -->
+    <PackageReference Include="pythonnet" Version="[3.0.5,4.0.0)" />
   </ItemGroup>
 
 </Project>

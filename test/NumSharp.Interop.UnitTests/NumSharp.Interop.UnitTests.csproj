@@ -23,9 +23,11 @@
     <PackageReference Include="Codecov" Version="1.13.0" />
     <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
     <PackageReference Include="OpenCover" Version="4.7.922" />
-    <!-- Addition over NumSharp.UnitTest: the embedded Python engine. The library's floor is
-         pythonnet 3.0.1; the tests pin 3.0.5 because Python 3.12/3.13 hosts require >= 3.0.4
-         (NuGet unifies the library's 3.0.1 upward). Tests self-skip when no Python+numpy is found. -->
+    <!-- Addition over NumSharp.UnitTest: the embedded Python engine. This pin is exactly the
+         library's floor (see NumSharp.Interop.pythonnet.csproj), so CI exercises the version a
+         default `dotnet add package` actually resolves — NuGet takes lowest-applicable, not latest.
+         3.0.5 drives Python 3.7-3.13; a Python 3.14 host needs 3.1.0 here (the library allows it,
+         and the source compiles clean against all of 3.0.0-3.1.0). Tests self-skip without numpy. -->
     <PackageReference Include="pythonnet" Version="3.0.5" />
     <!-- Numpy.NET compatibility proof (NumpyNetInteropTests): the Bare flavor binds to whatever
          engine is already initialized (no Python.Included download) and depends on pythonnet 3.0.1,
