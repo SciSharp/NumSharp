@@ -28,4 +28,14 @@ var nd = new NDArray(new UnmanagedStorage(
     new Shape(rows, cols)));
 ```
 
-Building a bridge to another ecosystem (Arrow, DLPack, a GPU runtime)? The pythonnet package is the reference implementation of the lifetime model — [open a PR](https://github.com/SciSharp/NumSharp) to add yours to this list.
+The release hook is the whole trick: it fires when the **last** NumSharp reference to that block — the original array *or any view derived from it* — goes away, whether by `Dispose()` or by the GC. A bridge puts "tell the other side we're done" in that hook and the refcount takes care of ordering, so neither side has to know about the other's lifetime rules.
+
+## Three questions every bridge must answer
+
+The pythonnet package is the reference implementation; if you build another, these are the decisions it had to make:
+
+1. **Share or duplicate?** Not every foreign layout is representable — dtype widths, byte order and stride granularity all have to line up. Prefer sharing, fall back to copying, and be explicit about which you did. The pythonnet bridge's answer is written up in [The Zero-Copy Model](zero-copy-model.md).
+2. **Who releases, and when?** Both runtimes have their own collector. Sharing means each side must hold a reference the *other* side's collector respects, and the release must be safe to run from a finalizer thread, on a foreign thread, or during interpreter teardown.
+3. **What does sharing cost the other side?** A live view is not free: it pins the source. Python's `bytearray` refuses to resize and numpy's `resize(refcheck=True)` refuses to reallocate while a lease exists — correct behaviour, but it must be documented, not discovered.
+
+Building a bridge to another ecosystem (Arrow, DLPack, a GPU runtime)? [Open a PR](https://github.com/SciSharp/NumSharp) to add yours to this list.
