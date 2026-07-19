@@ -54,6 +54,13 @@ namespace NumSharp.Interop.PythonNet
                 if (Volatile.Read(ref _sessionLive) == 1)
                     return;
 
+                // Each pythonnet release hard-caps the Python it can drive (MaxSupportedVersion moves
+                // up release by release; MinSupportedVersion has been 3.7 for all of v3). Overshooting
+                // the cap usually kills PythonEngine.Initialize() outright with a bare
+                // "Failed to load symbol <PyFoo>" — but not always, and a combination that DOES
+                // initialize while out of range is the dangerous one. Check once per session.
+                VerifyPythonnetSupportsRunningPython();
+
                 // pythonnet pops shutdown handlers while executing them, so this must be re-added
                 // for every engine session (Initialize -> Shutdown cycle).
                 PythonEngine.AddShutdownHandler(OnEngineShutdown);
@@ -67,6 +74,75 @@ namespace NumSharp.Interop.PythonNet
                 // starts so the leak cannot outlive the session boundary.
                 ReleaseOrphanedExports();
             }
+        }
+
+        /// <summary>
+        ///     The first pythonnet release able to drive a given Python minor — i.e. the release whose
+        ///     <c>MaxSupportedVersion</c> first reached it. Read out of each package's own
+        ///     <see cref="PythonEngine.MaxSupportedVersion"/>, not the release notes.
+        /// </summary>
+        private static string MinimumPythonnetFor(Version python)
+        {
+            if (python.Major != 3)
+                return null;
+
+            switch (python.Minor)
+            {
+                case int m when m <= 10: return "3.0.0";
+                case 11: return "3.0.1";
+                case 12: return "3.0.3";
+                case 13: return "3.0.5";
+                case 14: return "3.1.0";
+                default: return null; // newer than anything we know about
+            }
+        }
+
+        /// <summary>
+        ///     Turns pythonnet's opaque symbol-load failures into an actionable message naming the
+        ///     package version to install. Best-effort: never fails the session over its own parsing.
+        /// </summary>
+        private static void VerifyPythonnetSupportsRunningPython()
+        {
+            Version running;
+            try
+            {
+                // PythonEngine.Version is sys.version — "3.12.12 (tags/v3.12.12:...) [MSC v.1943 ...]"
+                var text = PythonEngine.Version;
+                if (string.IsNullOrEmpty(text))
+                    return;
+
+                var token = text.Split(' ')[0];
+                var parts = token.Split('.');
+                if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+                    return;
+
+                running = new Version(major, minor);
+            }
+            catch
+            {
+                return; // diagnostics must never be the reason interop fails
+            }
+
+            // Compare on major.minor only: MaxSupportedVersion carries int.MaxValue in its build/revision
+            // fields as an open upper bound, so a full Version comparison would be meaningless.
+            var max = PythonEngine.MaxSupportedVersion;
+            var min = PythonEngine.MinSupportedVersion;
+            var maxMinor = new Version(max.Major, max.Minor);
+            var minMinor = new Version(min.Major, min.Minor);
+
+            if (running >= minMinor && running <= maxMinor)
+                return;
+
+            var loaded = typeof(PythonEngine).Assembly.GetName().Version;
+            var advice = running > maxMinor
+                ? MinimumPythonnetFor(running) is string needed
+                    ? $"Upgrade pythonnet to {needed} or later: <PackageReference Include=\"pythonnet\" Version=\"{needed}\" />."
+                    : "No released pythonnet supports this Python yet — use an older Python."
+                : $"Use Python {minMinor} or newer, or pin an older pythonnet.";
+
+            throw new InvalidOperationException(
+                $"Python {running} is not supported by the loaded pythonnet {loaded?.ToString(3)} " +
+                $"(it supports Python {minMinor} - {maxMinor}). {advice}");
         }
 
         /// <summary>Cached <c>numpy</c> module (per engine session). Call under the GIL.</summary>

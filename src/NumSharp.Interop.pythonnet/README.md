@@ -89,6 +89,33 @@ Import views also **do not own their data** (like `np.frombuffer(...)`, whose `f
   NDArrayInterop.RequireGIL = false;                   // or process-wide, when EVERY call site holds the GIL
   ```
 - **Engine lifetime**: import views die with the interpreter. `PythonEngine.Shutdown()` releases all outstanding leases crash-free (a registered shutdown handler), but the NDArrays over that memory must not be touched afterwards (disposing them stays safe). Exports still held by Python are swept right after shutdown completes — no leak survives the engine.
-- **`PythonEngine.Shutdown` on .NET 8+**: pythonnet 3.0.x crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);`.
+- **`PythonEngine.Shutdown` on .NET 8+**: pythonnet crashes in its own BinaryFormatter state-stashing. Opt out first: `RuntimeData.FormatterType = typeof(NoopFormatter);` (`NoopFormatter` ships from pythonnet 3.0.4 onward — guaranteed by the 3.0.5 floor below).
 - **dtypes**: all NumSharp dtypes map except `Decimal` (no numpy equivalent — convert first); `Char` is exported as `uint16` (UTF-16 code units). Big-endian buffers are rejected (byte-swap first: `arr.astype(arr.dtype.newbyteorder('<'))`). complex64 imports copy-widen to complex128 (no zero-copy view).
-- **pythonnet versions**: floor is 3.0.1. Its `PyBuffer` is broken for shape/strides/format flags, so metadata is read through Python's `memoryview` and only the crash-free `PyBUF.SIMPLE`/`PyBUF.WRITABLE` are used — the same code path works on every 3.0.x. Python 3.12+ requires pythonnet ≥ 3.0.4.
+- **pythonnet versions**: the dependency is `[3.0.5, 4.0.0)`. `PyBuffer` is broken for shape/strides/format flags, so metadata is read through Python's `memoryview` and only the crash-free `PyBUF.SIMPLE`/`PyBUF.WRITABLE` are used — the same code path works on every v3. The source compiles clean against all of 3.0.0–3.1.0; 3.0.5 is the floor because it is the oldest release that covers the Python versions people actually run (see below).
+
+### Choosing a pythonnet version
+
+Every pythonnet release hard-caps the Python it can drive. `MinSupportedVersion` has been 3.7 for the
+entire v3 line, so the ceiling is the only thing that moves — which makes **3.0.5 a strict superset of
+every earlier release**. Read from each package's own `PythonEngine.MaxSupportedVersion`:
+
+| pythonnet | Python supported | note |
+|-----------|------------------|------|
+| 3.0.0 | 3.7 – 3.10 | |
+| 3.0.1 / 3.0.2 | 3.7 – 3.11 | |
+| 3.0.3 / 3.0.4 | 3.7 – 3.12 | `NoopFormatter` added in 3.0.4 |
+| **3.0.5** | **3.7 – 3.13** | **the floor — what you get by default** |
+| 3.1.0 | 3.7 – 3.14 | release notes drop 3.7–3.9; opt in for Python 3.14 |
+
+**NuGet installs the floor, not the latest.** Resolution is lowest-applicable, so a plain
+`dotnet add package NumSharp.Interop.pythonnet` gives you pythonnet **3.0.5** even though newer
+releases exist. On **Python 3.14**, ask for it explicitly:
+
+```xml
+<PackageReference Include="pythonnet" Version="3.1.0" />
+```
+
+Overshooting a release's ceiling usually kills `PythonEngine.Initialize()` with a bare
+`MissingMethodException: Failed to load symbol PyUnicode_AsUnicode` (or similar). If the engine
+initializes anyway, the interop checks the range itself on first use and raises an actionable error
+naming the version to install.
