@@ -149,12 +149,20 @@ namespace NumSharp.Interop.PythonNet
                     if (shape.Size == 0)
                         return new NDArray(tc, shape, fillZeros: false);
 
+                    // Read writeability from the metadata view while it is still open: it is the
+                    // authoritative signal and lets AcquireBuffer AVOID probing PyBUF.WRITABLE on a
+                    // read-only source. That probe is not merely wasteful — GetBuffer(PyBUF.WRITABLE)
+                    // on a read-only *memoryview* HARD-CRASHES pythonnet 3.0.5 (bytes throws cleanly,
+                    // a memoryview segfaults), so it must never be attempted when we already know the
+                    // source is read-only.
+                    bool sourceReadonly = GetBool(mv, PythonRuntimeInterop.NameReadonly);
+
                     // Dispose the metadata view BEFORE taking the lease buffer: some exporters
                     // count every open view (an extra one is harmless but untidy).
                     mv.Dispose();
                     mv = null;
 
-                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, out bool readOnly);
+                    PyBuffer buf = AcquireBuffer(obj, allowReadonly, sourceReadonly, out bool readOnly);
                     var lease = new ImportLease(buf, holder: null, bytes: buf.Length);
                     try
                     {
@@ -217,25 +225,35 @@ namespace NumSharp.Interop.PythonNet
             }
         }
 
-        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly, out bool readOnly)
+        private static PyBuffer AcquireBuffer(PyObject obj, bool allowReadonly, bool sourceReadonly, out bool readOnly)
         {
-            // WRITABLE first: a writable lease is what makes the view's shared MUTATION legal.
-            // Read-only exporters (bytes, arr.setflags(write=False), ...) refuse it with BufferError.
-            try
+            // A writable lease is what makes the view's shared MUTATION legal — but only REQUEST it
+            // when the source reports itself writable (<paramref name="sourceReadonly"/> comes from the
+            // exporter's own memoryview.readonly). GetBuffer(PyBUF.WRITABLE) must never be attempted on
+            // a read-only source: on a read-only *memoryview* it hard-crashes pythonnet 3.0.5 (bytes
+            // merely throws BufferError). We therefore gate on the known flag instead of probing by
+            // exception — which is also one fewer failed C-API call + throw on every read-only import.
+            if (!sourceReadonly)
             {
-                PyBuffer buf = obj.GetBuffer(PyBUF.WRITABLE);
-                readOnly = false;
-                return buf;
+                try
+                {
+                    PyBuffer buf = obj.GetBuffer(PyBUF.WRITABLE);
+                    readOnly = false;
+                    return buf;
+                }
+                catch (PythonException)
+                {
+                    // Defensive: the source claimed writable yet the lock request still failed. Fall
+                    // through to the read-only handling rather than surface a raw BufferError.
+                }
             }
-            catch (PythonException e)
-            {
-                if (!allowReadonly)
-                    throw new InvalidOperationException(
-                        "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
-                        "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).", e);
-                readOnly = true;
-                return obj.GetBuffer(PyBUF.SIMPLE);
-            }
+
+            if (!allowReadonly)
+                throw new InvalidOperationException(
+                    "the exporter's buffer is read-only; writing through a NumSharp view would corrupt an immutable Python object. " +
+                    "Use ToNDArray (copy), or pass allowReadonly:true to take a NON-WRITEABLE view (guarded writes through it throw).");
+            readOnly = true;
+            return obj.GetBuffer(PyBUF.SIMPLE);
         }
 
         /// <summary>

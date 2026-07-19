@@ -275,9 +275,11 @@ namespace NumSharp.Interop.UnitTests
             decoded.typecode.Should().Be(NPTypeCode.Double);
             ReadAt<double>(decoded, 5).Should().BeApproximately(5.0, 1e-12);
 
+            // The registered codec's DecodeMode default is Auto: a contiguous numpy source is
+            // viewable, so As<NDArray>() shares its memory — the NumSharp write lands in numpy.
             WriteAt(decoded, -100.0, 0);
             using (Gil())
-                their.item<double>(0).Should().BeApproximately(0.0, 1e-12, "decode defaults to copy — no accidental aliasing");
+                their.item<double>(0).Should().BeApproximately(-100.0, 1e-12, "Auto decode of a contiguous source is a zero-copy view");
 
             // and the same object can simultaneously live in a plain scope
             using (Gil())
@@ -287,8 +289,11 @@ namespace NumSharp.Interop.UnitTests
             {
                 their.item<double>(3).Should().BeApproximately(6.0, 1e-12,
                     "the scope name, the Numpy.NET wrapper and numpy itself are one object");
-                their.Dispose();
             }
+
+            decoded.Dispose();   // release the import-view lease deterministically (base-class leak gate)
+            using (Gil())
+                their.Dispose();
         }
     }
 }

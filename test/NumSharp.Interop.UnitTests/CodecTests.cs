@@ -60,8 +60,10 @@ namespace NumSharp.Interop.UnitTests
         }
 
         [TestMethod]
-        public void Decode_NdarrayToNDArray_IsACopy()
+        public void Decode_NdarrayToNDArray_DefaultsToView()
         {
+            // The registered codec's DecodeMode default is Auto: a contiguous numpy source has a
+            // zero-copy NumSharp representation, so As<NDArray>() shares its memory (view-first).
             EnsureCodec();
             PyExec("mm = np.arange(6, dtype='f8').reshape(2, 3)");
 
@@ -78,7 +80,10 @@ namespace NumSharp.Interop.UnitTests
             ReadAt<double>(dec, 1, 2).Should().BeApproximately(5.0, 1e-12);
 
             WriteAt(dec, -1.0, 0, 0);
-            PyFloat("float(mm[0, 0])").Should().BeApproximately(0.0, 1e-12, "decode defaults to copy — no accidental aliasing");
+            PyFloat("float(mm[0, 0])").Should().BeApproximately(-1.0, 1e-12,
+                "Auto decode of a contiguous source is a zero-copy view — the write reaches Python");
+
+            dec.Dispose();   // release the import lease deterministically (base-class leak gate)
         }
 
         [TestMethod]
@@ -86,26 +91,27 @@ namespace NumSharp.Interop.UnitTests
         {
             EnsureCodec();
 
+            // Under the Auto default these decode as views (leases), so dispose them deterministically.
             using (Gil())
             {
                 using (var mx = Scope.Eval("np.matrix('1 2; 3 4').astype('i8')"))
+                using (var dmx = mx.As<NDArray>())
                 {
-                    var dmx = mx.As<NDArray>();
                     dmx.shape[0].Should().Be(2);
                     dmx.shape[1].Should().Be(2);
                     ReadAt<long>(dmx, 1, 1).Should().Be(4, "numpy.matrix decodes via the __mro__ walk");
                 }
 
                 using (var mv = Scope.Eval("memoryview(b'ab')"))
+                using (var dm = mv.As<NDArray>())
                 {
-                    var dm = mv.As<NDArray>();
                     dm.typecode.Should().Be(NPTypeCode.Byte);
                     ReadAt<byte>(dm, 1).Should().Be(98);
                 }
 
                 using (var bs = Scope.Eval("b'xyz'"))
+                using (var db = bs.As<NDArray>())
                 {
-                    var db = bs.As<NDArray>();
                     db.typecode.Should().Be(NPTypeCode.Byte);
                     ReadAt<byte>(db, 0).Should().Be((byte)'x');
                 }

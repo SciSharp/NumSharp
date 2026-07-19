@@ -107,7 +107,7 @@ namespace NumSharp.Interop.PythonNet
         private static PyObject _ctypesCCharMul, _weakrefFinalize, _builtinsMemoryview;
         private static PyObject _trueLiteral, _falseLiteral, _strC, _strB;
         private static PyObject _nameFromAddress, _nameReshape, _nameSetflags, _nameCast, _nameTobytes,
-                                _nameFormat, _nameItemsize, _nameShape, _nameCContiguous,
+                                _nameFormat, _nameItemsize, _nameShape, _nameCContiguous, _nameReadonly,
                                 _nameArrayInterface, _nameTypestr, _nameData, _nameStrides;
         private static readonly PyObject[] _dtypeStrings = new PyObject[129]; // indexed by (int)NPTypeCode; max = Complex (128)
 
@@ -168,6 +168,7 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject NameItemsize => GetCached(ref _nameItemsize, static () => new PyString("itemsize"));
         internal static PyObject NameShape => GetCached(ref _nameShape, static () => new PyString("shape"));
         internal static PyObject NameCContiguous => GetCached(ref _nameCContiguous, static () => new PyString("c_contiguous"));
+        internal static PyObject NameReadonly => GetCached(ref _nameReadonly, static () => new PyString("readonly"));
         internal static PyObject NameArrayInterface => GetCached(ref _nameArrayInterface, static () => new PyString("__array_interface__"));
         internal static PyObject NameTypestr => GetCached(ref _nameTypestr, static () => new PyString("typestr"));
         internal static PyObject NameData => GetCached(ref _nameData, static () => new PyString("data"));
@@ -225,6 +226,7 @@ namespace NumSharp.Interop.PythonNet
             DisposeModule(ref _nameItemsize);
             DisposeModule(ref _nameShape);
             DisposeModule(ref _nameCContiguous);
+            DisposeModule(ref _nameReadonly);
             DisposeModule(ref _nameArrayInterface);
             DisposeModule(ref _nameTypestr);
             DisposeModule(ref _nameData);
