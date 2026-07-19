@@ -89,8 +89,93 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
+  # Python.NET interop. Kept as its OWN job rather than extra steps on `test`:
+  # the embedded-CPython setup must not slow down or destabilise the main gate,
+  # and a red here is immediately attributable to interop.
+  #
+  # Building is itself a gate — this is the ONLY place CI compiles
+  # src/NumSharp.Interop.pythonnet, whose sources reach into NumSharp.Core
+  # internals and would otherwise break unnoticed.
+  #
+  # The suite needs a Python that can host pythonnet AND import numpy. Discovery
+  # is left to PythonSession's own probe (the shipped code path, so CI exercises
+  # what users hit); when it finds nothing, every interop test reports
+  # Inconclusive — a runner without a usable libpython goes SKIPPED, never red.
+  # The "Report Python host" step below prints exactly the values that probe
+  # reads, so a silent skip is diagnosable straight from the log.
+  interop-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+    # Mirrors the `test` job: Ubuntu runners are the flaky ones here too.
+    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
+
+    # 3.12 sits inside pythonnet 3.0.5's supported range (PythonSession rejects
+    # anything outside 3.7-3.13) and has numpy 2.x wheels on all three OSes.
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install numpy
+      run: python -m pip install --upgrade pip "numpy>=2.0"
+
+    # Prints precisely what PythonSession.Probe consumes, so if the interop tests
+    # report Inconclusive the reason is visible without reproducing locally.
+    - name: Report Python host
+      shell: bash
+      run: |
+        python -c "import sys, sysconfig, numpy; \
+        print('python      ', sys.version.replace('\n', ' ')); \
+        print('numpy       ', numpy.__version__); \
+        print('base_prefix ', sys.base_prefix); \
+        print('INSTSONAME  ', sysconfig.get_config_var('INSTSONAME')); \
+        print('LIBDIR      ', sysconfig.get_config_var('LIBDIR'))"
+
+    - name: Build
+      run: dotnet build test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    # No category filter: the interop suite carries no OpenBugs/HighMemory tests,
+    # and every test already self-asserts a LiveExports/LiveImports leak baseline.
+    - name: Test (net8.0)
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj \
+          --configuration Release --no-build --framework net8.0 --logger "trx"
+      shell: bash
+
+    - name: Test (net10.0)
+      timeout-minutes: 10
+      run: |
+        dotnet test test/NumSharp.Interop.UnitTests/NumSharp.Interop.UnitTests.csproj \
+          --configuration Release --no-build --framework net10.0 --logger "trx"
+      shell: bash
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: interop-test-results-${{ matrix.os }}
+        path: ${{ github.workspace }}/**/TestResults/**/*.trx
+        retention-days: 5
+
   validate-release:
-    needs: test
+    # Interop now ships as a package, so a broken interop must block the release.
+    needs: [test, interop-test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
@@ -167,6 +252,18 @@ jobs:
           -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
           -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
 
+        # Interop packs its NumSharp.Core ProjectReference as a NuGet dependency
+        # on "NumSharp" $(Version), so the same -p:Version keeps the two in lockstep
+        # (the csproj's hardcoded 0.60.0 is only the local-dev default).
+        dotnet build src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
+          --configuration Release \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+
     - name: Pack
       run: |
         mkdir -p artifacts/nuget
@@ -182,6 +279,16 @@ jobs:
           -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
         dotnet pack src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+        dotnet pack src/NumSharp.Interop.pythonnet/NumSharp.Interop.pythonnet.csproj \
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
@@ -251,6 +358,7 @@ jobs:
           echo '```'
           echo "dotnet add package NumSharp --version ${VERSION}"
           echo "dotnet add package NumSharp.Bitmap --version ${VERSION}"
+          echo "dotnet add package NumSharp.Interop.pythonnet --version ${VERSION}"
           echo '```'
           echo ""
           echo "### Packages"
@@ -259,6 +367,7 @@ jobs:
           echo "|---------|-------|"
           echo "| NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${VERSION}) |"
           echo "| NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${VERSION}) |"
+          echo "| NumSharp.Interop.pythonnet | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Interop.pythonnet.svg)](https://www.nuget.org/packages/NumSharp.Interop.pythonnet/${VERSION}) |"
         } > RELEASE_BODY.md
         if [ -f "$NOTES_FILE" ]; then
           { echo ""; echo "---"; echo ""; cat "$NOTES_FILE"; } >> RELEASE_BODY.md
