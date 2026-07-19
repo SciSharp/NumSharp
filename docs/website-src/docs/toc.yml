@@ -55,5 +55,7 @@
   items:
   - name: Pythonnet
     href: interop/pythonnet.md
+  - name: Zero-Copy Model (view vs copy)
+    href: interop/zero-copy-model.md
   - name: Numpy.NET
     href: interop/numpy-net.md
