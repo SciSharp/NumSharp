@@ -12,7 +12,7 @@ namespace NumSharp.ConsumePackage
 
             var b = np.array(new double[] { 1,2}).reshape(2,1);
 
-            var c = A.lstqr(b);
+            var c = A.dot(b);
 
             Console.WriteLine("If there is no error --> package was sucessfully consumed! :)");
         }
