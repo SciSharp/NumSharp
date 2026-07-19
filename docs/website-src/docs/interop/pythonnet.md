@@ -1,10 +1,12 @@
 # Pythonnet — NumSharp ⇄ Python
 
-The **NumSharp.Interop.pythonnet** package bridges `NDArray` to the Python ecosystem through [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. It binds only to pythonnet's `PyObject` and Python's PEP 3118 buffer protocol, so it works with *any* numpy, *any* Python, and any buffer-exporting object (numpy arrays, `memoryview`, `bytes`, `bytearray`, `array.array`, PIL images, torch CPU tensors, ...).
+The **NumSharp.Interop.pythonnet** package bridges `NDArray` to the Python ecosystem through [Python.NET (pythonnet)](https://github.com/pythonnet/pythonnet) — with **no Numpy.NET dependency**. It binds only to pythonnet's `PyObject` and Python's PEP 3118 buffer protocol, so it works with *any* numpy, *any* Python, and **any** buffer-exporting object: numpy arrays, `memoryview`, `bytes`, `bytearray`, `array.array`, `ctypes` arrays, `io.BytesIO` buffers, PIL images, torch CPU tensors, custom C extensions.
 
-Both directions are **zero-copy by default**: Python mutates NumSharp's memory and NumSharp mutates Python's, with lifetimes coupled so neither side can free the buffer while the other can still see it.
+Both directions are **zero-copy by default**: Python mutates NumSharp's memory and NumSharp mutates Python's, with lifetimes coupled so neither side can free the buffer while the other can still see it. Measured across 48 exporter varieties, **45 share memory and 2 copy** — and those 2 are layouts that genuinely cannot be shared, not gaps. See [The Zero-Copy Model](zero-copy-model.md) for the decision tree.
 
 > Migrating from or coexisting with SciSharp's Numpy.NET packages? See [Numpy.NET — coexistence & migration](numpy-net.md); every sample there maps 1:1 to a test in `NumSharp.Interop.UnitTests`.
+
+**On this page:** [Installation](#installation) · [Quick Start](#quick-start) · [The Four Verbs](#the-four-verbs) · [Layout Fidelity](#layout-fidelity) · [Lifetime & Memory Safety](#lifetime--memory-safety) · [Auto-Marshaling](#auto-marshaling-the-codec) · [Dtypes](#dtype-mapping) · [Threading & the GIL](#threading--the-gil) · [Engine Lifecycle](#engine-lifecycle) · [Versions](#version-compatibility) · [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -26,7 +28,24 @@ PythonEngine.Initialize();
 PythonEngine.BeginAllowThreads();                    // release the GIL from the init thread
 ```
 
-> **Version note:** Python 3.12/3.13 hosts require pythonnet ≥ 3.0.4 (add an explicit `PackageReference` — NuGet unifies the package's 3.0.1 floor upward).
+Each pythonnet release hard-caps the Python it can drive, so **pair the two deliberately** (add an explicit `PackageReference` — NuGet unifies the package's 3.0.1 floor upward):
+
+| Your Python | Minimum pythonnet |
+|---|---|
+| 3.7 – 3.10 | 3.0.0 |
+| 3.11 | 3.0.1 |
+| 3.12 | 3.0.3 |
+| 3.13 | 3.0.5 |
+| 3.14 | 3.1.0 |
+
+Get it wrong and pythonnet usually dies inside `PythonEngine.Initialize()` with a bare `Failed to load symbol <PyFoo>` — and *sometimes* initializes anyway, which is the dangerous case. The bridge therefore checks the pairing once per session and raises an actionable error instead:
+
+```text
+Python 3.14 is not supported by the loaded pythonnet 3.0.5 (it supports Python 3.7 - 3.13).
+Upgrade pythonnet to 3.1.0 or later: <PackageReference Include="pythonnet" Version="3.1.0" />.
+```
+
+The check reads each package's own `PythonEngine.MaxSupportedVersion`/`MinSupportedVersion`, so it stays correct as pythonnet moves; it is best-effort and never fails a session over its own parsing.
 
 ---
 
@@ -58,6 +77,19 @@ using (Py.GIL())
 }
 ```
 
+Or skip the explicit calls entirely — register the codec once and every pythonnet boundary converts itself:
+
+```csharp
+NDArrayPythonInterop.RegisterCodec();       // Auto: share when possible, copy when not
+
+using (Py.GIL())
+{
+    scope.Set("x", nd);                                 // NDArray -> numpy view, automatically
+    using PyObject r = scope.Eval("np.sin(x / 3.0)");
+    NDArray back = r.As<NDArray>();                     // numpy -> NDArray, automatically
+}
+```
+
 ---
 
 ## The Four Verbs
@@ -66,10 +98,12 @@ Everything in the package is packaging over four operations on the static `NDArr
 
 | Direction | Verb | Semantics |
 |---|---|---|
-| NumSharp → Python | `NDArrayPythonInterop.ToNumpy(nd)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
-| NumSharp → Python | `NDArrayPythonInterop.ToNumpyCopy(nd)` | Independent numpy array — no shared memory, no lifetime coupling |
-| Python → NumSharp | `NDArrayPythonInterop.ToNDArray(py)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
-| Python → NumSharp | `NDArrayPythonInterop.ToNDArrayView(py[, allowReadonly])` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
+| NumSharp → Python | `ToNumpy(nd, bool? requireGIL = null)` | **Zero-copy numpy view** — shared mutation, source rooted, full layout fidelity |
+| NumSharp → Python | `ToNumpyCopy(nd, bool? requireGIL = null)` | Independent numpy array — no shared memory, no lifetime coupling |
+| Python → NumSharp | `ToNDArray(py, bool? requireGIL = null)` | **Copy** any PEP 3118 exporter into a fresh C-contiguous `NDArray` |
+| Python → NumSharp | `ToNDArrayView(py, bool allowReadonly = false, bool? requireGIL = null)` | **Zero-copy `NDArray` view** over Python memory — shared mutation, exporter leased |
+
+All four are static members of `NDArrayPythonInterop`. The trailing `requireGIL` is the [GIL opt-out](#threading--the-gil); `null` (the default) means "manage it for me". `ToNumpy(nd, copy: true)` is a routing overload equivalent to `ToNumpyCopy`.
 
 Plus `NDArrayPythonInterop.ToMemoryView(nd)` — a writable Python `memoryview` of raw bytes, for non-numpy consumers of the buffer protocol (`PIL.Image.frombuffer`, `struct.unpack_from`, sockets, ...) — and the dtype maps (`ToNumpyDtypeStr`, `FromNumpyDtypeStr`, `ToBufferFormat`, `FromBufferFormat`).
 
@@ -240,12 +274,45 @@ PythonEngine.Shutdown();
 
 | Component | Supported |
 |---|---|
-| pythonnet | 3.0.1+ (package floor). The bridge reads all buffer metadata through Python's `memoryview` and uses only the `SIMPLE`/`WRITABLE`/`STRIDED`/`STRIDED_RO` buffer flags — 3.0.1's `PyBuffer` is broken for shape/strides/format flags, and this code path is correct on every 3.0.x. Leases are acquired through the `memoryview` rather than the raw object, which also sidesteps pythonnet's per-exporter `GetBuffer` crashes (e.g. raw `ctypes` arrays) |
-| Python | Whatever your pythonnet supports (3.0.1 → up to 3.11; ≥ 3.0.4 → 3.12/3.13) |
+| pythonnet | 3.0.1+ (package floor); pair with your Python per the [table above](#installation). The bridge reads all buffer metadata through Python's `memoryview` and uses only the `SIMPLE`/`WRITABLE`/`STRIDED`/`STRIDED_RO` buffer flags — 3.0.1's `PyBuffer` is broken for shape/strides/format flags, and this code path is correct on every 3.0.x |
+| Python | 3.7 – 3.14, bounded by your pythonnet (validated at first use with an actionable error) |
 | numpy | Any — the bridge talks buffer protocol and `__array_interface__`, not numpy's C API. Verified against numpy 2.4.2 |
+| .NET | `net8.0` and `net10.0` |
+
+**Two pythonnet defects the bridge routes around**, so you don't have to:
+
+- `PyBuffer` is unusable for shape/strides/format flags on 3.0.x, so **all metadata is read through Python's own `memoryview`** and `PyBuffer` is used only to obtain the pointer.
+- `obj.GetBuffer` is *per-exporter* buggy — on a raw `ctypes` array it hard-crashes the process for **every** flag, and requesting a writable buffer from a read-only `memoryview` segfaults. So leases are acquired **through the exporter's `memoryview`** (uniformly well-behaved), and a writable buffer is only ever requested when `memoryview.readonly` says the source is writable.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause & fix |
+|---|---|
+| `Python 3.x is not supported by the loaded pythonnet 3.y.z` | Version pairing — install the pythonnet the message names (see the [matrix](#installation)) |
+| `Failed to load symbol <PyFoo>` during `Initialize()` | The same pairing problem, raised by pythonnet before our check can run. Same fix |
+| `Python engine is not initialized` | Call `PythonEngine.Initialize()` (and set `Runtime.PythonDLL`) before any conversion |
+| `the exporter's buffer is read-only …` | You asked for a *writable* view of `bytes` / a `writeable=False` array. Pass `allowReadonly: true` for a non-writeable view, or `ToNDArray` to copy |
+| `assignment destination is read-only` | You wrote through a non-writeable view (read-only or broadcast source). Copy it first if you need to mutate |
+| `BufferError: Existing exports of data: object cannot be re-sized` (Python side) | A live NumSharp view holds a `Py_buffer` lease on that `bytearray`. `Dispose()` the view — see [the lock trade-off](zero-copy-model.md#the-trade-off-a-live-view-locks-the-source) |
+| `ValueError: cannot resize an array that references or is referenced by …` (Python side) | Same, for numpy's `resize(refcheck=True)` |
+| `cannot resize this array: it does not own its data` | Import views don't own their memory (numpy's `owndata == False`). Use `np.require(…, "O")` for an owning copy |
+| `big-endian dtype … cannot be shared` | Byte-swap on the Python side: `arr.astype(arr.dtype.newbyteorder('<'))` |
+| `decimal has no numpy dtype` | Convert first: `nd.astype(NPTypeCode.Double)` |
+| complex64 came back as `Complex` | Expected — complex64 has no zero-copy NumSharp dtype and is widened on copy. See [why](zero-copy-model.md#complex64) |
+| `As<NDArray>()` returned a **view** and a later Python write changed my data | That's the `Auto` default. Use `DecodeMode = NumpyCodecMode.Copy` for a snapshot |
+| Access violation / process exit around a conversion | Almost always `requireGIL: false` (or `RequireGIL = false`) on a thread that does **not** hold the GIL — including inside a Python → .NET callback, where pythonnet releases it |
+| Crash after `PythonEngine.Shutdown()` | Set `RuntimeData.FormatterType = typeof(NoopFormatter)` before shutting down, and don't touch import views afterwards |
 
 ---
 
 ## Testing
 
-The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests` — covering every dtype and layout in both directions, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
+The package ships with a dedicated suite — `test/NumSharp.Interop.UnitTests` (149 tests on each of `net8.0` and `net10.0`) — covering every dtype and layout in both directions, all three conversion routes, the codec modes, the GIL policy, the lifetime model (orphaned exports, derived-view leases, transitive chains, premature/double disposal, GC hammers, cross-thread handoffs, async flows), and full made-up applications (ML inference, image pipelines, telemetry rings, co-simulation). Every test doubles as a leak test: it fails unless `LiveExports`/`LiveImports` return to baseline. The tests self-skip when no Python + numpy is found on the machine.
+
+```bash
+cd test/NumSharp.Interop.UnitTests
+dotnet test                                   # both frameworks
+dotnet test --filter "ClassName~StridedBufferViewTests"
+```
