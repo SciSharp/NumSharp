@@ -741,7 +741,12 @@ namespace NumSharp
                     for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++) //todo optimize this loop with unmanaged address.
                         index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
 
-                    if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset)
+                    // Bound BOTH ends: a negative computed offset (an exotic strided / negative-stride
+                    // destination view whose GetOffset underflows below the buffer base) would otherwise
+                    // pass the upper-bound check and WRITE before the buffer — a wild store that can land
+                    // in the GC heap (silent corruption crashing a later GC). Fault here, like the
+                    // block-scatter guard in SetIndicesND does.
+                    if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset || computedAddr[i] < 0)
                         throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
@@ -750,7 +755,7 @@ namespace NumSharp
                 var getter = indexGetters[0];
                 for (long i = 0; i < indicesSize; i++)
                 {
-                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset)
+                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset || computedAddr[i] < 0)
                         throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }

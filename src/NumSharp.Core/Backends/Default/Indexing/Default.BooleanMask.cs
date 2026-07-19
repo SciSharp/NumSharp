@@ -51,6 +51,16 @@ namespace NumSharp.Backends
             if (trueCount == 0)
                 return new NDArray(arr.dtype, BooleanMaskResultShape(0, arr, leadNdim));
 
+            // An EMPTY trailing block (blockSize == 0 — a mask on an array with a 0-length
+            // trailing axis, e.g. arr[:, 6:-4][mask] where the slice emptied the last axis)
+            // makes the whole selection empty: (trueCount,)+trailing carries that 0 axis, so
+            // there are trueCount*0 == 0 elements to gather. Return the correctly-shaped empty
+            // result and SKIP the gather — otherwise BooleanMaskGather writes an element into a
+            // zero-length buffer, an out-of-bounds heap write. (NumPy: arr shaped (3,0), mask
+            // (3,) -> result (3,0), empty.)
+            if (blockSize == 0)
+                return new NDArray(arr.dtype, BooleanMaskResultShape(trueCount, arr, leadNdim));
+
             // Flat gather buffer of trueCount*B elements, reshaped to (count,)+trailing below.
             var result = new NDArray(arr.dtype, new Shape(trueCount * blockSize));
 
@@ -94,16 +104,26 @@ namespace NumSharp.Backends
 
             int leadNdim = mask.ndim;
 
+            // Trailing block size B = prod(arr.shape[leadNdim:]). An empty trailing block
+            // (B == 0 — arr shaped (0,3), or a mask on an array whose last axis a prior basic
+            // slice emptied) makes the selection (trueCount,)+trailing EMPTY regardless of the
+            // true-count.
+            long blockSize = 1;
+            for (int d = leadNdim; d < arr.ndim; d++)
+                blockSize *= arr.shape[d];
+
             long trueCount = CountMaskTrue(mask.MakeGeneric<bool>());
-            if (trueCount == 0)
+            if (trueCount == 0 || blockSize == 0)
             {
-                // The selection is EMPTY ((0,)+trailing). NumPy still requires the value to
-                // broadcast to that indexing-result shape — a non-scalar that cannot broadcast
-                // raises ValueError (e.g. arr[allFalseMask] = [93,1,39] into a (0,4) selection);
-                // it is NOT silently a no-op. A scalar (size 1) always broadcasts.
+                // The selection is EMPTY ((trueCount,)+trailing carries a 0 axis). NumPy still
+                // requires the value to broadcast to that indexing-result shape — a non-scalar
+                // that cannot broadcast raises ValueError (e.g. arr[allFalseMask] = [93,1,39]
+                // into a (0,4) selection); it is NOT silently a no-op. A scalar (size 1) always
+                // broadcasts. (Also guards the scatter kernel from writing into arr's zero-length
+                // buffer when arr / the trailing block is empty — e.g. E03[True] = -7.)
                 if (value.size != 1)
                 {
-                    var emptySel = BooleanMaskResultShape(0, arr, leadNdim);
+                    var emptySel = BooleanMaskResultShape(trueCount, arr, leadNdim);
                     string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
                     try { np.broadcast_to(value, emptySel); }
                     catch (IncorrectShapeException)

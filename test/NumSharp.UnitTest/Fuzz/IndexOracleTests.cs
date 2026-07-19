@@ -42,15 +42,17 @@ namespace NumSharp.UnitTest.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Index_SetterDtype() => RunSetterDtypeCorpus("index_setter_dtype.jsonl");
 
-        // Seeded random fuzz over the whole index space. As of commit 7e968f5e it is **0 divergences**
-        // across every measurable window (all five mapping.c-parity buckets fixed; the now-passing
-        // forms are pinned independently by Indexing.CombinatorialParity, a CI [FuzzMatrix] gate).
-        // It stays [OpenBugs] ONLY because the full-corpus single-process run still SEGFAULTs at a
-        // flaky, pre-existing teardown OOB (handover R3) — a memory-safety bug unrelated to indexing
-        // correctness. Un-mark once R3 is fixed (the full run completes without an AccessViolation).
+        // Seeded random fuzz over the whole index space — **0 divergences** across every measurable
+        // window (all five mapping.c-parity buckets fixed; the forms are pinned independently by
+        // Indexing.CombinatorialParity, a CI [FuzzMatrix] gate). R3 — the flaky teardown SEGFAULT that
+        // kept this [OpenBugs] — is now FIXED: it was an out-of-bounds heap write in the boolean-mask
+        // gather/scatter when the trailing block is EMPTY (blockSize == 0, e.g. arr[:, 6:-4][mask] or
+        // E03[True] = v), which allocated a zero-length result/selection buffer and then wrote an
+        // element into it, corrupting the native heap and crashing a later GC. Guarded in
+        // Default.BooleanMask.cs (BooleanMask + BooleanMaskSet); the full 10 000-case single-process
+        // run now completes cleanly, so this is a live CI gate again.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
-        [OpenBugs]
         public void Index_Random() => RunIndexCorpus("index_random_20240626.jsonl");
 
         // ───────── base reconstruction (mirrors gen_index_oracle.make_base) ─────────

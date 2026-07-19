@@ -1,6 +1,6 @@
 # Handover: full combinatorial advanced indexing (NumPy `mapping.c` parity)
 
-**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–E done; random sweep **697 → 0 divergences** across every measurable window (all 5 buckets fixed, committed, CI-pinned). The ONLY open item is **R3**, a pre-existing flaky teardown heap-corruption (memory safety) that blocks un-marking the full-corpus `Index_Random` gate but does NOT affect correctness or CI. See "Execution status" below.
+**Branch:** `nditer`  **Date:** 2026-06-27  **Status:** IN PROGRESS — Phases A–E done; random sweep **697 → 0 divergences** across every measurable window (all 5 buckets fixed, committed, CI-pinned). **R3 — the pre-existing flaky teardown heap-corruption that blocked un-marking the full-corpus `Index_Random` gate — is now FIXED** (an out-of-bounds write in the boolean-mask gather/scatter when the trailing block is empty; see the R3 entry below). `Index_Random` is un-marked and GREEN: 10 000/10 000, 0 divergences, and the whole `FuzzMatrix` gate runs 91/91 to completion. See "Execution status" below.
 
 This is the successor to [`advanced-index-axis-placement.md`](./advanced-index-axis-placement.md)
 (which resolved the *two-advanced-indices-with-a-slice* case via `TryBuildMultiAdvancedGrid`).
@@ -71,7 +71,7 @@ flaky teardown OOB (R3) — windows are summed; correctness is bit-exact where t
   `A[...]=scalar` / `A[:,:]=scalar` / `A[None]=v` cases); non-subshaped fancy assignment validates the
   value broadcasts to the selection.
 
-### Remaining work — R3 only (the 5 divergence buckets are DONE)
+### Remaining work — NONE (the 5 divergence buckets AND R3 are DONE)
 
 The 61 random divergences were 5 buckets; ALL are fixed, committed, and CI-pinned in
 `Indexing.CombinatorialParity.MatrixTests.cs`. Each was gated behind the curated/dtype gate (stayed
@@ -93,7 +93,27 @@ gather time (an empty broadcast gathers nothing), and **R2 uncovered a general b
 `Shape.Broadcast` short-circuited on a shape-hash match without confirming the dims, and the hash
 collides a 0-length axis with a size-1 axis.
 
-**R3 — A flaky, layout-dependent teardown heap-corruption (memory safety; STILL OPEN).**
+**R3 — A flaky, layout-dependent teardown heap-corruption (memory safety). ✅ FIXED.**
+- *Root cause:* the boolean-mask gather/scatter never guarded an EMPTY TRAILING BLOCK. When
+  `blockSize == prod(arr.shape[mask.ndim:]) == 0` — a basic slice emptied the last axis
+  (`arr[:, 6:-4][mask]`, corpus `get/ANR/rand/2556`) or the array already had a 0-length trailing axis
+  (`E03[True] = v`, corpus `set/E03/rand/7171`) — `BooleanMask` allocated a `trueCount*0 == 0`-length
+  result and `BooleanMaskGather` / `BooleanMaskScatter` then wrote an 8-byte element INTO that
+  zero-length buffer, clobbering the adjacent CRT-heap chunk header. The fault only surfaced at a
+  later GC/finalizer, which is why it read as a "teardown" bug — and why every instrument masked it
+  (guard pages / GCStress / HeapVerify move or zero the buffer; an attached debugger switches on the
+  Windows debug heap, whose per-allocation PADDING absorbs the 8-byte overrun entirely).
+- *How it was finally caught:* an opt-in canary red-zone in `SizeBucketedBufferPool.Take/Return`
+  (allocate `bytes + 32`, fill the tail with a known pattern, sweep every live buffer on each
+  Take/Return). It both DETECTED the overrun — `bufBytes=0, pastByte=0` — and neutralised it, so the
+  full corpus completed and named the corrupting case. Replaying that case alone under the
+  empty-buffer guard page then faulted AT the write with a full managed stack.
+- *Fix:* `Default.BooleanMask.cs` — `BooleanMask` returns the correctly-shaped empty result and
+  `BooleanMaskSet` treats `blockSize == 0` as an empty selection (validating the value broadcast just
+  like the `trueCount == 0` branch). Pinned by the `R3_*` cases in
+  `Indexing.CombinatorialParity.MatrixTests`. `Index_Random` is un-marked and GREEN (10 000/10 000,
+  0 divergences); the full `FuzzMatrix` gate runs 91/91 to completion across repeated runs.
+- *Historical narrowing (superseded by the root cause above, kept for the record):*
 - *Symptom:* the main loop now COMPLETES (prints the result), but the full 10000-case run SEGFAULTS at
   process teardown (GC finalization walks a heap corrupted earlier in the run). `[0,5000)` and
   `[5000,5000)` windows complete — only the full accumulation tips it.
@@ -134,9 +154,12 @@ collides a 0-length axis with a size-1 axis.
   declined; with the grid owning ALL `HAS_FANCY` confirm they are dead for advanced and delete (keep
   `Storage.GetView` for pure-basic). Not done yet because the R3 crash makes the full-corpus
   regression net harder to trust; do it once R3 is closed, behind the curated + windowed sweep.
-- TODO (BLOCKED on R3): remove `[OpenBugs]` from `Index_Random` (`Fuzz/IndexOracleTests.cs`) so the
-  full corpus becomes a CI gate, re-run under `NUMSHARP_GUARD_PAGES=1` (DOD §10), and flip Status to
-  DONE. Blocked purely by the R3 teardown crash, not by any divergence.
+- ✅ DONE (R3 fixed): `[OpenBugs]` removed from `Index_Random` (`Fuzz/IndexOracleTests.cs`), so the
+  full 10 000-case corpus is a live CI gate again — 0 divergences, and the whole `FuzzMatrix` gate
+  runs 91/91 to completion across repeated runs. Fixing the crash also exposed a second, unrelated
+  pre-existing bug the truncated run had been hiding: a basic assignment whose value and target are
+  BOTH empty skipped broadcast validation, so `E03[()] = (0,)` silently no-opped where NumPy raises
+  `ValueError` (9 corpus cases). Guarded in `UnmanagedStorage.SetData`.
 
 ### Diagnostic tooling (scratchpad — recreate from `Fuzz/IndexOracleTests.cs`)
 

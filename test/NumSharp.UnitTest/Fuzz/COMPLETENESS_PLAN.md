@@ -36,8 +36,9 @@ marked **[probed]**, by executing NumPy 2.4.2 directly.
    - Single tier: add `&Name~<TestName>` e.g. `--filter "Name~Stat&TestCategory=FuzzMatrix"`
    - Final (before declaring DONE): the same filter WITHOUT `-f` (runs net8.0 + net10.0), plus a
      broad sanity `--filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"`.
-   - `Index_Random` is `[FuzzMatrix]+[OpenBugs]` because of a known flaky teardown SEGFAULT (R3)
-     — never let it block you; run it best-effort only.
+   - `Index_Random` is a live `[FuzzMatrix]` CI gate (10 000 cases, 0 divergences). It used to be
+     `[OpenBugs]` behind a flaky teardown SEGFAULT (R3) — that is FIXED (an OOB write in the
+     boolean-mask gather/scatter when the trailing block is empty; see `Default.BooleanMask.cs`).
 5. **Corpus regeneration** (deterministic — same input ⇒ byte-identical output; from worktree root):
    - `python test/oracle/gen_oracle.py <mode>` — modes: `smoke astype_full binary divmod_power
      comparison unary reduce where place matmul rounding bitwise unary_extra nanreduce scan stat
