@@ -26,8 +26,6 @@ jobs:
         os: [ windows-latest, ubuntu-latest, macos-latest ]
 
     runs-on: ${{ matrix.os }}
-    # Ubuntu has intermittent OOM issues - allow failure while investigating
-    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@v4
@@ -110,8 +108,6 @@ jobs:
         os: [ windows-latest, ubuntu-latest, macos-latest ]
 
     runs-on: ${{ matrix.os }}
-    # Mirrors the `test` job: Ubuntu runners are the flaky ones here too.
-    continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
 
     steps:
     - uses: actions/checkout@v4
