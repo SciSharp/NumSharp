@@ -20,7 +20,7 @@ namespace NumSharp.Interop.PythonNet
     ///     <see cref="ImportLease.Release"/> only enqueues (lock-free) and
     ///     <see cref="ExportKeeper.Release"/> touches CLR state only.</para>
     /// </summary>
-    internal static class PythonInteropRuntime
+    internal static class PythonRuntimeInterop
     {
         // ---- session wiring ------------------------------------------------------------------
 
@@ -30,7 +30,7 @@ namespace NumSharp.Interop.PythonNet
         private static PyObject _numpy, _ctypes, _builtins, _weakref;
 
         /// <summary>
-        ///     Set by <see cref="NDArrayInterop.RegisterCodec()"/>; reset at engine shutdown because
+        ///     Set by <see cref="NDArrayPythonInterop.RegisterCodec()"/>; reset at engine shutdown because
         ///     pythonnet's <c>PyObjectConversions.Reset()</c> clears all registered codecs there.
         /// </summary>
         internal static int CodecRegistered;
@@ -174,7 +174,7 @@ namespace NumSharp.Interop.PythonNet
         internal static PyObject NameStrides => GetCached(ref _nameStrides, static () => new PyString("strides"));
 
         /// <summary>
-        ///     Cached PyString of <see cref="NDArrayInterop.ToNumpyDtypeStr"/> for <paramref name="tc"/>
+        ///     Cached PyString of <see cref="NDArrayPythonInterop.ToNumpyDtypeStr"/> for <paramref name="tc"/>
         ///     (session-owned — callers must NOT dispose it). Call under the GIL.
         /// </summary>
         internal static PyObject DtypeString(NPTypeCode tc)
@@ -183,7 +183,7 @@ namespace NumSharp.Interop.PythonNet
             var v = Volatile.Read(ref cache);
             if (v is not null)
                 return v;
-            return PublishCached(ref cache, new PyString(NDArrayInterop.ToNumpyDtypeStr(tc)));
+            return PublishCached(ref cache, new PyString(NDArrayPythonInterop.ToNumpyDtypeStr(tc)));
         }
 
         private static PyObject GetCached(ref PyObject cache, Func<PyObject> resolve)
@@ -413,7 +413,7 @@ namespace NumSharp.Interop.PythonNet
         ///     its <c>PyBuffer</c> disposed NOW: pythonnet 3.0.x's <c>~PyBuffer()</c> throws when the
         ///     runtime is down, which would crash the finalizer thread later. NDArray views over Python
         ///     memory are invalid after engine shutdown (the interpreter that owned the memory is gone);
-        ///     that is documented on <see cref="NDArrayInterop.ToNDArrayView(PyObject, bool, bool?)"/>.
+        ///     that is documented on <see cref="NDArrayPythonInterop.ToNDArrayView(PyObject, bool, bool?)"/>.
         ///
         ///     Export keepers are NOT released here — but not for the reason one might hope. Their
         ///     <c>weakref.finalize</c> callbacks will never run: pythonnet's <c>Shutdown</c> performs
@@ -476,7 +476,7 @@ namespace NumSharp.Interop.PythonNet
     ///     <see cref="Release"/> when the LAST Python-side view is collected. CPython's documented
     ///     at-exit finalize pass does NOT happen under embedding — pythonnet's <c>Shutdown</c> runs
     ///     no atexit (probed) — so keepers still pinned when the engine dies are swept by
-    ///     <see cref="PythonInteropRuntime"/>'s orphaned-exports path right after shutdown completes.</para>
+    ///     <see cref="PythonRuntimeInterop"/>'s orphaned-exports path right after shutdown completes.</para>
     ///
     ///     <para><see cref="Release"/> touches only CLR state (no GIL, no Python calls), so it is safe
     ///     from any thread at any point of the engine lifecycle, including during <c>Py_Finalize</c>.</para>
@@ -502,7 +502,7 @@ namespace NumSharp.Interop.PythonNet
             if (Interlocked.Exchange(ref _released, 1) != 0)
                 return;
             _slice.Release();
-            PythonInteropRuntime.OnExportReleased(this);
+            PythonRuntimeInterop.OnExportReleased(this);
             GC.KeepAlive(_source);
         }
     }
@@ -521,8 +521,8 @@ namespace NumSharp.Interop.PythonNet
     ///     therefore extend the lease automatically.</para>
     ///
     ///     <para>Release never touches Python directly (see the lock-ordering note on
-    ///     <see cref="PythonInteropRuntime"/>); actual disposal is deferred to
-    ///     <see cref="PythonInteropRuntime.DrainPending"/> or the engine-shutdown drain.</para>
+    ///     <see cref="PythonRuntimeInterop"/>); actual disposal is deferred to
+    ///     <see cref="PythonRuntimeInterop.DrainPending"/> or the engine-shutdown drain.</para>
     /// </summary>
     internal sealed class ImportLease
     {
@@ -549,7 +549,7 @@ namespace NumSharp.Interop.PythonNet
         {
             if (Interlocked.Exchange(ref _released, 1) != 0)
                 return;
-            PythonInteropRuntime.QueueDisposal(this);
+            PythonRuntimeInterop.QueueDisposal(this);
         }
 
         /// <summary>Actual Python-side disposal. Only called by the drains, under the GIL.</summary>
@@ -604,7 +604,7 @@ namespace NumSharp.Interop.PythonNet
         {
             if (_bytes > 0)
                 GC.RemoveMemoryPressure(_bytes);
-            PythonInteropRuntime.OnImportReleased(this);
+            PythonRuntimeInterop.OnImportReleased(this);
         }
     }
 }

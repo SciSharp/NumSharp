@@ -13,8 +13,8 @@ namespace NumSharp.Interop.UnitTests
 {
     /// <summary>
     ///     The rock-solid core: memory must stay alive exactly as long as EITHER side can still see it,
-    ///     and must be released (observably, via <see cref="NDArrayInterop.LiveExports"/> /
-    ///     <see cref="NDArrayInterop.LiveImports"/>) once neither can. Collection-dependent lifecycles
+    ///     and must be released (observably, via <see cref="NDArrayPythonInterop.LiveExports"/> /
+    ///     <see cref="NDArrayPythonInterop.LiveImports"/>) once neither can. Collection-dependent lifecycles
     ///     run inside NoInlining helpers — see <see cref="InteropTestBase"/> for why.
     /// </summary>
     [TestClass]
@@ -23,7 +23,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void OrphanedExport_SurvivesFullClrCollection()
         {
-            int e0 = NDArrayInterop.LiveExports;
+            int e0 = NDArrayPythonInterop.LiveExports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             void CreateOrphan()
@@ -38,17 +38,17 @@ namespace NumSharp.Interop.UnitTests
 
             PyFloat("float(orph.sum())").Should().BeApproximately(45.0, 1e-9,
                 "the numpy view must still read valid NumSharp memory after every C# reference is gone");
-            NDArrayInterop.LiveExports.Should().Be(e0 + 1, "the buffer is rooted for python's sake");
+            NDArrayPythonInterop.LiveExports.Should().Be(e0 + 1, "the buffer is rooted for python's sake");
 
             PyExec("del orph");
-            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue(
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0).Should().BeTrue(
                 "dropping the last python reference must release the NumSharp buffer pin");
         }
 
         [TestMethod]
         public void Export_IsRootedByDerivedPythonViews_NotJustTheReturnedArray()
         {
-            int e0 = NDArrayInterop.LiveExports;
+            int e0 = NDArrayPythonInterop.LiveExports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             void CreateAndSlicePythonSide()
@@ -61,17 +61,17 @@ namespace NumSharp.Interop.UnitTests
             CreateAndSlicePythonSide();
             Pump(); Pump();
 
-            NDArrayInterop.LiveExports.Should().Be(e0 + 1, "a derived python view must keep the buffer rooted");
+            NDArrayPythonInterop.LiveExports.Should().Be(e0 + 1, "a derived python view must keep the buffer rooted");
             PyStr("v.tolist()").Should().Be("[4.0, 5.0, 6.0, 7.0, 8.0, 9.0]", "and its data must still be valid");
 
             PyExec("del v");
-            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue("the last derived view releases the pin");
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0).Should().BeTrue("the last derived view releases the pin");
         }
 
         [TestMethod]
         public void ImportLease_IsExtendedByDerivedNumSharpViews()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("src = np.arange(8, dtype='f8')");
 
             [MethodImpl(MethodImplOptions.NoInlining)]
@@ -86,21 +86,21 @@ namespace NumSharp.Interop.UnitTests
             {
                 var derived = MakeDerived();
                 Pump(); Pump();
-                NDArrayInterop.LiveImports.Should().Be(i0 + 1,
+                NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1,
                     "the derived slice alone must keep the Python buffer leased after the original NDArray is collected");
                 WriteAt(derived, -7.5, 0);
                 PyFloat("float(src[2])").Should().BeApproximately(-7.5, 1e-12, "the derived view still aliases python memory");
             }
 
             UseDerivedAlone();
-            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue(
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0).Should().BeTrue(
                 "collecting the last NumSharp view must release the lease");
         }
 
         [TestMethod]
         public void ImportLease_KeepsPythonExporterAlive_AfterPythonForgetsIt()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("import weakref\nkeep = np.arange(6, dtype='f8') * 1.5\nwr = weakref.ref(keep)");
 
             [MethodImpl(MethodImplOptions.NoInlining)]
@@ -118,7 +118,7 @@ namespace NumSharp.Interop.UnitTests
             }
 
             HoldWhilePythonForgets();
-            WaitFor(() => NDArrayInterop.LiveImports == i0).Should().BeTrue();
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0).Should().BeTrue();
             Pump();
             PyBool("wr() is None").Should().BeTrue(
                 "once the last NumSharp view is gone the exporter must actually be freed — no leak");
@@ -127,21 +127,21 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void ExplicitDispose_ReleasesTheLeaseDeterministically()
         {
-            int i0 = NDArrayInterop.LiveImports;
+            int i0 = NDArrayPythonInterop.LiveImports;
             PyExec("dv = np.arange(4, dtype='i8')");
 
             var nd = ViewOf("dv");
-            NDArrayInterop.LiveImports.Should().Be(i0 + 1);
+            NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1);
 
             nd.Dispose();
-            WaitFor(() => NDArrayInterop.LiveImports == i0, 4000).Should().BeTrue(
+            WaitFor(() => NDArrayPythonInterop.LiveImports == i0, 4000).Should().BeTrue(
                 "Dispose must release the lease without waiting for a garbage collection");
         }
 
         [TestMethod]
         public void NumSharpResize_IsBlockedByTheExportPin()
         {
-            int e0 = NDArrayInterop.LiveExports;
+            int e0 = NDArrayPythonInterop.LiveExports;
             var rz = np.arange(4);
             ExportTo("rz", rz);
 
@@ -151,7 +151,7 @@ namespace NumSharp.Interop.UnitTests
                 .Should().Throw<Exception>().Which.GetType().Name.Should().Be("IncorrectShapeException");
 
             PyExec("del rz");
-            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue();
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0).Should().BeTrue();
 
             rz.resize(new Shape(8));
             rz.size.Should().Be(8, "after python released the pin, resize must succeed");
@@ -160,7 +160,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void GcHammer_EverythingReturnsToBaseline()
         {
-            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
+            int e0 = NDArrayPythonInterop.LiveExports, i0 = NDArrayPythonInterop.LiveImports;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             void HammerOnce(int i)
@@ -168,7 +168,7 @@ namespace NumSharp.Interop.UnitTests
                 var a = np.arange(32).astype(NPTypeCode.Double);
                 using (Py.GIL())
                 {
-                    using var p = NDArrayInterop.ToNumpy(a);      // export; wrapper dropped immediately
+                    using var p = NDArrayPythonInterop.ToNumpy(a);      // export; wrapper dropped immediately
                 }
 
                 PyExec("h = np.arange(16, dtype='i8')");
@@ -179,7 +179,7 @@ namespace NumSharp.Interop.UnitTests
                 var c = np.arange(8).astype(NPTypeCode.Complex);
                 using (Py.GIL())
                 {
-                    using var pc = NDArrayInterop.ToNumpyCopy(c);
+                    using var pc = NDArrayPythonInterop.ToNumpyCopy(c);
                 }
             }
 
@@ -190,14 +190,14 @@ namespace NumSharp.Interop.UnitTests
             }
 
             PyExec("del h");
-            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0, 20_000)
-                .Should().BeTrue($"hammer must not leak (exports {NDArrayInterop.LiveExports}, imports {NDArrayInterop.LiveImports})");
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0 && NDArrayPythonInterop.LiveImports == i0, 20_000)
+                .Should().BeTrue($"hammer must not leak (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
         }
 
         [TestMethod]
         public void ConcurrentConversions_AreThreadSafe()
         {
-            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
+            int e0 = NDArrayPythonInterop.LiveExports, i0 = NDArrayPythonInterop.LiveImports;
             var failures = new ConcurrentQueue<Exception>();
 
             void Worker(int id)
@@ -239,26 +239,26 @@ namespace NumSharp.Interop.UnitTests
 
             failures.Should().BeEmpty(string.Join(" | ", failures));
             PyExec("del t0, t1, t2, t3, s0, s1, s2, s3");
-            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0, 20_000)
-                .Should().BeTrue($"concurrent churn must drain (exports {NDArrayInterop.LiveExports}, imports {NDArrayInterop.LiveImports})");
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0 && NDArrayPythonInterop.LiveImports == i0, 20_000)
+                .Should().BeTrue($"concurrent churn must drain (exports {NDArrayPythonInterop.LiveExports}, imports {NDArrayPythonInterop.LiveImports})");
         }
 
         [TestMethod]
         public void LiveCounters_TrackConversionsExactly()
         {
-            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
+            int e0 = NDArrayPythonInterop.LiveExports, i0 = NDArrayPythonInterop.LiveImports;
 
             var nd = np.arange(3);
             ExportTo("c1", nd);
-            NDArrayInterop.LiveExports.Should().Be(e0 + 1);
+            NDArrayPythonInterop.LiveExports.Should().Be(e0 + 1);
 
             PyExec("c2 = np.arange(3, dtype='i8')");
             var view = ViewOf("c2");
-            NDArrayInterop.LiveImports.Should().Be(i0 + 1);
+            NDArrayPythonInterop.LiveImports.Should().Be(i0 + 1);
 
             view.Dispose();
             PyExec("del c1");
-            WaitFor(() => NDArrayInterop.LiveExports == e0 && NDArrayInterop.LiveImports == i0)
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0 && NDArrayPythonInterop.LiveImports == i0)
                 .Should().BeTrue();
         }
     }

@@ -91,11 +91,11 @@ namespace NumSharp.Interop.UnitTests
             // --- exports: the deferred sweep must release Python-held pins once the engine is gone.
             if (ShutdownLeakTests.OrphanExportSlice is not null)
             {
-                bool swept = PollUntil(() => NDArrayInterop.LiveExports == 0 &&
+                bool swept = PollUntil(() => NDArrayPythonInterop.LiveExports == 0 &&
                                              ShutdownLeakTests.OrphanExportSlice.IsReleased, 10_000);
                 if (!swept)
                     throw new AssertFailedException(
-                        $"exports leaked at engine shutdown: LiveExports={NDArrayInterop.LiveExports}, " +
+                        $"exports leaked at engine shutdown: LiveExports={NDArrayPythonInterop.LiveExports}, " +
                         $"orphan buffer released={ShutdownLeakTests.OrphanExportSlice.IsReleased}. " +
                         "pythonnet's Shutdown runs no atexit pass, so without the interop's own sweep " +
                         "these pins are permanent.");
@@ -105,9 +105,9 @@ namespace NumSharp.Interop.UnitTests
             //     still-referenced NDArray must be a harmless no-op (the lease was already claimed).
             if (ShutdownLeakTests.OrphanImportView is not null)
             {
-                if (!PollUntil(() => NDArrayInterop.LiveImports == 0, 5_000))
+                if (!PollUntil(() => NDArrayPythonInterop.LiveImports == 0, 5_000))
                     throw new AssertFailedException(
-                        $"import leases survived engine shutdown: LiveImports={NDArrayInterop.LiveImports}.");
+                        $"import leases survived engine shutdown: LiveImports={NDArrayPythonInterop.LiveImports}.");
 
                 ShutdownLeakTests.OrphanImportView.Dispose();   // must not throw, must not double-release
                 if (!ShutdownLeakTests.OrphanImportSlice.IsReleased)

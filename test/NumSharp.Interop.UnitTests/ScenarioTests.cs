@@ -79,7 +79,7 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void TelemetryRing_SlidingWindowAnalytics_NoLeakGrowth()
         {
-            int e0 = NDArrayInterop.LiveExports;
+            int e0 = NDArrayPythonInterop.LiveExports;
             var ring = np.zeros(new Shape(256));
             var rnd = new Random(42);
 
@@ -98,13 +98,13 @@ namespace NumSharp.Interop.UnitTests
                 if (step % 50 == 49)
                 {
                     Pump();
-                    NDArrayInterop.LiveExports.Should().BeLessThan(e0 + 8,
+                    NDArrayPythonInterop.LiveExports.Should().BeLessThan(e0 + 8,
                         "rebinding the scope name must release prior window exports — no unbounded growth");
                 }
             }
 
             PyExec("del w");
-            WaitFor(() => NDArrayInterop.LiveExports == e0).Should().BeTrue("all window exports must drain");
+            WaitFor(() => NDArrayPythonInterop.LiveExports == e0).Should().BeTrue("all window exports must drain");
         }
 
         /// <summary>
@@ -196,9 +196,9 @@ namespace NumSharp.Interop.UnitTests
         [TestMethod]
         public void FaultyInputs_LeaveNoHalfTakenState_EngineStaysHealthy()
         {
-            int e0 = NDArrayInterop.LiveExports, i0 = NDArrayInterop.LiveImports;
+            int e0 = NDArrayPythonInterop.LiveExports, i0 = NDArrayPythonInterop.LiveImports;
 
-            ((Action)(() => NDArrayInterop.ToNumpy(np.arange(3).astype(NPTypeCode.Decimal))))
+            ((Action)(() => NDArrayPythonInterop.ToNumpy(np.arange(3).astype(NPTypeCode.Decimal))))
                 .Should().Throw<NotSupportedException>();
             ((Action)(() => ViewOf("b'abcd'")))
                 .Should().Throw<InvalidOperationException>();
@@ -208,8 +208,8 @@ namespace NumSharp.Interop.UnitTests
                 .Should().Throw<NotSupportedException>();
 
             Pump();
-            NDArrayInterop.LiveExports.Should().Be(e0, "failed conversions must not pin buffers");
-            NDArrayInterop.LiveImports.Should().Be(i0, "failed conversions must not take leases");
+            NDArrayPythonInterop.LiveExports.Should().Be(e0, "failed conversions must not pin buffers");
+            NDArrayPythonInterop.LiveImports.Should().Be(i0, "failed conversions must not take leases");
 
             // The engine and the interop must be fully functional after the failures.
             var nd = np.arange(4).astype(NPTypeCode.Double);

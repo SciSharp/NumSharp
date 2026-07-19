@@ -18,14 +18,14 @@ namespace NumSharp.Interop.UnitTests
         /// <summary>Register once for the whole run; safe no matter which test class runs first.</summary>
         internal static void EnsureCodec()
         {
-            NDArrayInterop.RegisterCodec();
+            NDArrayPythonInterop.RegisterCodec();
         }
 
         [TestMethod]
         public void Register_IsIdempotentPerSession()
         {
             EnsureCodec();
-            NDArrayInterop.RegisterCodec().Should().BeFalse("second registration in one engine session must be a no-op");
+            NDArrayPythonInterop.RegisterCodec().Should().BeFalse("second registration in one engine session must be a no-op");
         }
 
         [TestMethod]
