@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -10,6 +8,12 @@ namespace NumSharp.UnitTest
     /// ConvolveValid — the full convolution buffer is dead once the requested
     /// centre/valid slice has been copied out.
     /// </summary>
+    /// <remarks>
+    /// <c>ConvolveSame_TightLoop_DoesNotLeakWorkingSet</c> used to close this class. It is the one
+    /// member of that family that had already failed CI (Ubuntu, 25 MiB, code correct), and the
+    /// buffer it guarded — 1063 doubles, ~8.5 KB, 1.7 MiB over the whole loop — could not have
+    /// reached its own 20 MiB threshold. Removed — see <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class NdArray_Convolve_UsingTests
     {
@@ -37,44 +41,34 @@ namespace NumSharp.UnitTest
             r.Data<double>().Should().Equal(new double[] { 2.5 });
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop of `same`-mode convolves. Each call previously left a
-        /// `full` buffer (na + nv - 1 doubles) on the finalizer queue. Steady
-        /// state with `using` keeps working set near constant.
+        /// The centre/valid slice must outlive the <c>full</c> buffer it was cut from.
         /// </summary>
+        /// <remarks>
+        /// 'same' and 'valid' both slice their result out of <c>full</c> and then release it. A
+        /// slice in NumSharp is a VIEW by default, so if either mode returned the view rather than
+        /// a copy, the <c>using</c> would free the memory the caller is about to read. Both operands
+        /// must survive too — they are only read from.
+        /// </remarks>
         [TestMethod]
-        public void ConvolveSame_TightLoop_DoesNotLeakWorkingSet()
+        public void ConvolveModes_ResultOutlivesTheFullBuffer()
         {
-            var a = np.arange(1_000).astype(NPTypeCode.Double);
-            var v = np.arange(64).astype(NPTypeCode.Double);
+            var a = np.array(new double[] { 1, 2, 3 });
+            var v = np.array(new double[] { 0, 1, 0.5 });
 
-            for (int i = 0; i < 20; i++)
-                _ = a.convolve(v, "same");
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var same = a.convolve(v, "same");
+            var valid = a.convolve(v, "valid");
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            LeakGuards.StillUsable(same, " — 'same' must copy out of `full`, not view it");
+            LeakGuards.StillUsable(valid, " — 'valid' must copy out of `full`, not view it");
+            LeakGuards.StillUsable(a, " — the operands are read-only inputs");
+            LeakGuards.StillUsable(v);
 
-            for (int i = 0; i < 200; i++)
-            {
-                using var r = a.convolve(v, "same");
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // 200 iterations × ~8 KiB "full" buffer (1063 doubles) would only
-            // be ~1.6 MiB in raw bytes, but the wrapper churn through the
-            // finalizer queue adds GC overhead. 20 MiB headroom is generous.
-            deltaMB.Should().BeLessThan(20);
+            // Values survive the release of the buffer they came from.
+            same.Data<double>().Should().Equal(new double[] { 1, 2.5, 4 });
+            valid.Data<double>().Should().Equal(new double[] { 2.5 });
         }
     }
 }

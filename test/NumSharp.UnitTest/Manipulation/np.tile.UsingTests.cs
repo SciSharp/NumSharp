@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -9,6 +7,11 @@ namespace NumSharp.UnitTest.Manipulation
     /// Guards the `using` on promoted/broadcasted/contiguous inside np.tile's
     /// general case (the broadcast-then-reshape path).
     /// </summary>
+    /// <remarks>
+    /// <c>Tile_TightLoop_DoesNotLeakWorkingSet</c> used to close this class. By its own arithmetic
+    /// the intermediates totalled ~10 MiB against a 30 MiB threshold, so reintroducing the leak
+    /// could not have tripped it. Removed — see <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class np_tile_UsingTests : TestClass
     {
@@ -53,43 +56,42 @@ namespace NumSharp.UnitTest.Manipulation
                     ((int)r[i, j]).Should().Be((j % 3) + 1);
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop of 2D tile. Each call previously left three NDArray
-        /// wrappers (promoted, broadcasted, contiguous) on the finalizer
-        /// queue — `contiguous` carries the full output-sized buffer.
+        /// <c>promoted</c> and <c>broadcasted</c> are views of the caller's array, and
+        /// <c>contiguous</c> carries the output buffer. Releasing all three must free neither the
+        /// input nor the result.
         /// </summary>
+        /// <remarks>
+        /// The <c>reps=(1,1)</c> case is the one worth pinning: nothing needs promoting or
+        /// broadcasting, so the intermediates are at their most likely to BE the input rather than
+        /// a copy of it — exactly when a `using` on them does damage. Disposing the source last
+        /// checks the other end of the same chain: whether the result holds its own reference to
+        /// whatever buffer it ended up with. (It does not prove the result is a copy — a correctly
+        /// refcounted alias survives this too — it proves nothing was released early.)
+        /// </remarks>
         [TestMethod]
-        public void Tile_TightLoop_DoesNotLeakWorkingSet()
+        public void Tile_ReleasesIntermediates_ButNotInputOrOutput()
         {
-            using var a = np.arange(100).reshape(10, 10).astype(NPTypeCode.Int32);
+            var a = np.arange(100).reshape(10, 10).astype(NPTypeCode.Int32);
 
-            for (int i = 0; i < 20; i++)
-                _ = np.tile(a, new long[] { 5, 5 });
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var tiled = np.tile(a, new long[] { 5, 5 });
+            LeakGuards.StillUsable(a, " — promoted/broadcasted are views of the input");
+            LeakGuards.StillUsable(tiled, " — `contiguous` carries the output buffer");
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            // The no-op reps: intermediates most likely to alias the input outright.
+            var same = np.tile(a, new long[] { 1, 1 });
+            LeakGuards.StillUsable(a, " — reps=(1,1) must not hand the input to a `using`");
+            LeakGuards.StillUsable(same);
+            ((int)a[9, 9]).Should().Be(99);
 
-            for (int i = 0; i < 500; i++)
-            {
-                using var r = np.tile(a, new long[] { 5, 5 });
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // Each call produces a 50×50 Int32 output (~10 KiB) plus its
-            // contiguous intermediate of the same size. Without using:
-            // 500 × 2 × 10 KiB = ~10 MiB queued.
-            deltaMB.Should().BeLessThan(30);
+            // Both results must still stand once the source is gone.
+            a.Dispose();
+            LeakGuards.StillUsable(tiled, " — the result must hold its own reference to its buffer");
+            LeakGuards.StillUsable(same);
+            ((int)tiled[49, 49]).Should().Be(99);
+            ((int)same[9, 9]).Should().Be(99);
         }
     }
 }

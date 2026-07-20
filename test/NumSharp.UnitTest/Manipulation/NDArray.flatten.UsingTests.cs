@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -11,6 +9,12 @@ namespace NumSharp.UnitTest.Manipulation
     /// fcopy and bumps the refcount via InitializeArc — disposing fcopy
     /// only drops fcopy's wrapper ref.
     /// </summary>
+    /// <remarks>
+    /// That invariant is pinned by <see cref="Flatten_FOrder_ResultSurvivesSourceDispose"/>, which
+    /// checks the refcount directly. A <c>Flatten_FOrder_TightLoop_DoesNotLeakWorkingSet</c> used to
+    /// sit beneath it, conceding in its own comment that the buffer "is kept alive by the returned
+    /// flat anyway" — leaving it measuring process RSS. Removed — see <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class NDArray_flatten_UsingTests : TestClass
     {
@@ -86,43 +90,6 @@ namespace NumSharp.UnitTest.Manipulation
             flat.Storage.InternalArray.IsReleased.Should().BeFalse();
             ((int)flat[0]).Should().Be(0);
             ((int)flat[19]).Should().Be(19);
-        }
-
-        // --------------------------- leak guard ---------------------------
-
-        [TestMethod]
-        public void Flatten_FOrder_TightLoop_DoesNotLeakWorkingSet()
-        {
-            using var a = np.arange(200 * 100).reshape(200, 100).astype(NPTypeCode.Double);
-
-            for (int i = 0; i < 20; i++)
-            {
-                using var f = a.flatten('F');
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
-
-            for (int i = 0; i < 500; i++)
-            {
-                using var f = a.flatten('F');
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // Each call allocates a fresh 200×100 Double F-copy (~160 KiB).
-            // Without using on fcopy, each iteration left an NDArray wrapper
-            // on the finalizer queue (the buffer itself is kept alive by
-            // the returned flat anyway, so this is wrapper churn).
-            deltaMB.Should().BeLessThan(30);
         }
     }
 }

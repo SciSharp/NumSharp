@@ -322,27 +322,39 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
         // ----- alloc churn / no memory leak ----------------------------------
 
+        /// <summary>
+        ///     Every one of 10k alloc+dispose cycles must release its buffer at <c>Dispose</c>, not
+        ///     at some later finalization.
+        /// </summary>
+        /// <remarks>
+        ///     This assertion used to read <c>Process.WorkingSet64</c> and require less than 20 MiB
+        ///     of growth. That measured the C allocator's retention policy, not NumSharp's: freed
+        ///     unmanaged pages are returned to the allocator's free list, and whether the allocator
+        ///     then returns them to the OS differs by platform — Windows trims and reads 0 MiB,
+        ///     glibc largely does not. A leak of all 10k buffers (800 MB) and a clean run were
+        ///     equally capable of passing or failing it depending on the OS.
+        ///
+        ///     The refcount is the real signal and it is exact: <c>IsReleased</c> flips the moment
+        ///     the last reference drops. Checking it on every cycle turns "roughly how much memory
+        ///     is the process holding" into "did this specific buffer get freed, 10,000 times" —
+        ///     deterministic, platform-independent, and it fails on the first missed release.
+        /// </remarks>
         [TestMethod]
-        public void AllocAndDispose_TenThousandTimes_NoMemoryAccumulation()
+        public void AllocAndDispose_TenThousandTimes_ReleasesEveryBuffer()
         {
-            // After 10k explicit alloc+dispose cycles, working set must not
-            // have grown by more than a few MiB (allocator's internal slack).
-            using var p = System.Diagnostics.Process.GetCurrentProcess();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long start = p.WorkingSet64;
-
             for (int i = 0; i < 10_000; i++)
             {
                 var a = new NDArray(NPTypeCode.Double, new Shape(10_000), fillZeros: false);
+                var buffer = a.Storage.InternalArray;
+
+                buffer.IsReleased.Should().BeFalse("cycle {0}'s buffer is live before Dispose", i);
+
                 a.Dispose();
+
+                a.IsDisposed.Should().BeTrue("cycle {0} was disposed", i);
+                buffer.IsReleased.Should().BeTrue(
+                    "cycle {0}'s buffer must be freed AT Dispose, not left to the finalizer", i);
             }
-            p.Refresh();
-            long delta = (p.WorkingSet64 - start) / 1024 / 1024;
-            delta.Should().BeLessThan(20,
-                "10k cycles should not accumulate >20 MiB (allocator-level slack only)");
         }
 
         // ====================================================================

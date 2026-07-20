@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -10,6 +8,10 @@ namespace NumSharp.UnitTest.RandomSampling
     /// np.random.exponential. The log buffer is dead once np.negative(x)
     /// has been multiplied by scale.
     /// </summary>
+    /// <remarks>
+    /// <c>Exponential_TightLoop_DoesNotLeakWorkingSet</c> used to close this class and was removed;
+    /// it sampled process RSS rather than the generator. See <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class np_random_exponential_using_test : TestClass
     {
@@ -42,38 +44,30 @@ namespace NumSharp.UnitTest.RandomSampling
             mean.Should().BeApproximately(3.0, 0.15);
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop. Each call allocated three transient buffers
-        /// (uniform, 1-uniform, log) before the using; one of them (`x`)
-        /// is now atomically released. Working set should not grow.
+        /// The released <c>log</c> buffer must not be the one handed back.
         /// </summary>
+        /// <remarks>
+        /// <c>-x * scale</c> is what the caller receives, and elementwise ops in NumSharp can
+        /// return a buffer they were given rather than a fresh one. If the returned samples ever
+        /// aliased the <c>using</c>-bound <c>x</c>, every caller would get an array over freed
+        /// pages — values would read back as garbage rather than as a valid exponential draw.
+        /// Asserting the refcount AND the distribution catches both halves of that.
+        /// </remarks>
         [TestMethod]
-        public void Exponential_TightLoop_DoesNotLeakWorkingSet()
+        public void Exponential_ResultIsNotTheReleasedLogBuffer()
         {
-            for (int i = 0; i < 20; i++)
-                _ = np.random.exponential(1.0, new Shape(50_000));
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var samples = np.random.exponential(2.0, new Shape(5_000));
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            LeakGuards.StillUsable(samples, " — the returned samples must not alias the released log buffer");
 
-            for (int i = 0; i < 500; i++)
-            {
-                using var samples = np.random.exponential(1.0, new Shape(50_000));
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            deltaMB.Should().BeLessThan(30);
+            // Live memory holding real values, not freed pages: every draw is finite and >= 0,
+            // which the log buffer's own contents (all <= 0) could not satisfy.
+            ((double)np.amin(samples)).Should().BeGreaterThanOrEqualTo(0.0);
+            np.all(np.isfinite(samples)).Should().BeTrue();
+            ((double)np.mean(samples)).Should().BeApproximately(2.0, 0.25);
         }
     }
 }

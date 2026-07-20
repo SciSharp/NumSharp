@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -9,6 +7,11 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Guards the `using` on sliceI/sliceJ/temp inside SwapSlicesAxis0.
     /// Multi-dim shuffle routes through this helper N times (Fisher-Yates).
     /// </summary>
+    /// <remarks>
+    /// <c>Shuffle_TightLoop_DoesNotLeakWorkingSet</c> used to close this class. By its own comment
+    /// the churn it hoped to see was ~16 MiB against a 30 MiB threshold. Removed — see
+    /// <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class np_random_shuffle_using_test : TestClass
     {
@@ -74,40 +77,37 @@ namespace NumSharp.UnitTest.RandomSampling
         /// shuffle invokes it up to 4 times (i = n-1 → 1). The using-bound
         /// temps must release atomically.
         /// </summary>
+        /// <remarks>
+        /// sliceI and sliceJ are views straight into the array being shuffled, and a 5-row shuffle
+        /// disposes eight of them. Shuffling IN PLACE is what makes this able to fail: there is no
+        /// fresh output buffer to hide behind, so if a swap's `using` released the array's storage
+        /// the very next swap would be writing into freed pages. Running two shuffles back to back
+        /// over the same array, then reading every element, is the check.
+        /// </remarks>
         [TestMethod]
-        public void Shuffle_TightLoop_DoesNotLeakWorkingSet()
+        public void Shuffle_SwapTemps_DoNotReleaseTheArrayBeingShuffled()
         {
-            // Warm-up
             var rnd = np.random.RandomState(0);
-            for (int i = 0; i < 20; i++)
-            {
-                using var nd = np.arange(200 * 50).reshape(200, 50).astype(NPTypeCode.Double);
-                rnd.shuffle(nd);
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var nd = np.arange(20).reshape(5, 4).astype(NPTypeCode.Int32);
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            rnd.shuffle(nd);
+            LeakGuards.StillUsable(nd, " — sliceI/sliceJ are views into this very array");
 
-            for (int i = 0; i < 200; i++)
-            {
-                using var nd = np.arange(200 * 50).reshape(200, 50).astype(NPTypeCode.Double);
-                rnd.shuffle(nd);
-            }
+            // A second in-place pass over storage the first pass's temps have already released
+            // would be a write-after-free.
+            rnd.shuffle(nd);
+            LeakGuards.StillUsable(nd);
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // 200 iterations × ~199 swaps × (2 view wrappers + 1 row copy
-            // of 50 doubles = 400 bytes) — the temp buffer accumulation is
-            // the dominant term. Without using, that's ~16 MiB queued.
-            deltaMB.Should().BeLessThan(30);
+            // All 20 values still present exactly once — the swaps moved rows, lost nothing.
+            var seen = new bool[20];
+            for (int i = 0; i < 5; i++)
+                for (int j = 0; j < 4; j++)
+                {
+                    int v = (int)nd[i, j];
+                    v.Should().BeInRange(0, 19);
+                    seen[v].Should().BeFalse("value {0} must appear exactly once", v);
+                    seen[v] = true;
+                }
         }
     }
 }

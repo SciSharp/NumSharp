@@ -1,6 +1,3 @@
-using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -13,6 +10,10 @@ namespace NumSharp.UnitTest.Creation
     /// (the <c>dstSlice</c> view inside the general loop, plus the ravel'd workArrays
     /// when <c>axis=null</c>).
     /// </summary>
+    /// <remarks>
+    /// Two <c>TightLoop_DoesNotLeakWorkingSet</c> tests used to close this class. Both were removed
+    /// — they measured process RSS, not concatenate. See <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class np_concatenate_using_test : TestClass
     {
@@ -99,97 +100,65 @@ namespace NumSharp.UnitTest.Creation
             ((double)c[2, 3]).Should().Be(11.0);
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Repeated axis=null concatenates should not leak working-set growth.
-        /// Without <c>using</c> on the ravel'd wrappers, each iteration left
-        /// two NDArray wrappers on the finalizer queue, each holding an ARC
-        /// ref to the input buffer.
+        /// The general path's per-source <c>dstSlice</c> is a view INTO the freshly allocated
+        /// result. Disposing it must not release the result's buffer.
         /// </summary>
+        /// <remarks>
+        /// This is the sharper of the two hazards: <c>dstSlice</c> is created and disposed once per
+        /// source, so the last one to be released is the one that could take the whole output with
+        /// it. The array would still be reachable and correctly shaped, just backed by freed pages.
+        /// Transposed sources force the general path (both memcpy fast paths bail on non-contiguous
+        /// input), and the input views must survive too.
+        /// </remarks>
         [TestMethod]
-        public void Concatenate_AxisNull_TightLoop_DoesNotLeakWorkingSet()
+        public void Concatenate_GeneralPath_ResultOutlivesItsDstSlices()
         {
-            // Warm-up pass — bring JIT, kernels, and one-shot allocations
-            // into steady-state before we measure.
-            for (int i = 0; i < 20; i++)
-            {
-                using var a = new NDArray(NPTypeCode.Double, new Shape(50_000), fillZeros: true);
-                using var b = new NDArray(NPTypeCode.Double, new Shape(50_000), fillZeros: true);
-                using var c = np.concatenate(new[] { a, b }, axis: (int?)null);
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var a = np.arange(6).reshape(2, 3).astype(NPTypeCode.Int32);
+            var b = np.arange(6, 12).reshape(2, 3).astype(NPTypeCode.Int32);
+            var aT = a.T;
+            var bT = b.T;
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            var c = np.concatenate(new[] { aT, bT }, axis: 1);
 
-            for (int i = 0; i < 500; i++)
-            {
-                using var a = new NDArray(NPTypeCode.Double, new Shape(50_000), fillZeros: true);
-                using var b = new NDArray(NPTypeCode.Double, new Shape(50_000), fillZeros: true);
-                using var c = np.concatenate(new[] { a, b }, axis: (int?)null);
-            }
+            LeakGuards.StillUsable(c, " — the last dstSlice must not free the result it wrote into");
+            LeakGuards.StillUsable(a, " — the sources must outlive the copy");
+            LeakGuards.StillUsable(b);
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // 500 iterations × (2 inputs + 1 output ≈ 800K + 800K + 1.6M ≈ 3.2 MiB
-            // per iteration) — without ARC release, the finalizer queue would hold
-            // 500-iter * 2-ravels = 1000 NDArray wrappers in flight plus all their
-            // backing buffers. Steady-state with `using` keeps the delta near zero.
-            // 20 MiB headroom covers natural GC pacing variation.
-            // macOS WorkingSet64 reclaim is noisier than Windows/Linux; allow more headroom there
-            // (the leak guarded against is platform-independent and stays tight on the other CI OSes).
-            long limitMB = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? 96 : 20;
-            deltaMB.Should().BeLessThan(limitMB);
+            // Every element of the output is readable after the slices were released.
+            c.shape.Should().ContainInOrder(3L, 4L);
+            ((int)c[0, 0]).Should().Be(0);
+            ((int)c[0, 2]).Should().Be(6);
+            ((int)c[2, 3]).Should().Be(11);
         }
 
         /// <summary>
-        /// General path with transposed (non-contig) sources: tight-loop allocation
-        /// behaviour. The dstSlice wrapper allocated per source-per-iteration must
-        /// not accumulate.
+        /// The axis=null result must outlive the ravel'd work arrays it was built from, and stay
+        /// readable once the inputs those wrappers aliased are disposed.
         /// </summary>
+        /// <remarks>
+        /// Note what this does and does not prove. It does NOT prove the output is a copy — a
+        /// properly refcounted alias would survive this too. It proves the stronger thing worth
+        /// guarding: nothing here is released EARLY. The ravel wrappers alias the inputs, so a
+        /// missing ARC ref anywhere in that chain frees the buffer while the output still points
+        /// at it, and the read-back below lands on freed pages.
+        /// </remarks>
         [TestMethod]
-        public void Concatenate_GeneralPath_TightLoop_DoesNotLeakWorkingSet()
+        public void Concatenate_AxisNull_ResultSurvivesInputDispose()
         {
-            // Warm-up
-            for (int i = 0; i < 20; i++)
-            {
-                using var a = np.arange(2500).reshape(50, 50).astype(NPTypeCode.Int32);
-                using var b = np.arange(2500).reshape(50, 50).astype(NPTypeCode.Int32);
-                using var c = np.concatenate(new[] { a.T, b.T }, axis: 1);
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var a = np.arange(6).reshape(2, 3).astype(NPTypeCode.Int32);
+            var b = np.arange(6, 14).reshape(2, 4).astype(NPTypeCode.Int32);
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            var c = np.concatenate(new[] { a, b }, axis: (int?)null);
 
-            for (int i = 0; i < 500; i++)
-            {
-                using var a = np.arange(2500).reshape(50, 50).astype(NPTypeCode.Int32);
-                using var b = np.arange(2500).reshape(50, 50).astype(NPTypeCode.Int32);
-                using var c = np.concatenate(new[] { a.T, b.T }, axis: 1);
-            }
+            a.Dispose();
+            b.Dispose();
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // macOS WorkingSet64 reclaim is noisier than Windows/Linux; allow more headroom there
-            // (the leak guarded against is platform-independent and stays tight on the other CI OSes).
-            long limitMB = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? 96 : 20;
-            deltaMB.Should().BeLessThan(limitMB);
+            LeakGuards.StillUsable(c, " — the output must not be released with the ravels' sources");
+            for (int i = 0; i < 14; i++)
+                ((int)c[i]).Should().Be(i);
         }
     }
 }

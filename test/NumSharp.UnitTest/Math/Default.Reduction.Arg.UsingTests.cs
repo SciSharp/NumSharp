@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -11,6 +9,11 @@ namespace NumSharp.UnitTest.MathSuite
     /// cover all common (dtype, op, contig/strided) combinations, but the
     /// refactor must still be correctness-safe for the cases it does cover.
     /// </summary>
+    /// <remarks>
+    /// <c>ArgMax_Axis_TightLoop_DoesNotLeakWorkingSet</c> used to close this class. Its own comment
+    /// conceded it was "belt-and-suspenders" against a path that "rarely fires"; what it actually
+    /// measured was process RSS. Removed — see <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class Default_Reduction_Arg_UsingTests : TestClass
     {
@@ -56,40 +59,41 @@ namespace NumSharp.UnitTest.MathSuite
             ((long)r[3]).Should().Be(2L);
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop of axis argmax — even if the IL kernel path is taken,
-        /// the broader argmax flow can leak intermediates. The using on
-        /// the fallback's `slice` is a belt-and-suspenders guard.
+        /// The per-iteration <c>slice</c> is a VIEW into the caller's array; releasing it must
+        /// leave the source — and every later slice of it — intact.
         /// </summary>
+        /// <remarks>
+        /// The fallback disposes one such view per output element, so a source that survives a
+        /// single call is not evidence: the buffer is only at risk once the LAST view releases it.
+        /// Reducing twice over the same array, and reading the source afterwards, is what makes
+        /// this test able to fail.
+        /// </remarks>
         [TestMethod]
-        public void ArgMax_Axis_TightLoop_DoesNotLeakWorkingSet()
+        public void ArgMax_Axis_DoesNotDisposeTheSourceItSlices()
         {
-            using var a = np.arange(2000 * 64).reshape(2000, 64).astype(NPTypeCode.Int32);
+            var a = np.arange(12).reshape(3, 4).astype(NPTypeCode.Int32);
 
-            for (int i = 0; i < 20; i++)
-                _ = np.argmax(a, axis: 1);
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var first = np.argmax(a, axis: 1);
+            LeakGuards.StillUsable(a, " — the per-iteration slices must not free the source");
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            // Second reduction over the same buffer: still correct, so the views released by the
+            // first call left the data alone.
+            var second = np.argmax(a, axis: 1);
+            LeakGuards.StillUsable(a);
+            LeakGuards.StillUsable(first, " — an earlier result must not be freed by a later call");
 
-            for (int i = 0; i < 500; i++)
+            for (int i = 0; i < 3; i++)
             {
-                using var r = np.argmax(a, axis: 1);
+                ((long)first[i]).Should().Be(3L);
+                ((long)second[i]).Should().Be(3L);
             }
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            deltaMB.Should().BeLessThan(30);
+            // And the source itself still reads back its original values.
+            ((int)a[0, 0]).Should().Be(0);
+            ((int)a[2, 3]).Should().Be(11);
         }
     }
 }

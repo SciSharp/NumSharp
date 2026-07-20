@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Generic;
@@ -7,11 +6,16 @@ using NumSharp.Generic;
 namespace NumSharp.UnitTest.Selection
 {
     /// <summary>
-    /// Correctness + working-set guards for the unified NDIter boolean-mask
+    /// Correctness + lifetime guards for the unified NDIter boolean-mask
     /// axis-0 getter and setter (gather/scatter). Originally written for the
     /// hand-rolled per-iter srcSlice/destSlice loop; the assertions still hold
     /// for the allocation-free iterator path that replaced it.
     /// </summary>
+    /// <remarks>
+    /// <c>BooleanMask_Axis0Select_TightLoop_DoesNotLeakWorkingSet</c> used to close this class. It
+    /// guarded ~2.5 MiB of churn with a 30 MiB threshold — and the iterator path it was retargeted
+    /// at does not allocate the per-row wrappers it described. Removed — see <see cref="LeakGuards"/>.
+    /// </remarks>
     [TestClass]
     public class BooleanMasking_UsingTests : TestClass
     {
@@ -101,48 +105,45 @@ namespace NumSharp.UnitTest.Selection
             ((int)a[1, 0]).Should().Be(4);
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop of axis-0 boolean SELECTs on a 200-row array. The unified
-        /// gather streams through one NDIter pass (no per-row view wrappers),
-        /// so the working set must stay near-constant across many calls.
+        /// The gather must leave both the source and the mask usable, and its result must be a
+        /// copy that outlives them.
         /// </summary>
+        /// <remarks>
+        /// Selecting twice over the same (source, mask) pair proves the first gather did not
+        /// consume either operand. Disposing both afterwards then checks that the result holds its
+        /// own reference to whatever buffer backs it — not that it is a copy (a correctly
+        /// refcounted alias would survive too), but that nothing in the gather released a buffer
+        /// the result still points at.
+        /// </remarks>
         [TestMethod]
-        public void BooleanMask_Axis0Select_TightLoop_DoesNotLeakWorkingSet()
+        public void BooleanMask_Axis0Select_ResultSurvivesSourceAndMaskDispose()
         {
-            using var a = np.arange(200 * 32).reshape(200, 32).astype(NPTypeCode.Int32);
-            var maskBytes = new bool[200];
-            for (int i = 0; i < 200; i++) maskBytes[i] = (i % 2) == 0;
-            using var mask = new NDArray(maskBytes).MakeGeneric<bool>();
+            var a = np.arange(6 * 3).reshape(6, 3).astype(NPTypeCode.Int32);
+            var maskBytes = new bool[6];
+            for (int i = 0; i < 6; i++) maskBytes[i] = (i % 2) == 0;
+            var mask = new NDArray(maskBytes).MakeGeneric<bool>();
 
-            for (int i = 0; i < 20; i++)
-            {
-                using var r = a[mask];
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var first = a[mask];
+            LeakGuards.StillUsable(a, " — the gather must not consume its source");
+            LeakGuards.StillUsable(mask, " — nor its mask");
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            // Second select over the same operands must still work and agree.
+            var second = a[mask];
+            first.shape.Should().ContainInOrder(3L, 3L);
+            second.shape.Should().ContainInOrder(3L, 3L);
 
-            for (int i = 0; i < 200; i++)
-            {
-                using var r = a[mask];
-            }
+            // The result must still stand once both operands are gone.
+            a.Dispose();
+            mask.Dispose();
+            LeakGuards.StillUsable(first, " — the gathered result must hold its own reference");
 
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // 200 outer × 200 inner = 40K view wrappers per pass. Each wrapper
-            // is small but the buffer churn through the finalizer queue
-            // accumulates. 30 MiB headroom covers GC variation.
-            deltaMB.Should().BeLessThan(30);
+            // Rows 0, 2, 4 of arange(18).reshape(6,3).
+            ((int)first[0, 0]).Should().Be(0);
+            ((int)first[1, 0]).Should().Be(6);
+            ((int)first[2, 2]).Should().Be(14);
         }
     }
 }

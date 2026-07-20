@@ -1,6 +1,3 @@
-using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -11,9 +8,13 @@ namespace NumSharp.UnitTest.Logic
     /// <summary>
     /// Guards the <c>using</c> on the <c>np.isclose</c> intermediate inside
     /// <c>DefaultEngine.AllClose</c>. The intermediate is a bool array the
-    /// shape of broadcast(a, b); without atomic release each call in a tight
-    /// loop left a finalizer-queue entry per evaluation.
+    /// shape of broadcast(a, b), dead once <c>np.all</c> has collapsed it.
     /// </summary>
+    /// <remarks>
+    /// This class used to close with <c>AllClose_TightLoop_DoesNotLeakWorkingSet</c>. It was
+    /// removed: measured, it passed with the leak reintroduced and failed CI on Ubuntu with the
+    /// code correct. See <see cref="LeakGuards"/> for the numbers — and do not add another.
+    /// </remarks>
     [TestClass]
     public class np_allclose_using_test : TestClass
     {
@@ -45,52 +46,51 @@ namespace NumSharp.UnitTest.Logic
                 .Should().BeFalse();
         }
 
-        // --------------------------- leak guard ---------------------------
+        // --------------------------- lifetime ---------------------------
 
         /// <summary>
-        /// Tight loop of allcloses on 50K-element arrays. Each call previously
-        /// allocated and dropped a 50K-bool array; the using on the np.isclose
-        /// intermediate should drive working-set delta to near zero.
+        /// The <c>using</c> must release the closeness array and nothing else.
+        /// </summary>
+        /// <remarks>
+        /// <c>np.isclose</c> broadcasts its operands, and a broadcast of an already-correct shape
+        /// can legitimately hand back a view onto the input rather than a fresh buffer. Should the
+        /// intermediate ever become such an alias, <c>using</c> would free the caller's memory from
+        /// under it. Both operands must therefore still be usable — and still hold their values —
+        /// after the call, including on the equal-shape path where aliasing is most likely.
+        /// </remarks>
+        [TestMethod]
+        public void AllClose_DoesNotDisposeItsOperands()
+        {
+            var a = np.array(new[] { 1.0, 2.0, 3.0 });
+            var b = np.array(new[] { 1.0, 2.0, 3.0 });
+
+            np.allclose(a, b).Should().BeTrue();
+
+            LeakGuards.StillUsable(a, " — np.isclose's result must not alias operand a");
+            LeakGuards.StillUsable(b, " — np.isclose's result must not alias operand b");
+            a.Data<double>().Should().Equal(new[] { 1.0, 2.0, 3.0 });
+            b.Data<double>().Should().Equal(new[] { 1.0, 2.0, 3.0 });
+
+            // Still answering correctly on a second pass over the same operands.
+            np.allclose(a, b).Should().BeTrue();
+        }
+
+        /// <summary>
+        /// The broadcasting path (shape (3,1) against (3,)) allocates a differently-shaped
+        /// intermediate; releasing it must likewise leave both operands intact.
         /// </summary>
         [TestMethod]
-        public void AllClose_TightLoop_DoesNotLeakWorkingSet()
+        public void AllClose_Broadcast_DoesNotDisposeItsOperands()
         {
-            // Warm-up
-            for (int i = 0; i < 20; i++)
-            {
-                using var a = np.zeros(new Shape(50_000), NPTypeCode.Double);
-                using var b = np.zeros(new Shape(50_000), NPTypeCode.Double);
-                _ = np.allclose(a, b);
-            }
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            var a = np.array(new[] { 1.0, 2.0, 3.0 }).reshape(3, 1);
+            var b = np.array(new[] { 1.0, 2.0, 3.0 });
 
-            var p = Process.GetCurrentProcess();
-            p.Refresh();
-            long start = p.WorkingSet64;
+            np.allclose(a, b).Should().BeFalse();  // 3x3 comparison, off-diagonal differs
 
-            for (int i = 0; i < 1000; i++)
-            {
-                using var a = np.zeros(new Shape(50_000), NPTypeCode.Double);
-                using var b = np.zeros(new Shape(50_000), NPTypeCode.Double);
-                _ = np.allclose(a, b);
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            p.Refresh();
-            long deltaMB = (p.WorkingSet64 - start) / (1024 * 1024);
-
-            // Without `using` on the closeness array, 1000 calls would queue
-            // up 1000 * 50K-bool wrappers (~50 MiB). 20 MiB headroom covers natural
-            // GC pacing variation on Windows/Linux; macOS WorkingSet64 reclaim is
-            // noisier (observed ~20-28 MiB at idle), so allow more headroom there —
-            // the leak itself is platform-independent and stays tightly guarded on the
-            // other two CI OSes.
-            long limitMB = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? 96 : 20;
-            deltaMB.Should().BeLessThan(limitMB);
+            LeakGuards.StillUsable(a);
+            LeakGuards.StillUsable(b);
+            ((double)a[0, 0]).Should().Be(1.0);
+            ((double)b[2]).Should().Be(3.0);
         }
     }
 }
