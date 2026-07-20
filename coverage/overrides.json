@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "aliases": {
+    "numpy.acos": {
+      "target": "NumSharp.np.arccos",
+      "notes": "NumSharp exposes the canonical NumPy name arccos."
+    },
+    "numpy.asin": {
+      "target": "NumSharp.np.arcsin",
+      "notes": "NumSharp exposes the canonical NumPy name arcsin."
+    },
+    "numpy.atan": {
+      "target": "NumSharp.np.arctan",
+      "notes": "NumSharp exposes the canonical NumPy name arctan."
+    },
+    "numpy.atan2": {
+      "target": "NumSharp.np.arctan2",
+      "notes": "NumSharp exposes the canonical NumPy name arctan2."
+    },
+    "numpy.astype": {
+      "target": "NumSharp.NDArray.astype",
+      "notes": "The NumPy 2.x top-level helper is available as the NDArray instance method."
+    },
+    "numpy.bitwise_invert": {
+      "target": "NumSharp.np.invert",
+      "notes": "NumSharp exposes the ufunc alias invert."
+    },
+    "numpy.bitwise_left_shift": {
+      "target": "NumSharp.np.left_shift",
+      "notes": "NumSharp exposes the ufunc alias left_shift."
+    },
+    "numpy.bitwise_right_shift": {
+      "target": "NumSharp.np.right_shift",
+      "notes": "NumSharp exposes the ufunc alias right_shift."
+    },
+    "numpy.cumulative_prod": {
+      "target": "NumSharp.np.cumprod",
+      "notes": "NumSharp exposes the established cumprod spelling."
+    },
+    "numpy.cumulative_sum": {
+      "target": "NumSharp.np.cumsum",
+      "notes": "NumSharp exposes the established cumsum spelling."
+    },
+    "numpy.pow": {
+      "target": "NumSharp.np.power",
+      "notes": "NumSharp exposes the ufunc name power."
+    },
+    "numpy.remainder": {
+      "target": "NumSharp.np.mod",
+      "notes": "NumSharp exposes the equivalent ufunc name mod."
+    },
+    "numpy.round": {
+      "target": "NumSharp.np.round_",
+      "notes": "C# uses round_ to avoid a naming collision while preserving NumPy round semantics."
+    },
+    "numpy.row_stack": {
+      "target": "NumSharp.np.vstack",
+      "notes": "NumPy documents row_stack as an alias of vstack."
+    },
+    "numpy.random": {
+      "target": "NumSharp.np.random",
+      "notes": "NumSharp exposes random through np.random."
+    },
+    "numpy.ndarray.itemsize": {
+      "target": "NumSharp.NDArray.dtypesize",
+      "notes": "The element size is exposed as dtypesize in NumSharp."
+    },
+    "numpy.ndarray.data": {
+      "target": "NumSharp.NDArray.Data",
+      "notes": "NumSharp exposes typed unmanaged data through the generic Data<T>() method rather than NumPy's buffer-view property."
+    },
+    "numpy.ndarray.round": {
+      "target": "NumSharp.np.round_",
+      "notes": "Use the static np.round_ API; NumSharp does not expose ndarray.round as an instance member."
+    },
+    "numpy.random.ranf": {
+      "target": "NumSharp.NumPyRandom.random_sample",
+      "notes": "NumPy documents ranf as an alias of random_sample."
+    },
+    "numpy.random.sample": {
+      "target": "NumSharp.NumPyRandom.random_sample",
+      "notes": "NumPy documents sample as an alias of random_sample."
+    },
+    "numpy.random.random_integers": {
+      "target": "NumSharp.NumPyRandom.randint",
+      "notes": "Use randint and adjust the upper bound; deprecated random_integers includes the high endpoint."
+    },
+    "numpy.shape": {
+      "target": "NumSharp.NDArray.Shape",
+      "notes": "NumSharp exposes shape as an NDArray Shape property rather than the top-level NumPy tuple-returning helper."
+    },
+    "numpy.linalg.matrix_power": {
+      "target": "NumSharp.NDArray.matrix_power",
+      "notes": "Matrix power is available as an NDArray instance method rather than under an linalg namespace."
+    }
+  },
+  "support": {
+    "numpy.ndarray.data": {
+      "status": "partial",
+      "notes": "Data<T>() returns a typed NumSharp ArraySlice and is not NumPy's Python buffer object."
+    },
+    "numpy.random.random_integers": {
+      "status": "partial",
+      "notes": "The available randint alternative has an exclusive upper bound, while random_integers historically used an inclusive upper bound."
+    },
+    "numpy.shape": {
+      "status": "partial",
+      "notes": "NDArray.Shape is a NumSharp Shape value, not the tuple returned by numpy.shape."
+    },
+    "numpy.complex64": {
+      "status": "unsupported",
+      "notes": "The public compatibility symbol exists, but NumSharp does not implement a Complex64 storage dtype."
+    }
+  }
+}

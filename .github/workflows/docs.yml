@@ -5,6 +5,7 @@ on:
     branches: ["master", "main"]
     paths:
       - 'src/**'
+      - 'coverage/generated/**'
       - 'docs/website-src/**'
   workflow_dispatch:
 
