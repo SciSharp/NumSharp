@@ -19,12 +19,13 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.1.1"
+GENERATOR_VERSION = "1.1.2"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
 CALLABLE_KINDS = {"function", "ufunc", "callable", "method"}
 VALID_SUPPORT = {"declared", "partial", "unsupported", "missing", "extension"}
+PLATFORM_SPECIFIC_NUMPY_EXPORTS = {"float96", "float128", "complex192", "complex256"}
 
 CREATION = {
     "arange", "array", "asanyarray", "asarray", "asarray_chkfinite", "ascontiguousarray",
@@ -342,7 +343,10 @@ def member_maps(inventory: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], d
 def public_exports(np: Any) -> list[dict[str, Any]]:
     exports: list[dict[str, Any]] = []
 
-    for name in sorted(set(np.__all__)):
+    # NumPy conditionally exports extended-precision aliases according to the C
+    # platform. Compare the portable public surface so Windows and Linux produce
+    # the same checked-in artifact; longdouble/clongdouble remain represented.
+    for name in sorted(set(np.__all__) - PLATFORM_SPECIFIC_NUMPY_EXPORTS):
         if not hasattr(np, name):
             continue
         obj = getattr(np, name)

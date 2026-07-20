@@ -24,6 +24,8 @@ CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates 
 
 The default denominator includes NumPy top-level callables, `ndarray` methods and properties, and callables from `numpy.random`, `numpy.linalg`, and `numpy.fft`. NumPy types, constants, and modules are catalogued but do not affect the headline percentage. NumSharp-only APIs are catalogued separately and also do not affect it.
 
+Platform-conditional extended-precision aliases (`float96`, `float128`, `complex192`, and `complex256`) are excluded so the artifact is byte-identical across Windows and Linux. NumPy's portable `longdouble` and `clongdouble` names remain catalogued.
+
 - **Exact** — the corresponding NumSharp surface has the same public member name.
 - **Alias** — a reviewed or mechanically safe C# equivalent exists under another name or surface.
 - **Partial** — an API exists, but the reviewed mapping has a known semantic limitation.
