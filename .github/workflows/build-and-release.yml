@@ -19,6 +19,44 @@ env:
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
 
 jobs:
+  api-coverage:
+    name: NumPy ↔ NumSharp API coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install pinned NumPy reference
+      run: python -m pip install numpy==2.4.2
+
+    - name: Generate coverage artifact
+      run: python coverage/generate_coverage.py --output artifacts/numpy-numsharp-coverage
+
+    - name: Audit latest NumPy documentation links
+      run: python coverage/audit_documentation.py artifacts/numpy-numsharp-coverage/coverage.json
+
+    - name: Verify checked-in dashboard data
+      run: diff --recursive --unified coverage/generated artifacts/numpy-numsharp-coverage
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: numpy-numsharp-api-coverage
+        path: artifacts/numpy-numsharp-coverage/
+        if-no-files-found: error
+        retention-days: 14
+
   test:
     strategy:
       fail-fast: false
@@ -90,7 +128,7 @@ jobs:
         retention-days: 5
 
   validate-release:
-    needs: test
+    needs: [test, api-coverage]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:

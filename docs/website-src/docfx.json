@@ -44,6 +44,11 @@
         "src": "../../benchmark/history/latest",
         "files": ["benchmark-report.json"],
         "dest": "docs/data"
+      },
+      {
+        "src": "../../coverage/generated",
+        "files": ["coverage.json", "manifest.json"],
+        "dest": "docs/data"
       }
     ],
     "output": "../website",

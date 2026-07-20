@@ -5,5 +5,7 @@
   href: api/
 - name: Benchmarks
   href: docs/benchmarks-dashboard.md
+- name: NumPy API Coverage & Support
+  href: docs/coverage-support-dashboard.md
 - name: Source Code
   href: https://github.com/SciSharp/NumSharp

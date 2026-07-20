@@ -74,6 +74,16 @@ NumSharp focuses on:
   raw reports, and subsystem matrices. See the
   [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.md).
 
+## Features Support and Implementation Map
+
+[NumSharp's Coverage & Support Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html) is presenting the full implementation
+roadmap to complete 100% NumPy porting with an explorer allowing you to quickly check your favorite functions!
+
+<p align="center">
+  <a href="https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html"><img alt="NumSharp API coverage surface scoreboard" src="docs/website-src/images/coverage-support-surface-scoreboard.png" height="320"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html"><img alt="NumSharp API coverage capability map" src="docs/website-src/images/coverage-support-capability-map.png" height="320"></a>
+</p>
+
 ## Performance
 
 [NumSharp benchmarks](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html) are published as tracked release snapshots, not ad hoc
