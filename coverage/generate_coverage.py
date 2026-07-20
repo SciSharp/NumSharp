@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.1.0"
+GENERATOR_VERSION = "1.1.1"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -125,7 +125,22 @@ def load_numpy() -> Any:
 
 def load_numsharp_inventory() -> dict[str, Any]:
     project = ROOT / "tools" / "NumSharp.ApiInventory" / "NumSharp.ApiInventory.csproj"
-    command = ["dotnet", "run", "--project", str(project), "--configuration", "Release"]
+    build_command = [
+        "dotnet", "build", str(project), "--configuration", "Release", "--framework", "net8.0",
+        "--nologo", "--verbosity", "quiet",
+    ]
+    build = subprocess.run(build_command, cwd=ROOT, check=False, text=True, capture_output=True)
+    if build.returncode:
+        sys.stderr.write(build.stdout)
+        sys.stderr.write(build.stderr)
+        raise SystemExit("Failed to build the NumSharp API inventory tool.")
+
+    # Build output contains compiler warnings on stdout on clean Linux runners. Run
+    # the already-built tool separately so stdout is guaranteed to be JSON only.
+    command = [
+        "dotnet", "run", "--project", str(project), "--configuration", "Release",
+        "--framework", "net8.0", "--no-build", "--no-restore",
+    ]
     completed = subprocess.run(command, cwd=ROOT, check=False, text=True, capture_output=True)
     if completed.returncode:
         sys.stderr.write(completed.stdout)

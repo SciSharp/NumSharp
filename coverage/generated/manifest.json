@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator": "coverage/generate_coverage.py",
-  "generator_version": "1.1.0",
+  "generator_version": "1.1.1",
   "numpy_version": "2.4.2",
   "numsharp_assembly_version": "0.60.0.0",
   "artifact_files": [
