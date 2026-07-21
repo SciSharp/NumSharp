@@ -1,9 +1,9 @@
 name: Fuzz Soak
 
-# Nightly differential-fuzz soak: sweeps seeds through test/oracle/fuzz_random.py (NumPy 2.4.2 oracle),
-# generating hundreds of thousands of fresh random cases per seed and replaying them through the
-# C# harness. The FuzzMatrix gate on every push/PR replays the small COMMITTED corpora (no Python);
-# this job is the "millions of cases" tail that needs Python and runs on a schedule only.
+# Nightly differential-fuzz soak: sweeps five fixed seeds plus five fresh cryptographically-random
+# seeds through test/oracle/fuzz_random.py (NumPy 2.4.2 oracle), generating 200K cases per seed by
+# default and replaying them through the C# harness. The FuzzMatrix gate on every push/PR replays the
+# small COMMITTED corpora (no Python); this job is the "millions of cases" tail that needs Python.
 #
 # On a divergence the harness prints a shrunk single-element repro (Shrinker) in the log and the
 # offending corpus is uploaded as an artifact — copy the minimal line into
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       seeds:
-        description: 'Space-separated seeds to sweep'
+        description: 'Exactly five space-separated fixed seeds (five fresh random seeds are added)'
         default: '1 2 3 4 5'
       count:
         description: 'Random cases per seed'
@@ -50,25 +50,134 @@ jobs:
     - name: Soak — sweep seeds
       shell: bash
       run: |
-        SEEDS="${{ github.event.inputs.seeds || '1 2 3 4 5' }}"
+        FIXED_SEEDS="${{ github.event.inputs.seeds || '1 2 3 4 5' }}"
         COUNT="${{ github.event.inputs.count || '200000' }}"
+        EVIDENCE="fuzz-soak-evidence.jsonl"
+        CORPUS="test/NumSharp.UnitTest/Fuzz/corpus/random_smoke.jsonl"
+        COPIED_CORPUS="test/NumSharp.UnitTest/bin/Release/net10.0/Fuzz/corpus/random_smoke.jsonl"
         STATUS=0
-        for seed in $SEEDS; do
-          echo "::group::seed=$seed count=$COUNT"
-          python test/oracle/fuzz_random.py "$seed" "$COUNT" random_smoke.jsonl
-          # Incremental build copies the regenerated corpus to the test output, then replay it.
-          dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
-            --configuration Release -p:NoWarn=CS1591 >/dev/null
-          if ! dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
-              --configuration Release --no-build --framework net10.0 \
-              --filter "ClassName~FuzzCorpusTests&Name~FuzzRandom" --logger "trx"; then
-            echo "::error::Fuzz soak found a divergence at seed=$seed (see the 'minimal repro' line above)"
-            cp test/NumSharp.UnitTest/Fuzz/corpus/random_smoke.jsonl "failing-seed-$seed.jsonl"
-            STATUS=1
+
+        : > "$EVIDENCE"
+        read -r -a fixed_seed_array <<< "$FIXED_SEEDS"
+        if [[ ${#fixed_seed_array[@]} -ne 5 ]]; then
+          echo "::error::Expected exactly five fixed seeds, got ${#fixed_seed_array[@]}: $FIXED_SEEDS"
+          exit 1
+        fi
+        if [[ ! "$COUNT" =~ ^[1-9][0-9]*$ ]]; then
+          echo "::error::count must be a positive integer, got: $COUNT"
+          exit 1
+        fi
+
+        declare -A seen_fixed=()
+        for seed in "${fixed_seed_array[@]}"; do
+          if [[ ! "$seed" =~ ^[0-9]+$ ]]; then
+            echo "::error::Fixed seed must be a non-negative integer, got: $seed"
+            exit 1
           fi
+          if [[ -n "${seen_fixed[$seed]+present}" ]]; then
+            echo "::error::Fixed seeds must be unique, duplicate: $seed"
+            exit 1
+          fi
+          seen_fixed[$seed]=1
+        done
+
+        export FIXED_SEEDS
+        mapfile -t random_seed_array < <(python - <<'PY'
+        import os
+        import secrets
+
+        fixed = {int(seed) for seed in os.environ["FIXED_SEEDS"].split()}
+        random_seeds = set()
+        while len(random_seeds) < 5:
+            seed = secrets.randbelow(2**63 - 1) + 1
+            if seed not in fixed:
+                random_seeds.add(seed)
+        for seed in random_seeds:
+            print(seed)
+        PY
+        )
+        if [[ ${#random_seed_array[@]} -ne 5 ]]; then
+          echo "::error::Expected five random seeds, generated ${#random_seed_array[@]}"
+          exit 1
+        fi
+
+        fixed_csv=$(IFS=,; echo "${fixed_seed_array[*]}")
+        random_csv=$(IFS=,; echo "${random_seed_array[*]}")
+        requested_total=$((COUNT * 10))
+        printf '{"record":"run","requested_cases_per_seed":%s,"requested_total_cases":%s,"fixed_seeds":[%s],"random_seeds":[%s]}\n' \
+          "$COUNT" "$requested_total" "$fixed_csv" "$random_csv" >> "$EVIDENCE"
+        echo "Fixed seeds:  ${fixed_seed_array[*]}"
+        echo "Random seeds: ${random_seed_array[*]}"
+        echo "Requested cases: $COUNT per seed, $requested_total total"
+
+        run_seed() {
+          local kind="$1"
+          local seed="$2"
+          local result="passed"
+          local source_cases=0
+          local copied_cases=0
+          local source_sha=""
+          local copied_sha=""
+          local trx_name="fuzz-${kind}-seed-${seed}.trx"
+
+          echo "::group::kind=$kind seed=$seed count=$COUNT"
+          if ! python test/oracle/fuzz_random.py "$seed" "$COUNT" random_smoke.jsonl; then
+            result="generation-failed"
+          else
+            source_cases=$(wc -l < "$CORPUS")
+            source_sha=$(sha256sum "$CORPUS" | cut -d' ' -f1)
+            if [[ "$source_cases" -ne "$COUNT" ]]; then
+              echo "::error::Generator wrote $source_cases cases for seed=$seed; expected $COUNT"
+              result="source-count-mismatch"
+            elif ! dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+                --configuration Release -p:NoWarn=CS1591 >/dev/null; then
+              result="build-failed"
+            elif [[ ! -f "$COPIED_CORPUS" ]]; then
+              echo "::error::Regenerated corpus was not copied to the net10.0 test output"
+              result="copied-corpus-missing"
+            else
+              copied_cases=$(wc -l < "$COPIED_CORPUS")
+              copied_sha=$(sha256sum "$COPIED_CORPUS" | cut -d' ' -f1)
+              if [[ "$copied_cases" -ne "$COUNT" || "$copied_sha" != "$source_sha" ]]; then
+                echo "::error::Test-output corpus does not match the generated $COUNT-case corpus for seed=$seed"
+                result="copied-corpus-mismatch"
+              elif ! dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+                  --configuration Release --no-build --framework net10.0 \
+                  --filter "ClassName~FuzzCorpusTests&Name~FuzzRandom" \
+                  --logger "trx;LogFileName=$trx_name"; then
+                echo "::error::Fuzz soak found a divergence at seed=$seed (see the 'minimal repro' line above)"
+                result="test-failed"
+              fi
+            fi
+          fi
+
+          if [[ "$result" != "passed" && -f "$CORPUS" ]]; then
+            cp "$CORPUS" "failing-seed-$seed.jsonl"
+          fi
+          printf '{"record":"seed","kind":"%s","seed":%s,"requested_cases":%s,"source_cases":%s,"copied_cases":%s,"source_sha256":"%s","copied_sha256":"%s","result":"%s","trx":"%s"}\n' \
+            "$kind" "$seed" "$COUNT" "$source_cases" "$copied_cases" "$source_sha" "$copied_sha" "$result" "$trx_name" >> "$EVIDENCE"
           echo "::endgroup::"
+          [[ "$result" == "passed" ]]
+        }
+
+        for seed in "${fixed_seed_array[@]}"; do
+          if ! run_seed fixed "$seed"; then STATUS=1; fi
+        done
+        for seed in "${random_seed_array[@]}"; do
+          if ! run_seed random "$seed"; then STATUS=1; fi
         done
         exit $STATUS
+
+    - name: Upload soak evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-soak-evidence
+        path: |
+          fuzz-soak-evidence.jsonl
+          test/NumSharp.UnitTest/TestResults/fuzz-*.trx
+        if-no-files-found: warn
+        retention-days: 14
 
     - name: Upload failing corpora
       if: failure()
