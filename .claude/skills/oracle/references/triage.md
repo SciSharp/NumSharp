@@ -17,7 +17,8 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 1. **Reproduce and read the shrunk case.** The harness prints the operand(s), the op+params, NumPy's expected
    bytes, and NumSharp's actual bytes. Rebuild the exact call in a `dotnet run` script (see the project
-   `dotnet-run-script` guidance) and run the SAME call in Python against numpy 2.4.2. Confirm which side is "right".
+   `dotnet-run-script` guidance) and run the SAME call in Python against numpy 2.4.2. Confirm which side is "right"
+   — or whether the question is ill-posed, see 5.
 
 2. **NumSharp is wrong → it's a real bug.** Fix the op. If you can't fix it now, carve the shrunk case into an
    `[OpenBugs]` reproduction (`OpenBugs.cs`, or a focused file like `OpenBugs.DtypeCoverage.cs` / `OpenBugs.Char.cs`)
@@ -33,6 +34,16 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
    - A job whose Python lambda and C# case don't actually compute the same thing.
    - A params dict that doesn't capture everything the C# side needs to reconstruct the call.
    Fix it, regenerate the tier, re-run.
+
+5. **Neither side is "right" → NumPy's answer is host-dependent.** Before blaming either side, check whether the
+   expectation is even reproducible. Re-run the same Python on a *different* host (or just compare the vectorized
+   and scalar paths — `np.array([x]*8).astype(dt)[0]` vs `np.<src>(x).astype(dt)`). If NumPy contradicts itself,
+   the case is asserting undefined behaviour, not a contract, and no implementation can pass it. The known family
+   is **float→integer conversion of NaN / ±inf / out-of-range values** (`astype`, and `reciprocal` on an integer
+   dtype containing 0 — NumPy computes it as `(T)(1.0/0)`), where glibc/gcc and MSVC disagree. Fix the *generator*
+   so it stops emitting the undefined value class — do **not** excuse it in `MisalignedRegistry` (the divergence
+   isn't a NumSharp behaviour) and do **not** retune NumSharp to one host. See `Fuzz/README.md` →
+   "Host-dependent values"; `fuzz_random.py` already defuses this class and `assert_portable` audits it.
 
 ## Error parity
 

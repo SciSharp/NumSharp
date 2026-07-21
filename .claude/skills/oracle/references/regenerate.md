@@ -61,4 +61,14 @@ renumbering; the recorded dtypes/shapes/bytes for existing cases are unchanged. 
 
 Regenerating with the same NumPy version + unchanged generator must produce a byte-identical file (only your new
 cases differ). If a "no-op" regeneration changes existing bytes, your NumPy is not 2.4.2 (or `gen_oracle.py` /
-`layout_catalog.py` changed a fixture).
+`layout_catalog.py` changed a fixture) — **or you regenerated on a different OS/CPU**, see below.
+
+## Regenerate on the platform the corpus was authored on
+
+`astype_full` (and any tier casting float/complex → an integer dtype) is **host-sensitive**. C leaves a
+float→integer conversion undefined for NaN, ±inf, and out-of-range values; NumPy just does the C cast, so glibc/gcc
+and MSVC produce different bytes — as do the vectorized and scalar loops of one build. Those cells are committed on
+purpose (they pin NumSharp's hand-written cast kernels against themselves), but regenerating them elsewhere rewrites
+them, and the diff is a host difference, not a NumSharp bug. `fuzz_random.py` is the exception: it recomputes
+expectations on the host, so it defuses that value class and is portable by construction. Details:
+`test/NumSharp.UnitTest/Fuzz/README.md` → "Host-dependent values".

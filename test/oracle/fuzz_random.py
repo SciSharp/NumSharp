@@ -25,7 +25,7 @@ np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from layout_catalog import _cbase, _fill, describe  # noqa: E402
+from layout_catalog import _FLOAT_POOL, _cbase, _fill, describe  # noqa: E402
 import gen_oracle as G  # noqa: E402
 
 # G10 (F18): widened from 7 dtypes to all 13 — float16 + the narrow integers were exactly the
@@ -36,6 +36,97 @@ NP_BIN = {**G.BINARY_OPS, **G.COMPARISON_OPS}     # add/sub/mul/divide + compari
 # G10: flat reductions (axis=None) drawn into the random space; argmax/argmin/std/var stay out
 # (no flatten-argmax overload in the harness; std/var ride the documented precision excuse).
 REDUCE_FLAT = {k: G.REDUCE_OPS[k] for k in ("sum", "prod", "min", "max", "mean")}
+
+
+# ---------------------------------------------------------------------------
+# Undefined float->integer conversions — the ONE value class this fuzzer must not emit.
+#
+# C leaves a float->integer conversion UNDEFINED when the value is NaN, +/-inf, or outside the
+# destination's range, and NumPy performs exactly that C cast. The result is therefore the host
+# toolchain's, not a NumPy contract: glibc/gcc and MSVC disagree, and so do the SIMD and scalar
+# loops of ONE numpy build —
+#
+#     np.array([np.nan] * 8).astype(np.uint32)[0]   ->  2147483648   (gcc, vectorized loop)
+#     np.float64(np.nan).astype(np.uint32)          ->  0            (same build, scalar loop)
+#
+# This fuzzer recomputes `expected` on whichever host it runs on, so emitting those cases makes
+# the nightly soak report the host's undefined behaviour as a NumSharp bug — which it did, on
+# every seed, ~950/200000 cases, unfixable by any implementation (gh: fuzz-soak 29722530598).
+#
+# The DETERMINISTIC corpora keep the undefined edges on purpose (see layout_catalog._FLOAT_POOL):
+# they are committed as bytes and replayed, never recomputed, so they pin NumSharp's hand-written
+# cast kernels against themselves. Only this recompute-on-the-host tier has to stay portable.
+# ---------------------------------------------------------------------------
+
+def _cast_defined(values, dst):
+    """Elementwise mask: is converting `values` to integer dtype `dst` DEFINED in C?"""
+    dst = np.dtype(dst)
+    x = np.asarray(values.real if values.dtype.kind == "c" else values, dtype=np.float64)
+    bits = dst.itemsize * 8
+    lo = 0.0 if dst.kind == "u" else -(2.0 ** (bits - 1))
+    hi = 2.0 ** (bits if dst.kind == "u" else bits - 1)   # exclusive; both exact in float64
+    trunc = np.trunc(x)                                   # C converts by truncating toward zero
+    return np.isfinite(x) & (trunc >= lo) & (trunc < hi)
+
+
+def _defined_pool(real_dtype, dst):
+    """`_FLOAT_POOL` narrowed to the values that survive `real_dtype` and convert to `dst`."""
+    cand = np.array(_FLOAT_POOL, dtype=np.float64).astype(real_dtype)  # float16 saturates to inf
+    keep = cand[_cast_defined(cand, dst)]
+    return keep if keep.size else np.zeros(1, dtype=real_dtype)
+
+
+def _defuse_cast(base, dst):
+    """Rewrite, in place, the elements of `base` whose conversion to `dst` is undefined.
+
+    `base` is the C-contiguous buffer the operand view aliases, so repairing it repairs every
+    view of it. Replacements come from the pool's DEFINED edges, so the cast kernel still sees
+    truncation and boundary values — only NaN/inf/out-of-range disappear.
+
+    Complex operands are repaired through `.real`, the only part a complex->integer cast reads.
+    Building a complex replacement instead would reintroduce the very values being removed:
+    `1j * nan` is `nan + nan*j`, because the real part of the product is `0*nan - 1*0`.
+    """
+    ok = _cast_defined(base, dst)
+    if ok.all():
+        return
+    target = base.real if base.dtype.kind == "c" else base      # writable view for complex
+    reps = np.resize(_defined_pool(target.dtype, np.dtype(dst)), base.size).reshape(base.shape)
+    target[...] = np.where(ok, target, reps)
+
+
+def _defuse_integer_reciprocal(base):
+    """NumPy's integer reciprocal is `*out = (T)(1.0 / in)`, so in == 0 converts +/-inf back to
+    T — the same undefined conversion. Every other integer yields 1/x in [-1, 1], always defined.
+    """
+    if base.dtype.kind in "iu":
+        base[...] = np.where(base == 0, 1, base)
+
+
+def assert_portable(cases):
+    """Raise if an undefined float->integer conversion reached the corpus.
+
+    Runs on the SERIALIZED operand bytes, so it audits what the soak will actually replay rather
+    than what the generator meant to emit — and it sits outside the per-case `except Exception`
+    that would otherwise swallow the complaint.
+    """
+    for c in cases:
+        op = c["op"]
+        if op not in ("astype", "reciprocal"):
+            continue
+        o = c["operands"][0]
+        src = np.dtype(o["dtype"])
+        vals = np.frombuffer(bytes.fromhex(o["buffer"]), dtype=src)
+        if op == "astype":
+            dst = np.dtype(c["params"]["dtype"])
+            if src.kind in "fc" and dst.kind in "iu" and not _cast_defined(vals, dst).all():
+                raise AssertionError(
+                    f"{c['id']}: undefined {src.name}->{dst.name} conversion reached the corpus; "
+                    f"its `expected` is this host's undefined behaviour, not a NumPy contract")
+        elif src.kind in "iu" and (vals == 0).any():
+            raise AssertionError(
+                f"{c['id']}: reciprocal({src.name} 0) reached the corpus; NumPy computes it as "
+                f"({src.name})(1.0/0) — an undefined conversion whose result is host-specific")
 
 
 def random_view(rng, dtype, max_ndim=4):
@@ -109,6 +200,8 @@ def gen_random(seed, count):
                 dt = rng.choice(DTYPES)
                 b, v = random_view(rng, np.dtype(dt))
                 opn = rng.choice(list(G.UNARY_OPS))
+                if opn == "reciprocal":
+                    _defuse_integer_reciprocal(b)       # (T)(1.0/0) is an undefined conversion
                 cases.append(_case(opn, [describe(b, v)], G.UNARY_OPS[opn](v), len(cases)))
             elif kind == "reduce":                       # G10: flat reductions over random views
                 dt = rng.choice(DTYPES)
@@ -121,6 +214,8 @@ def gen_random(seed, count):
                 src = rng.choice(DTYPES)
                 dst = rng.choice(G.ALL_DTYPES)
                 b, v = random_view(rng, np.dtype(src))
+                if np.dtype(src).kind in "fc" and np.dtype(dst).kind in "iu":
+                    _defuse_cast(b, np.dtype(dst))
                 case = _case("astype", [describe(b, v)], v.astype(np.dtype(dst)), len(cases))
                 case["params"] = {"dtype": np.dtype(dst).name}
                 cases.append(case)
@@ -144,6 +239,7 @@ def gen_random(seed, count):
                                    np.where(vc, vx, vy), len(cases)))
         except Exception:
             continue  # incompatible shapes / NumPy raise: drop and retry
+    assert_portable(cases)
     return cases
 
 

@@ -54,10 +54,41 @@ A divergence is one of: **bit-exact** (passes), a **documented difference** in `
   `[<file>] documented Misaligned divergences excused: <n>x <reason>; …` — so growth in an
   excused class stays visible in the test output. Anything unclassified is red.
 
+### Host-dependent values — the one thing the oracle must never assert
+
+A float→integer conversion is **undefined in C** when the value is NaN, ±inf, or outside the
+destination's range, and NumPy performs exactly that C cast. The result is the host toolchain's,
+not a NumPy contract: glibc/gcc and MSVC disagree, and so do the vectorized and scalar loops of a
+*single* numpy build.
+
+```python
+np.array([np.nan] * 8).astype(np.uint32)[0]   # 2147483648   (gcc, vectorized loop)
+np.float64(np.nan).astype(np.uint32)          # 0            (same build, scalar loop)
+```
+
+Two tiers, two rules:
+
+- **Committed corpora are replayed from bytes, never recomputed**, so they may keep the undefined
+  edges — `layout_catalog._FLOAT_POOL` front-loads them on purpose. There they pin NumSharp's
+  hand-written cast kernels against *themselves*: an internal regression gate, not NumPy parity.
+  Regenerating such a tier **on a different OS or CPU rewrites those cells**, and that diff is a
+  host difference, not a NumSharp bug — regenerate on the platform the corpus was authored on.
+- **`fuzz_random.py` recomputes `expected` on whichever host it runs on**, so it may only emit
+  conversions NumPy defines. `_defuse_cast` / `_defuse_integer_reciprocal` rewrite the undefined
+  elements before the expectation is taken — keeping the defined truncation and boundary edges, so
+  the cell stays covered rather than dropped — and `assert_portable` then audits the serialized
+  bytes, so a regression fails generation loudly instead of producing unusable expectations.
+
+This is precisely what broke the nightly soak (run 29722530598): it generates on Ubuntu and replays
+against cast kernels that reproduce the MSVC answer, so ~950/200000 cases "diverged" every night on
+`astype` float→uint32/uint64 and on `reciprocal(uint64 0)` — which NumPy computes as
+`(uint64)(1.0/0)`, the same undefined conversion. No implementation can satisfy both hosts; the fix
+was to stop asserting undefined values, not to chase one host's.
+
 ## Regenerating the corpus
 
 ```bash
-python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts
+python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts (host-sensitive, see above)
 python test/oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
 python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (Misaligned)
 python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
