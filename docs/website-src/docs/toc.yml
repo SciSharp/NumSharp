@@ -57,9 +57,9 @@
   href: interop/index.md
   expanded: false
   items:
-  - name: Pythonnet
-    href: interop/pythonnet.md
-  - name: Zero-Copy Model (view vs copy)
-    href: interop/zero-copy-model.md
+  - name: Python & numpy (pythonnet)
+    href: interop/pythonnet-numpy.md
+  - name: Any library via np.frombuffer
+    href: interop/np-frombuffer.md
   - name: Numpy.NET
     href: interop/numpy-net.md
